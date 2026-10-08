@@ -16,22 +16,52 @@ reports with an explicit choice to omit, mask or locally include original prompt
 The maintained [product design contract](docs/design.md) records the user
 journey, Taste-informed choices and interaction acceptance criteria.
 
-## Run inside Copilot
+## Set up on another machine
+
+Install Git, Node.js **24 or newer**, and npm **11.17.0** (the version declared in
+`package.json`). Authenticate Git access to this private repository with your
+personal GitHub account; repository access is separate from Copilot authentication.
+Clone into a stable local folder, not a temporary Copilot worker checkout:
 
 ```powershell
+git clone https://github.com/likamrat/wire.git
+Set-Location wire
 npm ci
 npm start
 ```
 
-Keep the local runtime running, then install the user-scoped canvas entry:
+Open `http://127.0.0.1:47831/` in a browser. No build, copied `node_modules`,
+private release directory, Copilot sign-in or evidence migration is needed to
+start the empty app. Keep this terminal running. For an existing clone, stop
+only its own runtime before `git pull --ff-only` and `npm ci`, then restart it.
+
+The repository transfers **source only**. A new machine has its own empty private
+store and requires its own source approval in **Settings > Connection &
+permission**. Do not copy histories, prompts, responses, exports, credentials or
+the previous machine's private configuration into the checkout. Response saving
+and automatic scoring remain off until separately approved on the new machine.
+Connecting local history requires the supported local Copilot app metadata and
+history files described below; starting WIRE alone does not connect them.
+
+PDF export is optional. After `npm ci`, install its local browser with
+`npx playwright install chromium`; HTML, JSON and Markdown do not need it.
+
+## Optional Copilot canvas
+
+For the canvas, install a Copilot host that supports extensions and canvases.
+Copilot supplies `@github/copilot-sdk/extension` when launching the extension;
+do not add a machine-specific SDK folder to the project's dependencies.
+Keep the local runtime running, then open a **second terminal in the clone**
+and install the user-scoped canvas entry:
 
 ```powershell
 npm run install:canvas
 ```
 
-Reload Copilot extensions and open **WIRE**. The extension points to
-this maintained project's `extension.mjs`; it does not copy or depend on a worker
-session. The app is also available at `http://127.0.0.1:47831/`.
+Reload Copilot extensions and open **WIRE**. The installer points to this
+clone's `extension.mjs`; keep the clone at that location, or rerun the installer
+after moving it. It backs up a different existing entry before replacing it.
+The browser-only app does not require canvas installation.
 
 The runtime owns its loopback listener and private state. Closing a canvas or
 reloading an extension does not stop it. The canvas adapter only connects over
@@ -85,6 +115,15 @@ with separate accuracy, speed, answer-trust and action-trust results.
 Successful execution is not correctness or authorization. Missing evidence is
 unassessed/not measured, never a fabricated zero or failure. Personal feedback is
 optional and revisioned; it does not edit recorded outcomes or saved reports.
+
+Real Accuracy, answer-trust and action-trust measurement remains incomplete.
+Synthetic evaluator tests do not establish real answer quality; approved model
+assessments have a separate origin and do not prove human authorization.
+The original Cost metric is retired, not zero; evaluator allowance, observed
+spending and unknown-billing guards remain in score-processing controls.
+Optional scoring requires a separately configured local Copilot SDK/executable,
+Copilot authentication and explicit evidence/spending approval; cloning and
+starting WIRE do not perform those steps.
 
 Additional response evidence is off until explicit setup consent. In
 **Settings > Collection preferences > Recorded replies**, **Save Copilot replies

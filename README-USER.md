@@ -2,6 +2,11 @@
 
 Open [WIRE](http://127.0.0.1:47831/) (local runtime required).
 
+On a new machine, follow [source checkout and setup](README.md#set-up-on-another-machine)
+first. The clone contains no collected activity or private configuration. Approve
+that machine's source in Settings; response saving and automatic scoring each
+need separate approval and are not enabled by installing WIRE.
+
 | Page | Use |
 | --- | --- |
 | Home | Check for new activity; filter dates and results. |
