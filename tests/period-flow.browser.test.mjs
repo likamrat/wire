@@ -50,7 +50,7 @@ test("all retained dates labels the actual evidence, not the last collector wind
     assert.equal(await page.locator("#activityCount").innerText(), "4");
     await page.locator("#meaning > summary").click();
     assert.equal(await page.locator("#periodLabel").innerText(), "Jul 1 - Oct 1");
-    assert.equal(await page.locator("#dateFilter-control").innerText(), "All retained dates");
+    assert.equal(await page.locator("#dateFilter-control").innerText(), "All dates");
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(row.path)));
 });
 
@@ -175,8 +175,8 @@ test("Apply dates -> truthful feedback -> matching sessions -> analysis -> delib
     const { page, runtime, context, posts } = await setup(t);
     const before = await loadBoardState(context), original = await readFile(path.join(context.dataDir, "private-evidence", before.evidenceFile));
     await page.goto(runtime.url); await ready(page);
-    assert.equal(await page.locator("#moreFilters").getAttribute("open"), null);
-    assert.equal(await page.locator("#serviceFilter-control").isVisible(), false);
+    assert.equal(await page.locator("#moreFilters").count(), 0);
+    assert.equal(await page.locator("#serviceFilter-control").isVisible(), true);
     assert.equal(await page.locator("#pageAction").isVisible(), true);
     assert.equal(await page.locator("#exploreLink").isVisible(), false);
     assert.equal(await page.locator("#reportSelectionBar").isVisible(), false);
@@ -265,26 +265,21 @@ test("empty periods, failed and late snapshots do not claim coverage or a succes
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(row.path)));
 });
 
-test("period-first hierarchy reduces initial controls, keeps refinements/routes and fits both themes", { timeout: 90000 }, async t => {
+test("one filter row keeps refinements/routes and fits both themes", { timeout: 90000 }, async t => {
     const { page, runtime, posts } = await setup(t);
     if (proofs) await mkdir(proofs, { recursive: true });
     const measurements = [];
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
         await page.setViewportSize({ width, height: 960 });
         await page.goto(runtime.url); await ready(page); await chooseTheme(page, theme);
-        const closed = await page.locator("#filters button").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).length);
-        assert.equal(closed, 4, "Period and result selectors share one filter group with contextual help");
-        await page.locator("#moreFilters > summary").click();
-        const open = await page.locator("#filters button").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).length);
-        assert.equal(open - closed, 8, "Four secondary selectors and help remain in the same filter region");
+        const controls = await page.locator(".period-controls button").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).length);
+        assert.equal(controls, 14, "Seven selectors and seven help buttons are visible without expansion");
         await selectActivityOption(page, "serviceFilter", "Calendar"); await ready(page);
-        await page.locator("#moreFilters > summary").click();
-        assert.equal(await page.locator("#moreFiltersCount").innerText(), " (1 active)");
         assert.match(await page.locator("#filterChips").innerText(), /Service: Calendar/);
         await period(page, "2026-07-29", "2026-10-05");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         assert.equal(await page.locator("#serviceFilter").inputValue(), "Calendar");
-        measurements.push({ theme, width, closedFilterControls: closed, expandedFilterControls: open });
+        measurements.push({ theme, width, filterControls: controls });
         if (proofs) {
             await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
             await page.screenshot({ path: path.join(proofs, `period-flow-${theme}-${width}.png`), fullPage: true });
@@ -294,7 +289,7 @@ test("period-first hierarchy reduces initial controls, keeps refinements/routes 
         assert.equal(await page.locator("#collectionWindow-control").evaluate(node => node === document.activeElement), true);
         await page.goBack(); await ready(page);
         assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls");
-        assert.equal(await page.locator("#moreFilters").getAttribute("open"), null);
+        assert.equal(await page.locator("#moreFilters").count(), 0);
     }
     if (proofs) await writeFile(path.join(proofs, "period-controls.json"), JSON.stringify(measurements, null, 2));
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview", "/api/assessment/consent"].includes(row.path)),

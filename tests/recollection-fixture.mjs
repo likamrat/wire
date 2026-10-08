@@ -35,12 +35,16 @@ export async function recollectionFixture(t) {
     let runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     await collectorFor(context).configure({ appDbPath: dbPath, sessionRoot, approved: true, enabled: false, windowDays: 7, pollSeconds: 5 });
     await collectorFor(context).collectNow();
-    t.after(async () => { await runtime.close(); await rm(root, { recursive: true, force: true }); });
+    t.after(async () => { await runtime?.close(); await rm(root, { recursive: true, force: true }); });
     return { context, root, dbPath, files, sourceId, otherSourceId, firstDay, secondDay,
         get runtime() { return runtime; },
         get collector() { return collectorFor(context); },
+        async stop() {
+            await runtime?.close();
+            runtime = null;
+        },
         async restart() {
-            await runtime.close();
+            await runtime?.close();
             runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
         },
     };

@@ -15,6 +15,7 @@ import { executeAssessmentAction } from "../lib/assessment.mjs";
 import { buildAssessmentModel, finalizePersonalEvaluationCleanup } from "../lib/assessment-read-model.mjs";
 import { selectPersonalEvaluationCleanup } from "../lib/personal-evaluation.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
+import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 
 const scope = f => ({ sourceSessionIds: [f.sourceId], from: f.firstDay, to: f.firstDay,
     restorePrompts: false, timeContext: { timeZone: "UTC", locale: "en-US" } });
@@ -315,7 +316,7 @@ for (const uncertainPrefix of [false, true]) test(`source recollection preserves
         : { actor: "user", basis: "host-direct-input" },
         "A known first message survives chunk boundaries; an uncertain prefix cannot prove a later human author");
     assert.deepEqual(prompts.get("outside-C").authorship, { actor: "user", basis: "host-direct-input" });
-    assert.ok([...prompts.values()].every(prompt => prompt.authorshipVersion === 3));
+    assert.ok([...prompts.values()].every(prompt => prompt.authorshipVersion === promptAuthorship.version));
     assert.doesNotMatch(JSON.stringify(state.evidence), /transformedContent|<current_datetime>|SYNTHETIC_PADDING_NOT_RETAINED/);
     assert.deepEqual(await hashes([f.dbPath, ...f.files]), sourceBefore);
 });

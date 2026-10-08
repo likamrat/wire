@@ -36,7 +36,7 @@ test("an older retained human prompt changes from unverified to Your through ori
     await page.goto(app.runtime().url + `#request?request=${encodeURIComponent(human.scenarioId)}`); await ready(page);
     const reader = page.locator(".request-original");
     assert.equal(await reader.getByRole("heading", { name: "Copilot chat prompt", exact: true }).count(), 1);
-    assert.match(await reader.innerText(), /Author unverified/);
+    assert.equal(await reader.locator(".reader-state").textContent(), "Author unverified");
     if (proof) { await mkdir(proof, { recursive: true }); await reader.screenshot({ path: path.join(proof, "retained-human-before.png") }); }
     await app.runtime().collector.collectNow();
     await (await revealStoredRefresh(page)).click(); await ready(page);
@@ -93,7 +93,7 @@ test("collector -> real server -> Activity, reader and new report preserve truth
     await page.locator("#activitySearch").fill("Invented planning-only kickoff"); await ready(page); await openActivitySessions(page);
     const kickoff = app.cases[0], row = page.locator(`.request-row[data-view-key="request:${kickoff.scenarioId}"]`);
     await row.locator("input").check();
-    const listRead = row.getByRole("button", { name: "Read prompt", exact: true });
+    const listRead = row.getByRole("button", { name: "Read full prompt", exact: true });
     await listRead.focus(); await page.keyboard.press("Enter");
     assert.equal(await row.locator(".ux-code-label").textContent(), "Agent prompt / local only");
     assert.equal(await row.locator("pre").textContent(), kickoff.data.content);

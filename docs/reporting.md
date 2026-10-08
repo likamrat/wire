@@ -4,6 +4,14 @@ WIRE describes your approved, recorded interactions. It does not require a synth
 
 ## Reading the measures
 
+The analytical filter row uses short display names, not new provenance or units:
+**Work IQ calls**, **Graph API call sites**, **Graph statuses**, **Returned API
+entries**, **HTTP recorder** and **Graph code references**. A call site is not a
+measured network execution; visible statuses are a subset of those sites. Returned
+entries, owned diagnostic captures and code references remain separate evidence.
+Contextual help carries these distinctions; counts and reports keep their exact
+unit names. Filter layout and wording do not alter saved reports or membership.
+
 **Activity categories** group Work IQ calls by recorded data-service targets or by
 preparatory **Discovery**. API discovery (`search_paths`), schema lookup (`get_schema`)
 and agent discovery (`list_agents`) are not executions of the data operations they
@@ -91,6 +99,9 @@ Markdown share those facts and denominators. Source-neutral reports call the app
 - Every selected format uses the same frozen facts and reviewed content.
 - Markdown names each timing boundary and assessment origin, just like HTML/PDF;
   tool-call and final-response medians keep separate call/request coverage.
+- New readable model results name the frozen model and rubric ID/version, including
+  each comparison side's own origin. Missing legacy metadata is not filled from
+  today's evaluator; a partly saved rubric labels its missing ID or version.
 - The manifest retains privacy-projected evaluation facts even when JSON is not a chosen presentation format.
 - Evaluation facts contain no answer excerpts or raw prompt text. Prompt copies follow the separately chosen None, Masked or Original mode.
 - New readable reports label attributable originating text **User prompt** or **Agent prompt**, using the same retained author evidence as the app's **Your prompt** and **Agent prompt**. Known chat origin with an unverified author is **Copilot chat prompt**; genuinely unverified/non-chat origin remains **Prompt**. Captured question/query/filter fields are **Recorded tool argument**, not assumed to be human-authored. The prompt's author does not establish who initiated or authorized subsequent calls.
@@ -125,6 +136,12 @@ valid message ID, delivery and mode metadata, and no other injected block for de
 The supported neutral `canvas-context` suffix may follow that exact body. Its body is opaque,
 untrusted attachment data: it supplies no author evidence or instructions. Arbitrary trailing
 markup, duplicate/extra wrappers and malformed boundaries are not accepted as the direct-input path.
+The fixed host image-attachment `system_reminder` is also supported, only with its
+exact known notice outside the matched displayed body. Other reminder text, added
+attributes, duplicate wrappers and extra suffixes are rejected. This does not
+relax the message ID, timestamp, mode, delivery or agent-created-first-message checks.
+An eligible standalone chat need not have a workspace creation row; missing fields
+alone never qualify it without the complete supported input envelope.
 That combination is **Your prompt** in the app, not an assertion that a named person was authenticated.
 A host-added `cross_session_message` envelope with valid sender fields is **Agent prompt**.
 The parser never inspects tags inside the displayed content as provenance: a user copying an agent
@@ -160,6 +177,11 @@ rescanned for unrelated appends; source rotation, changed retained targets or a 
 history identity invalidates the relevant cache. A local classifier version prevents re-reading
 freshly classified unsupported original events as though their metadata had been lost.
 The lookup version also prevents an earlier tail-only miss from masquerading as a completed broader lookup.
+Completed lookup caches also carry the classifier version. An earlier unsupported
+format must not strand the exact retained record after a supported envelope is added.
+Current unsupported formats are not repeatedly rescanned. Explicit system-supplied
+context remains author-unverified, with a specific reason, even if its prose resembles
+a user request or agent handoff.
 Missing originals or proof outside the approved window/bounds remain unverified.
 This author-only correction cannot restore deleted content or rewrite frozen report membership. A new
 author-filtered view or report can reflect corrected origin metadata. Other missing

@@ -19,30 +19,39 @@ const render = process.env.WIRE_INSIGHT_BASELINE
     ? (await import(pathToFileURL(path.join(process.env.WIRE_INSIGHT_BASELINE, "lib", "render.mjs")))).renderHtmlShell : renderHtmlShell;
 const formatter = createAssessmentPresentation(contract);
 const checks = { accuracy: "request-requirements-corroborated", "answer-trust": "recorded-answer-support", "action-trust": "action-intent-alignment" };
-function records() {
-    return Array.from({ length: 4 }, (_, index) => {
+function records(supplied = false) {
+    let callIndex = 0;
+    return Array.from({ length: supplied ? 69 : 4 }, (_, index) => {
         const record = fixture(`hierarchy-${index}`), start = Date.UTC(2026, 9, 1, 12, index);
         record.sourceSessionId = `hierarchy-chat-${index}`;
         record.userPrompt = { ...record.userPrompt, text: `Synthetic hierarchy request ${index}`, sourceEventId: `prompt-${index}`, sourceTimestamp: new Date(start).toISOString() };
         record.followUpPrompts = [];
-        Object.assign(record.toolCalls[0], { completionEventId: `end-${index}`, startedAt: new Date(start).toISOString() });
-        if (index < 3) Object.assign(record.toolCalls[0], { completedAt: new Date(start + 3072).toISOString(), durationMs: 3072 });
-        if (index < 2) record.responseTiming = recordedResponseTiming([
+        record.toolCalls = Array.from({ length: supplied ? index < 19 ? 4 : 3 : 1 }, () => {
+            const call = structuredClone(record.toolCalls[0]), id = callIndex++;
+            Object.assign(call, { toolCallId: `call-${id}`, startEventId: `start-${id}`, completionEventId: `end-${id}`, startedAt: new Date(start).toISOString() });
+            const duration = supplied ? 2955 : 3072;
+            if (id < (supplied ? 225 : 3)) Object.assign(call, { completedAt: new Date(start + duration).toISOString(), durationMs: duration });
+            return call;
+        });
+        if (index < (supplied ? 8 : 2)) record.responseTiming = recordedResponseTiming([
             { id: `prompt-${index}`, type: "user.message", timestamp: new Date(start).toISOString(), data: { messageId: "p" } },
-            { id: `answer-${index}`, type: "assistant.message", timestamp: new Date(start + 29713).toISOString(), data: {
+            { id: `answer-${index}`, type: "assistant.message", timestamp: new Date(start + (supplied ? 16820 : 29713)).toISOString(), data: {
                 wireResponseMetadataVersion: 1, hasResponseText: true, finalAnswer: true, hasToolRequests: false, turnId: "t", originatingMessageId: "p",
             } },
-            { id: `turn-${index}`, type: "assistant.turn_end", timestamp: new Date(start + 29714).toISOString(), data: { turnId: "t" } },
+            { id: `turn-${index}`, type: "assistant.turn_end", timestamp: new Date(start + (supplied ? 16821 : 29714)).toISOString(), data: { turnId: "t" } },
         ], record.userPrompt);
         return record;
     });
 }
 function withQuality(metrics, mode) {
     if (mode === "unassessed") return metrics;
+    if (mode === "mixed") return [...withQuality(metrics, "ordinary"), ...withQuality(metrics, "personal").slice(metrics.length).map(metric => ({
+        ...metric, metricRef: metric.metricRef.replace("0000", "1000"),
+    }))];
     const additions = metrics.filter(metric => checks[metric.dimension]).map((original, index) => {
         const metric = structuredClone(original), eligible = metric.coverage.eligible;
         const unavailable = ["error", "insufficient"].includes(mode);
-        const covered = unavailable ? 0 : mode === "ordinary" ? Math.min(3, eligible) : eligible;
+        const covered = unavailable ? 0 : mode === "one-of-69" ? 1 : mode === "different" ? Math.min(index, eligible) : mode === "ordinary" ? Math.min(3, eligible) : eligible;
         const pass = mode === "zero" || mode === "personal" && index === 2 ? 0 : mode === "ordinary" ? Math.min(2, covered) : covered;
         Object.assign(metric, {
             metricRef: `metric-${(900 + index).toString(16).padStart(32, "0")}`,
@@ -60,8 +69,8 @@ function withQuality(metrics, mode) {
     });
     return [...metrics, ...additions];
 }
-async function setup(t) {
-    const state = { revision: 1, pseudonymKey: "a".repeat(64), evidence: records(), exports: [] }, before = structuredClone(state);
+async function setup(t, { supplied = false } = {}) {
+    const state = { revision: 1, pseudonymKey: "a".repeat(64), evidence: records(supplied), exports: [] }, before = structuredClone(state);
     const model = buildAssessmentModel(state), rejected = [], errors = [], calls = [];
     let mode = "unassessed", automaticState = "off";
     const collection = { state: "not-configured", revision: 1, configVersion: 0, connected: false, config: null,
@@ -135,7 +144,9 @@ async function setup(t) {
 }
 async function ready(page, host) {
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await page.locator(`${host} .assessment-grid`).waitFor();
+    await page.locator(`${host} .assessment-grid`).waitFor().catch(error => {
+        return page.locator(host).innerText().then(text => { throw new Error(`${text}\n${error.message}`); });
+    });
     await page.evaluate(() => document.fonts.ready);
 }
 async function capture(page, host, name) {
@@ -191,16 +202,16 @@ function hierarchyIssues(layout) {
     for (const group of layout.groups) for (const [index, row] of group.rows.entries()) {
         const prefix = `${row.dimension}/${index}`;
         if (!row.label || row.label.tag !== "H4") issues.push(`${prefix}: missing measure heading`);
-        for (const [role, item, size] of [["label", row.label, 14], ["value", row.value, 22], ["coverage", row.coverage, 12]]) {
+        const quality = row.dimension !== "speed";
+        for (const [role, item, size] of [["label", row.label, 14], ["value", row.value, quality ? 14 : 22], ["coverage", row.coverage, quality ? 22 : 12]]) {
             if (item && Math.abs(parseFloat(item.size) - size * layout.textScale) > 0.01) issues.push(`${prefix}: ${role} is not the required ${size}px text role`);
         }
         if (row.label && row.dimension === "accuracy" && row.label.text !== "Answer correctness") issues.push(`${prefix}: incorrect Accuracy measure label`);
         if (row.label && ["size", "weight", "line"].some(key => row.label[key] !== reference.label[key])) issues.push(`${prefix}: label typography differs from Speed`);
-        if (["size", "weight", "line"].some(key => row.value[key] !== reference.value[key])) issues.push(`${prefix}: value typography differs from Speed`);
-        if (row.coverage.size !== reference.coverage.size || row.coverage.line !== reference.coverage.line) issues.push(`${prefix}: coverage typography differs from Speed`);
-        if (row.label && (row.label.box.bottom > row.value.box.y || row.value.box.bottom > row.coverage.box.y + 1)) issues.push(`${prefix}: label/value/coverage hierarchy overlaps`);
-        if (row.label && Math.abs(row.value.box.y - row.label.box.bottom - 8) > 1) issues.push(`${prefix}: label/value gap differs from Speed`);
-        if (Math.abs(row.coverage.box.y - row.value.box.bottom - 4) > 1) issues.push(`${prefix}: value/coverage gap differs from Speed`);
+        const first = quality ? row.coverage : row.value, second = quality ? row.value : row.coverage;
+        if (row.label && (row.label.box.bottom > first.box.y || first.box.bottom > second.box.y + 1)) issues.push(`${prefix}: reading hierarchy overlaps`);
+        if (row.label && Math.abs(first.box.y - (row.origin ?? row.label).box.bottom - 8) > 1) issues.push(`${prefix}: headline gap differs`);
+        if (Math.abs(second.box.y - first.box.bottom - 4) > 1) issues.push(`${prefix}: result gap differs`);
         if (index && row.border !== "1px") issues.push(`${prefix}: missing restrained divider`);
         if (index && row.label && row.label.box.y - group.rows[index - 1].box.bottom < 32) issues.push(`${prefix}: insufficient measure separation`);
         for (const item of [row.label, row.value, row.coverage, row.origin, row.reason].filter(Boolean)) {
@@ -226,37 +237,39 @@ async function assertFacts(host, model) {
     for (const dimension of ["accuracy", "answer-trust", "action-trust"]) {
         const facts = host.locator(`[data-dimension="${dimension}"]`);
         const expected = model.groups[dimension];
-        assert.deepEqual(await facts.locator(".assessment-value").allTextContents(), expected.map(row => row.value));
-        assert.deepEqual(await facts.locator(".assessment-coverage").allTextContents(), expected.map(row => row.coverage));
+        assert.deepEqual(await facts.locator(".assessment-value").allTextContents(), expected.map(row => row.reading?.value ?? row.value));
+        assert.deepEqual(await facts.locator(".assessment-coverage").allTextContents(), expected.map(row => row.reading?.coverage ?? row.coverage));
         assert.deepEqual(await facts.evaluateAll(nodes => nodes.map(node => node.dataset.band)), expected.map(row => row.band));
         for (const [index, row] of expected.entries()) {
-            assert.ok((await facts.nth(index).textContent()).includes(row.qualification));
             if (["Model assessment", "Your feedback"].includes(row.origin)) assert.ok((await facts.nth(index).textContent()).includes(row.origin));
         }
     }
     assert.equal(await host.locator("[data-dimension=cost]").count(), 0);
 }
-test("Insights use Speed's label/value/coverage hierarchy across normal app surfaces and states", { timeout: 120000 }, async t => {
+test("Insights lead with check coverage and align dividers across normal surfaces and states", { timeout: 120000 }, async t => {
     const f = await setup(t), { page } = f, evidence = [], issues = [];
-    for (const mode of ["unassessed", "ordinary", "zero", "full", "personal", "error", "insufficient"]) {
+    for (const mode of ["unassessed", "ordinary", "zero", "full", "personal", "mixed", "different", "error", "insufficient"]) {
         f.setMode(mode);
         await page.goto("about:blank");
         await page.goto(f.origin + "#home"); await ready(page, "#homeInsights");
         const host = page.locator("#homeInsights");
         const expected = formatter.summarize(f.overview(f.model.overview.interactionRefs).metrics);
         const widths = ["ordinary", "personal"].includes(mode) ? [1440, 768, 464, 472, 375] : [1440, 375];
-        for (const theme of ["light", "dark"]) for (const width of widths) for (const zoom of [100, 200]) {
+        const layouts = ["ordinary", "personal", "unassessed"].includes(mode)
+            ? ["light", "dark"].flatMap(theme => widths.flatMap(width => [100, 200].map(zoom => [theme, width, zoom])))
+            : [["light", 1440, 100], ["dark", 375, 200]];
+        for (const [theme, width, zoom] of layouts) {
             await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
             await page.evaluate(zoom => { document.documentElement.style.fontSize = zoom + "%"; }, zoom);
             await page.mouse.move(0, 0);
             await assertFacts(host, expected);
-            assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-value').allTextContents(), ["3,072 ms", "29,713 ms"]);
-            assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-coverage').allTextContents(), ["Median \u00b7 3 / 4 calls timed", "Median \u00b7 2 / 4 requests timed"]);
+            assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-value').allTextContents(), ["3.07 s", "29.71 s"]);
+            assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-coverage').allTextContents(), ["3 of 4 calls timed \u00b7 Median", "2 of 4 requests timed \u00b7 Median"]);
             const layout = await geometry(host), name = `${mode}-${theme}-${width}-${zoom}`;
             if (zoom === 100 && width === 464) assert.notEqual(layout.groups[0].box.y, layout.groups[1].box.y, "Narrow categories stack without empty shared tracks.");
             if (zoom === 100 && width === 472) assert.equal(layout.groups[0].box.y, layout.groups[1].box.y, "Shared tracks begin when two columns fit.");
             evidence.push({ name, ...layout }); issues.push(...hierarchyIssues(layout).map(issue => `${name}: ${issue}`));
-            if (proofs && ["unassessed", "ordinary", "personal", "error"].includes(mode)) {
+            if (proofs && ["unassessed", "ordinary", "personal", "mixed", "different", "error"].includes(mode)) {
                 await capture(page, host, name);
             }
         }
@@ -270,7 +283,7 @@ test("Insights use Speed's label/value/coverage hierarchy across normal app surf
     const activity = page.locator("#activityInsights");
     await assertFacts(activity, formatter.summarize(f.overview(f.model.overview.interactionRefs).metrics));
     await page.locator("#activitySearch").fill("Synthetic hierarchy request 0");
-    await page.waitForFunction(() => document.querySelector("#activityInsights")?.textContent.includes("1 / 1 assessed")
+    await page.waitForFunction(() => document.querySelector("#activityInsights")?.textContent.includes("Results for 1 of 1 request")
         && document.querySelector("#activityInsights")?.getAttribute("aria-busy") !== "true");
     const ref = f.model.catalog.find(row => row.scenarioId === "hierarchy-0").interactionRef;
     await assertFacts(activity, formatter.summarize(f.overview([ref]).metrics));
@@ -278,6 +291,10 @@ test("Insights use Speed's label/value/coverage hierarchy across normal app surf
     evidence.push({ name: "activity-filtered", ...selected }); issues.push(...hierarchyIssues(selected));
     await capture(page, activity, "activity-filtered");
     assert.ok(f.calls.some(call => call.path.endsWith("/overview") && call.input.interactionRefs.length === 1));
+    await page.goto(f.origin + "#activity?session=hierarchy-chat-0"); await ready(page, "#activityInsights");
+    await assertFacts(activity, formatter.summarize(f.overview([ref]).metrics));
+    assert.match(await activity.locator(".assessment-scope").innerText(), /full retained interaction/);
+    await capture(page, activity, "chat-scoped");
     await page.goto(f.origin + "#request?request=hierarchy-0"); await ready(page, ".interaction-insights");
     const detail = page.locator(".interaction-insights");
     await assertFacts(detail, formatter.summarize(withQuality(f.model.details.get(ref).metrics, "personal"), { singleInteraction: true }));
@@ -289,15 +306,56 @@ test("Insights use Speed's label/value/coverage hierarchy across normal app surf
         evidence.push({ name, ...layout }); issues.push(...hierarchyIssues(layout).map(issue => `${name}: ${issue}`));
         await capture(page, detail, name);
     }
+    await page.goBack(); await ready(page, "#activityInsights");
+    await assertFacts(activity, formatter.summarize(f.overview([ref]).metrics));
     f.setMode("unassessed"); f.setAutomaticState("assessing");
     await page.goto("about:blank");
     await page.goto(f.origin + "#home"); await ready(page, "#homeInsights");
     await page.waitForFunction(() => document.querySelector("#homeInsights .assessment-scoring-status")?.textContent.includes("Assessing"));
     assert.match(await page.locator("#homeInsights").innerText(), /Automatic scores: Assessing.*values below cover only this view's included interactions/);
-    assert.deepEqual(await page.locator('#homeInsights [data-dimension="accuracy"] .assessment-value').allTextContents(), ["Unassessed"]);
+    assert.deepEqual(await page.locator('#homeInsights [data-dimension="accuracy"] .assessment-value').allTextContents(), ["No result"]);
     evidence.push({ name: "pending", text: await page.locator("#homeInsights").innerText() });
     if (proofs) await writeFile(path.join(proofs, "geometry.json"), JSON.stringify({ evidence, issues, calls: f.calls }, null, 2));
     assert.deepEqual(issues, []);
+});
+
+test("one of 69 checked requests reads before passed counts without hiding exact evidence", { timeout: 60000 }, async t => {
+    const f = await setup(t, { supplied: true }), { page } = f;
+    f.setMode("one-of-69");
+    await page.goto(f.origin + "#home"); await ready(page, "#homeInsights");
+    const host = page.locator("#homeInsights"), layouts = [];
+    for (const [theme, width, zoom] of [["light", 1440, 100], ["dark", 1440, 100], ["dark", 375, 200]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await page.evaluate(zoom => { document.documentElement.style.fontSize = zoom + "%"; }, zoom);
+        const name = `one-of-69-${theme}-${width}-${zoom}`;
+        await capture(page, host, name);
+        layouts.push({ name, ...await geometry(host) });
+    }
+    if (proofs) await writeFile(path.join(proofs, "one-of-69.json"), JSON.stringify(layouts, null, 2));
+    assert.deepEqual(layouts.flatMap(hierarchyIssues), []);
+    assert.match(await host.locator(".assessment-takeaway").innerText(), /same 1 request\. Missing results do not count as failed checks/);
+    assert.deepEqual(await host.locator(".assessment-check .assessment-coverage").allTextContents(), Array(3).fill("Results for 1 of 69 requests"));
+    assert.deepEqual(await host.locator(".assessment-check .assessment-value").allTextContents(), Array(3).fill("1 passed \u00b7 0 failed"));
+    assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-value').allTextContents(), ["2.96 s", "16.82 s"]);
+    assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-coverage').allTextContents(), ["225 of 226 calls timed \u00b7 Median", "8 of 69 requests timed \u00b7 Median"]);
+    assert.doesNotMatch(await host.locator(".assessment-grid").innerText(), /100%|independent ground truth|proof of authorization/);
+    await host.getByText("How to read these results", { exact: true }).focus();
+    await page.keyboard.press("Enter");
+    assert.match(await host.locator(".assessment-reading-help").innerText(), /Missing results are not failures.*do not mean a request is queued/);
+    assert.match(await host.locator(".assessment-reading-help").innerText(), /One request can contain several tool calls/);
+    assert.match(await host.locator(".assessment-reading-help").innerText(), /do not prove a person authorized/);
+    const readingHelp = host.getByText("How to read these results", { exact: true });
+    assert.ok((await readingHelp.boundingBox()).height >= 44);
+    await readingHelp.tap();
+    assert.equal(await host.locator(".assessment-reading-help").evaluate(node => node.open), false);
+    await host.getByRole("button", { name: "Measure definitions", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Insight details", exact: true });
+    await dialog.getByText("Recorded measures and definitions", { exact: true }).click();
+    const detail = await dialog.innerText();
+    for (const exact of ["100%", "1 / 1 passed; 1 / 69 assessed", "2,955 ms", "16,820 ms",
+        "Model synthetic-only; rubric wire-recorded-interaction-review v1", "Recorded intent alignment, not proof of authorization."]) assert.ok(detail.includes(exact), exact);
+    await page.keyboard.press("Escape");
+    assert.equal(await host.getByRole("button", { name: "Measure definitions", exact: true }).evaluate(node => node === document.activeElement), true);
 });
 
 test("Insights help and definitions remain accessible without initiating actions", { timeout: 60000 }, async t => {

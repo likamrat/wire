@@ -9,6 +9,19 @@ import { fixture } from "./helpers.mjs";
 
 const help = createControlHelp(serviceCategories);
 
+test("category filter help explains available choices without inventing service evidence", () => {
+    const tool = help.categoryGuide(["Discovery", "Search", "Mail", "Multiple workloads", "Unknown"]);
+    assert.match(tool, /Discovery:.*not data execution/);
+    assert.match(tool, /Search and retrieval: may span sources/);
+    assert.match(tool, /Mail names recorded service targets, not hidden traffic/);
+    assert.match(tool, /More than one service: one call, different services/);
+    assert.match(tool, /Service not shown: insufficient service evidence, not failure/);
+    assert.doesNotMatch(help.categoryGuide(["Mail", "Calendar"]), /Discovery|Search and retrieval|Service not shown/);
+    assert.doesNotMatch(help.categoryGuide(["Discovery", "Mail"], "reported-api"), /Discovery/);
+    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})());`)();
+    assert.equal(restored.categoryGuide(["Discovery", "Mail"]), help.categoryGuide(["Discovery", "Mail"]));
+});
+
 test("every authored filter has shared definitions for contextual help outside its menu", async () => {
     const source = await readFile(new URL("../lib/render.mjs", import.meta.url), "utf8");
     const controls = [...source.matchAll(/<select\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)];

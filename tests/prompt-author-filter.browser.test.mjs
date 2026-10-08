@@ -59,7 +59,7 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.equal(app.requests.length, before);
     await page.locator('[data-select-id="promptAuthorFilter"]').click();
     const emptyDraft = page.locator(".select-popup:visible");
-    await emptyDraft.getByRole("checkbox", { name: "Deselect all prompt authors", exact: true }).click();
+    await emptyDraft.getByRole("checkbox", { name: "Deselect all authors", exact: true }).click();
     assert.equal(await emptyDraft.getByRole("button", { name: "Apply", exact: true }).isDisabled(), true);
     assert.equal(await emptyDraft.locator(".select-draft-hint").textContent(), "Select at least one prompt author.");
     assert.equal(app.requests.length, before);

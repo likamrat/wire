@@ -85,7 +85,6 @@ async function setup(run, options = {}) {
 async function ready(page) {
     await page.locator("#workspace").waitFor({ state: "visible" });
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-    if (await page.locator("#moreFilters").isVisible() && await page.locator("#moreFilters").getAttribute("open") === null) await page.locator("#moreFilters>summary").click();
     await openActivitySessions(page);
 }
 const triggerFor = (page, id) => page.locator(`[data-select-id="${id}"]`);
@@ -128,7 +127,7 @@ test("Activity field help explains the selected evidence unit, and exploration c
     await page.goto(origin + "/#activity"); await ready(page);
     await page.getByRole("button", { name: "About Activity", exact: true }).click();
     await page.getByRole("tooltip").waitFor({ state: "visible" });
-    assert.equal(await page.getByRole("tooltip").innerText(), `${help.fields.layerFilter} ${help.layers.tool}`);
+    assert.equal(await page.getByRole("tooltip").innerText(), `${help.layers.tool} ${help.fields.layerFilter}`);
     await page.keyboard.press("Escape");
     await page.mouse.move(0, 0);
     const trigger = triggerFor(page, "layerFilter"), reads = requests.length;
@@ -142,13 +141,13 @@ test("Activity field help explains the selected evidence unit, and exploration c
     assert.equal(requests.length, reads);
     await trigger.press("Space"); await trigger.press("ArrowDown"); await trigger.press("Enter"); await ready(page);
     assert.equal(await page.locator("#layerFilter").inputValue(), "direct-request");
-    assert.equal(await trigger.locator(".select-value").innerText(), "Recorded Graph request sites");
+    assert.equal(await trigger.locator(".select-value").innerText(), "Graph API call sites");
     assert.deepEqual(await page.evaluate(() => window.helpControlChanges), [{ id: "layerFilter", value: "direct-request" }]);
     await trigger.click();
-    assert.equal(await page.getByRole("option", { name: "Graph sites with visible status", exact: true }).innerText(), "Graph sites with visible status");
+    assert.equal(await page.getByRole("option", { name: "Graph statuses", exact: true }).innerText(), "Graph statuses");
     await page.locator("#pageTitle").click();
     assert.equal(await trigger.getAttribute("aria-expanded"), "false");
-    await readTooltip(page, page.getByRole("button", { name: "About Activity", exact: true }), `${help.fields.layerFilter} ${help.layers["direct-request"]}`);
+    await readTooltip(page, page.getByRole("button", { name: "About Activity", exact: true }), `${help.layers["direct-request"]} ${help.fields.layerFilter}`);
 }));
 
 test("touch sees a full choice label and selects it with one tap", { timeout: 20000 }, async () => setup(async ({ context, origin, requests }) => {
@@ -156,9 +155,9 @@ test("touch sees a full choice label and selects it with one tap", { timeout: 20
     await page.goto(origin + "/#activity"); await ready(page);
     const before = page.url(), reads = requests.length, trigger = triggerFor(page, "layerFilter");
     await trigger.tap();
-    const row = page.getByRole("option", { name: "Graph sites with visible status", exact: true });
+    const row = page.getByRole("option", { name: "Graph statuses", exact: true });
     await row.scrollIntoViewIfNeeded();
-    assert.equal(await row.innerText(), "Graph sites with visible status");
+    assert.equal(await row.innerText(), "Graph statuses");
     assert.equal(await row.locator(".select-option-description, .select-option-detail").count(), 0);
     assert.equal(page.url(), before);
     assert.equal(requests.length, reads);
@@ -166,7 +165,7 @@ test("touch sees a full choice label and selects it with one tap", { timeout: 20
     await row.tap(); await ready(page);
     assert.equal(await page.locator("#layerFilter").inputValue(), "recorded-http");
     assert.equal(await trigger.getAttribute("aria-expanded"), "false");
-    assert.equal(await trigger.locator(".select-value").innerText(), "Graph sites with visible status");
+    assert.equal(await trigger.locator(".select-value").innerText(), "Graph statuses");
     assert.deepEqual(await page.evaluate(() => window.helpControlChanges), [{ id: "layerFilter", value: "recorded-http" }]);
 }, { viewport: { width: 375, height: 900 }, isMobile: true, hasTouch: true }));
 

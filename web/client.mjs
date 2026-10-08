@@ -34,7 +34,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let issuesSignature, issuesLoading = false, issuesStatus;
     const issueAttempts = new Map();
     const presentation = createDisclosureState(), readingPositions = new Map();
-    const textAccess = createTextAccess(ux, presentation, authorship);
+    const textAccess = createTextAccess(ux, presentation, authorship, metadata);
     let detailOwner = "page";
     let collection, collectionSettings, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
     const sidebar = mountSidebarNavigation(ux);
@@ -363,11 +363,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.append(label, ux.helpButton(labelText, text));
         field.append(heading, control);
     }
-    fieldHelp("dateFilter", "When", "All retained dates includes all stored dates in this collection, not a fixed experiment. Last 7/30 days include today; custom dates include both boundary days in the display time zone shown in the header. Dates filter stored evidence; Check for new activity reads only approved local history.");
-    fieldHelp("serviceFilter", "Activity category", () => route.service ? categories.describe(route.service).description : "Categories come from recorded resource paths and tool metadata. Discovery describes preparation, not a data service; hidden downstream services are not inferred.");
-    fieldHelp("projectFilter", "GitHub Copilot project", () => help.describeOption({ id: "projectFilter", value: route.project || "all" }));
-    fieldHelp("layerFilter", "Activity", () => `${help.fields.layerFilter} ${help.layers[applied?.layer || route.layer || "tool"]}`);
+    fieldHelp("dateFilter", "When", "All dates uses retained evidence in this collection. Last 7/30 days include today. Custom dates include both boundary days in the display time zone. Changing dates does not collect history.");
+    fieldHelp("serviceFilter", "Category", () => {
+        const layer = applied?.layer || route.layer || "tool";
+        const selected = applied ? applied.filters.workloads?.[0] : route.service;
+        return selected ? `${categories.describe(selected).label}: ${categories.describe(selected).description}`
+            : help.categoryGuide([...$("serviceFilter").options].filter(option => option.value !== "all").map(option => option.value), layer);
+    });
+    fieldHelp("projectFilter", "Project", () => help.describeOption({ id: "projectFilter", value: route.project || "all" }));
+    fieldHelp("layerFilter", "Activity", () => `${help.layers[applied?.layer || route.layer || "tool"]} ${help.fields.layerFilter}`);
     fieldHelp("scopeFilter", "Collection", () => `${help.fields.scopeFilter} ${help.describeOption({ id: "scopeFilter", value: route.scope || "history" })}`);
+    $("filters").querySelector(".filter-scroll").addEventListener("focusin", event => {
+        if (event.target instanceof HTMLElement && event.target.matches("button")) {
+            (event.target.closest(".help-heading") || event.target).scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+    });
     const authorHeading = el("div", "help-heading result-filter-heading"), authorLabel = $("promptAuthorFilterLabel");
     authorLabel.replaceWith(authorHeading);
     authorHeading.append(authorLabel, ux.helpButton("Prompt author", "Choose Your prompts, Agent prompts, or both, then Apply. All also includes unverified authors. This filters whole originating interactions, not which actor executed their calls."));
@@ -1037,8 +1047,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const controls = { service: "serviceFilter", project: "projectFilter", scope: "scopeFilter", authors: "promptAuthorFilter", from: "dateFilter", to: "dateFilter" };
             const changed = Object.keys(controls).find(key => route[key] !== previousRoute[key]);
             const trigger = changed ? $(controls[changed] + "-control") : null;
-            const target = trigger?.checkVisibility() ? trigger : $("moreFilters").querySelector("summary");
+            const target = trigger?.checkVisibility() ? trigger : $("dateFilter-control");
             ux.restoreFocus(target);
+            target?.scrollIntoView({ block: "nearest", inline: "nearest" });
         }
         if (!controlsOnly) { assessmentUI.leave(); automaticUI.leave(); }
         let update = true;
@@ -1343,9 +1354,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             chip.append(ux.icon("close"));
             host.append(ux.tooltip(chip, chip.getAttribute("aria-label")));
         }
-        const active = ["service", "project", "endpoint"].filter(key => Boolean(route[key])).length
-            + Number(Boolean(route.layer && route.layer !== "tool")) + Number(Boolean(route.scope && route.scope !== "history"));
-        setText($("moreFiltersCount"), active ? ` (${active} active)` : "");
     }
     function renderPeriodFeedback() {
         $("periodFeedback").hidden = !["home", "activity"].includes(route.view);
@@ -1375,7 +1383,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const projects = new Map(state.scenarios.map((scenario) => [scenario.projectId || "unscoped", scenario.projectId ? scenario.project || scenario.projectId : "Copilot chat without a project"]));
         $("projectFilter").replaceChildren(option("all", "All projects"), ...[...projects].map(([id, name]) => option(id, name)));
         const workloads = analytics.filterOptions?.workloads || analytics.filterOptions?.services || [];
-        $("serviceFilter").closest(".filter-field").querySelector(".help-heading label").textContent = categoryNoun();
+        $("serviceFilter").closest(".filter-field").querySelector(".help-heading label").textContent = applied.layer === "tool" ? "Category" : "Service";
         $("serviceFilter").closest(".filter-field").querySelector(".ux-help").setAttribute("aria-label", "About " + categoryNoun());
         $("serviceFilter").replaceChildren(option("all", allCategories()), ...workloads.map((item) => option(typeof item === "string" ? item : item.id, serviceLabel(typeof item === "string" ? item : item.label))));
         document.querySelector('[data-chart="workload"]').textContent = applied.layer === "tool" ? "By category" : "By service";
@@ -1815,6 +1823,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const evidence = tool?.failureEvidence;
         if (evidence?.version === 1 && evidence.reason === "error-code-recorded" && evidence.code) errors.unshift("Tool error: " + evidence.code);
         if (evidence?.version === 1 && evidence.messageSignal === "access-denial") errors.push("Tool error mentions access denial");
+        if (evidence?.version === 1 && evidence.messageSignal === "request-timeout") errors.push("Tool reported an MCP request timeout (-32001).");
         if (errors.length) return errors.join("; ");
         if (!failed && tool?.toolSucceeded !== false) return null;
         return help.failureEvidence[evidence?.version === 1 ? evidence.reason : "unknown"] ?? help.failureEvidence.unknown;

@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import { createEvaluationController } from "../lib/evaluation-controller.mjs";
 import { evaluationFixture, materializeEvaluationSource, assessed } from "./evaluation-fixture.mjs";
 import { resolveCopilotInstallation } from "../lib/copilot-installation.mjs";
-import { MODEL_EVALUATION_RESPONSE_SCHEMA, MODEL_EVALUATION_RUBRIC } from "../lib/model-evaluation.mjs";
+import { MODEL_EVALUATION_RUBRIC } from "../lib/model-evaluation.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -162,10 +162,10 @@ async function settledState(context, count) {
 }
 function respond(sdk, change = value => value) {
     sdk.setSyntheticResponder(({ message, timeout, options, emit }) => {
-        assert.deepEqual(message.responseSchema, MODEL_EVALUATION_RESPONSE_SCHEMA);
         assert.equal(timeout, 120000);
         assert.equal(options.model, "gpt-6-astra");
         const input = JSON.parse(message.prompt);
+        assertPacketRoleSchema(message.responseSchema, input.packet);
         const result = assessed({
             input, packetHash: input.packetHash, model: options.model,
             rubricId: MODEL_EVALUATION_RUBRIC.id, rubricVersion: MODEL_EVALUATION_RUBRIC.version,
@@ -175,6 +175,36 @@ function respond(sdk, change = value => value) {
         } });
         return { type: "assistant.message", data: { content: JSON.stringify(change(result.rawResult)) } };
     });
+}
+
+function assertPacketRoleSchema(schema, packet) {
+    const properties = schema.properties, requirement = properties.requirements.items.properties;
+    const roles = [
+        [requirement.promptEvidence, [packet.prompt.ref]],
+        [requirement.answerEvidence, [packet.answer.ref]],
+        [requirement.referenceEvidence, packet.references.map(document => document.ref)],
+        [properties.answerSegments.items.properties.referenceEvidence, packet.references.map(document => document.ref)],
+        [properties.actions.items.properties.promptEvidence, [packet.prompt.ref]],
+    ];
+    for (const [pointer, allowed] of roles) {
+        const anchors = schema.$defs[pointer.$ref.slice("#/$defs/".length)];
+        assert.equal(anchors.items.properties.ref.type, "string");
+        if (!allowed.length) {
+            assert.equal(anchors.maxItems, 0, "Absent references must require an empty anchor list, not an invalid empty enum.");
+            assert.equal(anchors.items.properties.ref.enum, undefined);
+            continue;
+        }
+        assert.deepEqual(anchors.items.properties.ref.enum, allowed,
+            "Generation must constrain each evidence field to its actual packet document role.");
+        const candidates = [packet.prompt.ref, packet.answer.ref, ...packet.references.map(document => document.ref),
+            "prompt-" + "1".repeat(32), "answer-" + "2".repeat(32), "reference-" + "3".repeat(32)];
+        for (const candidate of candidates) assert.equal(anchors.items.properties.ref.enum.includes(candidate), allowed.includes(candidate));
+    }
+    if (packet.actions.length) assert.deepEqual(properties.actions.items.properties.actionRef.enum, packet.actions.map(action => action.ref));
+    else {
+        assert.equal(properties.actions.maxItems, 0);
+        assert.equal(properties.actions.items.properties.actionRef.enum, undefined);
+    }
 }
 
 test("default installed adapter persists all three automatic dimensions through real source reads, routes and a frozen new report", { timeout: 20000 }, async t => {
@@ -192,6 +222,12 @@ test("default installed adapter persists all three automatic dimensions through 
     assert.equal(sdk.observed.processesStarted, 0);
     assert.equal(sdk.observed.disconnects, 2);
     assert.equal(sdk.observed.stops, 2);
+    for (const rpc of sdk.observed.rpc) {
+        const format = rpc.params.responseFormat;
+        assert.equal(format.type, "json_schema");
+        assert.equal(format.jsonSchema.strict, true);
+        assertPacketRoleSchema(format.jsonSchema.schema, JSON.parse(rpc.params.prompt).packet);
+    }
     assert.equal(f.calls.length, 0, "The fixture's injected evaluatorFactory must never be used.");
     assert.equal(state.personalEvaluation.consent.state, "off");
     const metrics = buildAssessmentModel(state).overview.metrics.filter(metric => metric.origin === "model-assessed");
@@ -247,6 +283,76 @@ test("default installed adapter rejects incomplete answer coverage, persists obs
     assert.equal(sdk.observed.stops, 1);
     assert.equal(sdk.observed.processesStarted, 0);
     assert.equal(buildAssessmentModel(state).overview.metrics.some(metric => metric.origin === "model-assessed"), false);
+});
+
+test("default installed adapter never repairs invented or wrong-role anchors returned despite the generation schema", async t => {
+    const fields = [
+        ["requirement-prompt", "prompt", result => result.requirements[0].promptEvidence],
+        ["requirement-answer", "answer", result => result.requirements[0].answerEvidence],
+        ["requirement-reference", "reference", result => result.requirements[0].referenceEvidence],
+        ["answer-reference", "reference", result => result.answerSegments[0].referenceEvidence],
+        ["action-prompt", "prompt", result => result.actions[0].promptEvidence],
+    ];
+    for (const [name, role, anchors] of fields) for (const kind of ["invented", "wrong-role"]) await t.test(`${name}: ${kind}`, async t => {
+        const f = await installation(t), sdk = await import(pathToFileURL(f.sdkFile).href);
+        respond(sdk, result => {
+            anchors(result)[0].ref = kind === "invented" ? `${role}-${"f".repeat(32)}`
+                : role === "prompt" ? result.requirements[0].answerEvidence[0].ref : result.requirements[0].promptEvidence[0].ref;
+            return result;
+        });
+        const { runtime, api, approval } = await automaticRuntime(f);
+        approval.chatRefs = approval.chatRefs.slice(0, 1); approval.maxCalls = 1; approval.maxAiCredits = 30;
+        await api("/api/evaluation/automatic/approve", approval);
+        const state = await settledState(f.context, 1), data = state.personalEvaluation.modelEvaluation;
+        assert.equal(data.runs[0].phase, "failed");
+        assert.equal(data.runs[0].callsReserved, 1);
+        assert.equal(data.runs[0].spentAiCredits, 0.1);
+        assert.equal(data.runs[0].costUnknown, false);
+        assert.equal(data.runs[0].results[0].diagnostic.stage, "result-validation");
+        assert.equal(data.runs[0].results[0].diagnostic.errorCode, "evidence-anchor-kind");
+        assert.equal(data.records.length, 0);
+        await runtime.collector.collectNow();
+        assert.equal(sdk.observed.sends, 1);
+        assert.equal(sdk.observed.disconnects, 1); assert.equal(sdk.observed.stops, 1);
+        assert.equal(sdk.observed.processesStarted, 0);
+    });
+});
+
+test("default installed adapter represents absent references as empty anchors and persists insufficient, never positive, answer checks", async t => {
+    const f = await installation(t), sdk = await import(pathToFileURL(f.sdkFile).href);
+    for (const input of f.inputs) input.events.find(event => event.type === "tool.execution_complete").data.result = {};
+    sdk.setSyntheticResponder(({ message, options, emit }) => {
+        const { packet, packetHash } = JSON.parse(message.prompt), anchor = document => ({ ref: document.ref, start: 0, end: document.text.length });
+        assert.equal(packet.references.length, 0);
+        assertPacketRoleSchema(message.responseSchema, packet);
+        emit({ type: "assistant.usage", data: {
+            apiCallId: "synthetic-no-references", model: options.model, copilotUsage: { totalNanoAiu: 100000000 },
+        } });
+        return { type: "assistant.message", data: { content: JSON.stringify({
+            schemaVersion: 1, rubricId: MODEL_EVALUATION_RUBRIC.id, rubricVersion: MODEL_EVALUATION_RUBRIC.version, packetHash,
+            requirements: [{ id: "requirement-1", promptEvidence: [anchor(packet.prompt)], answerEvidence: [],
+                referenceEvidence: [], verdict: "insufficient", reason: "missing-evidence" }],
+            answerSegments: [{ start: 0, end: packet.answer.text.length, kind: "factual", verdict: "insufficient",
+                referenceEvidence: [], reason: "missing-evidence" }],
+            actions: packet.actions.map(action => ({ actionRef: action.ref, promptEvidence: [anchor(packet.prompt)],
+                verdict: "met", reason: "requested" })),
+        }) } };
+    });
+    const { api, approval } = await automaticRuntime(f);
+    approval.chatRefs = approval.chatRefs.slice(0, 1); approval.maxCalls = 1; approval.maxAiCredits = 30;
+    await api("/api/evaluation/automatic/approve", approval);
+    const state = await settledState(f.context, 1), data = state.personalEvaluation.modelEvaluation;
+    assert.equal(data.runs[0].phase, "complete");
+    assert.equal(data.runs[0].spentAiCredits, 0.1); assert.equal(data.runs[0].costUnknown, false);
+    assert.equal(data.records.length, 1);
+    const detail = buildAssessmentModel(state).details.get(data.records[0].interactionRef);
+    const metrics = detail.metrics.filter(metric => metric.origin === "model-assessed");
+    assert.equal(metrics.length, 3);
+    for (const metric of metrics) {
+        assert.equal(metric.value, metric.dimension === "action-trust" ? 1 : null);
+        assert.deepEqual(metric.coverage, { covered: metric.dimension === "action-trust" ? 1 : 0, eligible: 1 });
+    }
+    assert.equal(sdk.observed.sends, 1); assert.equal(sdk.observed.processesStarted, 0);
 });
 
 test("automatic source admission preserves the exact oversized-reference exclusion without SDK calls, reservations or dropped evidence", { timeout: 20000 }, async t => {

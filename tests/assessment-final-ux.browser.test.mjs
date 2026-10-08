@@ -76,11 +76,11 @@ test("detail labels Automatic and uses existing single personal verdict words wi
         const personal = rows.filter({ hasText: "Your feedback" });
         const automatic = rows.filter({ hasNotText: "Your feedback" });
         assert.match(await automatic.textContent(), /Automatic/);
-        assert.equal(await automatic.locator(".assessment-value").textContent(), "Unassessed");
+        assert.equal(await automatic.locator(".assessment-value").textContent(), "No result");
         assert.equal(await personal.locator(".assessment-value").textContent(), item.expected);
         assert.equal(await personal.locator(".assessment-origin").textContent(), "Your feedback");
         assert.doesNotMatch(await personal.locator(".assessment-value").textContent(), /%/);
-        assert.match(await personal.locator(".assessment-coverage").textContent(), /1 \/ 1 assessed/);
+        assert.equal(await personal.locator(".assessment-coverage").textContent(), "Results for 1 of 1 request");
     }
     const after = await loadBoardState(context);
     assert.deepEqual(after.evidence, before.evidence);
@@ -88,7 +88,7 @@ test("detail labels Automatic and uses existing single personal verdict words wi
     assert.equal(calls.includes("/api/assessment/feedback"), false);
 });
 
-test("aggregate with only one rated interaction retains its percentage and full selected coverage", { timeout: 30000 }, async t => {
+test("aggregate with only one rated interaction leads with its full selected coverage", { timeout: 30000 }, async t => {
     const records = ["rated", "unrated-a", "unrated-b"].map(fixture);
     const { context, runtime, page } = await setup(t, records, [{
         scenarioId: "rated", checkId: checks[0].checkId, verdict: "pass",
@@ -97,8 +97,8 @@ test("aggregate with only one rated interaction retains its percentage and full 
     const rows = page.locator('#homeInsights [data-dimension="accuracy"]');
     assert.match(await rows.filter({ hasNotText: "Your feedback" }).textContent(), /Automatic/);
     const personal = rows.filter({ hasText: "Your feedback" });
-    assert.equal(await personal.locator(".assessment-value").textContent(), "100%");
-    assert.equal(await personal.locator(".assessment-coverage").textContent(), "1 / 1 passed; 1 / 3 assessed");
+    assert.equal(await personal.locator(".assessment-value").textContent(), "1 passed \u00b7 0 failed");
+    assert.equal(await personal.locator(".assessment-coverage").textContent(), "Results for 1 of 3 requests");
     assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records.length, 1);
 });
 
@@ -108,10 +108,10 @@ test("one personal Not-sure judgment stays unassessed rather than a pass, failur
     await page.goto(runtime.url + "#request?request=not-sure"); await ready(page);
     const rows = page.locator('.interaction-insights [data-dimension="accuracy"]');
     const personal = rows.filter({ hasText: "Your feedback" });
-    assert.equal(await personal.locator(".assessment-value").textContent(), "Unassessed");
+    assert.equal(await personal.locator(".assessment-value").textContent(), "No result");
     const automatic = rows.filter({ hasNotText: "Your feedback" });
     assert.equal(await automatic.locator(".assessment-origin").textContent(), "Automatic");
-    assert.equal(await automatic.locator(".assessment-value").textContent(), "Unassessed");
+    assert.equal(await automatic.locator(".assessment-value").textContent(), "No result");
     assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records[0].assessment.verdict, "unassessed");
 });
 

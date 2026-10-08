@@ -114,8 +114,8 @@ test("author-only metadata recovery neither invalidates a score nor submits anot
     await f.controller.settle();
     const before = await loadBoardState(f.context);
     await replaceEvidence(f.context, records => ({
-        records: records.map(record => ({ ...record, promptAuthor: "user", userPrompt: { ...record.userPrompt,
-            provenance: "host-direct-input", authorship: { kind: "user", basis: "host-direct-input", version: 3 },
+        records: records.map(record => ({ ...record, userPrompt: { ...record.userPrompt,
+            authorshipVersion: 4, authorship: { actor: "user", basis: "host-direct-input" },
         } })), importCoverage: before.importCoverage,
     }));
     await f.automatic.reconcile();

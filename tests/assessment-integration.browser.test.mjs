@@ -56,9 +56,7 @@ test("one-click actual interaction read, personal revisions and withdrawal persi
     await page.goto(runtime.url + "#activity"); await settled(page); await openActivitySessions(page);
     await page.getByRole("link", { name: "View interaction", exact: true }).first().click(); await settled(page);
     await page.locator(".interaction-insights .assessment-grid").waitFor();
-    assert.match(await page.locator(".interaction-insights").textContent(), /AccuracyUnassessed/);
-    assert.match(await page.locator(".interaction-insights").textContent(), /Answer trustUnassessed/);
-    assert.match(await page.locator(".interaction-insights").textContent(), /Action trustUnassessed/);
+    assert.deepEqual(await page.locator(".interaction-insights .assessment-check .assessment-value").allTextContents(), ["No result", "No result", "No result"]);
     assert.equal((await loadBoardState(context)).personalEvaluation, undefined);
     assert.equal(calls.includes("/api/assessment/evidence"), false);
     assert.equal(calls.includes("/api/assessment/consent/set"), false);
@@ -77,7 +75,7 @@ test("one-click actual interaction read, personal revisions and withdrawal persi
     assert.equal(state.personalEvaluation.feedback.records[0].assessment.verdict, "pass");
     assert.equal(state.personalEvaluation.consent.state, "off");
     assert.deepEqual(state.evidence, before.evidence);
-    assert.match(await page.locator(".interaction-insights").textContent(), /1 \/ 1 passed/);
+    assert.equal(await page.locator('.interaction-insights [data-dimension="accuracy"]').filter({ hasText: "Your feedback" }).locator(".assessment-value").innerText(), "Correct");
     await page.locator(".interaction-insights").getByRole("button", { name: "Details and feedback", exact: true }).click();
     await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
     feedback = page.getByRole("dialog", { name: "Your feedback: answer correctness", exact: true });
@@ -117,10 +115,10 @@ test("one-click actual interaction read, personal revisions and withdrawal persi
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
             const trustRowsAligned = await page.locator(".interaction-insights .assessment-fact-unavailable").evaluateAll(nodes =>
                 nodes.filter(node => ["answer-trust", "action-trust"].includes(node.dataset.dimension)).every(node => {
-                    const label = node.querySelector(".assessment-fact-label").getBoundingClientRect(), value = node.querySelector(".assessment-value").getBoundingClientRect();
-                    return label.bottom > value.top && value.bottom > label.top;
+                    const coverage = node.querySelector(".assessment-coverage").getBoundingClientRect(), value = node.querySelector(".assessment-value").getBoundingClientRect();
+                    return coverage.bottom <= value.top;
                 }));
-            assert.equal(trustRowsAligned, true, "Trust labels and unavailable states stay on the same visual row.");
+            assert.equal(trustRowsAligned, true, "Trust coverage reads before unavailable results.");
             await page.screenshot({ path: path.join(process.env.WIRE_ASSESSMENT_PROOFS, `interaction-${theme}-${width}-${size}.png`), fullPage: true });
         }
     }

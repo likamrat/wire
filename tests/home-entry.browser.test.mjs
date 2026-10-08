@@ -230,7 +230,6 @@ test("polling preserves filters, report membership, focus, scroll and help; stat
     await page.locator('[id^="select-request-"]').first().check();
     await navigateMain(page, "home"); await ready(page);
     await selectActivityOption(page, "serviceFilter", "Calendar"); await ready(page);
-    await page.locator("#moreFilters>summary").click();
     await page.locator("#coverage>summary").focus(); await page.keyboard.press("Enter");
     const prior = await page.evaluate(() => {
         window.entryFocus = document.activeElement;
@@ -249,7 +248,7 @@ test("polling preserves filters, report membership, focus, scroll and help; stat
     assert.equal(await page.locator("#activitySelectionSummary").textContent(), prior.membership);
     assert.match(prior.membership, /1 request/);
     assert.equal(await page.locator("#coverage").evaluate(node => node.open), true);
-    assert.equal(await page.locator("#moreFilters").evaluate(node => node.open), false);
+    assert.equal(await page.locator("#serviceFilter-control").isVisible(), true);
     assert.deepEqual(await page.evaluate(() => window.entryAnnouncements), []);
     assert.equal(await page.locator("#collectionChecked").evaluate(node => Boolean(node.closest('[aria-live], [role="status"]'))), false);
     await page.locator("#coverage [data-settings-link]").click();

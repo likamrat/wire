@@ -45,6 +45,15 @@ export function createReportComparison() {
         if (fact?.state !== "available" || fact.kind !== "pass-rate" || fact.unit !== "percent") return "";
         return fact.value < 50 ? "performance-red" : fact.value < 75 ? "performance-orange" : fact.value < 90 ? "performance-gold" : "performance-teal";
     }
+    function modelOrigin(fact) {
+        const qualifiers = fact.qualifiers ?? {};
+        let label = `Model assessment${qualifiers.evaluatorModel ? ` · ${qualifiers.evaluatorModel}` : ""}`;
+        if (qualifiers.rubricId != null || qualifiers.rubricVersion != null) {
+            label += ` · rubric ${qualifiers.rubricId ?? "ID not saved"}${qualifiers.rubricVersion != null
+                ? ` v${qualifiers.rubricVersion}` : " (version not saved)"}`;
+        }
+        return label;
+    }
     function metricPresentation(fact, dimension) {
         let note = "Not saved in this report";
         const timedUnit = fact?.boundary === "tool-start-to-completion" ? "calls"
@@ -59,13 +68,13 @@ export function createReportComparison() {
                 : fact.reason === "unverified-association" && fact.boundary === "verified-request-to-final-answer"
                     ? "No verified request-to-final-answer timing"
                     : reasons[fact.reason] ?? `Unavailable: ${fact.reason}`;
-            if (fact.basis === "model-assessment") note = `Model assessment · ${note}`;
+            if (fact.basis === "model-assessment") note = `${modelOrigin(fact)} · ${note}`;
             if (fact.coverage) note += ` · ${formatNumber(fact.coverage.count, 0)} of ${formatNumber(fact.coverage.eligible, 0)} ${fact.kind === "pass-rate" ? "assessed" : fact.kind === "cost" ? "units priced" : `${timedUnit} timed`}`;
         }
         if (fact?.state === "available") {
             const covered = fact.coverage.count, eligible = fact.coverage.eligible;
             note = fact.kind === "pass-rate"
-                ? `${fact.basis === "user-assessment" ? "Personal assessment" : fact.basis === "model-assessment" ? "Model assessment" : "Recorded check"} · ${formatNumber(fact.numerator, 0)} of ${formatNumber(fact.denominator, 0)} passed · ${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} assessed · ${formatNumber(eligible - covered, 0)} not assessed${fact.basis === "model-assessment" && dimension === "action-trust" ? " · intent alignment, not proof of authorization" : ""}`
+                ? `${fact.basis === "user-assessment" ? "Personal assessment" : fact.basis === "model-assessment" ? modelOrigin(fact) : "Recorded check"} · ${formatNumber(fact.numerator, 0)} of ${formatNumber(fact.denominator, 0)} passed · ${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} assessed · ${formatNumber(eligible - covered, 0)} not assessed${fact.basis === "model-assessment" && dimension === "action-trust" ? " · intent alignment, not proof of authorization" : ""}`
                 : `${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} ${fact.kind === "cost" ? "units priced" : `${timedUnit} timed`}`;
         }
         if (fact?.counts?.evaluatorError) note += ` · ${formatNumber(fact.counts.evaluatorError, 0)} check errors (not failed results)`;
@@ -100,7 +109,7 @@ export function createReportComparison() {
         })[fact.boundary] ?? fact.boundary;
         if (fact.kind === "cost") return fact.basis === "estimated" ? "Estimated attributed subtotal" : fact.basis === "observed" ? "Recorded attributed subtotal" : "Attributed cost";
         return fact.basis === "user-assessment" ? "Your feedback"
-            : fact.basis === "model-assessment" ? `Model assessment${fact.qualifiers?.evaluatorModel ? ` · ${fact.qualifiers.evaluatorModel}` : ""}${fact.metric === "action-trust" ? " · intent alignment" : ""}`
+            : fact.basis === "model-assessment" ? `${modelOrigin(fact)}${fact.metric === "action-trust" ? " · intent alignment" : ""}`
             : fact.basis === "automatic-assessment" ? fact.reason === "unsupported-check" ? "Local observation (not a model assessment)" : "Automatic local checks"
                 : fact.basis === "mixed-assessment" ? "Mixed assessments" : "Recorded checks";
     }

@@ -236,11 +236,11 @@ async function reconcileView(page, snapshot) {
 
 test("multiple results stay a draft until Apply; cancel, Escape and outside leave the accepted view untouched", async t => {
     const { page, reads, snapshotRequests } = await setup(t);
-    const trigger = page.getByRole("combobox", { name: "Recorded result", exact: true });
+    const trigger = page.getByRole("combobox", { name: "Result", exact: true });
     const original = page.url(), before = snapshotRequests.length;
     for (const dismissal of ["Cancel", "Escape", "outside"]) {
         await trigger.click();
-        assert.equal(await page.getByRole("listbox", { name: "Recorded result", exact: true }).getAttribute("aria-multiselectable"), "true");
+        assert.equal(await page.getByRole("listbox", { name: "Result", exact: true }).getAttribute("aria-multiselectable"), "true");
         await page.locator(".select-all").click();
         assert.equal(await page.getByRole("button", { name: "Apply", exact: true }).isDisabled(), true);
         assert.equal(await page.locator(".select-draft-hint").innerText(), "Select at least one result.");
@@ -536,7 +536,7 @@ test("supporting disclosure roles keep open content, keyboard focus and navigati
 test("one styled Recorded result dropdown replaces pills and detached clearing", async t => {
     const { page, reads } = await setup(t);
     assert.equal(await page.locator("#activityCount").innerText(), "4");
-    assert.equal(await page.getByRole("combobox", { name: "Recorded result", exact: true }).count(), 1);
+    assert.equal(await page.getByRole("combobox", { name: "Result", exact: true }).count(), 1);
     await selectActivityOption(page, "outcomeFilter", "success");
     await ready(page);
     assert.match(page.url(), /#home\?result=success$/);

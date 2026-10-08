@@ -10,7 +10,7 @@ import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
 import { contract, samples } from "./assessment-ui-fixtures.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { contrast } from "./color-measurements.mjs";
-import { promptRecord } from "../lib/prompt-authorship.mjs";
+import { promptRecord, promptAuthorship } from "../lib/prompt-authorship.mjs";
 
 const proof = process.env.WIRE_DETAIL_PROOFS;
 const ready = page => page.locator('#workspace[aria-busy="false"]').waitFor();
@@ -354,7 +354,7 @@ test("canonical host-envelope normalization reaches Your prompt without copying 
     };
     const { page, record, requests } = await setup(t, { sourceEvent });
     assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
-    assert.equal(record.userPrompt.authorshipVersion, 3);
+    assert.equal(record.userPrompt.authorshipVersion, promptAuthorship.version);
     assert.equal(await page.locator(".request-original h2").textContent(), "Your prompt");
     assert.equal(await page.locator(".request-source-label").textContent(), "GitHub Copilot chat");
     assert.equal(await page.locator(".request-original .reader-state").count(), 0, "Supported host metadata does not retain an unverified-author warning");

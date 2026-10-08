@@ -82,8 +82,6 @@ async function setup(run, options = {}) {
 async function ready(page) {
     await page.locator("#workspace").waitFor({ state: "visible" });
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-    const more = page.locator("#moreFilters");
-    if (await more.isVisible() && !await more.evaluate(node => node.open)) await more.locator(":scope>summary").click();
 }
 async function choose(page, id, value) {
     await selectActivityOption(page, id, value);
@@ -364,7 +362,7 @@ test("touch choices omit legacy explanatory paragraphs and preserve native form 
     assert.equal(await page.evaluate(() => window.controlChanges.length), 0, "Opening choices cannot commit");
     assert.equal(await row.getAttribute("aria-describedby"), null);
     assert.ok((await row.boundingBox()).height >= 44);
-    await page.getByRole("option", { name: "Recorded Graph request sites", exact: true }).tap();
+    await page.getByRole("option", { name: "Graph API call sites", exact: true }).tap();
     await ready(page);
     assert.equal(await page.locator("#layerFilter").inputValue(), "direct-request");
     assert.equal(await page.evaluate(() => window.controlChanges.length), 1);

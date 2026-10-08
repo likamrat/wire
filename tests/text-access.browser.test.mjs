@@ -251,7 +251,7 @@ test("short, missing, partial and long URL request excerpts keep literal content
         assert.equal(await content.getByRole("link", { name: "View interaction", exact: true }).count(), 1);
         if (status === "unavailable") {
             assert.equal(await content.locator(".full-text-preview").textContent(), "Prompt not available");
-            assert.equal(await content.locator("button,pre").count(), 0);
+            assert.equal(await content.locator(".full-text-toggle,.ux-copy,pre").count(), 0);
             assert.doesNotMatch(await content.innerText(), /DO_NOT_DISPLAY/);
         } else if (text.length < 170) {
             assert.equal(await content.locator(".full-text-preview").textContent(), text);

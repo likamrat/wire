@@ -51,10 +51,9 @@ test("Discovery reads consistently across whole charts, filters and action detai
         await page.goto(runtime.url + "#home?range=capture&chart=workload"); await ready(page);
         await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent === "8 Work IQ tool calls");
         await chooseTheme(page, theme);
-        if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFilters > summary").click();
         assert.equal(await page.locator("#chartTitle").innerText(), "Activity categories");
         assert.match(await page.locator("#meaningMatched").textContent(), /^8 Work IQ tool calls$/);
-        assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').innerText(), "Activity category");
+        assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').innerText(), "Category");
         assert.match(await page.locator('[data-percentage-card="composition"]').innerText(), /Activity-category share/);
         assert.equal(await page.locator('#serviceFilter option[value="Discovery"]').count(), 1);
         assert.equal(await page.locator('#serviceFilter option[value="Unknown"]').count(), 1);
@@ -104,7 +103,6 @@ test("Discovery reads consistently across whole charts, filters and action detai
     await selectActivityOption(page, "serviceFilter", "Discovery"); await ready(page);
     await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
     assert.doesNotMatch(page.url(), /service=Discovery/);
-    if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFilters > summary").click();
     assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').innerText(), "Service");
     assert.equal(await page.locator("#chartTitle").innerText(), "Services involved");
     assert.match(await page.locator("#meaningMatched").textContent(), /^1 tool-returned API result$/);

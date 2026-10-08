@@ -1,5 +1,5 @@
 // Presentation only: callers supply the authorized text, never a lookup for hidden originals.
-export function createTextAccess(ux, presentation, authorship) {
+export function createTextAccess(ux, presentation, authorship, metadata) {
     const caption = (source, options) => authorship?.label(source, options) ?? "Prompt";
     function retained(source) {
         return source?.status !== "unavailable" && typeof source?.text === "string" && source.text.trim() ? source.text : null;
@@ -23,10 +23,12 @@ export function createTextAccess(ux, presentation, authorship) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
-        label ??= "Read " + noun;
+        const complete = mode === "complete", partial = ["partial", "truncated"].includes(source?.status);
+        label ??= "Read " + (complete ? "" : partial ? "retained " : "full ") + noun;
         copyLabel ??= "Copy " + noun;
         const text = retained(source), preview = text === null && subject === "response" ? "Original not available" : excerpt(source);
-        const complete = mode === "complete";
+        const authorNote = label => metadata.item(label, { helpLabel: "prompt author", help: authorship.reason(source)
+            + " Author unverified describes message provenance, not an account sign-in failure." });
         const root = document.createElement("div");
         root.className = "full-text" + (complete ? " full-text-complete" : "");
         root.dataset.viewKey = "text:" + key;
@@ -43,9 +45,9 @@ export function createTextAccess(ux, presentation, authorship) {
             root.append(header);
         }
         if (complete && subject === "request" && (authorship?.read(source).actor ?? "unknown") === "unknown") {
-            const author = document.createElement("span");
-            author.className = "reader-state";
-            author.textContent = "Author unverified";
+            const author = authorship ? authorNote("Author unverified") : document.createElement("span");
+            author.classList.add("reader-state");
+            if (!authorship) author.textContent = "Author unverified";
             header.append(author);
         }
         const reading = document.createElement("p");
@@ -53,22 +55,35 @@ export function createTextAccess(ux, presentation, authorship) {
         reading.classList.add(complete ? "full-text-unavailable" : "full-text-preview");
         reading.textContent = complete && text !== null ? `${noun === "prompt" ? "Prompt" : "Response"} text is hidden.` : preview;
         root.append(reading);
+        let previewState;
         if (!complete) {
-            const hint = document.createElement("span");
-            hint.className = "full-text-preview-label";
-            hint.textContent = heading.textContent;
+            const provenance = document.createElement("div");
+            provenance.className = "full-text-provenance";
+            const unverified = subject === "request" && authorship?.read(source).actor === "unknown";
+            const hint = unverified ? authorNote(heading.textContent + " / author unverified") : document.createElement("span");
+            hint.classList.add("full-text-preview-label");
+            if (!unverified) hint.textContent = heading.textContent;
             hint.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
-            if (subject === "request" && authorship) {
-                hint.title = authorship.reason(source);
-                if (authorship.read(source).actor === "unknown") hint.textContent += " / author unverified";
+            provenance.append(hint);
+            root.prepend(provenance);
+            if (text !== null && text !== preview) {
+                previewState = document.createElement("p");
+                previewState.className = "full-text-preview-state";
+                previewState.textContent = partial ? "Preview / retained fragment" : `Preview / full retained ${noun} available`;
+                root.append(previewState);
             }
-            root.prepend(hint);
         }
         if (source?.status === "partial" || source?.status === "truncated") {
             const note = document.createElement("p");
             note.className = complete ? "reader-state reader-state-partial" : "full-text-availability";
             note.textContent = complete ? "Partial text" : "Only part of the original was recorded. Missing text is not reconstructed.";
-            if (complete) header.append(note); else root.append(note);
+            if (complete) {
+                header.append(note);
+                const explanation = document.createElement("p");
+                explanation.className = "full-text-availability";
+                explanation.textContent = "Only part of the original was recorded. Missing text is not reconstructed.";
+                root.append(explanation);
+            } else root.append(note);
         }
         if (complete) header.append(readerActions);
         let details;
@@ -82,11 +97,6 @@ export function createTextAccess(ux, presentation, authorship) {
                 const reason = document.createElement("p");
                 reason.textContent = authorship.reason(source);
                 details.append(reason);
-            }
-            if (["partial", "truncated"].includes(source?.status)) {
-                const partial = document.createElement("p");
-                partial.textContent = "Only part of the original was recorded. Missing text is not reconstructed.";
-                details.append(partial);
             }
             const explanation = document.createElement("p");
             explanation.textContent = text === null ? `No ${noun} text is available to copy.` : notice
@@ -121,6 +131,7 @@ export function createTextAccess(ux, presentation, authorship) {
             control.textContent = actionLabel;
             if (complete) control.setAttribute("aria-label", actionLabel);
             reading.hidden = open;
+            if (previewState) previewState.hidden = open;
             root.querySelector(".full-text-body")?.remove();
             header.querySelector(".ux-copy")?.remove();
             header.querySelector(".ux-copy-status")?.remove();

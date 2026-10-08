@@ -3,6 +3,9 @@ export const textAccessStyles = `
 .full-text {min-width:0;max-width:100%}
 .full-text>.full-text-preview {max-width:68ch;margin:4px 0 0;color:var(--ink);font-size:var(--type-body);line-height:1.6;overflow-wrap:anywhere;white-space:normal;overflow:visible;text-overflow:clip}
 .full-text-preview-label {display:block;color:var(--muted);font-size:var(--type-caption)}
+.full-text-provenance {min-width:0}
+.full-text-provenance .full-text-preview-label {min-width:0;overflow-wrap:anywhere}
+.full-text-preview-state {margin:4px 0 0;color:var(--muted);font-size:var(--type-caption);line-height:var(--leading-caption);overflow-wrap:anywhere}
 .full-text-actions {display:flex;flex-wrap:wrap;align-items:center;gap:0 var(--space-sm);margin-top:4px;min-width:0}
 .full-text-actions .request-link {display:inline-flex;align-items:center;min-height:44px;max-width:100%;padding:8px var(--pill-inset);font-size:var(--type-control);line-height:var(--leading-control);color:var(--accent)}
 .full-text-actions .full-text-toggle {margin-top:0}

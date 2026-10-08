@@ -256,7 +256,6 @@ test("browser reload preserves its URL/theme contract and starts a fresh unsaved
 
 async function prepareChoice(page, id, value) {
     const trigger = page.locator(`#${id}-control`);
-    if (!await trigger.isVisible()) await page.locator("#moreFilters > summary").click();
     await trigger.scrollIntoViewIfNeeded();
     await page.evaluate(id => scrollTo(0, Math.max(0, scrollY + document.getElementById(id + "-control").getBoundingClientRect().top - 220)), id);
     await trigger.click();
@@ -396,21 +395,20 @@ test("failed refinement keeps accepted scope and contextual focus with a real re
     await expect(page.locator("#projectFilter-control")).toBeFocused();
 });
 
-for (const expanded of [true, false]) test(`clearing a filter chip returns focus to ${expanded ? "its visible field" : "the collapsed filter group"}`, async t => {
-    const { page } = await setup(t);
+for (const width of [1200, 375]) test(`clearing a filter chip returns focus to its field in the ${width}px filter row`, async t => {
+    const { page } = await setup(t, "home", { width });
     await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
-    if (!expanded) await page.locator("#moreFilters > summary").click();
-    const target = page.locator(expanded ? "#projectFilter-control" : "#moreFilters > summary");
+    const target = page.locator("#projectFilter-control");
     await target.scrollIntoViewIfNeeded();
     await frames(page);
-    await startProbe(page, expanded ? "projectFilter-control" : "moreFilters");
+    await startProbe(page, "projectFilter-control");
     await page.getByRole("button", { name: "Remove copilot project filter: Invented project A", exact: true }).click();
     await ready(page); await frames(page);
-    const trace = await finishProbe(page, `clear-chip-${expanded ? "expanded" : "collapsed"}`);
+    const trace = await finishProbe(page, `clear-chip-${width}`);
     t.diagnostic(JSON.stringify({ focusAfterClear: trace.frames.at(-1).focus }));
     assert.equal(await page.locator("#projectFilter").inputValue(), "all");
     await expect(target).toBeFocused();
-    assert.equal(await page.locator("#moreFilters").evaluate(node => node.open), expanded);
+    await expect(target).toBeInViewport();
 });
 
 test("a pending refinement does not reclaim focus after the user moves into private search", async t => {

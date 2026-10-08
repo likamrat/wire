@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createEvaluationRequest, validateModelEvaluation, evaluationSummary, MODEL_EVALUATION_RUBRIC } from "../lib/model-evaluation.mjs";
+import { createEvaluationRequest, validateModelEvaluation, evaluationSummary, MODEL_EVALUATION_RUBRIC, MODEL_EVALUATION_RESPONSE_SCHEMA } from "../lib/model-evaluation.mjs";
 import { buildEvaluationPacket } from "../lib/evaluation-evidence.mjs";
 
 function packet() {
@@ -118,4 +118,45 @@ test("validated results cannot be changed after validation and packet projection
     assert.throws(() => evaluationSummary(structuredClone(accepted)), /unvalidated-evaluation-result/);
     value.answer.reasoningText = "must not be sent";
     assert.throws(() => createEvaluationRequest(value, grant(value)), /unexpected-evidence-field/);
+});
+
+test("packet-specific generation changes only allowed refs, preserves all other schema rules and freezes per-request roles", () => {
+    const value = packet(), template = structuredClone(MODEL_EVALUATION_RESPONSE_SCHEMA);
+    value.references = Array.from({ length: 100 }, (_, index) => ({
+        ...value.references[0], ref: `reference-${(index + 1).toString(16).padStart(32, "0")}`,
+    }));
+    const request = createEvaluationRequest(value, grant(value)), schema = request.responseSchema;
+    assert.deepEqual(schema.$defs.referenceAnchors.items.properties.ref.enum, value.references.map(document => document.ref));
+    assert.equal(schema.$defs.referenceAnchors.maxItems, 20, "The existing per-check anchor limit is not widened.");
+    const restored = structuredClone(schema);
+    for (const name of ["promptAnchors", "answerAnchors", "referenceAnchors"]) delete restored.$defs[name];
+    restored.$defs.anchors = structuredClone(template.$defs.anchors);
+    const requirement = restored.properties.requirements.items.properties;
+    for (const name of ["promptEvidence", "answerEvidence", "referenceEvidence"]) requirement[name].$ref = "#/$defs/anchors";
+    restored.properties.answerSegments.items.properties.referenceEvidence.$ref = "#/$defs/anchors";
+    restored.properties.actions.items.properties.promptEvidence.$ref = "#/$defs/anchors";
+    delete restored.properties.actions.items.properties.actionRef.enum;
+    assert.deepEqual(restored, template);
+    const firstPrompt = value.prompt.ref;
+    value.prompt.ref = "prompt-" + "e".repeat(32);
+    const later = createEvaluationRequest(value, grant(value));
+    assert.deepEqual(schema.$defs.promptAnchors.items.properties.ref.enum, [firstPrompt]);
+    assert.deepEqual(later.responseSchema.$defs.promptAnchors.items.properties.ref.enum, [value.prompt.ref]);
+    assert.equal(request.input.packet.prompt.ref, firstPrompt);
+    assert.throws(() => schema.$defs.promptAnchors.items.properties.ref.enum.push(value.prompt.ref), TypeError);
+    assert.throws(() => { request.responseSchema = template; }, TypeError);
+    assert.deepEqual(MODEL_EVALUATION_RESPONSE_SCHEMA, template, "Preparing another packet cannot mutate the shared template.");
+});
+
+test("an empty action/reference inventory uses zero-length lists, never empty enums or an invented anchor", () => {
+    const value = packet();
+    value.actions = []; value.references = [];
+    const schema = createEvaluationRequest(value, grant(value)).responseSchema;
+    assert.equal(schema.properties.actions.maxItems, 0);
+    assert.equal(schema.properties.actions.items.properties.actionRef.enum, undefined);
+    assert.equal(schema.$defs.referenceAnchors.maxItems, 0);
+    assert.equal(schema.$defs.referenceAnchors.items.properties.ref.enum, undefined);
+    assert.equal(schema.$defs.promptAnchors.maxItems, 20);
+    assert.deepEqual(schema.$defs.promptAnchors.items.properties.ref.enum, [value.prompt.ref]);
+    assert.deepEqual(schema.$defs.answerAnchors.items.properties.ref.enum, [value.answer.ref]);
 });

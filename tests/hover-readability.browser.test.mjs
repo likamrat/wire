@@ -215,7 +215,6 @@ test("component family hover matrix uses mounted routes and their effective pain
         if (!await page.locator("#tableDisclosure").evaluate(node => node.open)) await page.locator("#tableDisclosure>summary").click();
         await inspect(".exact-data-table .chart-data-action", "exact table drilldown");
         await inspect(".exact-data-table tbody tr", "hovered exact table row");
-        if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFilters>summary").click();
         await inspect("[data-select-id=serviceFilter]", "filter select trigger");
         await page.locator("[data-select-id=serviceFilter]").click();
         await inspect(".select-popup [aria-selected=true]", "selected option");

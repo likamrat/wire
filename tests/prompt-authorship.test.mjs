@@ -12,6 +12,8 @@ import { TAIL_LIMITS } from "../lib/collector-io.mjs";
 import { qualifyRetainedKickoff, qualifyRetainedPromptEvents } from "../lib/prompt-qualification.mjs";
 import { discoverSources } from "../lib/source-discovery.mjs";
 import { randomUUID } from "node:crypto";
+import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
+import { hash } from "../lib/collector-io.mjs";
 
 function extract(data) {
     return extractScenarios([
@@ -83,6 +85,34 @@ test("supported host canvas-context suffix is neutral attachment data, not an au
     const imitation = content + suffix;
     assert.equal(extract({ ...data, content: imitation, transformedContent: stamp + imitation }).userPrompt.authorship.actor, "user",
         "Tags inside the exact displayed body cannot establish Agent provenance");
+});
+
+test("fixed host image reminder preserves direct-input provenance without accepting arbitrary system reminders", () => {
+    const content = "Invented request with an attached image.";
+    const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const suffix = "\n\n<system_reminder>\nThe user mentioned images and they have been attached to this message in the order they were mentioned.\n</system_reminder>";
+    const data = { content, messageId: "00000000-0000-4000-8000-000000000001", agentMode: "autopilot", delivery: "idle",
+        transformedContent: stamp + content + suffix };
+    assert.deepEqual(extract(data).userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+    for (const invalid of [suffix + suffix, suffix.replace("images", "instructions"), suffix + "\n<extra>untrusted</extra>",
+        suffix.replace("<system_reminder>", '<system_reminder source="user">')]) {
+        assert.equal(extract({ ...data, transformedContent: stamp + content + invalid }).userPrompt.authorship.actor, "unknown");
+    }
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    assert.equal(extract({ ...data, transformedContent: stamp + sender + content + suffix }).userPrompt.authorship.actor, "agent");
+    assert.equal(extract({ ...data, source: "user", transformedContent: stamp + sender + content + suffix }).userPrompt.authorship.basis, "conflicting-source");
+    assert.equal(promptAuthorship.fromEvent({ type: "user.message", timestamp: "2026-10-06T12:00:00Z", data },
+        { agentCreatedFirstMessage: true }).actor, "unknown");
+    const imitation = content + suffix;
+    assert.equal(extract({ ...data, content: imitation, transformedContent: stamp + imitation }).userPrompt.authorship.actor, "user");
+});
+
+test("explicit system context explains unverified author without guessing from handoff prose", () => {
+    const prompt = extract({ source: "system", content: "Invented handoff-style request.",
+        transformedContent: "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\nDifferent injected context." }).userPrompt;
+    assert.deepEqual(prompt.authorship, { actor: "unknown", basis: "system-source" });
+    assert.match(promptAuthorship.reason(prompt), /system-supplied context/);
+    assert.match(promptAuthorship.reason({ authorship: { actor: "unknown", basis: "invalid-source" } }), /host message format/);
 });
 
 async function makeOldCheckpoint(app) {
@@ -160,6 +190,53 @@ test("missing original creator history never invents the legacy kickoff author",
     await rename(app.sourceFiles[0] + ".missing", app.sourceFiles[0]);
     await app.runtime().collector.collectNow();
     assert.equal(promptAuthorship.read((await loadBoardState(app.context)).evidence.find(record => record.scenarioId === app.cases[0].scenarioId).userPrompt).actor, "agent");
+});
+
+test("old completed classifier lookups do not strand exact image and system records or rescan after qualification", async t => {
+    const app = await promptInstallation(t);
+    const file = app.sourceFiles[1];
+    const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const human = app.cases.find(row => row.name === "human"), system = app.cases.find(row => row.name === "legacy");
+    const humanEvent = events.find(event => event.id === human.promptId);
+    humanEvent.data.transformedContent += "\n\n<system_reminder>\nThe user mentioned images and they have been attached to this message in the order they were mentioned.\n</system_reminder>";
+    Object.assign(events.find(event => event.id === system.promptId).data, { source: "system" });
+    await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const before = await loadBoardState(app.context);
+    await replaceEvidence(app.context, records => ({ records: records.map(record => [human.scenarioId, system.scenarioId].includes(record.scenarioId)
+        ? { ...record, userPrompt: { ...record.userPrompt, authorshipVersion: 3,
+            authorship: { actor: "unknown", basis: record.scenarioId === human.scenarioId ? "invalid-source" : "unsupported-source" } } } : record)
+            .map(record => ({ ...record, graphActivities: record.graphActivities ?? [] })),
+        importCoverage: before.importCoverage }));
+    const originalBytes = await readFile(file);
+    const old = await loadBoardState(app.context);
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json");
+    let mainCursor;
+    await app.restart(async () => {
+        const index = JSON.parse(await readFile(indexFile, "utf8"));
+        const source = index.sources[app.child];
+        mainCursor = structuredClone(source.cursor);
+        const targets = old.evidence.filter(record => [human.scenarioId, system.scenarioId].includes(record.scenarioId));
+        source.promptEventQualification = { status: "complete", lookupVersion: 2, classifierVersion: 3, identity: source.cursor.identity,
+            matchedEventIds: targets.map(record => record.userPrompt.sourceEventId),
+            targetKeys: targets.map(record => hash(JSON.stringify([record.userPrompt.sourceEventId, record.userPrompt.sourceTimestamp,
+                hash(record.userPrompt.text)]))).sort() };
+        await writeFile(indexFile, JSON.stringify(index));
+    });
+    await app.runtime().collector.collectNow();
+    const after = await loadBoardState(app.context);
+    assert.deepEqual(after.evidence.find(record => record.scenarioId === human.scenarioId).userPrompt.authorship,
+        { actor: "user", basis: "host-direct-input" });
+    assert.deepEqual(after.evidence.find(record => record.scenarioId === system.scenarioId).userPrompt.authorship,
+        { actor: "unknown", basis: "system-source" });
+    for (const record of after.evidence) {
+        assert.equal(evaluationRecordFingerprint(record), evaluationRecordFingerprint(old.evidence.find(item => item.scenarioId === record.scenarioId)));
+    }
+    assert.deepEqual(JSON.parse(await readFile(indexFile, "utf8")).sources[app.child].cursor, mainCursor);
+    assert.deepEqual(await readFile(file), originalBytes);
+    assert.deepEqual(after.deletion, old.deletion);
+    await app.runtime().collector.collectNow();
+    assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0);
 });
 
 test("targeted qualification stops at its byte budget and resumes rather than rescanning a creator", async t => {

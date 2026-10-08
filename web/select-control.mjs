@@ -65,6 +65,8 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         const height = viewport?.height || innerHeight;
         const gap = 6, edge = 8;
         if (box.bottom <= top || box.top >= top + height || box.right <= left || box.left >= left + width) { close(); return; }
+        const boundary = active.trigger.closest(".filter-scroll")?.getBoundingClientRect();
+        if (boundary && (box.right <= boundary.left || box.left >= boundary.right)) { close(); return; }
         popup.style.width = "max-content";
         const naturalWidth = popup.getBoundingClientRect().width;
         popup.style.width = Math.min(Math.max(box.width, naturalWidth), width - edge * 2) + "px";

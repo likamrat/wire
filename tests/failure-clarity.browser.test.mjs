@@ -83,6 +83,9 @@ test("bounded failure, success, relationship and HTTP cases share honest details
         ["tool-code", false, [], { version: 1, reason: "error-code-recorded", code: "failure", messageStatus: "text-excluded", messageSignal: "access-denial" }, "Tool error: failure; Tool error mentions access denial"],
         ["success", true, [{ index: 0, statusCode: 200 }], null, null],
         ["returned-failure", true, [{ index: 0, statusCode: 403, errorCode: "Forbidden" }], null, "Reported HTTP 403: Forbidden"],
+        ["timeout-with-returned-status", false, [{ index: 0, statusCode: 403, errorCode: "Forbidden" }, { index: 1, statusCode: 503 }],
+            { version: 1, reason: "error-code-recorded", code: "failure", messageStatus: "text-excluded", messageSignal: "request-timeout" },
+            "Tool reported an MCP request timeout (-32001)."],
     ];
     const records = cases.map(([name, success, apiResults, failureEvidence], index) => {
         const record = fixture(name), call = record.toolCalls[0];
@@ -127,6 +130,12 @@ test("bounded failure, success, relationship and HTTP cases share honest details
         if (expected) assert.ok(outcome.includes(expected), outcome);
         else assert.equal(await page.locator(".action-error").count(), 0);
         assert.match(outcome, success ? /Worked/ : /Tool failed/);
+        if (name === "timeout-with-returned-status") {
+            assert.match(outcome, /Reported HTTP 403: Forbidden/);
+            assert.match(outcome, /Reported HTTP 503/);
+            assert.doesNotMatch(outcome, /No HTTP status|no downstream cause|downstream cause was established/i,
+                "A protocol timeout must not deny independent returned HTTP evidence");
+        }
         await page.locator("#requestContent").getByText("Technical details", { exact: true }).click();
         const facts = page.locator(".technical-facts");
         const field = label => facts.locator("dt").filter({ hasText: new RegExp(`^${label}$`) }).evaluate(node => node.nextElementSibling.textContent);

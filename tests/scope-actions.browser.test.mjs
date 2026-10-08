@@ -267,8 +267,8 @@ for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 
         await page.locator("#filterTools").scrollIntoViewIfNeeded();
         const reset = page.locator("#resetView"), initial = await reset.boundingBox();
         await proof(page, `scope-${width}-${scale}-${theme}`, { state: await state(page), reset: initial });
-        await page.locator("#moreFilters > summary").click(); await frames(page);
-        for (const selector of ["#resetView", "#moreFilters > summary", "#projectFilter-control"]) {
+        for (const selector of ["#resetView", "#projectFilter-control"]) {
+            await page.locator(selector).scrollIntoViewIfNeeded();
             const box = await page.locator(selector).boundingBox();
             assert.ok(box.x >= 0 && box.x + box.width <= width + 1, selector + " fits the viewport.");
         }

@@ -165,7 +165,6 @@ test("help geometry inventory across normal Home, Activity, details, report and 
         await navigateMain(page, "home");
         await capture(`home-${theme}-${width}-${scale}`);
         await navigateMain(page, "activity");
-        if (await page.locator("#moreFilters").getAttribute("open") === null) await page.locator("#moreFilters>summary").click();
         await openActivitySessions(page);
         await capture(`activity-${theme}-${width}-${scale}`);
         await page.locator("#activityList .request-link").first().click();
@@ -286,7 +285,6 @@ test("normal report help preserves checkbox targets, selection and layout for ke
 test("field help never orphans or collides while the normal layout crosses its wrap thresholds", { timeout: 30000 }, async t => {
     const page = await setup(t);
     await navigateMain(page, "activity");
-    await page.locator("#moreFilters>summary").click();
     const measurements = [];
     for (const scale of [1, 2]) {
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);

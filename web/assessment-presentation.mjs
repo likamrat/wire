@@ -76,6 +76,30 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey }) 
         if (metric.status === "unpriced") return "Unpriced";
         return metric.unit === "ratio" ? "Unassessed" : "Not measured";
     }
+    function reading(metric, personalVerdict) {
+        const { covered, eligible } = metric.coverage;
+        const quality = ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension);
+        if (quality) {
+            const label = metric.dimension === "accuracy" ? "Answer correctness"
+                : metric.dimension === "answer-trust" ? "Answer support"
+                    : metric.origin === "user-personal" ? "Action authorization" : "Actions match request";
+            const missing = metric.reason === "not-applicable" ? "Not applicable"
+                : metric.status === "evaluator-error" ? "Check could not run"
+                    : metric.origin === "model-assessed" && ["missing-evidence", "partial-evidence"].includes(metric.reason) ? "Not enough evidence" : "No result";
+            return {
+                label, coverage: `Results for ${number(covered)} of ${number(eligible)} ${eligible === 1 ? "request" : "requests"}`,
+                value: personalVerdict ?? (metric.value === null ? missing : `${number(metric.numerator)} passed \u00b7 ${number(metric.denominator - metric.numerator)} failed`),
+            };
+        }
+        if (metric.dimension === "speed") {
+            const unit = metric.definitionId === "tool-duration" ? "calls" : metric.definitionId === "recorded-response-duration" ? "requests" : "items";
+            return {
+                value: metric.value === null ? "Not measured" : metric.value > 0 && metric.value < 10 ? "<0.01 s" : `${number(metric.value / 1000)} s`,
+                coverage: `${number(covered)} of ${number(eligible)} ${unit} timed${metric.value === null ? "" : " \u00b7 Median"}`,
+            };
+        }
+        return null;
+    }
     function present(metric, singleInteraction = false) {
         const ratio = metric.unit === "ratio", cost = metric.unit === "USD";
         const label = ratio ? dimensionLabels[metric.dimension] ?? checkLabels[metric.checkId] : cost
@@ -123,6 +147,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey }) 
         }[metric.definitionId];
         return {
             metricRef: metric.metricRef, dimension: metric.dimension, label, value, coverage, qualification, origin, personalVerdict,
+            reading: reading(metric, personalVerdict),
             ...(timingSummary ? { summary: {
                 label: timingSummary.label,
                 coverage: `${metric.value !== null ? "Median \u00b7 " : ""}${number(metric.coverage.covered)} / ${number(metric.coverage.eligible)} ${timingSummary.unit} timed`,
@@ -139,6 +164,10 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey }) 
         return {
             dimension, label: dimensionLabels[dimension], value: ["speed", "cost"].includes(dimension) ? "Not measured" : "Unassessed",
             coverage: "Coverage unavailable", qualification: "No metric was supplied for this scope.", origin: "",
+            reading: {
+                label: dimension === "accuracy" ? "Answer correctness" : dimension === "answer-trust" ? "Answer support" : dimension === "action-trust" ? "Actions match request" : dimensionLabels[dimension],
+                coverage: "Coverage unavailable", value: dimension === "speed" ? "Not measured" : "No result",
+            },
             band: "neutral", bandVersion, status: "unavailable", details: [`${dimensionLabels[dimension]}: no metric or coverage was supplied for this scope.`], basis: null,
         };
     }
@@ -181,7 +210,14 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey }) 
         else if (personalAccuracy) takeaway = "Your accuracy feedback is shown separately from automatic local observations.";
         else if (metrics.some(metric => metric.origin === "model-assessed")) takeaway = "Model assessments use recorded evidence. Each check keeps its own result and coverage; no overall grade is assigned.";
         else takeaway = "Supported facts and personal feedback are shown separately; no overall grade is assigned.";
-        return { groups, diagnostics, takeaway, bandVersion };
+        const modelChecks = metrics.filter(metric => metric.origin === "model-assessed" && ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension));
+        const sameUnits = (left, right) => JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+        const sharedRequests = modelChecks.length === 3 && new Set(modelChecks.map(metric => metric.dimension)).size === 3
+            && modelChecks.every(metric => sameUnits(metric.eligibleUnitRefs, modelChecks[0].eligibleUnitRefs) && sameUnits(metric.coveredUnitRefs, modelChecks[0].coveredUnitRefs));
+        const sharedCount = sharedRequests ? modelChecks[0].coverage.covered : 0;
+        const readingNote = (sharedCount ? `The three AI checks cover the same ${number(sharedCount)} ${sharedCount === 1 ? "request" : "requests"}.`
+            : "Each check has its own request coverage.") + " Missing results do not count as failed checks.";
+        return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "" };
     }
     return { format, summarize, band, bandVersion };
 }
@@ -208,12 +244,19 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         details.addEventListener("click", () => onDetails(details));
         heading.append(details);
     }
-    section.append(heading, el("p", "assessment-takeaway", model.takeaway));
+    section.append(heading, el("p", "assessment-takeaway", model.readingNote));
+    if (model.readingWarning) section.append(el("p", "assessment-unavailable", model.readingWarning));
+    const help = el("details", "assessment-reading-help");
+    help.append(el("summary", "", "How to read these results"),
+        el("p", "", "AI checks use recorded evidence, not independent proof. Missing results are not failures and do not mean a request is queued. Actions matching a request do not prove a person authorized them."),
+        el("p", "", "One request can contain several tool calls. Times are medians (middle recorded times), shown in seconds; call time and request-to-final-response time are separate. Exact milliseconds, counts, definitions, model and rubric are in Measure definitions or Details and feedback."));
     const grid = el("div", "assessment-grid");
     function appendRows(host, rows) {
         for (const row of rows) {
             const value = el("div", "assessment-fact");
             const available = ["measured", "estimated"].includes(row.status);
+            const quality = row.dimension !== "speed";
+            value.classList.toggle("assessment-check", quality);
             value.classList.toggle("assessment-fact-unavailable", !available);
             value.dataset.dimension = row.dimension;
             value.dataset.band = row.band;
@@ -221,12 +264,12 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
             const pairedPersonal = rows.some(other => other.dimension === row.dimension && other.origin === "Your feedback");
             const originLabel = row.origin === "Model assessment" ? "Model assessment" : row.origin === "Your feedback" ? "Your feedback"
                 : row.origin === "Automatic local observation" && pairedPersonal ? "Automatic" : "";
-            value.append(el("h4", "assessment-fact-label", row.summary?.label ?? (row.dimension === "accuracy" ? "Answer correctness" : row.label)));
-            value.append(el("p", "assessment-value", row.value));
-            value.append(el("p", "assessment-coverage", row.summary?.coverage ?? row.coverage));
+            value.append(el("h4", "assessment-fact-label", row.reading?.label ?? row.summary?.label ?? row.label));
             if (originLabel) value.append(el("p", "assessment-origin", originLabel));
-            if (available && !row.summary) value.append(el("p", "assessment-qualification", row.qualification));
-            else if (!available) value.append(el("p", "assessment-unavailable-reason", row.qualification));
+            const result = el("p", "assessment-value", row.reading?.value ?? row.value);
+            const coverage = el("p", "assessment-coverage", row.reading?.coverage ?? row.summary?.coverage ?? row.coverage);
+            value.append(...(quality ? [coverage, result] : [result, coverage]));
+            if (!available && !quality) value.append(el("p", "assessment-unavailable-reason", row.qualification));
             host.append(value);
         }
     }
@@ -245,7 +288,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         grid.append(group);
     }
     grid.style.setProperty("--assessment-rows", String(Math.max(...Array.from(grid.children, group => group.childElementCount))));
-    section.append(grid);
+    section.append(grid, help);
     root.replaceChildren(section);
     return section;
 }
@@ -276,6 +319,11 @@ export const assessmentPresentationStyles = `
 .assessment-coverage {font-size:var(--type-caption);line-height:var(--leading-ui);color:var(--ink);margin:0}
 .assessment-origin,.assessment-qualification,.assessment-unavailable-reason {font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:var(--space-xs) 0 0}
 .assessment-origin {font-weight:var(--weight-strong)}
+.assessment-check .assessment-coverage {font-size:var(--type-data-value);line-height:var(--leading-data-value);font-weight:var(--weight-strong);margin-top:var(--space-sm)}
+.assessment-check .assessment-value {font-size:var(--type-small);line-height:var(--leading-ui);margin-block:var(--space-xs) 0}
+.assessment-reading-help {font-size:var(--type-small);color:var(--muted)}
+.assessment-reading-help summary {min-height:44px;align-content:center;cursor:pointer;width:fit-content}
+.assessment-reading-help p {max-width:80ch;line-height:1.5;margin-block:var(--space-sm)}
 .assessment-fact-unavailable .assessment-value {color:var(--muted)}
 .assessment-fact[data-band=red] .assessment-value {color:var(--performance-red)}
 .assessment-fact[data-band=orange] .assessment-value {color:var(--performance-orange)}

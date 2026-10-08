@@ -51,7 +51,20 @@ definitions appear in **Glossary** inside the existing insight-details dialog;
 exact units, boundaries, and coverage remain under **Recorded measures and definitions**.
 The Speed card separates **Tool calls** from **Request to final response**.
 Each value keeps its median label and its own timed-call or timed-request
-coverage; longer timing boundaries live in the existing Speed help and details.
+coverage; seconds are display-only, with exact milliseconds and timing boundaries
+in the existing Speed help and details.
+
+Shared app Insights gives request coverage more prominence than the result:
+**Results for 1 of 69 requests**, then **1 passed · 0 failed**, not a leading 100%.
+Answer correctness, answer support and actions matching the request remain
+separate. Only identical covered and eligible request identities allow copy
+saying the three model checks cover the same requests. Equal totals alone are
+not enough. Different coverage and model/personal origins remain visible.
+Missing results, insufficient evidence and a check that could not run are not
+failed verdicts or a queue estimate. Single-request personal feedback remains a
+verdict in words. The existing details retain exact percentages, counts,
+definitions, model and rubric; **How to read these results** explains AI and
+timing limitations once. Report presentation and frozen facts are unchanged.
 
 An interaction can contain multiple calls, returned API entries, owned HTTP
 records, recorded Graph sites, and code references. These are different units.
@@ -320,6 +333,31 @@ Reference-only nodes and property maps are not primitive schema leaves.
 the nonstarting SDK/provider fixture boundary and exercises the corrected schema
 through the default installed evaluator. This proves the local correction, not
 real provider acceptance or a newly measured real interaction.
+
+Each prepared evaluation now carries a frozen, packet-specific response schema.
+Requirement and action-intent prompt anchors can name only the packet's prompt;
+answer anchors only its answer; reference anchors only its recorded references.
+Action checks can name only supplied actions. Empty reference or action inventories
+require empty lists with `maxItems: 0`, not an invalid empty enum or an invented
+reference. The generic schema remains a template, not the schema sent to the SDK;
+the actual generation schema hash therefore depends on the selected packet.
+
+The existing `MessageOptions.responseSchema` SDK contract accepts a per-message
+JSON Schema and returns an assistant message event. WIRE uses its existing typed
+`enum`, `$ref` and `maxItems` vocabulary rather than a new parser or provider API.
+This closes the gap between spelling-only generation constraints and the local
+validator's existing role membership checks. The rubric text/version, packet,
+offset/coverage predicates, usage accounting and no-replay identities are unchanged.
+A result violating those constraints still fails locally; WIRE never remaps an
+invented or wrong-role reference. A historical `evidence-anchor-kind` receipt
+identifies this failure class, not the exact rejected field or reference.
+
+The default-installed-adapter fixtures inspect the transmitted strict schema,
+persist correct controlled results, and inject wrong-role/invented anchors to
+prove they still fail with observed billing and no score or repeat call.
+Missing references remain insufficient. These checks do not prove real provider
+acceptance of a new packet-specific schema or close real multi-scenario acceptance;
+that requires a separately released new genuine case, never a consumed-case retry.
 
 Controlled-provider fixtures prove connected automatic processing, guards, explicit report
 origin and cleanup only. They do not close the real numeric acceptance gate:

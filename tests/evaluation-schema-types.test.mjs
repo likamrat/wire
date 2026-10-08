@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createEvaluationController } from "../lib/evaluation-controller.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { MODEL_EVALUATION_RESPONSE_SCHEMA as schema, MODEL_EVALUATION_RUBRIC } from "../lib/model-evaluation.mjs";
+import { MODEL_EVALUATION_RESPONSE_SCHEMA as schema, MODEL_EVALUATION_RUBRIC, createEvaluationRequest } from "../lib/model-evaluation.mjs";
 import { evaluationFixture, assessed, materializeEvaluationSource } from "./evaluation-fixture.mjs";
 import { CopilotClient, RuntimeConnection, observed, setSyntheticResponder, finiteSchemaTypeIssue } from "./fixtures/copilot-sdk-nonstarting.mjs";
 
@@ -77,8 +77,13 @@ test("default installed evaluator passes the finite-type provider boundary and p
     const metrics = buildAssessmentModel(state).overview.metrics.filter(metric => metric.origin === "model-assessed");
     assert.deepEqual(metrics.map(metric => [metric.dimension, metric.value]), [["accuracy", 1], ["answer-trust", 1], ["action-trust", 1]]);
     assert.equal(observed.processesStarted, 0);
+    const packet = JSON.parse(observed.rpc.at(-1).params.prompt).packet;
+    const prepared = createEvaluationRequest(packet, { confirmed: true, provider: "github-copilot", model: "gpt-6-astra",
+        maxCalls: 1, maxAiCredits: 30, interactionRefs: [packet.interactionRef],
+        sourceConfigRef: packet.sourceConfigRef, sourceConfigRevision: packet.sourceConfigRevision });
+    assert.equal(finiteSchemaTypeIssue(prepared.responseSchema), null);
     assert.deepEqual(observed.rpc.at(-1).params.responseFormat, {
-        type: "json_schema", jsonSchema: { name: "response", strict: true, schema },
+        type: "json_schema", jsonSchema: { name: "response", strict: true, schema: prepared.responseSchema },
     });
 });
 

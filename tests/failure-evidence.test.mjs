@@ -160,6 +160,27 @@ test("message signals are bounded, credential-screened mentions, not inferred ca
     }
 });
 
+test("structured MCP request timeout survives the real collector without implying HTTP or copying the error", async t => {
+    const events = sourceEvents({ error: { code: "failure", message: "Invented tool: MCP error -32001: Request timed out", stack: "PRIVATE_TIMEOUT_STACK" } });
+    events[2].timestamp = "2026-10-01T12:03:01.024Z";
+    const { retained, records } = collect(events);
+    const call = records[0].toolCalls[0];
+    assert.equal(call.failureEvidence.messageSignal, "request-timeout");
+    assert.equal(call.failureEvidence.code, "failure");
+    assert.equal(call.durationMs, 180024);
+    assert.equal(call.observedGraphHttp, false);
+    assert.deepEqual(call.apiResults, []);
+    assert.doesNotMatch(JSON.stringify(retained), /Invented tool|MCP error|PRIVATE_TIMEOUT_STACK/);
+    const { context } = await privateFixture(t, records);
+    assert.equal(mergeEvidenceWithState(await loadBoardState(context))[0].toolCalls[0].failureEvidence.messageSignal, "request-timeout");
+    for (const message of ["No MCP error -32001: Request timed out", "Possibly MCP error -32001: Request timed out",
+        "MCP error -32001: Request timed out was ruled out", "Request timed out", "HTTP 504",
+        "MCP error -32001: Request timed out. Bearer " + "a".repeat(40),
+        "x".repeat(8193) + " MCP error -32001: Request timed out"]) {
+        assert.equal(collect(sourceEvents({ error: { code: "failure", message } })).records[0].toolCalls[0].failureEvidence.messageSignal, null);
+    }
+});
+
 test("JSON payloads never fall back to raw status lines when result arrays are absent or empty", async t => {
     const { root } = await privateFixture(t, []);
     const payload = { error: { code: "failure", message: "Access denied", stack: "PRIVATE_STACK" }, statusCode: 403, body: { name: "PRIVATE_PERSON" } };
@@ -248,7 +269,7 @@ test("unqualified checkpoint reprocessing preserves completed automatic attempt 
     const approval = { schemaVersion: 1, approvalRef: "approval-" + "a".repeat(32), revision: 1, state: "enabled",
         sourceConfigRef: "sourceconfig-" + "b".repeat(32), sourceConfigRevision: 1, windowDays: 30, chatRefs: ["chat-" + "c".repeat(32)],
         method: { ...AUTOMATIC_SCORE_METHOD }, evidenceCategories: ["prompt", "answer", "references", "intent"],
-        maxCalls: 6, maxAiCredits: 1, approvedAt: events[0].timestamp, origin: "explicit-automatic-score-approval" };
+        maxCalls: 6, maxAiCredits: 60, approvedAt: events[0].timestamp, origin: "explicit-automatic-score-approval" };
     const interactionRef = "interaction-" + "d".repeat(32), key = automaticScoreAttemptKey(approval, interactionRef, old);
     const reprocessed = mergedRecords([old], extracted)[0];
     assert.equal(evaluationRecordFingerprint(reprocessed), fingerprint);

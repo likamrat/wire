@@ -30,7 +30,7 @@ test("measure help and glossary explain real unavailable facts without hover res
     await insights.locator(".assessment-grid").waitFor().catch(error => {
         throw new Error(`Interaction did not render. Browser errors: ${JSON.stringify(errors)}. ${error.message}`);
     });
-    assert.match(await insights.innerText(), /No current answer assessment/);
+    assert.match(await insights.innerText(), /Results for 0 of 1 request/);
     assert.doesNotMatch(await insights.innerText(), /\bCost\b/);
     for (const term of ["Accuracy", "Speed", "Trust"]) {
         const help = insights.getByRole("button", { name: `About ${term}`, exact: true });
@@ -57,6 +57,8 @@ test("measure help and glossary explain real unavailable facts without hover res
     assert.equal(await glossary.locator("dt").count(), 7);
     assert.match(await glossary.innerText(), /Answer trust/);
     assert.match(await glossary.innerText(), /Action trust/);
+    await dialog.getByText("Recorded measures and definitions", { exact: true }).click();
+    assert.match(await dialog.innerText(), /No current answer assessment/);
     await page.keyboard.press("Escape");
     assert.equal(await dialog.isVisible(), false);
     assert.equal(await definitions.evaluate(node => node === document.activeElement), true);
@@ -67,13 +69,13 @@ test("measure help and glossary explain real unavailable facts without hover res
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
         for (const dimension of ["answer-trust", "action-trust"]) {
             const row = insights.locator(`[data-dimension="${dimension}"]`).first();
-            const gap = await row.evaluate(node => {
-                const label = node.querySelector(".assessment-fact-label").getBoundingClientRect();
+            const order = await row.evaluate(node => {
+                const coverage = node.querySelector(".assessment-coverage").getBoundingClientRect();
                 const value = node.querySelector(".assessment-value").getBoundingClientRect();
-                return value.left - label.right;
+                return coverage.bottom <= value.top;
             });
-            assert.ok(gap < 24, "Unavailable trust value stays beside its label");
-            assert.ok((await row.locator(".assessment-unavailable-reason").innerText()).length > 15);
+            assert.ok(order, "Check coverage reads before its unavailable result.");
+            assert.equal(await row.locator(".assessment-value").innerText(), "No result");
         }
         if (process.env.WIRE_MEASURE_PROOFS) {
             await mkdir(process.env.WIRE_MEASURE_PROOFS, { recursive: true });
@@ -91,7 +93,7 @@ test("measure help and glossary explain real unavailable facts without hover res
     await page.locator("#homeInsights .assessment-grid").waitFor();
     await page.goBack();
     await insights.locator(".assessment-grid").waitFor();
-    assert.match(await insights.innerText(), /1,200 ms/);
+    assert.match(await insights.innerText(), /1.2 s/);
     assert.deepEqual(errors, []);
     assert.deepEqual(writes, []);
     assert.deepEqual(foreign, []);

@@ -13,8 +13,6 @@ export const homeResultFilterStyles = `
 .result-filter-heading {min-height:var(--select-help-target);padding-inline:var(--select-value-inset);align-items:center}
 .result-filter-heading>label {display:block;flex:initial;padding:0;font-size:var(--type-small);font-weight:var(--weight-regular);line-height:1.5}
 .result-filter-heading>.ux-help {width:var(--select-help-target);min-width:var(--select-help-target);height:var(--select-help-target);min-height:var(--select-help-target)}
-.period-controls>.home-result-filter>p {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.period-controls>.home-result-filter[data-unavailable=true]>p {position:static;width:auto;height:auto;padding:0;margin:4px 0;overflow:visible;clip-path:none;white-space:normal}
 .select-trigger .select-value.result-option-value,.result-option-value {display:flex;align-items:center;gap:8px;white-space:normal;overflow:visible}
 .result-option-label {min-width:0;overflow-wrap:anywhere}
 .result-option-value .result-legend-icon {align-self:start;margin-block:calc((1lh - 20px)/2)}

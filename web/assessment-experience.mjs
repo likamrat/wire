@@ -46,7 +46,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         heading.append(actions);
         const status = el("p", scoringMessage, "assessment-scoring-status");
         status.setAttribute("role", "status");
-        heading.after(status);
+        host.querySelector(".assessment-summary").append(status);
     }
     const recoveryHost = el("div", undefined, "notice assessment-recovery");
     recoveryHost.hidden = true;
@@ -425,6 +425,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         detailTrigger = trigger; detailOrigin = trigger.closest("[data-insight-key]")?.dataset.insightKey;
         activeDetail = view;
         const body = detailsBody("Insight details");
+        body.append(el("p", model.takeaway));
         if (view) {
             body.append(el("p", "Personal feedback is optional and separate from automatic checks. It does not change recorded evidence."));
             const label = el("label", "Personal feedback (optional)"), select = el("select");

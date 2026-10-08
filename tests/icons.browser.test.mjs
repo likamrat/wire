@@ -348,7 +348,6 @@ test("theme icons keep fixed bounds and touch help uses the shared dismissible t
         const mobile = await touch.newPage();
         await mobile.goto(origin);
         await ready(mobile);
-        await mobile.locator("#moreFilters > summary").tap();
         const help = mobile.getByRole("button", { name: "About Service", exact: true });
         const box = await help.boundingBox();
         assert.ok(box.width >= 44 && box.height >= 44);

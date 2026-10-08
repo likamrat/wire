@@ -5,6 +5,55 @@ import { contract, samples, quality, currentView, mixedOverview } from "./assess
 
 const presentation = createAssessmentPresentation(contract);
 const row = (model, dimension) => model.groups[dimension][0];
+function modelQuality(dimension, options) {
+    const metric = quality(dimension, { ...options, personal: true });
+    metric.origin = "model-assessed";
+    metric.checkId = { accuracy: "request-requirements-corroborated", "answer-trust": "recorded-answer-support", "action-trust": "action-intent-alignment" }[dimension];
+    metric.evaluator = { provider: "github-copilot", model: "synthetic-only", rubricId: "wire-recorded-interaction-review", rubricVersion: 1 };
+    return contract.validateMetric(metric);
+}
+test("count-led quality copy preserves exact percentages and distinguishes zero, missing and failed checks", () => {
+    const pass = modelQuality("accuracy", { pass: 1, unassessed: 68 });
+    const before = structuredClone(pass), shown = presentation.format(pass);
+    assert.equal(shown.reading.coverage, "Results for 1 of 69 requests");
+    assert.equal(shown.reading.value, "1 passed \u00b7 0 failed");
+    assert.equal(shown.value, "100%");
+    assert.equal(shown.coverage, "1 / 1 passed; 1 / 69 assessed");
+    assert.match(shown.details.join(" "), /Model synthetic-only; rubric wire-recorded-interaction-review v1/);
+    assert.deepEqual(pass, before);
+    const zero = presentation.format(modelQuality("accuracy", { fail: 1, unassessed: 68 }));
+    assert.equal(zero.value, "0%");
+    assert.equal(zero.reading.value, "0 passed \u00b7 1 failed");
+    const missing = modelQuality("accuracy", { unassessed: 69 });
+    assert.equal(presentation.format(missing).reading.value, "No result");
+    missing.reason = "missing-evidence";
+    assert.equal(presentation.format(missing).reading.value, "Not enough evidence");
+    missing.status = "evaluator-error"; missing.reason = "evaluator-failure";
+    missing.counts = { pass: 0, fail: 0, unassessed: 0, evaluatorError: 69 };
+    assert.equal(presentation.format(missing).reading.value, "Check could not run");
+    assert.equal(presentation.summarize([]).groups.accuracy[0].reading.coverage, "Coverage unavailable");
+});
+test("shared-request wording requires exact covered and eligible memberships, not matching totals", () => {
+    const metrics = ["accuracy", "answer-trust", "action-trust"].map(dimension => modelQuality(dimension, { pass: 1, unassessed: 68 }));
+    assert.match(presentation.summarize(metrics).readingNote, /same 1 request/);
+    metrics[1].coveredUnitRefs = [metrics[1].eligibleUnitRefs[1]];
+    assert.doesNotMatch(presentation.summarize(metrics).readingNote, /same/);
+    metrics[1].coveredUnitRefs = [metrics[1].eligibleUnitRefs[0]];
+    metrics[1].eligibleUnitRefs[1] = samples.id("interaction", 999);
+    assert.doesNotMatch(presentation.summarize(metrics).readingNote, /same/);
+    metrics.pop();
+    assert.doesNotMatch(presentation.summarize(metrics).readingNote, /three/);
+});
+test("seconds are display-only and preserve zero, tiny positive times and exact milliseconds", () => {
+    for (const [milliseconds, displayed] of [[0, "0 s"], [0.004, "<0.01 s"], [9, "<0.01 s"], [10, "0.01 s"], [2955, "2.96 s"], [16820, "16.82 s"]]) {
+        const metric = samples.makeDuration([milliseconds]), before = structuredClone(metric);
+        const shown = presentation.format(metric);
+        assert.equal(shown.reading.value, displayed);
+        assert.match(shown.value, /ms$/);
+        assert.ok(shown.details[1].startsWith(shown.value + "."));
+        assert.deepEqual(metric, before);
+    }
+});
 test("current adapter summary omits Cost and retains distinct answer/action trust", () => {
     const model = presentation.summarize(currentView().metrics);
     assert.deepEqual(Object.keys(model.groups), ["accuracy", "speed", "answer-trust", "action-trust"]);

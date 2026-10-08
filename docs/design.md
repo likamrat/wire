@@ -1,5 +1,31 @@
 # Product design
 
+## Analytical filter row
+
+Home, Activity and scoped chats share one always-present horizontal row:
+**When, Result, Author, Category (or Service), Project, Activity, Collection**.
+There is no More filters disclosure or secondary panel. Default choices fit the
+supplied desktop content width. At constrained widths, 200% text, or with long
+selected values, only the row scrolls horizontally. Its named, focusable region
+supports arrow keys, Tab and touch scrolling; no heading or selected value is
+wrapped, shrunk or ellipsized. Custom dates and an unavailable-result explanation
+stay below the row.
+
+Intrinsic field widths preserve complete text; active Clear actions may widen a
+field but never consume its dropdown's reading space. Labels align above the
+controls and use the existing 4px help gap, transparent 44px targets and 8px
+glyph-to-popup anchor. Select menus remain portaled outside the scrolling region,
+with 44px choices. A menu or tooltip closes when its anchor scrolls out of view.
+
+Concise Activity names describe the same six evidence layers. **Graph API call
+sites** are recorded invocation sites, not measured network calls; **Graph
+statuses** are their visible-status subset. **Returned API entries** are not tool
+calls, **HTTP recorder** is separate diagnostic capture, and **Graph code
+references** do not establish execution. Counts retain their exact canonical
+units. Category help explains available Discovery, search, services, multi-service
+and missing-service choices; a selected category retains its shared definition.
+No category rules, source evidence, report membership or saved files change.
+
 ## Fresh activity and history coverage
 
 The check button and **Source and collection** form one left-aligned action row.
@@ -55,13 +81,74 @@ the layout; no external screen-catalogue evidence was used. This is presentation
 only: selection, author scope, preview lifetime, approval invalidation, receipt
 recovery, refresh guards and immutable saved bytes are unchanged.
 
+## Offline historical metadata maintenance
+
+`scripts/maintain-historical-metadata.mjs` is an explicit offline maintenance
+entry, not an HTTP API, recollection action, or automatic migration. Source
+publication alone does not recover historical metadata. A coordinator must first
+review the exact original-source attestations, stop the normal runtime cleanly,
+verify recorder/evaluator quiescence and the current no-dispatch ledger, then
+pin the composed source manifest and private metadata-only plan. No historical
+source scan or provider call is performed by this entry.
+
+The plan allows exactly two existing prompt/call pairs. It includes their source,
+event and call identities, timestamps, complete retained-text hashes, record
+preimages, normalized author metadata and bounded failure projections. It also
+pins source configuration/index bytes, source approval identity/window,
+`maintenanceStateGuard(state)`, every saved bundle file and any additional private
+host receipts requiring preservation. Packet and already-completed predicate
+recheck hashes are attestations, not permission to repeat that source read.
+Unknown plan fields, raw error bodies, newer/conflicting metadata, absent or
+ambiguous targets, expired windows, pending cleanup and active evaluations fail
+closed. All private plan/journal files remain outside source control.
+
+Run with `--mode prepare` and explicit `--data-dir`, `--plan`, `--plan-sha256`, `--journal`,
+`--source-manifest` and `--source-identity` arguments. The manifest has
+`{ root, files: [{ path, sha256 }], sourceIdentity }`; its identity is SHA256 of
+`JSON.stringify(files)` in manifest order. The root must be this composed runtime
+root, all listed bytes must match, and no runtime module may be omitted.
+Preparation validates existing board/snapshot integrity before any helper can
+initialize storage, acquires the existing collector owner with `timers: false`,
+then uses `exclusiveActivity` and `exclusiveBoard`. It does not collect, configure,
+reconcile scores, restore responses, or publish evidence. Its only durable output
+is a new private hash-only pre/postimage journal and `reviewSha256`.
+
+After reviewing that journal, run the same command with `--mode apply` and the
+returned `--review-sha256`. Existing retained checkpoint events receive only the
+approved metadata; evicted events are not recreated and context limits cannot be
+met by evicting unrelated events. Checkpoint postimages are written first with
+`atomicJson`, followed by `stageEvidenceSnapshot` and one board save/revision.
+Unrelated snapshot fields, independent API results, cursors/index/configuration,
+cards, deletion/capture state, all assessment ledgers and saved bundle bytes stay
+unchanged. Genuine failure evidence still changes the assessment fingerprint;
+author-only evidence does not. Existing scoring policy must supply a durable
+pre-candidate no-dispatch gate; an empty candidate list alone is insufficient.
+
+This is **not an all-files transaction**. Keep the normal runtime stopped after
+any failure or uncertain result. Resume only with the same reviewed plan, source
+and journal: every file must match an exact sealed preimage or postimage. Already
+written checkpoints are recognized, and a confirmed board postimage is verified
+without incrementing its revision again. Drift aborts before further writes;
+there is no blind replay, automatic rollback, or deletion of evidence to make a
+target eligible. The journal does not itself block an operator from starting the
+normal runtime; maintaining the quiescent interval is the coordinator's duty.
+
+Postflight uses normal board loading and exact file hashes. Only after confirming
+completion may the coordinator close the maintenance interval and restart the
+normal entry with a freshly verified no-dispatch baseline. Source-only synthetic
+proof cannot substitute for that separate real-store acceptance.
+
 ## Failure evidence and technical facts
 
 Tool failures, tool-returned API metadata and owned HTTP captures remain separate.
 Newly collected completion errors retain a screened identifier-like code and
 explicit evidence/withholding reasons, not raw messages, stacks or bodies. A
-typed, credential-screened error message of at most 8 KiB can produce the single
-enum signal **Tool error mentions access denial**. Recognized negated or uncertain
+typed, credential-screened error message of at most 8 KiB can produce the
+enum signal **Tool error mentions access denial** or the narrowly recognized
+**Tool reported an MCP request timeout** (`MCP error -32001: Request timed out`).
+The timeout signal alone establishes neither an HTTP status nor a downstream
+cause; it is not HTTP 408/504 or a diagnosis inferred from elapsed time.
+Independent retained API/HTTP evidence remains visible. Recognized negated or uncertain
 wording does not produce that signal. The signal is a description of tool-error wording,
 not a verified cause, policy, authorization judgment or observed HTTP status.
 Oversized, credential-excluded, absent and unsupported message formats remain
@@ -125,6 +212,9 @@ the leading edge of its target: the trailing hit area does not separate it from
 its label or extend over neighboring text. Inline field labels use balanced
 wrapping rather than a separate icon column. Metadata retains its final-grapheme
 attachment and uses the same geometry.
+
+Analytical filter labels are the single-line exception: their horizontal row
+scrolls rather than balancing or truncating text.
 
 Information-help targets stay transparent on hover and press. Only the glyph
 changes to the existing ink color while its tooltip appears; the large hit area
@@ -194,17 +284,17 @@ unavailable; built-in accessibility guidance and the existing product system wer
 
 ## Prompt author controls
 
-The shared filter row places **Prompt author** beside When and Recorded result, including inside
+The shared filter row places **Author** beside When and Result, including inside
 a conversation. It reuses the opt-in checkbox multiselect: draft choices do not change results,
 Apply commits once, and Cancel/Escape/outside discard. All includes unverified authors; known
 Your + Agent does not. Applied counts, charts, groups and Insights use the same author scope before
 pagination and alongside existing filters. Pending and failed reads keep the last accepted selection
 with its existing counts; a late response cannot replace a newer choice.
 
-When, Recorded result and Prompt author share equal-width tracks, aligned labels and
-consistent gaps. Existing Clear actions sit in their field headers, so showing them does
-not shrink a dropdown or leave an invisible gap between fields. Custom dates occupy a
-separate row. The primary fields stack at constrained content widths and enlarged text.
+All seven analytical fields share aligned labels and consistent gaps. Existing
+Clear actions sit in their field headers, without shrinking the dropdown or
+leaving inactive clear-button gutters. Custom dates occupy a separate row.
+Constrained widths and enlarged text use the horizontal scrolling behavior above.
 
 The single author helper supplies **Your prompt**, **Agent prompt**, or a neutral source-qualified
 **Copilot chat prompt**. Non-chat/unknown-source text retains the generic Prompt fallback.
@@ -247,17 +337,29 @@ the last applied state; uncertain results offer status lookup, never replay.
 Single-interaction feedback uses the personal verdict wording, not an objective
 percentage; aggregate summaries retain their assessed counts and coverage.
 
-The shared app Insights summary uses the existing Speed measure hierarchy for
-all three dimensions: a measure heading, a prominent value or honest unavailable
-state, then compact coverage. Accuracy has one **Answer correctness** measure;
-Trust keeps **Answer trust** and **Action trust** separate. Each origin lane uses
-the same pattern, with the origin and qualification below coverage. Model
-assessment and optional personal feedback remain explicitly distinguishable.
+The shared app Insights summary leads each quality check with its request
+coverage, then passed/failed counts or an honest unavailable state. **Results for
+1 of 69 requests** is prominent; **1 passed · 0 failed** is subordinate, never a
+dominant 100% suggesting all requests succeeded. Accuracy keeps **Answer
+correctness**; Trust separates **Answer support** and **Actions match request**.
+Personal action feedback keeps its distinct **Action authorization** meaning.
+Origin labels remain explicit, and single-request personal verdicts stay words.
+Shared-request copy appears only when all three model checks have identical
+eligible and covered request identities, not merely equal counts. Otherwise
+each check keeps its own coverage. Missing results are neither failures nor
+evidence of queued work; no minimum sample threshold or combined grade is added.
+
+Speed keeps separate call and request boundaries, displaying seconds with its
+own timed coverage. Exact milliseconds and unchanged percentage/count facts,
+definitions, models and rubrics remain in the existing details panel.
+**How to read these results** explains repeated AI limitations and median timing
+once. Automatic-score processing status stays visible after the results, rather
+than preceding their scope. Partial-membership warnings remain visible.
 Sibling measures use Speed's 16px / hairline / 16px separation. Shared,
 content-sized grid rows align dividers across side-by-side categories; stacked
 categories keep their natural height, without fixed heights or filler rows.
-Labels use the shared 14/20 role, values 22/29.7,
-and coverage 12px; unavailable states keep the same value role in neutral color.
+Labels and quality results use the shared 14/20 role; quality coverage and timing
+values use 22/29.7, with timing coverage at 12px. Unavailable results stay neutral.
 All content reflows with enlarged text. This applies to Home, scoped Activity
 and the individual interaction through `renderAssessmentSummary`; report
 documents and frozen comparison renderers retain their separate presentation.
@@ -1568,10 +1670,13 @@ natural wrapping and document scrolling, without a nested frame or height cap.
 It is source evidence, not an editable report copy. Supported explicit sources,
 host-added input/sender envelopes and qualified creator kickoffs determine the author label.
 One quiet **Author unverified** state is reserved for missing, unsupported or conflicting evidence.
+Its adjacent keyboard/touch help explains the retained basis and that this is not
+an account sign-in failure. Explicit `source: system` stays in the neutral author
+cohort and is explained as system-supplied context, not guessed to be an Agent prompt.
 Source role, writing style, raw typed tags and old `human-authored` strings alone do not determine authorship.
 The shared authorship helper owns labels, origin kinds and actor identity; the
 separate author-cue stylesheet owns their restrained color cues.
-**About this prompt & copying** contains human-readable author/partial-text and
+**About this prompt & copying** contains human-readable author and
 clipboard explanations. **Technical source record** has a different purpose:
 exact timestamps, source identifiers, normalized basis codes and association facts.
 A concise **Copies original text, unmasked** notice is associated with Copy
@@ -1593,7 +1698,11 @@ Activity, matching actions and report lists show **Prompt** as an ordinary
 body-size paragraph, bounded to 68ch and at most 170 graphemes. Excerpts end at a
 word boundary when available; unbroken URLs and Unicode retain whole graphemes.
 There is no second CSS ellipsis or paragraph-sized link. The adjacent native
-**View interaction** link navigates; **Read prompt** expands in place. Both use
+**View interaction** link navigates; **Read full prompt** expands in place.
+A shortened preview explicitly says **Preview / full retained prompt available**;
+this is presentation shortening, not missing source text. A partial source instead
+uses **Read retained prompt**, identifies a retained fragment, and keeps its missing-text
+notice visible in both compact and complete readers. Both actions use
 the shared compact outlined action face, including a visible resting keyline
 in light and navy, while keeping native 44px targets and keyboard focus. Their
 matching control line-height keeps the two actions aligned; neither paints

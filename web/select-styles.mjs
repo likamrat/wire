@@ -66,7 +66,7 @@ export const selectStyles = `
 .select-popup::backdrop {background:transparent}
 .select-option {
  display:grid;grid-template-columns:minmax(0,1fr) 20px;align-items:center;column-gap:10px;
- min-height:36px;padding:7px 10px;border-radius:8px;cursor:pointer;overflow-wrap:anywhere;
+ min-height:44px;padding:7px 10px;border-radius:8px;cursor:pointer;overflow-wrap:anywhere;
 }
 .select-option+.select-option {margin-top:2px}
 .select-option[aria-selected=true] {background:var(--accent-soft);color:var(--accent);font-weight:var(--weight-medium)}

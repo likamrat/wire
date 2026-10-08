@@ -79,7 +79,7 @@ test("Speed presents separate call and final-response timing groups without chan
         await speed.scrollIntoViewIfNeeded();
         await page.mouse.move(0, 0);
         await page.evaluate(() => document.fonts.ready);
-        assert.deepEqual(await speed.locator(".assessment-value").allTextContents(), ["3,077 ms", "114,247 ms"]);
+        assert.deepEqual(await speed.locator(".assessment-value").allTextContents(), ["3.08 s", "114.25 s"]);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
         const layout = await speed.evaluate(node => {
             const box = node.getBoundingClientRect();
@@ -103,8 +103,8 @@ test("Speed presents separate call and final-response timing groups without chan
     if (process.env.WIRE_SPEED_CARD_PROOFS) await writeFile(path.join(process.env.WIRE_SPEED_CARD_PROOFS, "layout.json"), JSON.stringify(evidence, null, 2));
     assert.match(evidence[0].text, /Tool calls/);
     assert.match(evidence[0].text, /Request to final response/);
-    assert.match(evidence[0].text, /218 \/ 219 calls timed/);
-    assert.match(evidence[0].text, /2 \/ 62 requests timed/);
+    assert.match(evidence[0].text, /218 of 219 calls timed/);
+    assert.match(evidence[0].text, /2 of 62 requests timed/);
     assert.doesNotMatch(evidence[0].text, /Call start to recorded completion|Recorded request to final response; not tool-call time/);
     assert.deepEqual(evidence[0].headingTags, ["H4", "H4"]);
     assert.ok(evidence.every(item => item.groups[1].label.top - item.groups[0].coverage.bottom >= 32), "The next measure must be separated more than its own value and coverage.");
@@ -119,7 +119,7 @@ test("Speed presents separate call and final-response timing groups without chan
     assert.equal(await tooltip.isVisible(), false);
     await speed.getByRole("button", { name: "About Speed", exact: true }).tap();
     await tooltip.waitFor({ state: "visible" });
-    assert.match(await tooltip.innerText(), /medians.*milliseconds/i);
+    assert.match(await tooltip.innerText(), /medians.*seconds.*Exact milliseconds/i);
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Measure definitions", exact: true }).click();
     const details = page.getByRole("dialog", { name: "Insight details", exact: true });
@@ -152,7 +152,7 @@ test("unavailable Speed keeps missing timing distinct from zero at narrow width"
     await speed.locator(".assessment-value").waitFor();
     await chooseTheme(page, "dark");
     assert.equal(await speed.locator(".assessment-value").innerText(), "Not measured");
-    assert.match(await speed.innerText(), /0 \/ 219 calls timed/);
+    assert.match(await speed.innerText(), /0 of 219 calls timed/);
     assert.doesNotMatch(await speed.innerText(), /\b0 ms\b/);
     assert.match(await speed.innerText(), /not retained/);
     if (process.env.WIRE_SPEED_CARD_PROOFS) {
