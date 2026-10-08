@@ -131,7 +131,7 @@ test("interaction insights preserve separate trust states and request private re
     await show();
     assert.equal(calls.filter(call => call.path.endsWith("/detail")).length, 1);
     assert.equal(calls.filter(call => call.path.endsWith("/evidence")).length, 0);
-    assert.match(await page.locator("#summary").textContent(), /AccuracyUnassessed/);
+    assert.equal(await page.locator('#summary [data-dimension="accuracy"] .assessment-value').textContent(), "Unassessed");
     assert.match(await page.locator("#summary").textContent(), /Answer trustUnassessed/);
     assert.match(await page.locator("#summary").textContent(), /Action trustUnassessed/);
     assert.doesNotMatch(await page.locator("#summary").textContent(), /Whole-interaction latency/);

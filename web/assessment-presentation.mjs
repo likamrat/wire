@@ -210,24 +210,21 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     }
     section.append(heading, el("p", "assessment-takeaway", model.takeaway));
     const grid = el("div", "assessment-grid");
-    function appendRows(host, rows, title) {
+    function appendRows(host, rows) {
         for (const row of rows) {
             const value = el("div", "assessment-fact");
             const available = ["measured", "estimated"].includes(row.status);
             value.classList.toggle("assessment-fact-unavailable", !available);
-            value.classList.toggle("assessment-speed-fact", Boolean(row.summary));
             value.dataset.dimension = row.dimension;
             value.dataset.band = row.band;
             value.dataset.bandVersion = row.bandVersion;
             const pairedPersonal = rows.some(other => other.dimension === row.dimension && other.origin === "Your feedback");
-            const originLabel = row.origin === "Model assessment" ? "Model assessment" : row.origin === "Your feedback" ? row.personalVerdict ? "Your feedback:" : "Your feedback"
+            const originLabel = row.origin === "Model assessment" ? "Model assessment" : row.origin === "Your feedback" ? "Your feedback"
                 : row.origin === "Automatic local observation" && pairedPersonal ? "Automatic" : "";
-            const showLabel = row.label !== title && (available || rows.length > 1 || title === "Trust" || row.summary);
-            if (showLabel) value.append(el(row.summary ? "h4" : "p", "assessment-fact-label",
-                row.summary?.label ?? (!available && originLabel && row.origin !== "Model assessment" ? `${row.label} (${originLabel})` : row.label)));
-            if (originLabel && (available || !showLabel || row.origin === "Model assessment")) value.append(el("p", "assessment-origin", originLabel));
+            value.append(el("h4", "assessment-fact-label", row.summary?.label ?? (row.dimension === "accuracy" ? "Answer correctness" : row.label)));
             value.append(el("p", "assessment-value", row.value));
             value.append(el("p", "assessment-coverage", row.summary?.coverage ?? row.coverage));
+            if (originLabel) value.append(el("p", "assessment-origin", originLabel));
             if (available && !row.summary) value.append(el("p", "assessment-qualification", row.qualification));
             else if (!available) value.append(el("p", "assessment-unavailable-reason", row.qualification));
             host.append(value);
@@ -244,8 +241,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
             const available = rows.filter(row => row.status === "measured");
             rows = available.length ? available : rows.slice(0, 1);
         }
-        group.dataset.compact = String(rows.length === 1 && !rows[0].summary && !["measured", "estimated"].includes(rows[0].status));
-        appendRows(group, rows, title);
+        appendRows(group, rows);
         grid.append(group);
     }
     section.append(grid);
@@ -268,25 +264,14 @@ export const assessmentPresentationStyles = `
 .assessment-dimension h3 {margin:0 0 var(--space-sm);font-size:var(--type-small);font-weight:var(--weight-strong)}
 .assessment-dimension-heading {display:flex;align-items:center;gap:var(--space-xs);margin-bottom:var(--space-sm)}
 .assessment-dimension-heading h3 {margin:0}
-.assessment-fact {min-width:0}
-.assessment-fact + .assessment-fact {margin-top:var(--space-md)}
-.assessment-speed-fact {display:block}
-.assessment-speed-fact + .assessment-speed-fact {margin-top:var(--space-lg);padding-top:var(--space-lg);border-top:1px solid var(--rule)}
-.assessment-speed-fact .assessment-fact-label {margin:0;font-size:var(--type-small);line-height:var(--leading-ui);font-weight:var(--weight-strong)}
-.assessment-speed-fact .assessment-value {margin-block:var(--space-sm) var(--space-xs)}
-.assessment-speed-fact .assessment-coverage {margin:0;line-height:var(--leading-ui)}
-.assessment-speed-fact .assessment-unavailable-reason {margin-top:var(--space-xs)}
-.assessment-fact-unavailable {display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--space-xs) var(--space-sm)}
-.assessment-fact-unavailable .assessment-coverage {flex-basis:100%;margin:0}
-.assessment-unavailable-reason {flex-basis:100%;font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:0}
-.assessment-fact-label,.assessment-origin,.assessment-coverage,.assessment-qualification {font-size:var(--type-caption);color:var(--muted)}
+.assessment-fact {min-width:0;overflow-wrap:anywhere}
+.assessment-fact + .assessment-fact {margin-top:var(--space-lg);padding-top:var(--space-lg);border-top:1px solid var(--rule)}
+.assessment-fact-label {margin:0;font-size:var(--type-small);line-height:var(--leading-ui);font-weight:var(--weight-strong);color:var(--muted)}
+.assessment-value {font-size:var(--type-data-value);font-weight:var(--weight-strong);line-height:var(--leading-data-value);margin-block:var(--space-sm) var(--space-xs)}
+.assessment-coverage {font-size:var(--type-caption);line-height:var(--leading-ui);color:var(--ink);margin:0}
+.assessment-origin,.assessment-qualification,.assessment-unavailable-reason {font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:var(--space-xs) 0 0}
 .assessment-origin {font-weight:var(--weight-strong)}
-.assessment-value {font-size:var(--type-data-value);font-weight:var(--weight-strong);line-height:var(--leading-data-value);margin-block:var(--space-xs)}
-.assessment-fact-unavailable .assessment-value {font-size:var(--type-small);font-weight:var(--weight-medium);color:var(--muted);margin:0}
-.assessment-speed-fact.assessment-fact-unavailable {display:block}
-.assessment-speed-fact.assessment-fact-unavailable .assessment-value {margin-block:var(--space-sm) var(--space-xs)}
-.assessment-coverage {color:var(--ink)}
-.assessment-qualification {margin-top:var(--space-xs)}
+.assessment-fact-unavailable .assessment-value {color:var(--muted)}
 .assessment-fact[data-band=red] .assessment-value {color:var(--performance-red)}
 .assessment-fact[data-band=orange] .assessment-value {color:var(--performance-orange)}
 .assessment-fact[data-band=gold] .assessment-value {color:var(--performance-gold)}
@@ -324,7 +309,5 @@ html:has(.assessment-dialog:modal) {overflow:hidden;scrollbar-gutter:stable}
 .comparison-review>button {margin-block:var(--space-sm);margin-right:var(--space-sm)}
 @media(max-width:600px) {
  .assessment-grid {gap:var(--space-lg)}
- .assessment-dimension[data-compact=true] {display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:var(--space-sm)}
- .assessment-dimension[data-compact=true] h3 {margin:0}
 }
 `;

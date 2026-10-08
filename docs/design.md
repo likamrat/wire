@@ -247,6 +247,19 @@ the last applied state; uncertain results offer status lookup, never replay.
 Single-interaction feedback uses the personal verdict wording, not an objective
 percentage; aggregate summaries retain their assessed counts and coverage.
 
+The shared app Insights summary uses the existing Speed measure hierarchy for
+all three dimensions: a measure heading, a prominent value or honest unavailable
+state, then compact coverage. Accuracy has one **Answer correctness** measure;
+Trust keeps **Answer trust** and **Action trust** separate. Each origin lane uses
+the same pattern, with the origin and qualification below coverage. Model
+assessment and optional personal feedback remain explicitly distinguishable.
+Sibling measures use Speed's 16px / hairline / 16px separation, without filler
+rows or equal-height content. Labels use the shared 14/20 role, values 22/29.7,
+and coverage 12px; unavailable states keep the same value role in neutral color.
+All content reflows with enlarged text. This applies to Home, scoped Activity
+and the individual interaction through `renderAssessmentSummary`; report
+documents and frozen comparison renderers retain their separate presentation.
+
 Local reply saving is a row in Collection preferences, not a separate Settings
 category. It uses the existing row divider, spacing and heading role, a plain
 current state and **Save Copilot replies locally** beside its checkbox, without

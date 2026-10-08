@@ -78,7 +78,7 @@ test("detail labels Automatic and uses existing single personal verdict words wi
         assert.match(await automatic.textContent(), /Automatic/);
         assert.equal(await automatic.locator(".assessment-value").textContent(), "Unassessed");
         assert.equal(await personal.locator(".assessment-value").textContent(), item.expected);
-        assert.match(await personal.textContent(), new RegExp(`Your feedback:\\s*${item.expected}`));
+        assert.equal(await personal.locator(".assessment-origin").textContent(), "Your feedback");
         assert.doesNotMatch(await personal.locator(".assessment-value").textContent(), /%/);
         assert.match(await personal.locator(".assessment-coverage").textContent(), /1 \/ 1 assessed/);
     }
@@ -109,7 +109,9 @@ test("one personal Not-sure judgment stays unassessed rather than a pass, failur
     const rows = page.locator('.interaction-insights [data-dimension="accuracy"]');
     const personal = rows.filter({ hasText: "Your feedback" });
     assert.equal(await personal.locator(".assessment-value").textContent(), "Unassessed");
-    assert.match(await rows.filter({ hasNotText: "Your feedback" }).textContent(), /Automatic.*Unassessed/);
+    const automatic = rows.filter({ hasNotText: "Your feedback" });
+    assert.equal(await automatic.locator(".assessment-origin").textContent(), "Automatic");
+    assert.equal(await automatic.locator(".assessment-value").textContent(), "Unassessed");
     assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records[0].assessment.verdict, "unassessed");
 });
 
