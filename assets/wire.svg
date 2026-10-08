@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">WIRE - Work IQ Request Explorer</title>
+  <desc id="desc">A red W-shaped cable with large sidelong eyes extending beyond the cable outline and a crooked smirk. A cut jacket exposes three closely packed insulated cores with short copper strands.</desc>
+  <g id="mark" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M47 80 L74 180 C79 198 89 199 97 181 L124 117 C128 108 133 108 137 118 L164 183 C171 201 182 198 187 180 L214 80"
+      fill="none" stroke="var(--edge, #292b29)" stroke-width="25" stroke-linecap="butt"/>
+    <path d="M47 80 L74 180 C79 198 89 199 97 181 L124 117 C128 108 133 108 137 118 L164 183 C171 201 182 198 187 180 L214 80"
+      fill="none" stroke="var(--cable, #e64e44)" stroke-width="19" stroke-linecap="butt"/>
+    <g id="exposed-end" transform="translate(47 80) rotate(-15)">
+      <ellipse rx="12" ry="4.5" fill="var(--cable, #e64e44)" stroke="var(--edge, #292b29)" stroke-width="1.8"/>
+      <ellipse rx="8.5" ry="2.8" fill="var(--edge, #292b29)"/>
+      <g stroke-linecap="butt">
+        <path d="M-5 -20 L-6.1 -27.5 M0 -27 L-.3 -34 M5 -23 L5.5 -29.5"
+          fill="none" stroke="var(--copper, #bb7950)" stroke-width="3"/>
+        <path d="M-5.8 -20 L-6.8 -27.5 M-4.2 -20 L-5.2 -27 M-.8 -27 L-1.1 -34 M.8 -27 L.5 -33.4 M4.2 -23 L4.7 -29.5 M5.8 -23 L6.3 -29"
+          fill="none" stroke="var(--strand, #704936)" stroke-width=".45"/>
+        <path d="M-5 1 C-5 -7 -4 -13 -5 -20"
+          fill="none" stroke="var(--edge, #292b29)" stroke-width="5.8"/>
+        <path d="M-5 1 C-5 -7 -4 -13 -5 -20"
+          fill="none" stroke="var(--green, #639979)" stroke-width="4.2"/>
+        <path d="M0 0 C1 -11 -.2 -18 0 -27"
+          fill="none" stroke="var(--edge, #292b29)" stroke-width="5.8"/>
+        <path d="M0 0 C1 -11 -.2 -18 0 -27"
+          fill="none" stroke="var(--ivory, #f1efe5)" stroke-width="4.2"/>
+        <path d="M5 1 C6 -8 4.7 -16 5 -23"
+          fill="none" stroke="var(--edge, #292b29)" stroke-width="5.8"/>
+        <path d="M5 1 C6 -8 4.7 -16 5 -23"
+          fill="none" stroke="var(--gold, #dfb94e)" stroke-width="4.2"/>
+      </g>
+      <path d="M-11.5 .8 C-8 6.2 8 6.2 11.5 .8"
+        fill="none" stroke="var(--edge, #292b29)" stroke-width="2"/>
+    </g>
+    <g transform="translate(214 80) rotate(15)">
+      <ellipse rx="12" ry="4.5" fill="var(--cable, #e64e44)" stroke="var(--edge, #292b29)" stroke-width="1.8"/>
+      <ellipse rx="8.5" ry="2.8" fill="var(--edge, #292b29)"/>
+      <ellipse cx="-4.6" cy=".1" rx="1.7" ry="1.2" fill="var(--green, #639979)"/>
+      <ellipse cx="0" cy="-.5" rx="1.7" ry="1.2" fill="var(--ivory, #f1efe5)"/>
+      <ellipse cx="4.6" cy=".1" rx="1.7" ry="1.2" fill="var(--gold, #dfb94e)"/>
+    </g>
+    <g id="expression" transform="translate(52 99) rotate(-15)">
+      <path d="M-15 -6 L-1 -4.5 L-1 1.5 C-1 11 -15 11 -15 1.5 Z"
+        fill="var(--face, #fff9ed)" stroke="var(--edge, #292b29)" stroke-width="1.9"/>
+      <path d="M1 -4 L15 -7 L15 1 C15 11 1 11 1 1 Z"
+        fill="var(--face, #fff9ed)" stroke="var(--edge, #292b29)" stroke-width="1.9"/>
+      <ellipse cx="-4.5" cy=".5" rx="2.5" ry="3.7" fill="var(--edge, #292b29)"/>
+      <ellipse cx="10.5" cy="-.3" rx="2.5" ry="3.7" fill="var(--edge, #292b29)"/>
+      <path d="M-5.5 15.5 Q1.5 20 7 12.5"
+        fill="none" stroke="var(--face, #fff9ed)" stroke-width="2.4"/>
+    </g>
+  </g>
+</svg>

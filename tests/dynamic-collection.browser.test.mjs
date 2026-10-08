@@ -1,0 +1,90 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import os from "node:os";
+import { chromium } from "@playwright/test";
+import { startServer } from "../lib/server.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { loadBoardState } from "../lib/store.mjs";
+import { selectActivityOption, navigateMain } from "./helpers.mjs";
+import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
+
+test("synthetic UI: fresh source approval, new session updates without reload, frozen report and cleared selection", { timeout: 90000 }, async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "workiq-live-browser-synthetic-"));
+    const sessionRoot = path.join(root, "session-state"), appDbPath = path.join(root, "data.db");
+    await mkdir(sessionRoot);
+    const db = new DatabaseSync(appDbPath);
+    db.exec(`PRAGMA user_version=156;
+        CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT);
+        CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT);
+        CREATE TABLE workspaces(id TEXT PRIMARY KEY,session_id TEXT,project_id TEXT,name TEXT,archived_at TEXT,host_id TEXT,workspace_type TEXT);`);
+    const context = { dataDir: path.join(root, "private") };
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch({ headless: true });
+    t.after(async () => { await browser.close(); await runtime.close(); db.close(); await rm(root, { recursive: true, force: true }); });
+    async function addSession() {
+        const id = randomUUID(), timestamp = new Date().toISOString();
+        db.prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(id, "Synthetic live session", "general_chat", null, "local");
+        await mkdir(path.join(sessionRoot, id));
+        const events = [
+            { type: "session.start", data: { sessionId: id, version: 1 } },
+            { type: "user.message", data: { content: "Synthetic live request; no real workplace data." } },
+            { type: "tool.execution_start", data: { toolName: "workiq-fetch", toolCallId: randomUUID(), arguments: { entityUrls: ["/me/messages"] } } },
+        ].map(e => ({ ...e, id: randomUUID(), timestamp }));
+        await writeFile(path.join(sessionRoot, id, "events.jsonl"), events.map(e => JSON.stringify(e) + "\n").join(""));
+    }
+    const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, timezoneId: "America/Los_Angeles" });
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(runtime.url);
+    await page.locator('#workspace[aria-busy="false"]').waitFor();
+    assert.equal(await page.locator("#checkActivity").innerText(), "Review source & connect");
+    assert.equal(await page.locator("#collectionNotice").isVisible(), false, "Empty Home has one source-review entry, not a duplicate setup notice");
+    assert.equal(await page.locator("#collectionForm").isVisible(), false);
+    await navigateMain(page, "settings");
+    await page.locator("#reviewSource").click();
+    await page.locator("#sourceDatabase").fill(appDbPath);
+    await page.locator("#sourceSessions").fill(sessionRoot);
+    await page.locator("#connectCollection").click();
+    await page.waitForFunction(() => !document.querySelector("#collectNow").disabled);
+    await navigateMain(page, "home");
+    await selectActivityOption(page, "dateFilter", "7");
+    await selectActivityOption(page, "serviceFilter", "Mail");
+    await page.evaluate(() => { window.dynamicNoReload = "retained"; document.activeElement.blur(); });
+    await addSession();
+    await runtime.collector.collectNow();
+    await page.waitForFunction(() => document.querySelector("#activityCount").textContent === "1", { timeout: 15000 });
+    assert.equal(await page.evaluate(() => window.dynamicNoReload), "retained");
+    assert.equal(await page.locator("#dateFilter").inputValue(), "7");
+    assert.equal(await page.locator("#serviceFilter").inputValue(), "Mail");
+    await navigateMain(page, "reports");
+    assert.equal(await page.locator("#exportBtn").isDisabled(), true);
+    await chooseReportScope(page, "all");
+    await reportContents(page);
+    const previewResponse = page.waitForResponse(r => r.url().endsWith("/api/preview"));
+    await page.locator("#exportBtn").click();
+    const preview = await (await previewResponse).json();
+    assert.equal(preview.records.length, 1);
+    assert.equal(preview.timeContext.timeZone, "America/Los_Angeles");
+    await page.locator(".attestation input[data-review-control]").waitFor();
+    await addSession();
+    await runtime.collector.collectNow();
+    await page.locator("#newDataNotice").waitFor({ state: "visible", timeout: 15000 });
+    await page.locator(".attestation input[data-review-control]").check();
+    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    await page.locator("#reportsView [data-clear-selection]").first().click();
+    await page.evaluate(() => document.activeElement.blur());
+    await page.waitForFunction(() => document.querySelector("#scopeCount-all").textContent.includes("2 request groups"), { timeout: 15000 });
+    assert.equal(await page.locator('[name=reportScope]:checked').inputValue(), "selected");
+    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No requests selected");
+    await navigateMain(page, "settings");
+    await page.locator("#pauseCollection").click();
+    await page.waitForFunction(() => document.querySelector("#pauseCollection").textContent === "Resume collection");
+    assert.equal((await runtime.collector.status()).config.enabled, false);
+    assert.deepEqual(errors, []);
+});

@@ -1,0 +1,126 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdir, readFile, readdir } from "node:fs/promises";
+import path from "node:path";
+import { chromium } from "@playwright/test";
+import { startServer } from "../lib/server.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { loadBoardState } from "../lib/store.mjs";
+import { privateFixture, fixture, selectActivityOption, chooseTheme, openActivitySessions, navigateMain } from "./helpers.mjs";
+import { chooseReportScope, reportContents, cancelReportPreview } from "./report-journey-helpers.mjs";
+
+async function ready(page) {
+    await page.locator("#workspace").waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
+    await openActivitySessions(page);
+}
+
+test("sidebar and mobile drawer enter Reports without a global export action and freeze a non-destructive collection report", { timeout: 120000 }, async (t) => {
+    const records = Array.from({ length: 18 }, (_, i) => {
+        const source = fixture(`sidebar-${i}`);
+        source.toolCalls[0].requestedApiPath = i % 2 ? "/me/messages" : "/me/calendarView";
+        source.toolCalls[0].requestArgs = { entityUrls: [source.toolCalls[0].requestedApiPath] };
+        return source;
+    });
+    const { context } = await privateFixture(t, records);
+    const before = await loadBoardState(context);
+    const stateFile = (await readdir(context.dataDir)).find((name) => name.endsWith(".state.json"));
+    const stateBytes = await readFile(path.join(context.dataDir, stateFile));
+    const runtime = await startServer(context, createExportController(context), { port: 0 });
+    const browser = await chromium.launch({ headless: true });
+    t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, timezoneId: "America/Los_Angeles", locale: "en-US", reducedMotion: "reduce" });
+    page.setDefaultTimeout(10000);
+    const requests = [], errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("request", (request) => { if (request.method() === "POST") requests.push(new URL(request.url()).pathname); });
+    await page.goto(runtime.url);
+    await ready(page);
+    const proof = process.env.WORKIQ_SIDEBAR_PROOFS;
+    if (proof) await mkdir(proof, { recursive: true });
+    for (const theme of ["Light", "Dark"]) for (const width of [375, 820, 1200]) {
+        await page.setViewportSize({ width, height: 900 });
+        await chooseTheme(page, theme);
+        assert.equal(await page.locator("#sidebarExport,#mobileExportSlot").count(), 0);
+        assert.equal(await page.getByRole("button", { name: "Export report", exact: true }).count(), 0);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        const plot = await page.locator("#chart").boundingBox();
+        assert.ok(plot.width >= (width === 375 ? 300 : width === 820 ? 550 : 870), `${width}px viewport: chart width ${plot.width}px`);
+        if (width === 375) {
+            assert.equal(await page.locator(".primary-navigation").isVisible(), false);
+            await page.locator("#navigationToggle").click();
+            assert.equal(await page.locator("#navigationToggle").getAttribute("aria-expanded"), "true");
+            assert.equal(await page.locator(".primary-navigation [aria-current=page]").getAttribute("data-nav"), "home");
+            await page.keyboard.press("Escape");
+            assert.equal(await page.evaluate(() => document.activeElement.id), "navigationToggle");
+            await page.locator("#navigationToggle").click();
+            await page.mouse.click(width - 10, 200);
+            assert.equal(await page.locator("#navigationDrawer").evaluate((node) => node.open), false);
+            assert.equal(await page.evaluate(() => document.activeElement.id), "navigationToggle");
+        } else {
+            assert.equal(await page.locator("#sidebar nav").isVisible(), true);
+            assert.equal(await page.locator(".app-header nav").count(), 0);
+        }
+        await page.evaluate(() => { document.activeElement.blur(); window.scrollTo(0, 0); });
+        if (proof) await page.screenshot({ path: path.join(proof, `sidebar-home-${theme.toLowerCase()}-${width}.png`), fullPage: true });
+    }
+    await selectActivityOption(page, "serviceFilter", "Calendar");
+    await ready(page);
+    const filtered = new URL(page.url()).hash;
+    await page.locator("nav [data-nav=reports]").focus();
+    await page.keyboard.press("Enter");
+    await page.locator("#reportsView").waitFor({ state: "visible" });
+    assert.equal(await page.locator("#scopeCount-all").textContent(), "18 request groups");
+    assert.equal(await page.locator("#scopeCount-current").textContent(), "9 request groups");
+    assert.equal(await page.locator('[name=reportScope][value=selected]').isChecked(), true);
+    assert.equal(await page.locator("#exportBtn").isDisabled(), true, "Opening Reports does not opt into the collection");
+    assert.equal(await page.locator("[name=promptMode][value=masked]").isChecked(), true);
+    if (proof) await page.screenshot({ path: path.join(proof, "sidebar-report-scope-dark-1200.png"), fullPage: true });
+    await chooseReportScope(page, "current");
+    await reportContents(page);
+    assert.equal(await page.locator("#exportBtn").isEnabled(), true, "A deliberate scope needs no per-card transitions");
+    const pending = page.waitForResponse((response) => response.url().endsWith("/api/preview"));
+    await page.locator("#exportBtn").click();
+    const currentPreview = await (await pending).json();
+    assert.equal(currentPreview.snapshot.selectionScope.requestGroups, 9);
+    assert.equal(currentPreview.records.length, 9);
+    assert.deepEqual(await readFile(path.join(context.dataDir, stateFile)), stateBytes);
+    await cancelReportPreview(page);
+    await page.goBack();
+    assert.equal(new URL(page.url()).hash, filtered);
+    assert.equal(await page.locator("#serviceFilter").inputValue(), "Calendar");
+    await page.locator("nav [data-nav=activity]").click();
+    await openActivitySessions(page);
+    await page.locator("#activityList input[type=checkbox]").first().check();
+    await navigateMain(page, "reports");
+    assert.equal(await page.locator('[name=reportScope][value=selected]').isChecked(), true);
+    assert.equal(await page.locator("#scopeCount-selected").textContent(), "1 request group");
+    await chooseReportScope(page, "all");
+    await reportContents(page);
+    for (const format of ["pdf", "json", "markdown"]) await page.locator(`#formatOptions input[value=${format}]`).check();
+    const allPending = page.waitForResponse((response) => response.url().endsWith("/api/preview"));
+    await page.locator("#exportBtn").click();
+    const allPreview = await (await allPending).json();
+    assert.equal(allPreview.records.length, 18);
+    assert.deepEqual(allPreview.formats, ["html", "pdf", "json", "markdown"]);
+    assert.equal(allPreview.timeContext.timeZone, "America/Los_Angeles");
+    const confirm = page.getByRole("button", { name: "Confirm local export", exact: true, includeHidden: true });
+    assert.equal(await confirm.isDisabled(), true);
+    await page.locator(".attestation input[data-review-control]").check();
+    assert.equal(await confirm.isDisabled(), true);
+    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    await confirm.click();
+    await page.locator("#reportsView[data-report-phase=saved]").waitFor();
+    await ready(page);
+    const saved = await loadBoardState(context);
+    assert.deepEqual(saved.cards, before.cards);
+    assert.equal(saved.evidenceFile, before.evidenceFile);
+    assert.equal(saved.exports.length, 1);
+    const json = JSON.parse(await readFile(saved.exports[0].files["product-report.json"], "utf8"));
+    assert.deepEqual(json.records, allPreview.records);
+    assert.deepEqual(json.selectionScope, allPreview.snapshot.selectionScope);
+    for (const name of ["product-report.html", "product-report.pdf", "product-report.json", "product-report.md"]) assert.ok((await readFile(saved.exports[0].files[name])).length > 0);
+    assert.ok(!requests.some((url) => ["/api/move", "/api/import", "/api/record"].includes(url)));
+    assert.deepEqual(errors, []);
+});

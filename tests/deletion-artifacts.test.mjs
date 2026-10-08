@@ -1,0 +1,133 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdir, writeFile, readFile, access } from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { privateFixture } from "./helpers.mjs";
+import { updateBoardState, loadBoardState } from "../lib/store.mjs";
+import { createDeletionController } from "../lib/deletion.mjs";
+import { deletionHash, activityDeletionVersion } from "../lib/deletion-identities.mjs";
+import { createSavedArtifactDescriptor, savedArtifact, describeSavedArtifact } from "../lib/report-artifacts.mjs";
+import { migratePrivateData } from "../lib/migration.mjs";
+
+async function artifactsFixture(t, { backup = false, large = false } = {}) {
+    const { context: original, root } = await privateFixture(t);
+    const reports = [`export-${randomUUID()}`, `export-${randomUUID()}`], comparison = `export-${randomUUID()}`;
+    const entries = [];
+    for (const [index, bundleId] of [...reports, comparison].entries()) {
+        const kind = index === 2 ? "comparison" : "report", prefix = kind === "report" ? "product-report" : "comparison-report";
+        const folder = path.join(original.dataDir, "exports", bundleId, "files");
+        await mkdir(folder, { recursive: true });
+        const snapshotHash = deletionHash(`SYNTHETIC_SNAPSHOT_${index}`);
+        const contents = {
+            [`${prefix}.html`]: `SYNTHETIC_SAVED_${index}`,
+            [`${prefix}.json`]: JSON.stringify({ synthetic: true, snapshotHash }),
+            [`${prefix}.md`]: `SYNTHETIC_MARKDOWN_${index}`,
+            [`${prefix}.pdf`]: large && index === 0 ? Buffer.alloc(33 * 1024 ** 2, 42) : Buffer.from(`SYNTHETIC_BINARY_${index}`),
+            "coverage-and-redaction-manifest.json": JSON.stringify({ bundleId, snapshotHash, privacyReview: { reviewerConfirmed: true } }),
+        };
+        for (const [name, bytes] of Object.entries(contents)) await writeFile(path.join(folder, name), bytes);
+        entries.push({
+            bundleId, kind, bundleDir: folder, formats: ["html", "json", "markdown", "pdf"], snapshotHash,
+            files: Object.fromEntries(Object.keys(contents).map(name => [name, path.join(folder, name)])),
+            ...(kind === "comparison" ? { sourceReports: reports.map((id, n) => ({ bundleId: id, snapshotHash: deletionHash(`SYNTHETIC_SNAPSHOT_${n}`) })) } : {}),
+        });
+    }
+    await updateBoardState(original, state => { state.exports.push(...entries); });
+    let context = original, managedBackup;
+    if (backup) {
+        const inputs = path.join(root, "inputs");
+        await mkdir(inputs);
+        await writeFile(path.join(inputs, "app-inventory.json"), "[]");
+        await writeFile(path.join(inputs, "history-window.json"), '{"windowDays":30}');
+        const migrated = await migratePrivateData({ source: original.dataDir, destination: path.join(root, "maintained"), importFiles: inputs,
+            sessionRoot: path.join(root, "synthetic-sources"), appDbPath: path.join(root, "synthetic.db") });
+        context = { dataDir: migrated.destination };
+        managedBackup = migrated.backup;
+    }
+    return { context, original, reports, comparison, managedBackup, before: await loadBoardState(context) };
+}
+
+test("individual report deletion removes its large managed bundle/copies/index, preserving source, other reports and frozen comparisons", { timeout: 30000 }, async t => {
+    const { context, original, reports, comparison, managedBackup, before } = await artifactsFixture(t, { backup: true, large: true });
+    const controller = createDeletionController(context, { describeSavedArtifact: createSavedArtifactDescriptor(context) });
+    const retained = before.exports.filter(entry => entry.bundleId !== reports[0]);
+    const hashes = new Map();
+    for (const entry of retained) for (const file of Object.values(entry.files)) hashes.set(file, deletionHash(await readFile(file)));
+    const preview = await controller.previewArtifact("panel", { artifactKind: "report", artifactId: reports[0] });
+    assert.equal(preview.counts.managedFiles, 10);
+    assert.equal(preview.counts.managedCopies, 2);
+    assert.equal(preview.counts.savedDependentComparisons, 1);
+    assert.equal((await loadBoardState(context)).exports.length, 3, "Preview is not deletion");
+    const result = await controller.confirmArtifact("panel", { operationId: preview.operationId, confirmed: true });
+    assert.equal(result.phase, "complete");
+    const state = await loadBoardState(context);
+    assert.throws(() => savedArtifact(state, reports[0]), { status: 404 });
+    for (const file of Object.values(before.exports[0].files)) await assert.rejects(access(file), { code: "ENOENT" });
+    for (const file of Object.values(before.exports[0].files)) await assert.rejects(access(path.join(managedBackup, path.relative(context.dataDir, file))), { code: "ENOENT" });
+    assert.deepEqual(state.evidence, before.evidence);
+    assert.ok(Number.isSafeInteger(before.evidenceRevision));
+    assert.equal(state.evidenceRevision, before.evidenceRevision);
+    assert.deepEqual(state.cards, before.cards);
+    assert.equal(activityDeletionVersion(state), 0, "Artifact removal is not a source-identity purge");
+    for (const [file, hash] of hashes) assert.equal(deletionHash(await readFile(file)), hash);
+    assert.equal(describeSavedArtifact(savedArtifact(state, comparison), state).sourceReports[0].available, false);
+    assert.equal((await loadBoardState({ dataDir: managedBackup })).exports.some(entry => entry.bundleId === reports[0]), false);
+    assert.equal((await loadBoardState(original)).exports.length, 3, "Never follow an external migration source");
+    const comparisonPreview = await controller.previewArtifact("panel", { artifactKind: "comparison", artifactId: comparison });
+    await controller.confirmArtifact("panel", { operationId: comparisonPreview.operationId, confirmed: true });
+    assert.deepEqual((await loadBoardState(context)).exports.map(entry => entry.bundleId), [reports[1]]);
+});
+
+test("artifact receipts recover with a read-only token after restart, and partial cleanup never replays a new delete", async t => {
+    const { context, reports, before } = await artifactsFixture(t);
+    const file = before.exports[0].files["product-report.pdf"], original = await readFile(file);
+    const describe = createSavedArtifactDescriptor(context);
+    const controller = createDeletionController(context, { describeSavedArtifact: describe,
+        afterSeal: () => writeFile(file, "SYNTHETIC_CHANGED_AFTER_SEAL"),
+    });
+    const preview = await controller.previewArtifact("original-panel", { artifactKind: "report", artifactId: reports[0] });
+    await assert.rejects(controller.confirmArtifact("wrong-panel", { operationId: preview.operationId, confirmed: true }), { status: 409 });
+    await assert.rejects(controller.confirmArtifact("original-panel", { operationId: preview.operationId, confirmed: true }), /changed/);
+    await assert.rejects(access(before.exports[0].files["product-report.html"]), { code: "ENOENT" });
+    assert.equal((await controller.status(preview.operationId, "original-panel")).phase, "pending");
+    await assert.rejects(controller.status(preview.operationId, "new-panel"), { status: 403 });
+    await assert.rejects(controller.status(preview.operationId, "new-panel", "0".repeat(64)), { status: 403 });
+    const pending = await controller.status(preview.operationId, "new-panel", preview.receiptToken);
+    assert.equal(pending.phase, "pending");
+    assert.equal(pending.receiptHash, undefined);
+    assert.deepEqual((await loadBoardState(context)).evidence, before.evidence, "Unrelated source reads remain available");
+    await writeFile(file, original);
+    const restarted = createDeletionController(context, { describeSavedArtifact: describe });
+    await restarted.recover();
+    assert.equal((await restarted.status(preview.operationId, "new-panel", preview.receiptToken)).phase, "complete");
+    await assert.rejects(restarted.confirmArtifact("new-panel", { operationId: preview.operationId, confirmed: true }), { status: 403 });
+    assert.equal((await restarted.confirmArtifact("original-panel", { operationId: preview.operationId, confirmed: true })).phase, "complete");
+    assert.equal((await loadBoardState(context)).exports.length, 2);
+});
+
+test("legacy root-layout artifacts and stranded index copies delete without rewriting unrelated staged source data", async t => {
+    const { context } = await privateFixture(t);
+    const bundleId = `export-${randomUUID()}`, folder = path.join(context.dataDir, "exports", bundleId);
+    await mkdir(folder);
+    const files = {};
+    for (const name of ["report.md", "evidence.json", "manifest.json"]) {
+        files[name] = path.join(folder, name);
+        await writeFile(files[name], `SYNTHETIC_LEGACY_${name}`);
+    }
+    await updateBoardState(context, state => { state.exports.push({ bundleId, bundleDir: folder, files }); });
+    const before = await loadBoardState(context);
+    const staging = path.join(context.dataDir, "deletion-staging", randomUUID());
+    await mkdir(staging, { recursive: true });
+    await writeFile(path.join(staging, "0.json"), JSON.stringify(before));
+    const sourceCopy = JSON.stringify({ records: before.evidence });
+    await writeFile(path.join(staging, "1.json"), sourceCopy);
+    const controller = createDeletionController(context, { describeSavedArtifact: createSavedArtifactDescriptor(context) });
+    const preview = await controller.previewArtifact("panel", { artifactKind: "report", artifactId: bundleId });
+    assert.equal(preview.counts.managedFiles, 3);
+    await controller.confirmArtifact("panel", { operationId: preview.operationId, confirmed: true });
+    for (const file of Object.values(files)) await assert.rejects(access(file), { code: "ENOENT" });
+    assert.deepEqual(JSON.parse(await readFile(path.join(staging, "0.json"))).exports, []);
+    assert.equal(await readFile(path.join(staging, "1.json"), "utf8"), sourceCopy);
+    assert.deepEqual((await loadBoardState(context)).evidence, before.evidence);
+});
