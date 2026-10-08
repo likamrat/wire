@@ -238,6 +238,8 @@ test("default installed adapter rejects incomplete answer coverage, persists obs
     assert.equal(data.runs[0].spentAiCredits, 0.1);
     assert.equal(data.runs[0].costUnknown, false);
     assert.equal(data.runs[0].results[0].diagnostic.stage, "result-validation");
+    assert.equal(data.runs[0].results[0].diagnostic.errorCode, "incomplete-answer-coverage",
+        "The exact strict predicate must survive the content-free failed-attempt receipt.");
     assert.equal((await api("/api/evaluation/automatic/summary")).snapshot.reason, "evaluation-failed");
     await runtime.collector.collectNow();
     assert.equal(sdk.observed.sends, 1);

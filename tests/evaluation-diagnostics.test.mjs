@@ -4,6 +4,7 @@ import { createEvaluationController } from "../lib/evaluation-controller.mjs";
 import { createCopilotEvaluator } from "../lib/copilot-evaluator.mjs";
 import { evaluationFixture, assessed } from "./evaluation-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { buildEvaluationPacket } from "../lib/evaluation-evidence.mjs";
 import { createEvaluationDiagnostic, readEvaluationDiagnostic, validateEvaluationDiagnostic } from "../lib/evaluation-diagnostics.mjs";
 
@@ -86,6 +87,73 @@ test("safe diagnostics reject unrecognized fields and cannot be forged by a prov
     assert.throws(() => validateEvaluationDiagnostic({ ...diagnostic, stage: secretMarker }), /Invalid safe/);
     assert.throws(() => validateEvaluationDiagnostic({ ...diagnostic, sendInvoked: false, responseObserved: true }), /Invalid safe/);
     assert.throws(() => validateEvaluationDiagnostic({ ...diagnostic, size: { kind: "reference-content", measured: 70000, limit: 65536, unit: "bytes", text: secretMarker } }), /Invalid safe/);
+});
+
+test("every strict result predicate survives persistence without scores, private values or a second call", async t => {
+    const cases = [
+        ["invalid-model-evaluation", result => { result.requirements[0] = null; }],
+        ["unexpected-evaluation-field", result => { result.privateText = secretMarker; }],
+        ["evaluation-packet-mismatch", result => { result.packetHash = "0".repeat(64); }],
+        ["invalid-evaluation-check-list", result => { result.requirements = {}; }],
+        ["invalid-evidence-anchor", result => { result.requirements[0].answerEvidence[0].end = 1000000; }],
+        ["evidence-anchor-kind", result => { result.requirements[0].promptEvidence[0].ref = result.requirements[0].answerEvidence[0].ref; }],
+        ["duplicate-evidence-anchor", result => { result.requirements[0].promptEvidence.push({ ...result.requirements[0].promptEvidence[0] }); }],
+        ["invalid-evaluation-verdict", result => { result.requirements[0].verdict = secretMarker; }],
+        ["invalid-verdict-reason", result => { result.requirements[0].reason = "missing-evidence"; }],
+        ["invalid-requirement-identity", result => { result.requirements.push(structuredClone(result.requirements[0])); }],
+        ["requirement-without-request", result => { result.requirements[0].promptEvidence = []; }],
+        ["positive-accuracy-without-evidence", result => { result.requirements[0].referenceEvidence = []; }],
+        ["contradiction-without-evidence", result => {
+            Object.assign(result.requirements[0], { verdict: "not-met", reason: "contradicted", referenceEvidence: [] });
+        }],
+        ["incomplete-answer-coverage", result => { result.answerSegments[0].start = 1; }],
+        ["invalid-answer-segment-kind", result => { result.answerSegments[0].kind = secretMarker; }],
+        ["invalid-answer-applicability", result => { result.answerSegments[0].kind = "nonfactual"; }],
+        ["positive-support-without-reference", result => { result.answerSegments[0].referenceEvidence = []; }],
+        ["incomplete-action-coverage", result => { result.actions = []; }],
+        ["action-intent-without-request", result => { result.actions[0].promptEvidence = []; }],
+    ];
+    for (const [code, change] of cases) await t.test(code, async t => {
+        const f = await evaluationFixture(t, async request => {
+            const response = assessed(request, false);
+            change(response.rawResult);
+            return response;
+        });
+        f.input.scenarioIds = f.input.scenarioIds.slice(0, 1);
+        f.input.maxAiCredits = 30;
+        await f.controller.start("panel", f.input); await f.controller.settle();
+        const receipt = await f.controller.status("renewed-panel", { runRef: f.input.mutationRef, receiptToken: f.input.receiptToken });
+        assert.equal(receipt.phase, "failed");
+        assert.equal(receipt.callsReserved, 1);
+        assert.equal(receipt.spentAiCredits, 0.1);
+        assert.equal(receipt.costUnknown, false);
+        assert.equal(receipt.results[0].reason, "evaluation-failed");
+        const diagnostic = receipt.results[0].diagnostic;
+        assert.equal(diagnostic.stage, "result-validation");
+        assert.equal(diagnostic.errorCode, code);
+        assert.equal(diagnostic.responseObserved, true);
+        const state = await loadBoardState(f.context);
+        assert.equal(state.personalEvaluation.modelEvaluation.records.length, 0);
+        const quality = buildAssessmentModel(state).overview.metrics.filter(metric => ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension));
+        assert.equal(quality.length, 3);
+        assert.ok(quality.every(metric => metric.value === null && metric.denominator === 0 && metric.coverage.covered === 0));
+        assert.doesNotMatch(JSON.stringify(state.personalEvaluation.modelEvaluation), /SYNTHETIC_PRIVATE_ERROR_CONTENT|How many synthetic|Three synthetic/);
+        assert.deepEqual((await f.controller.start("panel", f.input)).results, receipt.results);
+        assert.equal(f.calls.length, 1);
+        assert.throws(() => validateEvaluationDiagnostic({ ...diagnostic, stage: "send" }), /Invalid safe/);
+        assert.equal(createEvaluationDiagnostic(new TypeError(code), { stage: "send" }).errorCode, "unknown-error");
+        assert.equal(createEvaluationDiagnostic(Object.assign(new Error(secretMarker), { code }), { stage: "result-validation" }).errorCode, "unknown-error");
+    });
+});
+
+test("result diagnostics keep unknown historical errors and never retain near-match exception prose", () => {
+    const legacy = createEvaluationDiagnostic(new Error(secretMarker), { stage: "result-validation", sendInvoked: true, responseObserved: true });
+    assert.equal(validateEvaluationDiagnostic(legacy).errorCode, "unknown-error");
+    const diagnostic = createEvaluationDiagnostic(new TypeError("invalid-evidence-anchor: " + secretMarker), {
+        stage: "result-validation", sendInvoked: true, responseObserved: true,
+    });
+    assert.equal(diagnostic.errorCode, "unknown-error");
+    assert.doesNotMatch(JSON.stringify(diagnostic), new RegExp(secretMarker));
 });
 
 test("source-read failures persist a no-send diagnostic without reserving or starting an evaluator", async t => {

@@ -214,6 +214,18 @@ billing uncertainty. Provider prose, source text, paths, credentials and raw
 packets are not copied into diagnostics. Existing receipts without these fields
 remain unchanged; missing historical stages cannot be inferred retroactively.
 
+At `result-validation`, new failed receipts retain the exact finite local
+predicate code, such as `invalid-evidence-anchor` or `incomplete-answer-coverage`,
+instead of collapsing it into `unknown-error`. Only exact local TypeError codes
+at this boundary qualify; provider exception properties, near-match prose and
+unrecognized text do not. No rejected value, anchor text or model body is retained.
+The rubric, structured schema and strict evidence predicates are unchanged.
+This diagnoses a rejection, not a failed quality verdict or permission to retry.
+Old `unknown-error` receipts stay unknown. The installed-adapter regression in
+`tests\copilot-installation.test.mjs` proves predicate retention, known accounting,
+no score publication and no replay using synthetic evidence only; it does not
+identify the predicate lost by a previous real attempt.
+
 The isolated SDK session has no tools, inherited instructions, skills, memory,
 session-store integration or remote export. Temporary work uses private,
 link-checked paths. Shutdown and revocation abort and drain affected owned work;
