@@ -253,8 +253,10 @@ state, then compact coverage. Accuracy has one **Answer correctness** measure;
 Trust keeps **Answer trust** and **Action trust** separate. Each origin lane uses
 the same pattern, with the origin and qualification below coverage. Model
 assessment and optional personal feedback remain explicitly distinguishable.
-Sibling measures use Speed's 16px / hairline / 16px separation, without filler
-rows or equal-height content. Labels use the shared 14/20 role, values 22/29.7,
+Sibling measures use Speed's 16px / hairline / 16px separation. Shared,
+content-sized grid rows align dividers across side-by-side categories; stacked
+categories keep their natural height, without fixed heights or filler rows.
+Labels use the shared 14/20 role, values 22/29.7,
 and coverage 12px; unavailable states keep the same value role in neutral color.
 All content reflows with enlarged text. This applies to Home, scoped Activity
 and the individual interaction through `renderAssessmentSummary`; report

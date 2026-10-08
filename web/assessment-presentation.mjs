@@ -244,6 +244,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         appendRows(group, rows);
         grid.append(group);
     }
+    grid.style.setProperty("--assessment-rows", String(Math.max(...Array.from(grid.children, group => group.childElementCount))));
     section.append(grid);
     root.replaceChildren(section);
     return section;
@@ -252,15 +253,19 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
 export const assessmentPresentationStyles = `
 #homeInsights,#activityInsights,.interaction-insights {display:flow-root;min-width:0;margin-block:var(--space-xl)}
 #homeInsights>.assessment-summary,#activityInsights>.assessment-summary,.interaction-insights>.assessment-summary {margin-block:0}
-.assessment-summary {margin-block:var(--space-xl);min-width:0}
+.assessment-summary {margin-block:var(--space-xl);min-width:0;container:assessment-summary / inline-size}
 .assessment-heading {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-sm) var(--space-lg)}
 .assessment-heading h2 {font-size:var(--type-section)}
 .assessment-heading button {min-height:44px}
 .assessment-takeaway {margin-block:var(--space-xs) var(--space-lg);max-width:72ch;font-size:var(--type-small);color:var(--muted)}
 .assessment-scoring-status {margin-block:var(--space-sm);font-size:var(--type-caption);line-height:1.5;color:var(--muted)}
-.assessment-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:var(--space-xl);padding-block:var(--space-lg);border-top:1px solid var(--rule)}
+.assessment-grid {display:grid;grid-template-columns:1fr;gap:var(--space-xl);padding-block:var(--space-lg);border-top:1px solid var(--rule)}
 .assessment-scope {margin-block:var(--space-md) 0;padding-top:var(--space-md);border-top:1px solid var(--rule);max-width:none;font-size:var(--type-caption);line-height:1.5;color:var(--muted)}
 .assessment-dimension {min-width:0}
+@container assessment-summary (min-width:calc(26rem + 24px)) {
+ .assessment-grid {grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))}
+ .assessment-dimension {display:grid;grid-template-rows:subgrid;grid-row:span var(--assessment-rows);row-gap:0}
+}
 .assessment-dimension h3 {margin:0 0 var(--space-sm);font-size:var(--type-small);font-weight:var(--weight-strong)}
 .assessment-dimension-heading {display:flex;align-items:center;gap:var(--space-xs);margin-bottom:var(--space-sm)}
 .assessment-dimension-heading h3 {margin:0}

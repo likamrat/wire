@@ -210,6 +210,14 @@ function hierarchyIssues(layout) {
                     || rect.y < item.box.y - 2 || rect.bottom > item.box.bottom + 2)) issues.push(`${prefix}: clipped ${item.text}`);
         }
     }
+    for (const [index, group] of layout.groups.entries()) {
+        const peers = layout.groups.filter(other => other !== group && Math.abs(other.box.y - group.box.y) < 1);
+        for (const other of peers) for (let row = 1; row < Math.min(group.rows.length, other.rows.length); row++) {
+            if (Math.abs(group.rows[row].box.y - other.rows[row].box.y) > 1) issues.push(`${group.title}/${other.title}: divider ${row} is not aligned across columns`);
+        }
+        if (!peers.length && Math.abs(group.box.bottom - group.rows.at(-1).box.bottom) > 1) issues.push(`${group.title}: stacked category has empty trailing tracks`);
+        if (index && !peers.length && group.box.y < layout.groups[index - 1].box.bottom) issues.push(`${group.title}: stacked categories overlap`);
+    }
     if (layout.overflow) issues.push("Page has horizontal overflow");
     if (!layout.fontLoaded) issues.push("Asta Sans did not load");
     return issues;
@@ -236,7 +244,8 @@ test("Insights use Speed's label/value/coverage hierarchy across normal app surf
         await page.goto(f.origin + "#home"); await ready(page, "#homeInsights");
         const host = page.locator("#homeInsights");
         const expected = formatter.summarize(f.overview(f.model.overview.interactionRefs).metrics);
-        for (const theme of ["light", "dark"]) for (const width of [1440, 375]) for (const zoom of [100, 200]) {
+        const widths = ["ordinary", "personal"].includes(mode) ? [1440, 768, 464, 472, 375] : [1440, 375];
+        for (const theme of ["light", "dark"]) for (const width of widths) for (const zoom of [100, 200]) {
             await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
             await page.evaluate(zoom => { document.documentElement.style.fontSize = zoom + "%"; }, zoom);
             await page.mouse.move(0, 0);
@@ -244,6 +253,8 @@ test("Insights use Speed's label/value/coverage hierarchy across normal app surf
             assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-value').allTextContents(), ["3,072 ms", "29,713 ms"]);
             assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-coverage').allTextContents(), ["Median \u00b7 3 / 4 calls timed", "Median \u00b7 2 / 4 requests timed"]);
             const layout = await geometry(host), name = `${mode}-${theme}-${width}-${zoom}`;
+            if (zoom === 100 && width === 464) assert.notEqual(layout.groups[0].box.y, layout.groups[1].box.y, "Narrow categories stack without empty shared tracks.");
+            if (zoom === 100 && width === 472) assert.equal(layout.groups[0].box.y, layout.groups[1].box.y, "Shared tracks begin when two columns fit.");
             evidence.push({ name, ...layout }); issues.push(...hierarchyIssues(layout).map(issue => `${name}: ${issue}`));
             if (proofs && ["unassessed", "ordinary", "personal", "error"].includes(mode)) {
                 await capture(page, host, name);
