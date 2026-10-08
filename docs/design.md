@@ -110,6 +110,13 @@ and new HTML/PDF column reports retain their existing materials. Saved files are
 not rewritten. Exact counts, percentages, minimum visible slices, category icons,
 labels, links and the exact-data disclosures are unchanged.
 
+Each percentage-chart heading includes its current unit in parentheses, such as
+**Recorded outcomes (Work IQ tool calls)**, with the unit in secondary text.
+There is no separate unit/enlargement caption. The existing exact-data disclosure
+and accessible chart description retain the minimum-slice explanation; counts,
+shares, materials and adjusted geometry are unchanged. Units update with the
+selected evidence layer and keep their singular/plural wording.
+
 ## Inline help geometry
 
 Help uses a shared 4px text-to-icon-box gap (`--help-gap`), a text-scaled

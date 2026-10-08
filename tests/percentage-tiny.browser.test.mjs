@@ -139,7 +139,8 @@ test("unknown, mixed-service and Other hover/focus visibly select only their own
         await page.evaluate(theme => document.documentElement.dataset.evidenceTheme = theme, theme);
         for (const [card, category, expected] of [["outcomes", "unknown", "0.5% (1)"], ["composition", "Multiple workloads", "0.9% (2)"], ["composition", "group:other", "13.7% (30)"]]) {
             const panel = page.locator(`[data-percentage-card="${card}"]`), row = panel.locator(`.percentage-legend-row[data-category="${category}"]`);
-            assert.match(await panel.locator(".percentage-denominator").textContent(), /small slices enlarged/, "A standalone donut discloses its adjusted angles in the existing unit line");
+            assert.equal(await panel.locator("h3 .percentage-denominator").textContent(), "(Work IQ tool calls)");
+            assert.match(await panel.locator(".percentage-exact").textContent(), /Small slices are enlarged for visibility/, "Adjusted-angle explanation stays in the exact-data disclosure, not the heading");
             const label = row.locator(".percentage-label");
             await panel.scrollIntoViewIfNeeded(); await page.evaluate(() => document.activeElement.blur()); await page.mouse.move(1, 1);
             const wall = panel.locator(`.percentage-outer-wall[data-category="${category}"]`).first();

@@ -4,9 +4,9 @@ export const percentageChartStyles = `
 .percentage-scope {color:var(--muted);font-size:var(--type-small);max-width:none;margin-bottom:16px}
 .percentage-panels {display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:20px}
 .percentage-card {min-width:0;padding:20px;border-radius:var(--radius);background:var(--paper)}
-.percentage-card-heading {display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;min-height:44px}
-.percentage-card h3 {font-size:var(--type-section)}
-.percentage-denominator {font-size:var(--type-small);color:var(--muted);margin:4px 0 8px}
+.percentage-card-heading {display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;min-height:44px;margin-bottom:8px}
+.percentage-card h3 {font-size:var(--type-section);min-width:0;overflow-wrap:anywhere}
+.percentage-denominator {display:inline-block;max-width:100%;font-size:var(--type-small);font-weight:var(--weight-regular);color:var(--muted)}
 .percentage-content {position:relative;display:grid;grid-template-columns:minmax(0,22.5rem) minmax(0,1fr);align-items:start;align-content:start;gap:12px 16px;min-width:0;container-type:inline-size}
 .percentage-content,.percentage-exact {max-width:calc(48rem - 40px)}
 .percentage-visual {width:min(100%,22.5rem);margin-inline:auto;min-width:0}
@@ -71,7 +71,7 @@ export const percentageChartStyles = `
 @container(min-width:64rem) {
  .percentage-panels {grid-template-columns:repeat(2,minmax(0,1fr))}
  .percentage-panels {row-gap:0;align-items:stretch}
- .percentage-panels>.percentage-card {display:grid;grid-template-rows:subgrid;grid-row:span 4}
+ .percentage-panels>.percentage-card {display:grid;grid-template-rows:subgrid;grid-row:span 3}
 }
 @container(max-width:44rem) {.percentage-visual,.percentage-legend {grid-column:1/-1}}
 @container(max-width:21rem) {
