@@ -57,20 +57,21 @@ careful synchronization or a fresh clone, not merging that ancestry into main.
 
 ## Preserved unfinished work
 
-The connected-failure clarity candidate is not included or accepted as complete.
-Its intended distinction is between the recorded execution outcome and the
+This source candidate includes connected-failure clarity and the separately
+guarded one-target repair entry; it is not a live release or user acceptance.
+Its distinction is between the recorded execution outcome and the
 independent AI-assessment state for the exact request. A later successful request
 must not supply a cause or score for an earlier failed one. A generic tool error,
 missing assessment or insufficient evidence is not a zero quality score.
 
-Before integration, finish the remaining visual/source review and apply only the
-owned changes over this newer library source. Preserve the library entry,
+Before integration, review the owned source delta and synthetic proof on this
+newer library source. Preserve the library entry,
 deletion protections, coverage semantics, readable origins and frozen report
 facts; do not replace the application with an older candidate's whole checkout.
 
-A proposed one-target historical-metadata repair helper remains unimplemented.
-Its next source-only work needs synthetic stale-target, scored-target,
-second-writer, crash/recovery, revision and preservation checks. Publication does
+A one-target historical signal repair entry now has synthetic stale-target,
+scored-target, second-writer, crash/recovery, revision and preservation checks.
+It changes only the finite signal and matching retained checkpoint. Publication does
 not authorize reading original private evidence or preparing/applying a real
 data repair. Those operations need separately reviewed, bounded permission.
 

@@ -44,6 +44,33 @@ test("supported completion error code survives collection, normalization, store 
     assert.doesNotMatch(JSON.stringify(buildSanitizedRecord(records[0], "a".repeat(64))), /INVENTED_PRIVATE_ERROR|INVENTED_STACK/);
 });
 
+test("exact Work IQ MCP sign-in failures retain a screened machine cause without retaining the message or implying HTTP", async t => {
+    const message = 'MCP server \'workiq\': Re-authentication required for MCP server "workiq". Run /mcp auth workiq';
+    const events = sourceEvents({ error: { code: "failure", message, stack: "PRIVATE_SIGN_IN_STACK" } });
+    events[1].data.toolName = "workiq-fetch";
+    events[1].data.arguments = { entityUrls: ["/me?$select=creationType"] };
+    const { retained, records } = collect(events);
+    assert.equal(records[0].toolCalls[0].failureEvidence.messageSignal, "workiq-sign-in-required");
+    assert.equal(records[0].toolCalls[0].failureEvidence.messageStatus, "text-excluded");
+    assert.deepEqual(records[0].toolCalls[0].apiResults, []);
+    assert.equal(records[0].toolCalls[0].observedGraphHttp, false);
+    assert.doesNotMatch(JSON.stringify(retained), /Re-authentication|\/mcp auth|PRIVATE_SIGN_IN_STACK/);
+    const { context } = await privateFixture(t, records);
+    assert.equal(mergeEvidenceWithState(await loadBoardState(context))[0].toolCalls[0].failureEvidence.messageSignal, "workiq-sign-in-required");
+    const direct = extractScenarios(events, { sessionId: "invented-source" }, events[0].timestamp, events.at(-1).timestamp).scenarios[0];
+    assert.deepEqual(direct.toolCalls[0].failureEvidence, records[0].toolCalls[0].failureEvidence);
+    for (const unsafeOrDifferent of [
+        'Re-authentication required for MCP server "another-service". Run /mcp auth another-service',
+        "No " + message, "Example: " + message, message + " was resolved",
+        message + " Bearer " + "a".repeat(40), "x".repeat(8193) + message,
+        { text: message },
+    ]) {
+        const projected = collect(sourceEvents({ error: { code: "failure", message: unsafeOrDifferent } }));
+        assert.equal(projected.records[0].toolCalls[0].failureEvidence.messageSignal, null);
+        assert.doesNotMatch(JSON.stringify(projected.retained), /Re-authentication|\/mcp auth|Bearer/);
+    }
+});
+
 test("MCP text-content JSON result array retains supported API metadata only", () => {
     const result = { content: [{ type: "text", text: JSON.stringify({ results: [{ statusCode: 403, error: { code: "AccessDenied" }, body: { displayName: "INVENTED_BODY" } }] }) }] };
     assert.equal(resultMetadata(result)[0]?.errorCode, "AccessDenied");

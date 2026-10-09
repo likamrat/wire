@@ -202,6 +202,7 @@ test("compact insight controls reflow in both themes at all approved widths and 
         coveredUnitRefs: [view.interaction.interactionRef], evidenceRefs: [personal.assessmentRef],
     });
     view.metrics.push(metric);
+    view.reviewStatus.assessment.personalFeedback = true;
     contract.validateInteractionView(view);
     const { page, show } = await setup(t, view);
     await show();

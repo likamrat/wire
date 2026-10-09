@@ -1868,7 +1868,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const errors = (tool?.apiResults || []).filter(result => result.errorCode || result.statusCode >= 400)
             .map(result => [result.statusCode ? `Reported HTTP ${result.statusCode}` : null, result.errorCode].filter(Boolean).join(": "));
         const evidence = tool?.failureEvidence;
-        if (evidence?.version === 1 && evidence.reason === "error-code-recorded" && evidence.code) errors.unshift("Tool error: " + evidence.code);
+        const signIn = (failed || tool?.toolSucceeded === false) && evidence?.version === 1
+            && evidence.messageStatus === "text-excluded" && evidence.messageSignal === "workiq-sign-in-required";
+        if (evidence?.version === 1 && evidence.reason === "error-code-recorded" && evidence.code
+            && (!signIn || evidence.code !== "failure")) errors.unshift("Tool error: " + evidence.code);
+        if (signIn) errors.unshift("Work IQ sign-in was required");
         if (evidence?.version === 1 && evidence.messageSignal === "access-denial") errors.push("Tool error mentions access denial");
         if (evidence?.version === 1 && evidence.messageSignal === "request-timeout") errors.push("Tool reported an MCP request timeout (-32001).");
         if (errors.length) return errors.join("; ");

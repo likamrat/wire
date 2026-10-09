@@ -72,6 +72,40 @@ Recorded `user.message` origin is not assumed human; nearest-message association
 is not proof of causality. Conflicting call/start aliases are excluded rather
 than treated as verified membership.
 
+Request Insights also connects **Recorded execution** with a separate **AI quality
+assessment** status for that exact attempt. A failed call does not automatically
+make an answer inaccurate or an action untrustworthy: reporting a failed lookup
+can be correct. Mixed calls keep their failed and successful counts, rather than
+declaring the whole request failed. A successful tool without an assessment is
+still **Not assessed**. Per-attempt pending, evaluator failure, unavailable evidence
+and an assessment that found insufficient evidence are distinct from a failed
+quality verdict. The global background-scoring pause is not presented as the cause
+of a Work IQ call failure.
+
+A credential-screened, exact recorded Work IQ MCP reauthentication message can
+retain only the machine signal `workiq-sign-in-required`; its prose and stack stay
+excluded. The view says sign-in **was** required for that attempt and points to
+Copilot's Work IQ/MCP sign-in flow if it is still needed. It neither tests current
+authentication nor retries, signs in, or uses WIRE's local-source settings for
+authentication. Unknown, screened, oversized and unsupported error evidence retain
+their specific limitations; absent API metadata never becomes an inferred 401/403.
+Service categories such as People continue to describe the target, not the outcome.
+
+The optional read-only `reviewStatus` projection and its per-interaction catalog
+revision do not change metric definitions, scored dependencies, record fingerprints
+or frozen report facts. Attempt transitions refresh that context even when no
+quality result was produced. Matching is by exact interaction and material evidence,
+not endpoint similarity. A later successful request cannot rewrite an earlier
+failed attempt. Old compacted metadata is not upgraded by default; any historical
+cause repair requires a separately reviewed exact-target guard and preservation
+proof.
+
+The current model evidence packet takes references from supported recorded result
+content, not arbitrary completion error prose. An error-only completion can therefore
+lack supporting model-reference evidence even when its safe operational cause is
+known. Judging the accuracy of its failure explanation would need separately reviewed
+error-reference evidence/approval semantics, not an automatic score or a relaxed rubric.
+
 ## Optional response evidence
 
 Additional assessment evidence starts **off**. An explicit, category-scoped

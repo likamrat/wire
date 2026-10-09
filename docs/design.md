@@ -193,6 +193,45 @@ completion may the coordinator close the maintenance interval and restart the
 normal entry with a freshly verified no-dispatch baseline. Source-only synthetic
 proof cannot substitute for that separate real-store acceptance.
 
+### One-target retained sign-in signal
+
+`scripts/maintain-failure-signal.mjs` is a separate offline entry for **one**
+unassessed failed call. The existing two-target command still requires exactly
+two targets; neither command accepts a dummy target. Both use the existing
+collector owner, activity/board queues, hash-sealed journal, atomic checkpoint
+write and snapshot staging transaction. There is no new server route.
+
+The only allowed record change is an existing v1 failure projection with
+`reason: "error-code-recorded"`, `code: "failure"`,
+`messageStatus: "text-excluded"` and `messageSignal: null` gaining
+`messageSignal: "workiq-sign-in-required"`. The complete record preimage binds
+all other facts, including arguments, prompt, final-response timing and call
+timing. Only the existing matching completion's signal changes in its retained
+checkpoint. Missing events/checkpoints are not reconstructed. Conflicting
+metadata, ambiguous identities, scored/attempted/enrolled targets and targets
+inside the current automatic approval fail closed. A postimage is accepted only
+with the same reviewed recovery journal, not as a fresh preparation.
+
+The command uses the same explicit options and top-level plan/source/attestation
+guards as the two-target command. Its `targets` array contains exactly one
+`{ scenarioId, sourceSessionId, interactionRef, recordSha256, prompt, call }`.
+`prompt` has only `sourceEventId`, `sourceTimestamp`, `textSha256`; `call` has
+only `toolCallId`, `startEventId`, `startedAt`, `completionEventId`, `completedAt`.
+It accepts no proposed prose, replacement score, authorship or configurable
+signal. The attested `recheckSha256` identifies already-approved finite source
+predicate evidence; it does not authorize or perform another original read.
+Preparation returns only a new hash-only journal and review seal.
+
+Execution requires separately reviewed current source pins, a stopped/quiescent
+normal runtime, fresh exact retained-store preimages and preservation inventory,
+and a second approval of the prepared journal before apply. Keep the runtime
+stopped after any uncertain checkpoint/board write and inspect that same journal.
+Recovery verifies exact pre/postimages and never increments an already-committed
+revision twice. The old snapshot and unrelated evidence, model ledgers, personal
+feedback, consent, configuration, source index/cursors and saved bundle bytes
+remain unchanged. Synthetic proof is not permission for real preparation,
+repair, source rereading, evaluation or restart, nor is it live UI acceptance.
+
 ## Failure evidence and technical facts
 
 Tool failures, tool-returned API metadata and owned HTTP captures remain separate.
@@ -201,6 +240,14 @@ explicit evidence/withholding reasons, not raw messages, stacks or bodies. A
 typed, credential-screened error message of at most 8 KiB can produce the
 enum signal **Tool error mentions access denial** or the narrowly recognized
 **Tool reported an MCP request timeout** (`MCP error -32001: Request timed out`).
+The exact supported Work IQ MCP reauthentication wording can also retain the
+finite `workiq-sign-in-required` signal. Its presentation says **Work IQ sign-in
+was required** for that recorded attempt, not that sign-in is required now.
+Beside the existing coverage-first request Insights, **Recorded execution** and
+**AI quality assessment** explain the retained cause and the independent
+assessment state. They retain the existing Asta/Fluent, light/navy, narrow,
+enlarged-text and visible-focus behavior. Plain Copilot/MCP sign-in guidance is
+not a retry action, source-configuration action or automatic authentication bridge.
 The timeout signal alone establishes neither an HTTP status nor a downstream
 cause; it is not HTTP 408/504 or a diagnosis inferred from elapsed time.
 Independent retained API/HTTP evidence remains visible. Recognized negated or uncertain

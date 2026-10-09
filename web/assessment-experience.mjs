@@ -44,6 +44,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         actions.append(configure);
         if (existing) actions.append(existing);
         heading.append(actions);
+        if (host.querySelector("[data-review-status]")) return;
         const status = el("p", scoringMessage, "assessment-scoring-status");
         status.setAttribute("role", "status");
         host.querySelector(".assessment-summary").append(status);
@@ -313,13 +314,15 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 return;
             }
             const expected = snapshot.basis;
-            const key = "detail:" + mapping.interactionRef + ":" + basisKey(expected);
+            if (mapping.reviewStatusRevision !== undefined && !/^[a-f0-9]{64}$/.test(mapping.reviewStatusRevision)) throw new Error("Invalid review-status revision.");
+            const key = "detail:" + mapping.interactionRef + ":" + basisKey(expected) + (mapping.reviewStatusRevision ? ":" + mapping.reviewStatusRevision : "");
             await paint(host, detailCache, key, () => read("get_interaction", {
                 schemaVersion: 1, interactionRef: mapping.interactionRef, expectedSourceRevision: expected.sourceRevision,
             }, expected), data => {
                 contract.validateInteractionView(data);
                 if (!sameBasis(data.basis, expected) || data.interaction.interactionRef !== mapping.interactionRef) throw new Error("Interaction identity or evidence version changed.");
-                const model = presentation.summarize(data.metrics, { membershipStatus: data.interaction.membershipStatus, singleInteraction: true });
+                const model = presentation.summarize(data.metrics, { membershipStatus: data.interaction.membershipStatus,
+                    singleInteraction: true, reviewStatus: data.reviewStatus ?? null });
                 renderSummary(host, model, { helpButton: measureHelp, onDetails: trigger => showDetails(model, data, trigger) });
                 automaticEntry(host);
                 showResponse(responseHost, data);
@@ -327,7 +330,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     ux.restoreFocus(host.querySelector("button"));
                     focusInteractionRef = null;
                 }
-            }, () => true, error => responseUnavailable(responseHost, "Response availability could not be read.", error.message, true));
+            }, () => snapshot?.catalog.find(row => row.scenarioId === scenarioId)?.reviewStatusRevision === mapping.reviewStatusRevision,
+            error => responseUnavailable(responseHost, "Response availability could not be read.", error.message, true));
         } catch (error) {
             if (host.isConnected) {
                 unavailable(host, error.message, () => detail(host, responseHost, scenarioId));

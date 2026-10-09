@@ -1,5 +1,5 @@
 // The backend supplies validated, already-pooled facts; this factory only presents them.
-export function createAssessmentPresentation({ validateMetric, metricSlotKey }) {
+export function createAssessmentPresentation({ validateMetric, metricSlotKey, validateReviewStatus }) {
     const bandVersion = "assessed-pass-share-v1";
     const dimensionLabels = { accuracy: "Accuracy", speed: "Speed", "answer-trust": "Answer trust", "action-trust": "Action trust" };
     const checkLabels = {
@@ -171,7 +171,59 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey }) 
             band: "neutral", bandVersion, status: "unavailable", details: [`${dimensionLabels[dimension]}: no metric or coverage was supplied for this scope.`], basis: null,
         };
     }
-    function summarize(metrics, { membershipStatus = "complete-retained", singleInteraction = false } = {}) {
+    function presentReviewStatus(status) {
+        validateReviewStatus(status);
+        const { execution, assessment } = status;
+        const causes = {
+            "workiq-sign-in-required": "Work IQ sign-in was required",
+            "request-timeout": "The tool reported an MCP request timeout",
+            "access-denial": "The recorded error mentions access denial",
+            "message-screened": "Error text was excluded by credential screening; its cause is unavailable",
+            "message-too-large": "Error text exceeded the inspection limit; its cause is unavailable",
+            "message-not-supplied": "The source supplied no typed error message",
+            "message-excluded": "Error text was excluded from collection; no specific cause signal was retained",
+            "unsupported-error-format": "The recorded error format is not supported",
+            "source-error-not-supplied": "The source supplied no supported structured error details",
+            unqualified: "Cause unavailable in retained evidence; source omission and earlier collection cannot be distinguished",
+        };
+        const failure = execution.failed ? `${number(execution.failed)} of ${number(execution.calls)} recorded Work IQ ${execution.calls === 1 ? "call" : "calls"} failed`
+            + (execution.succeeded ? `; ${number(execution.succeeded)} succeeded` : "") : "";
+        const outcome = failure || (execution.succeeded === execution.calls
+            ? `${number(execution.succeeded)} recorded Work IQ ${execution.calls === 1 ? "call completed" : "calls completed"}`
+            : "Recorded tool outcomes are incomplete");
+        const cause = execution.causes.map(item => causes[item.cause] + (execution.failed > 1 ? ` (${number(item.count)})` : "")).join("; ");
+        let quality;
+        if (assessment.result === "assessed") quality = "AI quality results are recorded for this attempt.";
+        else if (assessment.result === "partial") quality = "AI assessment produced some results; other checks have no quality verdict.";
+        else if (assessment.result === "unassessed") quality = assessment.unavailableReason === "not-applicable"
+            ? "AI assessment found no applicable quality checks." : assessment.unavailableReason === "missing-evidence"
+                ? "AI assessment found insufficient recorded evidence; no quality verdict was produced."
+                : "AI assessment produced no supported quality verdict.";
+        else quality = ({
+            none: "No AI quality assessment is recorded for this attempt.",
+            pending: "An AI quality assessment is pending for this attempt.",
+            failed: "AI quality assessment could not complete. This is an evaluator failure, not a failed answer or action verdict.",
+            uncertain: "The AI assessment's outcome is uncertain; no quality verdict is available.",
+            unavailable: "No AI verdict was produced: the assessment's recorded evidence or approval was unavailable.",
+            complete: "A prior AI quality result is no longer applicable to this attempt.",
+            revoked: "AI assessment approval was withdrawn for this attempt.",
+            "not-run": "This attempt was not reached by the recorded AI assessment run.",
+            "not-current": "No AI quality result is applicable to the current evidence for this attempt.",
+        })[assessment.latestAttempt];
+        if (assessment.result !== "none" && assessment.latestAttempt === "failed") quality += " A later evaluator attempt failed; the applicable results remain shown.";
+        if (assessment.result === "none" && assessment.latestAttempt === "none") {
+            if (!assessment.inAutomaticScope) quality += " It is not included in the current automatic-scoring scope.";
+            if (execution.failed) quality += " Reporting a failed lookup can still be correct.";
+        }
+        if (assessment.personalFeedback) quality += " Personal feedback is shown separately.";
+        return {
+            execution: `${outcome}.${cause ? ` ${cause}.` : ""}`, assessment: quality,
+            nextAction: execution.causes.some(item => item.cause === "workiq-sign-in-required")
+                ? "If sign-in is still needed, use the Work IQ/MCP sign-in flow in Copilot (/mcp auth workiq). WIRE does not retry this recorded call."
+                : execution.failed ? "Inspect the recorded actions and Technical details below. Missing or screened error text is not recovered by this view." : "",
+        };
+    }
+    function summarize(metrics, { membershipStatus = "complete-retained", singleInteraction = false, reviewStatus = null } = {}) {
         if (!Array.isArray(metrics)) throw new TypeError("Metrics must be supplied explicitly.");
         const slots = new Set();
         for (const metric of metrics) {
@@ -183,6 +235,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey }) 
             slots.add(slot);
         }
         const rows = metrics.filter(metric => metric.dimension !== "cost").map(metric => present(metric, singleInteraction));
+        const review = reviewStatus ? presentReviewStatus(reviewStatus) : null;
         const groups = Object.fromEntries(Object.keys(dimensionLabels).map(dimension => [
             dimension, rows.filter(row => row.dimension === dimension),
         ]));
@@ -217,7 +270,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey }) 
         const sharedCount = sharedRequests ? modelChecks[0].coverage.covered : 0;
         const readingNote = (sharedCount ? `The three AI checks cover the same ${number(sharedCount)} ${sharedCount === 1 ? "request" : "requests"}.`
             : "Each check has its own request coverage.") + " Missing results do not count as failed checks.";
-        return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "" };
+        return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "", reviewStatus: review };
     }
     return { format, summarize, band, bandVersion };
 }
@@ -245,6 +298,22 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         heading.append(details);
     }
     section.append(heading, el("p", "assessment-takeaway", model.readingNote));
+    if (model.reviewStatus) {
+        const status = el("div", "assessment-review-status"), facts = el("dl", "assessment-review-facts");
+        status.dataset.reviewStatus = "";
+        status.setAttribute("aria-label", "Recorded execution and AI quality assessment");
+        for (const [label, text, help] of [
+            ["Recorded execution", model.reviewStatus.execution, model.reviewStatus.nextAction],
+            ["AI quality assessment", model.reviewStatus.assessment, ""],
+        ]) {
+            const row = el("div"), detail = el("dd");
+            row.append(el("dt", "", label), detail);
+            detail.append(el("p", "", text));
+            if (help) detail.append(el("p", "assessment-review-help", help));
+            facts.append(row);
+        }
+        status.append(facts); section.append(status);
+    }
     if (model.readingWarning) section.append(el("p", "assessment-unavailable", model.readingWarning));
     const help = el("details", "assessment-reading-help");
     help.append(el("summary", "", "How to read these results"),
@@ -324,6 +393,14 @@ export const assessmentPresentationStyles = `
 .assessment-reading-help {font-size:var(--type-small);color:var(--muted)}
 .assessment-reading-help summary {min-height:44px;align-content:center;cursor:pointer;width:fit-content}
 .assessment-reading-help p {max-width:80ch;line-height:1.5;margin-block:var(--space-sm)}
+.assessment-review-status {margin-block:var(--space-md);font-size:var(--type-small);line-height:1.5}
+.assessment-review-facts {margin:0;display:grid;gap:var(--space-md)}
+.assessment-review-facts>div {display:grid;grid-template-columns:minmax(0,11rem) minmax(0,1fr);gap:var(--space-md)}
+.assessment-review-facts dt {font-weight:var(--weight-strong)}
+.assessment-review-facts dd {margin:0;min-width:0}
+.assessment-review-facts p {margin:0;max-width:90ch;overflow-wrap:anywhere}
+.assessment-review-facts .assessment-review-help {margin-top:var(--space-xs);color:var(--muted)}
+@container assessment-summary (max-width:600px) {.assessment-review-facts>div {grid-template-columns:1fr;gap:var(--space-xs)}}
 .assessment-fact-unavailable .assessment-value {color:var(--muted)}
 .assessment-fact[data-band=red] .assessment-value {color:var(--performance-red)}
 .assessment-fact[data-band=orange] .assessment-value {color:var(--performance-orange)}
