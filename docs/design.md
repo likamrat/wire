@@ -2214,9 +2214,15 @@ Review and Save flow. Contextual **Add to report**, **Review selection** and
 chat-specific report creation remain. Navigation preserves deliberate empty
 selection, current draft, filters, privacy gates and saved/downloaded artifacts.
 
-**Reset to Home** sits beside the analytical filters on Home/Activity, or the
-current scope on request/report pages, whenever the route differs from Home
-defaults. It returns to all retained dates and the weekly Work IQ chart,
+**Reset to Home** sits directly below the analytical controls on Home/Activity,
+including chat-scoped Activity. Its content-width action group aligns with the
+leading edge of the filter row, not the far edge of a full-width empty row.
+When custom dates are open, it follows their From/To/Apply controls. It remains
+outside the horizontally scrolling seven-filter row so narrow and enlarged-text
+views can reach it without scrolling to the last filter. Request details retain
+the same single action beside their current scope; Reports, Settings and
+Collection status do not show it. It appears whenever the analytical route
+differs from Home defaults. It returns to all retained dates and the weekly Work IQ chart,
 clearing primary/secondary filters, chart choice, time scale, chat/request/path
 scope, outer pagination and private search. It creates a
 history entry, so Back restores the prior slice and Forward returns to Home.

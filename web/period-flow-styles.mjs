@@ -26,7 +26,7 @@ export const periodFlowStyles = `
 .date-actions {display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 #dateError {grid-column:1/-1;margin:0;font-size:.875rem;overflow-wrap:anywhere}
 #dateError {color:var(--danger)}
-.filter-tools {display:flex;justify-content:flex-end}
+.filter-tools {display:flex;width:fit-content;max-width:100%}
 .filter-tools>.reset-view {margin-top:4px}
 .stored-refresh {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-block:12px}
 .stored-refresh>p {flex:1 1 20rem;min-width:0;margin:0;font-size:.875rem}
