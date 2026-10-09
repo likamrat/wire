@@ -470,13 +470,13 @@ test("pending and rejected source replacements keep approved bytes, paused state
     await runtime.collector.setEnabled(false);
     const configFile = path.join(context.dataDir, "collector", "config.json"), original = await readFile(configFile);
     const originalStatus = await runtime.collector.status(), before = await loadBoardState(context);
-    b.db.exec("PRAGMA user_version=999");
+    b.db.exec("PRAGMA user_version=999; ALTER TABLE sessions RENAME COLUMN execution_location TO removed_location");
     await page.goto(runtime.url + "#settings"); await ready(page);
     const invalid = [
         { database: "relative-data.db", sessions: a.sessionRoot, error: /absolute data.db path/ },
         { database: a.appDbPath, sessions: path.join(path.dirname(b.sessionRoot), "missing", "session-state"), error: /directory could not be opened/ },
         { database: path.join(path.dirname(b.appDbPath), "missing", "data.db"), sessions: b.sessionRoot, error: /metadata is disconnected/ },
-        { database: b.appDbPath, sessions: b.sessionRoot, error: /Unsupported Copilot app metadata version 999/ },
+        { database: b.appDbPath, sessions: b.sessionRoot, error: /Unsupported sessions mapping.*999/ },
     ];
     let release;
     t.after(() => release?.());
@@ -524,7 +524,7 @@ test("pending and rejected source replacements keep approved bytes, paused state
         await page.locator("#cancelSource").click();
     }
     assert.deepEqual(await loadBoardState(context), before);
-    b.db.exec("PRAGMA user_version=156");
+    b.db.exec("PRAGMA user_version=156; ALTER TABLE sessions RENAME COLUMN removed_location TO execution_location");
     await page.locator("#editSource").click();
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);

@@ -564,14 +564,26 @@ membership. Browser history can retain private query text locally; copied URLs
 contain only shareable routes and destination identifiers.
 
 The maintained runtime has no public, app-wide chat-enumeration interface.
-The explicit read-only adapter supports Copilot app SQLite `user_version=156`
-and `166`, and checks the required `sessions`/`workspaces`/`projects` columns.
-These versions use the same inspected source mapping. The existing
-`copilot-app-sqlite-v156` adapter identity stays stable so this compatibility
-update does not change an approved source, reset cursors, or renew consent. Unsupported
-versions, unavailable files and remote-only installations are shown as
-disconnected/errors, not treated as empty success. This is a version-qualified
-local integration, not an assertion that private app schemas are stable APIs.
+The read-only adapter validates the source mapping, not an exact version allowlist.
+The inspected mapping is shared by Copilot app SQLite generations `156`, `166`
+and `174`. Generation `156` is the minimum; later version numbers alone neither
+grant nor deny compatibility. Before enumerating sources, the adapter requires
+ordinary `sessions`/`workspaces`/`projects` tables, their consumed ordinary `TEXT`
+columns, and a sole `id` primary key. Required mapping values must retain their
+text/null representation and IDs must remain enumerable. Additive fields/indexes
+and version-only upgrades that preserve this contract do not interrupt collection.
+Unknown host/location or workspace-type values never establish local eligibility.
+Optional creator fields are used only as a compatible pair with explicit agent
+and valid creator identity evidence; absent, malformed or unfamiliar metadata
+does not establish a prompt author.
+
+The existing `copilot-app-sqlite-v156` adapter identity stays stable: compatibility
+does not change an approved source, reset cursors, renew consent or enable answer
+capture/scoring. Missing or incompatible required mappings fail with the metadata
+version and affected table/fields, without replacing retained evidence, cursors or
+source approval. Unavailable files remain errors, not empty success; remote-only
+histories remain unread. This is a checked local integration, not a stable public
+API or a guarantee that future equal-shaped schemas preserve field semantics.
 The root convention is documented by `copilot help environment` and GitHub's
 [CLI command reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference).
 No agent tools, session wake-ups or model loops are used by the runtime.

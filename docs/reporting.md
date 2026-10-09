@@ -148,8 +148,11 @@ The parser never inspects tags inside the displayed content as provenance: a use
 message still has the direct-input envelope. Malformed, unsupported or conflicting envelopes stay
 unverified. The full transformed text is neither retained nor exported.
 
-For an untagged child kickoff, the compatible version-156/166 app adapter optionally reads `workspaces.created_by`
-and `creator_session_id` from the already-approved metadata source. Agent attribution additionally
+For an untagged child kickoff, the schema-validated app adapter (inspected generations
+156/166/174) optionally reads `workspaces.created_by` and `creator_session_id` from
+the already-approved metadata source. Both must remain ordinary `TEXT` columns;
+missing or incompatible optional fields do not establish authorship or block
+otherwise-compatible collection. Agent attribution additionally
 requires the actual first message from a history read that began at the start, an eligible unambiguous
 creator, and an exact text match to that creator's earlier `external_tool.requested` / `create_session`
 `arguments.kickoff.prompt`. A default-user envelope on an agent-created first message is not enough

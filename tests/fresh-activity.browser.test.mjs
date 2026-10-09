@@ -14,6 +14,7 @@ import { chooseTheme, navigateMain, selectActivityOption, revealStoredRefresh } 
 import { reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { time } from "../lib/time.mjs";
+import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
 
 const event = (type, data) => ({ id: randomUUID(), type, timestamp: new Date().toISOString(), data });
 const call = id => event("tool.execution_start", { toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch", toolCallId: id, arguments: { entityUrls: ["/me/messages"] } });
@@ -23,12 +24,12 @@ const ready = async page => {
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
     await page.evaluate(() => document.fonts.ready);
 };
-async function fixture(t, approved = true, timers = false, pageOptions = {}) {
+async function fixture(t, approved = true, timers = false, pageOptions = {}, metadata174 = false) {
     const root = await mkdtemp(path.join(os.tmpdir(), "workiq-fresh-synthetic-"));
     const config = { appDbPath: path.join(root, "data.db"), sessionRoot: path.join(root, "session-state"), approved: true, enabled: false, pollSeconds: 5, windowDays: 30 };
     await mkdir(config.sessionRoot);
     const db = new DatabaseSync(config.appDbPath);
-    db.exec(`PRAGMA user_version=156;
+    db.exec(metadata174 ? metadata174Schema : `PRAGMA user_version=156;
         CREATE TABLE sessions(id TEXT PRIMARY KEY,title TEXT,session_type TEXT,archived_at TEXT,execution_location TEXT);
         CREATE TABLE projects(id TEXT PRIMARY KEY,name TEXT);
         CREATE TABLE workspaces(id TEXT PRIMARY KEY,session_id TEXT,project_id TEXT,name TEXT,archived_at TEXT,host_id TEXT,workspace_type TEXT);`);
@@ -45,7 +46,7 @@ async function fixture(t, approved = true, timers = false, pageOptions = {}) {
     t.after(async () => { await browser.close(); await runtime.close(); db.close(); await rm(root, { recursive: true, force: true }); assert.deepEqual(errors, []); });
     async function source(events = []) {
         const id = randomUUID();
-        db.prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(id, "Synthetic new Copilot chat", "chat", null, "local");
+        db.prepare("INSERT INTO sessions(id,title,session_type,archived_at,execution_location) VALUES(?,?,?,?,?)").run(id, "Synthetic new Copilot chat", "chat", null, "local");
         const file = path.join(config.sessionRoot, id, "events.jsonl");
         await mkdir(path.dirname(file));
         await writeFile(file, jsonl([event("session.start", { sessionId: id, version: 1 }), ...events]));
@@ -59,6 +60,37 @@ async function fixture(t, approved = true, timers = false, pageOptions = {}) {
     return { root, context, config, db, page, writes, receipts, source, check,
         runtime: () => runtime, restart: async () => { await runtime.close(); runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } }); } };
 }
+
+test("Choose a Copilot chat checks grounded metadata174 and retains its view on genuinely incompatible mappings", { timeout: 30000 }, async t => {
+    const app = await fixture(t, true, false, {}, true), { page } = app;
+    const source = await app.source([event("user.message", { content: "Invented metadata174 request" }), call("compatible"), complete("compatible")]);
+    const configFile = path.join(app.context.dataDir, "collector", "config.json"), configBefore = await readFile(configFile);
+    await page.goto(app.runtime().url + "#activity"); await ready(page);
+    assert.match(await page.locator("#activityView").innerText(), /Choose a Copilot chat/);
+    await app.check();
+    assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "complete");
+    assert.equal(await page.locator("#freshStatus").innerText(), "1 new activity record.");
+    assert.doesNotMatch(await page.locator("#freshContextMessage").innerText(), /Unsupported|not confirmed/);
+    assert.equal((await app.runtime().collector.status()).discovery.schemaVersion, 174);
+    const before = await loadBoardState(app.context);
+    assert.equal(before.evidence[0].toolCalls.length, 1);
+    app.db.exec("PRAGMA user_version=175; ALTER TABLE sessions ADD COLUMN invented_future_field TEXT");
+    await appendFile(source.file, jsonl([call("compatible-addition"), complete("compatible-addition")]));
+    await app.check();
+    assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "complete");
+    assert.equal(await page.locator("#freshStatus").innerText(), "1 new activity record.");
+    const accepted = await loadBoardState(app.context), previous = await page.locator("#activityView").innerHTML();
+    assert.equal(accepted.evidence[0].toolCalls.length, 2);
+    app.db.exec("ALTER TABLE sessions RENAME COLUMN execution_location TO removed_location");
+    await app.check();
+    assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "error");
+    assert.equal(await page.locator("#freshStatus").innerText(), "Local check not confirmed.");
+    assert.match(await page.locator("#freshContextMessage").innerText(), /Previous view kept.*Unsupported sessions mapping.*175.*execution_location.*No history was replaced/s);
+    assert.equal(await page.locator("#activityView").innerHTML(), previous);
+    assert.deepEqual(await loadBoardState(app.context), accepted);
+    assert.deepEqual(await readFile(configFile), configBefore);
+    assert.deepEqual(app.writes, ["/api/collection/now", "/api/collection/now", "/api/collection/now"]);
+});
 
 for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selected single day and custom dates collect fresh bounded records end-to-end in ${zone}`, { timeout: 90000 }, async t => {
     const app = await fixture(t, true, false, { timezoneId: zone }), { page } = app;
@@ -861,16 +893,16 @@ test("partial, bounded and failed checks retain honest coverage and last good Ho
         assert.equal(app.receipts.at(-1).coverage.limited, 1);
         const previous = await page.locator("#chart").innerHTML();
         const previousPercentages = await page.locator("#percentageCharts").innerHTML();
-        app.db.exec("PRAGMA user_version=157");
+        app.db.exec("PRAGMA user_version=174; ALTER TABLE sessions RENAME COLUMN execution_location TO removed_location");
         await app.check();
         assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "error");
         assert.match(await page.locator("#freshStatus").innerText(), /not confirmed/);
-        assert.match(await page.locator("#freshContextMessage").innerText(), /Unsupported.*157/);
+        assert.match(await page.locator("#freshContextMessage").innerText(), /Unsupported sessions mapping.*174/);
         assert.equal(await page.locator("#chart").innerHTML(), previous);
         assert.equal(await page.locator("#percentageCharts").innerHTML(), previousPercentages);
         assert.equal(await page.locator("#activityCount").innerText(), "2");
         assert.equal(await page.locator("#freshIssues").getAttribute("href"), "#collection-status");
-        app.db.exec("PRAGMA user_version=156");
+        app.db.exec("PRAGMA user_version=156; ALTER TABLE sessions RENAME COLUMN removed_location TO execution_location");
         let oldSnapshot;
         await page.route("**/api/snapshot", async route => { const response = await route.fetch(); oldSnapshot = await response.json(); await route.fulfill({ response }); });
         await (await revealStoredRefresh(page)).click(); await ready(page);
