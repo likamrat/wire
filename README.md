@@ -416,13 +416,18 @@ deduplicated `result=success,failure` list. Individual result links deliberately
 choose that one result. Current-view report membership follows the matching
 request-group union; Selected and All report scopes remain independent.
 
-Home shows flat count columns and directly labeled **Recorded outcomes** and
-**Service share** percentage bars. **Tool names** keeps the existing composition
+Home shows dimensional glass count columns and open, front-facing,
+restrained-tilt **Recorded outcomes** and **Service share** donuts.
+**Tool names** keeps the existing composition
 switch. All use the same accepted canonical evidence layer, filters and counts;
 missing/partial/other outcomes remain distinct. Worked means tool completion,
 not task correctness or proven Graph HTTP success.
 
-Columns use one zero-based scale without decorative depth, caps or reflections.
+Columns use one shared square-root height scale with minimum visible positive
+bodies and result sections; zero has no data-bearing paint. Faceted glass faces
+follow those visual spans, while neutral tops mark the end, not another result.
+Reflections are omitted. Visual sizes are adjusted for readability, not measured
+quantities; the shared chart-scale help discloses the adjustment.
 Plain count links (including **2 calls**) and the default-visible exact table
 make small values readable and actionable without hover. The table associates
 dates/categories with every recorded outcome. Its collapse choice is preserved.
@@ -430,15 +435,21 @@ dates/categories with every recorded outcome. Its collapse choice is preserved.
 **All categories and definitions** retain the other detailed explanations.
 There are no per-column info controls, tiny-band footnotes or donut connectors.
 
-Percentage rows show the category, share and exact count together. Unrounded bar
-lengths preserve proportions; `<0.1%` and `>99.9%` prevent false zero/100% labels.
+Donut legends show the category, actual share and exact count together. Positive
+slices have a 3% minimum visual share, with remaining space allocated
+proportionally among larger categories; zero stays unpainted. Counts and
+percentages retain the canonical denominator; `<0.1%` and `>99.9%` prevent false
+zero/100% labels. Headings retain the unit without a standalone enlargement
+caption; accessible chart descriptions and exact-data help explain enlarged
+slices and decorative depth. **Tool names** retains proportional percentage bars.
 Unknown and multi-service categories retain their identities. Grouped Other
 members remain in the exact table. Positive outcome/service names link to their
 filtered requests. A zero total is explicitly not applicable.
 
 Both panels reflow with the container and root text size. Existing Asta Sans,
-Fluent glyphs and light/navy themes remain. New HTML/PDF reports share the flat
-column presentation; previously saved report bytes are never rewritten.
+Fluent glyphs and light/navy themes remain. New HTML/PDF reports share the glass
+column presentation, disclosed readability scale and exact counts; previously
+saved report bytes are never rewritten.
 General history/hosted-Graph limits live once in **About this evidence**, not an
 unconditional footer. Actual source errors and incomplete-collection feedback
 remain visible in their existing context.
