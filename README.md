@@ -522,17 +522,26 @@ Technical details. Search results for issues, missing history and status navigat
 there without changing collection. Back, Forward and reload preserve the target
 and visible focus.
 
-Collection status shows readable, unavailable and pending chat counts separately.
+Collection status answers whether collection is running, which chats have gaps
+and whether an action is needed. Routine active collection explicitly needs no
+action; pause, disconnection and current errors provide state-specific guidance.
+Settings links navigate without resuming, approving or checking a source.
+The page shows readable chats out of eligible chats, with unavailable/limited
+counts under **Chat history**. Pending reads are shown separately because an
+importing chat can already have readable entries.
 The source inventory counts locations verified from Copilot metadata, not files
 successfully read. Archived, nonlocal and unverified chats are exclusions, not
 failed reads. Each affected chat is counted once, with unavailable history taking
 precedence over limits. Closed reason groups explain which file, entries, older
 history or request-to-action links are affected, and the actual next step.
-For example, **Saved Copilot chat history file not found** does not infer deletion
+For example, **History file not found** does not infer deletion
 or promise that another check recreates the file. Previously collected evidence
 stays. Technical codes and chat identifiers remain secondary support details.
 The closed **Technical details** section labels counters with their units and
 explains the unchanged history window, file/entry read limits and context limits.
+It also contains the existing **Refresh stored data** action, not a source check.
+With no reported gaps the search and empty reason list are hidden. Unchecked,
+importing and failed states never become a successful empty-history message.
 
 ### Local search scopes
 
@@ -551,7 +560,7 @@ no-result counts remain explicit.
 | Activity / chat analysis | Keep and clarify **Find a Copilot chat or request group**: retained request text, titles, chat/project names and chat IDs, intersected with existing filters before chat/request paging. Canonical evidence counts and metadata-only chats stay distinct. |
 | Requests already in a report | **Find a request in this report** filters the full current membership list by retained request text and chat/project identity. Matching and included totals are separate; hidden requests remain included. It cannot add/remove requests or change a frozen preview. |
 | Previously saved reports | **Find a saved report** searches all saved IDs, prepared dates, formats, prompt modes, file names and time-zone/locale metadata. It does not open report contents, original prompts or private file paths. |
-| Collection status | **Find an affected Copilot chat** searches the entire currently reported issue list by chat/project name, identifier, availability status (unavailable or limited history), readable reason label or common alias, before reason grouping and six-row paging. Unavailable takes precedence when a chat also has limits; each affected chat is counted once. Counts state matching versus all affected chats. Names are fetched only on visiting Collection status. |
+| Collection status | **Find a chat with gaps** searches the entire currently reported issue list by chat/project name, identifier, availability status (unavailable or limited history), short or full reason label or common alias, before reason grouping and six-row paging. Unavailable takes precedence when a chat also has limits; each affected chat is counted once. While searching, counts state matching versus all affected chats. Names are fetched only on visiting Collection status. |
 | Home / charts and request details | Keep existing date/service/result filters, chart drilldowns, exact-data disclosures and bounded request/action pages. No redundant search per card or universal evidence index. Request-detail actions are not a new full-text search scope. |
 | Long select lists | Keep keyboard typeahead and full option identities, including city-based time zones. Names wrap without clipping; short finite lists need no extra search box. |
 
@@ -639,22 +648,26 @@ capture latency: backfill, disk load and missing logs can delay availability.
 capability-protected discovery dispositions, cursor offsets, bounds and counters
 for verification. It contains no event bodies or prompts.
 
-**Collection status** separates **Checked** (a local collection check)
-from **New activity** (newly collected evidence). Its
+**Collection status** separates **Last checked** (a local collection check)
+from **Last new evidence** (newly collected evidence). No new activity does not
+establish complete history. Its
 direct link (`#collection-status?setting=issues`) shows only the
 affected local chats, grouped by the known reason and paged six at a time.
 Missing saved files, denied reads, other known file-read errors, unsupported
 history and unknown causes are distinct from size/context limits. Each chat
 appears in one group even if it has several limits; its detail lists the additional
-limits, last recorded attempt and whether prior evidence exists. Archived,
+limits, last recorded attempt and whether prior evidence exists. **Open chat
+activity** uses the existing chat route; Back restores the gap search, page and
+reading focus. Archived,
 nonlocal and unmapped sources remain exclusions, not read failures.
 Chat names and project context are fetched only when Collection status is visited.
 
 These notices concern saved chat history, not failed Work IQ or Graph requests.
 Reports may omit activity that could not be collected; available chats continue
 and prior evidence is kept. Partial gaps stay inspectable in Collection status; an unavailable
-collection source or all eligible histories being unreadable is not shown as
-healthy. Initial import/checking and paused states stay explicit. **Check for new activity**
+collection source stays an error. When checks are running but all eligible
+histories are unreadable, the page states both facts rather than confusing
+collector activity with successful coverage. Initial import/checking and paused states stay explicit. **Check for new activity**
 remains the existing bounded local read, not an API retry or missing-file repair.
 Collection status retains full local timestamps, source inventory, check frequency
 and technical limits. Source paths and approval stay in Settings.

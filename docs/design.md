@@ -1328,7 +1328,7 @@ truncated. Plain-text/JSON reports do not carry visual title styling.
 | Activity | Exact chat name, distinct project/unscoped context, compact reference for same-name or unnamed sources, one request-group-to-call count line, actionable recorded successes/failures, report-inclusion count | The repeated name-field label is screen-reader-only. Group the complete filtered set **before** paging eight chats. Overview groups start closed; each opened group renders six request groups per page. Eligible chats with no captured calls can still open analysis. | Choose a recognizable Copilot chat, then inspect its collected evidence independently. |
 | Chat analysis | Exact chat name as the primary heading, a recorded project when present, compact reference only for ambiguous/unnamed sources, canonical results, date/service/collection summary, coverage and report action | The existing Technical source record disclosure pattern holds exact source ID, recorded name, source host and project facts without a new card. Worked and Needs attention links render six matching canonical actions per page. | Inspect results without losing chat/filter context; create a report for this chat only. |
 | Request | Recorded outcomes and known failure details first, source context once, one exact prompt reader, chronological actions | Long prompt text opens without an excerpt or internal height limit. Technical details, provenance and inferred follow-ups stay secondary; action and follow-up lists remain paged by six. | Understand what is known, read the retained prompt and inspect its actions without duplicate summaries or navigation. |
-| Collection status | Current reading state, readable/unavailable/pending counts, affected-chat summary and search | Closed named reason groups, six chats per page; closed Technical details for inventory, exclusions and limits. Home check results and Activity link here. | Understand which history is affected without confusing collection gaps with request failures. |
+| Collection status | Collector state and next step, readable/eligible coverage, Chat history gap summary and compact search | Closed short reason groups, six chats per page; closed Technical details for inventory, exclusions, limits and stored refresh. Home check results and Activity link here. | Know whether collection is working, inspect missing activity when relevant and avoid treating every gap as a repair task. |
 | Settings | Display, Connection & permission, Collection preferences | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
 | Reports | Current-stage work, one-report inclusion summary, Clear selection and four-step navigation | Requests shows scope and a disclosure with four requests per page. Contents holds the three prompt modes, four formats and Scan and preview. Saved history stays separate, six reports per page. | Choose membership, then contents, without confronting every control at once. |
 | Review and Save | Review shows the frozen formatted preview, scope, incomplete-source/removal totals, limitations and unchecked attestation. Save shows the separate final confirmation, then actual file downloads. | Review opens six original/copy comparisons per page, retaining edits when paging; exact-file disclosures remain available. Save is reached only after explicit disclosure review. | Compare and approve the copies, then deliberately save; paging or changing stages never grants consent. |
@@ -1448,12 +1448,33 @@ navigation changes only: generated HTML/PDF/JSON/Markdown membership and complet
 content are unchanged, and previously saved bytes are never rewritten.
 
 **Collection status** is a dedicated `#collection-status` main-navigation view,
-not a configuration category or a second status card on Home. It names active/paused/checking/importing/
-setup state, relative last check and last newly collected activity. Eligibility
+not a configuration category or a second status card on Home. It separates
+active/paused/checking/disconnected/error state from history coverage, with a
+short state-specific next step. Routine active collection explicitly requires no
+action. Importing history continues through existing automatic checks; a running
+collector with all histories unavailable states that no history is readable,
+not that coverage is healthy. Relative last check and last new evidence stay
+separate; no new evidence is not a failed check or proof of complete history. Eligibility
 is metadata, not a successful-read count; the inventory and exclusions live there
 too. Routine status and timestamps are not live announcements. Check for new
 activity is also available on Home; Pause/Resume stays in Settings. All have
-ordinary labeled 44px targets.
+ordinary labeled 44px targets. Source and preference links are subordinate
+navigation, not duplicate collection buttons. Pause and source-review guidance
+locate the existing Settings controls without invoking them. The existing
+Retry connection button appears in the health heading when the status read
+fails, rather than disappearing inside the hidden entry notice.
+
+**Chat history** shows one affected total and unavailable/limited counts.
+Previously collected evidence is kept. The search control is capped at 32rem
+within a 64rem page, with 4px field-help spacing and unchanged reading type.
+Desktop headings and short reason labels fit naturally; narrow/enlarged text
+reflows without clipping or shrinking. The healthy state shows one no-gap
+message, not a search over an empty list. Unchecked, importing and current
+failure states retain their own wording. A nonempty query remains available
+even if its last matching issue disappears, so Clear/Escape still work.
+Only a nonempty query shows matching-versus-total counts. Distill guidance
+removed duplicate counts/actions without removing the existing metadata search,
+reason definitions, six-row pager or privacy boundaries.
 
 The closed **Optional network diagnostic** section on Collection status is
 separate from local collection health. **Test HTTP recorder** explains the
@@ -1498,7 +1519,7 @@ Native form nodes stay mounted to preserve drafts, but inactive categories use
 `section=display|connection|collection` is the canonical category
 route; `setting` contains only a fixed destination ID. Legacy `section=history`
 locates the history-window control. Legacy `#settings?issues=1` and `setting=issues`
-canonicalize to `#collection-status?setting=issues`, focusing Affected Copilot chats.
+canonicalize to `#collection-status?setting=issues`, focusing Chat history.
 `section=diagnostics` opens Collection status; `setting=advanced` and
 `setting=collection-details` open/focus its Technical details.
 Unknown categories show an explicit notice and canonical Connection fallback.
@@ -1596,7 +1617,10 @@ unsupported history and unknown causes are distinct; archived and intentionally
 excluded sources are never counted as failures. Size, malformed-entry and context
 limits are separate from unreadable files. One primary group per chat keeps
 all counts reconciled; secondary reasons remain in that chat's detail.
-Reason groups and their six-per-page chat rows start closed. Removing the outer
+Reason groups and their six-per-page chat rows start closed. Their short page
+titles and full explanatory titles share the same reason contract and remain
+searchable. Open chat activity uses the existing session journey and preserves
+the gap-list route, search, pager and reading focus on Back. Removing the outer
 Issues disclosure reduces one level of nesting; neither a search nor the current
 failure is hidden behind it. Search opens matching reason groups, across the whole
 current issue list before paging.
@@ -1613,7 +1637,8 @@ distinction avoids repeated disclaimers. Per-chat details state whether prior
 evidence exists; a closed support disclosure labels **Copilot chat identifier**
 and **Technical code**, never presenting a raw enum as the explanation.
 
-The closed page-level Technical details contains readable inventory/exclusion
+The closed page-level Technical details contains the existing stored-snapshot
+refresh (not a history check), readable inventory/exclusion
 counts, units and limit explanations. "Check frequency" replaces "cadence" in
 authored controls. Inventory is not readable-chat count; importing chats can
 already have readable entries. Counts and issue rows use one detailed status

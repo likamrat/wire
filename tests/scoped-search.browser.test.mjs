@@ -158,7 +158,7 @@ test("Collection status destinations restore visible focus on legacy routes, rel
     assert.equal(await page.locator(".history-issue").count(), 0);
     assert.equal(await page.locator("#collectionSetup").evaluate(node => node.open), false);
     await page.locator("#issueSearch").fill("unavailable");
-    await expect(page.locator("#issueSearchCount")).toHaveText("19 of 19 Copilot chats with reported issues match.");
+    await expect(page.locator("#issueSearchCount")).toHaveText("19 of 19 chats");
     assert.equal(await page.locator(".history-issue").count(), 6);
     await page.goBack();
     await expect(page.locator("#settingsView")).toBeVisible();
@@ -166,7 +166,7 @@ test("Collection status destinations restore visible focus on legacy routes, rel
     await page.goForward();
     await expect(page.locator("#issueSearch")).toHaveValue("unavailable");
     await page.reload(); await ready(page);
-    await expect(page.locator("#issueSearchCount")).toHaveText("19 of 19 Copilot chats with reported issues match.");
+    await expect(page.locator("#issueSearchCount")).toHaveText("19 of 19 chats");
     await page.locator("#issueSearch").focus(); await page.keyboard.press("Escape");
     await expect(page.locator("#issueSearch")).toHaveValue("");
     for (const [legacy, target] of [
@@ -195,18 +195,19 @@ test("Collection status keeps unchecked, paused, pending, zero and failed states
     const initial = structuredClone(status());
     const zero = { eligible: 0, readable: 0, unavailable: 0, limited: 0, pending: 0, affected: 0, excluded: {} };
     for (const [patch, label, coverage] of [
-        [{ config: null, discovery: null, historyCoverage: null }, "Not connected", /Review a local source/],
-        [{ discovery: null, historyCoverage: null, lastCheckedAt: null }, "Checking history", /Waiting for the first history check/],
-        [{ state: "paused", config: { ...initial.config, enabled: false }, historyCoverage: zero }, "Collection paused", /0 Copilot chats have readable history/],
-        [{ historyCoverage: { ...zero, eligible: 2, pending: 2 } }, "Importing history", /2 awaiting or still importing/],
-        [{ historyCoverage: zero }, "No local Copilot chats to collect", /0 Copilot chats have readable history/],
-        [{ error: "Synthetic file-access failure " + "x".repeat(100), historyCoverage: zero }, "Collection cannot check history", /0 Copilot chats have readable history/],
+        [{ config: null, discovery: null, historyCoverage: null }, "Not connected", /not available until a check completes/],
+        [{ discovery: null, historyCoverage: null, lastCheckedAt: null }, "Checking history", /not available until a check completes/],
+        [{ state: "paused", config: { ...initial.config, enabled: false }, historyCoverage: zero }, "Collection paused", /0 of 0 eligible chats/],
+        [{ historyCoverage: { ...zero, eligible: 2, pending: 2 } }, "Collection active", /0 of 2 eligible chats/],
+        [{ historyCoverage: zero }, "Collection active", /0 of 0 eligible chats/],
+        [{ error: "Synthetic file-access failure " + "x".repeat(100), historyCoverage: zero }, "Collection cannot check history", /Last known coverage: 0 of 0 eligible chats/],
     ]) {
         setStatus({ ...initial, lastCheckedAt: "2026-10-05T12:00:00Z", historyIssues: [], error: "", ...patch });
         await page.goto(url + "#collection-status"); await ready(page);
         await expect(page.locator("#collectionStatus")).toHaveText(label);
         await expect(page.locator("#collectionCoverageCounts")).toContainText(coverage);
-        if (patch.historyCoverage === null) await expect(page.locator("#collectionIssueLabel")).toHaveText("History has not been checked yet.");
+        if (patch.historyCoverage === null) await expect(page.locator("#collectionIssueLabel")).toHaveText("History not checked");
+        if (patch.historyCoverage?.pending) await expect(page.locator("#collectionCoveragePending")).toContainText("2 chats are awaiting or still importing");
         if (patch.error) {
             await expect(page.locator("#settingsDiagnosticError")).toHaveText(patch.error);
             await expect(page.locator("#settingsDiagnosticError")).toBeVisible();
@@ -216,15 +217,15 @@ test("Collection status keeps unchecked, paused, pending, zero and failed states
     }
 });
 
-test("authoritative zero issues has one message while real no-match searches and unknown coverage keep their controls", { timeout: 30000 }, async t => {
+test("authoritative zero issues has one message while real no-match searches retain their controls", { timeout: 30000 }, async t => {
     const { page, url, setStatus, status, requests } = await setup(t);
     const real = structuredClone(status());
     const zero = { eligible: 19, readable: 19, unavailable: 0, limited: 0, pending: 0, affected: 0, excluded: {} };
     setStatus({ ...real, lastCheckedAt: "2026-10-05T12:00:00Z", historyCoverage: zero, historyIssues: [] });
     await page.goto(url + "#collection-status"); await ready(page);
     const issues = page.locator("#collectionIssues");
-    await expect(issues.getByText("No current history issues reported", { exact: true })).toBeVisible();
-    assert.equal(await issues.getByText("No current history issues reported", { exact: true }).count(), 1);
+    await expect(issues.getByText("No history gaps reported", { exact: true })).toBeVisible();
+    assert.equal(await issues.getByText("No history gaps reported", { exact: true }).count(), 1);
     await expect(page.locator("#issueSearch")).toBeHidden();
     await expect(page.locator("#issueSearchCount")).toBeHidden();
     await expect(page.locator("#collectionIssueCounts")).toBeHidden();
@@ -234,25 +235,25 @@ test("authoritative zero issues has one message while real no-match searches and
     await page.reload(); await ready(page);
     await expect(page.locator("#issueSearch")).toBeVisible();
     await page.locator("#issueSearch").fill("no recorded issue matches this");
-    await expect(page.locator("#issueSearchCount")).toHaveText("0 of 19 Copilot chats with reported issues match.");
+    await expect(page.locator("#issueSearchCount")).toHaveText("0 of 19 chats");
     await expect(page.locator("#collectionIssueGroups")).toContainText("No affected Copilot chats match");
     await expect(page.locator("#collectionIssueCounts")).toBeVisible();
     await expect(page.locator("#collectionIssuesBody>.settings-help")).toBeVisible();
-    await expect(issues.getByText("No current history issues reported", { exact: true })).toHaveCount(0);
+    await expect(issues.getByText("No history gaps reported", { exact: true })).toHaveCount(0);
     setStatus({ historyCoverage: zero, historyIssues: [] });
     await page.reload(); await ready(page);
     await expect(page.locator("#issueSearch")).toBeVisible();
     await expect(page.locator("#issueSearch")).toHaveValue("no recorded issue matches this");
-    await expect(page.locator("#issueSearchCount")).toHaveText("0 of 0 Copilot chats with reported issues match.");
+    await expect(page.locator("#issueSearchCount")).toHaveText("0 of 0 chats");
     await page.locator("#clearIssueSearch").click();
     await expect(page.locator("#issueSearch")).toBeHidden();
     await expect(page.locator("#collectionIssuesTitle")).toBeFocused();
-    await expect(issues.getByText("No current history issues reported", { exact: true })).toBeVisible();
+    await expect(issues.getByText("No history gaps reported", { exact: true })).toBeVisible();
     setStatus({ historyCoverage: null, historyIssues: [], lastCheckedAt: null, discovery: null });
     await page.reload(); await ready(page);
-    await expect(page.locator("#collectionIssueLabel")).toHaveText("History has not been checked yet.");
-    await expect(page.locator("#issueSearch")).toBeVisible();
-    await expect(issues.getByText("No current history issues reported", { exact: true })).toHaveCount(0);
+    await expect(page.locator("#collectionIssueLabel")).toHaveText("History not checked");
+    await expect(page.locator("#issueSearch")).toBeHidden();
+    await expect(issues.getByText("No history gaps reported", { exact: true })).toHaveCount(0);
     assert.ok(requests.every(request => ["/api/snapshot", "/api/collection/status"].includes(request.url)));
 });
 
@@ -323,7 +324,7 @@ test("Collection status explains every reason and reflows at all required theme,
     }
     for (const [index, code] of reasons.entries()) {
         await page.locator("#issueSearch").fill(model.reasons[code].label);
-        await expect(page.locator("#issueSearchCount")).toHaveText("1 of 9 Copilot chats with reported issues match.");
+        await expect(page.locator("#issueSearchCount")).toHaveText("1 of 9 chats");
         await expect(page.locator(".history-issue")).toHaveCount(1);
         assert.match(await page.locator(".history-reason-body").innerText(), new RegExp(model.reasons[code].guidance.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
         assert.equal((await page.locator(".history-issue").getAttribute("data-disclosure-key")), `history-issue:reason-${index}`);
@@ -387,7 +388,7 @@ test("issue and Activity searches precede pagination, preserve canonical counts 
     await expect(page.locator(".history-issue")).toHaveCount(6);
     await page.getByRole("button", { name: "Next affected Copilot chats", exact: true }).click();
     await page.locator("#issueSearch").fill("ZEPHYR-end <img>");
-    await expect(page.locator("#issueSearchCount")).toHaveText("1 of 19 Copilot chats with reported issues match.");
+    await expect(page.locator("#issueSearchCount")).toHaveText("1 of 19 chats");
     await expect(page.locator(".history-issue")).toHaveCount(1);
     await expect(page.locator(".history-issue")).toContainText("Zephyr-end <img> chat");
     await page.locator("#issueSearch").fill("no such reason [.*]");
@@ -433,7 +434,7 @@ test("issue status search matches displayed unavailable/limited subsets with mix
     assert.equal(issues.length, 4);
     setStatus({ historyCoverage: summary, historyIssues: issues });
     await page.goto(url + "#settings?issues=1"); await ready(page);
-    await expect(page.locator("#collectionIssueLabel")).toContainText("4 Copilot chats affected");
+    await expect(page.locator("#collectionIssueLabel")).toContainText("4 chats with history gaps");
     const counts = await page.locator("#collectionIssueCounts").innerText();
     for (const [query, ids] of [
         ["UnAvAiLaBlE", ["missing-only", "missing-and-truncated"]],
@@ -443,13 +444,13 @@ test("issue status search matches displayed unavailable/limited subsets with mix
         ["unrelated <img> [.*]", []],
     ]) {
         await page.locator("#issueSearch").fill(query);
-        await expect(page.locator("#issueSearchCount")).toHaveText(`${ids.length} of 4 Copilot chats with reported issues match.`);
+        await expect(page.locator("#issueSearchCount")).toHaveText(`${ids.length} of 4 chats`);
         assert.deepEqual((await page.locator(".history-issue").evaluateAll(nodes => nodes.map(node => node.dataset.disclosureKey.replace("history-issue:", "")))).sort(), [...ids].sort());
         assert.equal(await page.locator("#collectionIssueCounts").innerText(), counts);
         assert.ok(!page.url().includes(encodeURIComponent(query)));
     }
     await page.locator("#clearIssueSearch").click();
-    await expect(page.locator("#issueSearchCount")).toHaveText("4 of 4 Copilot chats with reported issues match.");
+    await expect(page.locator("#issueSearchCount")).toHaveText("4 of 4 chats");
     assert.equal(await page.locator("#collectionIssueCounts").innerText(), counts);
     assert.doesNotMatch(JSON.stringify(requests), /UnAvAiLaBlE|limited-history|unrelated/);
 });

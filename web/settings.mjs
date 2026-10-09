@@ -89,26 +89,29 @@ export const settingsMarkup = `
   </div>
 </section>
 <section id="collectionStatusView" class="collection-status-view" aria-label="Collection status" hidden>
-  <div class="settings-section">
+  <div class="settings-section collection-health">
     <div id="collectionStrip" class="collection-status-details" aria-label="Local collection">
-      <p id="collectionStatus">Checking history</p>
-      <p id="collectionTimes" class="muted"><span id="collectionChecked"></span><span id="collectionNewActivity"></span></p>
+      <div class="collection-health-heading"><h2 id="collectionStatus">Checking history</h2><a id="collectionStatusAction" class="button-link" data-settings-link hidden></a></div>
+      <p id="collectionStatusGuidance">Reading collection status.</p>
     </div>
     <p id="settingsDiagnosticError" class="notice error" role="alert" hidden></p>
+    <p id="collectionTimes" class="muted"><span id="collectionChecked"></span><span id="collectionNewActivity"></span></p>
     <p id="collectionCoverageCounts"></p>
-    <div class="settings-actions"><a class="button-link" href="#settings?section=connection&setting=source-paths" data-settings-link>Source &amp; permission</a><a class="button-link" href="#settings?section=collection" data-settings-link>Collection preferences</a><a class="text-link" href="#home" data-settings-link>Check for new activity on Home</a></div>
+    <p id="collectionCoveragePending" class="settings-help" hidden></p>
+    <div class="collection-status-actions"><a id="collectionSourceLink" href="#settings?section=connection&setting=source-paths" data-settings-link>Source &amp; permission</a><a href="#settings?section=collection" data-settings-link>Collection preferences</a><a href="#home" data-settings-link>Go to Home</a></div>
   </div>
   <section id="collectionIssues" class="collection-issues settings-section" aria-labelledby="collectionIssuesTitle">
-    <h2 id="collectionIssuesTitle" tabindex="-1">Affected Copilot chats</h2>
+    <h2 id="collectionIssuesTitle" tabindex="-1">Chat history</h2>
     <p id="collectionIssueLabel"></p>
     <div id="collectionIssuesBody" class="collection-issues-body">
       <p id="collectionIssueCounts" class="muted"></p><p id="collectionIssueImpact"></p>
-      <div class="scoped-search"><label for="issueSearch">Find an affected Copilot chat</label><div class="search-input-row"><input id="issueSearch" type="search" placeholder="Search" autocomplete="off" spellcheck="false" aria-describedby="issueSearchHelp"><button id="clearIssueSearch" type="button" class="quiet" hidden>Clear</button></div><p id="issueSearchHelp" class="settings-help">Search all current issues by chat, project, identifier or reason. No prompts or source paths.</p><p id="issueSearchCount" class="search-count" role="status"></p></div>
+      <div class="scoped-search"><label for="issueSearch">Find a chat with gaps</label><div class="search-input-row"><input id="issueSearch" type="search" placeholder="Search" autocomplete="off" spellcheck="false" aria-describedby="issueSearchHelp"><button id="clearIssueSearch" type="button" class="quiet" hidden>Clear</button></div><p id="issueSearchHelp" class="settings-help">Search all affected chat names, projects, IDs and reasons. No prompts or source paths.</p><p id="issueSearchCount" class="search-count" role="status"></p></div>
       <p id="collectionIssuesMessage" role="status" hidden></p><div id="collectionIssueGroups"></div>
-      <p class="settings-help">History gaps are not failed Work IQ or Graph requests.</p>
+      <p class="settings-help">Each chat appears under one primary reason; other limits may overlap. History gaps are not failed Work IQ or Graph requests.</p>
     </div>
   </section>
   <details id="collectionSetup" class="settings-advanced"><summary>Technical details</summary>
+      <p class="settings-help">A check with no new activity is normal. It does not establish complete history or mean that a Work IQ request failed.</p>
       <dl class="settings-diagnostics"><dt>Last local check</dt><dd id="collectionExactCheck"></dd><dt>Last new evidence</dt><dd id="collectionExactNew"></dd><dt>Check frequency</dt><dd id="collectionExactTimes"></dd></dl>
       <div id="collectionDiagnostics"></div>
       <div id="collectionEvidenceDetails"></div>

@@ -45,7 +45,7 @@ test("history issues are scoped, bounded and stable during polling in both theme
     await page.goto(runtime.url);
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
     assert.equal(await page.locator("#collectionStatus").textContent(), "Collection active");
-    assert.match(await page.locator("#collectionIssueLabel").textContent(), /16 Copilot chats affected/);
+    assert.match(await page.locator("#collectionIssueLabel").textContent(), /16 chats with history gaps/);
     assert.equal(await page.locator("#collectionNotice").isVisible(), false);
     assert.equal(await page.locator("#collectionStrip").isVisible(), false);
     assert.equal(await page.locator("#collectionSetup").getAttribute("open"), null);
@@ -74,9 +74,9 @@ test("history issues are scoped, bounded and stable during polling in both theme
     assert.equal(await page.locator("#chart").innerHTML(), chartBefore);
     sources.unshift({ sessionId: "new-first", name: "New synthetic source", eligible: true });
     cursors.unshift({ sessionId: "new-first", error: "missing", errorCode: "ENOENT", lastAttemptAt: "2026-10-05T01:01:00Z" });
-    await page.waitForFunction(() => document.querySelector("#collectionIssueLabel").textContent.includes("17 Copilot chats"));
+    await page.waitForFunction(() => document.querySelector("#collectionIssueLabel").textContent.includes("17 chats"));
     assert.equal(await first.evaluate(node => node === document.activeElement), true, "New issues append without moving an existing focused source");
-    assert.match(await page.locator("#collectionIssueCounts").innerText(), /16 unavailable.*1 with limited history/);
+    assert.match(await page.locator("#collectionIssueCounts").innerText(), /16 unavailable.*1 limited/);
     await page.getByRole("button", { name: "Next affected Copilot chats", exact: true }).click();
     assert.match(await page.locator("#collectionIssueGroups").innerText(), /7-12 of 16 affected Copilot chats/);
     await page.getByRole("button", { name: "Next affected Copilot chats", exact: true }).click();
@@ -103,7 +103,7 @@ test("history issues are scoped, bounded and stable during polling in both theme
     await page.locator(".history-reason").last().locator(".history-issue-detail").waitFor();
     assert.match(await page.locator("#collectionIssueGroups").innerText(), /13-16 of 16 affected Copilot chats/);
     cursors = cursors.map(r => ({ ...r, error: null, errorCode: null, scanned: true, cursor: {}, diagnostics: {} }));
-    await page.waitForFunction(() => document.querySelector("#collectionIssueLabel").textContent === "No current history issues reported");
+    await page.waitForFunction(() => document.querySelector("#collectionIssueLabel").textContent === "No history gaps reported");
     assert.equal(await page.locator("#issueSearch").isVisible(), false);
     assert.equal(await page.locator("#collectionIssueCounts").isVisible(), false);
     assert.equal(await page.locator("#collectionIssueGroups").isVisible(), false);

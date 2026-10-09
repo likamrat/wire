@@ -12,7 +12,7 @@ need separate approval and are not enabled by installing WIRE.
 | Home | Check for new activity; filter dates and results. |
 | Activity | Choose a Copilot chat, inspect interactions and select requests. |
 | Reports | Find, open and manage saved reports, or switch to creating a report. |
-| Collection status | Understand missing or incomplete local histories. |
+| Collection status | Check whether collection is running, find chats with history gaps and see any available next step. |
 | Settings | **Connection & permission** for source approval; **Time zone**, collection and capture settings. |
 
 Use **Collapse navigation** at the top of the sidebar for an icon rail and more
@@ -42,6 +42,16 @@ Pending history can continue on later checks, and unfinished entries need Copilo
 to finish saving them. These gaps are not failed Work IQ calls. Excluded chats,
 deleted records, out-of-window activity and a chat with no Work IQ calls are not
 history-read failures.
+
+**Collection status** is a health and coverage page, not a repair queue. If
+collection is active, no action is needed to keep it running. Look under **Chat
+history** only when you want to understand missing activity: search all affected
+chats, open a reason, then open a chat for its retained activity or additional
+limits. Each chat is counted once, even when several limits apply.
+Paused or disconnected collection points to the relevant existing Settings
+control. Current collection errors stay visible; **Technical details** holds
+the full timestamps, limits and **Refresh stored data**. The optional network
+diagnostic does not check collection and is not a required next step.
 
 All analytical filters are visible in one row: **When, Result, Author, Category, Project, Activity, Collection**. On smaller screens or with larger text, scroll the row sideways; Tab reaches each control, and arrow keys scroll the focused row. Titles and selected values stay on one line without truncation. The same row works in Home, Activity and a scoped chat.
 

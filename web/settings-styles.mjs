@@ -7,22 +7,39 @@ export const settingsStyles = `
 .settings-view {max-width:1384px;container:settings / inline-size}
 .settings-status-link {margin:var(--space-lg) 0 0;color:var(--muted)}
 .settings-status-link a,#activityCollectionLink a {display:inline-flex;align-items:center;min-height:44px}
-.collection-status-view {max-width:64rem;min-width:0;container:collection-status / inline-size}
+#workspace>#collectionStatusView {max-width:64rem}
+.collection-status-view {min-width:0;container:collection-status / inline-size}
 .collection-status-view,.collection-status-view p,.collection-status-view summary {font-size:var(--type-reading);line-height:var(--leading-reading)}
 .collection-status-view label {font-size:var(--type-small);line-height:var(--leading-control)}
 .collection-status-view :is(input,button,select,.select-trigger) {font-size:var(--type-control);line-height:var(--leading-control)}
-.collection-status-view summary,.collection-status-view button {min-height:44px}
+.collection-status-view summary,.collection-status-view button,.collection-status-view .button-link {min-height:44px}
 .collection-status-view p,.collection-status-view summary {overflow-wrap:anywhere}
+.collection-status-view p {text-wrap:pretty}
 .collection-status-view .collection-issues-body {background:none;padding:0}
-.collection-status-view .history-reason {background:var(--canvas)}
+.collection-status-view .history-reason {background:var(--canvas);margin-top:8px}
 .collection-status-view .settings-advanced {padding:0 16px}
+.collection-status-view .collection-status-details {margin:0}
+.collection-health-heading {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px}
+.collection-health-heading h2 {min-width:0}
+.collection-status-view #collectionTimes {margin-top:16px;font-size:var(--type-small)}
+.collection-status-view #collectionCoverageCounts {margin-top:12px}
+.collection-status-actions {display:flex;flex-wrap:wrap;align-items:center;gap:4px 24px;margin-top:12px}
+.collection-status-actions a,.history-chat-link {display:inline-flex;align-items:center;min-height:44px;width:fit-content;max-width:100%;overflow-wrap:anywhere}
+.collection-status-view .scoped-search {margin-block:20px 16px}
+.collection-status-view .search-input-row {max-width:32rem}
+.collection-status-view .scoped-search>label {margin-bottom:4px}
+.collection-status-view .scoped-search p {margin-top:4px}
+.collection-status-view .scoped-search .settings-help {max-width:66ch}
+.collection-status-view .collection-issues>.collection-issues-body>p.settings-help {margin-top:16px}
+.collection-status-view .history-issue-detail {padding-left:0}
+.collection-status-view #collectionIssueLabel {font-size:var(--type-reading);font-weight:600}
+.collection-status-view .collection-issues[data-severity=error] #collectionIssueLabel {color:var(--danger)}
+.collection-status-view .history-reason>summary {text-wrap:pretty}
 .collection-status-view .facts {max-width:100%;grid-template-columns:minmax(0,2fr) minmax(0,1fr);font-size:1rem;line-height:1.5}
 @container collection-status (max-width:36rem) {
  .collection-status-view .facts,.collection-status-view .settings-diagnostics {grid-template-columns:minmax(0,1fr);gap:4px}
  .collection-status-view .facts dd,.collection-status-view .settings-diagnostics dd {margin-bottom:12px}
 }
-.collection-status-view #collectionIssueLabel {font-weight:600}
-.collection-status-view .collection-issues[data-severity=warning] #collectionIssueLabel {color:var(--warning)}
 #activityCollectionLink {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-bottom:16px}
 .settings-layout {display:grid;grid-template-columns:minmax(0,15rem) minmax(0,1fr);gap:var(--space-3xl);align-items:start}
 .settings-content,.settings-rail,.settings-categories,.settings-search {min-width:0}

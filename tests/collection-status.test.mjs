@@ -16,6 +16,7 @@ test("every reason names the history object, impact and next step without claimi
         assert.doesNotMatch(copy.guidance, /will repair|will recreate|deleted by/i);
         const row = { name: "Synthetic Atlas", sessionId: "synthetic-id", reasons: [code], unavailable: ["missing", "permission", "read", "unsupported", "unknown"].includes(code) };
         assert.ok(createLocalSearch().matches(copy.label, model.searchTerms(row)), code);
+        assert.ok(createLocalSearch().matches(model.reasonTitles[code], model.searchTerms(row)), code);
     }
     const mixed = { name: "Synthetic Beacon", reasons: ["missing", "truncated", "context"], unavailable: true };
     assert.ok(createLocalSearch().matches("unavailable", model.searchTerms(mixed)));
@@ -23,6 +24,29 @@ test("every reason names the history object, impact and next step without claimi
     const oversized = { name: "Synthetic Cedar", reasons: ["oversized"], unavailable: false };
     assert.ok(createLocalSearch().matches("limited", model.searchTerms(oversized)));
     assert.ok(!createLocalSearch().matches("unavailable", model.searchTerms(oversized)), "A negated explanation must not turn a limited chat into an unavailable search match.");
+});
+
+test("page health separates running collection from gaps and offers navigation rather than repair", () => {
+    const active = { state: "collecting-on-interval", config: { approved: true, enabled: true }, discovery: {},
+        lastCheckedAt: "2026-10-09T12:00:00Z", historyCoverage: { eligible: 10, readable: 8, unavailable: 2, limited: 3, affected: 5, pending: 0 } };
+    assert.equal(model.page(active).label, "Collection active");
+    assert.match(model.page(active).guidance, /No action is needed.*expected activity/);
+    assert.equal(model.page(active).action, undefined);
+    const unreadable = model.page({ ...active, historyCoverage: { eligible: 10, unavailable: 10 } });
+    assert.equal(unreadable.label, "Collection active");
+    assert.match(unreadable.guidance, /no chat history is currently readable/);
+    assert.doesNotMatch(unreadable.guidance, /No action|healthy|repair/);
+    assert.match(model.page({ ...active, state: "paused" }).action.href, /setting=collection-state$/);
+    assert.match(model.page({ state: "disconnected" }).action.href, /setting=source$/);
+    assert.equal(model.page({ ...active, state: "disconnected" }).label, "Collection disconnected");
+    assert.equal(model.page({ ...active, state: "error" }).severity, "error");
+    assert.equal(model.page({ ...active, state: "stopped" }).severity, "error");
+    assert.match(model.page({ ...active, error: "PRIVATE_ERROR" }).guidance, /Previously collected evidence is kept/);
+    assert.doesNotMatch(model.page({ ...active, error: "PRIVATE_ERROR" }).guidance, /PRIVATE_ERROR/);
+    assert.match(model.page({ ...active, historyCoverage: { ...active.historyCoverage, pending: 1 } }).guidance, /Automatic checks will continue/);
+    assert.equal(model.page({ ...active, discovery: null }).label, "Checking history");
+    assert.equal(model.page({ ...active, state: "collecting" }).label, "Checking history");
+    assert.equal(model.page({ ...active, historyCoverage: { eligible: 0 } }).action.label, "Review source in Settings");
 });
 test("local missing history is not an API failure; archived errors are excluded", () => {
     const roster = [

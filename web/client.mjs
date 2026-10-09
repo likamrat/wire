@@ -693,7 +693,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             if (next.session) presentation.setOpen("session:" + next.session, true);
-            navigate(next);
+            navigate(next, false, { restorePosition: next.view === "collection-status" && route.view === "activity" && Boolean(route.session) });
         });
         return node;
     }
@@ -1221,7 +1221,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             reports: route.task === "create" ? ["Create a report", "Choose requests and contents, review the copies, then save local files."]
                 : ["Reports", "Find, open and manage your saved reports."],
             settings: ["Settings", "Manage your local connection, permission and collection preferences."],
-            "collection-status": ["Collection status", "See whether approved local history collection is running, review gaps below, or change the source and collection preferences."],
+            "collection-status": ["Collection status", "Check collection health and find gaps in local Copilot chat history."],
         };
         $("pageTitle").textContent = titles[route.view][0];
         $("pageTitle").classList.toggle("copilot-chat-name", route.view === "activity" && Boolean(route.session) && applied.layer !== "http");
@@ -1265,7 +1265,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const refreshHost = ["home", "activity"].includes(route.view) ? $("freshHelpBody")
             : route.view === "reports" ? $("savedLibraryHelpBody")
             : route.view === "settings" ? $("settingsView")
-            : route.view === "collection-status" ? $("collectionStatusView") : $("coverage");
+            : route.view === "collection-status" ? $("collectionSetup") : $("coverage");
         if ($("storedRefresh").parentElement !== refreshHost) {
             const summary = refreshHost.querySelector(":scope > summary");
             if (summary) summary.after($("storedRefresh"));
@@ -1275,7 +1275,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const requestAvailable = state.scenarios.some(scenario => scenario.scenarioId === route.request);
         const returnRoute = route.view === "activity" && route.session ? sessionsRoute()
             : route.view === "request" ? routeFor(requestAvailable && route.origin === "reports" ? "reports" : "activity", requestAvailable ? {} : { request: undefined }) : null;
-        const returnLabel = route.view === "activity" ? applied.layer === "http" ? "Back to recorder sources" : "Back to Copilot chats"
+        const returnLabel = returnRoute?.view === "collection-status" ? "Back to history gaps"
+            : route.view === "activity" ? applied.layer === "http" ? "Back to recorder sources" : "Back to Copilot chats"
             : !requestAvailable ? "Back to activity" : route.origin === "reports" ? "Back to report scope" : "Back to filtered activity";
         const returnKey = JSON.stringify([returnRoute, returnLabel]);
         if (returnKey !== contextReturnKey) {
@@ -1299,7 +1300,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.view !== "home") {
             crumbs.append(link("Home", "home", { request: undefined, page: undefined }));
             if (!configurationOrStatus && (route.view === "request" || route.session)) {
-                crumbs.append(el("span", "", "/"), routeLink(applied.layer === "http" ? "Recorder sources" : "Copilot chats", sessionsRoute()));
+                crumbs.append(el("span", "", "/"), routeLink(sessionsRoute().view === "collection-status" ? "History gaps" : applied.layer === "http" ? "Recorder sources" : "Copilot chats", sessionsRoute()));
                 if (source) {
                     const sourceLabel = applied.layer === "http" ? "Recorder source" : "GitHub Copilot chat";
                     const sourceLink = routeLink(sourceLabel, { ...route, view: "activity", session: source.sessionId, request: undefined });
@@ -2631,12 +2632,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderIssueZeroState(detail, rows, query) {
         const coverage = detail?.historyCoverage;
-        const compact = Array.isArray(rows) && rows.length === 0 && coverage?.affected === 0
-            && coverage.unavailable === 0 && coverage.limited === 0 && coverage.pending === 0
-            && Boolean(detail.lastCheckedAt) && !detail.error && detail.state !== "collecting" && !query.trim();
         const unavailable = coverage?.unavailable ?? detail?.sourceErrors ?? 0, limited = coverage?.limited ?? 0;
-        setText($("collectionIssueLabel"), compact ? "No current history issues reported" : !coverage ? "History has not been checked yet."
-            : unavailable || limited ? `${chatCopy.count(unavailable + limited)} affected` : "No current history issues");
+        const compact = Array.isArray(rows) && rows.length === 0 && !unavailable && !limited && !query.trim();
+        const checked = coverage && detail?.lastCheckedAt && detail?.discovery;
+        setText($("collectionIssueLabel"), unavailable || limited ? `${count(unavailable + limited)} ${unavailable + limited === 1 ? "chat" : "chats"} with history gaps`
+            : !checked ? "History not checked"
+            : collectionReadError || collection?.error || ["error", "disconnected", "stopped"].includes(collection?.state) ? "Current history coverage unavailable"
+            : !coverage.eligible ? "No eligible chats to check"
+            : coverage.pending ? "History is still importing"
+            : detail.state === "collecting" ? "Checking for history gaps"
+            : detail.state === "paused" ? "No history gaps reported at last check" : "No history gaps reported");
         const search = $("issueSearch").closest(".scoped-search");
         if (compact && (search.contains(document.activeElement) || $("collectionIssueGroups").contains(document.activeElement))) ux.restoreFocus($("collectionIssuesTitle"));
         for (const node of [$("collectionIssueCounts"), search,
@@ -2656,7 +2661,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const reading = captureReading();
             const focusedSource = document.activeElement?.closest(".history-issue")?.dataset.disclosureKey?.slice("history-issue:".length);
             const ordered = presentation.ordered("history-issues", rows, row => row.sessionId).filter(row => localSearch.matches(query, historyStatus.searchTerms(row)));
-            setText($("issueSearchCount"), `${count(ordered.length)} of ${chatCopy.count(rows.length)} with reported issues match.`);
+            setText($("issueSearchCount"), `${count(ordered.length)} of ${count(rows.length)} ${rows.length === 1 ? "chat" : "chats"}`);
+            $("issueSearchCount").hidden = !query.trim();
             issuesSignature = signature;
             const host = $("collectionIssueGroups");
             host.replaceChildren();
@@ -2667,7 +2673,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (focusedIndex >= 0) presentation.setPage(`history-issues:${reason}:${query}`, Math.floor(focusedIndex / 6));
                 const list = el("div"), content = el("div", "history-reason-body");
                 content.append(el("p", "", copy.explanation), el("p", "muted", copy.guidance), list);
-                const group = disclosure(`${copy.label} (${chatCopy.count(members.length)})`, content, "history-reason");
+                const group = disclosure(`${historyStatus.reasonTitles[reason]} (${count(members.length)})`, content, "history-reason");
                 bindDetails(group, `history-reason:${reason}:${query}`, open => {
                     if (!open) { list.replaceChildren(); return; }
                     pagedList(list, members, { key: `history-issues:${reason}:${query}`, noun: members.length === 1 ? "affected Copilot chat" : "affected Copilot chats", renderItem: row => {
@@ -2685,6 +2691,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                             body.append(el("p", "", row.unavailable ? "History unavailable" : "Limited history"), attempt, el("p", "", row.hasPriorEvidence
                                 ? "Previously collected evidence for this Copilot chat is kept."
                                 : "No evidence has been collected for this Copilot chat."));
+                            body.append(routeLink("Open chat activity", sessionRoute(row.sessionId), "text-link history-chat-link"));
                             for (const secondary of row.reasons.slice(1)) {
                                 const copy = historyStatus.reasons[secondary];
                                 body.append(el("p", "", copy.label + ". " + copy.explanation + " " + copy.guidance));
@@ -2699,7 +2706,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }, Boolean(query.trim()));
                 host.append(group);
             }
-            if (!rows.length && !compact) host.append(el("p", "", collection?.historyCoverage ? "No local history issues are currently reported." : "History has not been checked yet."));
+            if (!rows.length && !compact) host.append(el("p", "", "There are no reported chats to search. Clear this search to see history coverage."));
             else if (rows.length && !ordered.length) host.append(el("p", "", "No affected Copilot chats match. Try a chat, project or known issue reason, or clear this search."));
             restoreReading(reading);
         }
@@ -2733,6 +2740,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const host = $("collectionNotice");
         host.hidden = ["settings", "collection-status"].includes(route.view) || !notice || setupHandled && !hasEvidence
             || !$("message").hidden && $("message").dataset.connectionFailure === "true";
+        const retryHost = route.view === "collection-status" ? $("collectionStatus").parentElement : host;
+        if ($("collectionRetry").parentElement !== retryHost) retryHost.append($("collectionRetry"));
         $("collectionRetry").hidden = !collectionReadError;
         $("collectionRetry").disabled = isLoading;
         if (!notice) return;
@@ -2753,10 +2762,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         setText($("collectionStatus"), "Collection status unavailable");
         $("collectionStatus").dataset.severity = "error";
+        setText($("collectionStatusGuidance"), "Retry the connection to read current status. Any coverage below is from the last accepted check. Previously collected evidence is kept.");
+        $("collectionStatusAction").hidden = true;
+        $("collectionSourceLink").hidden = false;
         setText($("settingsDiagnosticError"), error);
         $("settingsDiagnosticError").hidden = false;
         renderCoverageDetails();
         renderCollectionNotice();
+        if (collection) renderIssueZeroState(issuesStatus ?? collection, issueRows, localQuery("issueSearch"));
         renderFreshActivity();
     }
     function renderFreshActivity() {
@@ -2856,21 +2869,24 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (Array.isArray(status.historyIssues)) issuesStatus = status;
         // Keep counts, source coverage and rows on the same detailed response while it is visible.
         const detail = route.view === "collection-status" && issuesStatus ? issuesStatus : status;
-        const view = historyStatus.view(status), c = detail.historyCoverage;
-        setText($("collectionStatus"), status.config ? view.label : "Not connected");
-        $("collectionStatus").dataset.severity = view.severity;
-        setText($("collectionChecked"), `Checked ${freshness(status.lastCheckedAt)}`);
-        setText($("collectionNewActivity"), `New activity ${freshness(status.lastNewDataAt)}`);
+        const c = detail.historyCoverage, view = historyStatus.page({ ...status, historyCoverage: c });
+        setText($("collectionStatus"), view.label);
+        $("collectionStatus").dataset.severity = view.severity || "normal";
+        setText($("collectionStatusGuidance"), view.guidance);
+        const statusAction = $("collectionStatusAction");
+        statusAction.hidden = !view.action;
+        if (view.action) { setText(statusAction, view.action.label); statusAction.href = view.action.href; }
+        $("collectionSourceLink").hidden = view.action?.href === "#settings?section=connection&setting=source";
+        setText($("collectionChecked"), status.lastCheckedAt ? `Last checked ${freshness(status.lastCheckedAt)}` : "Not checked yet");
+        setText($("collectionNewActivity"), status.lastNewDataAt ? `Last new evidence ${freshness(status.lastNewDataAt)}` : "No new evidence collected yet");
         $("collectionChecked").title = `Last local check: ${timestamp(status.lastCheckedAt)}`;
         $("collectionNewActivity").title = `Last newly collected activity: ${timestamp(status.lastNewDataAt)}`;
         setText($("settingsDiagnosticError"), status.error || status.lastCheckWarning || "");
         $("settingsDiagnosticError").hidden = !status.error && !status.lastCheckWarning;
         const unavailable = c?.unavailable ?? detail.sourceErrors ?? 0, limited = c?.limited ?? 0;
-        $("collectionIssues").dataset.severity = unavailable ? "warning" : "normal";
-        setText($("collectionIssueLabel"), !c ? "History has not been checked yet."
-            : unavailable || limited ? `${chatCopy.count(unavailable + limited)} affected` : "No current history issues");
-        setText($("collectionIssueCounts"), c ? `${count(unavailable)} unavailable · ${count(limited)} with limited history. Each chat is counted once.` : "");
-        setText($("collectionIssueImpact"), unavailable || limited ? "Uncollected activity may be absent from reports. Previously collected evidence is kept." : "");
+        $("collectionIssues").dataset.severity = c?.eligible > 0 && unavailable === c.eligible ? "error" : "normal";
+        setText($("collectionIssueCounts"), c ? `${count(unavailable)} unavailable · ${count(limited)} limited` : "");
+        setText($("collectionIssueImpact"), unavailable || limited ? "Missing activity may be absent from reports. Previously collected evidence is kept. Open a reason for affected chats and guidance." : "");
         $("collectionIssueImpact").hidden = !unavailable && !limited;
         renderIssueZeroState(detail, detail.historyIssues, localQuery("issueSearch"));
         setText($("collectionExactCheck"), timestamp(status.lastCheckedAt));
@@ -2878,9 +2894,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText($("collectionExactTimes"), status.config
             ? `Read new history every ${count(status.cadence?.pollSeconds)} seconds; discover chats every ${count(status.cadence?.reconciliationSeconds ?? 30)} seconds; refresh this view every ${count(status.cadence?.browserPollSeconds ?? 5)} seconds.`
             : "Not configured.");
-        setText($("collectionCoverageCounts"), c
-            ? `${chatCopy.count(c.readable)} have readable history; ${count(c.unavailable)} unavailable; ${count(c.pending)} awaiting or still importing history.`
-            : status.config ? "Waiting for the first history check. No reading result is available yet." : "Review a local source in Settings before collection can start.");
+        setText($("collectionCoverageCounts"), c && status.lastCheckedAt
+            ? `${status.error || ["error", "stopped", "disconnected"].includes(status.state) ? "Last known coverage: " : ""}${count(c.readable)} of ${count(c.eligible)} eligible chats have readable history.`
+            : "History coverage is not available until a check completes.");
+        setText($("collectionCoveragePending"), c?.pending
+            ? `${count(c.pending)} ${c.pending === 1 ? "chat is" : "chats are"} awaiting or still importing history; some may already be readable.` : "");
+        $("collectionCoveragePending").hidden = !c?.pending;
         collectionSettings.receive(status);
         renderSettingsSearch();
         renderCollectionNotice();
