@@ -63,8 +63,8 @@ test("current adapter summary omits Cost and retains distinct answer/action trus
     assert.equal(row(model, "answer-trust").value, "Unassessed");
     assert.equal(row(model, "action-trust").value, "Unassessed");
     assert.equal(model.groups.cost, undefined);
-    assert.match(model.takeaway, /Call timing is available/);
-    assert.match(model.takeaway, /both kinds of trust are unassessed/);
+    assert.match(model.takeaway, /Timing is available/);
+    assert.match(model.takeaway, /no results.*answer correctness, answer support or actions matching the request/);
 });
 test("recorded tool success never becomes accuracy, trust or a colored quality score", () => {
     const model = presentation.summarize([samples.makeRatio(8, 2)]);
@@ -74,7 +74,8 @@ test("recorded tool success never becomes accuracy, trust or a colored quality s
     assert.equal(row(model, "accuracy").value, "Unassessed");
     assert.equal(row(model, "answer-trust").band, "neutral");
     assert.equal(row(model, "action-trust").band, "neutral");
-    assert.match(model.takeaway, /^2 \/ 10 tool completions with a recorded success\/failure result failed/);
+    assert.match(model.takeaway, /^2 of 10 calls.*failed/);
+    assert.match(model.takeaway, /does not tell us whether the answer was correct/);
     assert.doesNotMatch(model.takeaway, /assessed tool/);
 });
 test("automatic and personal accuracy remain distinct origin lanes with exact partial coverage", () => {
@@ -254,7 +255,8 @@ test("missing whole-interaction boundaries stay unavailable even when call timin
 test("partial and conflicting membership lead with retained-scope limits", () => {
     for (const membershipStatus of ["partial", "unverified"]) {
         const model = presentation.summarize(currentView().metrics, { membershipStatus });
-        assert.match(model.takeaway, /Only part of this interaction can be attributed/);
+        assert.match(model.takeaway, /Only some recorded actions.*linked to this request/);
+        assert.match(model.takeaway, /results cover that saved evidence/);
     }
 });
 test("summary projection never mutates source facts and needs no answer text", () => {

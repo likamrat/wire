@@ -9,6 +9,26 @@ import { fixture } from "./helpers.mjs";
 
 const help = createControlHelp(serviceCategories);
 
+test("measure help leads with the human meaning and keeps calculation limits in the glossary", () => {
+    const { accuracy, speed, trust, coverage, unassessed } = help.glossary;
+    assert.match(accuracy.definition, /answer met the request.*recorded evidence/);
+    assert.match(accuracy.definition, /tool can work.*wrong answer/);
+    assert.doesNotMatch(accuracy.definition, /divided|denominator|rubric/);
+    assert.match(accuracy.detail, /passed plus failed/);
+    assert.match(accuracy.detail, /without a result.*left out.*included in coverage/);
+    assert.match(trust.definition, /supports the answer.*actions match the request/);
+    assert.match(trust.definition, /does not prove a person gave permission/);
+    assert.match(speed.detail, /call starts.*recorded completion/);
+    assert.match(speed.detail, /recorded request.*recorded final response/);
+    assert.match(speed.detail, /lower middle.*even count/);
+    assert.match(speed.detail, /Concurrent call times are not added/);
+    assert.match(coverage.definition, /does not rate the rest of your history/);
+    assert.match(unassessed.detail, /review failed, not the answer/);
+    assert.match(unassessed.detail, /does not mean a review is waiting/);
+    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})());`)();
+    assert.deepEqual(restored.glossary, help.glossary, "The normal shell uses the same short and detailed copy.");
+});
+
 test("category filter help explains available choices without inventing service evidence", () => {
     const tool = help.categoryGuide(["Discovery", "Search", "Mail", "Multiple workloads", "Unknown"]);
     assert.match(tool, /Discovery:.*not data execution/);

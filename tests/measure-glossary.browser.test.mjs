@@ -58,7 +58,7 @@ test("measure help and glossary explain real unavailable facts without hover res
     assert.match(await glossary.innerText(), /Answer trust/);
     assert.match(await glossary.innerText(), /Action trust/);
     await dialog.getByText("Recorded measures and definitions", { exact: true }).click();
-    assert.match(await dialog.innerText(), /No current answer assessment/);
+    assert.match(await dialog.innerText(), /No AI answer review is available here/);
     await page.keyboard.press("Escape");
     assert.equal(await dialog.isVisible(), false);
     assert.equal(await definitions.evaluate(node => node === document.activeElement), true);

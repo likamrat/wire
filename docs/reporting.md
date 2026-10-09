@@ -110,6 +110,14 @@ Markdown share those facts and denominators. Source-neutral reports call the app
 
 Saved reports are immutable. A new assessment or a new visual design does not rewrite an existing HTML, PDF, JSON or Markdown file.
 
+New readable reports and comparisons explain the checks in **How to read these
+results** or **Reading notes**. HTML/PDF, Markdown and the comparison reader reuse
+the report presenter's wording: coverage belongs to each check, missing results
+are excluded from pass percentages, tool outcomes are not answer correctness,
+and action matching is not proof of a person's permission. Timing boundaries and
+timed-call/request counts stay separate. Exact model/rubric origins remain beside
+their saved results. These explanations do not change facts or older saved files.
+
 **Open saved report** reads the registered, disclosure-reviewed HTML file after
 checking its manifest and exact file hash. The reader names its preparation time,
 prompt mode and report ID and leaves any unfinished draft untouched. It does not

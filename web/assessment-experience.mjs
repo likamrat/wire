@@ -455,7 +455,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 });
                 feedbackView.open(event.currentTarget);
             }));
-        } else body.append(el("p", "Definitions and coverage for the interactions in this view. Personal feedback is available from a single interaction."));
+        } else body.append(el("p", "What these results mean and which requests they cover. Open a single request to add optional personal feedback."));
         const terms = el("details", undefined, "reading-section"), definitions = el("dl", undefined, "measure-glossary");
         definitions.dataset.measureGlossary = "";
         terms.append(el("summary", "Glossary"), definitions);
@@ -463,6 +463,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             const entry = el("div", undefined, "assessment-definition");
             entry.dataset.glossaryTerm = key;
             entry.append(el("dt", term.label), el("dd", term.definition));
+            if (term.detail) entry.lastElementChild.append(el("p", term.detail));
             definitions.append(entry);
         }
         body.append(terms);

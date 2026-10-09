@@ -51,6 +51,8 @@ test("comparison uses the loaded font and remains readable across root-text size
         const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: ".comparison-metric-value" });
         const fonts = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
         assert.ok(fonts.fonts.some(font => font.isCustomFont && /Asta/i.test(font.familyName)), "The metric uses embedded Asta, not a fallback");
+        await page.getByText("Scope, coverage and reading notes", { exact: true }).click();
+        for (const note of createReportComparison().readingNotes) assert.ok((await page.locator(".comparison-reading").innerText()).includes(note));
         for (const theme of ["light", "dark"]) for (const width of [320, 375, 414, 768, 1200, 2560]) for (const size of ["100%", "200%"]) {
             await page.setViewportSize({ width, height: 1000 });
             await page.evaluate(({ theme, size }) => {
@@ -61,9 +63,12 @@ test("comparison uses the loaded font and remains readable across root-text size
                 page: document.documentElement.scrollWidth, width: innerWidth,
                 clipped: [...document.querySelectorAll(".comparison-metric-value,.comparison-score-value,.comparison-pattern-title")]
                     .filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent),
+                clippedNotes: [...document.querySelectorAll(".comparison-reading p")]
+                    .filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent),
             }));
             assert.ok(bounds.page <= width + 1, `${theme}/${width}/${size}: horizontal page overflow ${bounds.page}`);
             assert.deepEqual(bounds.clipped, [], `${theme}/${width}/${size}: clipped values`);
+            assert.deepEqual(bounds.clippedNotes, [], `${theme}/${width}/${size}: clipped explanations`);
             if (process.env.WIRE_REPORT_PROOFS && size === "100%" && (width === 1200 && theme === "light" || width === 375 && theme === "dark")) {
                 await mkdir(process.env.WIRE_REPORT_PROOFS, { recursive: true });
                 await page.screenshot({ path: path.join(process.env.WIRE_REPORT_PROOFS, `comparison-${theme}-${width}.png`), fullPage: true });

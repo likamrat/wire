@@ -341,9 +341,9 @@ test("one of 69 checked requests reads before passed counts without hiding exact
     assert.doesNotMatch(await host.locator(".assessment-grid").innerText(), /100%|independent ground truth|proof of authorization/);
     await host.getByText("How to read these results", { exact: true }).focus();
     await page.keyboard.press("Enter");
-    assert.match(await host.locator(".assessment-reading-help").innerText(), /Missing results are not failures.*do not mean a request is queued/);
-    assert.match(await host.locator(".assessment-reading-help").innerText(), /One request can contain several tool calls/);
-    assert.match(await host.locator(".assessment-reading-help").innerText(), /do not prove a person authorized/);
+    assert.match(await host.locator(".assessment-reading-help").innerText(), /None means the answer failed or a review is queued/);
+    assert.match(await host.locator(".assessment-reading-help").innerText(), /One request can have several tool calls/);
+    assert.match(await host.locator(".assessment-reading-help").innerText(), /does not prove a person gave permission/);
     const readingHelp = host.getByText("How to read these results", { exact: true });
     assert.ok((await readingHelp.boundingBox()).height >= 44);
     await readingHelp.tap();
@@ -353,7 +353,8 @@ test("one of 69 checked requests reads before passed counts without hiding exact
     await dialog.getByText("Recorded measures and definitions", { exact: true }).click();
     const detail = await dialog.innerText();
     for (const exact of ["100%", "1 / 1 passed; 1 / 69 assessed", "2,955 ms", "16,820 ms",
-        "Model synthetic-only; rubric wire-recorded-interaction-review v1", "Recorded intent alignment, not proof of authorization."]) assert.ok(detail.includes(exact), exact);
+        "Model synthetic-only; rubric wire-recorded-interaction-review v1"]) assert.ok(detail.includes(exact), exact);
+    assert.match(detail, /actions match the recorded request.*does not prove a person gave permission/);
     await page.keyboard.press("Escape");
     assert.equal(await host.getByRole("button", { name: "Measure definitions", exact: true }).evaluate(node => node === document.activeElement), true);
 });
@@ -377,7 +378,7 @@ test("Insights help and definitions remain accessible without initiating actions
         assert.ok(target.width >= 44 && target.height >= 44); assert.notEqual(target.outline, "0px");
         assert.ok(Math.abs(target.gap - 4) < 1);
         await page.keyboard.press("Enter"); await tooltip.waitFor({ state: "visible" });
-        assert.match(await tooltip.innerText(), dimension === "Accuracy" ? /Tool success is not answer correctness/ : dimension === "Trust" ? /not.*proof of authorization/ : /timed calls or requests separately/);
+        assert.match(await tooltip.innerText(), dimension === "Accuracy" ? /tool can work.*wrong answer/ : dimension === "Trust" ? /does not prove a person gave permission/ : /separate times.*seconds/);
         const anchor = await help.evaluate(node => {
             const icon = node.querySelector("svg").getBoundingClientRect(), popup = document.querySelector("#evidence-tooltip").getBoundingClientRect();
             return Math.min(Math.abs(popup.top - icon.bottom), Math.abs(icon.top - popup.bottom));
@@ -397,7 +398,7 @@ test("Insights help and definitions remain accessible without initiating actions
     await dialog.getByText("Recorded measures and definitions", { exact: true }).click();
     assert.match(await dialog.innerText(), /Call start to recorded completion/);
     assert.match(await dialog.innerText(), /Recorded request to final response; not tool-call time/);
-    assert.match(await dialog.innerText(), /intent alignment, not authorization/);
+    assert.match(await dialog.innerText(), /actions match the request, not whether a person gave permission/);
     await page.keyboard.press("Escape");
     assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
     assert.equal(await host.getByRole("button", { name: "Automatic scores", exact: true }).isVisible(), true);

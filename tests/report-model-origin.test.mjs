@@ -36,10 +36,24 @@ test("new readable report summaries show each frozen model and rubric version ra
             assert.ok(text.includes(`rubric wire-recorded-interaction-review v${version}`),
                 "The readable summary dropped the frozen rubric ID/version.");
             assert.match(text, /1 of 1 passed.*1 of 1 assessed/);
-            assert.match(text, /intent alignment, not proof of authorization/);
+            assert.match(text, /actions match the request, not proof of a person(?:'|&#39;)s permission/);
         }
         assert.equal(JSON.stringify(facts), before);
     }
+});
+
+test("new readable formats share plain reading notes without changing frozen facts", () => {
+    const { facts } = modelFacts("fixture-model", 1), before = JSON.stringify(facts);
+    const formatter = createReportComparison();
+    const a = comparisonFact({ evaluatorModel: "fixture-model", rubricId: "fixture-rules", rubricVersion: 1 });
+    const comparison = compareFrozenReportFacts(report("a", a), report("b", structuredClone(a)));
+    const texts = [evaluationSummaryHtml(facts), evaluationSummaryMarkdown(facts).join("\n"),
+        renderComparisonHtml(comparison, snapshot(comparison)), renderComparisonMarkdown(comparison, snapshot(comparison))];
+    for (const text of texts) for (const note of formatter.readingNotes) assert.ok(text.includes(note));
+    assert.match(formatter.readingNotes.join(" "), /passed plus failed.*Missing results are left out/);
+    assert.match(formatter.readingNotes.join(" "), /not whether a person gave permission/);
+    assert.match(formatter.readingNotes.join(" "), /own timed-call or timed-request count/);
+    assert.equal(JSON.stringify(facts), before);
 });
 
 async function pdfText(bytes) {
@@ -72,7 +86,7 @@ for (const [model, version] of [["fixture-model-a", 1], ["archived-model-b", 7]]
             assert.ok(compact.includes(`rubricwire-recorded-interaction-reviewv${version}`));
             assert.match(text, /1 of 1 passed/);
             assert.match(text, /1 of 1 assessed/);
-            assert.match(text, /intent alignment, not proof of authorization/);
+            assert.match(text, /actions match the request, not proof of a person(?:'|&#39;)s permission/);
         }
         const json = JSON.parse(bundle.files["product-report.json"]), manifest = JSON.parse(bundle.files["coverage-and-redaction-manifest.json"]);
         assert.deepEqual(json.evaluationFacts, manifest.evaluationFacts);

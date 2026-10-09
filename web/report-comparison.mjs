@@ -3,23 +3,41 @@ export function createReportComparison() {
         id: "assessed-pass-share-v1", unit: "percent", thresholds: Object.freeze([50, 75, 90]), unavailable: "neutral",
     }) });
     const dimensions = { accuracy: "Accuracy", speed: "Speed", cost: "Cost", "answer-trust": "Trust: answers", "action-trust": "Trust: actions" };
+    const readingNotes = Object.freeze([
+        "Accuracy checks whether the answer met the request. Answer trust checks whether recorded evidence supports it. AI action trust checks whether actions match the recorded request, not whether a person gave permission.",
+        "AI results use the recorded evidence and can be wrong. Personal feedback is labeled separately. A successful tool call does not prove the answer was correct.",
+        "Read each result with its coverage: how many requests have a result for that check. Pass percentages count passed checks out of passed plus failed checks. Missing results are left out, not counted as failures or zero.",
+        "Speed measures tool calls from start to recorded completion. It also measures the time from the recorded request to its final response. Each has its own timed-call or timed-request count. The median is the middle recorded time (the lower middle for an even count). Calls that run at the same time are not added together. A final response does not prove the task succeeded.",
+    ]);
+    const comparisonNote = "The reports may cover different requests or time periods. A change between them does not tell you what caused it. Returned API entries, recorded Graph sites and HTTP recorder records are counted separately.";
     const labels = { success: "Succeeded", failure: "Failed", partial: "Partial", unknown: "Unknown", other: "Other", transport: "No response" };
     const reasons = {
         "unsupported-check": "No supported check for this evidence",
         "missing-evidence": "Not enough recorded evidence",
         "usage-unavailable": "No attributable usage recorded",
         "pricing-unavailable": "Recorded usage has no price",
-        "no-assessed-units": "No assessed interactions",
+        "no-assessed-units": "No requests have a result for this check",
         "evaluator-failure": "Assessment could not be completed",
         "metric-not-saved": "This measure was not saved",
         "baseline-metric-not-saved": "Not saved in the earlier report",
         "later-metric-not-saved": "Not saved in the later report",
-        "unverified-association": "The action-to-interaction association is not verified",
+        "unverified-association": "The record does not confirm which request the action belongs to",
         "missing-completion": "No completion was recorded",
         "nonbinary-outcome": "The recorded result is neither a pass nor a fail",
         "capture-disabled": "Optional response capture is off",
         "category-not-consented": "This evidence category is not enabled",
-        "no-eligible-units": "No eligible items in this scope",
+        "no-eligible-units": "No items in this selection can be used for this measure",
+        "partial-evidence": "Only part of the evidence was saved",
+        "invalid-timing": "The recorded times cannot establish this duration",
+        "unsupported-adapter": "This source does not provide the evidence needed",
+        "stale-consent": "Evidence permission changed; this result is no longer current",
+        "stale-source": "The approved source changed; this result is no longer current",
+        "stale-membership": "The request's recorded actions changed",
+        "stale-override": "Personal feedback changed",
+        "deletion-pending": "Local cleanup must finish before this result is available",
+        "deleted-dependency": "Supporting activity was deleted",
+        "credential-excluded": "Text was left out because it may contain credentials",
+        "capture-limit": "Some evidence exceeded the saving limit",
         "user-verdict": "Your optional personal feedback",
         "user-withdrawn": "Personal feedback was withdrawn",
         "not-applicable": "This check does not apply to this recorded interaction",
@@ -60,9 +78,9 @@ export function createReportComparison() {
             : ["recorded-request-to-final-answer", "verified-request-to-final-answer"].includes(fact?.boundary) ? "requests" : "HTTP records";
         if (fact?.state !== "available" && fact) {
             const unsupported = {
-                accuracy: "Local observations do not assess answer correctness; model assessment requires separate approval",
-                "answer-trust": "Local observations do not assess answer support; model assessment requires separate approval",
-                "action-trust": "Local observations do not assess authorization; model assessment checks recorded intent separately",
+                accuracy: "Tool outcomes do not tell us whether the answer was correct. AI review needs separate approval",
+                "answer-trust": "Tool outcomes do not tell us whether the answer was supported. AI review needs separate approval",
+                "action-trust": "Tool outcomes do not prove a person gave permission. AI review checks whether actions match the request",
             };
             note = fact.reason === "unsupported-check" ? unsupported[dimension] ?? reasons[fact.reason]
                 : fact.reason === "unverified-association" && fact.boundary === "verified-request-to-final-answer"
@@ -74,7 +92,7 @@ export function createReportComparison() {
         if (fact?.state === "available") {
             const covered = fact.coverage.count, eligible = fact.coverage.eligible;
             note = fact.kind === "pass-rate"
-                ? `${fact.basis === "user-assessment" ? "Personal assessment" : fact.basis === "model-assessment" ? modelOrigin(fact) : "Recorded check"} · ${formatNumber(fact.numerator, 0)} of ${formatNumber(fact.denominator, 0)} passed · ${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} assessed · ${formatNumber(eligible - covered, 0)} not assessed${fact.basis === "model-assessment" && dimension === "action-trust" ? " · intent alignment, not proof of authorization" : ""}`
+                ? `${fact.basis === "user-assessment" ? "Personal assessment" : fact.basis === "model-assessment" ? modelOrigin(fact) : "Recorded check"} · ${formatNumber(fact.numerator, 0)} of ${formatNumber(fact.denominator, 0)} passed · ${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} assessed · ${formatNumber(eligible - covered, 0)} not assessed${fact.basis === "model-assessment" && dimension === "action-trust" ? " · actions match the request, not proof of a person's permission" : ""}`
                 : `${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} ${fact.kind === "cost" ? "units priced" : `${timedUnit} timed`}`;
         }
         if (fact?.counts?.evaluatorError) note += ` · ${formatNumber(fact.counts.evaluatorError, 0)} check errors (not failed results)`;
@@ -290,7 +308,8 @@ export function createReportComparison() {
         const details = el("details", "comparison-reading");
         details.append(el("summary", "", "Scope, coverage and reading notes"));
         const notes = el("div");
-        notes.append(el("p", "", "Percentages keep their exact denominators. Unknown, partial and unassessed evidence are not silently counted as successes or failures."));
+        for (const text of readingNotes) notes.append(el("p", "", text));
+        notes.append(el("p", "", comparisonNote));
         notes.append(el("p", "", "Pass-share colors describe assessed results only: below 50%, 50–74%, 75–89%, and 90%+. They are not a combined quality grade."));
         if (model.scopeDifferences?.length) notes.append(el("p", "", `Scope differences: ${model.scopeDifferences.map(code => code.replaceAll("-", " ")).join("; ")}.`));
         if (tool?.overlap) notes.append(el("p", "", tool.overlap.verified ? `${tool.overlap.sharedCount} calls occur in both snapshots.` : "Repeated calls between these reports could not be verified."));
@@ -308,6 +327,8 @@ export function createReportComparison() {
     }
     return {
         presentation,
+        readingNotes,
+        comparisonNote,
         formatValue,
         metricPresentation,
         comparisonSidePresentation,

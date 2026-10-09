@@ -34,10 +34,10 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         "explicit-attributed-usage-scope": "Explicitly attributed usage only",
     };
     const reasonLabels = {
-        "missing-evidence": "The required evidence was not retained.",
+        "missing-evidence": "The saved record does not contain the evidence needed for this result.",
         "missing-completion": "No completion was recorded.",
         "nonbinary-outcome": "The recorded outcome is not a pass or fail.",
-        "unsupported-check": "Local observations do not assess this. Review Automatic scores for model assessment.",
+        "unsupported-check": "Recorded tool outcomes cannot answer this check. See Automatic scores for AI review.",
         "unsupported-adapter": "This source does not provide the required evidence.",
         "capture-disabled": "Optional response capture is off.",
         "category-not-consented": "This evidence category is not enabled.",
@@ -48,14 +48,14 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         "deletion-pending": "Local cleanup must finish before these facts can be shown.",
         "deleted-dependency": "Supporting activity was deleted.",
         "credential-excluded": "Text was excluded by credential screening.",
-        "capture-limit": "Only bounded evidence could be retained.",
+        "capture-limit": "Some evidence was left out because it exceeded the saving limit.",
         "partial-evidence": "Only part of the evidence was retained.",
-        "unverified-association": "Association with this interaction is unverified.",
+        "unverified-association": "The record does not confirm that this evidence belongs to this request.",
         "invalid-timing": "The recorded times cannot establish this duration.",
         "usage-unavailable": "No attributed usage or charge was recorded.",
         "pricing-unavailable": "Usage has no compatible price.",
-        "no-eligible-units": "No eligible items in this scope.",
-        "no-assessed-units": "No eligible items have an assessed result.",
+        "no-eligible-units": "There are no items this measure can use in the current selection.",
+        "no-assessed-units": "None of the included items has a result for this check.",
         "evaluator-failure": "The check could not run. This is not a failed result.",
         "user-withdrawn": "Personal feedback was withdrawn.",
         "user-verdict": "Your personal feedback, not an automatic check.",
@@ -120,17 +120,17 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 : `${number(metric.numerator)} / ${number(metric.denominator)} passed; ${number(metric.coverage.covered)} / ${number(metric.coverage.eligible)} assessed`
             : `${number(metric.coverage.covered)} / ${number(metric.coverage.eligible)} ${cost ? "priced" : "timed"}`;
         const unsupported = {
-            accuracy: "No current answer assessment. Review Automatic scores; feedback is optional.",
-            "answer-trust": "No current answer-support assessment. Review Automatic scores.",
-            "action-trust": "No current action assessment. Model scores check intent alignment, not authorization.",
+            accuracy: "No AI answer review is available here. See Automatic scores; your feedback is optional.",
+            "answer-trust": "No AI answer-support review is available here. See Automatic scores.",
+            "action-trust": "No AI action review is available here. AI checks whether actions match the request, not whether a person gave permission.",
             speed: "No verified request-to-final-answer timing.",
         };
         const qualification = cost && metric.value !== null
             ? `${metric.status === "estimated" ? "Estimated" : "Recorded"} ${metric.coverage.covered < metric.coverage.eligible ? "subtotal" : "total"} (USD). ${boundaryLabels[metric.boundary]}.`
             : metric.value === null ? metric.reason === "unsupported-check" ? unsupported[metric.dimension] ?? reasonLabels[metric.reason]
                 : reasonLabels[metric.reason] : metric.origin === "model-assessed"
-                    ? metric.dimension === "action-trust" ? "Recorded intent alignment, not proof of authorization."
-                        : "Assessed against recorded evidence, not independent ground truth."
+                    ? metric.dimension === "action-trust" ? "AI checked whether the actions match the recorded request. This does not prove a person gave permission."
+                        : "AI checked the recorded evidence. Its result can be wrong."
                     : boundaryLabels[metric.boundary];
         const details = [
             `${label}. ${origin}.`,
@@ -140,7 +140,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         ];
         if (metric.counts) details.push(`${number(metric.counts.pass)} passed, ${number(metric.counts.fail)} failed, ${number(metric.counts.unassessed)} unassessed, ${number(metric.counts.evaluatorError)} check errors.`);
         if (metric.pricing) details.push(`${metric.pricing.method === "recorded-charge" ? "Recorded charge" : "Versioned rate card"}, pricing version ${metric.pricing.version}.`);
-        if (metric.evaluator) details.push(`Model ${metric.evaluator.model}; rubric ${metric.evaluator.rubricId} v${metric.evaluator.rubricVersion}. ${metric.dimension === "action-trust" ? "Intent alignment, not proof of authorization." : "Model-assessed against recorded evidence, not independent ground truth."}`);
+        if (metric.evaluator) details.push(`Model ${metric.evaluator.model}; rubric ${metric.evaluator.rubricId} v${metric.evaluator.rubricVersion}.`);
         const timingSummary = {
             "tool-duration": { label: "Tool calls", unit: "calls" },
             "recorded-response-duration": { label: "Request to final response", unit: "requests" },
@@ -254,22 +254,22 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         const trustMeasured = metrics.some(metric => ["answer-trust", "action-trust"].includes(metric.dimension) && metric.value !== null);
         const timed = metrics.some(metric => metric.dimension === "speed" && metric.value !== null);
         let takeaway;
-        if (membershipStatus !== "complete-retained") takeaway = "Only part of this interaction can be attributed; the summary covers retained evidence only.";
+        if (membershipStatus !== "complete-retained") takeaway = "Only some recorded actions can be linked to this request. These results cover that saved evidence.";
         else if (personalAccuracy?.counts.fail) takeaway = "Your feedback identifies an incorrect result; recorded tool outcomes remain separate.";
-        else if (failedTools?.counts.fail) takeaway = `${number(failedTools.counts.fail)} / ${number(failedTools.denominator)} tool completions with a recorded success/failure result failed. Execution status is separate from model assessment.`;
+        else if (failedTools?.counts.fail) takeaway = `${number(failedTools.counts.fail)} of ${number(failedTools.denominator)} calls with a recorded success or failure failed. That does not tell us whether the answer was correct.`;
         else if (!accuracyMeasured && !trustMeasured) takeaway = timed
-            ? "Call timing is available; answer correctness and both kinds of trust are unassessed."
-            : "Answer correctness and both kinds of trust are unassessed; missing evidence is not a failed result.";
+            ? "Timing is available. There are no results yet for answer correctness, answer support or actions matching the request."
+            : "There are no results for answer correctness, answer support or actions matching the request. A missing result is not a failure.";
         else if (personalAccuracy) takeaway = "Your accuracy feedback is shown separately from automatic local observations.";
-        else if (metrics.some(metric => metric.origin === "model-assessed")) takeaway = "Model assessments use recorded evidence. Each check keeps its own result and coverage; no overall grade is assigned.";
-        else takeaway = "Supported facts and personal feedback are shown separately; no overall grade is assigned.";
+        else if (metrics.some(metric => metric.origin === "model-assessed")) takeaway = "AI checks use the recorded evidence. Read each result with the number of requests it covers; there is no overall grade.";
+        else takeaway = "Recorded facts and your feedback are shown separately. There is no overall grade.";
         const modelChecks = metrics.filter(metric => metric.origin === "model-assessed" && ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension));
         const sameUnits = (left, right) => JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
         const sharedRequests = modelChecks.length === 3 && new Set(modelChecks.map(metric => metric.dimension)).size === 3
             && modelChecks.every(metric => sameUnits(metric.eligibleUnitRefs, modelChecks[0].eligibleUnitRefs) && sameUnits(metric.coveredUnitRefs, modelChecks[0].coveredUnitRefs));
         const sharedCount = sharedRequests ? modelChecks[0].coverage.covered : 0;
         const readingNote = (sharedCount ? `The three AI checks cover the same ${number(sharedCount)} ${sharedCount === 1 ? "request" : "requests"}.`
-            : "Each check has its own request coverage.") + " Missing results do not count as failed checks.";
+            : "Read the request count for each check; they may cover different requests.") + " Missing results do not count as failed checks.";
         return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "", reviewStatus: review };
     }
     return { format, summarize, band, bandVersion };
@@ -317,8 +317,10 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     if (model.readingWarning) section.append(el("p", "assessment-unavailable", model.readingWarning));
     const help = el("details", "assessment-reading-help");
     help.append(el("summary", "", "How to read these results"),
-        el("p", "", "AI checks use recorded evidence, not independent proof. Missing results are not failures and do not mean a request is queued. Actions matching a request do not prove a person authorized them."),
-        el("p", "", "One request can contain several tool calls. Times are medians (middle recorded times), shown in seconds; call time and request-to-final-response time are separate. Exact milliseconds, counts, definitions, model and rubric are in Measure definitions or Details and feedback."));
+        el("p", "", "Start with the request count. A result for one request does not tell you about the others. Pass percentages use only passed and failed checks; missing results are left out."),
+        el("p", "", "AI reviews the recorded evidence and can be wrong. Your feedback and tool outcomes are separate. Matching the request does not prove a person gave permission."),
+        el("p", "", "No result, too little evidence and a check that could not run are different states. None means the answer failed or a review is queued."),
+        el("p", "", `One request can have several tool calls. Speed shows the middle recorded times, not a total of those calls. Tool-call time and request-to-final-response time have separate coverage. Open ${detailsLabel} for exact times, counts, definitions and the AI model and review rules (rubric).`));
     const grid = el("div", "assessment-grid");
     function appendRows(host, rows) {
         for (const row of rows) {

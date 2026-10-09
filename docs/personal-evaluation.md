@@ -46,13 +46,16 @@ and evaluator errors remain distinguishable.
 An unavailable check's specific reason survives interaction, overview, and
 report aggregation when all included items share it. Mixed missing reasons use
 the aggregate "no assessed items" state rather than claiming one common cause.
-The three measure headings have keyboard/touch-accessible help. The same short
-definitions appear in **Glossary** inside the existing insight-details dialog;
+The three measure headings have keyboard/touch-accessible help. First-hover copy
+explains what the check or timing means in plain language. The same short
+definitions appear in **Glossary** inside the existing insight-details dialog,
+followed by the pass-rate rule, missing-result distinctions and timing limits;
 exact units, boundaries, and coverage remain under **Recorded measures and definitions**.
 The Speed card separates **Tool calls** from **Request to final response**.
 Each value keeps its median label and its own timed-call or timed-request
 coverage; seconds are display-only, with exact milliseconds and timing boundaries
-in the existing Speed help and details.
+in the existing Glossary and measure details. The median uses the lower middle
+recorded time when there is an even number of samples.
 
 Shared app Insights gives request coverage more prominence than the result:
 **Results for 1 of 69 requests**, then **1 passed · 0 failed**, not a leading 100%.
@@ -64,7 +67,8 @@ Missing results, insufficient evidence and a check that could not run are not
 failed verdicts or a queue estimate. Single-request personal feedback remains a
 verdict in words. The existing details retain exact percentages, counts,
 definitions, model and rubric; **How to read these results** explains AI and
-timing limitations once. Report presentation and frozen facts are unchanged.
+timing limitations once. New readable reports and comparisons share their own
+reading notes; saved report bytes and metric facts are unchanged.
 
 An interaction can contain multiple calls, returned API entries, owned HTTP
 records, recorded Graph sites, and code references. These are different units.
