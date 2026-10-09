@@ -1609,10 +1609,20 @@ outlines remain visible rather than being mistaken for extra containers.
 Source values use the existing system reading font at regular weight and preserve
 exact whitespace, wrapping spaces inside the field rather than hanging them beyond
 its edge; medium-weight role labels and the stronger heading establish
-hierarchy without oversized monospace. Named Settings and affected-chat headings
-keep programmatic destination focus, with a keyboard-only start rail rather than
-an enclosing control outline. Search-target outlines apply only while focused;
-polling cannot revive a stale highlight. Real controls retain their focus rings.
+hierarchy without oversized monospace. Programmatically focusable semantic
+headings (`h1` through `h6` with `tabindex="-1"`) share the existing Settings
+keyboard-only start rail rather than a full-width native/control outline.
+This includes the shared page title, Settings destinations and report-stage
+headings. Their real heading semantics and negative tab order stay intact;
+pointer navigation does not add a keyboard indicator. Forced-colors mode keeps
+the rail visible. Interactive links, inputs, summaries, buttons and chart focus
+retain their own indicators. Search-target outlines apply only while focused;
+polling cannot revive a stale highlight.
+
+**Skip to content** focuses the current page heading without changing the hash
+or creating a browser-history entry. The hash router must not interpret the
+native `#main` fallback as a Home navigation. Current route parameters, private
+search, report selection and ordinary Back behavior remain unchanged.
 **Review source & connect** is the separate initial permission entry. Editing an
 approved source does not remove its approval. Cancel restores the current values
 and focuses the original entry without writing. Source/path search and deep

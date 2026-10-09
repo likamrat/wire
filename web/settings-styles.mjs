@@ -81,8 +81,6 @@ export const settingsStyles = `
 .settings-search-results mark {color:inherit;background:var(--accent-soft);font-weight:700}
 .settings-target {scroll-margin-block:20px}
 .settings-target:where(:focus) {outline:2px solid var(--focus);outline-offset:4px}
-:is(#approvedSourceTitle,#displayTitle,#connectionTitle,#preferencesTitle,#collectionIssuesTitle)[tabindex="-1"] {position:relative;outline:none;border-radius:0}
-:is(#approvedSourceTitle,#displayTitle,#connectionTitle,#preferencesTitle,#collectionIssuesTitle)[tabindex="-1"]:focus-visible::before {content:"";position:absolute;inset-block:.125em;inset-inline-start:-8px;width:3px;background:var(--focus)}
 @container settings (max-width:52rem) {
  .settings-layout {grid-template-columns:minmax(0,1fr);gap:16px}
  .settings-rail {position:static;max-height:none;overflow:visible;padding:0;margin:0}

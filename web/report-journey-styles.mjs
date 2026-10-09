@@ -29,7 +29,6 @@ export const reportJourneyStyles = `
 .report-step:not(:disabled):hover{background:var(--hover)}
 .report-stage{margin-top:20px;min-width:0}
 .report-stage>h3{font-size:var(--type-dialog);line-height:var(--leading-dialog);margin:0 0 20px;text-wrap:balance;scroll-margin-top:calc(var(--app-header-height,80px) + 16px)}
-.report-stage>h3:focus-visible{outline:2px solid var(--focus);outline-offset:6px}
 .report-entry-context,.report-scope-gap{max-width:72ch;line-height:var(--leading-reading)}
 .report-choice-summary{margin:4px 0 0;color:var(--muted);font-size:1rem}
 .report-entry-context{margin:12px 0 0;color:var(--muted);font-size:var(--type-body)}

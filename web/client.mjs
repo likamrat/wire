@@ -3547,6 +3547,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("closeDialog").addEventListener("click", () => $("overlay").close());
     $("overlay").addEventListener("close", () => { invalidatePreview(); if (returnFocus?.isConnected) ux.restoreFocus(returnFocus); });
     $("overlay").addEventListener("cancel", (event) => { if (exportWriting) event.preventDefault(); });
+    document.querySelector(".skip-link").addEventListener("click", event => {
+        event.preventDefault();
+        const heading = $("pageTitle");
+        heading.tabIndex = -1;
+        ux.restoreFocus(heading);
+        heading.scrollIntoView({ block: "start" });
+    });
     window.addEventListener("popstate", () => applyRoute(readRoute(), { restorePosition: true }));
     window.addEventListener("pageshow", (event) => { if (event.persisted) recoverRead(); });
     window.addEventListener("online", recoverRead);

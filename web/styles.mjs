@@ -43,6 +43,11 @@ button:active:not(:disabled),.button-link:active {background:var(--pill-pressed)
 a {color:var(--accent);text-decoration:none}
 a:is(:hover,:active) {color:var(--ink)}
 :is(button,a,input,select,summary):focus-visible {outline:2px solid var(--focus);outline-offset:3px}
+:is(h1,h2,h3,h4,h5,h6)[tabindex="-1"] {position:relative;outline:none;border-radius:0}
+:is(h1,h2,h3,h4,h5,h6)[tabindex="-1"]:focus-visible::before {content:"";position:absolute;inset-block:.125em;inset-inline-start:-8px;width:3px;background:var(--focus)}
+@media(forced-colors:active) {
+ :is(h1,h2,h3,h4,h5,h6)[tabindex="-1"]:focus-visible::before {background:Highlight;forced-color-adjust:none}
+}
 input[type=checkbox] {width:18px;height:18px;accent-color:var(--accent);flex:0 0 auto}
 h1,h2,h3,p {margin:0;min-width:0;overflow-wrap:anywhere}
 h1 {font-size:var(--type-title);font-weight:var(--weight-strong);line-height:var(--leading-heading);letter-spacing:var(--tracking-heading);text-wrap:balance}
