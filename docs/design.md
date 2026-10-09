@@ -909,6 +909,12 @@ and grouped Other. Informational labels can receive inspection focus without
 inventing a filter action. Neighboring outlines remain clipped to their own
 faces. Do not restore full-row hover blocks, dotted leaders, detached tiny-outcome
 annotations or per-column info controls.
+Donut face links suppress only the browser's non-keyboard SVG focus outline:
+that native rectangle follows a face's bounding box, not its painted geometry.
+Pointer inspection keeps the existing face-bounded highlight; keyboard inspection
+keeps the visible focus ring on the semantic legend label and highlights the same
+category. Native link destinations/modifiers and `:focus-visible` remain intact.
+The rule is scoped to donut SVG links, not column/count links or tool-name bars.
 Paired cards keep the same shared row alignment with exact-data disclosures open
 or closed. Disclosure content expands below its summary; opening it must not
 switch the parent layout or move the trigger.

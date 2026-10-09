@@ -13,6 +13,8 @@ export const percentageChartStyles = `
 .percentage-ring {display:block;width:100%;height:auto;aspect-ratio:240/200;overflow:hidden}
 .percentage-face {stroke:var(--column-label);stroke-width:var(--slice-outline,.7px);pointer-events:visibleFill}
 .percentage-ring a {cursor:pointer}
+/* SVG links get a UA pointer-focus box even when :focus-visible is false. */
+.percentage-ring a:focus:not(:focus-visible) {outline:none}
 .percentage-slice {fill-opacity:var(--glass-cap-opacity)}
 .percentage-outer-wall {fill-opacity:var(--glass-front-opacity)}
 .percentage-inner-wall {fill-opacity:var(--glass-side-opacity)}
