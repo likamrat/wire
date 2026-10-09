@@ -1,5 +1,60 @@
 # Product design
 
+## Saved report library
+
+Reports opens directly on the saved library, expanded by default. The top-level
+**Saved reports / Create a report** links separate browsing from the unchanged
+Requests / Contents / Review / Save flow; users do not pass the wizard to find
+search. **Continue draft** returns to unfinished work and **Saved report details**
+returns to the most recent save state. Activity's explicit create action goes
+straight to creation. `#reports?task=create` and the legacy `#report` creation
+link remain direct entries; the main Reports navigation opens the library.
+
+Switching tasks within the same Reports context preserves choices, selection,
+prepared review and disclosure approval. Browser Back restores the task and
+library search/page. Relevant source, permission, filter and evidence changes
+still invalidate previews; switching tasks does not bypass their checks.
+The saved library remains separate from Requests / Contents / Review / Save.
+It uses the existing metadata search and six-item paginated history, not another
+list or search implementation. Reports and comparisons have explicit labels and
+separate counts. The range and Previous/Next remain together; the saved-library-only
+Page / Go control reaches distant pages without serial scrolling. Other pagers
+retain their previous behavior.
+
+Search says **Search saved reports**; the metadata-only limitation stays in help.
+It has a bounded desktop width and a visible label. A compact row aligns the
+report's preparation identity, prompt mode, format availability, **Manage** and
+direct **Open**. Manage holds membership count, full identity, download, comparison
+and individual deletion controls. Repeated frozen-copy/search prose and stored
+refresh move into **About saved reports**. Missing HTML has an explicit no-HTML
+state rather than an inert Open action. Unknown metadata stays unknown.
+
+**Delete all saved reports** is available beside search, never interpreted as
+delete visible/search-matching rows. Its existing saved-artifact dialog previews
+the exact report-bundle/file/copy counts and comparison preservation, focuses
+Cancel first and requires a separate count-labeled confirmation. Confirmed
+membership is fixed. New reports, saved comparisons, source activity, draft
+reports and downloads are not swept in. Affected unsaved comparisons and their
+approvals become invalid; the confirmation distinguishes them from preserved
+draft reports. The confirmation names permanent deletion
+and possible partial cleanup. Comparison retention is explained once; the UI
+retains recovery details and offers **Check deletion result**, without requiring
+users to manually keep a receipt or repeat a destructive request.
+
+Search, page, disclosures and Back retain their prior state; deletions clamp
+the surviving page. Loading and failed snapshot states disable the new bulk
+entry. The immutable saved reader and refresh/draft guards are unchanged.
+Layout retains Asta Sans, Fluent, light/navy tokens, visible focus and 44px
+controls, wrapping at narrow widths and 200% text without truncating labels.
+
+The supplied screenshot and Distill playbook informed this simplification.
+Local catalogue execution was unavailable (no Python runtime); the installed
+UI/UX accessibility guidance and existing design system were used instead.
+Synthetic proof covers a 1,001-report / 167-page library, small/empty/no-match
+states, direct navigation and frozen reading, named and bulk cancellation,
+confirmed report-only removal, stale previews, lost responses and sealed
+restart recovery. This is not a claim of human acceptance or a live release.
+
 ## Analytical filter row
 
 Home, Activity and scoped chats share one always-present horizontal row:

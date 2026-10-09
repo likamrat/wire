@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain, openActivitySessions, selectActivityOption, revealStoredRefresh } from "./helpers.mjs";
-import { chooseReportScope, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, scanReport, inspectReportCopies, openReportCreation } from "./report-journey-helpers.mjs";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { contrast } from "./color-measurements.mjs";
@@ -20,6 +20,7 @@ test("report hierarchy belongs to the current task, with local actions and consi
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
     await page.goto(runtime.url + "#reports?session=test-session");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await openReportCreation(page);
     assert.equal(await page.locator("#resetView").isVisible(), false, "Analytical reset does not belong to Reports.");
     assert.equal(await page.locator("#reportClearSelection").isVisible(), false, "An empty selection has nothing to clear.");
     const hints = await page.locator(".report-step-hint").evaluateAll(nodes => nodes.map(node => ({
@@ -35,7 +36,7 @@ test("report hierarchy belongs to the current task, with local actions and consi
     assert.deepEqual(typography[1], typography[2]);
     assert.equal(await page.locator("#reportStage1>.report-stage-actions").getByRole("button", { name: "Choose requests in Activity", exact: true }).count(), 1);
     assert.equal(await page.locator("#reportStage1>.report-stage-actions").getByRole("button", { name: "Continue to contents", exact: true }).isDisabled(), true);
-    assert.ok((await page.locator("#reportStepTitle1").boundingBox()).y < 520, "The task begins before the lower half of the desktop viewport.");
+    assert.ok((await page.locator("#reportStepTitle1").boundingBox()).y < 600, "The chosen creation task remains in the first viewport below its workspace switch.");
     await chooseReportScope(page, "all");
     await page.locator(".report-other-scope>summary").click();
     assert.ok((await page.getByRole("button", { name: "Continue to contents", exact: true }).boundingBox()).y < 1000);
@@ -143,13 +144,14 @@ test("normal report journey remains readable through scope, pending, dirty, reco
         }, { times: 1 });
         return { pending, release };
     }
-    await page.goto(app.runtime.url + "#reports"); await ready();
+    await page.goto(app.runtime.url + "#reports?task=create"); await ready();
     await capture("empty", true);
     assert.equal(requests.filter(endpoint => endpoint === "/api/preview").length, 0);
     await navigateMain(page, "activity"); await ready(); await openActivitySessions(page);
     for (const key of ["ownMail", "agentMail", "unverified"]) await page.locator(`.request-row[data-view-key="request:${app.cases[key].scenarioId}"] input`).check();
     await selectActivityOption(page, "promptAuthorFilter", ["user"]); await ready();
     await navigateMain(page, "reports"); await ready();
+    await openReportCreation(page);
     assert.match(await page.locator("#previewSelectionSummary").textContent(), /3 request groups/);
     await selectActivityOption(page, "reportPromptAuthorFilter", ["user", "agent"]);
     assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /2 of 3 request groups/);
@@ -174,6 +176,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     waiting.release(); await cancelled;
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-step"), "2");
     await page.route("**/api/preview", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Synthetic scan unavailable" }) }), { times: 1 });
+    await openReportCreation(page);
     await page.locator("#exportBtn").click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     await capture("scan-error");
@@ -203,6 +206,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     await page.getByRole("button", { name: "Back to contents", exact: true }).click();
     assert.equal(await (await revealStoredRefresh(page)).isDisabled(), true);
     const scans = requests.filter(endpoint => endpoint === "/api/preview").length;
+    await openReportCreation(page);
     await page.locator("#exportBtn").click();
     await page.getByRole("button", { name: "Continue to save", exact: true }).click();
     assert.equal(requests.filter(endpoint => endpoint === "/api/preview").length, scans);
@@ -232,7 +236,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     assert.match(await page.locator("#reportJourneyError").textContent(), /may have completed/);
     assert.equal(requests.filter(endpoint => endpoint === "/api/export").length, 2);
     await (await revealStoredRefresh(page)).click(); await ready();
-    assert.match(await page.locator("#savedReportCount").textContent(), /^2 saved reports/);
+    assert.match(await page.locator("#savedReportCount").textContent(), /^2 reports/);
     assert.equal(requests.filter(endpoint => endpoint === "/api/export").length, 2, "Recovery reads history, never replays the mutation.");
     await capture("history-recovery");
     assert.deepEqual(await Promise.all(Object.values(saved.files).map(async file => digest(await readFile(file)))), frozenHashes);

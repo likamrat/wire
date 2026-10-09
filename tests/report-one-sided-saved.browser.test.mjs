@@ -160,7 +160,7 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         await item(direction.legacy.bundleId).locator(":scope>summary").click();
         const beforeOpen = await loadBoardState(context);
         const opening = page.waitForResponse(result => result.url().endsWith("/api/report-comparison/open"));
-        await item(direction.legacy.bundleId).getByRole("button", { name: "Open saved comparison", exact: true }).click();
+        await item(direction.legacy.bundleId).locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
         const openResponse = await opening;
         assert.equal(openResponse.status(), 200, await openResponse.text());
         const opened = await openResponse.json();
@@ -201,7 +201,7 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
     await showReports(directions[0].legacy.bundleId);
     await item(directions[0].legacy.bundleId).locator(":scope>summary").click();
     const reopened = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/open"));
-    await item(directions[0].legacy.bundleId).getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await item(directions[0].legacy.bundleId).locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
     assert.equal((await reopened).status(), 200);
     await assertView("baseline");
     assert.deepEqual(errors, []);

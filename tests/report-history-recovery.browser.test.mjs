@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain, revealStoredRefresh } from "./helpers.mjs";
-import { chooseReportScope, scanReport, inspectReportCopies, reportContents } from "./report-journey-helpers.mjs";
+import { chooseReportScope, scanReport, inspectReportCopies, reportContents, openReportLibrary, openReportCreation } from "./report-journey-helpers.mjs";
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const hashes = async entries => Promise.all(entries.map(async entry => [
     entry.bundleId, await Promise.all(Object.entries(entry.files).map(async ([name, file]) => [name, digest(await readFile(file))])),
@@ -52,7 +52,7 @@ async function save(page) {
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
 }
 async function history(page) {
-    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#bundles > summary").click();
+    await openReportLibrary(page);
 }
 async function deleteReport(page, id) {
     await history(page);
@@ -112,7 +112,7 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     await save(page);
     const state = await loadBoardState(context), newest = state.exports.at(-1);
     assert.equal(state.exports.length, 7);
-    await page.locator("#bundles > summary").click();
+    await openReportLibrary(page);
     const summaries = await page.locator("#bundleList details > summary").allTextContents();
     assert.equal(summaries.length, 6);
     assert.match(summaries[0], /Masked prompts.*HTML/i, "Collapsed saved reports need safe identifying metadata");
@@ -121,7 +121,7 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     assert.deepEqual(state.exports.slice(0, 6), before.exports, "Presentation sorting cannot reorder or rewrite the persisted index");
     assert.deepEqual(await hashes(state.exports.slice(0, 6)), bytes, "Old artifact bytes remain frozen");
     const first = page.locator("#bundleList details").first();
-    assert.match(await first.locator(":scope > summary").textContent(), /1 request group/);
+    assert.match(await first.locator(".saved-report-management").textContent(), /1 request group/, "Secondary membership remains available in Manage");
     await first.locator(":scope > summary").focus();
     await page.keyboard.press("Enter");
     assert.equal(await first.evaluate(node => node.open), false);
@@ -179,7 +179,7 @@ test("UX-003 deleting the displayed saved report removes its ready result", { ti
     await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
     await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
-    await page.locator("#bundles > summary").click();
+    await openReportLibrary(page);
     await page.locator("#bundleList details > summary").first().click();
     await page.locator("#bundleList").getByRole("button", { name: "Delete report", exact: true }).click();
     const dialog = page.locator("dialog[open]").filter({ has: page.locator("#savedArtifactDeleteTitle") });
@@ -285,6 +285,7 @@ test("UX-003 late completed deletion receipt cannot clear a successor saved repo
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await (await revealStoredRefresh(page)).click();
     await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await openReportCreation(page);
     await page.getByRole("button", { name: "Start a new report", exact: true }).click();
     await save(page);
     const successor = (await loadBoardState(context)).exports.at(-1);
@@ -362,7 +363,7 @@ test("UX-002 report/comparison labels preserve named actions, chooser eligibilit
     const comparisonRow = page.locator("#bundleList details").first();
     assert.match(await comparisonRow.locator(":scope > summary").textContent(), /^Comparison.*HTML, JSON/);
     await comparisonRow.locator(":scope > summary").click();
-    await comparisonRow.getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await comparisonRow.locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
     await page.locator("#comparisonWorkspace").getByRole("heading", { name: "Saved comparison", exact: true }).waitFor();
     const dialog = await deleteReport(page, sources[0].bundleId);
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();

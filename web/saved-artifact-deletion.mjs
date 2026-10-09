@@ -55,12 +55,21 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
         if (phase === "unknown") showRecovery();
     }
     function validatePreview(value, expected) {
-        if (!value || typeof value.operationId !== "string" || !/^[a-f0-9]{64}$/.test(value.receiptToken) || !value.artifact || value.artifact.artifactId !== expected.artifactId
-            || value.artifact.artifactKind !== expected.artifactKind || !value.counts
+        const bulk = expected.scope === "all-reports";
+        if (!value || typeof value.operationId !== "string" || !/^[a-f0-9]{64}$/.test(value.receiptToken)
+            || (bulk ? !validBatch(value) : !value.artifact || value.artifact.artifactId !== expected.artifactId || value.artifact.artifactKind !== expected.artifactKind)
+            || !value.counts
             || ["managedFiles", "managedCopies", "savedDependentComparisons"].some(key => !Number.isSafeInteger(value.counts[key]) || value.counts[key] < 0)) {
             throw new Error("The deletion preview did not confirm this saved object and its managed scope.");
         }
         return value;
+    }
+    function validBatch(value) {
+        return value.scope === "all-reports" && Array.isArray(value.artifacts) && value.artifacts.length > 0
+            && value.artifacts.every(item => item.artifactKind === "report" && /^export-[a-f0-9-]{36}$/.test(item.artifactId))
+            && new Set(value.artifacts.map(item => item.artifactId)).size === value.artifacts.length
+            && value.counts?.reports === value.artifacts.length
+            && Number.isSafeInteger(value.counts.savedComparisons) && value.counts.savedComparisons >= 0;
     }
     function forget() {
         receiptToken = null; preview = null;
@@ -76,20 +85,28 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
     async function result(value) {
         if (!value || value.operationId !== operationId) throw new Error("This deletion receipt belongs to another operation.");
         if (value.phase === "complete") {
-            if (value.kind !== "artifact-deletion" || typeof value.artifact?.artifactId !== "string"
-                || !["report", "comparison"].includes(value.artifact.artifactKind)) throw new Error("The receipt did not identify the deleted saved object.");
-            if (target && (value.artifact.artifactId !== target.artifactId || value.artifact.artifactKind !== target.artifactKind)) throw new Error("The completed deletion does not match the named saved object.");
+            const bulk = value.scope === "all-reports";
+            if (value.kind !== "artifact-deletion" || (bulk ? !validBatch(value) : typeof value.artifact?.artifactId !== "string"
+                || !["report", "comparison"].includes(value.artifact.artifactKind))) throw new Error("The receipt did not identify the deleted saved object.");
+            if (target && (target.scope === "all-reports" ? !bulk || preview && JSON.stringify(value.artifacts) !== JSON.stringify(preview.artifacts)
+                : bulk || value.artifact.artifactId !== target.artifactId || value.artifact.artifactKind !== target.artifactKind)) throw new Error("The completed deletion does not match the named saved object.");
             phase = "complete"; forget();
-            title.textContent = value.artifact.artifactKind === "comparison" ? "Saved comparison deleted" : "Saved report deleted";
-            scope.textContent = `${target?.label || value.artifact.artifactId} was deleted from this app.`;
-            message("The saved " + (value.artifact.artifactKind === "comparison" ? "comparison" : "report") + " was deleted. Source activity and other saved objects are unchanged.");
+            preservation.textContent = ""; dependents.textContent = "";
+            title.textContent = bulk ? `${value.counts.reports.toLocaleString()} saved reports deleted`
+                : value.artifact.artifactKind === "comparison" ? "Saved comparison deleted" : "Saved report deleted";
+            scope.textContent = bulk ? "Only the reports included in the confirmed preview were removed. Newer reports are not included."
+                : `${target?.label || value.artifact.artifactId} was deleted from this app.`;
+            message(bulk ? "Saved comparisons, collected activity, draft reports and external downloads are unchanged. Unsaved comparisons using the deleted reports are no longer valid."
+                : "The saved " + (value.artifact.artifactKind === "comparison" ? "comparison" : "report") + " was deleted. Source activity and other saved objects are unchanged.");
             paint();
             const displayedGeneration = generation;
-            if (await onDeleted(value.artifact) === false) message("Deletion completed, but the saved list could not refresh. Use Refresh stored data; do not repeat deletion.", true);
+            if (await onDeleted(bulk ? { scope: value.scope, artifacts: value.artifacts } : value.artifact) === false) message("Deletion completed, but the saved list could not refresh. Use Refresh stored data; do not repeat deletion.", true);
             if (dialog.open && generation === displayedGeneration) cancel.focus();
         } else if (value.phase === "not-started") {
             phase = "not-started"; forget(); message("No committed deletion was found. Nothing was retried. Close this dialog and start a fresh preview if needed.");
-        } else if (["pending", "in-progress"].includes(value.phase)) {
+        } else if (value.phase === "pending") {
+            phase = "unknown"; message("Deletion is sealed but cleanup is not complete. Some files may already be removed. Check the original result after runtime recovery; no additional deletion will be sent.", true);
+        } else if (value.phase === "in-progress") {
             phase = "unknown"; message("The original deletion is still in progress. Check its result; no additional deletion will be sent.");
         } else {
             phase = "unknown"; message("Saved-object cleanup is incomplete. Check the original operation after recovery; do not repeat deletion.", true);
@@ -103,7 +120,8 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
         try { sessionStorage.setItem(receiptKey, JSON.stringify({ operationId, receiptToken })); }
         catch { message("The recovery receipt cannot be retained in this panel. Nothing was deleted.", true); return; }
         taskActive = true;
-        phase = "pending"; message("Deleting only this saved object's managed files and copies..."); paint(); status.focus();
+        phase = "pending"; message(target?.scope === "all-reports" ? "Deleting only the reviewed reports and their managed copies. Cleanup may finish in stages..."
+            : "Deleting only this saved object's managed files and copies..."); paint(); status.focus();
         try { await result(await api("/api/artifact-deletion/confirm", { operationId, confirmed: true })); }
         catch (error) { phase = "unknown"; message(error.message + " Check the original deletion result; do not repeat it.", true); paint(); }
         finally { taskActive = false; paint(); }
@@ -143,25 +161,33 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
             paint(); if (!dialog.open) dialog.showModal(); cancel.focus(); return;
         }
         if (!value) { recoveryNotice.hidden = true; return; }
-        if (!["report", "comparison"].includes(value.artifactKind) || typeof value.artifactId !== "string") throw new TypeError("A saved object identity is required.");
+        const bulk = value.scope === "all-reports";
+        if (!bulk && (!["report", "comparison"].includes(value.artifactKind) || typeof value.artifactId !== "string")) throw new TypeError("A saved object identity is required.");
         const token = ++generation;
         taskActive = true;
-        phase = "loading"; title.textContent = `Delete ${value.artifactKind === "comparison" ? "saved comparison" : "report"} ${value.label || value.artifactId}?`;
+        phase = "loading"; title.textContent = bulk ? "Delete all saved reports?" : `Delete ${value.artifactKind === "comparison" ? "saved comparison" : "report"} ${value.label || value.artifactId}?`;
+        warning.textContent = bulk
+            ? "Permanent local deletion. This cannot be undone. If interrupted, some files may remain. Use Check deletion result to see whether cleanup has finished."
+            : "Permanent local deletion. This cannot be undone.";
         scope.textContent = "Reading the exact managed files and copies. Nothing is being deleted.";
-        preservation.textContent = value.artifactKind === "comparison"
+        preservation.textContent = bulk ? "Saved comparisons, collected activity, draft reports and external downloads stay unchanged. Unsaved comparisons using these reports will become invalid."
+            : value.artifactKind === "comparison"
             ? "Source reports, collected activity, other saved comparisons and external downloads stay unchanged."
-            : "Collected activity, other reports, saved comparisons and external downloads stay unchanged.";
+            : "Collected activity, draft reports, other reports, saved comparisons and external downloads stay unchanged. Unsaved comparisons using this report will become invalid.";
         dependents.textContent = ""; message("");
         paint(); if (!dialog.open) dialog.showModal(); cancel.focus();
         try {
-            const response = await api("/api/artifact-deletion/preview", { artifactKind: value.artifactKind, artifactId: value.artifactId });
+            const response = await api("/api/artifact-deletion/preview", bulk ? { scope: "all-reports" } : { artifactKind: value.artifactKind, artifactId: value.artifactId });
             if (token !== generation || !dialog.open) { await cancelPreview(response); return; }
             preview = validatePreview(response, value);
-            scope.textContent = `${preview.counts.managedFiles} managed files and ${preview.counts.managedCopies} managed copies will be removed for this saved object.`;
-            dependents.textContent = preview.counts.savedDependentComparisons
-                ? `${preview.counts.savedDependentComparisons} saved comparisons keep their frozen information. Their links to this original report become unavailable.`
+            scope.textContent = bulk
+                ? `${preview.counts.reports.toLocaleString()} saved reports across all pages, regardless of search, will be deleted (${preview.counts.managedFiles.toLocaleString()} managed files in ${preview.counts.managedCopies.toLocaleString()} copies). New reports saved after this preview are not included.`
+                : `${preview.counts.managedFiles} managed files and ${preview.counts.managedCopies} managed copies will be removed for this saved object.`;
+            if (bulk) preservation.textContent = `${preview.counts.savedComparisons.toLocaleString()} saved comparison${preview.counts.savedComparisons === 1 ? " keeps its" : "s keep their"} frozen information${preview.counts.savedDependentComparisons ? `; ${preview.counts.savedDependentComparisons.toLocaleString()} will lose links to the deleted originals` : ""}. Collected activity, draft reports and external downloads stay unchanged. Unsaved comparisons using these reports will become invalid.`;
+            dependents.textContent = !bulk && preview.counts.savedDependentComparisons
+                ? `${preview.counts.savedDependentComparisons} saved comparison${preview.counts.savedDependentComparisons === 1 ? "" : "s"} ${preview.counts.savedDependentComparisons === 1 ? "keeps" : "keep"} frozen information. Links to this original report become unavailable.`
                 : "";
-            confirm.textContent = value.artifactKind === "comparison" ? "Delete saved comparison" : "Delete report";
+            confirm.textContent = bulk ? `Delete ${preview.counts.reports.toLocaleString()} saved reports` : value.artifactKind === "comparison" ? "Delete saved comparison" : "Delete report";
             phase = "preview"; paint();
         } catch (error) { if (token === generation) { phase = "error"; message(error.message + " Nothing was deleted.", true); paint(); } }
         finally {

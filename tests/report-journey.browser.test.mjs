@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain, revealStoredRefresh } from "./helpers.mjs";
-import { chooseReportScope, reportContents, inspectReportCopies, scanReport } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, inspectReportCopies, scanReport, openReportLibrary, openReportCreation } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WORKIQ_JOURNEY_PROOFS;
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -40,6 +40,7 @@ test("guided actual frontend: deliberate one-session scope, four stages and all 
     const initial = await loadBoardState(context);
     const original = await readFile(path.join(context.dataDir, "private-evidence", initial.evidenceFile));
     await page.goto(runtime.url + "#reports"); await ready(page);
+    await openReportCreation(page);
     assert.equal(await page.locator("#collectionForm").isVisible(), false);
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No requests selected");
     assert.equal(await page.locator("#promptOptions").isVisible(), false);
@@ -331,8 +332,8 @@ test("final save survives read/lifecycle events, while an uncertain export is ne
     assert.equal(requests.filter(request => request.path === "/api/export").length, 2);
     assert.equal((await loadBoardState(context)).exports.length, 2, "The interrupted response conceals a real synthetic save; do not repeat it");
     await (await revealStoredRefresh(page)).click(); await ready(page);
-    await page.locator("#bundles > summary").click();
-    assert.match(await page.locator("#savedReportCount").textContent(), /^2 saved reports/);
+    await openReportLibrary(page);
+    assert.match(await page.locator("#savedReportCount").textContent(), /^2 reports/);
     assert.equal(requests.filter(request => request.path === "/api/export").length, 2);
     assert.deepEqual(errors, []);
 });

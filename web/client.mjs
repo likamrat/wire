@@ -179,7 +179,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderBody?.(node.open);
         return node;
     }
-    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list }) {
+    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false }) {
         const paint = (position = null) => {
             const page = presentation.page(key, items.length, size), start = page * size;
             const pager = viewKey(el("div", "pager list-pager"), "pager:" + key);
@@ -201,6 +201,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     control.dataset.pageDirection = String(offset);
                     control.disabled = offset < 0 ? page === 0 : start + size >= items.length;
                     pager.append(control);
+                }
+                if (jump) {
+                    const pages = Math.ceil(items.length / size);
+                    const form = el("form", "library-page-jump"), fieldLabel = el("label", "", "Page"), input = el("input");
+                    input.type = "number"; input.min = "1"; input.max = String(pages); input.step = "1";
+                    input.required = true; input.value = String(page + 1);
+                    input.setAttribute("aria-label", "Saved library page");
+                    fieldLabel.append(input, el("span", "", `of ${count(pages)}`));
+                    const go = el("button", "quiet", "Go"); go.type = "submit"; go.setAttribute("aria-label", "Go to page");
+                    form.append(fieldLabel, go);
+                    form.addEventListener("submit", event => {
+                        event.preventDefault();
+                        if (!form.reportValidity()) return;
+                        const position = capturePager(pager, 0);
+                        presentation.setPage(key, input.valueAsNumber - 1);
+                        paint(position);
+                        keyed("pager:" + key)?.querySelector("input")?.focus({ preventScroll: true });
+                    });
+                    pager.append(form);
                 }
             }
             const list = el(listTag, listClass);
@@ -588,9 +607,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const aliases = { overview: "home", calls: "activity", report: "reports" };
         const view = aliases[rawView] || rawView || "home";
         const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "range", "from", "to", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting"];
+        const keys = ["layer", "chart", "bucket", "range", "from", "to", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task"];
         const values = { view: ["home", "activity", "request", "reports", "settings", "collection-status"].includes(view) ? view : "home" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
+        if (view === "reports" && !params.has("task") && (rawView === "report" || values.request)) values.task = "create";
         if (navigationState?.evidenceView?.url === hash && typeof navigationState.evidenceView.search === "string") values.search = navigationState.evidenceView.search;
         if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToSessions) values.returnToSessions = navigationState.evidenceView.returnToSessions;
         if (navigationState?.evidenceView?.url === hash) {
@@ -601,6 +621,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return canonicalRoute(values);
     }
     function canonicalRoute(next) {
+        if (Object.hasOwn(next, "task") && (next.task !== "create" || !["reports", "request"].includes(next.view))) {
+            const { task, ...rest } = next;
+            next = rest;
+        }
         if (Object.hasOwn(next, "result")) next = { ...next, result: results.filterValue(next.result) };
         if (Object.hasOwn(next, "authors")) next = { ...next, authors: authorship.filterValue(next.authors) };
         if ((next.from || next.to) && (!next.range || next.range === "capture")) {
@@ -627,6 +651,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...route, view,
             request: ["request", "reports"].includes(view) ? route.request : undefined,
             origin: view === "request" ? (route.view === "reports" ? "reports" : route.origin || "activity") : undefined,
+            task: view === "reports" ? (route.view === "reports" ? route.task : route.origin === "reports" ? "create" : undefined)
+                : view === "request" && route.view === "reports" ? route.task : undefined,
             issues: view === "settings" ? route.issues : undefined,
             section: view === "settings" ? route.section : undefined,
             setting: view === route.view && ["settings", "collection-status"].includes(view) ? route.setting : undefined,
@@ -705,7 +731,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         draft.clearSelection();
         invalidatePreview();
         reportJourney?.clear();
-        go("reports", { request: undefined });
+        go("reports", { request: undefined, task: "create" });
     }
     function selectionRows() { return analytics?.rows || []; }
     function idsFor(row) { return Array.isArray(row?.scenarioIds) && row.scenarioIds.length ? row.scenarioIds : [row?.scenarioId]; }
@@ -905,6 +931,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         isLoading = true;
         isStale = Boolean(analytics);
+        $("deleteAllReports").disabled = true;
         syncResultFilter();
         syncAuthorFilter();
         renderTimeContext();
@@ -1028,7 +1055,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         selectControls?.close();
         sidebar.close(false);
         if ($("overlay").open) $("overlay").close();
-        invalidatePreview();
         const before = JSON.stringify(query());
         if (["range", "from", "to"].some(key => route[key] !== next[key])) dateDraft = null;
         route = canonicalRoute(next);
@@ -1038,6 +1064,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         syncControls();
         $("resetView").hidden = !viewChanged();
         const queryChanged = before !== JSON.stringify(query());
+        // Browsing saved files is the same workspace, not a change to the frozen draft.
+        if (previousRoute.view !== "reports" || route.view !== "reports" || queryChanged) invalidatePreview();
         const refinement = !reset && !restorePosition && Boolean(analytics)
             && ["home", "activity"].includes(route.view) && route.view === previousRoute.view
             && route.session === previousRoute.session && route.request === previousRoute.request
@@ -1169,7 +1197,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const active = route.view === "request" ? "activity" : route.view;
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
-            node.href = routeUrl(routeFor(view, { request: undefined }));
+            node.href = routeUrl(routeFor(view, { request: undefined, task: undefined }));
             if (view === active && node.closest("nav")) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
         });
@@ -1190,7 +1218,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             home: ["Work IQ in your Copilot chats", "Explore recorded activity and prepare feedback reports."],
             activity: [route.session ? sessionSource()?.name : "Choose a Copilot chat", route.session ? "" : "Explore GitHub Copilot chats and their recorded tool calls."],
             request: ["Request details", "Read the prompt and available response, then inspect the recorded evidence."],
-            reports: ["Create a report", "Choose requests and contents, review the copies, then save local files."],
+            reports: route.task === "create" ? ["Create a report", "Choose requests and contents, review the copies, then save local files."]
+                : ["Reports", "Find, open and manage your saved reports."],
             settings: ["Settings", "Manage your local connection, permission and collection preferences."],
             "collection-status": ["Collection status", "See whether approved local history collection is running, review gaps below, or change the source and collection preferences."],
         };
@@ -1218,7 +1247,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const actions = { home: [applied.layer === "http" ? "Choose a recorder source" : "Choose a Copilot chat", "activity"], activity: [route.session ? "Create report for this Copilot chat" : "Review selection", "reports"], request: ["Review selection", "reports"], reports: ["Back to activity", "activity"], settings: ["Back to activity", "activity"], "collection-status": ["Back to activity", "activity"] };
         const [label, target] = actions[route.view];
         $("pageAction").textContent = label;
-        $("pageAction").href = routeUrl(routeFor(target));
+        $("pageAction").href = routeUrl(routeFor(target, target === "reports" ? { task: "create" } : {}));
         if (route.view === "home") $("pageAction").href = routeUrl(routeFor("activity", { session: undefined, request: undefined, page: undefined }));
         const actionHost = route.view === "home" ? $("periodActions") : route.view === "reports" ? $("pageHeadingActions") : route.view === "request" ? $("activitySelectionContext") : $("pagePrimaryActions");
         if ($("pageAction").parentElement !== actionHost) {
@@ -1234,7 +1263,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if ($("resetView").parentElement !== resetHost) resetHost.append($("resetView"));
         $("scopeResetActions").hidden = route.view !== "request";
         const refreshHost = ["home", "activity"].includes(route.view) ? $("freshHelpBody")
-            : route.view === "reports" ? $("bundles")
+            : route.view === "reports" ? $("savedLibraryHelpBody")
             : route.view === "settings" ? $("settingsView")
             : route.view === "collection-status" ? $("collectionStatusView") : $("coverage");
         if ($("storedRefresh").parentElement !== refreshHost) {
@@ -1282,6 +1311,24 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         $("exploreLink").href = routeUrl(routeFor("activity"));
         $("backToSelection").href = routeUrl(routeFor("activity"));
+        renderReportTask();
+    }
+    function renderReportTask() {
+        if (!$("reportCreatePanel")) return;
+        const creating = route.task === "create";
+        $("reportCreatePanel").hidden = !creating;
+        $("savedReportsPanel").hidden = creating;
+        const current = reportJourney?.snapshot();
+        const unfinished = current && !["saved", "unavailable"].includes(current.phase)
+            && (current.requestCount > 0 || current.step > 1 || current.promptMode !== "masked"
+                || current.formats.join(",") !== "html" || $("manualTerms").value.trim());
+        setText($("reportCreateLink"), current?.completed ? "Saved report details" : unfinished ? "Continue draft" : "Create a report");
+        for (const [id, active, task] of [["reportLibraryLink", !creating, undefined], ["reportCreateLink", creating, "create"]]) {
+            const control = $(id);
+            control.href = routeUrl(routeFor("reports", { task, request: task ? route.request : undefined }));
+            if (active) control.setAttribute("aria-current", "page");
+            else control.removeAttribute("aria-current");
+        }
     }
     function renderViewingContext() {
         const host = $("viewingContext"), scenarios = currentViewScenarios();
@@ -2241,6 +2288,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         updateSessionSelections();
         selectControls?.sync();
         renderStoredRefresh();
+        renderReportTask();
     }
     function renderReports() {
         captureReading();
@@ -2299,14 +2347,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         $("bundleList").replaceChildren();
         const savedCount = state.exports?.length || 0;
-        $("bundles").querySelector("summary").textContent = `Previously saved reports (${count(savedCount)})`;
-        $("savedReportCount").textContent = `${count(savedCount)} saved report${savedCount === 1 ? "" : "s"}. Newest prepared first; unknown dates last. Separate from the draft selection above.`;
+        const reportCount = (state.exports || []).filter(bundle => (bundle.kind ?? "report") === "report").length;
+        const comparisonCount = savedCount - reportCount;
+        $("bundles").querySelector("summary").textContent = comparisonCount ? `Saved reports and comparisons (${count(savedCount)})` : `Saved reports (${count(savedCount)})`;
+        $("savedReportCount").textContent = `${count(reportCount)} report${reportCount === 1 ? "" : "s"}${comparisonCount ? ` / ${count(comparisonCount)} comparison${comparisonCount === 1 ? "" : "s"}` : ""}. Newest prepared first.`;
+        $("deleteAllReports").disabled = !reportCount || isLoading || isStale;
         bindDetails($("bundles"), "bundles", open => {
         $("bundleList").replaceChildren();
         if (!open) return;
-        setText($("savedReportSearchCount"), `0 of ${count(savedCount)} saved reports match.`);
+        setText($("savedReportSearchCount"), "");
         if (!savedCount) { $("bundleList").append(el("p", "", "No local reports have been saved.")); return; }
-        $("bundleList").append(el("p", "context-help-note", help.notices.download));
         const history = el("div");
         const query = localQuery("savedReportSearch");
         const rows = state.exports.map((bundle, index) => {
@@ -2323,7 +2373,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 mode, formats,
                 Number.isSafeInteger(groups) && groups >= 0 ? `${count(groups)} request group${groups === 1 ? "" : "s"}` : "",
             ].filter(Boolean).join(" / ");
-            return { bundle, index, prepared, label };
+            return { bundle, index, prepared, label, date, mode, formats };
         });
         const labelCounts = new Map();
         for (const { label } of rows) labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
@@ -2335,25 +2385,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ({ none: "No prompts", masked: "Masked prompts", original: "Original prompts" })[bundle.promptMode],
             ...(bundle.formats || []), ...Object.keys(bundle.files || {}), bundle.timeContext?.timeZone, bundle.timeContext?.locale,
         ]));
-        setText($("savedReportSearchCount"), `${count(matching.length)} of ${count(savedCount)} saved reports match.`);
+        setText($("savedReportSearchCount"), query ? `${count(matching.length)} of ${count(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
         if (!matching.length) { $("bundleList").append(empty("No saved reports match", "Try a report ID, date, format or prompt mode, or clear this metadata search.")); return; }
-        pagedList(history, matching, { key: "saved-reports:" + query, noun: "saved reports", renderItem: ({ bundle, label }) => {
+        pagedList(history, matching, { key: "saved-reports:" + query, noun: comparisonCount ? "saved items" : "saved reports", jump: true, renderItem: ({ bundle, label, date, mode, formats }) => {
             detailOwner = "bundle:" + bundle.bundleId;
-            const content = el("div");
+            const content = el("div", "saved-report-management");
             content.append(el("p", "mono", `Report ID: ${bundle.bundleId}`));
+            const outer = el("article", "saved-library-row");
+            let openButton;
             if (bundle.kind !== "comparison") {
-                if (bundle.files?.["product-report.html"]) content.append(button("Open saved report", event => openSavedReport(bundle, event.currentTarget), "quiet"));
+                if (bundle.files?.["product-report.html"]) openButton = button("Open", event => openSavedReport(bundle, event.currentTarget), "quiet");
                 else content.append(el("p", "muted", "HTML was not saved. Read one of the saved downloads below."));
+            } else {
+                openButton = button("Open", () => reportComparisonUI.open(bundle.bundleId), "quiet");
             }
-            const compare = button(bundle.kind === "comparison" ? "Open saved comparison" : "Compare saved reports", () => reportComparisonUI.open(bundle.kind === "comparison" ? bundle.bundleId : undefined), "quiet");
-            content.append(compare);
+            if (openButton) {
+                openButton.setAttribute("aria-label", bundle.kind === "comparison" ? "Open saved comparison" : "Open saved report");
+                viewKey(openButton, "open-bundle:" + bundle.bundleId);
+            }
+            if (bundle.kind !== "comparison") content.append(button("Compare saved reports", () => reportComparisonUI.open(), "quiet"));
             content.append(button(bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", event => savedArtifactUI.open({
                 artifactKind: bundle.kind === "comparison" ? "comparison" : "report",
                 artifactId: bundle.bundleId, label: `${bundle.preparedAtDisplay || time.formatTime(bundle.preparedAt, viewerTime)} / ${bundle.bundleId}`,
             }, event.currentTarget), "danger"));
             if (bundle.timeContext) content.append(el("p", "", `Report timezone: ${time.label(bundle.timeContext)}. Prepared: ${bundle.preparedAtDisplay || time.formatTime(bundle.preparedAt, bundle.timeContext)}. Locale: ${bundle.timeContext.locale}.`));
-            if (bundle.promptMode) content.append(el("p", "", `${({ none: "No prompts", masked: "Masked prompts", original: "Original prompts" })[bundle.promptMode]} / ${(bundle.formats || []).join(", ")}`));
-            for (const [name, file] of Object.entries(bundle.files || {})) {
+            const groups = bundle.selectionScope?.requestGroups;
+            if (Number.isSafeInteger(groups) && groups >= 0) content.append(el("p", "", `${count(groups)} request group${groups === 1 ? "" : "s"}`));
+            const downloads = el("div", "saved-report-downloads");
+            for (const name of Object.keys(bundle.files || {})) {
                 const control = button("Download " + name, async () => {
                     control.disabled = true;
                     try {
@@ -2363,14 +2422,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 });
                 control.prepend(ux.icon("download"));
                 control.classList.add("icon-action");
-                content.append(ux.tooltip(control, help.actions.download), el("p", "mono", file));
+                downloads.append(ux.tooltip(control, help.actions.download));
             }
+            content.append(downloads);
             const row = el("details", "detail-disclosure saved-report");
-            row.append(el("summary", "", labelCounts.get(label) > 1 ? `${label} / ${bundle.bundleId}` : label), content);
-            return bindDetails(row, detailOwner);
+            const summary = el("summary", "saved-report-summary"), identity = el("span", "saved-report-identity");
+            identity.append(el("span", "saved-report-name", bundle.kind === "comparison" ? "Comparison" : "Report"),
+                el("span", "", date === "Time not recorded" ? "Preparation time unavailable" : `Prepared ${date}`));
+            if (labelCounts.get(label) > 1) identity.append(el("span", "saved-report-disambiguation", bundle.bundleId));
+            const metadata = el("span", "saved-report-metadata");
+            metadata.append(el("span", "", mode || "Prompt mode not recorded"), el("span", "", formats || "Formats not recorded"));
+            summary.append(identity, metadata, el("span", "saved-report-manage", "Manage"));
+            row.append(summary, content);
+            outer.append(bindDetails(row, detailOwner));
+            if (openButton) outer.append(openButton);
+            else outer.append(el("span", "saved-report-no-html", "No HTML"));
+            return outer;
         } });
         $("bundleList").append(history);
-        });
+        }, true);
         updateSelection();
     }
     async function openSavedReport(bundle, trigger) {
@@ -3239,13 +3309,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     document.querySelectorAll("[data-nav]").forEach((node) => node.addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        event.preventDefault(); go(node.dataset.nav, { request: undefined });
+        event.preventDefault(); go(node.dataset.nav, { request: undefined, task: undefined });
     }));
-    for (const id of ["pageAction", "exploreLink", "backToSelection"]) $(id).addEventListener("click", (event) => {
+    for (const id of ["pageAction", "exploreLink", "backToSelection", "reportLibraryLink", "reportCreateLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        if (isLoading || isStale) return;
-        navigate({ ...readRoute(new URL(event.currentTarget.href).hash, null), search: route.search, returnToSessions: route.returnToSessions });
+        const reportTask = event.currentTarget.closest("#reportTaskNav");
+        if (!reportTask && (isLoading || isStale)) return;
+        navigate({ ...readRoute(new URL(event.currentTarget.href).hash, null), search: route.search, returnToSessions: route.returnToSessions,
+            ...(reportTask ? { localSearch: route.localSearch } : {}) });
     });
     $("resetView").addEventListener("click", resetView);
     document.querySelectorAll("[data-chart]").forEach((node) => node.addEventListener("click", () => go("home", { chart: node.dataset.chart, request: undefined })));
@@ -3373,6 +3445,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     settingsSize.observe($("settingsView"));
     $("refreshBtn").addEventListener("click", refreshStoredData);
+    $("deleteAllReports").addEventListener("click", event => savedArtifactUI.open({ scope: "all-reports" }, event.currentTarget));
     $("collectionRetry").addEventListener("click", refreshStoredData);
     $("collectionRetry").setAttribute("aria-describedby", "storedRefreshHelp");
     $("clearDates").addEventListener("click", () => {
@@ -3435,11 +3508,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     window.addEventListener("pageshow", () => { pageInactive = false; clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); });
     document.addEventListener("visibilitychange", () => { assessmentUI.clearPrivateText(); if (!document.hidden) { clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); } });
     for (const node of document.querySelectorAll("details[id]")) {
-        if (!node.dataset.disclosureKey && node.id !== "settingsCategories") bindDetails(node, node.id);
+        if (!node.dataset.disclosureKey && node.id !== "settingsCategories") bindDetails(node, node.id, undefined, node.id === "bundles");
     }
     viewKey($("chart"), "chart");
     reportJourney = createReportJourney({
-        onStateChange: renderStoredRefresh,
+        onStateChange: () => { renderStoredRefresh(); renderReportTask(); },
         root: $("reportsView"), cancelReview: invalidatePreview, clearSelection: clearReportSelection,
         chooseRequests: () => navigate(reportEntry?.returnTo || routeFor("activity")),
         showSourceIssues: async () => {
@@ -3461,8 +3534,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return $("pageTitle");
         },
         onDeleted: async artifact => {
-            reportComparisonUI.invalidateSavedReport(artifact.artifactId);
-            reportJourney.invalidateSavedReport(artifact.artifactId);
+            for (const item of artifact.artifacts ?? [artifact]) {
+                reportComparisonUI.invalidateSavedReport(item.artifactId);
+                reportJourney.invalidateSavedReport(item.artifactId);
+            }
             return load({ background: true });
         },
     });

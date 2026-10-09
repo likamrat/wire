@@ -1,4 +1,9 @@
 export const reportJourneyStyles = `
+.report-task-nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;max-width:1100px}
+.report-task-nav>a{min-height:44px;align-content:center;white-space:normal}
+.report-task-nav>a[aria-current=page]{--pill-fill:var(--accent-soft);--pill-border:var(--accent);color:var(--accent);font-weight:var(--weight-strong)}
+#reportCreatePanel[hidden],#savedReportsPanel[hidden]{display:none!important}
+#reportsView #savedReportsPanel #bundles{margin-top:0}
 .assessment-dialog.saved-report-dialog{width:min(72rem,calc(100% - 24px))}
 .assessment-dialog.saved-report-dialog>.dialog-head{flex-wrap:wrap}
 .assessment-dialog.saved-report-dialog>.dialog-head h2{flex:1 1 auto;min-width:min-content;overflow-wrap:normal}
@@ -75,6 +80,50 @@ export const reportJourneyStyles = `
 .report-save-success{font-weight:600;color:var(--success);margin-bottom:12px}
 .report-saved-id,.report-saved-location{overflow-wrap:anywhere;color:var(--muted)}
 #bundleList .saved-report>summary{min-height:44px}
+.saved-library-context{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 20px}
+.saved-library-context>p{margin:0;color:var(--muted)}
+#savedLibraryHelp{position:relative;margin-inline-start:auto}
+#savedLibraryHelp>summary{min-height:44px;padding:12px 0;color:var(--muted);cursor:pointer}
+#savedLibraryHelp[open]{flex-basis:100%;margin-inline-start:0}
+#savedLibraryHelpBody{max-width:72ch}
+.saved-library-tools{display:flex;flex-wrap:wrap;align-items:end;gap:8px 24px;margin:8px 0}
+.saved-library-tools>.scoped-search{flex:1 1 20rem;max-width:30rem;min-width:0;margin:0}
+.saved-library-tools>.scoped-search label{display:block;margin:0 0 4px}
+.saved-library-tools>button{margin-inline-start:auto;max-width:100%;white-space:normal}
+#savedReportSearchCount:empty{display:none}
+#bundleList .list-pager{margin:12px 0;gap:8px;align-items:center}
+.library-page-jump{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 0 auto}
+.library-page-jump label{display:flex;align-items:center;gap:8px;margin:0;font-weight:var(--weight-regular)}
+.library-page-jump input{width:5.5rem;min-height:44px;min-width:0;padding:8px}
+.saved-library-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px;border-top:1px solid var(--rule);padding:8px 0}
+#bundleList .saved-library-row>.saved-report{min-width:0;border:0;margin:0;padding:0}
+#bundleList .saved-report>summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(10rem,.65fr) auto;align-items:center;gap:12px;list-style:none;padding:4px 0;font-weight:var(--weight-regular)}
+.saved-report-summary::-webkit-details-marker{display:none}
+.saved-report-identity,.saved-report-metadata{display:grid;gap:2px;min-width:0;overflow-wrap:anywhere}
+.saved-report-name{font-weight:var(--weight-strong)}
+.saved-report-metadata,.saved-report-disambiguation{color:var(--muted)}
+.saved-report-manage{display:flex;align-items:center;gap:8px;padding-inline-end:3px;color:var(--accent);min-height:44px}
+.saved-report-manage:after{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg)}
+[open]>.saved-report-summary .saved-report-manage:after{transform:rotate(225deg)}
+.saved-library-row>button{min-height:44px;align-self:center}
+.saved-library-row:has(>details[open])>button{align-self:start}
+.saved-report-management{padding:12px 0;overflow-wrap:anywhere}
+.saved-report-management>p{margin:8px 0}
+.saved-report-downloads{display:flex;flex-wrap:wrap;gap:8px}
+.saved-report-no-html{align-self:center;color:var(--muted)}
+@media(max-width:850px){
+ #bundleList .saved-report>summary{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}
+ .saved-report-identity{grid-column:1}
+ .saved-report-metadata{grid-column:1}
+ .saved-report-manage{grid-column:2;grid-row:1 / 3}
+}
+@media(max-width:500px){
+ .saved-library-tools>.scoped-search{max-width:none;flex-basis:100%}
+ .saved-library-tools>button{margin-inline-start:0}
+ #bundleList .saved-report>summary{grid-template-columns:minmax(0,1fr)}
+ .saved-report-manage{grid-column:1;grid-row:auto}
+ .library-page-jump{margin-inline-start:0}
+}
 .report-downloads{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0 28px}
 .report-journey [hidden]{display:none!important}
 #reportsView:is([data-report-phase=saved],[data-report-phase=unavailable]) #reportStage4>.report-stage-actions{display:none}

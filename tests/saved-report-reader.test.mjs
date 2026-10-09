@@ -8,7 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { readSavedReportDocument, reportHash } from "../lib/report-artifacts.mjs";
-import { chooseReportScope, reportContents, scanReport } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, scanReport, openReportLibrary } from "./report-journey-helpers.mjs";
 
 async function save(exports, context, formats = ["html", "json"]) {
     const state = await loadBoardState(context);
@@ -78,11 +78,11 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await page.locator(".attestation input[data-review-control]").check();
     await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-    await page.locator("#bundles > summary").click();
+    await openReportLibrary(page);
     const rowFor = id => page.locator(".saved-report").filter({ has: page.locator(".mono", { hasText: `Report ID: ${id}` }) });
     const firstRow = rowFor(first.bundleId), secondRow = rowFor(second.bundleId);
     await firstRow.locator(":scope > summary").click();
-    const open = firstRow.getByRole("button", { name: "Open saved report", exact: true });
+    const open = firstRow.locator("..").getByRole("button", { name: "Open saved report", exact: true });
     await open.click();
     const dialog = page.getByRole("dialog", { name: "Saved report", exact: true });
     await page.waitForFunction(() => document.querySelector(".saved-report-dialog iframe,.saved-report-dialog .error"));
@@ -159,7 +159,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await open.click(); await read.promise;
     await dialog.getByRole("button", { name: "Close saved report", exact: true }).click();
     await secondRow.locator(":scope > summary").click();
-    await secondRow.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await secondRow.locator("..").getByRole("button", { name: "Open saved report", exact: true }).click();
     await dialog.locator("iframe").waitFor(); release.resolve();
     await page.waitForTimeout(50);
     assert.match(await dialog.innerText(), new RegExp(second.bundleId));

@@ -179,6 +179,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             return node;
         }
         const shell = el("div", "report-journey"), nav = el("nav", "report-progress"), list = el("ol");
+        shell.id = "reportCreatePanel";
         nav.setAttribute("aria-label", "Report creation steps");
         const progress = el("p", "report-progress-label"), summary = el("p", "report-choice-summary"), context = el("p", "report-entry-context");
         progress.setAttribute("role", "status");
@@ -267,7 +268,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         }
         const toolbar = root.querySelector(".report-toolbar");
         toolbar.hidden = true;
-        root.insertBefore(shell, byId("bundles"));
+        root.insertBefore(shell, byId("savedReportsPanel"));
         shell.append(...panels);
         nodes = { panels, steps, stepHints, headings, backButtons, progress, summary, context, gap, choose, issues, next, scan, error, reviewHost, saveHost, reviewActions, saveActions, el, button };
         paint();

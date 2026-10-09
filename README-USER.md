@@ -11,7 +11,7 @@ need separate approval and are not enabled by installing WIRE.
 | --- | --- |
 | Home | Check for new activity; filter dates and results. |
 | Activity | Choose a Copilot chat, inspect interactions and select requests. |
-| Reports | Create, download, compare and delete saved reports. |
+| Reports | Find, open and manage saved reports, or switch to creating a report. |
 | Collection status | Understand missing or incomplete local histories. |
 | Settings | **Connection & permission** for source approval; **Time zone**, collection and capture settings. |
 
@@ -69,10 +69,10 @@ To keep recorded replies in WIRE, open **Settings > Collection preferences > Rec
 
 ## Create a report
 
-1. **Requests:** Open **Reports** in navigation (on mobile, open **Menu > Reports**), then **Choose requests in Activity**. Tick requests and return via **Review selection** or **Reports**. **Add to report** works from interaction details. Selection starts empty; other scopes are under **Use current view or all collected activity**. Use **Prompt authors in this report** to narrow that scope, then **Apply**. Your-only leaves out agent-originated interactions, including their calls and scores; unverified authors are a separate choice. Browsing filters do not discard hidden selected requests. Review the included/excluded group counts, then click **Continue to contents**.
+1. **Requests:** Open **Reports** in navigation (on mobile, open **Menu > Reports**), choose **Create a report**, then **Choose requests in Activity**. Tick requests and return via **Review selection** or **Reports > Continue draft**. **Add to report** works from interaction details. Selection starts empty; other scopes are under **Use current view or all collected activity**. Use **Prompt authors in this report** to narrow that scope, then **Apply**. Your-only leaves out agent-originated interactions, including their calls and scores; unverified authors are a separate choice. Browsing filters do not discard hidden selected requests. Review the included/excluded group counts, then click **Continue to contents**.
 2. **Contents:** Choose **No prompts**, **Masked prompts** or **Original prompts**, and HTML, PDF, JSON or Markdown. Click **Scan and preview**.
 3. **Review:** Read the preview, prompt copies and privacy findings. **Inspect exact files** and **Included evidence and preparation details** show the underlying copies and counts. **Edit or omit this report copy** affects only exports; then **Rebuild preview**. Check approval and **Complete disclosure review**.
-4. **Save:** Check the approved requests, prompt mode and formats, then click **Confirm local export**. Use **Open saved report** or **Download**. Reopen files through **Previously saved reports**.
+4. **Save:** Check the approved requests, prompt mode and formats, then click **Confirm local export**. Use **Open saved report** or **Download**. Reopen files through **Saved reports > Open**.
 
 Back and the next action stay together in each step. Opening scope details and
 optional request labels is not a required step. Back to Contents keeps an unchanged preview;
@@ -85,9 +85,23 @@ Changing report authors requires a fresh preview and disclosure review. Saved fi
 
 ## Compare or delete
 
-Expand a saved report and click **Compare saved reports**. Choose **Baseline report** and **Later report**, then **Compare reports**. These use frozen facts. To save, choose formats, **Prepare comparison copy**, review and **Confirm disclosure**, then **Save comparison**.
+Reports opens on the saved library. Search across all pages, use **Previous/Next**
+or **Page / Go**, and choose **Open** to read a frozen report. **Manage** holds
+downloads, comparisons and individual deletion. Search uses report metadata,
+not private report contents or prompts. Switching to **Continue draft** keeps
+your unfinished report choices and otherwise unchanged review.
+
+Choose **Manage > Compare saved reports**. Choose **Baseline report** and **Later report**, then **Compare reports**. These use frozen facts. To save, choose formats, **Prepare comparison copy**, review and **Confirm disclosure**, then **Save comparison**.
 
 **Delete report** or **Delete saved comparison** removes that item and managed copies. Source activity, other reports and external downloads remain; saved comparisons survive deletion of an input report.
+
+**Delete all saved reports** previews all report bundles across every page,
+regardless of search, before a separate count-labeled confirmation. Saved
+comparisons, collected activity, draft reports and external downloads remain.
+Unsaved comparisons using deleted reports become invalid. Cancel deletes nothing.
+Deletion is permanent; interrupted cleanup can leave files behind. Use
+**Check deletion result**, including after reopening the panel, rather than
+repeating confirmation. New reports saved after the preview are not included.
 
 For collected records, use **Settings > Data management > Delete collected activity**. Opening it deletes nothing. Choose **All collected activity** or dates, then **Preview deletion**. Review counts before **Delete N records**. **Cancel** changes nothing; **Change scope** requires another preview. Copilot sources and saved reports remain. Red outlines identify destructive entries and confirmations, not ordinary previews or cancellation.
 

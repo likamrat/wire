@@ -87,7 +87,7 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     await navigateMain(page, "reports");
     await emptySelection(page);
     assert.equal(await page.locator("#scopeCount-all").textContent(), "18 request groups");
-    assert.match(await page.locator("#savedReportCount").textContent(), /^1 saved report\./);
+    assert.match(await page.locator("#savedReportCount").textContent(), /^1 report\./);
     assert.ok(requests.every(request => ["/api/snapshot", "/api/collection/status", "/api/assessment/overview"].includes(request.path)), "Opening Reports only reads the snapshot, collection status and current insight overview");
     await chooseReportScope(page, "all");
     await reportContents(page);

@@ -131,3 +131,79 @@ test("legacy root-layout artifacts and stranded index copies delete without rewr
     assert.equal(await readFile(path.join(staging, "1.json"), "utf8"), sourceCopy);
     assert.deepEqual((await loadBoardState(context)).evidence, before.evidence);
 });
+
+test("all-report deletion seals logical membership once and preserves newer reports, comparisons, activity and managed indexes", async t => {
+    const { context, reports, comparison, managedBackup, before } = await artifactsFixture(t, { backup: true });
+    const controller = createDeletionController(context, { describeSavedArtifact: createSavedArtifactDescriptor(context) });
+    const preview = await controller.previewArtifact("panel", { scope: "all-reports" });
+    assert.equal(preview.scope, "all-reports");
+    assert.deepEqual(preview.artifacts.map(item => item.artifactId), reports);
+    assert.equal(preview.counts.reports, 2, "A bundle counts once, not once per format/copy");
+    assert.equal(preview.counts.managedFiles, 20);
+    assert.equal(preview.counts.savedDependentComparisons, 1, "Shared comparisons count once");
+    assert.equal(preview.counts.savedComparisons, 1);
+    assert.deepEqual((await loadBoardState(context)).exports, before.exports, "Preview is read-only");
+    const retainedBytes = await Promise.all(Object.values(before.exports[2].files).map(file => readFile(file)));
+    const newer = `export-${randomUUID()}`;
+    await updateBoardState(context, state => { state.exports.push({ bundleId: newer, kind: "report", files: {} }); });
+    const result = await controller.confirmArtifact("panel", { operationId: preview.operationId, confirmed: true });
+    assert.equal(result.phase, "complete");
+    assert.deepEqual(result.artifacts, preview.artifacts);
+    const after = await loadBoardState(context);
+    assert.deepEqual(after.exports.map(entry => entry.bundleId), [comparison, newer], "Unreviewed new reports are not swept in");
+    assert.deepEqual(after.evidence, before.evidence);
+    assert.deepEqual(after.personalEvaluation, before.personalEvaluation);
+    assert.equal(activityDeletionVersion(after), activityDeletionVersion(before));
+    assert.deepEqual(await Promise.all(Object.values(before.exports[2].files).map(file => readFile(file))), retainedBytes);
+    assert.deepEqual((await loadBoardState({ dataDir: managedBackup })).exports.map(entry => entry.bundleId), [comparison]);
+    for (const entry of before.exports.slice(0, 2)) for (const file of Object.values(entry.files)) {
+        await assert.rejects(access(file), { code: "ENOENT" });
+        await assert.rejects(access(path.join(managedBackup, path.relative(context.dataDir, file))), { code: "ENOENT" });
+    }
+    assert.deepEqual(await controller.confirmArtifact("panel", { operationId: preview.operationId, confirmed: true }), result);
+});
+
+test("bulk previews fail closed for cancelled, expired, changed or broadened scope and recover only the sealed batch", async t => {
+    const { context, reports, comparison, before } = await artifactsFixture(t);
+    let clock = Date.now();
+    const descriptor = createSavedArtifactDescriptor(context);
+    const controller = createDeletionController(context, { describeSavedArtifact: descriptor, now: () => clock });
+    for (const scope of [{ scope: "all" }, { scope: "all-reports", query: "masked" }, { scope: "all-reports", artifactId: reports[0] }]) {
+        await assert.rejects(controller.previewArtifact("panel", scope), { status: 422 });
+    }
+    let preview = await controller.previewArtifact("panel", { scope: "all-reports" });
+    controller.cancel("panel", preview.operationId);
+    await assert.rejects(controller.confirmArtifact("panel", { operationId: preview.operationId, confirmed: true }), { status: 409 });
+    preview = await controller.previewArtifact("panel", { scope: "all-reports" });
+    clock += 120001;
+    await assert.rejects(controller.confirmArtifact("panel", { operationId: preview.operationId, confirmed: true }), { status: 409 });
+    preview = await controller.previewArtifact("panel", { scope: "all-reports" });
+    const file = before.exports[1].files["product-report.pdf"], original = await readFile(file);
+    await writeFile(file, "SYNTHETIC_CHANGED_BEFORE_CONFIRMATION");
+    await assert.rejects(controller.confirmArtifact("panel", { operationId: preview.operationId, confirmed: true }), { status: 409 });
+    assert.deepEqual((await loadBoardState(context)).exports, before.exports, "Stale batch does not remove any index entries");
+    for (const entry of before.exports) for (const file of Object.values(entry.files)) await access(file);
+    await writeFile(file, original);
+    const interrupted = createDeletionController(context, {
+        describeSavedArtifact: descriptor, afterSeal: () => writeFile(file, "SYNTHETIC_CHANGED_AFTER_SEAL"),
+    });
+    preview = await interrupted.previewArtifact("panel", { scope: "all-reports" });
+    await assert.rejects(interrupted.confirmArtifact("panel", { operationId: preview.operationId, confirmed: false }), { status: 422 });
+    await assert.rejects(interrupted.confirmArtifact("other-panel", { operationId: preview.operationId, confirmed: true }), { status: 409 });
+    await assert.rejects(interrupted.confirmArtifact("panel", { operationId: preview.operationId, confirmed: true }), /incomplete/);
+    assert.equal((await interrupted.status(preview.operationId, "panel")).phase, "pending");
+    const sealed = await loadBoardState(context);
+    assert.deepEqual(sealed.exports.map(entry => entry.bundleId), [comparison], "Logical removal seals together; disk cleanup can be partial");
+    assert.deepEqual(sealed.evidence, before.evidence);
+    await assert.rejects(interrupted.previewArtifact("panel", { scope: "all-reports" }), { status: 409 });
+    await assert.rejects(interrupted.status(preview.operationId, "other-panel", "0".repeat(64)), { status: 403 });
+    const restarted = createDeletionController(context, { describeSavedArtifact: descriptor });
+    await assert.rejects(restarted.recover(), /incomplete/);
+    await writeFile(file, original);
+    await restarted.recover();
+    const result = await restarted.status(preview.operationId, "new-panel", preview.receiptToken);
+    assert.equal(result.phase, "complete");
+    assert.equal(result.receiptHash, undefined);
+    await assert.rejects(restarted.previewArtifact("panel", { scope: "all-reports" }), { status: 422 });
+    for (const entry of before.exports.slice(0, 2)) for (const file of Object.values(entry.files)) await assert.rejects(access(file), { code: "ENOENT" });
+});

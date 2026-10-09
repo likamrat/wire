@@ -189,9 +189,38 @@ historical evidence still needs separately approved bounded recovery, never a de
 
 Editing or omitting a prompt copy disables approval until you select **Rebuild preview** and review again. Edits change only the draft copy, not saved files or captured sources. Scope, contents and source changes still require a current scan.
 
-Saved history shows known preparation dates, prompt modes, formats and request-group counts. Preparation time is not the activity period. Reports appear newest-prepared first; exact timestamp ties use newest registration first. Unknown dates follow in original registration order, without guessing from private contents or file modification times. Identical summaries include the ID; every expanded entry retains its full ID. Search covers safe metadata across all pages.
+### Finding and opening saved reports
 
-Saving returns the current history search to its first page without clearing its query or other filters. Background refreshes preserve the history page and disclosures. Deleting the displayed saved report replaces its ready message and downloads with an unavailable state, including when another tab's deletion is observed. Unrelated deletions leave newer saved results and unfinished drafts intact.
+**Reports** opens on the saved library, not the creation wizard. Choose **Create
+a report** to enter the existing four-stage flow, or **Continue draft** to return
+to unfinished choices and review. **Saved reports** switches back without clearing
+selection or invalidating an otherwise unchanged prepared review. Browser Back
+and Forward restore these tasks and the saved-library search/page. The explicit
+Activity create action opens creation directly. `#reports?task=create` (and the
+legacy `#report` link) opens creation; reloading still starts a new empty draft,
+not an inferred selection. Existing source, permission and evidence checks remain.
+
+Saved history already paginates; it is not an endless list. **Saved reports** shows
+six items per page, the current range and total, Previous/Next, and a **Page / Go**
+control to jump directly to a distant page. When comparisons are present, the
+library names them explicitly and counts reports and comparisons separately.
+Search covers safe metadata across every page, not just the visible six items:
+IDs, preparation dates, formats, prompt modes and time zones. It does not read
+stored report bodies or prompts.
+
+Rows show preparation time, prompt mode and format availability. **Open** reads
+the registered frozen HTML directly; **Manage** reveals full identity, request-group
+count, preparation details, downloads, comparison and individual deletion actions.
+No saved HTML is regenerated. Missing HTML and unknown metadata remain explicit.
+**About saved reports** holds the search/privacy boundary and **Refresh stored data**;
+refresh retains its existing draft/review guards.
+
+Preparation time is not the activity period. Reports appear newest-prepared first;
+exact timestamp ties use newest registration first. Unknown dates follow in original
+registration order, without guessing from private contents or file modification times.
+Identical summaries include the ID; every expanded entry retains its full ID.
+
+Saving returns the current history search to its first page without clearing its query or other filters. Background refreshes preserve the history page and disclosures. Deleting the displayed saved report replaces its ready message and downloads with an unavailable state, including when another tab's deletion is observed. Unrelated deletions leave newer saved results and unfinished report drafts intact.
 
 ## Comparing two reports
 
@@ -232,8 +261,27 @@ These actions have different meanings:
 - **Discard draft / clear selection** clears unsaved work, not recorded activity or saved reports.
 - **Delete collected activity** removes the approved activity scope and its unsaved derived data. Saved reports and comparison exports retain their reviewed copies.
 - **Delete report** removes one logical saved bundle: its managed formats, manifest, embedded facts and recognized managed copies. It does not delete the source interaction, another report, or an external download.
+- **Delete all saved reports** previews every saved report bundle across all pages,
+  regardless of the current search. A bundle counts once, not once per format.
+  The separate confirmation names the report/file/copy counts and retained
+  comparisons. It excludes saved comparisons, collected activity, draft reports
+  and external downloads. Unsaved comparisons using a deleted input report become
+  invalid, including their preview and disclosure approval. Cancel does not delete anything.
 - **Delete saved comparison** removes that comparison bundle, not either source report.
 
 Deleting an original report does not silently delete a saved comparison that already contains frozen information from it. Confirmation discloses those retained comparisons. Their bytes remain unchanged; the live original-report link becomes unavailable.
 
 Source deletion, permission revocation and deletion of a selected source report invalidate affected unsaved comparisons and approvals. A stale save cannot recreate a deleted artifact. Incomplete cleanup has a recoverable operation status; the UI checks that operation rather than blindly repeating a destructive request.
+
+Bulk confirmation binds the exact membership and hashed managed inventory from its
+two-minute preview. New reports saved after that preview are never swept in. Changed
+members, copies, retention dependencies or deletion state require a fresh preview.
+The batch reuses the saved-artifact ownership checks, recovery-index updates and
+deletion tombstones in one guarded operation, not a directory purge or repeated
+individual delete requests. Reports become unavailable together when the operation
+is sealed, but file cleanup is **not** an all-or-nothing filesystem transaction.
+An interruption can leave partial cleanup. The panel retains its recovery details.
+Use **Check deletion result** (also available after panel reload); it reads the original
+operation without resubmitting deletion. Runtime restart recovery finishes only
+that sealed plan and refuses changed files. A receipt reporting no committed
+operation permits a new deliberate preview, never an automatic retry.

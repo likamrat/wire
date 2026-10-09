@@ -237,7 +237,7 @@ test("context actions retain native destinations, private search, draft membersh
     await page.locator("#reportClearSelection").click();
     assert.equal(await page.locator("#exportBtn").isDisabled(), true);
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No requests selected");
-    assert.match(await page.locator("#savedReportCount").textContent(), /^1 saved report\./);
+    assert.match(await page.locator("#savedReportCount").textContent(), /^1 report\./);
 });
 
 test("long contextual labels wrap inside a narrow panel on a wide host, including disabled controls", { timeout: 30000, skip: baseline }, async t => {

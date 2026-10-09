@@ -67,7 +67,7 @@ async function setup(t, { comparison = false, timed = false } = {}) {
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
-    await page.locator("#bundles>summary").click();
+    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#bundles>summary").click();
     const row = id => page.locator(`#bundleList details[data-disclosure-key="bundle:${id}"]`);
     return { context, controller, page, calls, bundles, savedComparison, row };
 }
@@ -85,7 +85,7 @@ test("saved comparison Back returns useful focus to its retained draft section w
     await selectReport(page, "Baseline report", bundles[0].bundleId);
     await selectReport(page, "Later report", bundles[1].bundleId);
     await row(savedComparison.bundleId).locator(":scope>summary").click();
-    await row(savedComparison.bundleId).getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await row(savedComparison.bundleId).locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
     await workspace.locator(".report-comparison").waitFor();
     const back = workspace.getByRole("button", { name: "Back to comparison draft", exact: true });
     await back.focus();
@@ -239,7 +239,7 @@ test("contextual report deletion cancels safely and preserves a saved comparison
     const dialog = page.locator('dialog[aria-labelledby="savedArtifactDeleteTitle"]');
     const confirm = dialog.getByRole("button", { name: "Delete report", exact: true });
     await page.waitForFunction(() => !document.querySelector(".delete-object-confirm")?.disabled);
-    assert.match(await dialog.textContent(), /saved comparisons keep their frozen information/);
+    assert.match(await dialog.textContent(), /1 saved comparison keeps frozen information/);
     assert.equal(await dialog.getByRole("button", { name: "Cancel", exact: true }).evaluate(node => node === document.activeElement), true);
     assert.equal(calls.filter(call => call.path === "/api/artifact-deletion/confirm").length, 0);
     await page.keyboard.press("Escape");
@@ -265,12 +265,54 @@ test("contextual report deletion cancels safely and preserves a saved comparison
     const keptComparison = row(savedComparison.bundleId);
     await keptComparison.locator(":scope>summary").click();
     const opened = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/open"));
-    await keptComparison.getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await keptComparison.locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
     const openedResponse = await opened;
     assert.equal(openedResponse.status(), 200, await openedResponse.text());
     assert.equal((await openedResponse.json()).sources.some(source => source.available === false), true);
     assert.match(await page.locator("#comparisonWorkspace").textContent(), /original report is no longer available.*frozen facts are unchanged/i);
     assert.deepEqual(await hashes(savedComparison), comparisonHash);
+});
+
+test("bulk report deletion preserves saved comparisons but invalidates their approved unsaved counterparts", { timeout: 30000 }, async t => {
+    const { context, controller, page, calls, bundles, savedComparison, row } = await setup(t, { comparison: true });
+    const frozen = await hashes(savedComparison), before = await loadBoardState(context);
+    const stale = await controller.previewComparison("dependent-draft", bundles[0].bundleId, bundles[1].bundleId, { timeContext });
+    await controller.reviewComparison("dependent-draft", stale.previewId, true, timeContext);
+    await row(bundles[0].bundleId).locator(":scope>summary").click();
+    await row(bundles[0].bundleId).getByRole("button", { name: "Compare saved reports", exact: true }).click();
+    const workspace = page.locator("#comparisonWorkspace");
+    await workspace.locator("select option").nth(1).waitFor({ state: "attached" });
+    await selectReport(page, "Baseline report", bundles[0].bundleId);
+    await selectReport(page, "Later report", bundles[1].bundleId);
+    await workspace.getByRole("button", { name: "Compare reports", exact: true }).click();
+    await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
+    await workspace.getByRole("checkbox", { name: "I reviewed this frozen comparison for disclosure.", exact: true }).check();
+    await workspace.getByRole("button", { name: "Confirm disclosure", exact: true }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll("#comparisonWorkspace button")].some(node => node.textContent === "Save comparison" && !node.disabled));
+    await page.locator("#deleteAllReports").click();
+    const dialog = page.locator('dialog[aria-labelledby="savedArtifactDeleteTitle"]');
+    await dialog.getByRole("button", { name: "Delete 2 saved reports", exact: true }).waitFor();
+    assert.match(await dialog.innerText(), /draft reports.*unchanged/);
+    assert.match(await dialog.innerText(), /Unsaved comparisons using these reports will become invalid/);
+    assert.doesNotMatch(await dialog.innerText(), /unfinished drafts/);
+    if (process.env.WIRE_LIBRARY_SCOPE_PROOFS) {
+        await mkdir(process.env.WIRE_LIBRARY_SCOPE_PROOFS, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.WIRE_LIBRARY_SCOPE_PROOFS, "confirmation-draft-scope.png") });
+    }
+    await dialog.getByRole("button", { name: "Delete 2 saved reports", exact: true }).click();
+    await dialog.getByRole("heading", { name: "2 saved reports deleted", exact: true }).waitFor();
+    assert.match(await dialog.innerText(), /Unsaved comparisons using the deleted reports are no longer valid/);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    assert.equal(await workspace.getByRole("button", { name: "Save comparison", exact: true, includeHidden: true }).isDisabled(), true);
+    assert.equal(await workspace.getByRole("button", { name: "Save comparison", exact: true, includeHidden: true }).isVisible(), false);
+    assert.equal(await workspace.getByRole("checkbox", { name: "I reviewed this frozen comparison for disclosure.", exact: true, includeHidden: true }).isChecked(), false);
+    await assert.rejects(controller.confirmComparison("dependent-draft", stale.previewId, true, timeContext), /no longer available/);
+    assert.deepEqual(await hashes(savedComparison), frozen);
+    const after = await loadBoardState(context);
+    assert.deepEqual(after.exports.map(bundle => bundle.bundleId), [savedComparison.bundleId]);
+    assert.deepEqual(after.evidence, before.evidence);
+    assert.equal(calls.filter(call => call.path === "/api/artifact-deletion/confirm").length, 1);
+    assert.equal(calls.filter(call => call.path === "/api/report-comparison/save").length, 0);
 });
 
 test("uncertain saved-object deletion recovers after page renewal without another confirm", { timeout: 30000 }, async t => {

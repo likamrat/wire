@@ -1,4 +1,14 @@
+export async function openReportLibrary(page) {
+    if (!await page.locator("#savedReportsPanel").isVisible()) await page.locator("#reportLibraryLink").click();
+    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#bundles > summary").click();
+}
+
+export async function openReportCreation(page) {
+    if (!await page.locator("#reportCreatePanel").isVisible()) await page.locator("#reportCreateLink").click();
+}
+
 export async function reportContents(page) {
+    await openReportCreation(page);
     const reports = page.locator("#reportsView");
     if (await reports.getAttribute("data-report-step") !== "2") {
         if (await reports.getAttribute("data-report-step") === "1") await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
@@ -7,6 +17,7 @@ export async function reportContents(page) {
 }
 
 export async function chooseReportScope(page, value) {
+    await openReportCreation(page);
     if (await page.locator("#reportsView").getAttribute("data-report-step") !== "1") await page.getByRole("button", { name: "1. Requests", exact: true }).click();
     if (value !== "selected" && !await page.locator(".report-other-scope").evaluate(node => node.open)) await page.locator(".report-other-scope > summary").click();
     await page.locator(`[name=reportScope][value=${value}]`).check();

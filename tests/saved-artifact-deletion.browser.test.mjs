@@ -9,7 +9,7 @@ import { styles } from "../web/styles.mjs";
 import { deletionStyles } from "../web/deletion-styles.mjs";
 
 const artifact = { artifactKind: "report", artifactId: "export-00000000-0000-4000-8000-000000000001", label: "Artificial baseline / 6 October" };
-async function setup(t, handler) {
+async function setup(t, handler, target = artifact) {
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1200, height: 950 }, reducedMotion: "reduce" });
     const calls = [], errors = [], unexpected = [];
     t.after(async () => { await browser.close(); assert.deepEqual(errors, []); assert.deepEqual(unexpected, []); });
@@ -45,7 +45,7 @@ async function setup(t, handler) {
             fallbackFocus: () => document.getElementById("saved"),
         });
         document.getElementById("open").onclick = event => window.flow.open(artifact, event.currentTarget);
-    }, { artifact, icons: uxIcons });
+    }, { artifact: target, icons: uxIcons });
     await page.evaluate(() => document.fonts.ready);
     return { page, calls };
 }
@@ -64,7 +64,7 @@ test("named saved-object deletion has safe cancel, no cascade and centered acces
     const dialog = page.locator(".deletion-dialog"), confirm = dialog.locator(".delete-object-confirm");
     await page.waitForFunction(() => !document.querySelector(".delete-object-confirm").disabled);
     assert.match(await dialog.textContent(), /3 managed files and 1 managed copies/);
-    assert.match(await dialog.textContent(), /2 saved comparisons keep their frozen information/);
+    assert.match(await dialog.textContent(), /2 saved comparisons keep frozen information/);
     assert.equal(await dialog.getByRole("button", { name: "Cancel", exact: true }).evaluate(node => node === document.activeElement), true);
     for (const theme of ["light", "dark"]) for (const width of [320, 375, 414, 768, 820, 1200, 2560]) for (const scale of [100, 200]) {
         await page.setViewportSize({ width, height: 1000 });
@@ -133,5 +133,66 @@ test("missing counts fail closed and never become zero-count deletion approval",
     await dialog.getByRole("alert").waitFor();
     assert.match(await dialog.textContent(), /did not confirm.*Nothing was deleted/);
     assert.equal(await dialog.getByRole("button", { name: "Delete report", exact: true }).isVisible(), false);
+    assert.equal(calls.some(call => call.path.endsWith("/confirm")), false);
+});
+
+test("bulk confirmation names all reports across pages, preserves exclusions and recovers a lost response without resubmitting", async t => {
+    const pending = { ...preview(), scope: "all-reports",
+        artifacts: [artifact, { ...artifact, artifactId: "export-00000000-0000-4000-8000-000000000002" }],
+        counts: { reports: 2, managedFiles: 10, managedCopies: 2, savedComparisons: 3, savedDependentComparisons: 1 } };
+    delete pending.artifact;
+    const { page, calls } = await setup(t, async path => {
+        if (path.endsWith("/preview")) return pending;
+        if (path.endsWith("/cancel")) return { cancelled: true };
+        if (path.endsWith("/confirm")) return { failure: "Artificial interrupted connection." };
+        if (path.endsWith("/status")) return { ...pending, kind: "artifact-deletion", phase: "complete" };
+        throw new Error("Unexpected call");
+    }, { scope: "all-reports" });
+    await page.locator("#open").click();
+    const dialog = page.locator(".deletion-dialog");
+    await dialog.getByRole("button", { name: "Delete 2 saved reports", exact: true }).waitFor();
+    assert.match(await dialog.innerText(), /all pages.*regardless of search/i);
+    assert.match(await dialog.innerText(), /3 saved comparisons/);
+    assert.match(await dialog.innerText(), /draft reports.*external downloads/i);
+    assert.match(await dialog.innerText(), /Unsaved comparisons using these reports will become invalid/);
+    assert.match(await dialog.innerText(), /New reports saved after this preview are not included/);
+    assert.match(await dialog.innerText(), /Permanent local deletion.*cannot be undone.*If interrupted, some files may remain/);
+    assert.doesNotMatch(await dialog.innerText(), /keep the receipt|sealed|atomic/i);
+    assert.equal((await dialog.innerText()).match(/3 saved comparisons/g).length, 1, "Comparison retention is explained once");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.equal(calls.filter(call => call.path.endsWith("/confirm")).length, 0);
+    await page.locator("#open").click();
+    await dialog.getByRole("button", { name: "Delete 2 saved reports", exact: true }).click();
+    await dialog.getByRole("button", { name: "Check deletion result", exact: true }).click();
+    await dialog.getByRole("heading", { name: "2 saved reports deleted", exact: true }).waitFor();
+    assert.equal(calls.filter(call => call.path.endsWith("/confirm")).length, 1);
+    assert.deepEqual(calls.find(call => call.path.endsWith("/preview")).input, { scope: "all-reports" });
+    assert.equal((await page.evaluate(() => window.deleted))[0].artifacts.length, 2);
+});
+
+test("bulk scope validation and stale-state invalidation never enable an unreviewed deletion", async t => {
+    const pending = { ...preview(), scope: "all-reports", artifacts: [artifact],
+        counts: { reports: 1, managedFiles: 3, managedCopies: 1, savedComparisons: 0, savedDependentComparisons: 0 } };
+    delete pending.artifact;
+    for (const change of [
+        value => { value.counts.reports = 2; },
+        value => { value.artifacts[0].artifactKind = "comparison"; },
+        value => { value.artifacts.push({ ...value.artifacts[0] }); value.counts.reports = 2; },
+    ]) {
+        const invalid = structuredClone(pending); change(invalid);
+        await t.test("malformed bound membership fails closed", async t => {
+            const { page, calls } = await setup(t, async () => invalid, { scope: "all-reports" });
+            await page.locator("#open").click();
+            await page.locator(".deletion-dialog").getByRole("alert").waitFor();
+            assert.equal(await page.locator(".delete-object-confirm").isVisible(), false);
+            assert.equal(calls.some(call => call.path.endsWith("/confirm")), false);
+        });
+    }
+    const { page, calls } = await setup(t, async path => path.endsWith("/preview") ? pending : { cancelled: true }, { scope: "all-reports" });
+    await page.locator("#open").click();
+    await page.locator(".delete-object-confirm:not([disabled])").waitFor();
+    await page.evaluate(() => window.flow.invalidate());
+    assert.match(await page.locator(".deletion-dialog").innerText(), /Saved objects changed.*fresh deletion preview/);
+    assert.equal(await page.locator(".delete-object-confirm").isVisible(), false);
     assert.equal(calls.some(call => call.path.endsWith("/confirm")), false);
 });
