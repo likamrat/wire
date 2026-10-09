@@ -19,7 +19,7 @@ export const percentageChartStyles = `
 .percentage-outer-wall {fill-opacity:var(--glass-front-opacity)}
 .percentage-inner-wall {fill-opacity:var(--glass-side-opacity)}
 .percentage-face[data-thin=true] {fill:var(--column-label);fill-opacity:1;stroke:none}
-.percentage-face.percentage-active {fill-opacity:1;stroke:var(--column-label);stroke-width:1.6px;filter:brightness(var(--percentage-active-brightness,1.15))}
+.percentage-face.percentage-active {stroke:var(--column-label);stroke-width:1.6px;filter:brightness(var(--percentage-active-brightness,1.05))}
 .percentage-legend-row.percentage-active .percentage-label {color:var(--ink)}
 .percentage-rim {fill:none;stroke:var(--glass-rim);stroke-width:1.1;stroke-opacity:.85;pointer-events:none}
 .percentage-glint {fill:var(--glass-rim);opacity:var(--glass-glint);pointer-events:none}
@@ -48,6 +48,7 @@ export const percentageChartStyles = `
 .percentage-value span {color:var(--muted);font-size:inherit}
 .percentage-value strong {font-weight:var(--weight-strong)}
 .percentage-members {grid-column:2/-1;font-size:var(--type-caption);color:var(--muted);overflow-wrap:anywhere;max-width:32ch}
+.percentage-evidence p {margin:4px 0;font:inherit;color:inherit}
 .percentage-note {color:var(--muted);font-size:var(--type-caption);margin-top:16px;max-width:none}
 .percentage-exact>.percentage-note {margin-top:8px}
 .percentage-empty {padding-block:24px;color:var(--muted);font-size:var(--type-small)}

@@ -74,7 +74,7 @@ test("Discovery reads consistently across whole charts, filters and action detai
         assert.match(await schema.innerText(), /Schema path\s+\/me\/messages/);
         assert.match(await schema.innerText(), /Tool failed/);
         assert.match(await page.locator('[data-tool-call-id="invented-call-2"]').innerText(), /Agent discovery[\s\S]*No result recorded/);
-        assert.match(await page.locator('[data-tool-call-id="invented-call-3"]').innerText(), /Copilot assistance[\s\S]*not exposed/);
+        assert.match(await page.locator('[data-tool-call-id="invented-call-3"]').textContent(), /Copilot assistance[\s\S]*Not in this record/);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         const sizes = await page.locator(".journey-item > details > summary").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
         assert.ok(sizes.every(height => height >= 44));

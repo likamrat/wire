@@ -294,10 +294,19 @@ existing semantic hues. On light paper, their broad caps use restrained highligh
 mixed from the existing top and label tones instead of the near-white column cap.
 More opaque faces and darker wall stops prevent white-background washout; reduced
 rim/glint opacity keeps the gloss without glare. Hover and focus keep the stronger
-outline and gently darken the opaque faces instead of brightening them. Navy, column charts
+outline and gently darken the faces instead of brightening them. Column charts
 and new HTML/PDF column reports retain their existing materials. Saved files are
 not rewritten. Exact counts, percentages, minimum visible slices, category icons,
 labels, links and the exact-data disclosures are unchanged.
+
+Donut inspection retains each cap and wall's resting transparency in both themes.
+The previous opaque hover/focus override exposed the near-white neutral material;
+navy's brightness multiplier then clipped it to white. Navy inspection now uses a
+small 1.05 brightness change with the stronger outline, including full-circle,
+mixed and minimum-size slices. The broad cap and front wall remain below the
+near-white glare threshold. Normal materials, glass accents, geometry and service
+hues are unchanged. Pointer-only SVG focus suppression remains narrowly scoped;
+keyboard labels retain visible focus, native navigation and 44px targets.
 
 Each percentage-chart heading includes its current unit in parentheses, such as
 **Recorded outcomes (Work IQ tool calls)**, with the unit in secondary text.
@@ -368,17 +377,34 @@ An action names **API discovery**, **Schema lookup** or **Agent discovery** besi
 tool name. The existing compact definition list carries a short purpose and **Data service:
 Not applicable**; only schema lookup shows a **Schema path**. No missing API-path/status
 warning is invented for a discovery-only action. Its actual completion/failure stays
-visible, and technical details remain available. Hosted Copilot assistance explains
-unexposed service routing without guessing from private text or changing Unknown into success.
+visible, and technical details remain available. Copilot assistance explains missing
+service details in that call's record without guessing from private text or changing Unknown into success.
 
 Remaining `Unknown` activity is displayed as **Service not shown**, not a service failure.
 The detail reader keeps **Copilot assistance** as a known purpose and names its data service
-**Not exposed by Work IQ**. Other unknown records distinguish **Path not recognized**,
+**Not in this record**. Other unknown records distinguish **Path not recognized**,
 **Target format not supported**, and **No target recorded**. Short on-demand explanations
 use only retained technical metadata; chart-definition and percentage disclosures describe
 the reasons present in the applied slice. Outcome counts and the result cue stay separate.
 The category uses a neutral information glyph in remaining donut/glossary cues, never a
 new under-column icon row. Its canonical ID, color and filter value remain `Unknown`.
+
+An applied **Service not shown** filter now explains the actual matching rows
+above Home or Activity, without requiring a disclosure. It groups exact counts by
+recorded tool and evidence reason, showing known purposes such as **Copilot assistance**
+beside `workiq-ask`. The donut's neutral legend also names those tools and reasons.
+Empty slices and other selected categories do not show the explanation. A full
+request keeps its own technical context instead of inheriting the filtered count.
+Hosted-call details explicitly mark the downstream API path, HTTP method and API
+version as unrecorded; none is guessed from question text,
+file attachments, conversation identifiers or other calls in the same request.
+This describes the retained call, not a general limit of Work IQ or proof that
+no downstream service was used.
+Unsupported targets include invalid origins, not just absent paths.
+
+This changes evidence presentation, not service classification or category v3.
+Counts, layer boundaries, report patterns and assessment identities are unchanged;
+opening an explanation does not collect, re-score or rewrite a saved report.
 
 This narrow change reuses Asta/Fluent, current light/navy tokens, accessible help and
 44px controls. Existing chart geometry is unchanged. Local design-search Python was

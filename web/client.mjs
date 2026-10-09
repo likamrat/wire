@@ -835,6 +835,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const value = el("dd");
             value.append(metadata.item(evidence.label, { help: evidence.description }));
             list.append(el("dt", "", "Data service"), value);
+            list.append(el("dt", "", "Why this category"), el("dd", "", evidence.description));
         }
         if (returned) {
             const value = results.returnedPath(call, row, { discovery: categories.operation(call?.tool)?.category === "Discovery" });
@@ -844,7 +845,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 note.textContent = "Call target; no separate path returned.";
                 list.append(el("dt", "path-attribution", "Path source"), note);
             }
-        } else if (evidence?.reason !== "hosted-routing" && (!discovery || operation.pathLabel)) {
+        } else if (evidence?.reason === "hosted-routing") {
+            pathField(list, "Downstream API path", null, "Not recorded");
+            list.append(el("dt", "", "HTTP method"), el("dd", "", "Not recorded"),
+                el("dt", "", "API version"), el("dd", "", "Not recorded"));
+        } else if (!discovery || operation.pathLabel) {
             const paths = results.callPaths(call);
             paths.forEach((path, index) => pathField(list, discovery ? operation.pathLabel : paths.length > 1 ? `API path ${index + 1}` : "API path", path));
         }
@@ -1338,6 +1343,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         host.hidden = route.view !== "request";
         const ids = new Set(scenarios.map(s => s.scenarioId));
         const rows = search ? selectionRows().filter(row => ids.has(row.scenarioId)) : selectionRows();
+        const evidenceHost = $("serviceEvidenceSummary");
+        const evidenceGroups = categories.evidenceGroups(rows, applied.layer);
+        evidenceHost.hidden = !["home", "activity"].includes(route.view) || route.service !== "Unknown" || !evidenceGroups.length;
+        evidenceHost.replaceChildren();
+        if (!evidenceHost.hidden) {
+            const heading = el("h2", "", "Why the service is not shown");
+            heading.id = "serviceEvidenceTitle";
+            const total = evidenceGroups.reduce((sum, group) => sum + group.count, 0);
+            const description = el("p", "", `${count(total)} of ${count(rows.length)} ${results.unit(applied.layer, rows.length)} in this view. Recorded outcomes are shown separately.`);
+            const groups = el("dl");
+            for (const group of evidenceGroups) {
+                const item = el("div"), term = el("dt");
+                item.dataset.evidenceCount = group.count;
+                term.append(document.createTextNode(`${count(group.count)} ${results.unit(applied.layer, group.count)}: `));
+                if (group.purpose) term.append(document.createTextNode(group.purpose + " "), el("span", "muted", `(${group.tool})`));
+                else term.append(document.createTextNode(group.tool));
+                item.append(term, el("dd", "", `${group.evidence.label}. ${group.evidence.description}`));
+                groups.append(item);
+            }
+            evidenceHost.append(heading, description, groups);
+        }
         const label = route.view === "request" ? "Viewing full request from" : route.view === "reports" ? "Current activity view" : "Viewing";
         const project = route.project ? $("projectFilter").selectedOptions[0]?.textContent || "Project unavailable" : "All projects";
         const dates = route.from || route.to ? `${date(route.from)} to ${date(route.to)}` : "All retained dates";

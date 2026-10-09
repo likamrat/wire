@@ -32,11 +32,18 @@ measures visible. Raw evidence/automatic-attempt fingerprints do not change, so 
 cannot schedule another assessment. Existing saved files remain unchanged.
 
 **Service not shown** (canonical `Unknown`, previously displayed as Service not identified)
-remains a genuine evidence limit. Contextual help distinguishes downstream services not
-exposed by Work IQ, recorded paths not recognized by WIRE, unsupported target formats and
+remains a genuine evidence limit. Contextual help distinguishes service details missing
+from a Copilot-assistance record, recorded paths not recognized by WIRE, unsupported target formats and
 genuinely missing targets. Copilot assistance is a known tool purpose, not an assigned
 downstream service. A neutral information glyph replaces the question mark where category
 cues remain; chart columns do not regain the removed icon row.
+In the app, the selected **Service not shown** view exposes its actual tool/reason
+counts before any disclosure. Hosted-call technical details explicitly mark a
+downstream API path, HTTP method or API version missing from that record. This
+does not claim Work IQ never exposes services or that no service was used. A question,
+attachment or conversation identifier is not evidence of an executed service
+endpoint. These explanations preserve category v3 and its frozen report patterns;
+they do not regroup calls, change scores or reinterpret existing saved reports.
 **Search and retrieval** is distinct from path discovery. Tool success is independent:
 discovery can work, fail or lack a recorded completion. An absent API status is not proof
 that discovery returned no useful catalog information, and absent owned HTTP capture does

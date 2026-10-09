@@ -16,6 +16,7 @@ import { adaptEvaluationReport, freezeEvaluationFacts } from "../lib/report-fact
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { AUTOMATIC_SCORE_METHOD, automaticScoreAttemptKey, planAutomaticScore } from "../lib/automatic-score-policy.mjs";
 import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
+import { MINIMUM_SESSION_AI_CREDITS } from "../lib/evaluation-budget.mjs";
 import { serviceEvidenceFixture } from "./service-evidence-fixtures.mjs";
 
 test("shared driveItem classification preserves only the exact public path and never the opaque token or query value", () => {
@@ -70,12 +71,30 @@ test("neutral Unknown presentation explains hosted routing, unrecognized paths a
         "explicit unusable target evidence is not hidden routing");
     assert.equal(serviceCategories.serviceEvidence({ ...rows[4], targetCount: 1, endpoint: normalizeEndpoint("not-a-relative-path") }).reason, "unsupported-target");
     const explanation = serviceCategories.explainRows(rows);
-    assert.match(explanation, /downstream services/);
+    assert.match(explanation, /Its record does not identify a service or API path/);
+    assert.doesNotMatch(explanation, /Work IQ does not expose|services.*were used|services.*it used/);
     assert.match(explanation, /path was recorded/);
     assert.match(explanation, /No service target/);
     assert.doesNotMatch(explanation, /Invented question|SHARING-TOKEN/);
     const serialized = Function(`return (${createServiceCategories.toString()})()`)();
     assert.equal(serialized.explainRows(rows), explanation);
+    const original = structuredClone(rows), groups = serviceCategories.evidenceGroups(rows);
+    assert.deepEqual(groups.map(group => [group.tool, group.purpose, group.evidence.reason, group.count]), [
+        ["workiq-ask", "Copilot assistance", "hosted-routing", 1],
+        ["workiq-fetch", null, "unrecognized-path", 1],
+        ["workiq-fetch", null, "missing-target", 1],
+    ]);
+    assert.deepEqual(serialized.evidenceGroups(rows), groups);
+    assert.deepEqual(rows, original, "Evidence explanations never rewrite canonical rows");
+    assert.deepEqual(serviceCategories.evidenceGroups([]), []);
+    assert.equal(serviceCategories.evidenceGroups([rows[0]], "reported-api")[0].purpose, null);
+    assert.equal(serviceCategories.evidenceGroups([rows[0]], "reported-api")[0].evidence.reason, "missing-target");
+    for (const target of ["https://untrusted.invalid/v1.0/me/messages", "https://name:secret@graph.microsoft.com/v1.0/me/messages", "not-a-path"]) {
+        const endpoint = normalizeEndpoint(target);
+        const evidence = serviceCategories.serviceEvidence({ ...rows[0], targetCount: 1, targets: [endpoint], endpoint });
+        assert.equal(evidence.reason, "unsupported-target", "Invalid origins/formats are not presented as a missing target or hidden routing");
+        assert.match(evidence.description, /supported relative path or trusted Microsoft Graph URL/);
+    }
     assert.equal(serviceCategories.explainRows([]), "");
     assert.doesNotMatch(serviceCategories.explainRows(rows.filter(row => row.tool === "workiq-ask")), /path was recorded|No service target/);
 });
@@ -96,7 +115,7 @@ test("new reports freeze Files recognition and v3 patterns; v2 comparisons withh
         assert.match(content, /shares/);
     }
     for (const content of [bundle.files["product-report.html"], bundle.files["product-report.md"]]) {
-        assert.match(content, /does not expose which downstream services/);
+        assert.match(content, /Its record does not identify a service or API path/);
         assert.match(content, /regrouping, not a change in recorded outcomes/);
     }
     const pdf = getDocument({ data: new Uint8Array(bundle.files["product-report.pdf"]), useSystemFonts: true });
@@ -154,7 +173,7 @@ test("derived service regrouping leaves completed automatic assessment identity 
     const approval = { schemaVersion: 1, approvalRef: ref("approval", "a"), revision: 1, state: "enabled",
         sourceConfigRef: ref("source", "b"), sourceConfigRevision: 1, windowDays: 30, chatRefs: [ref("chat", "c")],
         method: { ...AUTOMATIC_SCORE_METHOD }, evidenceCategories: ["answer", "intent", "prompt", "references"],
-        maxCalls: 2, maxAiCredits: 1, approvedAt: "2026-10-01T12:00:00.000Z", origin: "explicit-automatic-score-approval" };
+        maxCalls: 2, maxAiCredits: MINIMUM_SESSION_AI_CREDITS * 2, approvedAt: "2026-10-01T12:00:00.000Z", origin: "explicit-automatic-score-approval" };
     const interactionRef = ref("interaction", "d");
     const fingerprint = evaluationRecordFingerprint(record), attemptKey = automaticScoreAttemptKey(approval, interactionRef, record);
     const original = structuredClone(record);

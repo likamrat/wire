@@ -388,6 +388,12 @@ ${toolbarStyles}
 .glossary-entry>dd {flex:2 1 16rem;min-width:0}
 .service-definitions .service-glossary dd {margin:0;color:var(--ink);font-size:var(--type-reading);line-height:1.6;max-width:48ch}
 .service-glossary dt {font-size:var(--type-reading);line-height:1.6;overflow-wrap:anywhere}
+.service-evidence-summary {margin-block:16px 24px;max-width:72ch;overflow-wrap:anywhere}
+.service-evidence-summary h2 {font-size:var(--type-section)}
+.service-evidence-summary p,.service-evidence-summary dl {margin:8px 0;font-size:var(--type-small)}
+.service-evidence-summary dl>div {margin-top:12px}
+.service-evidence-summary dt {font-weight:var(--weight-strong)}
+.service-evidence-summary dd {margin:4px 0 0}
 #coverage p {font-size:var(--type-reading);line-height:1.6;max-width:80ch;margin-block:12px;overflow-wrap:anywhere}
 #coverage .coverage-destination {margin-block:16px}
 #collectionEvidenceDetails p,#collectionEvidenceDetails .evidence-notes {max-width:80ch;overflow-wrap:anywhere}

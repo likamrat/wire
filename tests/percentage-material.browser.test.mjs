@@ -93,7 +93,7 @@ async function inspect(page) {
     }));
 }
 
-async function pixels(page, card) {
+async function pixels(page, card, preserveScroll = false) {
     const ring = card.locator(".percentage-ring");
     const probes = await ring.evaluate(svg => {
         const box = svg.getBoundingClientRect();
@@ -116,7 +116,7 @@ async function pixels(page, card) {
             };
         });
     });
-    const image = await capture(page, ring);
+    const image = preserveScroll ? await page.screenshot({ clip: await ring.boundingBox() }) : await capture(page, ring);
     const measured = await page.evaluate(async ({ image, probes }) => {
         const img = new Image(); img.src = image; await img.decode();
         const canvas = document.createElement("canvas"); canvas.width = img.width; canvas.height = img.height;
@@ -219,9 +219,11 @@ test("light donut materials restrain glare without changing canonical geometry, 
                     assert.equal(await link.evaluate(node => getComputedStyle(node).outlineStyle), "solid");
                     const active = await page.locator(".percentage-active.percentage-face").first().evaluate(node => ({
                         opacity: getComputedStyle(node).fillOpacity, filter: getComputedStyle(node).filter,
+                        restingOpacity: node.dataset.thin === "true" ? "1" : String(Number(getComputedStyle(node).getPropertyValue(
+                            node.classList.contains("percentage-slice") ? "--glass-cap-opacity" : node.classList.contains("percentage-outer-wall") ? "--glass-front-opacity" : "--glass-side-opacity"))),
                     }));
-                    assert.equal(active.opacity, "1");
-                    assert.equal(active.filter, theme === "light" ? "brightness(0.9)" : "brightness(1.15)");
+                    assert.equal(active.opacity, active.restingOpacity, "Inspection retains each face's glass opacity rather than exposing near-white material");
+                    assert.equal(active.filter, theme === "light" ? "brightness(0.9)" : "brightness(1.05)");
                     await page.emulateMedia({ forcedColors: "active" });
                     assert.equal(await page.locator(".percentage-active.percentage-face").first().evaluate(node =>
                         getComputedStyle(node).filter), "none", "System high-contrast colors are not dimmed");
@@ -247,4 +249,98 @@ test("light donut materials restrain glare without changing canonical geometry, 
         } finally { await context.close(); }
     }
     if (proofDir) await writeFile(path.join(proofDir, "material-measurements.json"), JSON.stringify(reports, null, 2));
+});
+
+test("full-circle service evidence and mixed/tiny donuts keep calm pointer and keyboard states", { timeout: 90000 }, async t => {
+    const record = fixture("neutral-service-material");
+    const originalCall = record.toolCalls[0];
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1280, height: 1100 }, reducedMotion: "reduce" });
+    const denied = [], errors = [], measurements = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", async route => {
+        const request = route.request(), url = new URL(request.url());
+        if (url.origin !== "http://neutral-material.test") { denied.push(url.origin); return route.abort("blockedbyclient"); }
+        if (request.method() === "GET" && url.pathname === "/") {
+            return route.fulfill({ contentType: "text/html", body: renderHtmlShell("a".repeat(64), "neutral-service-material") });
+        }
+        if (request.method() === "POST" && url.pathname === "/api/snapshot") {
+            return route.fulfill({ json: { revision: 1, scenarios: [record], exports: [], coverage: { notes: [] }, collection,
+                analytics: { ...buildActivityAnalytics([record], request.postDataJSON()), revision: 1 } } });
+        }
+        if (request.method() === "POST" && url.pathname === "/api/evaluation/automatic/summary") {
+            return route.fulfill({ json: automaticScoreOffSummary() });
+        }
+        denied.push(url.pathname); return route.abort("blockedbyclient");
+    });
+    for (const [shape, counts] of Object.entries({ full: [5, 0], mixed: [5, 5], tiny: [1, 199], zero: [0, 0] })) {
+        record.toolCalls = counts.flatMap((total, group) => Array.from({ length: total }, (_, index) => ({
+            ...originalCall, tool: group ? "workiq-fetch" : "workiq-ask",
+            toolCallId: `neutral-${group}-${index}`, startEventId: `neutral-start-${group}-${index}`,
+            requestedApiPath: group ? "/me/messages" : null,
+            requestArgs: group ? { entityUrls: ["/me/messages"] } : { question: "Invented question; no executed service target." },
+            apiResults: [],
+        })));
+        for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
+            await page.setViewportSize({ width, height: 1100 });
+            await page.goto(`http://neutral-material.test/?case=${shape}-${theme}-${width}#home?bucket=week`); await ready(page);
+            await chooseTheme(page, theme);
+            await page.evaluate(size => { document.documentElement.style.fontSize = size; }, width === 375 ? "200%" : "100%");
+            const card = page.locator('[data-percentage-card="composition"]'), ring = card.locator(".percentage-ring");
+            assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), String(counts[0] + counts[1]));
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+            if (shape === "zero") {
+                assert.equal(await ring.count(), 0);
+                assert.equal(await card.locator(".percentage-label[href]").count(), 0);
+                continue;
+            }
+            const face = card.locator('.percentage-slice[data-category="Unknown"]');
+            const label = card.locator('[data-category="Unknown"] .percentage-label');
+            const geometry = await face.getAttribute("d"), fraction = await face.getAttribute("data-exact-fraction");
+            assert.equal(Number(fraction), counts[0] / (counts[0] + counts[1]));
+            if (shape === "tiny") assert.ok(await face.evaluate(node => +node.dataset.end - +node.dataset.start >= .03 - 1e-12));
+            const sample = async state => {
+                const material = await pixels(page, card, true);
+                const unknown = material.slices.find(slice => slice.category === "Unknown");
+                assert.ok(unknown.meanLuminance < .5, `${shape}/${theme}/${width}/${state}: neutral face luminance ${unknown.meanLuminance}`);
+                assert.ok(unknown.maxLuminance < .65, `${shape}/${theme}/${width}/${state}: broad near-white highlight`);
+                if (unknown.wall) assert.ok(luminance(cssRgb(unknown.wall)) < .65, `${shape}/${theme}/${width}/${state}: front wall glare`);
+                assert.ok(unknown.boundaryContrast >= 3);
+                assert.equal(await face.getAttribute("d"), geometry);
+                assert.equal(await face.getAttribute("data-exact-fraction"), fraction);
+                measurements.push({ shape, theme, width, state, material });
+                if (proofDir && shape === "full") {
+                    await mkdir(proofDir, { recursive: true });
+                    await page.screenshot({ clip: await card.boundingBox(), path: path.join(proofDir, `${shape}-${theme}-${width}-${state}.png`) });
+                }
+            };
+            await ring.scrollIntoViewIfNeeded(); await page.mouse.move(1, 1);
+            await sample("normal");
+            await label.hover(); await sample("legend-hover");
+            await face.scrollIntoViewIfNeeded();
+            const point = await face.evaluate(node => {
+                const r = node.getBoundingClientRect();
+                for (let y = r.top + 1; y < r.bottom; y += 2) for (let x = r.left + 1; x < r.right; x += 2) {
+                    if (document.elementFromPoint(x, y) === node) return { x, y };
+                }
+                throw Error("No reachable neutral slice.");
+            });
+            await page.mouse.move(point.x, point.y); await sample("face-hover");
+            await page.mouse.down(); await sample("down");
+            assert.equal(await face.locator("..").evaluate(node => getComputedStyle(node).outlineStyle), "none");
+            await page.mouse.move(1, 1); await page.mouse.up(); await sample("retained-focus");
+            await page.keyboard.press("Tab"); await label.focus();
+            assert.equal(await label.evaluate(node => node.matches(":focus-visible") && getComputedStyle(node).outlineStyle === "solid"), true);
+            assert.ok((await label.boundingBox()).height >= 44);
+            await sample("keyboard");
+            await label.evaluate(node => node.blur()); await page.mouse.move(1, 1); await sample("blur");
+            assert.equal(await card.locator(".percentage-face.percentage-active").count(), 0);
+            await page.emulateMedia({ forcedColors: "active" });
+            await label.focus();
+            assert.equal(await face.evaluate(node => getComputedStyle(node).filter), "none");
+            await page.emulateMedia({ forcedColors: "none" });
+        }
+    }
+    assert.deepEqual(denied, []); assert.deepEqual(errors, []);
+    if (proofDir) await writeFile(path.join(proofDir, "neutral-interactions.json"), JSON.stringify(measurements, null, 2));
 });

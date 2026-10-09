@@ -22,6 +22,59 @@ async function ready(page) {
 }
 const dataService = item => item.locator("dt").filter({ hasText: /^Data service$/ }).evaluate(node => node.nextElementSibling.textContent);
 
+test("the Unknown-filtered entry explains its actual calls before any disclosure is opened", { timeout: 30000 }, async t => {
+    const { context } = await privateFixture(t, [serviceEvidenceFixture()]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+    const unexpected = [], errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("request", request => {
+        const url = new URL(request.url());
+        if (url.origin !== new URL(runtime.url).origin || request.method() !== "GET" &&
+            !["/api/connect", "/api/snapshot", "/api/assessment/overview", "/api/assessment/detail", "/api/evaluation/automatic/summary"].includes(url.pathname)) unexpected.push(url.pathname);
+    });
+    await page.goto(runtime.url + "#activity?bucket=week&service=Unknown"); await ready(page);
+    const explanation = page.locator("#serviceEvidenceSummary");
+    assert.equal(await explanation.isVisible(), true, "The exact filtered entry must explain the service gap without opening hidden help.");
+    assert.match(await explanation.innerText(), /3 of 3 Work IQ tool calls/);
+    assert.match(await explanation.innerText(), /Copilot assistance[\s\S]*workiq-ask/);
+    assert.match(await explanation.innerText(), /Path not recognized/);
+    assert.match(await explanation.innerText(), /No target recorded/);
+    assert.doesNotMatch(await explanation.innerText(), /Invented question|INVENTED-PRIVATE|\/unsupported\/resource/);
+    assert.equal(await explanation.locator("[data-evidence-count]").evaluateAll(nodes =>
+        nodes.reduce((sum, node) => sum + Number(node.dataset.evidenceCount), 0)), 3);
+    for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
+        await page.setViewportSize({ width, height: 1100 }); await chooseTheme(page, theme);
+        await page.evaluate(size => { document.documentElement.style.fontSize = size; }, width === 375 ? "200%" : "100%");
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        assert.equal(await explanation.isVisible(), true);
+        if (proofDir) {
+            await mkdir(proofDir, { recursive: true });
+            await explanation.screenshot({ path: path.join(proofDir, `filtered-evidence-${theme}-${width}.png`) });
+        }
+    }
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await page.goto(runtime.url + "#home?bucket=week&service=Unknown"); await ready(page);
+    const composition = page.locator('[data-percentage-card="composition"]');
+    assert.match(await composition.locator(".percentage-evidence").innerText(), /Copilot assistance[\s\S]*workiq-ask/);
+    assert.equal(await composition.locator(".percentage-label").getAttribute("aria-describedby"),
+        await composition.locator(".percentage-evidence").getAttribute("id"));
+    assert.equal(await composition.locator("details").evaluate(node => node.open), false);
+    await page.goto(runtime.url + "#request?request=service-evidence&service=Unknown"); await ready(page);
+    assert.equal(await explanation.isVisible(), false, "A full request must not be described as only the originating Unknown slice.");
+    const ask = page.locator('[data-tool-call-id="service-evidence-call-0"]');
+    assert.match(await ask.innerText(), /Downstream API path[\s\S]*Not recorded/);
+    assert.match(await ask.innerText(), /HTTP method[\s\S]*Not recorded[\s\S]*API version[\s\S]*Not recorded/);
+    for (const suffix of ["service=Files", "service=Unknown&result=failure"]) {
+        await page.goto(runtime.url + "#activity?" + suffix); await ready(page);
+        assert.equal(await explanation.isVisible(), false, "Known services and empty Unknown slices do not show irrelevant evidence explanations.");
+    }
+    assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
+});
+
 test("whole category view and detail explain remaining service evidence without question marks or reconstructed chart icons", { timeout: 90000 }, async t => {
     const { context } = await privateFixture(t, [serviceEvidenceFixture()]);
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
@@ -55,17 +108,17 @@ test("whole category view and detail explain remaining service evidence without 
         assert.match(await unknown.innerText(), /Service not shown/);
         if (!await composition.locator("details").evaluate(node => node.open)) await composition.locator("summary").click();
         const explanation = await composition.locator(".percentage-exact").innerText();
-        assert.match(explanation, /does not expose which downstream services/);
+        assert.match(explanation, /Its record does not identify a service or API path/);
         assert.match(explanation, /target path was recorded/);
         assert.match(explanation, /No service target/);
         if (!await page.locator("#serviceDefinitions").evaluate(node => node.open)) await page.locator("#serviceDefinitions > summary").click();
-        assert.match(await page.locator("#serviceDefinitions").innerText(), /does not expose which downstream services/);
+        assert.match(await page.locator("#serviceDefinitions").innerText(), /Its record does not identify a service or API path/);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await shot(page, `remaining-${theme}-${width}-chart`);
         await page.goto(runtime.url + "#request?request=service-evidence&range=capture"); await ready(page);
         const ask = page.locator('[data-tool-call-id="service-evidence-call-0"]');
         assert.match(await ask.innerText(), /Copilot assistance/);
-        assert.equal(await dataService(ask), "Not exposed by Work IQ");
+        assert.equal(await dataService(ask), "Not in this record");
         const unrecognized = page.locator('[data-tool-call-id="service-evidence-call-3"]');
         assert.match(await unrecognized.innerText(), /Service not shown/);
         assert.equal(await dataService(unrecognized), "Path not recognized");
@@ -74,7 +127,7 @@ test("whole category view and detail explain remaining service evidence without 
         assert.match(await page.locator('[data-tool-call-id="service-evidence-call-2"]').innerText(), /Files[\s\S]*Tool failed/);
         assert.match(await page.locator('[data-tool-call-id="service-evidence-call-5"]').innerText(), /Schema lookup[\s\S]*Not applicable[\s\S]*Schema path/);
         await ask.getByRole("button", { name: "About Copilot assistance", exact: true }).click();
-        assert.match(await page.getByRole("tooltip").innerText(), /does not expose which downstream services/);
+        assert.match(await page.getByRole("tooltip").innerText(), /Its record does not identify a service or API path/);
         await page.keyboard.press("Escape");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         await shot(page, `remaining-${theme}-${width}-detail`);
@@ -101,7 +154,7 @@ test("new readable report retains the neutral evidence reasons and safe shared-f
     const page = await browser.newPage({ reducedMotion: "reduce" });
     await page.setContent(bundle.files["product-report.html"]);
     assert.match(await page.locator(".service-glossary").innerText(), /Service not shown/);
-    assert.match(await page.locator("#operations").innerText(), /does not expose which downstream services/);
+    assert.match(await page.locator("#operations").innerText(), /Its record does not identify a service or API path/);
     assert.match(await page.locator("#operations").innerText(), /\/shares\/\{id\}\/driveItem/);
     assert.doesNotMatch(await page.locator("main").innerText(), /INVENTED-PRIVATE|ANOTHER-INVENTED|INVENTED-SCHEMA/);
     for (const width of [1280, 375]) {
