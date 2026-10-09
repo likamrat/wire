@@ -22,6 +22,31 @@ async function ready(page) {
 }
 const dataService = item => item.locator("dt").filter({ hasText: /^Data service$/ }).evaluate(node => node.nextElementSibling.textContent);
 
+test("a single-group legend explains the missing evidence without repeating the total", { timeout: 15000 }, async t => {
+    const record = serviceEvidenceFixture(), call = record.toolCalls[0];
+    record.toolCalls = Array.from({ length: 5 }, (_, index) => ({ ...call, toolCallId: `copy-call-${index}`, startEventId: `copy-start-${index}` }));
+    const { context } = await privateFixture(t, [record]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch(); t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 1100 }, colorScheme: "dark" });
+    await page.goto(runtime.url + "#home?bucket=week&service=Unknown"); await ready(page);
+    const composition = page.locator('[data-percentage-card="composition"]');
+    assert.equal(await composition.locator(".percentage-evidence").textContent(),
+        "Copilot assistance via workiq-ask. These records do not identify a service or API path.");
+    assert.equal(await composition.locator(".percentage-legend-row").getAttribute("data-count"), "5");
+    assert.equal(await composition.locator(".percentage-legend-row").getAttribute("data-percentage"), "100%");
+    for (const width of [1280, 375]) {
+        await page.setViewportSize({ width, height: 1100 });
+        await page.evaluate(size => { document.documentElement.style.fontSize = size; }, width === 375 ? "200%" : "100%");
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        if (proofDir) {
+            await mkdir(proofDir, { recursive: true });
+            const visibleCopy = width === 375 ? composition.locator(".percentage-legend") : composition;
+            await visibleCopy.screenshot({ path: path.join(proofDir, `single-group-dark-${width}.png`) });
+        }
+    }
+});
+
 test("the Unknown-filtered entry explains its actual calls before any disclosure is opened", { timeout: 30000 }, async t => {
     const { context } = await privateFixture(t, [serviceEvidenceFixture()]);
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
@@ -60,6 +85,15 @@ test("the Unknown-filtered entry explains its actual calls before any disclosure
     await page.goto(runtime.url + "#home?bucket=week&service=Unknown"); await ready(page);
     const composition = page.locator('[data-percentage-card="composition"]');
     assert.match(await composition.locator(".percentage-evidence").innerText(), /Copilot assistance[\s\S]*workiq-ask/);
+    const reasonLines = await composition.locator(".percentage-evidence p").allTextContents();
+    assert.equal(reasonLines.length, 3);
+    assert.ok(reasonLines.every(line => line.includes(": 1 Work IQ tool call. ")), "Separate tool/reason groups retain their exact counts with units");
+    assert.match(reasonLines[0], /Copilot assistance via workiq-ask: 1 Work IQ tool call\. This record does not identify a service or API path\./);
+    assert.doesNotMatch(reasonLines.join(" "), /Not in this record/);
+    if (proofDir) {
+        await mkdir(proofDir, { recursive: true });
+        await composition.screenshot({ path: path.join(proofDir, "multiple-groups-dark-1280.png") });
+    }
     assert.equal(await composition.locator(".percentage-label").getAttribute("aria-describedby"),
         await composition.locator(".percentage-evidence").getAttribute("id"));
     assert.equal(await composition.locator("details").evaluate(node => node.open), false);

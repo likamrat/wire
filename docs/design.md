@@ -393,6 +393,9 @@ An applied **Service not shown** filter now explains the actual matching rows
 above Home or Activity, without requiring a disclosure. It groups exact counts by
 recorded tool and evidence reason, showing known purposes such as **Copilot assistance**
 beside `workiq-ask`. The donut's neutral legend also names those tools and reasons.
+Its helper uses complete, record-scoped sentences that name the missing evidence,
+not standalone labels such as "Not in this record." A single group does not repeat
+the overall count; multiple tool/reason groups retain their individual exact counts.
 Empty slices and other selected categories do not show the explanation. A full
 request keeps its own technical context instead of inheriting the filtered count.
 Hosted-call details explicitly mark the downstream API path, HTTP method and API
