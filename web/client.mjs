@@ -85,7 +85,7 @@ export function createAnalysisSlice(localSearch, projection) {
     };
 }
 
-export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState, createAnalysisSlice, createActivityProjection, createRequestContext) {
+export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState, createAnalysisSlice, createActivityProjection, createRequestContext, createCallInvestigation) {
     const $ = (id) => document.getElementById(id);
     const time = createTimeContext();
     const authorship = createPromptAuthorship();
@@ -127,6 +127,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const presentation = createDisclosureState(), readingPositions = new Map();
     const textAccess = createTextAccess(ux, presentation, authorship, metadata);
     const requestContext = createRequestContext();
+    const callInvestigation = createCallInvestigation();
     let detailOwner = "page";
     let collection, collectionSettings, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
     mountSidebarNavigation();
@@ -700,7 +701,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const [rawView, rawQuery = ""] = hash.slice(1).split("?");
         const view = rawView === "report" ? "reports" : rawView || "analyze";
         const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode"];
+        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision"];
         const values = { view: ["analyze", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
         if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
@@ -716,6 +717,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function canonicalRoute(next) {
         next = filterState.canonical(sessionJourney.canonical(next));
+        if (next.view !== "request" && Object.hasOwn(next, "call")) next = { ...next, call: undefined };
+        if ((next.view !== "request" || next.layer !== "reported-api" || next.call === undefined) && Object.hasOwn(next, "callRevision")) {
+            next = { ...next, callRevision: undefined };
+        }
+        if (next.callSort && !["slowest", "fastest"].includes(next.callSort)) next = { ...next, callSort: undefined };
         if (Object.hasOwn(next, "task") && (next.task !== "create" || !["reports", "request"].includes(next.view))) {
             const { task, ...rest } = next;
             next = rest;
@@ -746,6 +752,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return {
             ...route, view,
             request: ["request", "reports"].includes(view) ? route.request : undefined,
+            call: view === "request" && (!changes.request || changes.request === route.request) ? route.call : undefined,
+            callRevision: view === "request" && (!changes.request || changes.request === route.request) ? route.callRevision : undefined,
             origin: view === "request" ? (route.view === "reports" ? "reports" : route.origin || "analyze") : undefined,
             task: view === "reports" ? (route.view === "reports" ? route.task : route.origin === "reports" ? "create" : undefined)
                 : view === "request" && route.view === "reports" ? route.task : undefined,
@@ -920,7 +928,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (includeTool) list.append(el("dt", "", "Tool"), el("dd", "action-tool", call?.tool || row?.tool || "Not recorded"));
         if (includeService) {
             const service = el("dd", "action-service");
-            service.append(serviceCue("span", row?.workload));
+            if (returned) {
+                const association = row?.serviceAssociation?.layer === "reported-api" ? row.serviceAssociation : null;
+                for (const [index, name] of (association?.services ?? []).entries()) {
+                    if (index) service.append(document.createTextNode(", "));
+                    service.append(serviceCue("span", name));
+                }
+                for (const gap of association?.gaps ?? []) {
+                    service.append(metadata.item(gap.label, { help: gap.description }));
+                    if (includePurpose) service.append(el("p", "context-help-note", gap.description));
+                }
+                if (!service.childNodes.length) service.textContent = "Service association unavailable in this snapshot.";
+            } else service.append(serviceCue("span", row?.workload));
             list.append(el("dt", "", returned ? "Service" : "Activity category"), service);
         }
         if (operation && includePurpose) {
@@ -928,7 +947,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (discovery) list.append(el("dt", "", "Data service"), el("dd", "", "Not applicable"));
         }
         const evidence = categories.serviceEvidence(row ? { ...row, tool: call?.tool || row.tool } : row, returned ? "reported-api" : "tool");
-        if (evidence && includePurpose) {
+        if (evidence && includePurpose && !returned) {
             const value = el("dd");
             value.append(metadata.item(evidence.label, { help: evidence.description }));
             list.append(el("dt", "", "Data service"), value);
@@ -957,21 +976,37 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.append(el("span", "action-field-label", "Tool"), el("span", "", tool || "Not recorded"));
         return heading;
     }
-    function returnedDetails(call, row, apiRows) {
+    function returnedDetails(call, row, apiRows, selectedId) {
         if (!apiRows?.length) return null;
         const paths = results.callPaths(call);
-        if (apiRows.length === 1 && paths.length === 1 && results.returnedPath(call, apiRows[0]).path === paths[0]) return null;
+        if (!selectedId && apiRows.length === 1 && paths.length === 1 && results.returnedPath(call, apiRows[0]).path === paths[0]) return null;
+        const renderEntry = entry => {
+            const item = viewKey(el("div", "api-result-entry"), "returned:" + entry.id);
+            item.dataset.resultId = entry.id;
+            item.append(resultLine("reported-api", results.summarize([entry]), { heading: "Returned API result" }),
+                actionFields(call, entry, { includeTool: false, returned: true }));
+            if (entry.id === selectedId) {
+                item.id = "selectedCall";
+                item.tabIndex = -1;
+                item.setAttribute("aria-current", "true");
+                item.prepend(el("h4", "context-selected-label", "Selected returned API result"));
+                actionContext(item, [entry]);
+            }
+            return item;
+        };
         const list = el("div", "returned-api-entries");
-        pagedList(list, apiRows, {
+        const otherRows = selectedId ? apiRows.filter(entry => entry.id !== selectedId) : apiRows;
+        pagedList(list, otherRows, {
             key: "returned:" + row.id, noun: "returned results",
-            renderItem: entry => {
-                const item = el("div", "api-result-entry");
-                item.dataset.resultId = entry.id;
-                item.append(resultLine("reported-api", results.summarize([entry]), { heading: "Returned API result" }),
-                    actionFields(call, entry, { includeTool: false, returned: true }));
-                return item;
-            },
+            renderItem: renderEntry,
         });
+        if (selectedId) {
+            const section = el("section", "selected-api-result");
+            section.append(renderEntry(apiRows.find(entry => entry.id === selectedId)),
+                el("p", "context-help-note", "This returned entry belongs to the recorded tool call above. Its status is not a separate observed HTTP execution."));
+            if (otherRows.length) section.append(disclosure("Other returned API results", list, "returned-api-details"));
+            return section;
+        }
         return disclosure("Returned API details", list, "returned-api-details");
     }
     function actionContext(item, rows) {
@@ -1866,6 +1901,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("activityView").scrollIntoView({ block: "start" });
     }
     function revealSessionResult() {
+        if (route.view === "request" && route.call !== undefined) {
+            const target = $("selectedCall") || $("unavailableCall");
+            if (!target) return false;
+            target.focus({ preventScroll: true });
+            target.scrollIntoView({ block: "start" });
+            return true;
+        }
         if (route.view !== "analyze" || route.mode !== "calls") return false;
         revealResults();
         return true;
@@ -1922,8 +1964,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         scenarios.sort((a, b) => String(b.userPrompt?.sourceTimestamp || b.capturedAt || "").localeCompare(String(a.userPrompt?.sourceTimestamp || a.capturedAt || "")));
         const host = $("activityList");
         const calls = route.mode === "calls";
-        const items = presentation.ordered((calls ? "calls:" : "interactions:") + sliceKey(),
-            calls ? selectionRows() : scenarios, item => calls ? item.id : item.scenarioId);
+        const items = calls ? callInvestigation.order(selectionRows(), route.callSort, applied.layer)
+            : presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId);
+        $("callSortControls").hidden = !calls;
+        $("callSort").value = route.callSort || "slowest";
+        selectControls?.sync();
+        const timed = items.filter(row => callInvestigation.duration(row, applied.layer) !== null).length;
+        $("callTimingScope").textContent = `${count(timed)} timed; ${count(items.length - timed)} unavailable, listed last. Ties use canonical record ID order. Each duration is for one record, not task latency.`;
         const noun = calls ? results.unit(applied.layer, 2) : applied.layer === "http" ? "record groups" : "interactions";
         $("activityTitle").textContent = calls ? applied.layer === "tool" ? "Calls" : results.unit(applied.layer, 2) : applied.layer === "http" ? "Record groups" : "Interactions";
         for (const node of document.querySelectorAll("[data-analyze-mode]")) {
@@ -1943,7 +1990,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 search ? "Try a different phrase or clear the private search. Other filters and report selections stay."
                     : "Change a filter or use Reset Analyze to explore retained evidence. Source approval and collection settings are unchanged."));
         }
-        for (const item of items.slice(activityPage * pageSize, (activityPage + 1) * pageSize)) host.append(calls ? matchingAction(item) : requestCard(item));
+        let previousTiming;
+        for (const item of items.slice(activityPage * pageSize, (activityPage + 1) * pageSize)) {
+            if (calls) {
+                const timing = callInvestigation.duration(item, applied.layer) === null ? "Duration unavailable" : "Recorded duration";
+                if (timing !== previousTiming) host.append(el("h3", "call-duration-group", timing));
+                previousTiming = timing;
+            }
+            host.append(calls ? matchingAction(item) : requestCard(item));
+        }
         const pager = viewKey($("activityPager"), "pager:activity");
         pager.hidden = !items.length;
         pager.setAttribute("role", "navigation");
@@ -1989,7 +2044,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         card.dataset.actionId = row.id;
         card.dataset.sessionId = row.sourceSessionId;
         const call = sourceCallFor(row);
-        card.append(toolHeading(row.tool), el("p", "muted", `Action recorded: ${time.formatMoment(row.startedAt, applied.timeContext)}`));
+        const recordedLabel = applied.layer === "code-reference" ? "Reference recorded" : applied.layer === "reported-api" ? "Parent call recorded"
+            : ["direct-request", "recorded-http"].includes(applied.layer) ? "Request site recorded" : "Action recorded";
+        card.append(toolHeading(row.tool), el("p", "muted", `${recordedLabel}: ${time.formatMoment(row.startedAt, applied.timeContext)}`));
+        const measured = callInvestigation.duration(row, applied.layer);
+        card.append(el("p", "call-duration", measured === null ? "Duration unavailable"
+            : `Recorded ${applied.layer === "tool" ? "call" : applied.layer === "reported-api" ? "API result" : "HTTP record"} duration: ${count(measured)} ms`));
         if (analytics.serviceInvolvement?.selection.contextOnlyIds.includes(row.id)) card.append(el("p", "service-context-label", "Missing-service context, not a known match to the selected service."));
         if (["tool", "reported-api"].includes(applied.layer)) card.append(actionFields(call, row, { includeTool: false, returned: applied.layer === "reported-api" }));
         else {
@@ -2003,7 +2063,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         card.append(resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer) }));
         if (["failure", "transport"].includes(row.outcome)) {
-            const reason = applied.layer === "tool" ? recordedFailure(call, true)
+            const reason = applied.layer === "http" && row.outcome === "transport" ? "Connection failed; no HTTP response was recorded."
+                : applied.layer === "tool" ? recordedFailure(call, true)
                 : row.status ? `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}. Response body was not retained.`
                     : recordedFailure(call, true);
             card.append(el("p", "action-error", reason));
@@ -2013,7 +2074,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (scenario) {
             card.append(interactionContext(scenario));
             card.append(textAccess.render(scenario.userPrompt, { key: "action:" + row.id, originKind: authorship.originKind(scenario),
-                navigationNode: link("View interaction", "request", { request: scenario.scenarioId }, "request-link text-link"),
+                navigationNode: link(applied.layer === "tool" ? "Open exact call in context" : "Open exact record in context",
+                    "request", { request: scenario.scenarioId, call: row.id,
+                        callRevision: applied.layer === "reported-api" ? String(state.revision) : undefined }, "request-link text-link"),
             }));
         } else card.append(el("p", "muted", "Full request details were not retained."));
         return card;
@@ -2094,18 +2157,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.view !== "request") return;
         captureReading();
         const context = requestContext.select(state.scenarios, route.request);
+        const target = callInvestigation.resolve(state.requestActivity, state.scenarios, route, state.revision);
         const body = $("requestContent");
         body.replaceChildren();
+        detailOwner = "request:" + route.request;
+        viewKey(body, detailOwner);
+        if (target.status === "unavailable") {
+            const notice = empty("This exact record is unavailable", target.reason === "snapshot-changed"
+                ? "This API-result link has no matching snapshot revision. Returned-entry identities are not stable across stored revisions. No other entry was substituted. Return to Calls and reopen the result from the current snapshot."
+                : "The selected record or its recorded parent is no longer available in this interaction. No nearby action was substituted. Return to results to choose another record.");
+            notice.id = "unavailableCall";
+            notice.tabIndex = -1;
+            body.append(notice);
+            return;
+        }
         if (!context.groups.length) {
             body.append(empty("This interaction is not available", "It may no longer be in the current local collection. Return to Analyze to choose another interaction."));
             return;
         }
-        detailOwner = "request:" + route.request;
-        viewKey(body, detailOwner);
         const heading = el("h2", "", "What was asked and what came back");
         heading.id = "requestContextTitle";
         const contextHeader = el("section", "request-context-heading");
         contextHeader.append(heading, el("p", "context-help-note", context.limitation));
+        if (target.status === "available") contextHeader.append(el("p", "context-help-note", "Opened the exact selected record below. Other retained actions and messages remain context, not additional matches."));
         if (context.groups.length > 1) contextHeader.append(el("p", "context-help-note", "Nearby groups are linked by recorded messages, not a confirmed task or continuation."));
         const boundary = el("details", "reader-details");
         boundary.append(el("summary", "", "How this context is linked"), el("p", "", context.boundary),
@@ -2126,16 +2200,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (content !== item) item.append(content);
             item.dataset.contextGroup = entry.scenarioId;
             item.dataset.contextKind = entry.kind ?? "action";
+            if (entry.actionId) item.dataset.actionId = entry.actionId;
             viewKey(item, entry.key);
             const moment = typeof entry.at === "string" && Number.isFinite(Date.parse(entry.at))
-                ? `${entry.kind === "response" ? "Response recorded" : entry.kind === "prompt" || entry.kind === "follow-up" ? "Message recorded" : "Action started"}: ${timestamp(entry.at)}`
+                ? `${entry.kind === "response" ? "Response recorded" : entry.kind === "prompt" || entry.kind === "follow-up" ? "Message recorded" : entry.timeLabel || "Action started"}: ${timestamp(entry.at)}`
                 : "Time not recorded; position in the chronology is unknown.";
             const label = el("p", "context-entry-label", `${relationLabel(entry.relation)} / ${moment}`);
             item.prepend(label);
             if (entry.kind === "prompt" && entry.relation === "selected") {
                 item.id = "selectedContext";
-                item.setAttribute("aria-current", "true");
+                if (target.status !== "available") item.setAttribute("aria-current", "true");
                 label.classList.add("context-selected-label");
+            }
+            if (target.status === "available" && entry.actionId === target.actionId && entry.scenarioId === route.request) {
+                item.dataset.selectedAction = "true";
+                label.classList.add("context-selected-label");
+                label.prepend(document.createTextNode(applied.layer === "reported-api" ? "Parent of selected API result / " : "Selected record / "));
+                if (applied.layer !== "reported-api") {
+                    item.id = "selectedCall";
+                    item.tabIndex = -1;
+                    item.setAttribute("aria-current", "true");
+                }
             }
             const index = rendered.findIndex(other => requestContext.compare(entry, other) < 0);
             journey.insertBefore(item, index < 0 ? null : rendered[index].node);
@@ -2238,10 +2323,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (applied.layer === "tool" ? rows : undefined);
         for (const tool of scenario.toolCalls || []) {
             const row = canonical?.find(item => tool.toolCallId ? item.toolCallId === tool.toolCallId : item.id === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
-            if (row && seen.has(row.id)) continue;
+            if (row && (seen.has(row.id) || row.id === target.actionId && !isSelected)) continue;
             if (row) seen.add(row.id);
             const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || tool]);
-            entries.push({ key, startedAt: tool.startedAt, render: () => {
+            entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
             item.dataset.toolCallId = tool.toolCallId || "";
@@ -2249,10 +2334,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const result = resultLine("tool", row ? results.summarize([row]) : null, { help: explanations.tool, heading: results.heading("tool") });
             result.classList.add("journey-result");
             item.append(result);
+            const duration = callInvestigation.duration(tool);
+            item.append(el("p", "call-duration", duration === null ? "Call duration unavailable" : `Recorded call duration: ${count(duration)} ms`));
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
             if (apiRows?.length) item.append(resultLine("reported-api", results.summarize(apiRows), { heading: results.heading("reported-api") }));
             else if (row?.workload !== "Discovery") item.append(el("p", "result-missing-api", apiRows ? "API metadata: None recorded." : "API metadata: Unavailable."));
-            if (!sameScope) actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
+            if (!sameScope || target.status === "available") actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
             const failure = recordedFailure(tool, ["failure", "transport"].includes(row?.outcome));
             if (failure) item.append(el("p", "action-error", failure),
                 el("p", "context-help-note", "Historical call evidence only; it does not establish current sign-in or permission state."));
@@ -2260,7 +2347,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false });
             if (fields.childElementCount) item.append(fields);
             if (row) {
-                const returned = returnedDetails(sourceCall, row, apiRows);
+                const returned = returnedDetails(sourceCall, row, apiRows,
+                    applied.layer === "reported-api" && target.actionId === row.id ? target.row.id : undefined);
                 if (returned) item.append(returned);
             }
             const expert = el("div", "technical-detail");
@@ -2289,10 +2377,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const graph of scenario.graphActivities || []) {
             const layer = graph.evidenceLevel === "code-reference" ? "code-reference" : "direct-request";
             const graphRows = fullRowsFor(scenario.scenarioId, layer)?.filter(row => row.activityId === graph.activityId);
-            if (graphRows?.[0] && seen.has(graphRows[0].id)) continue;
+            if (graphRows?.[0] && (seen.has(graphRows[0].id) || graphRows[0].id === target.actionId && !isSelected)) continue;
             if (graphRows?.[0]) seen.add(graphRows[0].id);
             const key = JSON.stringify([scenario.scenarioId, "graph", graph.activityId || graph]);
-            entries.push({ key, startedAt: graph.startedAt, render: () => {
+            entries.push({ key, actionId: graphRows?.[0]?.id, startedAt: graph.startedAt,
+                timeLabel: layer === "code-reference" ? "Reference recorded" : "Request site recorded", render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
             item.append(actionHeading(layer === "code-reference" ? "Graph code reference" : "Direct Graph request site", graphRows?.[0]?.workload || graph.workload || "Unknown", graphRows?.[0], layer));
@@ -2311,10 +2400,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         for (const record of scenario.httpRecords || []) {
             const httpRows = fullRowsFor(scenario.scenarioId, "http")?.filter(row => row.recordId === record.recordId);
-            if (httpRows?.[0] && seen.has(httpRows[0].id)) continue;
+            if (httpRows?.[0] && (seen.has(httpRows[0].id) || httpRows[0].id === target.actionId && !isSelected)) continue;
             if (httpRows?.[0]) seen.add(httpRows[0].id);
             const key = JSON.stringify([scenario.scenarioId, "http", record.recordId || record]);
-            entries.push({ key, startedAt: record.startedAt, render: () => {
+            entries.push({ key, actionId: httpRows?.[0]?.id, startedAt: record.startedAt, render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
             item.append(actionHeading("Explicit HTTP recorder", httpRows?.[0]?.workload, httpRows?.[0], "http"), el("p", "", record.status == null ? "No HTTP response recorded." : "Recorded HTTP status " + record.status));
@@ -3729,6 +3818,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
+    $("callSort").addEventListener("change", () => {
+        if (!restoring) navigate(routeFor("analyze", { callSort: $("callSort").value, page: undefined }), false, { keepFocus: true });
+    });
     selectControls = createSelectControls(ux, {
         decorateOption: (node, { id, value, label }) => {
             if (["promptAuthorFilter", "reportPromptAuthorFilter"].includes(id)) {

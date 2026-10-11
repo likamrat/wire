@@ -1990,6 +1990,64 @@ No source, capture, evaluation, report projection or retention schema changes ar
 part of this reader. Focused proof is in `tests/request-context.test.mjs`,
 `tests/context-reading.browser.test.mjs` and the existing text/detail reader tests.
 
+### Exact recorded-call investigation
+
+Analyze's existing `#analyze?mode=calls` list uses canonical `slice.rows`, across
+all pages. `callSort=slowest` (default) or `callSort=fastest` affects presentation
+only, not filters, report membership or assessment populations. The pure
+`createCallInvestigation().order(rows, sort, layer)` sorts finite nonnegative
+recorded durations, then canonical ID for ties; unavailable durations form a
+separate final group, also ID-ordered. Zero is measured, not missing. No start/end
+subtraction, concurrent-call sum or latency threshold is introduced. Tool calls,
+returned API entries and owned HTTP records use only their own duration.
+Graph sites, visible-status sites and code references have no measured duration.
+
+Exact links use the existing request route with `request=<canonical scenarioId>`,
+`layer=<evidence layer>` and `call=<canonical row.id>`. They never build a target
+from a displayed position, optional source result index, tool name or nearby
+timestamp. Other route fields, including `mode`, `callSort`, filters and result
+page, survive the round trip; private search remains only in `history.state`.
+`call` is request-only and clears when leaving the reader or changing interaction.
+`resolve(requestActivity, authorizedScenarios, route, snapshotRevision)` returns `none`,
+`unavailable`, or `{ status: "available", row, source, actionId }`, preserving the
+original row/source references. An API entry resolves through its canonical
+`parentCallId`; other layers retain their canonical tool/event, Graph activity or
+HTTP record identity. The selected record must belong to the named canonical
+owner and have a retained exact source/parent. No alternative group is substituted.
+
+Returned-entry **Service** fields read the accepted `serviceAssociation.services`
+and explain its precise gaps. They never use the parent-derived legacy
+`workload` category as that entry's service. Ordinary tool **Activity category**
+and canonical records, membership and fingerprints are unchanged.
+
+Returned API-entry canonical IDs currently contain offsets in retained parent
+metadata. Their links therefore also require `callRevision=<snapshot revision>`.
+A missing or different revision is explicitly unavailable before mounting any
+response reader, even if the same canonical offset exists in the newer snapshot.
+Reopen from Calls to obtain a current link. This intentionally conservative guard
+also rejects such links after unrelated stored revisions; it does not invent
+stable source identities or change backend normalization. Stable tool/event,
+Graph and owned-HTTP identities do not need this extra revision guard.
+
+The unchanged context selector still sets the bounded interaction membership.
+Action entries expose `data-action-id`; the selected action exposes
+`data-selected-action=true`. `#selectedCall` is the focused, visible exact-record
+anchor (`aria-current=true`), with stable view keys for Back. For a returned API
+entry the anchor is the exact `data-result-id` child under the marked parent,
+outside the pager for **Other returned API results**. The selected entry appears
+once; the remaining returned entries and all surrounding actions stay available.
+Matching versus other context is independent of the selection highlight.
+Unresolvable targets render `#unavailableCall` before mounting response readers;
+they never silently open a generic interaction.
+
+Sort/navigation reuse the accepted snapshot; there are no backend, classifier,
+capture, consent or assessment changes. Deliberate valid interaction opening
+retains the existing independently authorized response reads, generation guards
+and Hide state. Focused evidence is in `tests/call-investigation.test.mjs` and
+`tests/call-investigation.browser.test.mjs`, using invented normal-source records,
+plus the existing context and Analyze tests. These fixtures establish application
+behavior, not production coverage or real-world latency.
+
 Text-access audit boundaries:
 
 | Display family | Full-value contract |

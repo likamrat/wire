@@ -524,6 +524,11 @@ ${selectStyles}
 .matched-action .action-purpose {margin:8px 0}
 .matched-action .action-error {color:var(--danger)}
 .matched-action>.text-link,.session-analysis>.text-link {display:inline-flex;align-items:center;min-height:44px}
+.call-sort-controls {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-block:16px;min-width:0}
+.call-sort-controls>.context-help-note {flex-basis:100%;margin:0}
+.call-sort-controls .select-control {max-width:100%}
+.call-duration-group {margin-block:20px 8px}
+.call-duration {font-variant-numeric:tabular-nums}
 ${reportJourneyStyles}
 ${settingsStyles}
 ${periodFlowStyles}

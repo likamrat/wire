@@ -133,7 +133,7 @@ test("normal Analyze entry directly opens exact interactions and restores query,
     assert.deepEqual(sorted(await rowIds(page, true)), sorted(app.snapshot().analytics.rows.map(row => row.id)));
     assert.equal(app.requests.filter(request => request.path === "/api/snapshot").length, snapshotReads);
     await expect(page.locator(".service-context-label")).toHaveCount(1);
-    await page.locator("#activityList .request-link").first().click(); await ready(page);
+    await page.locator("#activityList .matched-action").filter({ hasText: "Invented parity chat 0" }).first().locator(".request-link").click(); await ready(page);
     await expect(page.locator("#requestView")).toContainText("Outside current view");
     await page.goBack(); await ready(page);
     await expect(page.locator('[data-analyze-mode="calls"]')).toHaveAttribute("aria-current", "true");

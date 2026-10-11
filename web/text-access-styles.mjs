@@ -93,6 +93,10 @@ export const textAccessStyles = `
 .request-context-timeline>.journey-item[aria-current=true] {border-inline-start-color:var(--accent)}
 .request-context-timeline .context-entry-label {font-size:var(--type-caption);line-height:var(--leading-caption);margin:0 0 12px}
 .request-context-timeline .context-selected-label {color:var(--accent);font-weight:var(--weight-strong)}
+.request-context-timeline>.journey-item[data-selected-action=true] {border-inline-start-color:var(--accent)}
+#selectedCall,#unavailableCall {scroll-margin-block-start:160px;outline-offset:4px}
+.selected-api-result {min-width:0;margin-block:16px}
+.selected-api-result>.api-result-entry {border-inline-start:2px solid var(--accent);padding-inline-start:12px}
 .request-context-timeline :is(.request-original,.request-context-prompt,.interaction-response) {padding:0;margin:0;border:0;border-radius:0;background:none;min-width:0}
 .request-context-timeline .reader-state-partial {color:var(--warning)}
 .request-context-summaries>.request-recorded {margin-top:16px;padding-top:16px}
