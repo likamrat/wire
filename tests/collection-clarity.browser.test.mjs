@@ -151,7 +151,7 @@ test("collection page has measured compact controls, responsive states and local
             if (!captureOnly) {
                 assert.ok(current.controls.every(control => control.height >= 44), `${theme}/${name} 44px targets`);
                 assert.ok(current.readingSize >= 16, "Reading typography is not shrunk to fit");
-                assert.match(current.font, /Asta Sans/);
+                assert.match(current.font, /^Arial,/);
                 assert.ok(current.colors.every(pair => contrast(pair.color, pair.background) >= 4.5), `${theme}/${name} text contrast`);
                 if (name === "desktop") {
                     assert.ok(current.search.width <= 540 && current.search.width >= 280, "Search has a useful, proportionate width");

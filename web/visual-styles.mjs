@@ -13,7 +13,7 @@ export const visualStyles = `
 .filters {border:0;box-shadow:none;background:transparent;padding:0;gap:12px}
 .filters label {font-size:var(--type-small)}
 .filters select {min-height:44px}
-.chart-panel {border:0;box-shadow:none}
+.chart-panel {border:1px solid var(--rule);box-shadow:none}
 .view-switch {border:0}
 .result-summary .result-with-help>button:not(.ux-help) {border-color:var(--pill-border);background:var(--pill-fill);color:var(--pill-ink);min-height:44px}
 .result-summary .result-with-help>button:not(.ux-help):hover {background:var(--pill-hover)}

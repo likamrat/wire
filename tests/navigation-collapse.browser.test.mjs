@@ -65,7 +65,7 @@ async function geometry(page) {
         return { sidebar: box("#sidebar"), main: box("#main"), header: box(".app-header"), chart: box(".chart-panel"),
             scene: box(".dimensional-plot"), filters: box("#filters"), overflow: document.documentElement.scrollWidth - innerWidth,
             offset: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-sidebar-width")),
-            font: getComputedStyle(document.body).fontFamily, loaded: document.fonts.check('14px "Asta Sans"'),
+            font: getComputedStyle(document.body).fontFamily, loaded: document.fonts.check("14px Arial"),
             scrollY, route: location.hash };
     });
 }
@@ -85,7 +85,7 @@ test("pointer and keyboard collapse reclaim actual chart width and retain toolti
     const { page, requests } = await setup(t);
     const before = await geometry(page), scene = await page.locator(".dimensional-plot").elementHandle();
     const snapshotReads = requests.filter(url => url === "/api/snapshot").length;
-    assert.equal(before.loaded, true); assert.match(before.font, /Asta Sans/);
+    assert.equal(before.loaded, true); assert.match(before.font, /^Arial,/);
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
     const documentNode = await cdp.send("DOM.getDocument");

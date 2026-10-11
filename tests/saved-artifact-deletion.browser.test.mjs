@@ -78,7 +78,7 @@ test("named saved-object deletion has safe cancel, no cascade and centered acces
             return {
                 fits: node.scrollWidth <= node.clientWidth + 1 && node.getBoundingClientRect().right <= innerWidth,
                 height: box.height, radius: parseFloat(style.borderRadius), controlRadius: parseFloat(style.getPropertyValue("--radius-control")), centered: Math.abs((glyph.left + glyph.right - box.left - box.right) / 2),
-                fill: style.backgroundColor, loaded: [...document.fonts].some(face => face.family.includes("Asta Sans") && face.status === "loaded"),
+                fill: style.backgroundColor, loaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
             };
         });
         assert.equal(geometry.fits, true, `${theme}/${width}/${scale}`);

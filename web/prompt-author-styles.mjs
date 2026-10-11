@@ -1,7 +1,7 @@
 export const promptAuthorStyles = `
-:root {--prompt-author-user:#19676b}
-@media(prefers-color-scheme:dark) {:root:not([data-evidence-theme]) {--prompt-author-user:#8bcbd0}}
-:root[data-evidence-theme=dark] {--prompt-author-user:#8bcbd0}
+:root {--prompt-author-user:#006580}
+@media(prefers-color-scheme:dark) {:root:not([data-evidence-theme]) {--prompt-author-user:#06b6d4}}
+:root[data-evidence-theme=dark] {--prompt-author-user:#06b6d4}
 [data-prompt-actor=user] {--prompt-author-ink:var(--prompt-author-user)}
 [data-prompt-actor=agent] {--prompt-author-ink:var(--copilot-chat-title)}
 [data-prompt-actor=unknown] {--prompt-author-ink:var(--muted)}

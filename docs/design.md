@@ -885,7 +885,7 @@ actions behind it, and choose what to include in a short technical report.
 
 The installed Taste redesign guidance informed hierarchy, spacing, navigation,
 interaction states and restraint. Its marketing-page prescriptions do not fit
-this product. The app uses bundled Asta Sans with system fallbacks and its own coherent
+this product. The app uses the shared system sans-serif and its own coherent
 light/charcoal palette, without external imagery, decorative animation or
 invented metrics. The shapes are Fluent-inspired, not an official Fluent UI
 component implementation. This targeted navigation change uses predictable
@@ -894,61 +894,69 @@ hierarchy (variance 3), no decorative motion (motion 2), and ordinary app densit
 
 ## Theme and shape
 
-### Fluent typography and controls
+### METROPOLIS typography and controls
 
-The user-selected IQ-OS reference establishes the visual roles, not dashboard
-content or a new information architecture. Source inspection verified **Asta Sans**:
-IQ-OS `kit/theme.css:11-26` registers the local variable face,
-`kit/typeface.mjs:12` supplies its fallback stack, and `kit/theme.css:87-125`
-defines 14/20 body, 12/16 caption, 13/20 compact controls, 18/36 widget titles
-and weights 400/500/600. `kit/icons.mjs:25-45` uses official Fluent regular/filled
-variants. `kit/theme.css:211-249` distinguishes outlined buttons from filled
-primary actions; `web/index.html:2251-2276` distinguishes outlined metadata pills.
-These are declared CSS facts. Screenshot scale and device-pixel ratio are
-unknown; screenshot pixels do not establish exact CSS dimensions or font identity.
+The user's latest METROPOLIS Intelligent Operations Center reference takes
+priority over the earlier IQ-OS/Asta/Fluent visual treatment: typography, status
+pills, panels and charts, not only hue changes. Earlier feature histories below
+that mention Asta, navy or larger rounded cards describe the superseded design.
+Fluent icons and native control behavior remain where useful; preserving their
+old appearance is not a goal.
 
-WIRE adapts these roles to its existing reading tasks and 44px targets. The
+`lib/typeface.mjs` now supplies `Arial,"Helvetica Neue","Segoe UI",sans-serif`.
+This locally available, compact sans-serif approximates the reference's letter
+forms; a screenshot cannot establish its original font's exact identity.
+Headings use weight 700, and chart-panel headings use restrained uppercase with
+.025em tracking. Supporting text keeps ordinary case. There is no new font
+download, framework or decorative animation.
+
+WIRE adapts the reference to its existing reading tasks and 44px targets. The
 single source is `typographyTokens` in `web/tokens.mjs`, with no page-local font
 stacks or external font downloads:
 
 | Role | Token | Size / line at 16px root | Weight |
 | --- | --- | --- | --- |
-| Page heading | `--type-title` / `--leading-heading` | 24 / 32 | 600 |
-| Section heading | `--type-section` / `--leading-section` | 18 / 24 | 600 |
+| Page heading | `--type-title` / `--leading-heading` | 24 / 32 | 700 |
+| Section heading | `--type-section` / `--leading-section` | 18 / 24 | 700 |
 | Body, navigation, controls | `--type-body`, `--type-control` / `--leading-ui`, `--leading-control` | 14 / 20 | 400; controls 500 |
 | Caption and metadata | `--type-caption` / `--leading-caption` | 12 / 16 | 400 |
 | Labels and help | `--type-small` / `--leading-ui` | 14 / 20 | 400 or 500 |
 | Longer reading text | `--type-reading` / `--leading-reading` | 16 / 26 | 400 |
-| Dialog title and assessment value | `--type-dialog`, `--type-data-value` / corresponding leading tokens | 22 / 29.7 | 600 |
+| Dialog title and assessment value | `--type-dialog`, `--type-data-value` / corresponding leading tokens | 22 / 29.7 | 700 |
 | API paths and code | `--mono`, `--type-small` | 14 / 22.4 | 400 |
 
-All sizes use rem and line heights are unitless. General headings have zero
+All sizes use rem and line heights are unitless. General headings have .015em
 tracking; the explicitly selected Settings reference has its own heading role
 below. Chart numeric sizes remain their
 established quantitative roles; tabular figures are retained. Filesystem paths
 in Settings remain selectable regular UI text, while literal API paths retain
 Cascadia Mono, no ligatures, original case and full wrapping text.
 
-`lib/typeface.mjs` embeds the unchanged Latin variable WOFF2 and its complete
+`lib/typeface.mjs` retains the unchanged Asta Latin variable WOFF2 and its complete
 OFL-1.1 copyright/license from `assets/fonts/`. The font SHA-256 is
 `ad3079a2c2cef53a0ba3598f7c5a4ae9289982c8b8a426872395846e9fa08e25`.
-The Latin unicode range deliberately leaves other scripts to the verified
-system fallback chain. The application permits only data fonts, not a CDN.
-New reviewed reports freeze the font, license and role declarations into their
-own HTML; print sizing remains independent. Existing saved report bytes are
-never re-styled or rewritten. Actual loaded-face checks must await
-`document.fonts.ready`; a computed family name alone does not prove font loading.
+Its existing `fontDataUrl` and `fontFaceStyles` exports stay available for
+consumers that explicitly embed it, but it is no longer the default UI face.
+The system stack requires no downloaded asset or redistributed font file.
+Chromium's PDF renderer embeds local-font subsets in the output; the strict
+saved reader does not fetch fonts or fall back to system fonts.
+`tests/typeface.test.mjs` verifies actual embedded font-program bytes while
+reading with `useSystemFonts:false`. Native consumers retain that requirement.
+Report-specific layout/embedding remains its owner's responsibility. Existing
+saved report bytes are never re-styled or rewritten. Actual glyph checks use
+the browser's platform-font result after `document.fonts.ready`, not just the
+declared family name.
 
-Primary actions use the existing solid accent/foreground pair and 8px corners.
-Secondary actions are content-sized outlined controls with 8px corners, neutral paper at rest,
+Primary actions use faint cyan-tinted fills, cyan ink/outlines and 6px corners.
+Secondary actions are content-sized outlined controls with 6px corners, neutral paper at rest,
 12px inline padding, 8px icon/group gaps and 44px minimum targets. Their
 neutral outline retains at least 3:1 contrast against resting, hover and pressed
 surfaces in both themes. Native and enhanced fields use 4px corners. Activity
-result badges use 12/16 caption text, 16px glyphs and 6px corners rather than the
+result badges use strong uppercase 12/16 caption text, 16px glyphs and capsule corners rather than the
 reading-text role; actionable results retain a 44px target around their smaller
 painted face. The outer target stays transparent on hover and press; only the
 inset face changes color. Keyboard focus keeps its distinct native outline.
-Noninteractive results have a neutral inset keyline without changing their
+Noninteractive results have a semantic-colored keyline and faint matching fill without changing their
 compact geometry or acquiring button behavior, hover paint or a tab stop.
 Native form fields, sidebar rows, popups, cards and dialogs retain distinct
 shapes rather than becoming identical capsules. Text-only controls no longer
@@ -981,7 +989,7 @@ R, and completes the tilted E's middle bar with exposed copper tips. It has no
 face. Its light/dark geometry and colors live in `assets/wire-wordmark.svg` and
 `assets/wire-wordmark-dark.svg`; the compact tab icon is `assets/wire-icon.svg`.
 The header shows the 165px by 52px wordmark above the visible
-**Work IQ Request Explorer** subtitle, using the shared Asta Sans font at
+**Work IQ Request Explorer** subtitle, using the shared system sans-serif at
 .8125rem (13px), weight 600, foreground ink and a unitless 1.25 line height.
 The subtitle stays on one line without truncation or ellipsis. Its viewport fit
 caps the size at `(100vw - 40px) / 12`; for example, at 320px with 200% root
@@ -1047,21 +1055,30 @@ replaces the former blue/navy palette, not the Fluent controls or typography.
 all canonical service/category identities and the separate grouped Other presentation;
 `web/dimensional-charts-styles.mjs` consumes it for material and readable ink in
 both themes. Service tokens never reuse outcome tokens.
-Light uses neutral page (`#f2f3f3`), paper (`#fcfcfc`) and inset (`#e9ebeb`)
-surfaces. Dark complements it with charcoal page (`#17191c`), paper (`#202327`)
-and inset (`#2a2e32`) surfaces. Muted teal is the interaction accent, with faded
-selected fills; it is not a success or quality grade. Both explicit preferences
-and the first-paint system CSS use the same pair.
+The user's METROPOLIS Intelligent Operations Center reference grounds the
+palette, not the former WIRE colors. Dark page (`#0f111a`), paper (`#171923`)
+and inset (`#141622`) match its sampled near-black charcoal surfaces. Cyan
+(`#06b6d4`), emerald (`#10b981`) and amber (`#f59e0b`) follow its chart
+colors; the pink (`#ed58a5`) keeps the reference's hue with sufficient label
+contrast. These accents occupy marks, text and thin outlines, not broad pastel
+surfaces. Low-luminance cyan tints carry selection and primary-action fills.
+
+Light complements the same hue families with pale page (`#f4f5f9`), white paper
+and inset (`#eceef5`) surfaces, darker cyan/emerald/pink/amber text and faint
+selected fills. Cyan identifies interaction, not success or a quality grade.
+Both explicit preferences and the first-paint system CSS use the same pair.
 
 Existing `--page`, `--paper`, `--canvas`, `--hover`, `--ink`, `--muted`,
 `--rule`, `--control`, `--focus` and pill roles remain the consumer contract.
 `--rule` separates content; `--control` identifies input boundaries. Primary
-actions use `--accent-fill`, `--accent-hover`, `--accent-pressed` with the same
-`--on-accent` ink. Selection retains its stroke/checkmark/ARIA; keyboard focus
+actions use `--accent-soft`, `--accent-hover`, `--accent-pressed` with
+`--accent` ink and boundary. `--accent-fill`/`--on-accent` remain paired for
+the small theme-switch thumb, rather than filling whole buttons. Selection
+retains its stroke/checkmark/ARIA; keyboard focus
 retains its outline; disabled/loading controls retain readable muted ink on
 canvas. Error, warning, success, unknown and the four performance roles stay
-separate. User author cues are subdued cyan; Agent/chat identity stays violet.
-Outcome tones remain success/teal, failure/pink, partial/orange, unknown/slate,
+separate. User author cues are cyan; Agent/chat identity stays violet.
+Outcome tones remain success/emerald, failure/pink, partial/amber, unknown/slate,
 other/violet and transport/cyan. Service IDs, ordering and non-red hue families
 are unchanged; light and dark label/mid pairs retain minimum OKLab distance 7
 (x100), and labels reach 4.5:1 on paper, inset and hover surfaces.
@@ -1080,8 +1097,10 @@ to new output layouts.
 through the real renderer. It checks Analyze, request reading and the Settings
 rail/pane at desktop and 375px/200% text, computed text/control/semantic-mark
 contrast, selection preservation, focus, hover/press, loading/error and disabled
-states. It also inspects existing dialog-shell paint without opening a source
-review. `WIRE_FOUNDATION_PROOFS` optionally saves local screenshots and computed
+states. Its surface/accent assertions pin the reference-derived roles rather
+than treating generic neutrality or contrast as visual alignment. It also
+inspects existing dialog-shell paint without opening a source review.
+`WIRE_FOUNDATION_PROOFS` optionally saves local screenshots and computed
 measurements; no proof artifacts belong in source control.
 Counts, labels and exact tables retain the meaning independently of color.
 Chart tooltips, accessible exact-data tables and form controls follow the resolved color scheme.
@@ -1100,7 +1119,7 @@ text wraps complete fields onto their own rows instead of squeezing labels.
 help targets and popup anchors at 375/820/1200/1466px in both themes and 200% text.
 
 Secondary navigation actions, secondary buttons, format choices and filter chips
-use the shared 8px control corners; fields use 4px corners and result badges 6px.
+use the shared 6px control corners; fields use 4px corners and result badges capsules.
 Ordinary text-action buttons (including primary, secondary, quiet and destructive
 actions) paint a 36px face inside a 44px native target at normal text size. The
 face is inset 4px vertically in every pointer/disabled state; its balanced padding
@@ -1118,15 +1137,17 @@ with contextual accessible labels, explanatory tooltips, hover/pressed feedback
 and visible keyboard focus. An inset rounded surface grows with the text, rather
 than cropping a fixed-height rectangular background. Ordinary document links
 keep their own styling. Icon/text counts, not color alone, identify each outcome. Dropdown popups
-retain 12px corners and multi-line option rows, not capsule-shaped containers.
-Cards/charts use 20px corners, dialogs 24px, and inputs, rows,
-documents and inset disclosures 12px. Whitespace and tonal surfaces replace
+retain 6px corners and multi-line option rows, not capsule-shaped containers.
+Cards/charts use 6px corners and thin rules, dialogs 8px, and inputs, rows,
+documents and inset disclosures use the shared compact corners. Whitespace and tonal surfaces replace
 nested outlines on filters, charts, activity and report choices. Report columns
 share a width but size to their content; prompt choices have matching rows and
 format pills use an equal-width responsive grid. Data remains rectangular and aligned,
-not capsule-shaped. Focus, pressed, hover and disabled states share these
+not capsule-shaped. Quantitative tracks have only rounded ends; their lengths,
+counts and percentages are unchanged. Time columns use opaque semantic paint
+rather than washed-out material faces. Focus, pressed, hover and disabled states share these
 tokens; numbers use tabular figures and reduced motion disables transitions.
-Primary actions keep `--on-accent` paired with their rest/hover/pressed fills.
+Primary actions keep cyan ink and boundaries on their faint rest/hover/pressed fills.
 Foreground and surface switch atomically between themes instead of
 interpolating only the background through an unreadable intermediate color.
 Flat fill, border and focus feedback remain. Browser coverage measures composed

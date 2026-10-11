@@ -1,5 +1,5 @@
 export const selectStyles = `
-:root {--layer-select:6;--select-radius:12px;--select-value-inset:max(12px,.5rem);--select-field-gap:4px;--select-help-target:var(--help-target)}
+:root {--layer-select:6;--select-radius:var(--radius);--select-value-inset:max(12px,.5rem);--select-field-gap:4px;--select-help-target:var(--help-target)}
 .select-source {display:none!important}
 .select-control {display:inline-flex;min-width:0;max-width:100%;vertical-align:middle}
 :is(.select-field:not(.bucket-control),.filter-field:has(>.select-control)) {
@@ -66,7 +66,7 @@ export const selectStyles = `
 .select-popup::backdrop {background:transparent}
 .select-option {
  display:grid;grid-template-columns:minmax(0,1fr) 20px;align-items:center;column-gap:10px;
- min-height:44px;padding:7px 10px;border-radius:8px;cursor:pointer;overflow-wrap:anywhere;
+ min-height:44px;padding:7px 10px;border-radius:var(--radius-field);cursor:pointer;overflow-wrap:anywhere;
 }
 .select-option+.select-option {margin-top:2px}
 .select-option[aria-selected=true] {background:var(--accent-soft);color:var(--accent);font-weight:var(--weight-medium)}

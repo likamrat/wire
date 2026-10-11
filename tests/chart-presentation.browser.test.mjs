@@ -186,7 +186,7 @@ test("loaded-font changes invalidate count-label pitch without changing values o
     await page.setContent(`<style>${styles}</style><div id="font-chart" style="width:360px;max-width:100%"></div>`);
     await page.evaluate(async dimensional => {
         document.documentElement.style.fontSize = "32px";
-        await document.fonts.load('600 32px "Asta Sans"');
+        await document.fonts.load("700 32px Arial");
         await document.fonts.ready;
         document.documentElement.style.setProperty("--font", "monospace");
         const charts = (0, eval)(`(${dimensional})`)();

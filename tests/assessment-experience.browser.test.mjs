@@ -217,12 +217,12 @@ test("compact insight controls reflow in both themes at all approved widths and 
             overflow: document.documentElement.scrollWidth > innerWidth + 1,
             clipped: [...document.querySelectorAll("#summary p,#summary h3,#summary button")].some(node => node.scrollWidth > node.clientWidth + 1),
             buttonHeight: document.querySelector("#summary button").getBoundingClientRect().height,
-            loadedAsta: [...document.fonts].some(face => face.family.includes("Asta Sans") && face.status === "loaded"),
+            fontReady: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
         }));
         assert.equal(result.overflow, false, `${theme}/${width}/${size}`);
         assert.equal(result.clipped, false, `${theme}/${width}/${size}`);
         assert.ok(result.buttonHeight >= 44);
-        assert.equal(result.loadedAsta, true, "The registered Asta font must be loaded, not merely a fallback.");
+        assert.equal(result.fontReady, true, "The reference-aligned UI font is available.");
         await page.getByRole("button", { name: "Details and feedback", exact: true }).click();
         await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
         const feedback = page.getByRole("dialog", { name: "Your feedback: answer correctness", exact: true });

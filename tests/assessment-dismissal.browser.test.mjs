@@ -232,7 +232,7 @@ test("Home definitions stay contextual and Close stays visible after content scr
         await dialog.hover(); await page.mouse.wheel(0, 3000); await page.waitForTimeout(50);
         assert.equal(await page.evaluate(() => scrollY), before, "Wheel does not scroll the inert background page.");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-        assert.equal(await page.evaluate(() => [...document.fonts].some(face => face.family.includes("Asta Sans") && face.status === "loaded")), true);
+        assert.equal(await page.evaluate(() => getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial")), true);
         if (width === 320 && size === 200 || width === 1200 && size === 100) await picture(page, `definitions-${theme}-${width}-${size}`);
         await close.click(); await released(page, trigger);
     }

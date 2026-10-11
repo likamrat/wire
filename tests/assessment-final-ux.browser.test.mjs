@@ -193,7 +193,7 @@ test("recorded results and Insights stay ahead of an expanded exact Prompt throu
             insightBottom: document.querySelector(".interaction-insights").getBoundingClientRect().bottom,
             promptTop: document.querySelector(".request-original").getBoundingClientRect().top,
             overflow: document.documentElement.scrollWidth > innerWidth + 1,
-            loaded: [...document.fonts].some(font => font.family.includes("Asta Sans") && font.status === "loaded"),
+            loaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
         }));
         assert.equal(position.insightTop, before, "Expanding the Prompt cannot move Insights down.");
         assert.ok(position.insightBottom <= position.promptTop + 1);

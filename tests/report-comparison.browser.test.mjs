@@ -44,7 +44,7 @@ test("comparison uses the loaded font and remains readable across root-text size
             window.component.render(document.querySelector("#comparison"), value, { onInspectPattern: id => { window.inspected = id; window.inspectCount++; } });
         }, model());
         await page.evaluate(() => document.fonts.ready);
-        assert.equal(await page.evaluate(() => document.fonts.check('14px "Asta Sans"')), true);
+        assert.equal(await page.evaluate(() => document.fonts.check("14px Arial")), true);
         const cdp = await context.newCDPSession(page);
         await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
         const doc = await cdp.send("DOM.getDocument");

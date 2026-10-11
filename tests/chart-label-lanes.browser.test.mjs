@@ -76,7 +76,7 @@ test("Discovery and one/two-line API labels share a text-only first-line lane at
                 await page.screenshot({ path: path.join(proofDir, `${theme}-${width}-text${scale}-${mode}.png`), fullPage: true, clip });
                 await writeFile(path.join(proofDir, "label-lanes.json"), JSON.stringify(evidence, null, 2));
             }
-            assert.ok(await page.evaluate(() => document.fonts.check('500 14px "Asta Sans"')), "Measure the loaded product font");
+            assert.ok(await page.evaluate(() => document.fonts.check("500 14px Arial")), "Measure the available product font");
             for (const row of measured) {
                 assert.equal(row.iconCount, 0, "Category names need no separate icon row beneath the columns");
                 assert.ok(Math.abs(row.firstY - measured[0].firstY) < 1, "Single and multiline labels begin on the same first line");

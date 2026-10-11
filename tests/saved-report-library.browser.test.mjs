@@ -208,7 +208,7 @@ test("small, empty and error library states retain accessible controls at narrow
                 controls: [...root.querySelectorAll("button,summary,input"), ...document.querySelectorAll("#reportTaskNav a")].filter(node => node.checkVisibility()).map(rect),
                 search: root.querySelector("#savedReportSearch").getBoundingClientRect().width,
                 library: root.getBoundingClientRect().width,
-                fontLoaded: [...document.fonts].some(face => face.family.includes("Asta Sans") && face.status === "loaded"),
+                fontLoaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
                 colors: [...root.querySelectorAll(".saved-report-identity,.saved-report-metadata,.saved-report-manage,#savedReportCount")].map(colorPair),
             };
         });

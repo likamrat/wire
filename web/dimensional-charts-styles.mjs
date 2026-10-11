@@ -6,21 +6,21 @@ const services = theme => Object.fromEntries(Object.values(servicePalette).map(e
     entry.token, faces.map(face => entry[theme][face]),
 ]));
 const light = {
-    orange: ["#c59663", "#c59663", "#c59663", "#c59663", "#c59663", "#87521d"],
-    cyan: ["#79aabd", "#79aabd", "#79aabd", "#79aabd", "#79aabd", "#285e79"],
-    teal: ["#72aaa0", "#72aaa0", "#72aaa0", "#72aaa0", "#72aaa0", "#22685e"],
-    pink: ["#c58a9f", "#c58a9f", "#c58a9f", "#c58a9f", "#c58a9f", "#a03461"],
-    slate: ["#929ea6", "#929ea6", "#929ea6", "#929ea6", "#929ea6", "#58656e"],
-    violet: ["#a093bd", "#a093bd", "#a093bd", "#a093bd", "#a093bd", "#6b4e92"],
+    orange: ["#815200", "#815200", "#815200", "#815200", "#815200", "#815200"],
+    cyan: ["#006580", "#006580", "#006580", "#006580", "#006580", "#006580"],
+    teal: ["#007458", "#007458", "#007458", "#007458", "#007458", "#007458"],
+    pink: ["#a52b75", "#a52b75", "#a52b75", "#a52b75", "#a52b75", "#a52b75"],
+    slate: ["#586071", "#586071", "#586071", "#586071", "#586071", "#586071"],
+    violet: ["#6842ba", "#6842ba", "#6842ba", "#6842ba", "#6842ba", "#6842ba"],
     ...services("light"),
 };
 const dark = {
-    orange: ["#b99165", "#b99165", "#b99165", "#b99165", "#b99165", "#dcb789"],
-    cyan: ["#729eaf", "#729eaf", "#729eaf", "#729eaf", "#729eaf", "#92c6da"],
-    teal: ["#6caaa0", "#6caaa0", "#6caaa0", "#6caaa0", "#6caaa0", "#94c7bf"],
-    pink: ["#b68197", "#b68197", "#b68197", "#b68197", "#b68197", "#e3a0bb"],
-    slate: ["#88969f", "#88969f", "#88969f", "#88969f", "#88969f", "#b3bdc5"],
-    violet: ["#9c89b9", "#9c89b9", "#9c89b9", "#9c89b9", "#9c89b9", "#c6b0df"],
+    orange: ["#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b"],
+    cyan: ["#06b6d4", "#06b6d4", "#06b6d4", "#06b6d4", "#06b6d4", "#06b6d4"],
+    teal: ["#10b981", "#10b981", "#10b981", "#10b981", "#10b981", "#10b981"],
+    pink: ["#ed58a5", "#ed58a5", "#ed58a5", "#ed58a5", "#ed58a5", "#ed58a5"],
+    slate: ["#a2a9b9", "#a2a9b9", "#a2a9b9", "#a2a9b9", "#a2a9b9", "#a2a9b9"],
+    violet: ["#ad88f0", "#ad88f0", "#ad88f0", "#ad88f0", "#ad88f0", "#ad88f0"],
     ...services("dark"),
 };
 const tokens = palette => Object.entries(palette).map(([tone, colors]) => colors.map((color, index) => `--chart-${tone}-${faces[index]}:${color};`).join("")).join("");
@@ -124,7 +124,7 @@ ${dimensionalColumnStyles}
 .flat-time-plot .time-column {position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:84px;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent;pointer-events:none}
 .flat-time-plot .time-stack {display:block;width:100%;height:100%;overflow:visible;border-radius:0;pointer-events:none}
 .flat-time-column {display:block;max-width:none;overflow:visible;pointer-events:none}
-.flat-time-segment {fill:var(--column-label);fill-opacity:.76;stroke:none;pointer-events:visibleFill}
+.flat-time-segment {fill:var(--column-label);fill-opacity:1;stroke:none;pointer-events:visibleFill}
 .flat-time-column [data-ux-tooltip]:hover {fill-opacity:1}
 .flat-time-plot .time-column:hover .time-stack {filter:none;outline:0}
 .flat-time-plot .time-column:focus-visible {outline:0}

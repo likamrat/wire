@@ -7,7 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
 import { scopeRecords } from "./analysis-scope-fixture.mjs";
-import { contrast } from "./color-measurements.mjs";
+import { contrast, rgb } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_FOUNDATION_PROOFS;
 const baseline = process.env.WIRE_FOUNDATION_BASELINE === "1";
@@ -16,7 +16,10 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
 
 async function inspect(page, label) {
     const measured = await page.evaluate(() => {
-        const rgba = value => value.match(/[\d.]+/g).map(Number);
+        const rgba = value => {
+            const channels = value.match(/[\d.]+/g).map(Number);
+            return value.startsWith("color(srgb ") ? channels.map((v, i) => i < 3 ? v * 255 : v) : channels;
+        };
         const composite = (color, base, opacity = 1) => {
             const a = (color[3] ?? 1) * opacity;
             return base.map((v, i) => color[i] * a + v * (1 - a));
@@ -30,7 +33,7 @@ async function inspect(page, label) {
                 ? composite(rgba(face.backgroundColor), base, Number(face.opacity)) : base;
         }
         const color = channels => `rgb(${channels.slice(0, 3).join(",")})`;
-        const text = [], controls = [], focus = [], marks = [], targets = [], surfaces = [], overflow = [];
+        const text = [], controls = [], focus = [], marks = [], targets = [], surfaces = [], pills = [], overflow = [];
         const root = getComputedStyle(document.documentElement);
         const tokens = Object.fromEntries(["page", "paper", "canvas", "hover", "ink", "muted", "control", "focus", "accent",
             "accent-soft", "accent-fill", "on-accent", "pill-pressed", "danger", "success", "warning", "unknown",
@@ -63,9 +66,10 @@ async function inspect(page, label) {
                 const box = node.getBoundingClientRect();
                 targets.push({ id, width: box.width, height: box.height });
             }
-            if (node.matches(".app-header,.chart-panel,.request-intro,.settings-pane,.select-popup,dialog")) {
-                surfaces.push({ id, bg: css.backgroundColor, image: css.backgroundImage, shadow: css.boxShadow });
+            if (node.matches(".app-header,.chart-panel,.percentage-card,.request-intro,.settings-pane,.select-popup,dialog")) {
+                surfaces.push({ id, bg: css.backgroundColor, image: css.backgroundImage, shadow: css.boxShadow, radius: css.borderRadius });
             }
+            if (node.matches(".recorded-result")) pills.push({ id, radius: css.borderRadius, bg: color(bg), ink: css.color });
             const box = node.getBoundingClientRect();
             if (!node.closest(".dimensional-scroll,#countTable,.percentage-scroll") && box.width && (box.right > innerWidth + 1 || box.left < -1)) overflow.push(id);
         }
@@ -82,10 +86,11 @@ async function inspect(page, label) {
             faces: ["orange", "cyan", "teal", "pink", "slate", "violet"].map(tone =>
                 ["top", "mid", "base", "side", "cap"].map(face => root.getPropertyValue(`--chart-${tone}-${face}`).trim())),
         };
-        return { tokens, text, controls, focus, marks, targets, surfaces, overflow, state,
+        return { tokens, text, controls, focus, marks, targets, surfaces, pills, overflow, state,
             material,
             rootOverflow: document.documentElement.scrollWidth - innerWidth,
-            fontLoaded: [...document.fonts].some(font => font.family === "Asta Sans" && font.status === "loaded") };
+            fontFamily: getComputedStyle(document.body).fontFamily,
+            fontLoaded: document.fonts.check('14px Arial') };
     });
     const ratios = entries => entries.map(entry => ({ ...entry, ratio: Math.min(contrast(entry.ink, entry.bg),
         entry.outside ? contrast(entry.ink, entry.outside) : Infinity) }));
@@ -93,7 +98,8 @@ async function inspect(page, label) {
     measured.controls = ratios(measured.controls);
     measured.focus = ratios(measured.focus);
     measured.marks = ratios(measured.marks);
-    assert.equal(measured.fontLoaded, true, `${label}: bundled font`);
+    assert.equal(measured.fontLoaded, true, `${label}: reference-aligned system font available`);
+    if (!baseline) assert.match(measured.fontFamily, /^Arial,/, `${label}: reference-aligned sans-serif`);
     assert.ok(measured.rootOverflow <= 1, `${label}: document overflow`);
     assert.deepEqual(measured.overflow, [], `${label}: unclipped content`);
     for (const [kind, minimum] of [["text", 4.5], ["controls", 3], ["focus", 3], ["marks", 3]]) {
@@ -112,11 +118,13 @@ async function inspect(page, label) {
             role, surface, ratio: contrast(measured.tokens[role], measured.tokens[surface]),
         })));
         assert.deepEqual(measured.semantic.filter(item => item.ratio < 4.5), [], `${label}: readable semantic labels and marks on shared surfaces`);
-        for (const name of ["page", "paper", "canvas", "hover"]) {
-            const channels = measured.tokens[name].slice(1).match(/../g).map(v => parseInt(v, 16));
-            assert.ok(Math.max(...channels) - Math.min(...channels) <= 12, `${label}: neutral ${name}, not navy`);
-        }
+        const reference = label.includes("dark")
+            ? { page: "#0f111a", paper: "#171923", canvas: "#141622", accent: "#06b6d4", success: "#10b981", danger: "#ed58a5", warning: "#f59e0b" }
+            : { page: "#f4f5f9", paper: "#ffffff", canvas: "#eceef5", accent: "#006580", success: "#007458", danger: "#a52b75", warning: "#815200" };
+        for (const [name, expected] of Object.entries(reference)) assert.equal(measured.tokens[name], expected, `${label}: METROPOLIS-derived ${name}`);
         assert.deepEqual(measured.surfaces.filter(item => item.image !== "none" || item.shadow !== "none"), [], `${label}: flat shared surfaces`);
+        assert.deepEqual(measured.surfaces.filter(item => parseFloat(item.radius) > 8), [], `${label}: compact panel corners, not rounded cards`);
+        assert.deepEqual(measured.pills.filter(item => parseFloat(item.radius) < 999), [], `${label}: semantic status capsules`);
     }
     return { label, ...measured };
 }
@@ -184,13 +192,20 @@ test("shared foundation preserves real Analyze, reader and Settings in both them
         const before = await action.boundingBox();
         const buttonPaint = async () => action.evaluate(node => {
             const paint = getComputedStyle(node, "::before");
-            return { background: paint.backgroundColor, ink: getComputedStyle(node).color };
+            return { background: paint.backgroundColor, border: paint.borderTopColor, ink: getComputedStyle(node).color };
         });
         const rest = await buttonPaint();
         await action.hover(); const hover = await buttonPaint();
         await page.mouse.down(); const pressed = await buttonPaint();
         await page.mouse.move(0, 0); await page.mouse.up();
-        if (!baseline) assert.equal(new Set([rest.background, hover.background, pressed.background]).size, 3, "Primary states use distinct flat fills");
+        if (!baseline) {
+            assert.equal(new Set([rest.background, hover.background, pressed.background]).size, 3, "Primary states use distinct flat fills");
+            assert.deepEqual(rgb(rest.background), rgb(matrix.at(-1).tokens["accent-soft"]), "Primary is a faded tint, not a broad pastel fill");
+            for (const paint of [rest, hover, pressed]) {
+                assert.deepEqual(rgb(paint.ink), rgb(matrix.at(-1).tokens.accent), "Cyan action label");
+                assert.deepEqual(rgb(paint.border), rgb(matrix.at(-1).tokens.accent), "Cyan action boundary");
+            }
+        }
         await chooseTheme(page, theme === "light" ? "dark" : "light");
         assert.deepEqual(await action.boundingBox(), before, "Theme does not move the action");
         assert.equal(await page.locator("#activityList input:checked").count(), 1);

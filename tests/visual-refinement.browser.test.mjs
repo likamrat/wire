@@ -74,11 +74,10 @@ async function ready(page) {
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
     const fontLoaded = await page.evaluate(async () => {
         const style = getComputedStyle(document.querySelector(".brand-caption"));
-        const faces = await document.fonts.load(`${style.fontWeight} ${style.fontSize} "Asta Sans"`, "Work IQ Request Explorer");
         await document.fonts.ready;
-        return faces.some(face => face.family.replaceAll('"', "") === "Asta Sans" && face.status === "loaded");
+        return style.fontFamily.startsWith("Arial") && document.fonts.check(`${style.fontWeight} ${style.fontSize} Arial`);
     });
-    assert.equal(fontLoaded, true, "Header proof uses loaded Asta Sans, not its fallback");
+    assert.equal(fontLoaded, true, "Header proof uses the available reference-aligned system font");
     if (await page.locator("#moreFilters").isVisible() && await page.locator("#moreFilters").getAttribute("open") === null) await page.locator("#moreFilters>summary").click();
     await openActivitySessions(page);
 }
@@ -215,7 +214,6 @@ test("the complete wordmark subtitle stays on one line at narrow widths and enla
         const logo = brand.locator(".brand-logo:visible");
         const metrics = await caption.evaluate(async node => {
             const style = getComputedStyle(node);
-            const faces = await document.fonts.load(`${style.fontWeight} ${style.fontSize} "Asta Sans"`, node.textContent);
             await document.fonts.ready;
             const range = document.createRange();
             range.selectNodeContents(node);
@@ -232,7 +230,7 @@ test("the complete wordmark subtitle stays on one line at narrow widths and enla
             const foreground = luminance(style.color);
             const background = luminance(getComputedStyle(document.querySelector(".app-header")).backgroundColor);
             return {
-                loaded: faces.some(face => face.family.replaceAll('"', "") === "Asta Sans" && face.status === "loaded"),
+                loaded: style.fontFamily.startsWith("Arial") && document.fonts.check(`${style.fontWeight} ${style.fontSize} Arial`),
                 lines: new Set(rects.map(rect => rect.top.toFixed(2))).size,
                 clipped: node.scrollWidth > node.clientWidth + 1,
                 textRight: Math.max(...rects.map(rect => rect.right)),

@@ -21,7 +21,7 @@ test("every classifier category and Other owns a distinct non-red service palett
             assert.equal(new Set(colors).size, ids.length, `${theme} ${face} must not reuse colors`);
             for (const color of colors) {
                 const angle = hue(color);
-                assert.ok(angle === null || angle >= 40 && angle <= 280, `${theme} ${face} excludes red, pink and coral: ${color} (${angle})`);
+                assert.ok(angle === null || angle >= 35 && angle <= 280, `${theme} ${face} permits reference amber but excludes red, pink and coral: ${color} (${angle})`);
             }
         }
         for (const face of ["label", "mid"]) {

@@ -3,10 +3,10 @@ export const percentageChartStyles = `
 .percentage-heading {margin-bottom:4px}
 .percentage-scope {color:var(--muted);font-size:var(--type-small);max-width:none;margin:4px 0 16px}
 .percentage-panels {display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:16px 24px}
-.percentage-card {min-width:0;padding:16px;background:var(--paper);border-radius:var(--radius-small)}
+.percentage-card {min-width:0;padding:16px;background:var(--paper);border:1px solid var(--rule);border-radius:var(--radius)}
 .percentage-card-heading {min-height:44px;margin-bottom:8px}
 .percentage-card h3 {font-size:var(--type-section);overflow-wrap:anywhere}
-.percentage-denominator {display:block;font-size:var(--type-small);font-weight:var(--weight-regular);color:var(--muted)}
+.percentage-denominator {display:block;font-size:var(--type-small);font-weight:var(--weight-regular);color:var(--muted);text-transform:none;letter-spacing:0}
 .percentage-content {position:relative;min-width:0}
 .percentage-visual {width:7rem;max-width:100%;margin-inline:auto}
 .percentage-ring {display:block;width:100%;height:auto;aspect-ratio:1;overflow:visible}
@@ -27,9 +27,9 @@ export const percentageChartStyles = `
 .percentage-value>* {min-width:0;max-width:100%}
 .percentage-value span {color:var(--muted)}
 .percentage-value strong {font-weight:var(--weight-strong)}
-.percentage-bar-track {grid-column:2/-1;height:8px;background:var(--canvas);overflow:hidden}
+.percentage-bar-track {grid-column:2/-1;height:8px;background:var(--canvas);border-radius:var(--radius-pill);overflow:hidden}
 .percentage-tool-list .percentage-bar-track {grid-column:1/-1}
-.percentage-bar {display:block;height:100%;background:var(--column-label,var(--accent));min-width:0}
+.percentage-bar {display:block;height:100%;background:var(--column-label,var(--accent));border-radius:var(--radius-pill);min-width:0}
 .percentage-legend-row:has(a) .percentage-bar-track {cursor:pointer}
 .percentage-note,.percentage-service-scope,.percentage-coverage {color:var(--muted);font-size:var(--type-small);line-height:1.5;max-width:none}
 .percentage-service-scope {margin:0 0 8px}

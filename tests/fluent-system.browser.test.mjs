@@ -85,7 +85,7 @@ async function measure(page) {
             ".button-link", ".primary", ".select-trigger", ".recorded-result", "code.api-path", ".settings-paths dd",
             ".assessment-value", ".assessment-qualification", ".report-step", "input[type=text]", "table"];
         return {
-            fontLoaded: [...document.fonts].some(font => font.family === "Asta Sans" && font.status === "loaded"),
+            fontLoaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
             viewport: innerWidth, rootSize: getComputedStyle(document.documentElement).fontSize,
             rootOverflow: document.documentElement.scrollWidth - innerWidth,
             rootOverflowPolicy: getComputedStyle(document.documentElement).overflowX,
@@ -121,16 +121,16 @@ test("Fluent roles are rendered consistently across real views, themes and root-
             const result = await measure(page), label = `${route}/${theme}/${width}/${scale}`;
             matrix.push({ route, theme, width, scale, ...result });
             if (!baseline) {
-                assert.equal(result.fontLoaded, true, `${label}: embedded actual Asta font loaded`);
+                assert.equal(result.fontLoaded, true, `${label}: reference-aligned UI font available`);
                 assert.ok(result.rootOverflow <= 1, `${label}: no document overflow`);
                 assert.notEqual(result.rootOverflowPolicy, "clip", `${label}: no global clipping workaround`);
                 for (const sample of result.samples) {
                     const mono = sample.selector === "code.api-path";
-                    assert.match(sample.styles.fontFamily, mono ? /Cascadia Mono/ : /Asta Sans/, `${label}/${sample.selector}`);
+                    assert.match(sample.styles.fontFamily, mono ? /Cascadia Mono/ : /^Arial,/, `${label}/${sample.selector}`);
                     if (sample.selector === "h1") {
                         const settingsTitle = route.startsWith("settings") && width >= 700;
                         assert.equal(sample.styles.fontSize, `${(settingsTitle ? 32 : 24) * scale}px`);
-                        assert.equal(sample.styles.fontWeight, "600");
+                        assert.equal(sample.styles.fontWeight, "700");
                         assert.ok(Math.abs(parseFloat(sample.styles.lineHeight) - (settingsTitle ? 40 : 32) * scale) < .01);
                     }
                     if (sample.selector === "code.api-path") {
@@ -143,7 +143,7 @@ test("Fluent roles are rendered consistently across real views, themes and root-
                     if (sample.selector === ".primary-navigation a") {
                         assert.equal(sample.icons.length, 1, `${label}: exactly one visible navigation variant`);
                     }
-                    if (sample.selector === ".primary") assert.equal(sample.styles.borderRadius, "8px", `${label}: filled/disabled primary retains its distinct Fluent shape`);
+                    if (sample.selector === ".primary") assert.equal(sample.styles.borderRadius, "6px", `${label}: primary retains its reference-aligned compact corners`);
                     if (sample.id === "checkActivity" || sample.tag === "INPUT" || sample.selector === ".button-link") {
                         assert.ok(sample.box.height >= 44, `${label}/${sample.id}: target preserved`);
                         assert.ok(sample.box.x >= -1 && sample.box.right <= width + 1, `${label}/${sample.id}: full target fits`);
@@ -158,7 +158,7 @@ test("Fluent roles are rendered consistently across real views, themes and root-
     if (proofs) await writeFile(path.join(proofs, "computed-role-matrix.json"), JSON.stringify(matrix, null, 2));
 });
 
-test("real server CSP loads Asta glyphs offline while unsupported scripts retain system fallbacks", { timeout: 30000 }, async t => {
+test("real server uses system sans-serif glyphs offline while unsupported scripts retain fallbacks", { timeout: 30000 }, async t => {
     const { context } = await privateFixture(t, [fixture("fluent-font-server")]);
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
@@ -182,7 +182,7 @@ test("real server CSP loads Asta glyphs offline while unsupported scripts retain
         return (await session.send("CSS.getPlatformFontsForNode", { nodeId })).fonts;
     };
     const title = await fontsFor("#pageTitle"), fallback = await fontsFor("#unicodeFallback");
-    assert.ok(title.some(font => font.postScriptName.startsWith("Asta-Sans-") && font.isCustomFont && font.glyphCount > 0), JSON.stringify(title));
+    assert.ok(title.some(font => /Arial|Liberation Sans|Helvetica|Segoe UI/.test(font.familyName) && !font.isCustomFont && font.glyphCount > 0), JSON.stringify(title));
     assert.ok(fallback.some(font => !font.isCustomFont && font.glyphCount > 0), JSON.stringify(fallback));
     if (proofs) await writeFile(path.join(proofs, "actual-platform-fonts.json"), JSON.stringify({ title, fallback }, null, 2));
 });
@@ -260,7 +260,7 @@ test("actual text and icon groups remain centered with generated and existing pr
                         iconCenterY: icon.y + icon.height / 2, centerY: box.y + box.height / 2,
                         pending: node.dataset.pending, ariaBusy: node.getAttribute("aria-busy"),
                         markerVisible: getComputedStyle(marker).visibility,
-                        fontLoaded: [...document.fonts].some(font => font.family === "Asta Sans" && font.status === "loaded"),
+                        fontLoaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
                     };
                 }, pending);
                 assert.equal(result.fontLoaded, true);
@@ -338,7 +338,7 @@ test("populated saved-report comparison inherits Fluent roles without changing f
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await page.evaluate(() => document.fonts.ready);
         const result = await workspace.evaluate(root => ({
-            fontLoaded: [...document.fonts].some(face => face.family === "Asta Sans" && face.status === "loaded"),
+            fontLoaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
             pageOverflow: document.documentElement.scrollWidth - innerWidth,
             overflow: root.scrollWidth - root.clientWidth,
             fields: [...root.querySelectorAll(".comparison-selectors>.select-field")].map(field => {
@@ -368,7 +368,7 @@ test("populated saved-report comparison inherits Fluent roles without changing f
             assert.ok(field.labelHeight <= field.textLines * field.lineHeight + 1, `${theme}/${width}/${scale}: label height follows rendered text, not a vertical flex basis ${JSON.stringify(field)}`);
         }
         for (const sample of result.samples) {
-            assert.match(sample.font, sample.className.split(" ").includes("comparison-endpoint") ? /Cascadia Mono/ : /Asta Sans/, sample.className);
+            assert.match(sample.font, sample.className.split(" ").includes("comparison-endpoint") ? /Cascadia Mono/ : /^Arial,/, sample.className);
             assert.equal(sample.clipped, false, `${theme}/${width}/${scale}/${sample.className}: complete text`);
             if (sample.tag === "BUTTON") {
                 assert.equal(sample.size, `${14 * scale}px`, "Comparison actions use the same control role");

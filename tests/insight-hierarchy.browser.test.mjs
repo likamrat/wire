@@ -176,7 +176,7 @@ async function geometry(host) {
         };
         return { overflow: document.documentElement.scrollWidth > innerWidth + 1, background: getComputedStyle(document.body).backgroundColor,
             textScale: parseFloat(getComputedStyle(document.documentElement).fontSize) / 16,
-            fontLoaded: [...document.fonts].some(font => font.family.includes("Asta Sans") && font.status === "loaded"),
+            fontLoaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
             groups: [...root.querySelectorAll(".assessment-dimension,.assessment-timing")].map(group => ({
                 title: group.querySelector("h3,h4").textContent, box: box(group),
                 rows: [...group.querySelectorAll(".assessment-fact")].map(row => ({
@@ -226,7 +226,7 @@ function hierarchyIssues(layout) {
         issues.push(`${group.title}: assessment groups overlap`);
     }
     if (layout.overflow) issues.push("Page has horizontal overflow");
-    if (!layout.fontLoaded) issues.push("Asta Sans did not load");
+    if (!layout.fontLoaded) issues.push("The reference-aligned UI font is unavailable");
     return issues;
 }
 async function assertFacts(host, model) {
