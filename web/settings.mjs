@@ -10,29 +10,45 @@ export const settingsMarkup = `
     <p id="settingsSearchCount" class="search-count" role="status" hidden></p>
     <ul id="settingsSearchResults" class="settings-search-results" hidden></ul>
   </div>
-  <details id="settingsCategories" class="settings-categories" open><summary id="settingsCategorySummary">Category: Connection &amp; permission</summary><nav id="settingsCategoryNav" aria-label="Settings categories"></nav></details>
+  <details id="settingsCategories" class="settings-categories" open><summary id="settingsCategorySummary">Category: Connection &amp; updates</summary><nav id="settingsCategoryNav" aria-label="Settings categories"></nav></details>
   <p class="settings-status-link"><a href="#collection-status" data-settings-link>Collection status</a></p>
   </aside>
   <div class="settings-content">
-  <section class="settings-section" data-settings-section="data" aria-labelledby="dataManagementTitle" hidden>
-    <h2 id="dataManagementTitle" tabindex="-1">Data management</h2>
+  <p id="settingsMessage" class="notice" role="status" tabindex="-1" hidden></p>
+  <button id="reloadSettings" type="button" hidden>Read current connection</button>
+  <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
+    <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
+    <section class="settings-reply-row" aria-labelledby="assessmentSetupTitle">
+      <h3 id="assessmentSetupTitle" tabindex="-1">Recorded replies</h3>
+      <div id="assessmentSetup"><p>Loading response-saving settings.</p></div>
+    </section>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Delete collected activity</h3>
-    <p id="deleteActivityHelp">Delete all collected activity or a date range. Review the scope before permanent removal.</p>
+    <p id="deleteActivityHelp">Permanently remove all collected activity or a date range after preview. Copilot sources and saved reports stay unchanged.</p>
     </div>
     <button id="deleteActivity" type="button" class="danger" aria-describedby="deleteActivityHelp">Delete collected activity</button>
     </div>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Recollect activity</h3>
-    <p>Read available activity again from your approved Copilot chats. Preview it before confirming.</p>
-    </div><button id="recollectActivity" type="button">Recollect from approved sources</button></div>
+    <p id="recollectActivityHelp">Restore available activity from approved Copilot chats only after preview and confirmation. Missing source history cannot be recovered.</p>
+    </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Recollect from approved sources</button></div>
+    <p class="settings-help">Saved reports keep their reviewed content. <a href="#reports" data-settings-link>Open saved reports</a> to manage them separately.</p>
   </section>
-  <p id="settingsMessage" class="notice" role="status" tabindex="-1" hidden></p>
-  <button id="reloadSettings" type="button" hidden>Read current connection</button>
+  <section class="settings-section" data-settings-section="ai" aria-labelledby="aiReviewsTitle" hidden>
+    <h2 id="aiReviewsTitle" tabindex="-1">AI reviews</h2>
+    <div id="automaticScoreSetup"></div>
+    <p class="settings-help">Review which chats and evidence may be sent to GitHub Copilot, with a shared assessment allowance and AI-credit budget. Charges are post-paid; an in-flight assessment may exceed the soft limit.</p>
+    <p class="settings-help">Source approval and reply saving do not authorize model review. Opening these settings does not run an assessment.</p>
+  </section>
   <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
-    <h2 id="displayTitle" tabindex="-1">Time zone</h2>
+    <h2 id="displayTitle" tabindex="-1">Display</h2>
+    <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
+      <h3>Theme</h3><p id="settingsThemeState" role="status"></p>
+      <p id="settingsThemeHelp" class="settings-help">Saved for this browser and app address. The header switch uses the same preference.</p>
+    </div><button id="settingsThemePreference" type="button" aria-describedby="settingsThemeState settingsThemeHelp themeStorageNotice">Change theme</button></div>
     <div class="settings-field display-time-field">
-      <select id="displayTimeZone" aria-labelledby="displayTitle" aria-describedby="displayTimeImpact displayTimeEffective displayTimeHelp timeZoneNotice"></select>
+      <label for="displayTimeZone">Time zone</label>
+      <select id="displayTimeZone" aria-describedby="displayTimeImpact displayTimeEffective displayTimeHelp timeZoneNotice"></select>
       <p id="displayTimeImpact" class="settings-help">Dates, filters and new previews use this zone. Saved reports and source timestamps stay unchanged.</p>
       <p id="displayTimeHelp" class="settings-help" hidden></p>
       <p id="displayTimeEffective" class="settings-help"></p>
@@ -41,7 +57,7 @@ export const settingsMarkup = `
   </section>
   <div id="collectionForm">
     <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
-      <div class="settings-section-heading"><div><h2 id="connectionTitle" tabindex="-1">Connection &amp; permission</h2><p>Choose which local Copilot chats WIRE can read.</p></div><span id="connectionStatus" class="connection-status">Checking connection</span></div>
+      <div class="settings-section-heading"><h2 id="connectionTitle" tabindex="-1">Connection &amp; updates</h2><span id="connectionStatus" class="connection-status">Checking connection</span></div>
       <div id="approvedConnection" hidden>
         <p><strong>Local Copilot chats</strong> <span id="connectionApproval" class="approved-label">Approved</span></p>
         <p id="connectionSummary" class="settings-help"></p>
@@ -63,13 +79,11 @@ export const settingsMarkup = `
         <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="sourceSessionsHelp sourceScope settingsMessage"><p id="sourceSessionsHelp" class="settings-help">Contains recorded events (session-state).</p></div>
         <p id="sourceScope" class="settings-help">Only these named local sources are read. No repository scans, model calls, cloud sign-in or OS startup task.</p>
         <p id="approvalScope"></p>
-        <a href="#settings?section=collection" data-settings-link class="text-link">Review collection preferences</a>
+        <a href="#settings?section=connection&setting=history-window" data-settings-link class="text-link">Review history and frequency</a>
         <div class="settings-actions"><button id="connectCollection" type="button" class="primary">Approve source and start collection</button><button id="cancelSource" type="button" class="quiet">Cancel</button></div>
       </div>
       <p class="settings-help permission-boundary">Review reports separately before saving or sharing.</p>
-    </section>
-    <section class="settings-section" data-settings-section="collection" aria-labelledby="preferencesTitle" hidden>
-      <h2 id="preferencesTitle" tabindex="-1">Collection preferences</h2>
+      <h3 id="preferencesTitle" class="settings-subheading" tabindex="-1">History and frequency</h3>
       <div class="settings-preferences">
         <div class="settings-field"><label for="collectionWindow">Initial history window</label><select id="collectionWindow" aria-describedby="historyWindowHelp"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select><p id="historyWindowHelp" class="settings-help">How much saved chat history to read. Collected activity is kept.</p></div>
         <div class="settings-field"><label for="collectionCadence">Check frequency</label><select id="collectionCadence" aria-describedby="eventCadenceHelp"><option value="5" selected>Every 5 seconds</option><option value="15">Every 15 seconds</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option></select><p id="eventCadenceHelp" class="settings-help">Longer intervals reduce disk checks.</p></div>
@@ -78,13 +92,16 @@ export const settingsMarkup = `
       <p id="settingsDraftStatus" class="settings-help" role="status"></p>
       <a id="returnToSourceReview" href="#settings?section=connection&setting=source" data-settings-link class="text-link" hidden>Return to source review</a>
       <details class="settings-advanced" id="collectionPreferenceDetails"><summary>Collection details</summary><p class="settings-help">Large histories may take several checks, within the file read limit. New and archived chats are discovered every 30 seconds. Closing this panel does not pause collection.</p><p class="settings-help">Changing these preferences keeps collected activity, saved reports, your approved source and its active or paused state.</p></details>
-      <section class="settings-reply-row" aria-labelledby="assessmentSetupTitle">
-        <h3 id="assessmentSetupTitle" tabindex="-1">Recorded replies</h3>
-        <div id="assessmentSetup"><p>Loading response-saving settings.</p></div>
-      </section>
-      <div id="automaticScoreSetup"></div>
     </section>
   </div>
+  <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
+    <h2 id="troubleshootingTitle" tabindex="-1">Troubleshooting</h2>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>History gaps</h3><p>Read coverage, affected chats and the last saved check. History gaps are separate from failed tool calls.</p></div><a class="button-link" href="#collection-status?setting=issues" data-settings-link>Review chat history</a></div>
+    <div class="collection-status-actions"><a href="#collection-status?setting=collection-details" data-settings-link>Collection technical details</a><a href="#collection-status?setting=network-diagnostic" data-settings-link>Optional network diagnostic</a></div>
+    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>Service details</summary><p>WIRE uses recorded targets, not prompts or citations, to identify services. Missing or unsupported targets stay explicit; discovery and assistance do not prove a service ran.</p><p><a href="#analyze?mode=calls" data-settings-link>Open Calls in Analyze</a> and choose a call for its recorded target and service explanation.</p></details>
+    <details id="authorProvenanceHelp" class="settings-advanced"><summary>Prompt authors</summary><p>Sender metadata identifies the prompt author, not the tool executor. Missing, incompatible or conflicting metadata stays explained; message wording is not proof of authorship.</p><p><a href="#analyze?mode=interactions" data-settings-link>Open interactions in Analyze</a> to inspect the recorded author and available context.</p></details>
+    <details id="settingsSearchDetails" class="settings-advanced"><summary>Settings search</summary><p>Search setting names and purposes, such as source, reply saving or budget. This local lookup does not search private paths, prompts or report contents. Choosing a match only opens its destination; it does not apply a change.</p></details>
+  </section>
   </div>
   </div>
 </section>
@@ -98,7 +115,7 @@ export const settingsMarkup = `
     <p id="collectionTimes" class="muted"><span id="collectionChecked"></span><span id="collectionNewActivity"></span></p>
     <p id="collectionCoverageCounts"></p>
     <p id="collectionCoveragePending" class="settings-help" hidden></p>
-    <div class="collection-status-actions"><a id="collectionSourceLink" href="#settings?section=connection&setting=source-paths" data-settings-link>Source &amp; permission</a><a href="#settings?section=collection" data-settings-link>Collection preferences</a><a href="#analyze" data-settings-link>Go to Analyze</a></div>
+    <div class="collection-status-actions"><a id="collectionSourceLink" href="#settings?section=connection&setting=source-paths" data-settings-link>Source &amp; permission</a><a href="#settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="#settings?section=troubleshooting" data-settings-link>Troubleshooting</a><a href="#analyze" data-settings-link>Go to Analyze</a></div>
   </div>
   <section id="collectionIssues" class="collection-issues settings-section" aria-labelledby="collectionIssuesTitle">
     <h2 id="collectionIssuesTitle" tabindex="-1">Chat history</h2>

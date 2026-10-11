@@ -89,7 +89,7 @@ test("Settings category links, deep links, native history and reload expose exac
     await page.goBack(); await expect(page.locator("#displayTitle")).toBeVisible();
     await page.goForward(); await expect(page.locator("#preferencesTitle")).toBeVisible();
     await page.goto(url + "#settings?section=history"); await ready(page);
-    assert.match(page.url(), /section=collection&setting=history-window/);
+    assert.match(page.url(), /section=connection&setting=history-window/);
     assert.equal(await page.evaluate(() => document.activeElement.id), "collectionWindow-control");
     await page.goto(url + "#settings?issues=1"); await ready(page);
     await expect(page.locator(".history-reason").first()).toBeVisible();

@@ -7,7 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { evaluationFixture, materializeEvaluationSource } from "./evaluation-fixture.mjs";
-import { navigateMain } from "./helpers.mjs";
+import { navigateMain, navigateSettings } from "./helpers.mjs";
 
 async function fixture(t) {
     const cleanup = [], f = await evaluationFixture({ after: action => cleanup.push(action) });
@@ -25,11 +25,12 @@ async function fixture(t) {
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => { if (request.method() === "POST") routes.push(new URL(request.url()).pathname); });
     t.after(() => assert.deepEqual(errors, []));
-    await page.goto(runtime.url + "#settings?section=collection");
+    await page.goto(runtime.url + "#settings?section=ai&setting=automatic-scores");
     await page.locator("#automaticScoreSetup").getByRole("button", { name: "Set up automatic scores" }).waitFor();
     return { ...f, runtime, page, routes };
 }
 async function review(page) {
+    await navigateSettings(page, "ai");
     await page.locator("#automaticScoreSetup").getByRole("button", { name: "Set up automatic scores" }).click();
     const dialog = page.getByRole("dialog", { name: "Automatic scores", exact: true });
     await dialog.locator(".automatic-score-chats").waitFor();
@@ -49,9 +50,11 @@ async function settle(context, count) {
     assert.fail("The controlled automatic model did not finish.");
 }
 
-test("normal Collection preferences approval produces scores automatically and Stop remains separate from Recorded replies", { timeout: 45000 }, async t => {
+test("normal AI reviews approval produces scores automatically and Stop remains separate from Recorded replies", { timeout: 45000 }, async t => {
     const f = await fixture(t), { page, runtime } = f;
     const saving = page.locator("#assessmentSetup").getByRole("checkbox");
+    await navigateSettings(page, "privacy");
+    await saving.waitFor();
     assert.equal(await saving.isChecked(), false);
     assert.equal(f.calls.length, 0);
     const dialog = await review(page);
@@ -86,7 +89,7 @@ test("normal Collection preferences approval produces scores automatically and S
     assert.equal(f.routes.filter(route => route === "/api/evaluation/automatic/approve").length, 1);
     assert.equal(f.routes.some(route => route === "/api/evaluation/start" || route === "/api/collection/now"), false);
     await page.evaluate(() => sessionStorage.setItem("wire.automaticScore.pending", "INVALID"));
-    await page.goto(runtime.url + "#settings?section=collection");
+    await page.goto(runtime.url + "#settings?section=ai&setting=automatic-scores");
     const stop = page.locator("#automaticScoreSetup").getByRole("button", { name: "Stop automatic scores" });
     await stop.waitFor();
     await stop.click();
@@ -103,6 +106,8 @@ test("normal Collection preferences approval produces scores automatically and S
     assert.equal(state.personalEvaluation.modelEvaluation.automatic.approval.state, "revoked");
     assert.equal(state.personalEvaluation.modelEvaluation.records.length, 0);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("wire.automaticScore.pending")), null);
+    await navigateSettings(page, "privacy");
+    await saving.waitFor();
     assert.equal(await saving.isChecked(), false);
 });
 
@@ -129,6 +134,7 @@ test("a lost approval reply is recovered by reading its original receipt after r
 test("local reply saving grants no scoring permission and its removal cannot erase independently approved model scores", { timeout: 45000 }, async t => {
     const f = await fixture(t), { page, runtime } = f;
     const saving = page.locator("#assessmentSetup").getByRole("checkbox");
+    await navigateSettings(page, "privacy");
     await saving.check();
     const enabled = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
     await page.getByRole("button", { name: "Turn on response saving", exact: true }).click();
@@ -154,6 +160,7 @@ test("local reply saving grants no scoring permission and its removal cannot era
     await settle(f.context, 1);
     await runtime.collector.collectNow();
     await settle(f.context, 2);
+    await navigateSettings(page, "privacy");
     await saving.uncheck();
     const removed = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
     await page.getByRole("button", { name: "Turn off and delete responses", exact: true }).click();

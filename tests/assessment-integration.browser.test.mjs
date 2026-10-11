@@ -226,7 +226,7 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     const setup = page.locator("#assessmentSetup");
     await setup.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true }).waitFor();
     const checkbox = setup.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
-    assert.equal(await page.locator('[data-settings-section="collection"] h2').count(), 1, "Reply saving shares the Collection preferences pane.");
+    assert.equal(await page.locator('[data-settings-section="privacy"] h2').count(), 1, "Reply saving belongs to Privacy and saved data.");
     assert.equal(await page.locator("#assessmentSetupTitle").textContent(), "Recorded replies");
     assert.equal(await checkbox.isChecked(), false);
     assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
@@ -277,7 +277,7 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     assert.equal(calls.filter(path => path === "/api/assessment/evidence").length, 1);
     await page.bringToFront();
     await (await revealStoredRefresh(page)).click(); await settled(page);
-    await navigateMain(page, "settings"); await navigateSettings(page, "collection");
+    await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
     await page.waitForFunction(() => document.querySelector("#assessmentSetup")?.textContent.includes("Response saving is on."));
     await checkbox.uncheck();
     const revoke = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));

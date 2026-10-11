@@ -13,7 +13,7 @@ need separate approval and are not enabled by installing WIRE.
 | Activity | Choose a Copilot chat, inspect interactions and select requests. |
 | Reports | Find, open and manage saved reports, or switch to creating a report. |
 | Collection status | Check whether collection is running, find chats with history gaps and see any available next step. |
-| Settings | **Connection & permission** for source approval; **Time zone**, collection and capture settings. |
+| Settings | **Connection & updates**, **Privacy & saved data**, **AI reviews**, **Display** and **Troubleshooting**. |
 
 Use **Collapse navigation** at the top of the sidebar for an icon rail and more
 content space. Hover or focus an icon for its name; **Expand navigation** restores
@@ -121,7 +121,7 @@ Unassessed reasons appear when the saved evidence supports them. An evaluator th
 
 In Analyze, private search and filters select the request groups used by counts and Insights, across every page. The top recorded-timing section uses matching calls; Insights use those groups' full retained interactions, so their timing and completion denominators can be wider. Calls, API entries and HTTP records remain separate units. No matching groups means no interaction metrics, not the all-activity summary. Search stays in this browser's history, not in links or backend text queries. Earlier Home and Activity links both open Analyze.
 
-Reply saving is off unless previously approved. To keep recorded replies in WIRE, open **Settings > Collection preferences > Recorded replies**, select **Save Copilot replies locally**, then **Turn on response saving**. **Discard change** restores your current choice. **What gets saved** explains the source and limits. Deliberately opening an interaction immediately reads only its displayed context's already-retained, currently authorized replies. Analyze, search and hover do not preload them. Every reply is checked independently against current access; opening context never turns saving on or reads the original source. **Copy response** copies only that response body and **Hide response** collapses it; an explicit hidden state is respected on rerender. Missing responses remain unavailable, read errors offer an explicit retry, and partial or unverified final-answer status is not upgraded. Turning response saving off removes optional text and dependent unsaved insights; activity and saved reports remain. This does not authorize model assessment.
+Reply saving is off unless previously approved. To keep recorded replies in WIRE, open **Settings > Privacy & saved data > Recorded replies**, select **Save Copilot replies locally**, then **Turn on response saving**. **Discard change** restores your current choice. **What gets saved** explains the source and limits. Deliberately opening an interaction immediately reads only its displayed context's already-retained, currently authorized replies. Analyze, search and hover do not preload them. Every reply is checked independently against current access; opening context never turns saving on or reads the original source. **Copy response** copies only that response body and **Hide response** collapses it; an explicit hidden state is respected on rerender. Missing responses remain unavailable, read errors offer an explicit retry, and partial or unverified final-answer status is not upgraded. Turning response saving off removes optional text and dependent unsaved insights; activity and saved reports remain. This does not authorize model assessment.
 
 ## Create a report
 
@@ -160,13 +160,13 @@ Deletion is permanent; interrupted cleanup can leave files behind. Use
 **Check deletion result**, including after reopening the panel, rather than
 repeating confirmation. New reports saved after the preview are not included.
 
-For collected records, use **Settings > Data management > Delete collected activity**. Opening it deletes nothing. Choose **All collected activity** or dates, then **Preview deletion**. Review counts before **Delete N records**. **Cancel** changes nothing; **Change scope** requires another preview. Copilot sources and saved reports remain. Red outlines identify destructive entries and confirmations, not ordinary previews or cancellation.
+For collected records, use **Settings > Privacy & saved data > Delete collected activity**. Opening it deletes nothing. Choose **All collected activity** or dates, then **Preview deletion**. Review counts before **Delete N records**. **Cancel** changes nothing; **Change scope** requires another preview. Copilot sources and saved reports remain. Red outlines identify destructive entries and confirmations, not ordinary previews or cancellation.
 
 ## Recollect activity
 
 After deletion, ordinary refresh and collection checks do not bring deleted records back.
 
-1. Open **Settings > Data management > Recollect from approved sources**.
+1. Open **Settings > Privacy & saved data > Recollect from approved sources**.
 2. Use **Find a chat** or the paged list, then enter **From/To** dates. Choices stay selected across searches and pages; **Show selected** reviews them. Only the already-approved source and history window can be read.
 3. If wanted, select **Also restore original prompts for these requests**. This is off by default. Deleted response captures and personal feedback are not restored.
 4. Select **Preview available evidence**. Review the exact records, prompt choice and **Source availability and limits**. Missing history cannot be recovered. **Cancel**, Escape or **Change scope** makes no stored change.

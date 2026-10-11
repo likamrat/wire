@@ -39,7 +39,7 @@ test("response settings explains the choice beside its checkbox without unrelate
     await page.locator("#editSource").click();
     await page.locator("#sourceDatabase").fill(f.dbPath + ".unsaved");
     await page.locator("#cancelSource").click();
-    await navigateSettings(page, "collection");
+    await navigateSettings(page, "privacy");
     const pane = page.locator("#assessmentSetup");
     await pane.locator("input[type=checkbox]").waitFor();
     if (proofs) await mkdir(proofs, { recursive: true });

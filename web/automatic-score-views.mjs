@@ -7,6 +7,9 @@ export function mountAutomaticScoresRow(root, { onReview }) {
     title.id = "automaticScoresTitle";
     title.tabIndex = -1;
     title.textContent = "Automatic scores";
+    status.id = "automaticScoreState";
+    review.id = "automaticScoreReview";
+    review.setAttribute("aria-describedby", status.id);
     section.setAttribute("aria-labelledby", title.id);
     status.setAttribute("role", "status");
     review.type = "button";

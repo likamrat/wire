@@ -573,7 +573,7 @@ wall time. Recorded and estimated cost stay separate from unpriced/missing
 usage. The versioned red/orange/gold/teal pass-share bands are presentation
 heuristics, not an overall grade or a correctness guarantee.
 
-**Settings > Collection preferences > Recorded replies** is off until explicitly enabled. It explains
+**Settings > Privacy & saved data > Recorded replies** is off until explicitly enabled. It explains
 the supported category, approved source, bounded local retention and revocation.
 Opening a page does not enable capture. **Read response text** reads only
 already-retained, consented evidence; it does not revisit source histories or
@@ -641,7 +641,7 @@ All content reflows with enlarged text. This applies to Home, scoped Activity
 and the individual interaction through `renderAssessmentSummary`; report
 documents and frozen comparison renderers retain their separate presentation.
 
-Local reply saving is a row in Collection preferences, not a separate Settings
+Local reply saving is a row in Privacy & saved data, not a separate Settings
 category. It uses the existing row divider, spacing and heading role, a plain
 current state and **Save Copilot replies locally** beside its checkbox, without
 a separate introduction. These are recorded assistant replies, not guaranteed final answers.
@@ -685,7 +685,7 @@ cascade. Discarding a draft and withdrawing feedback remain different actions.
 
 ## Collected activity deletion
 
-One shared flow is available from Settings > Data management and a quiet Activity
+One shared flow is available from Settings > Privacy & saved data and a quiet Activity
 shortcut. Neither entry deletes anything. It begins with blank custom dates;
 All requires an explicit radio choice. Preview is read-only and independent of
 the activity filters. A separate confirmation stage hides the editor, names
@@ -1040,7 +1040,7 @@ label/help with a right-side action (`2520-2557`). `kit/theme.css:212-223` uses
 8px button corners; `287-294` uses 4px field corners. These are source facts,
 not dimensions inferred from screenshots with unknown zoom.
 
-WIRE retains its outer navigation and four Settings categories. The Settings
+WIRE retains its outer navigation and five Settings categories. The Settings
 rail contains search, the native category disclosure and the Collection status
 link. Search stays available when categories collapse. The right pane is flat,
 with 24px row insets and single hairline boundaries; wide rows place label/help
@@ -1060,7 +1060,7 @@ red-outline confirmation dialogs keep their existing geometry. Steady deletion
 and recollection entry labels have no authored continuation dots; the adjacent
 help explains scope preview and separate confirmation. Tests measure real text,
 row/control centers, divider spacing, long option disclosure, private search,
-Back/focus, grants and source-edit behavior in light/navy and enlarged layouts.
+Back/focus, grants and source-edit behavior in both themes and enlarged layouts.
 
 Painted text controls retain at least the shared 12px horizontal inset, including
 both Read/Hide request-text labels and chat disclosures. Quiet controls remain
@@ -1481,7 +1481,7 @@ truncated. Plain-text/JSON reports do not carry visual title styling.
 | Chat-filtered Analyze | Analyze heading, exact source context, project, ambiguous-name reference, canonical results, date/service/collection summary, coverage and chat report action | Technical source record retains exact IDs and provenance. Source outcome links switch to the same Calls list. Empty or unreadable sources retain coverage/recovery links. | Optionally narrow by chat without making it the entry gate. |
 | Request | Selected result marked within bounded retained prompts, calls, known failure reasons and authorized replies | Text opens immediately with original roles, inferred-association limits and missing evidence. Exact arguments and original per-group counts/verdicts remain secondary. | Follow the available back-and-forth without another context gate, guessed task boundaries or new source reads. |
 | Collection status | Collector state and next step, readable/eligible coverage, Chat history gap summary and compact search | Closed short reason groups, six chats per page; closed Technical details for inventory, exclusions, limits and stored refresh. Home check results and Activity link here. | Know whether collection is working, inspect missing activity when relevant and avoid treating every gap as a repair task. |
-| Settings | Display, Connection & permission, Collection preferences | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
+| Settings | Connection & updates, Privacy & saved data, AI reviews, Display, Troubleshooting | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
 | Reports | Current-stage work, one-report inclusion summary, Clear selection and three-step navigation | Setup combines scope, authors, three prompt modes, four formats and Scan and preview. Detailed included requests remain four per page; saved history stays separate, six reports per page. | Choose membership and contents together, then review the actual disclosure before a separate local save. |
 | Review and Save | Review shows the frozen formatted preview, scope, incomplete-source/removal totals, limitations and unchecked attestation. Save shows the separate final confirmation, then actual file downloads. | Review opens six original/copy comparisons per page, retaining edits when paging; exact-file disclosures remain available. Save is reached only after explicit disclosure review. | Compare and approve the copies, then deliberately save; paging or changing stages never grants consent. |
 
@@ -1651,8 +1651,9 @@ intentional wrapping are preserved rather than applying a cosmetic offset.
 First use shows a short **Review source in Settings** Home entry after the title, not
 a mandatory configuration wall. The dedicated route is reachable in the sidebar
 and the same mobile drawer, with an official Fluent settings glyph, active state,
-deep links and focus/Back/Forward behavior. Settings has three categories:
-Display, Connection & permission and Collection preferences. Its short
+deep links and focus/Back/Forward behavior. Settings has five categories:
+Connection & updates, Privacy & saved data, AI reviews, Display and
+Troubleshooting. Its short
 Collection status link separates configuration from reading results.
 Inside the existing main sidebar, a compact left category navigation presents
 exactly one dedicated content pane. Native links use `aria-current="page"`, not
@@ -1663,7 +1664,7 @@ is introduced. The pane has a 58rem maximum; field labels and explanations wrap.
 Native form nodes stay mounted to preserve drafts, but inactive categories use
 `hidden` and expose neither controls nor prose to keyboard/screen-reader users.
 
-`section=display|connection|collection` is the canonical category
+`section=connection|privacy|ai|display|troubleshooting` is the canonical category
 route; `setting` contains only a fixed destination ID. Legacy `section=history`
 locates the history-window control. Legacy `#settings?issues=1` and `setting=issues`
 canonicalize to `#collection-status?setting=issues`, focusing Chat history.
@@ -1674,7 +1675,62 @@ The existing timezone header link still opens Display. Category links focus
 the new heading; search links focus/highlight the relevant visible control,
 disabled explanation, source-review entry or disclosed heading, never invoke it.
 Back/Forward restores category and safe reading focus; reload restores the route.
-The source editor links to Collection preferences and back, keeping both drafts.
+The source editor links to history and frequency in Connection & updates,
+keeping the source draft and its independent approval.
+
+#### Settings organization and destination contract
+
+The registry in `web/settings-navigation.mjs` is fixed metadata, not a new search
+engine or permission store. All existing control nodes stay mounted when the rail
+changes category. The original source controller, reply-saving controller,
+automatic-score dialog, deletion/recollection flows and read-only status routes
+remain their owners. Busy source writes still guard navigation; unknown outcomes
+keep their error and explicit read-result action across categories. Save preferences
+only changes window/frequency on the already approved source and retains its pause
+state. There is no Save all. Display's theme button and the header switch subscribe
+to the same existing browser preference.
+
+| Previous setting ID / control | New category or view | Exact target / preserved flow |
+| --- | --- | --- |
+| `source`: Review/Change source, path inputs, Approve, Cancel | Connection & updates | `reviewSource` or `editSource`; while editing, `sourceDatabase`. `sourceSessions`, `connectCollection`, `cancelSource` are unchanged. |
+| `source-paths` | Connection & updates | `approvedSourceTitle` and selectable `approvedDatabase`/`approvedSessions`; source editor input while editing, review entry if unapproved. |
+| `collection-state` | Connection & updates | `pauseCollection`; unapproved sources target `reviewSource` without invoking it. |
+| `collect-now` | Connection & updates | Visible shared `checkActivity`. Hidden `collectNow` retains explicit-event forwarding and all guards. No second visible Refresh. |
+| `history-window`, `cadence`, `save-preferences` | Connection & updates | `collectionWindow`, `collectionCadence`, `saveCollection`; custom select triggers or disabled explanations receive focus. `cancelPreferences`, draft status, advanced collection details and `reloadSettings` retain their independent roles. |
+| `assessment-evidence` / Recorded replies | Privacy & saved data | `assessmentSetupTitle`; existing checkbox, Turn on/Turn off and delete, Discard, previous-source removal and Check update result stay within `assessmentSetup`. |
+| `delete-activity`, `recollect-activity` | Privacy & saved data | `deleteActivity`, `recollectActivity`; existing scope/preview/confirmation/cancel/recovery flows unchanged. Saved-report management remains in Reports. |
+| `automatic-scores` | AI reviews | `automaticScoreReview`, described by `automaticScoreState`; only an explicit click opens existing chat/disclosure/allowance/AI-credit approval or receipt recovery. Stop and remove remains a separate confirmation. |
+| `time-zone`; header theme switch | Display | `displayTimeZone` and `settingsThemePreference`; the header `themePreference` remains available. Effective time zone, device details and storage errors are preserved. |
+| `issues`, `collection-details`, status link | Collection status, linked from Troubleshooting | `collectionIssuesTitle`, `collectionSetup` summary, `pageTitle`; affected-chat search, counts, provenance and diagnostic limits unchanged. |
+| Optional HTTP recorder | Collection status, linked from Troubleshooting | New registry ID `network-diagnostic` targets `recorderDiagnostics` summary; opening only reads stored status. `recordBtn` still requires its existing separate confirmation. |
+| Provenance and search help | Troubleshooting | `service-provenance` -> `serviceProvenanceHelp`, `author-provenance` -> `authorProvenanceHelp`, `settings-search` -> `settingsSearchDetails`; summaries disclose guidance and link to existing Analyze destinations, not guessed records. |
+
+Explicit category aliases: `collection` and `history` -> Connection & updates /
+`history-window`; `data` -> Privacy & saved data / `delete-activity`; `evidence`
+-> Privacy & saved data / `assessment-evidence`. A supplied known `setting` wins
+over the category, including old `section=collection&setting=automatic-scores`
+and `section=collection&setting=assessment-evidence`. Existing
+`issues=1`, `section=diagnostics` and `setting=advanced` keep their Collection
+status destinations; `advanced` aliases `collection-details`. Display and
+connection category links remain valid. Unknown destinations show a notice.
+
+For the later search-corpus adapter, consume `entries` and `categories` from
+`createSettingsNavigation`, keep the stable entry `id`, and form
+`#settings?section=<entry.section>&setting=<entry.id>` or
+`#collection-status?setting=<entry.id>` for entries with that view. Use only
+title/category/context/synonyms as index text, never rendered values, source
+paths, state, private evidence or pending receipts. `resolve` owns alias
+canonicalization. The normal client owns dynamic target selection (approved,
+unapproved, editing, disabled), focus and disclosure. Opening a result never
+clicks its control, opens an approval dialog, starts a source check, grants
+permission, assesses, deletes, exports or recollects. Native query and Back
+restoration remain unchanged.
+
+Troubleshooting's Analyze links explicitly name `mode=calls` or
+`mode=interactions`. The Settings-link handler honors only those two named
+Analyze modes, using the normal mode-switch page reset while preserving current
+filters, private query and report selection. Other normalized route fields are
+not copied into navigation. Modified clicks retain the native link behavior.
 
 **Search settings** is a local fixed-metadata lookup, not a search of hidden DOM
 text or source paths. It covers setting titles, category names, brief contexts and
@@ -2451,9 +2507,9 @@ measured height keeps the sidebar and scroll targets below it.
 Settings offers a browser-local Time zone override using the existing
 typeahead select. Device default removes it. Named choices are canonicalized by
 the shared time helper, never inferred from an abbreviation or today's offset.
-The category and single **Time zone** heading use the same plain name; a Fluent
-globe-and-clock icon represents time zones rather than general display settings.
-The heading also names the select accessibly. Existing `section=display` links
+Display groups the existing browser-local theme and time-zone preferences;
+the time-zone control keeps its own label and exact header-link destination.
+Its **Time zone** label names the select accessibly. Existing `section=display` links
 remain compatible. Time zone and Collection selects size to their value, bounded by the pane and
 36rem; long values retain the shared full-value focus/hover tooltip and readable
 popup choices. Font size and 44px minimum targets are unchanged; the pill grows

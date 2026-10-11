@@ -92,7 +92,7 @@ test("Settings current location, transient hover and keyboard focus are distinct
         await chooseTheme(page, theme);
         await navigateSettings(page, "connection");
         const current = page.locator("#settingsCategoryNav [data-category=connection]");
-        const other = page.locator("#settingsCategoryNav [data-category=display]");
+        const other = page.locator("#settingsCategoryNav [data-category=privacy]");
         await page.mouse.move(1, 1);
         const rest = await paint(current);
         if (proofs) await page.screenshot({ path: path.join(proofs, `${theme}-settings-rest.png`) });
@@ -105,18 +105,18 @@ test("Settings current location, transient hover and keyboard focus are distinct
         await page.mouse.move(1, 1);
         const inactiveRest = await paint(other);
         await other.focus();
-        await page.keyboard.press("Tab");
+        await page.keyboard.press("Shift+Tab");
         await expect(current).toBeFocused();
         const focus = await paint(current);
         if (proofs) await page.screenshot({ path: path.join(proofs, `${theme}-settings-focus.png`) });
         await page.keyboard.press("Enter");
-        for (const category of ["display", "collection", "data", "connection"]) {
+        for (const category of ["display", "ai", "privacy", "troubleshooting", "connection"]) {
             await navigateSettings(page, category);
             await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", category);
             await expect(page.locator("[data-settings-section]:visible")).toHaveAttribute("data-settings-section", category);
         }
         await page.goBack();
-        await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "data");
+        await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "troubleshooting");
         await page.goForward();
         await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "connection");
         await page.reload();

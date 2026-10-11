@@ -1,15 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { defaultConsent, validateRequest } from "../lib/assessment-contract.mjs";
-import { fixture, exportCatalogFor, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption } from "./helpers.mjs";
+import { createSettingsNavigation } from "../web/settings-navigation.mjs";
+import { createLocalSearch } from "../web/local-search.mjs";
 
-async function setup(t) {
+async function setup(t, { approved = true } = {}) {
     const records = [fixture("settings-reference")], reads = [], blocked = [], errors = [];
     const basis = { sourceRevision: 1, membershipRevision: 1, consentRevision: 0, overrideRevision: 0, deletionEpoch: 0 };
     const assessment = {
@@ -24,6 +26,8 @@ async function setup(t) {
         discovery: { counts: { sessions: 1, dispositions: { eligible: 1 }, skippedByLimit: 0, unmappedWorkspaces: 0 } },
         historyCoverage: { eligible: 1, readable: 1, unavailable: 0, limited: 0, affected: 0, pending: 0 }, historyIssues: [],
     };
+    if (!approved) { status.config = null; status.connected = false; status.state = "unconfigured"; assessment.source.available = false; }
+    const automatic = automaticScoreOffSummary();
     const server = createServer(async (request, response) => {
         if (request.method === "GET" && request.url === "/") {
             response.setHeader("Content-Type", "text/html");
@@ -38,7 +42,8 @@ async function setup(t) {
         let body = ""; for await (const chunk of request) body += chunk;
         const input = body ? JSON.parse(body) : {};
         response.setHeader("Content-Type", "application/json");
-        if (request.method !== "POST" || !["/api/snapshot", "/api/collection/status", "/api/assessment/consent", "/api/assessment/overview"].includes(request.url)) {
+        if (request.method !== "POST" || !["/api/snapshot", "/api/collection/status", "/api/collection/issues", "/api/record/status",
+            "/api/assessment/consent", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(request.url)) {
             blocked.push(`${request.method} ${request.url}`); return response.writeHead(403).end('{"error":"Only explicitly allowed artificial reads are available."}');
         }
         reads.push(request.url);
@@ -48,6 +53,9 @@ async function setup(t) {
             analytics: { ...buildActivityAnalytics(records, input), revision: 1 },
         }));
         if (request.url === "/api/collection/status") return response.end(JSON.stringify(status));
+        if (request.url === "/api/collection/issues") return response.end(JSON.stringify({ revision: 1, issues: [], historyIssues: [], total: 0 }));
+        if (request.url === "/api/record/status") return response.end(JSON.stringify({ attempt: null }));
+        if (request.url === "/api/evaluation/automatic/summary") return response.end(JSON.stringify(automatic));
         if (request.url === "/api/assessment/consent") {
             validateRequest("get_assessment_consent", input);
             return response.end(JSON.stringify({ schemaVersion: 1, basis, data: { consent: assessment.consent, source: assessment.source, capabilities: assessment.capabilities } }));
@@ -67,7 +75,7 @@ async function setup(t) {
     await page.goto(origin + "/#settings?section=display");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
-    return { page, reads };
+    return { page, reads, status, automatic, origin };
 }
 async function category(page, value) {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -77,21 +85,21 @@ async function category(page, value) {
     await page.locator(`[data-settings-section="${value}"]`).waitFor({ state: "visible" });
 }
 
-test("response saving belongs to Collection preferences with valid forms and compatible old links", { timeout: 20000 }, async t => {
+test("response saving belongs to Privacy and saved data with valid forms and compatible old links", { timeout: 20000 }, async t => {
     const { page, reads } = await setup(t);
     await page.goto(page.url().split("#")[0] + "#settings?section=evidence");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.locator("#assessmentSetup input[type=checkbox]").waitFor();
     assert.equal(await page.locator("#settingsCategoryNav [data-category=evidence]").count(), 0);
-    assert.equal(await page.locator("#settingsCategoryNav [aria-current=page]").getAttribute("data-category"), "collection");
-    assert.equal(await page.locator("#assessmentSetup").evaluate(node => node.closest("[data-settings-section]").dataset.settingsSection), "collection");
+    assert.equal(await page.locator("#settingsCategoryNav [aria-current=page]").getAttribute("data-category"), "privacy");
+    assert.equal(await page.locator("#assessmentSetup").evaluate(node => node.closest("[data-settings-section]").dataset.settingsSection), "privacy");
     assert.equal(await page.getByRole("heading", { name: "Optional evidence", exact: true }).count(), 0);
     assert.equal(await page.locator("#assessmentSetup form").count(), 1);
     assert.equal(await page.locator("form form").count(), 0);
     assert.equal(await page.locator("#assessmentSetup>section>p").count(), 1, "Current state stays; a separate introductory paragraph is unnecessary");
     const choice = page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
     await choice.check();
-    await category(page, "data");
+    await category(page, "connection");
     await page.goBack();
     await choice.waitFor();
     assert.equal(await choice.isChecked(), true, "Moving the row cannot lose an unsaved capture choice");
@@ -100,7 +108,7 @@ test("response saving belongs to Collection preferences with valid forms and com
     await page.reload();
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await choice.waitFor();
-    assert.equal(await page.locator("#settingsCategoryNav [aria-current=page]").getAttribute("data-category"), "collection");
+    assert.equal(await page.locator("#settingsCategoryNav [aria-current=page]").getAttribute("data-category"), "privacy");
     assert.equal(reads.some(route => route.endsWith("/set")), false);
 });
 
@@ -113,7 +121,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
     assert.equal(await page.locator(".settings-layout>.settings-content").count(), 1);
     assert.equal(await page.locator("#settingsSearch").getAttribute("placeholder"), "Search settings");
     assert.equal(await page.locator(".settings-search-icon").getAttribute("aria-hidden"), "true");
-    for (const value of ["display", "connection", "collection", "data"]) {
+    for (const value of ["connection", "ai", "display", "troubleshooting", "privacy"]) {
         await category(page, value);
         const row = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
         assert.equal(await row.getAttribute("aria-current"), "page");
@@ -134,10 +142,10 @@ test("Settings uses a compact search/category rail and flat pane without changin
         assert.notEqual(measure.selectedFill, "rgba(0, 0, 0, 0)");
     }
     assert.equal(await page.locator('#dataManagementTitle').evaluate(node => node === document.activeElement), true);
-    assert.equal(await page.locator(".settings-task-row>.settings-row-copy").count(), 2);
+    assert.equal(await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy').count(), 2);
     assert.equal(await page.locator(".settings-task-row>#deleteActivity").count(), 1);
     assert.equal(await page.locator(".settings-task-row>#recollectActivity").count(), 1);
-    for (const row of await page.locator(".settings-task-row>.settings-row-copy").all()) {
+    for (const row of await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy').all()) {
         assert.equal(await row.locator("p").count(), 1, "Each Data management entry has one short purpose/effect, not repeated safety paragraphs");
         assert.ok((await row.locator("p").innerText()).split(/\s+/).length <= 22);
     }
@@ -148,9 +156,9 @@ test("Settings uses a compact search/category rail and flat pane without changin
         await mkdir(process.env.WIRE_SETTINGS_REFERENCE_PROOFS, { recursive: true });
         for (const theme of ["light", "dark"]) for (const width of [375, 1200]) {
             await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-            for (const value of ["display", "connection", "collection", "data"]) {
+            for (const value of ["connection", "privacy", "ai", "display", "troubleshooting"]) {
                 await category(page, value);
-                if (value === "collection") await page.locator("#assessmentSetup .assessment-applied").waitFor();
+                if (value === "privacy") await page.locator("#assessmentSetup .assessment-applied").waitFor();
                 await page.evaluate(() => document.fonts.ready);
                 await page.evaluate(() => scrollTo(0, 0));
                 await page.mouse.move(0, 0);
@@ -166,7 +174,7 @@ test("Settings rail search stays accessible on narrow panels and only navigates 
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, size);
         await page.evaluate(() => document.fonts.ready);
-        await category(page, "collection");
+        await category(page, "connection");
         assert.equal(await page.getByRole("searchbox", { name: "Search settings", exact: true }).isVisible(), true);
         assert.ok((await page.locator("#settingsSearch").boundingBox()).height >= 44, "The actual search input, not only its painted wrapper, keeps a 44px target.");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `${theme}/${width}/${size}`);
@@ -193,7 +201,326 @@ test("Settings rail search stays accessible on narrow panels and only navigates 
     assert.equal(await page.locator("#settingsSearch").inputValue(), "time zone");
     assert.doesNotMatch(page.url(), /time%20zone|time\+zone/);
     await page.goBack();
-    await page.locator('[data-settings-section="collection"]').waitFor({ state: "visible" });
+    await page.locator('[data-settings-section="connection"]').waitFor({ state: "visible" });
     assert.equal(await page.locator("#settingsSearch").inputValue(), "time zone");
-    assert.ok(reads.every(route => ["/api/snapshot", "/api/collection/status", "/api/assessment/consent", "/api/assessment/overview"].includes(route)));
+    assert.ok(reads.every(route => ["/api/snapshot", "/api/collection/status", "/api/assessment/consent", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(route)));
+});
+
+test("every registered setting and old route opens its exact live destination without an action", { timeout: 45000 }, async t => {
+    const { page, origin } = await setup(t);
+    const navigation = createSettingsNavigation(createLocalSearch());
+    const route = async hash => {
+        await page.evaluate(hash => { location.hash = hash; }, hash);
+        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    };
+    for (const entry of navigation.entries) {
+        await route("#settings?section=troubleshooting");
+        await page.locator("#settingsSearch").fill(entry.title);
+        await page.locator(`#settingsSearchResults a[data-setting="${entry.id}"]`).click();
+        let target = entry.id === "source" ? "editSource" : entry.id === "source-paths" ? "approvedSourceTitle" : entry.target;
+        if (["displayTimeZone", "collectionWindow", "collectionCadence"].includes(target)) target += "-control";
+        if (entry.id === "save-preferences") {
+            await expect(page.locator("#saveCollection")).toBeDisabled();
+            assert.equal(await page.locator("#saveCollection").evaluate(node => node.closest(".ux-disabled-help") === document.activeElement), true);
+        } else {
+            const node = page.locator(`#${target}`);
+            await expect(node).toBeVisible();
+            if (await node.evaluate(node => node.tagName === "DETAILS")) await expect(node.locator("summary")).toBeFocused();
+            else await expect(node).toBeFocused();
+        }
+        assert.equal(await page.locator("dialog[open]").count(), 0, entry.id);
+    }
+    for (const [legacy, canonical] of Object.entries(navigation.sectionAliases)) {
+        await route(`#settings?section=${legacy}`);
+        await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", canonical.section);
+        assert.ok(page.url().startsWith(origin));
+    }
+    await route("#settings?section=collection&setting=automatic-scores");
+    await expect(page.locator("#automaticScoreReview")).toBeFocused();
+    await route("#settings?section=collection&setting=assessment-evidence");
+    await expect(page.locator("#assessmentSetupTitle")).toBeFocused();
+    await route("#settings?issues=1");
+    await expect(page.locator("#collectionIssuesTitle")).toBeFocused();
+    await route("#settings?section=diagnostics&setting=advanced");
+    await expect(page.locator("#collectionSetup>summary")).toBeFocused();
+    await route("#settings?section=missing");
+    await expect(page.locator("#settingsRouteNotice")).toContainText("Unknown settings category");
+    await expect(page.locator("#connectionTitle")).toBeFocused();
+});
+
+test("category navigation preserves source and reply drafts, local search, cancellation and independent approvals", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await category(page, "connection");
+    await page.locator("#editSource").click();
+    await page.locator("#sourceDatabase").fill("C:\\invented-unsaved\\data.db");
+    await page.locator("#sourceSessions").fill("C:\\invented-unsaved\\session-state");
+    await selectActivityOption(page, "collectionWindow", "7");
+    await selectActivityOption(page, "collectionCadence", "15");
+    const sourceNode = await page.locator("#sourceDatabase").elementHandle();
+    await expect(page.locator("#checkActivity")).toBeDisabled();
+    await expect(page.locator("#preferenceActions")).toBeHidden();
+    await category(page, "privacy");
+    const choice = page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    await choice.check();
+    await page.locator("#settingsSearch").fill("budget");
+    await page.locator('#settingsSearchResults a[data-setting="automatic-scores"]').click();
+    await expect(page.locator("#automaticScoreReview")).toBeFocused();
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+    await page.goBack();
+    await expect(choice).toBeChecked();
+    assert.equal(await page.locator("#settingsSearch").inputValue(), "budget");
+    await page.getByRole("button", { name: "Discard change", exact: true }).click();
+    await expect(choice).not.toBeChecked();
+    await expect(choice).toBeFocused();
+    await category(page, "connection");
+    assert.equal(await sourceNode.evaluate(node => node === document.getElementById("sourceDatabase")), true);
+    await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\invented-unsaved\\data.db");
+    await expect(page.locator("#approvalScope")).toContainText("7 days; event check: 15 seconds");
+    await page.locator("#cancelSource").click();
+    await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\artificial\\data.db");
+    await expect(page.locator("#editSource")).toBeFocused();
+    await selectActivityOption(page, "collectionCadence", "30");
+    await category(page, "display");
+    await category(page, "connection");
+    await expect(page.locator("#collectionCadence")).toHaveValue("30");
+    await expect(page.locator("#saveCollection")).toBeEnabled();
+    await page.locator("#cancelPreferences").click();
+    await expect(page.locator("#collectionCadence")).toHaveValue("5");
+    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#pauseCollection")).toHaveText("Resume collection");
+});
+
+test("pending and uncertain settings results survive categories and only explicit recovery reads their outcome", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    const packets = [];
+    let release;
+    await page.route("**/api/collection/configure", async route => {
+        packets.push(route.request().postDataJSON());
+        await new Promise(resolve => { release = resolve; });
+        await route.abort("failed");
+    });
+    await category(page, "connection");
+    await selectActivityOption(page, "collectionCadence", "15");
+    await page.locator("#saveCollection").click();
+    await expect(page.locator("#collectionCadence")).toBeDisabled();
+    await expect(page.locator("#settingsDraftStatus")).toContainText("Wait while");
+    await page.locator('#settingsCategoryNav [data-category="privacy"]').click();
+    await expect(page.locator('[data-settings-section="connection"]')).toBeVisible();
+    release();
+    await expect(page.locator("#reloadSettings")).toBeVisible();
+    await expect(page.locator("#settingsMessage")).toContainText("No success is assumed");
+    await category(page, "privacy");
+    await category(page, "ai");
+    await expect(page.locator("#settingsMessage")).toBeVisible();
+    await expect(page.locator("#checkActivity")).toBeDisabled();
+    await category(page, "connection");
+    await expect(page.locator("#collectionCadence")).toHaveValue("15");
+    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await page.locator("#reloadSettings").click();
+    await expect(page.locator("#reloadSettings")).toBeHidden();
+    await expect(page.locator("#saveCollection")).toBeEnabled();
+    assert.equal(packets.length, 1, "Recovery and rail navigation never replay the write");
+    assert.equal(packets[0].enabled, false, "Preference changes preserve paused collection");
+    assert.equal(packets[0].appDbPath, "C:\\artificial\\data.db");
+    await page.locator("#cancelPreferences").click();
+});
+
+test("source preferences, pause and replacement keep their own explicit save gates", { timeout: 30000 }, async t => {
+    const { page, status } = await setup(t);
+    const writes = [];
+    await page.route("**/api/collection/configure", async route => {
+        const input = route.request().postDataJSON();
+        writes.push({ path: "configure", input });
+        assert.equal(input.expectedConfigVersion, status.configVersion);
+        status.config = { ...status.config, ...input };
+        status.configVersion++;
+        await route.fulfill({ json: status });
+    });
+    await page.route("**/api/collection/enabled", async route => {
+        const input = route.request().postDataJSON();
+        writes.push({ path: "enabled", input });
+        status.config.enabled = input.enabled;
+        status.configVersion++;
+        await route.fulfill({ json: status });
+    });
+    await category(page, "connection");
+    await selectActivityOption(page, "collectionCadence", "30");
+    await page.locator("#saveCollection").click();
+    await expect(page.locator("#settingsMessage")).toContainText("Preferences saved");
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].input.enabled, false);
+    assert.equal(writes[0].input.appDbPath, "C:\\artificial\\data.db");
+    await page.locator("#pauseCollection").click();
+    await expect(page.locator("#pauseCollection")).toHaveText("Pause collection");
+    assert.equal(writes[1].path, "enabled");
+    await page.locator("#editSource").click();
+    await page.locator("#sourceDatabase").fill("C:\\invented-new\\data.db");
+    await page.locator("#sourceSessions").fill("C:\\invented-new\\session-state");
+    await page.locator("#sourceSessions").press("Enter");
+    assert.equal(writes.length, 2, "Typing a path is not source approval");
+    await expect(page.locator("#preferenceActions")).toBeHidden();
+    await page.locator("#connectCollection").click();
+    await expect(page.locator("#settingsMessage")).toContainText("Source approved");
+    assert.equal(writes.length, 3);
+    assert.equal(writes[2].input.enabled, true);
+    assert.equal(writes[2].input.appDbPath, "C:\\invented-new\\data.db");
+    await category(page, "privacy");
+    await expect(page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true })).not.toBeChecked();
+    await category(page, "ai");
+    await expect(page.locator("#automaticScoreState")).toHaveText("Off");
+});
+
+test("reply-saving pending and uncertain state survives the rail without repeating permission", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    const writes = [];
+    let release;
+    await page.route("**/api/assessment/consent/set", async route => {
+        writes.push(route.request().postDataJSON());
+        await new Promise(resolve => { release = resolve; });
+        await route.abort("failed");
+    });
+    await category(page, "privacy");
+    const choice = page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    await choice.check();
+    await page.getByRole("button", { name: "Turn on response saving", exact: true }).click();
+    await expect(choice).toBeDisabled();
+    await category(page, "ai");
+    release();
+    await category(page, "privacy");
+    await expect(page.locator("#assessmentSetup [role=alert]")).toContainText("do not repeat the update");
+    await expect(choice).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Check update result", exact: true })).toBeEnabled();
+    await category(page, "connection");
+    await category(page, "privacy");
+    await expect(choice).toBeDisabled();
+    assert.equal(writes.length, 1);
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+});
+
+test("unapproved source search stays read-only and AI errors do not become answer failures", { timeout: 30000 }, async t => {
+    const { page, automatic } = await setup(t, { approved: false });
+    await category(page, "connection");
+    await expect(page.locator("#reviewSource")).toBeEnabled();
+    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
+    for (const query of ["source", "pause", "Refresh"]) {
+        await page.locator("#settingsSearch").fill(query);
+        const id = query === "pause" ? "collection-state" : query === "Refresh" ? "collect-now" : "source";
+        if (id === "collect-now") await expect(page.locator('#settingsSearchResults a[data-setting="collect-now"]')).toContainText("stored activity only");
+        await page.locator(`#settingsSearchResults a[data-setting="${id}"]`).click();
+        await expect(page.locator(id === "collect-now" ? "#checkActivity" : "#reviewSource")).toBeFocused();
+        await expect(page.locator("#sourceEditor")).toBeHidden();
+    }
+    await category(page, "privacy");
+    await expect(page.locator("#assessmentSetup")).toContainText("Connect a supported local Copilot source");
+    automatic.snapshot.state = "paused";
+    automatic.snapshot.reason = "evaluation-failed";
+    await category(page, "ai");
+    await expect(page.locator("#automaticScoreState")).toHaveText("Paused - The evaluator could not finish.");
+    await expect(page.locator("#automaticScoreReview")).toHaveText("Review automatic scores");
+    assert.equal(await page.locator("dialog[open]").count(), 0);
+});
+
+test("five groups retain keyboard focus and readable geometry at 375 and 200 percent in both themes", { timeout: 60000 }, async t => {
+    const { page } = await setup(t);
+    const evidence = [], proofs = process.env.WIRE_SETTINGS_ORGANIZATION_PROOFS;
+    if (proofs) await mkdir(proofs, { recursive: true });
+    const groups = createSettingsNavigation(createLocalSearch()).categories;
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1200, 100], [375, 100], [375, 200]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
+        await chooseTheme(page, theme);
+        for (const group of groups) {
+            await category(page, group.id);
+            if (group.id === "privacy") await page.locator("#assessmentSetup input").waitFor();
+            await expect(page.locator(`#${group.heading}`)).toBeFocused();
+            await page.keyboard.press("Tab");
+            assert.equal(await page.evaluate(() => document.activeElement.checkVisibility()), true);
+            const value = await page.evaluate(() => {
+                const pane = document.querySelector("[data-settings-section]:not([hidden])");
+                const nodes = [...pane.querySelectorAll("button,summary,label,p,h2,h3,a")].filter(node => node.checkVisibility());
+                const active = getComputedStyle(document.activeElement);
+                return {
+                    overflow: document.documentElement.scrollWidth > innerWidth,
+                    clipped: nodes.filter(node => node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1).map(node => node.id || node.tagName),
+                    targets: nodes.filter(node => node.matches("button,summary,.button-link")).map(node => ({ id: node.id || node.textContent, height: node.getBoundingClientRect().height })),
+                    focus: active.outlineStyle,
+                    sectionCount: document.querySelectorAll("[data-settings-section]:not([hidden])").length,
+                };
+            });
+            assert.equal(value.overflow, false, `${theme}/${width}/${scale}/${group.id}`);
+            assert.deepEqual(value.clipped, [], `${theme}/${width}/${scale}/${group.id}`);
+            assert.equal(value.sectionCount, 1);
+            assert.equal(value.focus, "solid");
+            assert.ok(value.targets.every(target => target.height >= 44));
+            evidence.push({ theme, width, scale, group: group.id, ...value });
+            if (proofs) {
+                await page.keyboard.press("Escape");
+                await page.mouse.move(0, 0);
+                await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
+                await page.screenshot({ path: path.join(proofs, `${theme}-${width}-${scale}-${group.id}.png`), fullPage: true });
+            }
+        }
+    }
+    await category(page, "display");
+    const previous = await page.locator("html").getAttribute("data-evidence-theme");
+    await page.locator("#settingsThemePreference").click();
+    const next = previous === "light" ? "dark" : "light";
+    await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", next);
+    await expect(page.locator("#themePreference")).toHaveAttribute("aria-checked", String(next === "dark"));
+    await expect(page.locator("#settingsThemeState")).toHaveText(next === "dark" ? "Dark" : "Light");
+    if (proofs) await writeFile(path.join(proofs, "geometry.json"), JSON.stringify(evidence, null, 2));
+});
+
+test("Display and header share theme state and storage errors; time-zone link still focuses the exact control", async t => {
+    const { page } = await setup(t);
+    await category(page, "display");
+    await chooseTheme(page, "light");
+    await expect(page.locator("#settingsThemeState")).toHaveText("Light");
+    await page.locator("#themePreference").click();
+    await expect(page.locator("#settingsThemeState")).toHaveText("Dark");
+    await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to light theme");
+    await page.evaluate(() => {
+        const set = Storage.prototype.setItem;
+        Storage.prototype.setItem = function(key, value) {
+            if (key === "workiq-evidence.theme") throw new DOMException("Invented browser storage denial", "QuotaExceededError");
+            return set.call(this, key, value);
+        };
+    });
+    await page.locator("#settingsThemePreference").click();
+    await expect(page.locator("#themeStorageNotice")).toBeVisible();
+    await expect(page.locator("#settingsThemeState")).toHaveText("Light");
+    await expect(page.locator("#themePreference")).toHaveAttribute("aria-checked", "false");
+    await category(page, "connection");
+    await page.locator("#displayTimeZoneLink").click();
+    await expect(page.locator("#displayTimeZone-control")).toBeFocused();
+    await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "display");
+});
+
+test("Troubleshooting opens the named Analyze mode from its opposite without losing scope, private query or selection", async t => {
+    const { page } = await setup(t);
+    await page.evaluate(() => { location.hash = "#analyze?project=test-project&layer=tool"; });
+    await expect(page.locator('[data-analyze-mode="interactions"]')).toHaveAttribute("aria-current", "true");
+    const query = "SYNTHETIC_PRIVATE_PROMPT";
+    await page.locator("#activitySearch").fill(query);
+    const selected = page.locator('#activityList .request-row input[type="checkbox"]');
+    await expect(selected).toHaveCount(1);
+    await selected.check();
+    for (const [mode, help, label] of [
+        ["calls", "serviceProvenanceHelp", "Open Calls in Analyze"],
+        ["interactions", "authorProvenanceHelp", "Open interactions in Analyze"],
+    ]) {
+        await page.locator('nav [data-nav="settings"]').click();
+        await category(page, "troubleshooting");
+        await page.locator(`#${help}>summary`).click();
+        const link = page.getByRole("link", { name: label, exact: true });
+        await link.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.locator(`[data-analyze-mode="${mode}"]`)).toHaveAttribute("aria-current", "true");
+        const params = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+        assert.equal(params.get("project"), "test-project");
+        assert.equal(params.get("layer"), "tool");
+        assert.equal(page.url().includes(query), false, "The private query stays out of the URL");
+        await expect(page.locator("#activitySearch")).toHaveValue(query);
+        if (mode === "interactions") await expect(selected).toBeChecked();
+    }
 });

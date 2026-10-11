@@ -39,6 +39,7 @@ export async function revealStoredRefresh(page) {
 }
 
 export async function navigateSettings(page, category) {
+    category = { collection: "connection", history: "connection", data: "privacy", evidence: "privacy" }[category] || category;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const link = page.locator(`#settingsCategoryNav [data-category=${category}]`);
     if (!await link.isVisible()) await page.locator("#settingsCategorySummary").click();
@@ -65,7 +66,7 @@ export async function chooseTheme(page, value) {
 export async function selectActivityOption(page, id, value) {
     const trigger = page.locator(`[data-select-id=${JSON.stringify(id)}]`);
     if (!await trigger.isVisible() && await page.locator("#moreFilters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await page.locator("#moreFilters > summary").click();
-    if (!await trigger.isVisible() && ["collectionWindow", "collectionCadence"].includes(id)) await navigateSettings(page, "collection");
+    if (!await trigger.isVisible() && ["collectionWindow", "collectionCadence"].includes(id)) await navigateSettings(page, "connection");
     await trigger.click();
     if (await page.locator(`#${id}`).evaluate(node => node.multiple)) {
         const values = await page.locator(`#${id} option`).evaluateAll(nodes => nodes.map(node => node.value));

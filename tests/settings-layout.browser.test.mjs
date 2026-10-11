@@ -139,12 +139,12 @@ async function assertPopup(page, label) {
 
 test("reply saving gives a short connection prerequisite without an implicit opt-in", async t => {
     const { page } = await setup(t);
-    await navigateSettings(page, "collection");
+    await navigateSettings(page, "privacy");
     await expect(page.locator("#assessmentSetup")).toHaveText("Connect a supported local Copilot source to save replies.");
     await expect(page.locator("#assessmentSetup input,#assessmentSetup button")).toHaveCount(0);
 });
 
-test("Time zone has a named category, matching glyph and help inside its setting rather than a separate section", { timeout: 30000 }, async t => {
+test("Display has a named category and time-zone help inside its setting rather than a separate section", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     const values = [];
     for (const theme of ["light", "dark"]) {
@@ -169,9 +169,9 @@ test("Time zone has a named category, matching glyph and help inside its setting
     }
     if (proofs) await writeFile(path.join(proofs, "time-zone-hierarchy.json"), JSON.stringify(values, null, 2));
     for (const value of values) {
-        assert.equal(value.category, "Time zone");
-        assert.equal(value.title, "Time zone");
-        assert.equal(value.icon, "globe_clock_20_regular");
+        assert.equal(value.category, "Display");
+        assert.equal(value.title, "Display");
+        assert.equal(value.icon, "weather_sunny_20_regular");
         assert.equal(value.helpInsideField, true);
         assert.equal(value.helpTitle, "About this time zone");
         assert.equal(value.helpBorder, "0px", "Help belongs to this field, not a new settings section");
@@ -221,10 +221,9 @@ test("Time zone has one named heading, proportionate controls and vertically ord
     const { page } = await setup(t);
     const trigger = page.getByRole("combobox", { name: "Time zone", exact: true });
     await expect(trigger).toHaveCount(1);
-    await expect(page.locator("#displayTitle")).toHaveText("Time zone");
-    await expect(page.locator("#displayTimeZone")).toHaveAttribute("aria-labelledby", "displayTitle");
-    await expect(trigger).toHaveAttribute("aria-labelledby", "displayTitle");
-    assert.equal(await page.locator("[data-settings-section=display] label").count(), 0);
+    await expect(page.locator("#displayTitle")).toHaveText("Display");
+    await expect(trigger).toHaveAttribute("aria-labelledby", "displayTimeZone-label-0");
+    assert.equal(await page.locator("[data-settings-section=display] label").count(), 1);
     const reference = await geometry(page, "[data-settings-section=display]");
     assertGeometry(reference, 1);
     assert.ok(reference.fields[0].control.width <= 288, "The reference-style setting action column is bounded, not the former 576px");
@@ -271,11 +270,11 @@ test("Time zone has one named heading, proportionate controls and vertically ord
             measurements.push({ theme, scale, ...config, zone: zone.value, display: long });
         }
         await navigateSettings(page, "collection");
-        const collection = await geometry(page, "[data-settings-section=collection]");
+        const collection = await geometry(page, "[data-settings-section=connection]");
         assertGeometry(collection, scale);
         assert.deepEqual(collection.fields.map(field => field.id), ["collectionWindow-control", "collectionCadence-control"]);
         const visibility = await page.locator("[data-settings-section]").evaluateAll(panes => panes.map(pane => ({ section: pane.dataset.settingsSection, visible: pane.checkVisibility() })));
-        assert.deepEqual(visibility.filter(pane => pane.visible).map(pane => pane.section), ["collection"]);
+        assert.deepEqual(visibility.filter(pane => pane.visible).map(pane => pane.section), ["connection"]);
         await expect(trigger).toBeHidden();
         await expect(page.getByRole("textbox", { name: "Copilot metadata database", exact: true })).toHaveCount(0);
         if (config.narrow || config.width === 375) await expect(page.locator("#settingsCategorySummary")).toBeVisible();
@@ -285,7 +284,7 @@ test("Time zone has one named heading, proportionate controls and vertically ord
         }
         measurements.push({ theme, scale, ...config, collection });
         if (proofs && (config.narrow || config.width === 375 || config.width === 2560)) {
-            await page.locator("[data-settings-section=collection]").screenshot({ path: path.join(proofs, `collection-${theme}-${config.width}-${scale}-${config.narrow}.png`) });
+            await page.locator("[data-settings-section=connection]").screenshot({ path: path.join(proofs, `collection-${theme}-${config.width}-${scale}-${config.narrow}.png`) });
             await navigateSettings(page, "display");
             await page.locator("[data-settings-section=display]").screenshot({ path: path.join(proofs, `display-${theme}-${config.width}-${scale}-${config.narrow}.png`) });
         }

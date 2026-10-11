@@ -14,8 +14,13 @@ export function mountThemeControl(theme, ux) {
     trigger.replaceChildren(track);
     trigger.setAttribute("role", "switch");
     trigger.setAttribute("aria-label", "Dark theme");
+    const settingsTrigger = document.getElementById("settingsThemePreference");
     let nextTheme;
     trigger.addEventListener("click", () => {
+        theme.setPreference(nextTheme);
+        ux.hideTooltip();
+    });
+    settingsTrigger.addEventListener("click", () => {
         theme.setPreference(nextTheme);
         ux.hideTooltip();
     });
@@ -25,6 +30,8 @@ export function mountThemeControl(theme, ux) {
         trigger.value = state.preference;
         trigger.setAttribute("aria-checked", String(state.theme === "dark"));
         ux.tooltip(trigger, label);
+        settingsTrigger.textContent = label;
+        document.getElementById("settingsThemeState").textContent = state.theme === "dark" ? "Dark" : "Light";
         document.getElementById("themeStorageNotice").hidden = !state.storageUnavailable;
     });
 }

@@ -285,7 +285,7 @@ test("one filter row keeps refinements/routes and fits both themes", { timeout: 
             await page.screenshot({ path: path.join(proofs, `period-flow-${theme}-${width}.png`), fullPage: true });
         }
         await page.locator("#periodHistoryLink").click();
-        assert.match(page.url(), /#settings.*section=collection.*setting=history-window/);
+        assert.match(page.url(), /#settings.*section=connection.*setting=history-window/);
         assert.equal(await page.locator("#collectionWindow-control").evaluate(node => node === document.activeElement), true);
         await page.goBack(); await ready(page);
         assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls");

@@ -44,7 +44,7 @@ async function fixture(t, evaluate) {
 }
 async function approve(f) {
     const { page, runtime } = f;
-    await page.goto(runtime.url + "#settings?section=collection");
+    await page.goto(runtime.url + "#settings?section=ai&setting=automatic-scores");
     await page.locator("#automaticScoreSetup").getByRole("button", { name: "Set up automatic scores" }).click();
     const dialog = page.getByRole("dialog", { name: "Automatic scores", exact: true });
     await dialog.locator(".automatic-score-chats").waitFor();

@@ -791,7 +791,7 @@ test("compact summary and fresh action wrap accessibly in light/navy at every re
     assert.equal(await page.evaluate(() => scrollY), position);
     assert.equal(await page.locator("#freshChecked").innerText(), manual);
     await page.locator('#freshActivity a[href*="section=collection"]').click();
-    assert.equal(await page.locator('[data-settings-section="collection"]').isVisible(), true);
+    assert.equal(await page.locator('[data-settings-section="connection"]').isVisible(), true);
     await page.goBack(); await ready(page);
     await page.locator('#freshActivity a[href*="source-paths"]').click();
     assert.equal(await page.locator("#approvedSourceDetails").isVisible(), true);

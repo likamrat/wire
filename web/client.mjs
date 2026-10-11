@@ -374,7 +374,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const query = localQuery("settingsSearch"), entries = settingsNavigation.find(query);
         const contexts = entries.map(entry => {
             const id = settingsTarget(entry), control = $(id);
-            if (!collection?.config?.approved && ["source-paths", "collection-state", "collect-now"].includes(entry.id)) return "Requires an approved source. Open Connection to review permission; nothing is started.";
+            if (!collection?.config?.approved && entry.id === "collect-now") return "Refresh reads stored activity only. Approve a source separately to check history; opening this result does neither.";
+            if (!collection?.config?.approved && ["source-paths", "collection-state"].includes(entry.id)) return "Requires an approved source. Open Connection to review permission; nothing is started.";
             if (entry.id === "source") return collectionSettings?.explain(id) || "Read the current connection before reviewing a source.";
             if (control?.disabled) return collectionSettings?.explain(id) || "Unavailable while the current update finishes.";
             if (entry.id === "save-preferences" && $("preferenceActions").hidden) return $("settingsDraftStatus").textContent;
@@ -431,11 +432,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function revealCollectionStatus() {
         document.querySelector(".settings-target")?.classList.remove("settings-target");
-        const target = route.setting === "issues" ? $("collectionIssuesTitle")
-            : route.setting === "collection-details" ? $("collectionSetup").querySelector("summary") : $("pageTitle");
-        if (route.setting === "collection-details") {
-            $("collectionSetup").open = true;
-            presentation.setOpen("collectionSetup", true);
+        const entry = settingsNavigation.entries.find(entry => entry.view === "collection-status" && entry.id === route.setting);
+        let target = $(entry?.target || "pageTitle");
+        if (target.tagName === "DETAILS") {
+            target.open = true;
+            presentation.setOpen(target.id, true);
+            target = target.querySelector("summary");
         }
         ux.restoreFocus(target);
         target.scrollIntoView({ block: route.setting ? "nearest" : "start" });
@@ -1421,7 +1423,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             request: ["Request details", "Read the prompt and available response, then inspect the recorded evidence."],
             reports: route.task === "create" ? ["Create a report", "Set up scope and contents, review the actual copies, then save locally."]
                 : ["Reports", "Find, open and manage your saved reports."],
-            settings: ["Settings", "Manage your local connection, permission and collection preferences."],
+            settings: ["Settings", "Manage connection, saved data, AI reviews and display preferences."],
             "collection-status": ["Collection status", "Check collection health and find gaps in local Copilot chat history."],
         };
         $("pageTitle").textContent = titles[route.view][0];
@@ -2904,7 +2906,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderCurrentViewInsights();
         if (route.view === "request") renderRequest();
         if (route.view === "reports") renderReports();
-        if (route.view === "settings" && route.section === "collection") assessmentUI.setup($("assessmentSetup"));
+        if (route.view === "settings" && route.section === "privacy") assessmentUI.setup($("assessmentSetup"));
         renderCoverage();
         updateSelection();
     }
@@ -3765,7 +3767,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("settingsSearchResults").addEventListener("keydown", event => {
         if (event.key === "Escape") { event.preventDefault(); $("clearSettingsSearch").click(); }
     });
-    const settingsCategoryIcons = { display: "time-zone", connection: "connection", collection: "settings", data: "database" };
+    const settingsCategoryIcons = { connection: "connection", privacy: "database", ai: "check", display: "sun", troubleshooting: "collection-status" };
     const settingsSearchIcon = ux.icon("search");
     settingsSearchIcon.classList.add("settings-search-icon");
     $("settingsSearch").before(settingsSearchIcon);
@@ -3799,7 +3801,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         const target = readRoute(node.hash, null);
-        go(target.view, { section: target.section, setting: target.setting, issues: undefined });
+        const changes = { section: target.section, setting: target.setting, issues: undefined };
+        const mode = new URLSearchParams(node.hash.split("?")[1]).get("mode");
+        if (target.view === "analyze" && ["calls", "interactions"].includes(mode)) {
+            changes.mode = mode === "calls" ? "calls" : undefined;
+            changes.page = undefined;
+        }
+        go(target.view, changes);
     }));
     mountRecorderDiagnostics({ api, openDialog, el, button });
     $("exportBtn").addEventListener("click", previewExport);
@@ -3915,7 +3923,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         invalidate: () => { invalidatePreview(); invalidateDialog("Collection settings are changing. Prepare a fresh report preview."); },
         onDraftChange: changed => {
             $("settingsDraftNotice").hidden = route.view === "settings" || !changed;
-            $("settingsDraftNotice").querySelector("a").href = $("sourceEditor").hidden ? "#settings?section=collection" : "#settings?section=connection&setting=source";
+            $("settingsDraftNotice").querySelector("a").href = $("sourceEditor").hidden ? "#settings?section=connection&setting=history-window" : "#settings?section=connection&setting=source";
             renderSettingsSearch();
             renderFreshActivity();
         },

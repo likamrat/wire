@@ -72,8 +72,8 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     });
     async function settings() {
         const target = runtime.url + "#settings?section=evidence";
-        // The legacy URL now canonicalizes to Collection preferences.
-        if (await page.locator('[data-settings-section="collection"]').isVisible()) await page.reload();
+        // The legacy URL canonicalizes to Privacy & saved data.
+        if (await page.locator('[data-settings-section="privacy"]').isVisible()) await page.reload();
         else await page.goto(target);
         await ready(page);
         await page.locator("#assessmentSetup .assessment-applied").waitFor();

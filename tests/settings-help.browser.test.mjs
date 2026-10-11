@@ -106,7 +106,7 @@ test("benign Settings messages stay with their originating section while uncerta
         assert.equal(await page.locator("#settingsMessage").isVisible(), false);
         await navigateSettings(page, "display");
         await page.goBack();
-        await page.locator("[data-settings-section=data]:visible").waitFor();
+        await page.locator("[data-settings-section=privacy]:visible").waitFor();
         assert.equal(await page.locator("#settingsMessage").isVisible(), false, "Back cannot revive an unrelated discard message");
         await page.goForward();
         await page.locator("[data-settings-section=display]:visible").waitFor();
@@ -124,8 +124,8 @@ test("benign Settings messages stay with their originating section while uncerta
     const second = await page.context().newPage();
     await second.goto(page.url().split("#")[0] + "#settings?section=data");
     await second.locator("#workspace[aria-busy=false]").waitFor();
-    await page.locator("#settingsCategoryNav [data-category=data]").click();
-    assert.equal(await page.locator("[data-settings-section=collection]").isVisible(), true, "A pending write still guards navigation");
+    await page.locator("#settingsCategoryNav [data-category=privacy]").click();
+    assert.equal(await page.locator("[data-settings-section=connection]").isVisible(), true, "A pending write still guards navigation");
     state.release();
     await page.waitForFunction(() => !document.querySelector("#collectionCadence").disabled);
     assert.equal(await second.locator("#settingsMessage").isVisible(), false, "A late callback belongs to its originating panel, not an already-open Data management page");

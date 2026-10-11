@@ -133,8 +133,13 @@ export const settingsStyles = `
 .display-time-field>.select-control,.settings-preferences .select-control {align-self:flex-start;width:max-content;max-width:min(100%,36rem)}
 .display-time-field .select-trigger,.settings-preferences .select-trigger {font-size:var(--type-control);line-height:var(--leading-control);min-height:max(44px,calc(1lh + 16px))}
 .settings-preferences {display:grid;grid-template-columns:minmax(0,1fr);gap:0;margin-top:24px}
+.settings-view .settings-subheading {font-size:var(--type-reading);margin-top:var(--space-xl)}
+.settings-view .settings-subheading+.settings-preferences {margin-top:var(--space-md)}
+.settings-view p,.settings-view summary {overflow-wrap:anywhere}
+.settings-theme-row #settingsThemeState {font-weight:var(--weight-medium)}
 .settings-view :is(.settings-preferences .settings-field,.display-time-field,.settings-task-row,#approvedConnection,#unapprovedConnection) {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,18rem);align-items:center;gap:4px var(--space-xl);padding-block:var(--space-xl);border-top:1px solid var(--rule)}
 .settings-preferences .settings-field>label {grid-column:1;grid-row:1;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
+.display-time-field>label {grid-column:1;grid-row:1;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
 .settings-preferences .settings-field>.settings-help {grid-column:1;grid-row:2;margin:0}
 .settings-preferences .settings-field>.select-control,.display-time-field>.select-control {grid-column:2;grid-row:1 / span 3;justify-self:end;align-self:center;width:100%;max-width:18rem}
 .display-time-field>.settings-help {grid-column:1;margin:0}
@@ -142,7 +147,7 @@ export const settingsStyles = `
 .settings-task-row {margin-top:24px}
 .settings-row-copy {min-width:0}
 .settings-row-copy h3 {font-size:var(--type-reading);line-height:var(--leading-ui)}
-.settings-task-row>button,#unapprovedConnection>button {justify-self:end}
+.settings-task-row>:is(button,.button-link),#unapprovedConnection>button {justify-self:end;max-width:100%}
 #approvedConnection>p {grid-column:1;margin:0}
 #approvedConnection>.settings-actions {grid-column:2;grid-row:1 / span 2;margin:0}
 #unapprovedConnection>p {margin:0}
@@ -155,6 +160,10 @@ export const settingsStyles = `
 .settings-view #assessmentSetup .assessment-capture-details {margin-top:var(--space-md)}
 .settings-view #assessmentSetup .assessment-capture-details>summary {width:fit-content;max-width:100%;min-height:44px;padding-block:var(--space-md);color:var(--muted);cursor:pointer}
 .settings-view #assessmentSetup>section>p {max-width:70ch}
+.settings-view .settings-automatic-row {display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-sm) var(--space-lg)}
+.settings-view .settings-automatic-row>h3 {flex:1;min-width:0}
+.settings-view .settings-automatic-row>p {flex-basis:100%;order:1;margin:0}
+.settings-view .settings-automatic-row>button {max-width:100%}
 .display-time-field p,#displayTimeEffective,.settings-preferences .settings-help {overflow-wrap:anywhere}
 .permission-boundary {margin-top:20px!important;padding-top:16px;border-top:1px solid var(--rule)}
 #unapprovedConnection>.ux-disabled-help {margin-top:16px}
@@ -173,9 +182,11 @@ export const settingsStyles = `
 @container settings-pane (max-width:36rem) {
  .settings-view :is(.settings-preferences .settings-field,.display-time-field,.settings-task-row,#approvedConnection,#unapprovedConnection) {grid-template-columns:minmax(0,1fr);gap:8px}
  .settings-preferences .settings-field>label,.settings-preferences .settings-field>.settings-help,.settings-preferences .settings-field>.select-control,
- .display-time-field>.select-control,.display-time-field>.settings-help,#approvedConnection>p,#approvedConnection>.settings-actions {grid-column:1;grid-row:auto}
+ .display-time-field>label,.display-time-field>.select-control,.display-time-field>.settings-help,#approvedConnection>p,#approvedConnection>.settings-actions {grid-column:1;grid-row:auto}
  .settings-preferences .settings-field>.select-control,.display-time-field>.select-control {justify-self:start;width:max-content;max-width:100%}
- .settings-task-row>button,#unapprovedConnection>button {justify-self:start}
+ .settings-task-row>:is(button,.button-link),#unapprovedConnection>button {justify-self:start}
+ .settings-view .settings-automatic-row {flex-direction:column;align-items:flex-start}
+ .settings-view .settings-automatic-row>p {order:0}
  .settings-view :is(.settings-actions,.assessment-control-actions) {justify-content:flex-start}
 }
 @media(max-width:699px) {
