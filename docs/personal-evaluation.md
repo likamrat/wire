@@ -121,6 +121,30 @@ for a single interaction or the overview `reviewStatuses`, alongside existing
 dimension and provenance; origins/rubrics are never averaged or merged. The
 existing `.evidence` coverage and metric arithmetic are unchanged.
 
+Reported canonical outcomes and `recorded-tool-success` checks use different
+evidence boundaries. The former can retain success/failure from outcome fields;
+the latter requires a completion event reference and a supported binary
+`toolSucceeded` result. Retained timestamps or duration do not supply that
+missing reference. Neither producer nor its saved/frozen facts are rewritten.
+
+With complete status coverage, findings require the same eligible-call total
+and bound qualified passes/failures by the corresponding reported counts.
+Any difference must fit the existing unassessed/error units. Causes remain
+validated against reported failures, not the narrower qualified-failure count.
+Partial context is explicitly scoped by request and call coverage: its known
+calls cannot exceed the full population, and qualified results cannot exceed
+the compatible reported results plus calls outside that context. It never
+supplies a complete reported total.
+
+Full available context leads with **Reported outcomes**. A single
+`execution-gap` finding explains any difference using saved unassessed-check
+reason types; absent reason metadata stays unknown. Partial/unavailable context
+instead leads with **Completion-evidence checks** and its explicit context
+coverage. The execution finding's `boundary` distinguishes those presentations.
+Secondary tool-outcome counts and percentages stay unchanged under
+**Completion-evidence checks**, including **No qualified outcome** and separate
+check errors. Returned HTTP-status checks retain their own evidence boundary.
+
 The DOM renderer accepts an optional `findingsHost`: Analyze supplies
 `#homeFindings` before its charts; the reader supplies a host by each original
 request. Timing and secondary details stay in the original summaries.

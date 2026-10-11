@@ -91,7 +91,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
     };
     const reasonLabels = {
         "missing-evidence": "The saved record does not contain the evidence needed for this result.",
-        "missing-completion": "No completion was recorded.",
+        "missing-completion": "No completion event reference was retained.",
         "nonbinary-outcome": "The recorded outcome is not a pass or fail.",
         "unsupported-check": "Recorded tool outcomes cannot answer this check. See Automatic scores for AI review.",
         "unsupported-adapter": "This source does not provide the required evidence.",
@@ -432,32 +432,67 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         }
         const operational = [], answers = [], causes = new Map();
         const execution = evidence.execution.find(row => row.kind === "execution");
+        const reported = { calls: 0, succeeded: 0, failed: 0, other: 0 };
+        const completeStatus = Boolean(reviewStatus) || reviewStatuses !== null && statuses.length === eligible.size;
+        for (const status of statuses) for (const key of Object.keys(reported)) reported[key] += status.execution[key];
         for (const status of statuses) for (const { cause, count } of status.execution.causes) {
             causes.set(cause, (causes.get(cause) ?? 0) + count);
         }
         if (execution) {
             const { pass, fail, unassessed, evaluatorError } = execution.counts;
-            const failedText = `${number(fail)} of ${units(execution.eligible, "recorded calls")} failed`;
-            const parts = [{ tone: "negative", text: failedText }, ...(pass ? [{ tone: "positive", text: `${number(pass)} succeeded` }] : [])];
+            const unqualified = unassessed + evaluatorError;
+            const outsideContext = execution.eligible - reported.calls;
+            if (outsideContext < 0 || completeStatus && outsideContext !== 0) {
+                throw new TypeError("Review statuses do not match the full selected call population.");
+            }
+            // Qualified binary checks are a subset of reported outcomes, not the same evidence boundary.
+            if (pass > reported.succeeded + outsideContext || fail > reported.failed + outsideContext
+                || pass + fail > reported.succeeded + reported.failed + outsideContext
+                || reported.succeeded + reported.failed - pass - fail > unqualified) {
+                throw new TypeError("Qualified results conflict with reported outcomes in the full selected call population.");
+            }
+            const succeeded = completeStatus ? reported.succeeded : pass;
+            const failed = completeStatus ? reported.failed : fail;
+            const other = completeStatus ? reported.other : unqualified;
+            const prefix = completeStatus ? "Reported outcomes: " : "Completion-evidence checks: ";
+            const failedText = `${number(failed)} of ${units(execution.eligible, "recorded calls")} failed`;
+            const parts = [
+                { tone: "negative", text: failedText },
+                ...(succeeded ? [{ tone: "positive", text: `${number(succeeded)} succeeded` }] : []),
+                ...(other ? [{ tone: "neutral", text: `${number(other)} without ${completeStatus ? "a binary reported outcome" : "a qualified result"}` }] : []),
+            ];
             operational.push({
                 kind: "execution", tone: "neutral",
-                ...(fail ? { prefix: "", parts, suffix: "." } : {}),
-                text: fail ? parts.map(part => part.text).join("; ") + "."
-                    : pass === execution.eligible && pass ? `${units(pass, "recorded calls")} completed.`
-                        : `${number(pass)} of ${units(execution.eligible, "recorded calls")} completed; ${number(unassessed + evaluatorError)} have no success or failure result.`,
+                boundary: completeStatus ? "reported-outcomes" : "completion-evidence",
+                ...(failed ? { prefix, parts, suffix: "." } : {}),
+                text: prefix + (failed ? parts.map(part => part.text).join("; ") + "."
+                    : succeeded === execution.eligible && succeeded ? `${units(succeeded, "recorded calls")} succeeded.`
+                        : `${number(succeeded)} of ${units(execution.eligible, "recorded calls")} succeeded; ${number(other)} without ${completeStatus ? "a binary reported outcome" : "a qualified result"}.`),
             });
-            if ([...causes.values()].reduce((sum, count) => sum + count, 0) > fail) throw new TypeError("Failure reasons exceed the selected failed calls.");
-            if (reviewStatus || reviewStatuses !== null && statuses.length === eligible.size) {
-                const totals = ["calls", "succeeded", "failed", "other"].map(key => statuses.reduce((sum, status) => sum + status.execution[key], 0));
-                if (totals.some((value, index) => value !== [execution.eligible, pass, fail, unassessed + evaluatorError][index])) {
-                    throw new TypeError("Review statuses do not match the full selected call population.");
-                }
+            const gap = reported.succeeded + reported.failed - pass - fail;
+            if (completeStatus && gap > 0) {
+                const metric = metrics.find(metric => metric.origin === "automatic-local" && metric.checkId === "recorded-tool-success");
+                const labels = {
+                    "missing-completion": "completion event reference not retained",
+                    "nonbinary-outcome": "no supported binary completion outcome",
+                    "evaluator-failure": "execution-check error",
+                };
+                const reasons = new Set((metric.unassessedReasons ?? (unassessed ? [{ reason: null }] : []))
+                    .map(item => item.reason === null ? "reason not retained" : labels[item.reason] ?? reasonLabels[item.reason]));
+                if (evaluatorError) reasons.add("execution-check error");
+                operational.push({
+                    kind: "execution-gap", tone: "neutral", count: gap,
+                    text: `${units(gap, "reported outcomes")} ${gap === 1 ? "lacks" : "lack"} a completion-qualified result. Unassessed-check reasons: ${[...reasons].join("; ")}.`,
+                });
             }
         }
+        if ([...causes.values()].reduce((sum, count) => sum + count, 0) !== reported.failed) throw new TypeError("Failure reasons do not match reported failures.");
         if (!reviewStatus && (reviewStatuses === null || statuses.length < eligible.size)) operational.push({
             kind: "unavailable", tone: "neutral", text: reviewStatuses === null
                 ? "Detailed call-status context is unavailable in this saved summary."
-                : `Detailed call-status context is available for ${number(statuses.length)} of ${units(eligible.size, "requests")}; other failure reasons are unavailable.`,
+                : `Reported outcome context covers ${number(statuses.length)} of ${units(eligible.size, "requests")}`
+                    + (execution ? ` and ${number(reported.calls)} of ${units(execution.eligible, "calls")}` : "")
+                    + `: ${number(reported.succeeded)} succeeded, ${number(reported.failed)} failed, ${number(reported.other)} other. Remaining reported outcomes and reasons are unavailable.`,
         });
         const causeLabels = {
             "workiq-sign-in-required": "Work IQ sign-in was required for the recorded call",
@@ -707,23 +742,24 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     }
     saved.append(el("p", "assessment-finding-limit", [model.findings.rationale, model.findings.qualification, model.findings.scope].filter(Boolean).join(" ")));
     const execution = el("section", "assessment-execution");
-    execution.append(el("h3", "", "Tool execution"));
+    execution.append(el("h3", "", "Saved execution checks"));
     for (const row of model.evidence.execution) {
         const observed = el("div", "assessment-observed-fact");
         observed.dataset.observation = row.provenance.checkId;
-        const title = row.kind === "execution" ? `${number(row.eligible)} recorded calls` : row.label;
+        const title = row.kind === "execution" ? `Completion-evidence checks (${number(row.eligible)} ${row.eligible === 1 ? "call" : "calls"})` : row.label;
         observed.append(el("h4", "", title));
         if (row.kind === "execution") {
             const facts = el("dl", "assessment-count-strip");
             for (const [label, count, tone] of [
                 ["Succeeded", row.counts.pass, ""], ["Failed", row.counts.fail, "negative"],
-                ["No success/failure result", row.counts.unassessed, ""], ["Check errors", row.counts.evaluatorError, ""],
+                ["No qualified outcome", row.counts.unassessed, ""], ["Check errors", row.counts.evaluatorError, ""],
             ]) {
-                if (!count && ["No success/failure result", "Check errors"].includes(label)) continue;
+                if (!count && ["No qualified outcome", "Check errors"].includes(label)) continue;
                 const item = el("div"), value = el("dd", count ? tone : "", number(count));
                 item.append(value, el("dt", "", label)); facts.append(item);
             }
-            observed.append(facts);
+            observed.append(facts, el("p", "assessment-execution-note",
+                "This tool-outcome check requires a retained completion event reference and a supported binary tool outcome. Reported outcomes can be available without that evidence."));
         } else {
             const http = ["returned-status-2xx", "graph-output-status-2xx", "owned-http-status-2xx"].includes(row.provenance.checkId);
             observed.append(el("p", "assessment-observation-result", http
@@ -735,7 +771,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         execution.append(observed);
     }
     if (!model.evidence.execution.length) execution.append(el("p", "assessment-unavailable", "No tool execution measure is available for this scope."));
-    execution.append(el("p", "assessment-execution-note", "Tool completion does not tell us whether the answer was correct."));
+    execution.append(el("p", "assessment-execution-note", "Execution observations do not establish answer correctness."));
     saved.append(execution);
     let reviewStatus;
     if (model.reviewStatus) {
@@ -950,6 +986,7 @@ export const assessmentPresentationStyles = `
 .assessment-execution h3,.assessment-attempts h3 {font-size:var(--type-small);font-weight:var(--weight-strong);margin:0 0 var(--space-sm)}
 .assessment-observed-fact {display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-sm) var(--space-2xl)}
 .assessment-observed-fact h4 {font-size:var(--type-reading);font-weight:var(--weight-medium);margin:0}
+.assessment-observed-fact .assessment-execution-note {flex-basis:100%}
 .assessment-observed-fact+.assessment-observed-fact {margin-top:var(--space-md);padding-top:var(--space-md);border-top:1px solid var(--rule)}
 .assessment-count-strip {display:flex;flex-wrap:wrap;gap:var(--space-lg) var(--space-2xl);margin:0;font-variant-numeric:tabular-nums}
 .assessment-count-strip dd {margin:0;font-size:var(--type-data-value);font-weight:var(--weight-strong)}

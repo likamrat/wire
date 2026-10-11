@@ -13,6 +13,28 @@ async function screenshot(page, name) {
     await mkdir(proof, { recursive: true });
     await page.screenshot({ path: path.join(proof, name + ".png") });
 }
+async function expectSavedMetrics(page) {
+    const details = page.locator("#homeInsights .assessment-saved-details");
+    await expect(details).toBeVisible();
+    if (!await details.evaluate(node => node.open)) await details.locator(":scope > summary").click();
+    await expect(details.locator(".assessment-grid")).toBeVisible();
+    await expect(details.locator('[data-quality-dimension="accuracy"]')).toContainText("0 of 1 request assessed");
+    await expect(page.locator("#homeFindings [data-finding-kind=execution]")).toContainText("Reported outcomes: 1 recorded call succeeded");
+    await expect(page.locator("#homeFindings [data-finding-kind=execution-gap]")).toContainText("completion event reference not retained");
+    await expect(details.locator(".assessment-execution")).toContainText("Completion-evidence checks");
+    const counts = details.locator('[data-observation="recorded-tool-success"] .assessment-count-strip');
+    await expect(counts.locator("div").filter({ hasText: "Succeeded" }).locator("dd")).toHaveText("0");
+    await expect(counts.locator("div").filter({ hasText: "No qualified outcome" }).locator("dd")).toHaveText("1");
+    const apiStatus = details.locator('[data-observation="returned-status-2xx"]');
+    await expect(apiStatus).toContainText("1 HTTP 2xx");
+    await expect(apiStatus).not.toContainText("completion event reference");
+    const proof = process.env.WIRE_RECOVERY_PROOF_DIR;
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        await page.locator("#homeFindings").screenshot({ path: path.join(proof, "legacy-reported-outcomes.png") });
+        await details.locator(".assessment-execution").screenshot({ path: path.join(proof, "legacy-qualified-checks.png") });
+    }
+}
 async function setup(t) {
     const record = fixture("connection-recovery");
     record.userPrompt.sourceEventId = "invented-prompt";
@@ -48,7 +70,7 @@ test("renewed polling capability revalidates the accepted snapshot even at the s
     const { page, requests, url } = await setup(t);
     await page.goto(url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator("#homeInsights .assessment-grid")).toBeVisible();
+    await expectSavedMetrics(page);
     const capability = requests.find(request => request.url().endsWith("/api/snapshot")).headers()["x-board-capability"];
     const release = await page.request.post(url + "api/session/release", {
         headers: { Origin: new URL(url).origin, "X-Board-Capability": capability }, data: {},
@@ -56,8 +78,8 @@ test("renewed polling capability revalidates the accepted snapshot even at the s
     assert.equal(release.status(), 200);
     await expect.poll(() => requests.filter(request => request.url().endsWith("/api/session")).length, { timeout: 8000 }).toBe(1);
     await expect.poll(() => requests.filter(request => request.url().endsWith("/api/snapshot")).length).toBeGreaterThan(1);
-    await expect(page.locator("#homeInsights .assessment-grid")).toBeVisible();
-    await page.locator("#pageAction").click();
+    await expectSavedMetrics(page);
+    await page.locator("#resultsLink").click();
     await expect(page.locator("#activityView")).toBeVisible();
 });
 
@@ -78,7 +100,7 @@ test("stopped runtime keeps only the accepted view and returns through read-only
     await page.locator("#message").getByRole("button", { name: "Try again" }).click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#message")).toBeHidden();
-    await expect(page.locator("#activityInsights .assessment-grid")).toBeVisible();
+    await expectSavedMetrics(page);
     await expect(page.locator("#collectionNoticeText")).not.toContainText("unavailable");
     await screenshot(page, "runtime-recovered");
 });
@@ -94,7 +116,7 @@ test("no accepted snapshot means no claim of retained evidence; retry loads the 
     await page.unroute("**/api/snapshot");
     await page.locator("#message").getByRole("button", { name: "Try again" }).click();
     await expect(page.locator("#workspace")).toBeVisible();
-    await expect(page.locator("#homeInsights .assessment-grid")).toBeVisible();
+    await expectSavedMetrics(page);
 });
 
 test("snapshot loading stays pending and a collector read failure does not claim the runtime is stopped", { timeout: 20000 }, async t => {
@@ -112,7 +134,7 @@ test("snapshot loading stays pending and a collector read failure does not claim
     await page.route("**/api/collection/status", route => route.fulfill({ status: 503, json: { error: "Synthetic collection status failure." } }));
     await expect(page.locator("#collectionNoticeText")).toContainText("Collection status unavailable", { timeout: 8000 });
     await expect(page.locator("#collectionNoticeText")).not.toContainText("Local runtime unavailable");
-    await expect(page.locator("#homeInsights .assessment-grid")).toBeVisible();
+    await expectSavedMetrics(page);
     await screenshot(page, "collector-status-error");
     await page.unroute("**/api/collection/status");
     await page.locator("#collectionRetry").click();

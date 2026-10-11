@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAssessmentPresentation } from "../web/assessment-presentation.mjs";
-import { assessmentOverview, buildReportFacts } from "../lib/assessment-read-model.mjs";
+import { assessmentOverview, buildAssessmentModel, buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { contract, quality } from "./assessment-ui-fixtures.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { retainedContextFixture } from "./request-context-fixture.mjs";
+import { fixture } from "./helpers.mjs";
 
 const presentation = createAssessmentPresentation(contract);
 const text = findings => JSON.stringify(findings);
@@ -12,6 +13,102 @@ const present = view => presentation.summarize(view.metrics, {
     singleInteraction: true, reviewStatus: view.reviewStatus,
 });
 const detail = (model, id) => model.details.get(model.catalog.find(row => row.scenarioId === id).interactionRef);
+
+for (const succeeded of [true, false]) for (const completion of [false, true]) {
+    test(`legacy completion boundary: ${succeeded ? "success" : "failure"}, completion ${completion ? "present" : "missing"}`, () => {
+        const record = fixture("connection-recovery");
+        record.userPrompt.sourceEventId = "invented-prompt";
+        Object.assign(record.toolCalls[0], {
+            startedAt: "2026-09-30T12:00:00Z", completedAt: "2026-09-30T12:00:01Z", durationMs: 1000,
+            toolSucceeded: succeeded, reportedOutcome: succeeded ? "succeeded" : "failed",
+            ...(completion ? { completionEventId: "invented-completion" } : {}),
+        });
+        const state = { revision: 1, evidenceRevision: 1, pseudonymKey: "a".repeat(64), evidence: [record] };
+        const before = structuredClone(state), model = buildAssessmentModel(state);
+        const view = [...model.details.values()][0];
+        const execution = view.metrics.find(metric => metric.checkId === "recorded-tool-success");
+        const metricsBefore = structuredClone(view.metrics);
+        const frozenBefore = buildReportFacts([record], state, { preparedAt: "2026-10-11T09:00:00.000Z" }).facts;
+        assert.equal(view.reviewStatus.execution[succeeded ? "succeeded" : "failed"], 1);
+        assert.deepEqual(execution.counts, {
+            pass: Number(completion && succeeded), fail: Number(completion && !succeeded),
+            unassessed: Number(!completion), evaluatorError: 0,
+        });
+        assert.equal(execution.value, completion ? Number(succeeded) : null);
+        assert.deepEqual(execution.unassessedReasons, completion ? [] : [{ reason: "missing-completion", count: 1 }]);
+        assert.equal(view.metrics.find(metric => metric.definitionId === "tool-duration").value, 1000);
+        assert.doesNotThrow(() => present(view), "Legitimate missing-completion records must retain findings and details");
+        assert.doesNotThrow(() => presentation.summarize(model.overview.metrics, model.overview));
+        const shown = present(view);
+        assert.equal(shown.findings.operational[0].boundary, "reported-outcomes");
+        assert.match(shown.findings.operational[0].text, succeeded ? /Reported outcomes: 1 recorded call succeeded/ : /Reported outcomes: 1 of 1 recorded call failed/);
+        const gaps = shown.findings.operational.filter(row => row.kind === "execution-gap");
+        assert.equal(gaps.length, Number(!completion));
+        if (!completion) {
+            assert.equal(gaps[0].count, 1);
+            assert.match(gaps[0].text, /completion event reference not retained/);
+            assert.equal(Object.hasOwn(record.toolCalls[0], "completionEventId"), false);
+        }
+        assert.deepEqual(shown.evidence.execution[0].counts, execution.counts);
+        assert.deepEqual(view.metrics, metricsBefore);
+        assert.deepEqual(buildReportFacts([record], state, { preparedAt: "2026-10-11T09:00:00.000Z" }).facts, frozenBefore);
+        assert.deepEqual(state, before);
+    });
+}
+
+test("legacy boundary guards retain partial coverage and reject over-counted or opposed qualified facts", () => {
+    const { state } = qualityDisplayFixture({ requests: 2, calls: 2, finalDuration: null });
+    const [first, second] = state.evidence;
+    delete first.toolCalls[0].completionEventId;
+    Object.assign(first.toolCalls[0], {
+        toolSucceeded: false, reportedOutcome: "failed",
+        failureEvidence: { version: 1, reason: "error-code-recorded", messageStatus: "text-excluded", messageSignal: "workiq-sign-in-required" },
+    });
+    Object.assign(second.toolCalls[0], { toolSucceeded: true, reportedOutcome: "succeeded" });
+    const { overview } = buildAssessmentModel(state);
+    const partial = presentation.summarize(overview.metrics, { reviewStatuses: overview.reviewStatuses.slice(0, 1) });
+    assert.equal(partial.findings.operational[0].boundary, "completion-evidence");
+    assert.match(text(partial.findings), /context covers 1 of 2 requests and 1 of 2 calls/);
+    assert.match(text(partial.findings), /sign-in was required/);
+    assert.equal(partial.findings.operational.some(row => row.kind === "execution-gap"), false, "A partial population is not compared as a complete reported total");
+    const overcounted = structuredClone(overview.reviewStatuses.slice(0, 1));
+    Object.assign(overcounted[0].reviewStatus.execution, { calls: 3, succeeded: 2 });
+    assert.throws(() => presentation.summarize(overview.metrics, { reviewStatuses: overcounted }), /full selected call population/);
+    const opposed = structuredClone(overview.reviewStatuses.slice(0, 1));
+    opposed[0].reviewStatus.execution = { calls: 2, succeeded: 0, failed: 2, other: 0, causes: [{ cause: "unqualified", count: 2 }] };
+    assert.throws(() => presentation.summarize(overview.metrics, { reviewStatuses: opposed }), /Qualified results conflict/);
+    const undercounted = structuredClone(overview.reviewStatuses);
+    undercounted[0].reviewStatus.execution = { calls: 0, succeeded: 0, failed: 0, other: 0, causes: [] };
+    assert.throws(() => presentation.summarize(overview.metrics, { reviewStatuses: undercounted }), /full selected call population/);
+    const invalidCause = structuredClone(overview.reviewStatuses);
+    invalidCause[0].reviewStatus.execution.causes[0].count++;
+    assert.throws(() => presentation.summarize(overview.metrics, { reviewStatuses: invalidCause }), /invalid-execution-summary/);
+    const legacyMetrics = structuredClone(overview.metrics);
+    delete legacyMetrics.find(metric => metric.checkId === "recorded-tool-success").unassessedReasons;
+    const legacy = presentation.summarize(legacyMetrics, overview);
+    const gap = legacy.findings.operational.find(row => row.kind === "execution-gap");
+    assert.match(gap.text, /reason not retained/);
+    assert.doesNotMatch(gap.text, /completion event reference not retained/);
+    assert.deepEqual(legacy.evidence.execution[0].counts, partial.evidence.execution[0].counts);
+});
+
+test("legacy reported success does not bypass nonbinary or invalid completion-evidence checks", () => {
+    for (const [toolSucceeded, reportedOutcome, reason] of [
+        [null, "succeeded", "no supported binary completion outcome"],
+        [true, "failed", "execution-check error"],
+    ]) {
+        const record = fixture("legacy-qualified-boundary");
+        Object.assign(record.toolCalls[0], { completionEventId: "invented-completion", toolSucceeded, reportedOutcome });
+        const view = [...buildAssessmentModel({ revision: 1, pseudonymKey: "a".repeat(64), evidence: [record] }).details.values()][0];
+        const result = present(view);
+        assert.equal(view.reviewStatus.execution.succeeded, 1);
+        assert.match(result.findings.operational.find(row => row.kind === "execution-gap").text, new RegExp(reason));
+        assert.equal(result.evidence.execution[0].counts.pass, 0);
+        assert.equal(result.evidence.execution[0].counts.fail, 0);
+        assert.equal(result.evidence.execution[0].counts.evaluatorError, Number(toolSucceeded === true));
+        assert.equal(view.reviewStatus.assessment.latestAttempt, "none");
+    }
+});
 
 test("source-supported failure and positive answer findings stay separate across changed requests", () => {
     const { records } = retainedContextFixture();

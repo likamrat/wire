@@ -99,6 +99,8 @@ Open **Saved assessment details and counts** for tool outcomes and exact saved q
 
 Opened saved details stay open when the same scope or request is redrawn or revisited with Back. Different scopes and original request groups keep independent disclosure state.
 
+**Reported outcomes** can show that a call succeeded or failed even when its completion event reference was not retained. **Completion-evidence checks** in saved details use that stricter evidence boundary, so a reported success may still have **No qualified outcome**. WIRE explains the gap without changing either count or inventing missing evidence; partial outcome context is labelled with its actual coverage.
+
 Unassessed reasons appear when the saved evidence supports them. An evaluator that could not complete is distinct from a failed quality verdict. Missing historical attempt information stays unknown; it does not mean no assessment was attempted or that one is queued.
 
 **Recorded timing** in Analyze describes matching tool calls, after filters, private search and service refinements. It shows human-readable **Median / P95** from the retained samples, alongside the timed and eligible call counts. The dot and line share a linear duration scale from zero to the displayed P95; they are not quality percentages. **View matching calls** opens that same population. **Exact timing and boundary** keeps unrounded milliseconds and the measurement definition accessible without hover.
