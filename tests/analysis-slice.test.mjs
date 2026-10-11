@@ -10,11 +10,14 @@ import { createRecordedResults } from "../web/recorded-results.mjs";
 import { createReportScope } from "../web/report-scope.mjs";
 import { exportCatalogFor } from "./helpers.mjs";
 import { scopeRecords, scopeOptions, privateQuery } from "./analysis-scope-fixture.mjs";
+import { createSearchMembership } from "../web/search-membership.mjs";
 
 const projection = createActivityProjection(createTimeContext(), createServiceCategories(), Object.keys(createRecordedResults().labels("tool")));
 const refine = createAnalysisSlice(createLocalSearch(), projection);
 const sorted = values => [...values].sort();
 const rowId = (i, j = 0) => `call:${JSON.stringify([`parity-chat-${i}`, `parity-call-${i}-${j}`])}`;
+const hit = (type, request, layer, call) => ({ type, target: { kind: "route",
+    href: "#request?" + new URLSearchParams({ request, ...(layer ? { layer, call } : {}) }) } });
 function snapshot(options = scopeOptions) {
     const scenarios = scopeRecords();
     return { revision: 17, scenarios, analytics: { ...buildActivityAnalytics(scenarios, options), revision: 17 },
@@ -30,10 +33,61 @@ function exact(slice, ids, scenarioIds) {
         [...model.visibleGroups, ...(model.otherGroup ? [model.otherGroup] : [])]]) {
         assert.deepEqual(sorted(groups.flatMap(group => group.drilldownIds)), sorted(ids));
     }
+
     for (const group of model.serviceInvolvement.groups) {
         assert.deepEqual(sorted(group.drilldownIds), sorted(model.rows.filter(row => row.serviceAssociation.services.includes(group.label)).map(row => row.id)));
     }
 }
+
+test("verified empty, stale and full-page semantic membership never falls back to lexical or global hits", () => {
+        const input = snapshot(), receipt = { revision: 17 };
+        const empty = createSearchMembership(input, scopeOptions, [], [], receipt);
+        exact(refine(input, scopeOptions, privateQuery, [], empty), [], []);
+        assert.throws(() => createSearchMembership(input, scopeOptions, [], [], { revision: 16 }), /revision/);
+        assert.throws(() => refine(input, { ...scopeOptions, bucket: "month" }, "", [], empty), /scope/);
+        const hits = input.scenarios.map(row => hit("interaction", row.scenarioId));
+        hits.push(hit("report", "not-a-scenario"), { type: "view", target: { kind: "route", href: "#analyze" } });
+        const all = createSearchMembership(input, scopeOptions, [], hits, receipt);
+        exact(refine(input, scopeOptions, "", [], all), input.analytics.rows.map(row => row.id),
+            [...new Set(input.analytics.rows.map(row => row.scenarioId))]);
+        assert.equal(refine(input, scopeOptions).analytics, input.analytics);
+});
+
+test("semantic action membership keeps pre-outcome facets, broader API parents and complete report interactions", () => {
+        const options = { ...scopeOptions, layer: "reported-api", filters: { services: ["Files"], includeMissingService: true, outcomes: ["failure"] } };
+        const input = snapshot(options), allEntries = input.requestActivity["reported-api"];
+        const action = allEntries.find(row => row.scenarioId === "parity-request-0" && row.outcome === "failure");
+        const membership = createSearchMembership(input, options, [], [hit("action", action.scenarioId, options.layer, action.id)], { revision: 17 });
+        const result = refine(input, options, "", [], membership);
+        assert.deepEqual(result.rowIds, [action.id]);
+        assert.equal(result.analytics.apiCoverage.eligibleToolCalls, 2, "Parent scope is not reduced to the one matching returned entry");
+        const success = input.analytics.resultFacet.rows.find(row => row.outcome === "success");
+        const beforeOutcome = createSearchMembership(input, options, [], [hit("action", success.scenarioId, options.layer, success.id)], { revision: 17 });
+        const narrowed = refine(input, options, "", [], beforeOutcome);
+        assert.deepEqual(narrowed.rowIds, []);
+        assert.deepEqual(narrowed.analytics.resultFacet.rows.map(row => row.id), [success.id]);
+        const report = createReportScope().resolve(input.exportCatalog, "current", result.scenarioIds, []);
+        assert.equal(report.requests.find(row => row.scenarioId === action.scenarioId).counts.workIqActions, 3);
+});
+
+test("correction: legacy qualifier uses full roster and intersects semantic facets and API parents", () => {
+    const options = { ...scopeOptions, layer: "reported-api", filters: { services: ["Files"], includeMissingService: true, outcomes: ["failure"] } };
+    const input = snapshot(options), legacy = `${privateQuery} request 2`;
+    const membership = createSearchMembership(input, options, [], [
+        hit("interaction", "parity-request-0"), hit("interaction", "parity-request-2"),
+    ], { revision: 17 });
+    const selected = refine(input, options, legacy, [], membership);
+    assert.deepEqual(selected.rowIds, []);
+    assert.deepEqual(selected.analytics.resultFacet.rows.map(row => row.scenarioId), ["parity-request-2"]);
+    assert.deepEqual(selected.analytics.apiCoverage.calls.map(row => row.id), [rowId(2)]);
+    assert.deepEqual(refine.legacyScenarioIds(input, legacy), ["parity-request-2"]);
+    assert.equal(refine.legacyScenarioIds(input, ""), undefined);
+    assert.deepEqual(refine.legacyScenarioIds(input, "NO_LEGACY_MATCH"), []);
+    const outsideDates = { ...input, analytics: { ...input.analytics, rows: [], resultFacet: { ...input.analytics.resultFacet, rows: [] } } };
+    assert.deepEqual(refine.legacyScenarioIds(outsideDates, legacy), ["parity-request-2"], "Qualifier is not derived from old Analyze dates/pages");
+    const restored = refine(input, options, "", [], membership);
+    assert.ok(restored.rowIds.length > 0, "Removing only the legacy phrase restores the receipt-derived scope");
+});
 
 test("one private slice supplies exact deduped IDs to all aggregations and full-interaction report selection", () => {
     const input = snapshot(), before = structuredClone(input), slice = refine(input, scopeOptions, privateQuery);

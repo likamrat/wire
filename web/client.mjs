@@ -35,19 +35,32 @@ export function createFilterState(results, authorship) {
 
 // Refine only an accepted canonical snapshot. Private search never becomes a server filter.
 export function createAnalysisSlice(localSearch, projection) {
-    return function slice(snapshot, options, search = "", withinServices = []) {
+    function legacyScenarioIds(snapshot, search) {
+        if (!search.trim()) return undefined;
+        const sources = new Map((snapshot.sessions || []).map(source => [source.sessionId, source]));
+        const records = new Map(snapshot.scenarios.map(scenario => [scenario.scenarioId, scenario]));
+        return [...records.values()].filter(scenario => {
+            const source = sources.get(scenario.sourceSessionId);
+            return localSearch.phrase(search, [scenario.userPrompt?.text, scenario.title, source?.project, source?.name,
+                scenario.project, scenario.sourceSessionName, scenario.sourceSessionId]);
+        }).map(scenario => scenario.scenarioId).sort();
+    }
+    function slice(snapshot, options, search = "", withinServices = [], membership) {
         if (!Array.isArray(withinServices) || withinServices.some(service => typeof service !== "string" || !service)) {
             throw new TypeError("Service chart refinements require named services.");
         }
         const base = snapshot.analytics, records = new Map(snapshot.scenarios.map(scenario => [scenario.scenarioId, scenario]));
-        const sources = new Map((snapshot.sessions || []).map(source => [source.sessionId, source]));
-        const hasQuery = Boolean(search.trim());
-        const matches = hasQuery ? new Set([...records.values()].filter(scenario => {
-            const source = sources.get(scenario.sourceSessionId);
-            return localSearch.phrase(search, [scenario.userPrompt?.text, scenario.title, source?.project, source?.name,
-                scenario.project, scenario.sourceSessionName, scenario.sourceSessionId]);
-        }).map(scenario => scenario.scenarioId)) : null;
-        const searchRows = rows => hasQuery ? rows.filter(row => matches.has(row.scenarioId)) : rows;
+        if (membership && (membership.revision !== snapshot.revision || membership.scopeKey !== JSON.stringify([options, withinServices])
+            || !Array.isArray(membership.scenarioIds) || !Array.isArray(membership.actionIds) || !Array.isArray(membership.parentScenarioIds))) {
+            throw new TypeError("Search membership is not bound to this accepted analytical scope.");
+        }
+        const legacyIds = legacyScenarioIds(snapshot, search), legacy = legacyIds ? new Set(legacyIds) : null;
+        const hasQuery = Boolean(legacy) || Boolean(membership);
+        const matches = new Set(membership?.scenarioIds);
+        const actionIds = new Set(membership?.actionIds);
+        const withinLegacy = row => !legacy || legacy.has(row.scenarioId);
+        const searchRows = rows => hasQuery ? rows.filter(row => withinLegacy(row)
+            && (!membership || matches.has(row.scenarioId) || actionIds.has(row.id))) : rows;
         const refineRows = rows => searchRows(rows).filter(row => withinServices.every(service => row.serviceAssociation?.services.includes(service)));
         const rows = refineRows(base.rows), scenarioIds = [...new Set(rows.map(row => row.scenarioId).filter(id => records.has(id)))];
         let analytics = base;
@@ -55,11 +68,14 @@ export function createAnalysisSlice(localSearch, projection) {
             const facetRows = refineRows(base.resultFacet.rows);
             let parentCalls;
             if (base.layer === "reported-api") {
-                parentCalls = searchRows(base.apiCoverage.calls);
+                parentCalls = membership ? base.apiCoverage.calls.filter(row => withinLegacy(row) && membership.parentScenarioIds.includes(row.scenarioId))
+                    : searchRows(base.apiCoverage.calls);
                 if (withinServices.length) {
                     const entries = snapshot.requestActivity?.["reported-api"];
                     if (!Array.isArray(entries)) throw new TypeError("Service-refined API parent coverage requires accepted returned-entry associations.");
-                    const parents = new Set(refineRows(entries).map(row => row.parentCallId));
+                    const parentEntries = membership ? entries.filter(row => withinLegacy(row) && membership.parentScenarioIds.includes(row.scenarioId)
+                        && withinServices.every(service => row.serviceAssociation?.services.includes(service))) : refineRows(entries);
+                    const parents = new Set(parentEntries.map(row => row.parentCallId));
                     parentCalls = parentCalls.filter(call => parents.has(call.id));
                 }
             }
@@ -82,7 +98,9 @@ export function createAnalysisSlice(localSearch, projection) {
         }
         return { analytics, rows, rowIds: rows.map(row => row.id), scenarioIds,
             scenarios: scenarioIds.map(id => records.get(id)), refineRows };
-    };
+    }
+    slice.legacyScenarioIds = legacyScenarioIds;
+    return slice;
 }
 
 export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState, createAnalysisSlice, createActivityProjection, createRequestContext, createCallInvestigation) {
@@ -91,7 +109,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const authorship = createPromptAuthorship();
     const requestTiming = createRequestTiming(time, authorship);
     const localSearch = createLocalSearch(), settingsNavigation = createSettingsNavigation(localSearch);
-    let compactSettings, settingsSearchSignature, issueRows, deletionUI, recollectionUI, assessmentUI, automaticUI;
+    let compactSettings, settingsSearchSignature, issueRows, deletionUI, recollectionUI, assessmentUI, automaticUI, liveSearchUI;
+    let semanticMembership, semanticQuery = null, semanticComplete = false, semanticBound = false, semanticStatus = "stale";
+    let searchOpenedRequest = null, searchTargetInvalid = false;
     const chatCopy = createChatCopy();
     const periodFlow = createPeriodFlow(time, chatCopy);
     let viewerTime = time.detect();
@@ -137,6 +157,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let issuesSignature, issuesLoading = false, issuesStatus;
     const issueAttempts = new Map();
     const presentation = createDisclosureState(), readingPositions = new Map();
+    let periodReturnReading = null;
     const textAccess = createTextAccess(ux, presentation, authorship, metadata);
     const requestContext = createRequestContext();
     const callInvestigation = createCallInvestigation();
@@ -517,7 +538,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return selected.length !== 1 ? help.describeOption({ id: "outcomeFilter", value: "all" }, { layer })
             : `Menu counts are before result filtering; other filters still apply. ${help.resultHelp(selected[0], layer)}`;
     }));
-    fieldHelp("activitySearch", "Search these interactions", help.fields.activitySearch);
     const activitySearchInput = $("activitySearch"), activitySearchRow = el("div", "search-input-row");
     activitySearchInput.replaceWith(activitySearchRow);
     activitySearchRow.append(activitySearchInput, $("clearActivitySearch"));
@@ -567,7 +587,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             route = { ...route, from: time.addDays(to, 1 - Number(route.range)), to };
             rememberRoute(route, true);
         }
-        if (draft.synchronizeTime(viewerTime, dateSelection())) invalidatePreview("The report time or date basis changed. Return to Setup and scan again.");
+        if (draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : dateSelection())) {
+            invalidatePreview("The report time or date basis changed. Return to Setup and scan again.");
+        }
         renderTimeContext();
     }
     function renderTimeContext() {
@@ -643,6 +665,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function clearMessage() { $("message").hidden = true; }
 
     const api = createBoardTransport(capability, () => {
+        liveSearchUI?.sessionChanged();
         connectionNeedsSnapshot = true;
         assessmentUI?.invalidate("The local connection changed. Read current insights; no update was replayed.");
         automaticUI?.invalidate("The local connection changed. Read the original approval result; nothing was repeated.");
@@ -652,6 +675,59 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         isStale = true;
         invalidateDialog("The local connection changed. Close and prepare a new report preview.");
         updateSelection();
+    });
+    const analysisSearchKey = () => state ? JSON.stringify([state.revision, applied, route.withinServices?.split(",") || []]) : null;
+    liveSearchUI = assessmentFactories.liveSearch.mount({
+        api, createState: assessmentFactories.liveSearch.createState,
+        frozenFrame: assessmentFactories.liveSearch.frozenFrame,
+        getAnalysis: () => ({ key: analysisSearchKey(), revision: state?.revision, pending: isLoading,
+            active: route.view === "analyze", needsRebind: semanticStatus === "pending" && !semanticBound }),
+        async navigate(target) {
+            const next = readRoute(target.href, null);
+            searchOpenedRequest = next.view === "request" ? next.request : null;
+            searchTargetInvalid = false;
+            await navigate(next.view === "analyze" ? next
+                : { ...route, ...next, request: next.request, call: next.call, callRevision: next.callRevision });
+            if (target.focus) {
+                const node = $(target.focus);
+                if (node) { node.tabIndex = -1; node.focus({ preventScroll: true }); node.scrollIntoView({ block: "start" }); }
+            }
+        },
+        onInvalidateOpen() {
+            if (!searchOpenedRequest || route.view !== "request" || route.request !== searchOpenedRequest) return;
+            searchTargetInvalid = true;
+            assessmentUI?.invalidate("Search authorization changed. Reopen the current item.");
+            assessmentUI?.clearPrivateText();
+            $("requestContent").replaceChildren(el("p", "notice", "This search destination is no longer current. Return to Search WIRE and reopen its verified current item."));
+        },
+        onAnalysis(update) {
+            if (!state) return;
+            if (update.query === null || !update.query.trim()) {
+                if (semanticQuery === null) return;
+                semanticQuery = null; semanticMembership = undefined; semanticComplete = false; semanticBound = false;
+                $("wireAnalysisSearchNotice").hidden = true;
+                render(); return;
+            }
+            semanticQuery = update.query;
+            semanticComplete = false;
+            semanticBound = false;
+            semanticStatus = update.state === "pending" ? "pending" : "stale";
+            const current = update.scopeKey === analysisSearchKey() && update.receipt?.revision === state.revision;
+            if (update.state === "ready" && current) {
+                semanticComplete = update.complete === true;
+                semanticMembership = assessmentFactories.liveSearch.membership(state, applied, route.withinServices?.split(",") || [],
+                    semanticComplete ? update.hits : [], update.receipt);
+                semanticBound = semanticComplete;
+                semanticStatus = semanticComplete ? "ready" : "partial";
+            } else {
+                semanticMembership = assessmentFactories.liveSearch.membership(state, applied, route.withinServices?.split(",") || [], [], { revision: state.revision });
+            }
+            $("wireAnalysisSearchNotice").hidden = false;
+            $("wireAnalysisSearchNotice").textContent = update.state === "ready" && current
+                ? `Search WIRE / Current Analyze scope: ${semanticQuery}. ${semanticComplete ? "Verified matched population across all pages." : "Partial searchable coverage; analytical measures and current-view report preparation are unavailable."} Navigation hits do not change membership.`
+                : `Search WIRE / Current Analyze scope: ${semanticQuery}. ${update.state === "pending" ? "Waiting for verified membership; analytical counts are not displayed yet." : "Membership cleared because local search is not current."} Current-view report preparation is unavailable.`;
+            render();
+        },
     });
     deletionUI = mountDeletion({ api, flow: createDeletionFlow(), timeContext: () => viewerTime, ux,
         onCommitted: async () => {
@@ -724,9 +800,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         root: $("periodComparison"), toggle: $("comparePeriods"), api, time, search: localSearch, categories, results,
         projection: createActivityProjection(time, categories, resultKeys),
         createState: assessmentFactories.periodComparison.createState, assessmentFactories, bindDetails,
-        getContext: () => ({ snapshot: state, options: query(), route, search, isLoading, isStale }),
+        getContext: () => ({ snapshot: state, options: query(), route, search, isLoading, isStale,
+            semanticSearch: semanticQuery === null ? undefined : {
+                status: semanticStatus,
+                receipt: semanticBound ? semanticMembership?.receipt : undefined,
+                scenarioIds: semanticMembership?.scenarioIds ?? [], actionIds: semanticMembership?.actionIds ?? [],
+                parentScenarioIds: semanticMembership?.parentScenarioIds ?? [], coverage: "whole-retained-corpus",
+                ...(search.trim() ? { withinScenarioIds: analysisSlice.legacyScenarioIds(state, search) } : {}),
+            } }),
         navigate: changes => navigate(routeFor("analyze", changes), false, { keepFocus: true }),
         onSearch: value => { $("activitySearch").value = value; $("activitySearch").dispatchEvent(new Event("input")); },
+        openSearch: () => liveSearchUI.analysisScope(),
         syncFilters: () => selectControls?.sync(),
         createReport: (value, semanticSelection) => {
             if (exportWriting || isLoading || isStale) return;
@@ -1217,6 +1301,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return true;
         } catch (error) {
             if (request !== generation) return false;
+            liveSearchUI?.invalidate("The stored view could not be verified. Search results were cleared.");
             assessmentUI.clearPrivateText();
             isStale = Boolean(analytics);
             isLoading = false;
@@ -1306,6 +1391,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else render();
         }
         const position = readingPositions.get(readingKey(route));
+        periodReturnReading = restorePosition && route.view === "analyze" && route.compare === "periods" && position
+            ? { position, navigation, intent } : null;
         const finishNavigation = (loaded = true) => {
             if (!loaded || navigation !== navigationGeneration || refinement || intent !== readingIntent) return;
             if (paging) { restorePager(paging); return; }
@@ -1457,9 +1544,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         const settings = route.view === "settings", operational = route.view === "collection-status", configurationOrStatus = settings || operational;
         for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
-            for (const id of ids) $(id).hidden = route.view !== view;
+            for (const id of ids) $(id).hidden = route.view !== view || view === "analyze" && semanticQuery !== null && !semanticBound;
         }
-        $("resultsLink").hidden = route.view !== "analyze";
+        $("resultsLink").hidden = route.view !== "analyze" || semanticQuery !== null && !semanticBound;
         $("filters").hidden = configurationOrStatus || route.view === "request" || route.view === "reports";
         $("projectContextHelp").hidden = configurationOrStatus || route.view === "reports";
         $("filterChips").hidden = configurationOrStatus || route.view === "reports";
@@ -1578,7 +1665,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const host = $("viewingContext");
         const collectionLink = $("activityCollectionLink");
         if (host.contains(collectionLink)) $("collectionNotice").after(collectionLink);
-        host.hidden = route.view !== "request";
+        host.hidden = route.view !== "request" || semanticQuery !== null && !semanticBound;
         const rows = selectionRows();
         const evidenceHost = $("serviceEvidenceSummary");
         const evidenceGroups = categories.evidenceGroups(rows, applied.layer);
@@ -1707,7 +1794,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function renderPeriodFeedback() {
-        $("periodFeedback").hidden = route.view !== "analyze";
+        $("periodFeedback").hidden = route.view !== "analyze" || semanticQuery !== null && !semanticBound;
         if ($("periodFeedback").hidden) return;
         const rows = selectionRows();
         const model = periodFlow({ rows, filters: applied.filters, coverage: state.collection?.config?.approved ? state.collection.checkedWindow : state.coverage, timeContext: applied.timeContext, session: Boolean(route.session), stale: isStale, layer: applied.layer, unit: results.unit(applied.layer, rows.length) });
@@ -1745,11 +1832,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const selectedResults = resultSelection(applied.filters.outcomes);
         const choices = applied.layer === "code-reference" ? [...new Set(["unknown", ...selectedResults])] : resultKeys;
         const totals = analytics.resultFacet.totals;
-        const resultOptions = choices.map(key => [key, applied.layer === "code-reference" && key !== "unknown" ? `Previous: ${results.labels("tool")[key]}` : resultLabels[key], totals[key]]);
-        $("outcomeFilter").dataset.allLabel = `All results (${count(totals.count)})`;
+        const countsAvailable = semanticQuery === null || semanticBound;
+        const resultOptions = choices.map(key => [key, applied.layer === "code-reference" && key !== "unknown" ? `Previous: ${results.labels("tool")[key]}` : resultLabels[key], countsAvailable ? totals[key] : null]);
+        $("outcomeFilter").dataset.allLabel = countsAvailable ? `All results (${count(totals.count)})` : "All results (counts unavailable)";
         const signature = JSON.stringify([applied.layer, resultOptions]);
         if ($("outcomeFilter").dataset.optionsSignature !== signature) {
-            $("outcomeFilter").replaceChildren(...resultOptions.map(([key, label, total]) => option(key, `${label} (${count(total)})`)));
+            $("outcomeFilter").replaceChildren(...resultOptions.map(([key, label, total]) => option(key, `${label} (${total === null ? "count unavailable" : count(total)})`)));
             $("outcomeFilter").dataset.optionsSignature = signature;
         }
         $("outcomeFilter").disabled = applied.layer === "code-reference";
@@ -2019,7 +2107,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderSessionAnalysis() {
         const host = $("sessionAnalysis"), source = sessionSource();
         host.replaceChildren();
-        host.hidden = route.view !== "analyze" || !route.session;
+        host.hidden = route.view !== "analyze" || !route.session || semanticQuery !== null && !semanticBound;
         if (host.hidden) return;
         const context = state.sessionAnalysis;
         const rows = context?.rows && slice.refineRows(context.rows);
@@ -2251,6 +2339,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderRequest() {
         if (route.view !== "request") return;
+        if (searchTargetInvalid && route.request === searchOpenedRequest) return;
         captureReading();
         const context = requestContext.select(state.scenarios, route.request);
         const target = callInvestigation.resolve(state.requestActivity, state.scenarios, route, state.revision);
@@ -2542,7 +2631,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return reportScopes.resolve(state?.exportCatalog, "selected", [],
                 [...new Set(Object.values(value.periods).flatMap(side => side.scenarioIds))], authorship.selection(value.options.filters?.promptAuthors));
         }
-        return reportScopes.resolve(state?.exportCatalog, kind, state ? currentViewScenarios().map((s) => s.scenarioId) : [], [...selected], reportAuthors);
+        const value = reportScopes.resolve(state?.exportCatalog, kind, state ? currentViewScenarios().map((s) => s.scenarioId) : [], [...selected], reportAuthors);
+        return kind === "current" && semanticQuery !== null && !semanticComplete ? { ...value, available: false } : value;
     }
     function clearReportSelection() {
         if (exportWriting) return;
@@ -2600,7 +2690,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.querySelectorAll("[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
         $("reportRecordedContext").checked = draft.options().recordedContext === true && draft.options().promptMode !== "none";
         $("reportRecordedContext").disabled = exportWriting || draft.options().promptMode === "none";
-        setText($("reportPromptAuthorSummary"), `${count(value.requests.length)} of ${count(value.baseRequests.length)} request groups in the base scope included.${value.authorExcludedRequestGroups ? ` ${count(value.authorExcludedRequestGroups)} left out with their calls and scores. The base selection is kept.` : ""}`);
+        setText($("reportPromptAuthorSummary"), value.available === false ? "Request counts are unavailable for this scope."
+            : `${count(value.requests.length)} of ${count(value.baseRequests.length)} request groups in the base scope included.${value.authorExcludedRequestGroups ? ` ${count(value.authorExcludedRequestGroups)} left out with their calls and scores. The base selection is kept.` : ""}`);
         $("scopeExplanation").textContent = reportEntry && reportScope === "selected"
             ? `GitHub Copilot chat: ${reportEntry.sessionName}. Complete eligible request groups across all retained dates, services and pages, not just the analysis slice. The chosen groups stay fixed until you change selection; new groups are not added automatically.`
             : reportScope === "all"
@@ -2609,13 +2700,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const reportIds = new Set(value.requests.flatMap(request => request.aliases));
         const currentIds = new Set(currentViewScenarios().map(s => s.scenarioId));
         const hidden = value.requests.filter(request => !request.aliases.some(id => currentIds.has(id))).length;
+        const currentMembershipAvailable = semanticQuery === null || semanticBound;
         $("reportPopulationNote").textContent = value.available && !unknownSelected && value.requests.length
-            ? `${count(value.requests.length)} complete request group${value.requests.length === 1 ? "" : "s"} / ${count(value.counts.workIqActions)} Work IQ tool call${value.counts.workIqActions === 1 ? "" : "s"} across all pages.${hidden ? ` Includes ${chatCopy.groups(hidden)} outside the current browsing filters.` : ""} Calls and scores use these groups, not just the visible chart matches. Other evidence units and exclusions are detailed below.`
+            ? `${count(value.requests.length)} complete request group${value.requests.length === 1 ? "" : "s"} / ${count(value.counts.workIqActions)} Work IQ tool call${value.counts.workIqActions === 1 ? "" : "s"} across all pages.${currentMembershipAvailable ? hidden ? ` Includes ${chatCopy.groups(hidden)} outside the current browsing filters.` : "" : " Current analytical match membership is unavailable."} Calls and scores use these groups, not just the visible chart matches. Other evidence units and exclusions are detailed below.`
             : "";
         const matching = results.summarize(selectionRows().filter(row => reportIds.has(row.scenarioId) && currentIds.has(row.scenarioId)));
         $("reportMatchingContext").replaceChildren(resultLine(applied?.layer || "tool", matching, { scope: "Matching view results, not the full report", label: `${count(matching?.count)} matching ${results.unit(applied?.layer || "tool", matching?.count)} in the current view` }));
         $("reportMatchingContext").append(el("p", "context-help-note", `Report counts above include complete eligible request groups; the matching results here do not. Snapshot revision ${count(state.revision)}; frozen only when you prepare a preview.`));
-        $("reportMatchingContext").hidden = !value.requests.length;
+        $("reportMatchingContext").hidden = !value.requests.length || !currentMembershipAvailable;
         const x = state.exportCatalog?.excluded;
         $("scopeExclusions").textContent = x
             ? `Collection exclusions: ${x.syntheticRequestGroups} synthetic request groups; ${x.diagnosticRequestGroups} diagnostic groups; ${x.unknownSourceRequestGroups} groups with unknown source identity; ${x.requestGroupsWithoutEligibleEvidence} alias-only or excluded groups. ${x.duplicateEvidenceRecords} duplicate evidence records, ${x.unidentifiableEvidenceRecords} unidentifiable records and ${x.platformDiagnosticEvidenceRecords} platform diagnostic records are excluded. ${x.excludedOrDuplicateEvidenceRecords} evidence records excluded or deduplicated overall. ${value.excludedRequestedGroups} requested groups have no eligible evidence. These overlapping categories are not additive. Missing projects remain unscoped, not excluded. Hidden calls, missing logs and new chats are not inferred.`
@@ -2879,36 +2971,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 el("p", "muted", "Frozen saved copy. Today's activity, scores and report choices do not change it. Section links work here; use the saved download buttons outside this reader for companion files."));
             if (result.artifact.sourceReports?.some(source => !source.available)) body.append(el("p", "muted",
                 "An original report is no longer available. This independently reviewed saved copy is unchanged."));
-            const frame = el("iframe", "report-frame");
+            const frame = assessmentFactories.liveSearch.frozenFrame(result.html);
             frame.title = "Frozen saved " + kind;
-            frame.setAttribute("sandbox", "");
-            frame.setAttribute("referrerpolicy", "no-referrer");
-            // Parse in an inert template: opening frozen bytes must not load or navigate to companion content.
-            const template = document.createElement("template");
-            template.innerHTML = result.html;
-            template.content.querySelectorAll("base,iframe,frame,object,embed,script").forEach(node => node.remove());
-            template.content.querySelectorAll("meta[http-equiv]").forEach(node => {
-                if (node.getAttribute("http-equiv").trim().toLowerCase() !== "content-security-policy") node.remove();
-            });
-            template.content.querySelectorAll("[href],[xlink\\:href]").forEach(node => {
-                for (const attribute of ["href", "xlink:href"]) {
-                    const value = node.getAttribute(attribute);
-                    if (value !== null && !/^#[a-zA-Z0-9_-]+$/.test(value)) node.removeAttribute(attribute);
-                    else if (value !== null && ["a", "area"].includes(node.localName)) node.setAttribute(attribute, "about:srcdoc" + value);
-                }
-                for (const attribute of ["target", "ping", "download"]) node.removeAttribute(attribute);
-            });
-            const root = document.createElement("html"), rootTemplate = document.createElement("template");
-            const prefix = result.html.match(/^\s*(?:<!doctype html>\s*)?<html\b([^>]*)>/i);
-            if (prefix) {
-                rootTemplate.innerHTML = "<div" + prefix[1] + "></div>";
-                for (const attribute of ["lang", "data-evidence-theme"]) {
-                    const value = rootTemplate.content.firstElementChild?.getAttribute(attribute);
-                    if (value !== null && value !== undefined) root.setAttribute(attribute, value);
-                }
-            }
-            const isolation = '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; base-uri &#39;none&#39;; form-action &#39;none&#39;">';
-            frame.srcdoc = "<!doctype html>" + root.outerHTML.replace("</html>", () => isolation + template.innerHTML + "</html>");
             body.append(frame);
         } catch (error) {
             if (dialog.open && savedReportView === current && !current.invalid) body.replaceChildren(el("p", "error", error.message));
@@ -3013,7 +3077,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function render() {
         if (!state || !analytics) return;
-        slice = analysisSlice(state, applied, search, route.withinServices?.split(",") || []);
+        const withinServices = route.withinServices?.split(",") || [];
+        if (semanticMembership && (semanticMembership.revision !== state.revision
+            || semanticMembership.scopeKey !== JSON.stringify([applied, withinServices]))) {
+            semanticComplete = false;
+            semanticBound = false;
+            semanticStatus = "pending";
+            semanticMembership = assessmentFactories.liveSearch.membership(state, applied, withinServices, [], { revision: state.revision });
+        }
+        slice = analysisSlice(state, applied, search, withinServices, semanticMembership);
         analytics = slice.analytics;
         renderTimeContext();
         renderControls(); renderNavigation(); renderFilterChips(); renderViewingContext(); renderSessionAnalysis(); renderPeriodFeedback();
@@ -3028,7 +3100,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.view === "settings" && route.section === "privacy") assessmentUI.setup($("assessmentSetup"));
         renderCoverage();
         updateSelection();
-        periodComparisonUI.update();
+        periodComparisonUI.update().then(() => {
+            const saved = periodReturnReading;
+            if (!saved) return;
+            if (saved.navigation !== navigationGeneration || saved.intent !== readingIntent
+                || route.view !== "analyze" || route.compare !== "periods") { periodReturnReading = null; return; }
+            if (periodComparisonUI.consumer()) { restoreReading(saved.position); periodReturnReading = null; }
+        });
+        liveSearchUI?.changed();
     }
 
     function setText(node, text) {
@@ -3163,6 +3242,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : notice.severity === "error" || notice.action === "View collection details" ? "#collection-status" : "#settings?section=connection";
     }
     function collectionUnavailable(error, reason = "") {
+        liveSearchUI?.invalidate("Current collection status could not be verified. Search results were cleared.");
         collectionReadError = error;
         collectionReadReason = reason;
         if (reason === "runtime_unavailable") {
@@ -3919,6 +3999,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         appliedRoute = { ...route };
         render();
     });
+    $("openAnalysisSearch").addEventListener("click", () => liveSearchUI.analysisScope());
     $("clearActivitySearch").addEventListener("click", () => {
         $("activitySearch").value = ""; $("activitySearch").dispatchEvent(new Event("input")); $("activitySearch").focus();
     });

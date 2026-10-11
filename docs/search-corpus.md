@@ -4,6 +4,10 @@
 
 The [on-device hybrid retrieval facade](semantic-retrieval.md) consumes this contract through `index` and `deliver`. Its model provisioning is explicit and separate; no runtime transport or UI integration is activated by either module.
 
+The [live-search owner](live-search.md) connects that unchanged facade to the
+loopback runtime, ordered generation stream, single field and verified opening
+journey. It does not bypass these readers or add a persistent corpus cache.
+
 ## Source contract
 
 | Type | Allowed input and reader | Identity and destination |

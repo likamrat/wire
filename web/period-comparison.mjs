@@ -162,7 +162,7 @@ export function createPeriodComparisonState({ time, search, contract, projection
 }
 
 export function mountPeriodComparison({ root, toggle, api, time, search, categories, results, projection, createState,
-    assessmentFactories, bindDetails, getContext, navigate, onSearch, recordLink, syncFilters, createReport }) {
+    assessmentFactories, bindDetails, getContext, navigate, onSearch, recordLink, syncFilters, createReport, openSearch }) {
     const doc = root.ownerDocument;
     let machine, presentation, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null;
     const snapshotKey = context => JSON.stringify([context.snapshot?.revision, context.snapshot?.assessment?.basis, context.snapshot?.assessment?.source]);
@@ -201,6 +201,7 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
     const searchLabel = el("label", "Search these interactions", "search-label"), searchInput = el("input");
     searchInput.type = "search"; searchInput.autocomplete = "off"; searchInput.id = "comparisonSearch";
     searchLabel.append(searchInput);
+    searchLabel.hidden = typeof openSearch === "function";
     searchInput.addEventListener("input", () => onSearch(searchInput.value));
     searchInput.addEventListener("keydown", event => {
         if (event.key === "Escape" && searchInput.value) { searchInput.value = ""; onSearch(""); event.preventDefault(); }
@@ -216,6 +217,7 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
     report.id = "createPeriodReport"; report.disabled = true;
     const notice = el("p", "Prepare exactly this comparison through Setup, disclosure Review and a separate local Save. No earlier reports are needed.", "context-help-note");
     root.append(heading, form, dateHint, searchLabel, scope, status, output, report, notice);
+    if (typeof openSearch === "function") searchLabel.after(button("Search this comparison", openSearch));
     toggle.setAttribute("aria-controls", root.id);
     toggle.addEventListener("click", () => navigate({ compare: shown ? undefined : "periods" }));
     form.addEventListener("submit", event => {

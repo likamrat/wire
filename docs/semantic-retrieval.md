@@ -2,6 +2,10 @@
 
 `lib/search-retrieval.mjs` is a private, in-memory retrieval facade over the [authorized corpus](search-corpus.md). `lib/search-retrieval.d.mts` is its consumer contract. It implements actual pretrained embeddings plus independent lexical precision. It does **not** attach itself to the running collector, expose HTTP routes, change the browser's existing analytical search, render results, or open targets.
 
+The separate [live-search integration](live-search.md) now owns those runtime/UI
+responsibilities, using this facade unchanged. It coalesces normal typing behind
+verified delivery instead of repeatedly aborting a PDF generation.
+
 ## Model and provisioning
 
 | Component | Fixed identity | License |
@@ -35,7 +39,7 @@ Package versions and selected module hashes are checked before inference. The sa
 
 One request is admitted to the child at a time. Supersession, invalidation and close terminate actual active computation, not just hide a late response. Invocation ownership extends through the embed continuation, including the interval after IPC clears its pending request. A replacement waits for the prior child to exit, and the superseded promise settles without requiring the replacement to be closed. Idle helpers remain warm; restarting after cancellation has a cold-load cost. Ordinary JavaScript/process isolation is not an OS sandbox, secure memory erasure, protection against a privileged local attacker, or a change to existing evidence permissions.
 
-**Future transport seam:** global semantic queries may be computed in the existing local Node runtime and this child. That does not change existing analytical/private search in browser memory and `history.state`; it must remain out of URLs. No transport is enabled by this module.
+**Transport seam:** global semantic queries are computed in the existing local Node runtime and this child through the separate live-search owner. Legacy analytical/private search in browser memory and `history.state` remains compatible; new global text remains memory-only and out of URLs. No transport is enabled by this facade itself.
 
 ## Corpus, index and delivery contract
 

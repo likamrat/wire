@@ -119,9 +119,34 @@ Unassessed reasons appear when the saved evidence supports them. An evaluator th
 
 **Recorded timing in full interactions** under Insights is separate: its calls and recorded request-to-final-response samples cover each selected interaction in full, not only its matching calls. HTTP response-header and transport-error timings retain their own boundaries. A single measured item is shown as **Single measured sample**, with no percentile chart or representative-performance claim. No samples means **Not measured**, not zero; a recorded zero remains zero. Never sum concurrent calls, average medians, or treat recorded request bounds as the duration of a person's entire task. **Measure definitions** retains exact subset percentages with their denominators, milliseconds, boundaries, model and rubric; **Details and feedback** on a single interaction also offers optional personal verdicts and **Withdraw feedback**. Use the panel's header **Close** or **Escape** to leave. Closing feedback does not cancel a submitted update; check its existing result rather than repeating it. **Worked** means tool completion, not verified correctness.
 
-In Analyze, private search and filters select the request groups used by counts and Insights, across every page. The top recorded-timing section uses matching calls; Insights use those groups' full retained interactions, so their timing and completion denominators can be wider. Calls, API entries and HTTP records remain separate units. No matching groups means no interaction metrics, not the all-activity summary. Search stays in this browser's history, not in links or backend text queries. Earlier Home and Activity links both open Analyze.
+In Analyze, scoped search and filters select the request groups used by counts and Insights, across every page. The top recorded-timing section uses matching calls; Insights use those groups' full retained interactions, so their timing and completion denominators can be wider. Calls, API entries and HTTP records remain separate units. No matching groups means no interaction metrics, not the all-activity summary. Legacy private search keeps its browser-history compatibility. New Search WIRE text stays in panel memory and the on-device local runtime, never in links, logs or browser storage. Earlier Home and Activity links both open Analyze.
 
-Reply saving is off unless previously approved. To keep recorded replies in WIRE, open **Settings > Privacy & saved data > Recorded replies**, select **Save Copilot replies locally**, then **Turn on response saving**. **Discard change** restores your current choice. **What gets saved** explains the source and limits. Deliberately opening an interaction immediately reads only its displayed context's already-retained, currently authorized replies. Analyze, search and hover do not preload them. Every reply is checked independently against current access; opening context never turns saving on or reads the original source. **Copy response** copies only that response body and **Hide response** collapses it; an explicit hidden state is respected on rerender. Missing responses remain unavailable, read errors offer an explicit retry, and partial or unverified final-answer status is not upgraded. Turning response saving off removes optional text and dependent unsaved insights; activity and saved reports remain. This does not authorize model assessment.
+Reply saving is off unless previously approved. To keep recorded replies in WIRE, open **Settings > Privacy & saved data > Recorded replies**, select **Save Copilot replies locally**, then **Turn on response saving**. **Discard change** restores your current choice. **What gets saved** explains the source and limits. Deliberately opening an interaction immediately reads only its displayed context's already-retained, currently authorized replies. Analyze and hover do not preload them; explicit Search WIRE reads only already-authorized retained replies through the same permission gates. Every reply is checked independently against current access; opening context never turns saving on or reads the original source. **Copy response** copies only that response body and **Hide response** collapses it; an explicit hidden state is respected on rerender. Missing responses remain unavailable, read errors offer an explicit retry, and partial or unverified final-answer status is not upgraded. Turning response saving off removes optional text and dependent unsaved insights; activity and saved reports remain. This does not authorize model assessment.
+
+## Search WIRE
+
+Type in the header's **Search WIRE** field; results appear without Submit. Meaning
+matching works alongside exact tool names, API methods/paths, statuses and
+prefixes. **Everywhere** finds existing interactions/context/replies, calls,
+saved report/comparison contents, tools, services, views and settings.
+Each result names its source and destination. Enter or click opens the actual
+item directly; Back restores your query, category, page and focused result.
+Settings opens the named setting without operating its control.
+
+Choose **Current Analyze scope** (also available through **Search this Analyze
+scope**) only when you want the matching population to refine Analyze. Global
+navigation hits never become report membership. Pending, stale or partial membership
+shows unavailable measures, not fabricated zero counts. Partial navigation matches
+remain labelled, but cannot establish an analytical population or current-view report. Selected/All report
+choices and hidden selected requests remain separate.
+
+Search is on-device. It never enables collection, runs a tool or assessment, saves
+replies or downloads model assets while typing. Missing/corrupt local assets show
+**Exact/prefix search only**, with an explicit setup notice. A busy runtime,
+disconnection or permission/source change clears results rather than retaining
+clickable stale targets. Saved HTML/JSON/Markdown open their verified frozen copy;
+explicit PDF Open downloads the verified saved PDF. Nothing is regenerated.
+See [runtime boundaries and local setup](docs/live-search.md).
 
 ## Compare retained periods
 
@@ -132,9 +157,11 @@ stored revision in the displayed time zone. This is a stored-data read, not a
 source refresh or a new assessment.
 
 Tool, Service, Outcome, Author and More filters apply to both sides.
-**Search these interactions** matches the complete retained interaction roster,
-not just the ordinary Analyze date range or visible page. The query stays in
-browser memory/history, never in API inputs or copied URLs. Each Outcome choice
+**Search this comparison** opens the single Search WIRE field in analytical
+scope without changing either period. Meaning/exact matches cover the full retained
+corpus, not just the ordinary Analyze dates or visible page. A retained legacy
+phrase is an additional intersection; only its canonical narrowing IDs enter the
+paired request, never the phrase text. Each Outcome choice
 shows separate A/B counts before that outcome filter; overlapping periods are
 not added together. Opening or ticking a menu does not apply its draft.
 
@@ -142,8 +169,9 @@ The comparison temporarily replaces ordinary date controls, charts and rows.
 **Stop comparing** restores them, including their previous dates and private
 query. **Exact matching records** opens the existing record/context reader; Back
 restores the paired periods and opened assessment details. Report selections
-remain separate. Ordinary report actions are hidden while comparing: saving a
-comparison as a report is not implemented here yet.
+remain separate. **Create comparison report** prepares this exact accepted pair
+through Setup, a disclosure Review, and a separate local Save. No earlier reports
+are required, and the saved copy is not regenerated when reopened.
 
 Read the matching-record counts separately from **full retained interaction**
 findings. An interaction can have calls outside the selected dates or filters,

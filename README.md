@@ -573,10 +573,13 @@ importing and failed states never become a successful empty-history message.
 
 ### Local search scopes
 
-There is no duplicate global search or raw-transcript index. Each search names
-the thing it finds, operates on its entire retained scope before paging, and
-keeps query text in this browser's history state rather than a URL, server log,
-export, telemetry or new persistent index. New metadata searches match words
+The single header **Search WIRE** entry provides [live on-device semantic and
+exact/prefix retrieval](docs/live-search.md). Its global text stays in panel and
+authenticated loopback-runtime memory, not history, URLs, logs or storage.
+**Current Analyze scope** explicitly binds its full verified interaction/action
+membership to charts, rows and current-view report eligibility. It does not index
+raw source histories. Existing metadata/list utilities keep their own scope and
+browser-history compatibility. Metadata searches match words
 across their named fields, ignoring case, accents and punctuation. Activity keeps
 phrase matching within a field, with the same normalization, rather than widening
 one numbered request into unrelated word matches. Clear and Escape are available;
@@ -585,19 +588,20 @@ no-result counts remain explicit.
 | Surface | Search decision and scope |
 | --- | --- |
 | Settings | Fixed setting metadata and useful synonyms; navigation only, never source paths or control actions. |
-| Activity / chat analysis | Keep and clarify **Find a Copilot chat or request group**: retained request text, titles, chat/project names and chat IDs, intersected with existing filters before chat/request paging. Canonical evidence counts and metadata-only chats stay distinct. |
+| Analyze | **Search this Analyze scope** focuses the single Search WIRE field in explicit analytical mode. Verified full-interaction or exact action matches intersect existing filters before paging. Unready membership does not display fabricated zero measures. |
 | Requests already in a report | **Find a request in this report** filters the full current membership list by retained request text and chat/project identity. Matching and included totals are separate; hidden requests remain included. It cannot add/remove requests or change a frozen preview. |
 | Previously saved reports | **Find a saved report** searches all saved IDs, prepared dates, formats, prompt modes, file names and time-zone/locale metadata. It does not open report contents, original prompts or private file paths. |
 | Collection status | **Find a chat with gaps** searches the entire currently reported issue list by chat/project name, identifier, availability status (unavailable or limited history), short or full reason label or common alias, before reason grouping and six-row paging. Unavailable takes precedence when a chat also has limits; each affected chat is counted once. While searching, counts state matching versus all affected chats. Names are fetched only on visiting Collection status. |
-| Home / charts and request details | Keep existing date/service/result filters, chart drilldowns, exact-data disclosures and bounded request/action pages. No redundant search per card or universal evidence index. Request-detail actions are not a new full-text search scope. |
+| Home / charts and request details | Keep existing date/service/result filters, chart drilldowns, exact-data disclosures and bounded request/action pages. The header owns global search; there is no redundant search per card. |
 | Long select lists | Keep keyboard typeahead and full option identities, including city-based time zones. Names wrap without clipping; short finite lists need no extra search box. |
 
 New list-query scopes start at their first page; clearing restores the unsearched
 list's prior page where still valid. These scoped queries survive ordinary
 navigation, Back/Forward and reload in the same history entry. Report draft
 membership itself remains panel-memory only and still resets on reload.
-No search fetches Work IQ/Graph data, scans additional files or expands report
-membership. Browser history can retain private query text locally; copied URLs
+No search fetches Work IQ/Graph data or scans additional original source history.
+Only explicit analytical scope refines current-view report membership. Legacy
+browser history can retain private query text locally; copied URLs
 contain only shareable routes and destination identifiers.
 
 The maintained runtime has no public, app-wide chat-enumeration interface.
@@ -872,12 +876,13 @@ service associations or legacy aliases as additional calls. It opens the existin
 interaction reader; dedicated call sorting and exact-action context navigation
 are separate work, not implied by this entry.
 
-**Search these interactions** keeps the existing local phrase matching across
-retained prompts, titles and chat/project context. It is not global or semantic
-search. Charts, summaries, rows and current-view report IDs share the same
+**Search this Analyze scope** uses the single live Search WIRE field and its
+receipt-bound semantic/exact membership. Legacy browser-history phrase queries
+remain compatible. Charts, summaries, rows and current-view report IDs share the same
 all-page matched membership. Insights and ordinary reports still include full
 selected interactions; their scope notes distinguish them from matching calls.
-Private queries stay in browser history state, never URLs or browser storage.
+New global queries stay in panel/local-runtime memory, never URLs or browser storage.
+Legacy private/list queries retain browser-history behavior.
 Back/Forward restores the mode, filters, query, page, scroll and focused row;
 report selection hidden by later filters remains selected.
 
@@ -965,9 +970,10 @@ verify who wrote it; a user-role message, coordinator message or legacy
 human-authored attribution is not proof of identity. **Prompt provenance**
 keeps the original attribution available. Missing text says **Prompt not
 available**. Tool arguments and assistant responses remain separate.
-Displayed replies use only the existing consent- and basis-checked retained-text
-endpoint after deliberately opening the request, never overview/search preload,
-source rereads, new capture or AI. Recorded response timestamps determine their
+Request-reader replies use the existing consent- and basis-checked retained-text
+endpoint after deliberately opening the request. Global Search WIRE separately
+admits authorized retained excerpts through those same gates, never source
+rereads, new capture or AI. Recorded response timestamps determine their
 positions without asserting finality. Missing reply text is shown with its own
 group; missing timestamps are not reconstructed. Counts and saved verdicts remain
 scoped to their original groups. No report context producer is added.
