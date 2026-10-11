@@ -10,10 +10,10 @@ export const percentageChartStyles = `
 .percentage-content {position:relative;min-width:0}
 .percentage-visual {width:7rem;max-width:100%;margin-inline:auto}
 .percentage-ring {display:block;width:100%;height:auto;aspect-ratio:1;overflow:visible}
-.percentage-face {fill:var(--column-label);stroke:none;pointer-events:visibleFill}
+.percentage-face {stroke:none;pointer-events:visibleFill}
 .percentage-ring a {cursor:pointer}
 .percentage-ring a:focus:not(:focus-visible) {outline:none}
-.percentage-face.percentage-active {fill:var(--column-label);fill-opacity:.8}
+.percentage-face.percentage-active {fill:var(--column-label);fill-opacity:1}
 .percentage-legend {list-style:none;margin:0;padding:0;min-width:0;display:grid;gap:8px}
 .percentage-legend-row {display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,max-content);align-items:center;column-gap:8px;color:var(--ink);min-width:0}
 .percentage-tool-list .percentage-legend-row {grid-template-columns:minmax(0,1fr) minmax(0,max-content)}
@@ -29,7 +29,7 @@ export const percentageChartStyles = `
 .percentage-value strong {font-weight:var(--weight-strong)}
 .percentage-bar-track {grid-column:2/-1;height:8px;background:var(--canvas);border-radius:var(--radius-pill);overflow:hidden}
 .percentage-tool-list .percentage-bar-track {grid-column:1/-1}
-.percentage-bar {display:block;height:100%;background:var(--column-label,var(--accent));border-radius:var(--radius-pill);min-width:0}
+.percentage-bar {display:block;height:100%;background:var(--column-label,var(--accent));background-image:linear-gradient(90deg,var(--chart-mark-low),var(--chart-mark-high));border-radius:var(--radius-pill);min-width:0}
 .percentage-legend-row:has(a) .percentage-bar-track {cursor:pointer}
 .percentage-note,.percentage-service-scope,.percentage-coverage {color:var(--muted);font-size:var(--type-small);line-height:1.5;max-width:none}
 .percentage-service-scope {margin:0 0 8px}

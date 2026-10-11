@@ -8,7 +8,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, revealStoredRefresh, exportCatalogFor } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
-import { contrast } from "./color-measurements.mjs";
+import { contrast, measureChartPaint } from "./color-measurements.mjs";
 import { chooseReportScope } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WIRE_BREAKDOWN_PROOFS;
@@ -110,7 +110,7 @@ test("normal renderer shows Tools and Services together with exact involvement, 
         assert.equal(row.count, group.total); assert.equal(row.fraction, group.total / total);
     }
     assert.equal(serviceRows.some(row => ["Unknown", "Multiple workloads", "Discovery"].includes(row.id)), false);
-    assert.equal(await page.locator("#percentageCharts linearGradient,#percentageCharts .percentage-outer-wall,#percentageCharts .percentage-glint").count(), 0);
+    assert.equal(await page.locator("#percentageCharts .percentage-outer-wall,#percentageCharts .percentage-glint").count(), 0);
     await expect(card(page, "outcomes").locator(".percentage-ring")).toHaveAttribute("data-visual-scale", "linear");
     for (const kind of ["tools", "services", "outcomes"]) {
         const summary = card(page, kind).locator("summary");
@@ -289,11 +289,11 @@ test("desktop and narrow 200% light/dark retain full labels, exact shares, contr
             return { text: node.textContent, color: getComputedStyle(node).color, background: getComputedStyle(parent).backgroundColor };
         }));
         for (const row of textColors) assert.ok(contrast(row.color, row.background) >= 4.5, row.text);
-        const marks = await page.locator(".percentage-slice,.percentage-bar").evaluateAll(nodes => nodes.map(node => ({
-            color: node.classList.contains("percentage-bar") ? getComputedStyle(node).backgroundColor : getComputedStyle(node).fill,
-            background: getComputedStyle(node.closest(".percentage-card")).backgroundColor,
-        })));
-        for (const mark of marks) assert.ok(contrast(mark.color, mark.background) >= 3, `${theme}: visible data mark`);
+        const marks = await page.evaluate(measureChartPaint, ".percentage-slice,.percentage-bar");
+        for (const mark of marks) {
+            assert.ok(mark.local && mark.gradient && mark.colors.length === 2, "Each mark uses a local two-stop fade");
+            for (const color of mark.colors) assert.ok(contrast(color, mark.background) >= 3, `${theme}: visible entire data fade`);
+        }
         await page.keyboard.press("Tab");
         const target = card(page, "services").locator(".percentage-label[href]").first();
         await target.focus(); await expect(target).toBeFocused();

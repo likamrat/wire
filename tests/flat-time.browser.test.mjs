@@ -8,7 +8,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
-import { rgb, contrast } from "./color-measurements.mjs";
+import { rgb, contrast, measureChartPaint } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_TIME_PROOFS;
 const ready = async page => {
@@ -101,14 +101,14 @@ test("time view keeps readable exact labels, focus and 44px equivalents in both 
         assert.deepEqual(measurements.map(row => row.text), ["1 call", "4 calls", "1 call", "0 calls", "2 calls"]);
         assert.ok(measurements.every(row => row.height >= 44 && row.width >= row.inkWidth && row.font >= 16 * scale));
         assert.notEqual(await page.locator(".time-column .dimensional-count").first().evaluate(node => getComputedStyle(node).outlineStyle), "none");
-        const colors = await page.locator(".flat-time-segment").evaluateAll(nodes => nodes.map(node => {
-            const css = getComputedStyle(node), background = getComputedStyle(node.closest(".chart-panel")).backgroundColor;
-            return { fill: css.fill, opacity: Number(css.fillOpacity), background };
-        }));
+        const colors = await page.evaluate(measureChartPaint, ".flat-time-segment");
         for (const color of colors) {
-            const fill = rgb(color.fill), back = rgb(color.background);
-            const painted = `rgb(${fill.map((channel, index) => channel * color.opacity + back[index] * (1 - color.opacity)).join(",")})`;
-            assert.ok(contrast(painted, color.background) >= 3, `${theme}: data remains visible against its panel`);
+            assert.ok(color.local && color.gradient && color.colors.length === 2, "Each exact rectangle has its own local fade");
+            for (const endpoint of color.colors) {
+                const fill = rgb(endpoint), back = rgb(color.background);
+                const painted = `rgb(${fill.map((channel, index) => channel * color.opacity + back[index] * (1 - color.opacity)).join(",")})`;
+                assert.ok(contrast(painted, color.background) >= 3, `${theme}: the entire fade remains visible against its panel`);
+            }
         }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         await capture(page, `${theme}-${width}-text${scale}`);
@@ -147,7 +147,7 @@ test("source bins, shares, DST and partial bounds drill into the same Analyze ID
         [["2026-03-07", 1], ["2026-03-08", 4], ["2026-03-09", 1], ["2026-03-10", 0], ["2026-03-11", 2]]);
     await expect(page.locator("#chartFooter")).toContainText("1 undated");
     await expect(page.locator("#chartFooter")).toContainText("not proof no activity occurred");
-    assert.equal(await page.locator("#chart .dimensional-ground,#chart .dimensional-cap,#chart linearGradient").count(), 0);
+    assert.equal(await page.locator("#chart .dimensional-ground,#chart .dimensional-cap").count(), 0);
     const columns = await page.locator(".flat-time-column").evaluateAll(nodes => nodes.map(svg => ({
         total: Number(svg.dataset.total), maximum: Number(svg.dataset.maximum), plotHeight: Number(svg.dataset.plotHeight),
         height: svg.getBoundingClientRect().height,

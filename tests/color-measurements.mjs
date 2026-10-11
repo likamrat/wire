@@ -1,7 +1,33 @@
 export function rgb(value) {
     if (/^#[\da-f]{6}$/i.test(value)) return value.slice(1).match(/../g).map(part => parseInt(part, 16));
     if (/^rgba?\(/.test(value)) return value.match(/[\d.]+/g).slice(0, 3).map(Number);
+    if (/^color\(srgb /.test(value)) return value.match(/[\d.]+/g).slice(0, 3).map(channel => Number(channel) * 255);
     throw new TypeError(`Unsupported measured color: ${value}`);
+}
+
+// Runs in the browser so contrast covers actual paint, not a gradient's solid fallback.
+export function measureChartPaint(selector) {
+    return [...document.querySelectorAll(selector)].filter(node => node.checkVisibility()).map(node => {
+        const css = getComputedStyle(node), svg = node.ownerSVGElement;
+        let surface = node.parentElement;
+        while (surface && getComputedStyle(surface).backgroundColor === "rgba(0, 0, 0, 0)") surface = surface.parentElement;
+        const background = getComputedStyle(surface || document.body).backgroundColor;
+        let colors, local = true, gradient = false;
+        if (svg && css.fill.startsWith("url(")) {
+            const reference = css.fill.match(/url\(["']?(.*?)["']?\)$/)[1];
+            const id = reference.slice(reference.lastIndexOf("#") + 1);
+            const definition = document.getElementById(id);
+            local = !!definition && definition.ownerSVGElement === svg &&
+                (reference.startsWith("#") || reference.slice(0, reference.lastIndexOf("#")) === location.href.split("#")[0]);
+            colors = definition ? [...definition.querySelectorAll("stop")].map(stop => getComputedStyle(stop).stopColor) : [];
+            gradient = true;
+        } else if (!svg && css.backgroundImage.startsWith("linear-gradient(")) {
+            colors = css.backgroundImage.match(/rgba?\([^)]*\)|color\(srgb [^)]*\)/g) || [];
+            gradient = true;
+        } else colors = [svg ? css.fill : css.backgroundColor];
+        return { category: node.dataset.category || node.dataset.segment, background, colors, gradient, local,
+            opacity: Number(css.opacity) * (svg ? Number(css.fillOpacity) : 1) };
+    });
 }
 
 const linear = value => rgb(value).map(n => n / 255).map(n => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4);

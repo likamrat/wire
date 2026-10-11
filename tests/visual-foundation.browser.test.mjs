@@ -7,7 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
 import { scopeRecords } from "./analysis-scope-fixture.mjs";
-import { contrast, rgb } from "./color-measurements.mjs";
+import { contrast, rgb, hue, measureChartPaint } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_FOUNDATION_PROOFS;
 const baseline = process.env.WIRE_FOUNDATION_BASELINE === "1";
@@ -98,6 +98,12 @@ async function inspect(page, label) {
     measured.controls = ratios(measured.controls);
     measured.focus = ratios(measured.focus);
     measured.marks = ratios(measured.marks);
+    measured.chartPaint = await page.evaluate(measureChartPaint, ".flat-time-segment,.percentage-slice,.percentage-bar,.flat-comparison-segment");
+    for (const mark of measured.chartPaint) {
+        assert.equal(mark.local, true, `${label}: chart paint resolves inside its SVG`);
+        assert.ok(mark.colors.length > 0, `${label}: chart paint is resolved`);
+        for (const color of mark.colors) assert.ok(contrast(color, mark.background) >= 3, `${label}: entire chart fade is readable`);
+    }
     assert.equal(measured.fontLoaded, true, `${label}: reference-aligned system font available`);
     if (!baseline) assert.match(measured.fontFamily, /^Arial,/, `${label}: reference-aligned sans-serif`);
     assert.ok(measured.rootOverflow <= 1, `${label}: document overflow`);
@@ -110,7 +116,7 @@ async function inspect(page, label) {
         assert.equal(measured.material.glint, "0");
         assert.equal(measured.material.rim, "transparent");
         assert.equal(measured.material.shadow, "transparent");
-        for (const faces of measured.material.faces) assert.equal(new Set(faces).size, 1, `${label}: no outcome bevel/gradient`);
+        for (const faces of measured.material.faces) assert.notEqual(faces[0], faces[2], `${label}: intentional high-to-low outcome fade`);
         const semanticRoles = ["ink", "muted", "accent", "danger", "success", "warning", "unknown", "prompt-author-user",
             "copilot-chat-title", "performance-red", "performance-orange", "performance-gold", "performance-teal",
             ...Object.keys(measured.tokens).filter(name => /^chart-.*-label$/.test(name))];
@@ -119,9 +125,13 @@ async function inspect(page, label) {
         })));
         assert.deepEqual(measured.semantic.filter(item => item.ratio < 4.5), [], `${label}: readable semantic labels and marks on shared surfaces`);
         const reference = label.includes("dark")
-            ? { page: "#0f111a", paper: "#171923", canvas: "#141622", accent: "#06b6d4", success: "#10b981", danger: "#ed58a5", warning: "#f59e0b" }
-            : { page: "#f4f5f9", paper: "#ffffff", canvas: "#eceef5", accent: "#006580", success: "#007458", danger: "#a52b75", warning: "#815200" };
+            ? { page: "#0f111a", paper: "#171923", canvas: "#141622", accent: "#06b6d4", success: "#10b981", danger: "#ed58a5", warning: "#f2a262" }
+            : { page: "#f4f5f9", paper: "#ffffff", canvas: "#eceef5", accent: "#006580", success: "#007458", danger: "#a52b75", warning: "#a14d16" };
         for (const [name, expected] of Object.entries(reference)) assert.equal(measured.tokens[name], expected, `${label}: METROPOLIS-derived ${name}`);
+        for (const role of ["warning", "chart-pink-label", "chart-service-mail-label"]) {
+            const angle = hue(measured.tokens[role]);
+            assert.ok(angle >= 20 && angle <= 32, `${label}: ${role} leans orange, not yellow/gold`);
+        }
         assert.deepEqual(measured.surfaces.filter(item => item.image !== "none" || item.shadow !== "none"), [], `${label}: flat shared surfaces`);
         assert.deepEqual(measured.surfaces.filter(item => parseFloat(item.radius) > 8), [], `${label}: compact panel corners, not rounded cards`);
         assert.deepEqual(measured.pills.filter(item => parseFloat(item.radius) < 999), [], `${label}: semantic status capsules`);

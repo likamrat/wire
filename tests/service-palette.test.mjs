@@ -19,9 +19,10 @@ test("every classifier category and Other owns a distinct non-red service palett
         for (const face of ["top", "mid", "base", "side", "cap", "label"]) {
             const colors = ids.map(id => charts.servicePalette[id][theme][face]);
             assert.equal(new Set(colors).size, ids.length, `${theme} ${face} must not reuse colors`);
-            for (const color of colors) {
+            for (const [index, color] of colors.entries()) {
                 const angle = hue(color);
-                assert.ok(angle === null || angle >= 35 && angle <= 280, `${theme} ${face} permits reference amber but excludes red, pink and coral: ${color} (${angle})`);
+                const minimumHue = ids[index] === "Mail" ? 20 : 35;
+                assert.ok(angle === null || angle >= minimumHue && angle <= 280, `${theme} ${face} permits user-selected Mail orange but excludes red and pink: ${color} (${angle})`);
             }
         }
         for (const face of ["label", "mid"]) {

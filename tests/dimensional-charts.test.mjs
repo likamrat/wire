@@ -20,13 +20,17 @@ test("flat time columns use one exact linear scale without minimum bodies or res
         if (!total) assert.equal(svg, "");
         else {
             assert.match(svg, /aria-hidden="true"/);
-            assert.doesNotMatch(svg, /Gradient|matrix|transform|path |stroke|glint|cap|side|ground/);
+            assert.doesNotMatch(svg, /matrix|transform|path |stroke|glint|cap|side|ground/);
+            assert.equal((svg.match(/<linearGradient /g) || []).length, flat.segments.length);
+            for (const reference of svg.matchAll(/fill="url\(#([^"]+)\)"/g)) assert.ok(svg.includes(`id="${reference[1]}"`));
         }
     }
     const browser = new Function(`return (${createDimensionalCharts.toString()})()`)();
     const mixed = { total: 121, maximum: 200, values: { success: 50, unknown: 9, partial: 28, other: 9, transport: 2, failure: 23 } };
     assert.deepEqual(browser.flatLayout(mixed), charts.flatLayout(mixed));
-    assert.equal(browser.flatSvg(mixed), charts.flatSvg(mixed));
+    const withoutSequence = svg => svg.replaceAll(/flat-time-\d+-/g, "flat-time-id-");
+    assert.equal(withoutSequence(browser.flatSvg(mixed)), withoutSequence(charts.flatSvg(mixed)));
+    assert.notEqual(browser.flatSvg(mixed), browser.flatSvg(mixed), "Repeated charts never share local gradient IDs");
     assert.deepEqual(charts.flatLayout(mixed).segments.map(part => part.key), ["unknown", "success", "partial", "other", "transport", "failure"]);
     assert.equal(charts.flatLayout({ total: 1, maximum: 200, values: values(1), service: "Files" }).height, 1);
     const extreme = charts.flatLayout({ total: Number.MAX_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER,

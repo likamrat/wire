@@ -21,10 +21,11 @@ const light = `
  --accent:#006580;--accent-soft:#e0f1f6;--accent-fill:#006580;--on-accent:#ffffff;
  --accent-hover:#cfe8f0;--accent-pressed:#bddfe9;
  --pill-outline:var(--control);--pill-hover:var(--hover);--pill-pressed:#d8deea;
- --danger:#a52b75;--success:#007458;--warning:#815200;--unknown:#586071;
+ --danger:#a52b75;--success:#007458;--warning:#a14d16;--unknown:#586071;
  --performance-red:#9f2d68;--performance-orange:#8a451c;--performance-gold:#706000;--performance-teal:#006e5d;
  --delete-fill:#a52b75;--delete-ink:#ffffff;
- --chart-success:#007458;--chart-failure:#a52b75;--chart-partial:#815200;--chart-unknown:#586071;
+ --chart-success:#086d7c;--chart-failure:#a14d16;--chart-partial:#95552a;--chart-unknown:#586071;
+ --chart-mark-high:#007f9b;--chart-mark-low:#23509a;--chart-fade-strength:82%;
  --focus:#006580;--scrim:#0e101ca6;--shadow:none;
 `;
 const dark = `
@@ -35,10 +36,11 @@ const dark = `
  --accent:#06b6d4;--accent-soft:#102c37;--accent-fill:#06b6d4;--on-accent:#0f111a;
  --accent-hover:#123542;--accent-pressed:#183e4d;
  --pill-outline:var(--control);--pill-hover:var(--hover);--pill-pressed:#2c3142;
- --danger:#ed58a5;--success:#10b981;--warning:#f59e0b;--unknown:#a2a9b9;
+ --danger:#ed58a5;--success:#10b981;--warning:#f2a262;--unknown:#a2a9b9;
  --performance-red:#ed58a5;--performance-orange:#efa15d;--performance-gold:#d5c541;--performance-teal:#10b981;
  --delete-fill:#ed58a5;--delete-ink:#250b1b;
- --chart-success:#10b981;--chart-failure:#ed58a5;--chart-partial:#f59e0b;--chart-unknown:#a2a9b9;
+ --chart-success:#48bfd2;--chart-failure:#f2a262;--chart-partial:#e59b76;--chart-unknown:#a2a9b9;
+ --chart-mark-high:#48bfd2;--chart-mark-low:#4279b7;--chart-fade-strength:65%;
  --focus:#06b6d4;--scrim:#090b16bd;--shadow:none;
 `;
 

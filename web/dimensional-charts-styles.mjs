@@ -6,21 +6,21 @@ const services = theme => Object.fromEntries(Object.values(servicePalette).map(e
     entry.token, faces.map(face => entry[theme][face]),
 ]));
 const light = {
-    orange: ["#815200", "#815200", "#815200", "#815200", "#815200", "#815200"],
-    cyan: ["#006580", "#006580", "#006580", "#006580", "#006580", "#006580"],
-    teal: ["#007458", "#007458", "#007458", "#007458", "#007458", "#007458"],
-    pink: ["#a52b75", "#a52b75", "#a52b75", "#a52b75", "#a52b75", "#a52b75"],
-    slate: ["#586071", "#586071", "#586071", "#586071", "#586071", "#586071"],
-    violet: ["#6842ba", "#6842ba", "#6842ba", "#6842ba", "#6842ba", "#6842ba"],
+    orange: ["#b5723a", "#95552a", "#995328", "#95552a", "#95552a", "#95552a"],
+    cyan: ["#528cce", "#315fad", "#345fa4", "#315fad", "#315fad", "#315fad"],
+    teal: ["#1494a6", "#086d7c", "#21687e", "#086d7c", "#086d7c", "#086d7c"],
+    pink: ["#c06b24", "#a14d16", "#a34e1a", "#a14d16", "#a14d16", "#a14d16"],
+    slate: ["#7a899f", "#586071", "#5c687f", "#586071", "#586071", "#586071"],
+    violet: ["#9473ba", "#694b9c", "#684895", "#694b9c", "#694b9c", "#694b9c"],
     ...services("light"),
 };
 const dark = {
-    orange: ["#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b"],
-    cyan: ["#06b6d4", "#06b6d4", "#06b6d4", "#06b6d4", "#06b6d4", "#06b6d4"],
-    teal: ["#10b981", "#10b981", "#10b981", "#10b981", "#10b981", "#10b981"],
-    pink: ["#ed58a5", "#ed58a5", "#ed58a5", "#ed58a5", "#ed58a5", "#ed58a5"],
-    slate: ["#a2a9b9", "#a2a9b9", "#a2a9b9", "#a2a9b9", "#a2a9b9", "#a2a9b9"],
-    violet: ["#ad88f0", "#ad88f0", "#ad88f0", "#ad88f0", "#ad88f0", "#ad88f0"],
+    orange: ["#e59b76", "#e59b76", "#9d6e59", "#e59b76", "#e59b76", "#e59b76"],
+    cyan: ["#75a6ed", "#75a6ed", "#5475a6", "#75a6ed", "#75a6ed", "#75a6ed"],
+    teal: ["#48bfd2", "#48bfd2", "#378595", "#48bfd2", "#48bfd2", "#48bfd2"],
+    pink: ["#f2a262", "#f2a262", "#a2693b", "#f2a262", "#f2a262", "#f2a262"],
+    slate: ["#a2a9b9", "#a2a9b9", "#717785", "#a2a9b9", "#a2a9b9", "#a2a9b9"],
+    violet: ["#b69bdf", "#b69bdf", "#7e6e9d", "#b69bdf", "#b69bdf", "#b69bdf"],
     ...services("dark"),
 };
 const tokens = palette => Object.entries(palette).map(([tone, colors]) => colors.map((color, index) => `--chart-${tone}-${faces[index]}:${color};`).join("")).join("");
@@ -29,7 +29,10 @@ export const dimensionalColumnStyles = `
 @media(prefers-color-scheme:dark) {:root:not([data-evidence-theme]) {${tokens(dark)}--glass-end-light:#535b61;--glass-end-shade:#535b61}}
 :root[data-evidence-theme=light] {${tokens(light)}}
 :root[data-evidence-theme=dark] {${tokens(dark)}--glass-end-light:#535b61;--glass-end-shade:#535b61}
-${Object.keys(light).map(tone => `.dimensional-tone-${tone} {${faces.map(face => `--column-${face}:var(--chart-${tone}-${face});`).join("")}color:var(--column-mid)}`).join("\n")}
+${Object.keys(light).map(tone => `.dimensional-tone-${tone} {${faces.map(face => `--column-${face}:var(--chart-${tone}-${face});`).join("")}--chart-mark-high:var(--column-label);--chart-mark-low:color-mix(in srgb,var(--column-label) var(--chart-fade-strength,82%),var(--paper));color:var(--column-mid)}`).join("\n")}
+:is(.dimensional-tone-orange,.dimensional-tone-cyan,.dimensional-tone-teal,.dimensional-tone-pink,.dimensional-tone-slate,.dimensional-tone-violet) {--chart-mark-high:var(--column-top);--chart-mark-low:var(--column-base)}
+.chart-fade-high {stop-color:var(--chart-mark-high)}
+.chart-fade-low {stop-color:var(--chart-mark-low)}
 .dimensional-stop-top {stop-color:var(--column-top)}
 .dimensional-stop-mid {stop-color:var(--column-mid)}
 .dimensional-stop-base {stop-color:var(--column-base)}
@@ -80,7 +83,7 @@ ${dimensionalColumnStyles}
 .flat-comparison-action:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
 .flat-comparison-count {font-variant-numeric:tabular-nums;font-weight:var(--weight-strong);min-width:0;overflow-wrap:anywhere}
 .flat-comparison-track {display:flex;grid-column:1/-1;height:12px;min-width:0;background:var(--canvas)}
-.flat-comparison-segment {display:block;height:100%;min-width:0;flex-shrink:0;background:var(--column-label)}
+.flat-comparison-segment {display:block;height:100%;min-width:0;flex-shrink:0;background:var(--column-label);background-image:linear-gradient(90deg,var(--chart-mark-low),var(--chart-mark-high))}
 @media(max-width:500px) {.flat-comparison-action {grid-template-columns:minmax(0,1fr)}}
 @media(forced-colors:active) {.flat-comparison-segment {background:CanvasText}.flat-comparison-action:focus-visible {outline-color:Highlight}}
 .dimensional-scroll {overflow-x:auto;overflow-y:hidden;padding:8px 4px calc(max(16px,1rem) + 1px);scrollbar-width:thin;min-width:0;max-width:100%}
@@ -124,7 +127,7 @@ ${dimensionalColumnStyles}
 .flat-time-plot .time-column {position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:84px;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent;pointer-events:none}
 .flat-time-plot .time-stack {display:block;width:100%;height:100%;overflow:visible;border-radius:0;pointer-events:none}
 .flat-time-column {display:block;max-width:none;overflow:visible;pointer-events:none}
-.flat-time-segment {fill:var(--column-label);fill-opacity:1;stroke:none;pointer-events:visibleFill}
+.flat-time-segment {fill-opacity:1;stroke:none;pointer-events:visibleFill}
 .flat-time-column [data-ux-tooltip]:hover {fill-opacity:1}
 .flat-time-plot .time-column:hover .time-stack {filter:none;outline:0}
 .flat-time-plot .time-column:focus-visible {outline:0}

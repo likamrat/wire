@@ -422,7 +422,9 @@ and group identifiers remain readable and copyable.
 Tools and service involvement use flat, proportional bars. Recorded outcomes
 alone use a circular annulus: each canonical record has exactly one outcome.
 The annulus is a true circle with exact angles, no projection, extrusion,
-gradients, minimum slices, glints or outline that could inflate tiny values.
+minimum slices, glints or outline that could inflate tiny values. The user's
+later NEXAGRID reference explicitly calls for restrained gradient fades inside
+these unchanged 2D marks; flat geometry does not mean solid color.
 Zero has no data paint. The adjacent complete labels and exact counts supply
 44px keyboard targets; a tiny slice never needs a precision hit or hover.
 
@@ -1078,20 +1080,43 @@ retains its stroke/checkmark/ARIA; keyboard focus
 retains its outline; disabled/loading controls retain readable muted ink on
 canvas. Error, warning, success, unknown and the four performance roles stay
 separate. User author cues are cyan; Agent/chat identity stays violet.
-Outcome tones remain success/emerald, failure/pink, partial/amber, unknown/slate,
-other/violet and transport/cyan. Service IDs, ordering and non-red hue families
-are unchanged; light and dark label/mid pairs retain minimum OKLab distance 7
+The later NEXAGRID chart correction replaces the rejected green/pink outcome
+pair with teal/cyan for completed calls and orange for failed calls. The user's
+subsequent orange correction supersedes the rejected yellow/gold treatment:
+failure gradients, Mail identity and warning accents use orange in both themes. Partial
+results use copper, transport blue, other statuses violet and missing results
+slate. Labels/icons preserve their distinct meanings. Existing CSS tone IDs
+(`teal`, `pink`, `orange`, `cyan`, `violet`, `slate`) are compatibility keys,
+not a requirement to retain their former literal hues. Chart legends, result
+pills and time/comparison marks share the same label roles; general UI error
+and destructive roles remain separate. Service IDs and order are unchanged;
+light and dark service label/mid pairs retain minimum OKLab distance 7
 (x100), and labels reach 4.5:1 on paper, inset and hover surfaces.
 
 Shared surfaces no longer cast floating shadows (`--shadow:none`). Dropdowns
 retain their boundary; focus and selection strokes are not decorative shadows.
-Outcome material faces are solid, glints/rims/ground paint are transparent, and
-neutral end paint has no highlight gradient. These are paint changes only:
+Glints/rims/ground paint remain transparent and neutral end paint has no
+highlight gradient. The chart fades are static color transitions, not shine,
+perspective, extrusion or transparency to zero. These are paint changes only:
 time, breakdown and percentage owners still replace their own legacy geometry.
 This foundation does not claim to remove 3D paths across all components.
 New native reports consume the shared semantic palette; historical saved files
 are not regenerated. The report owner separately applies the completed treatment
 to new output layouts.
+
+Chart paint exposes `--chart-mark-high`, `--chart-mark-low` and
+`--chart-fade-strength`. Untyped tool bars use a restrained blue-to-cyan fade.
+Outcome high/base paint stays separate from readable label colors, especially
+in light mode; service fades use their stable identity ink and a bounded mix
+toward the panel. Both ends retain at least 3:1 essential-mark contrast, never
+fading to an invisible tail. Text continues to use the >=4.5:1 label roles.
+Time rectangles and outcome-ring slices contain local two-stop SVG definitions,
+with IDs scoped by their existing factory/mount sequence. Bars use equivalent
+CSS gradients. No external resource is referenced. Zero still emits no mark,
+tiny slices retain exact angles/heights, and hover/forced-color cues stay
+available without making gradient or hue the only indication of meaning.
+Native consumers can adopt those paint roles inside their existing quantitative
+marks; this change does not edit native-specific rendering or saved files.
 
 `tests/visual-foundation.browser.test.mjs` uses only invented retained records
 through the real renderer. It checks Analyze, request reading and the Settings
@@ -1144,8 +1169,9 @@ nested outlines on filters, charts, activity and report choices. Report columns
 share a width but size to their content; prompt choices have matching rows and
 format pills use an equal-width responsive grid. Data remains rectangular and aligned,
 not capsule-shaped. Quantitative tracks have only rounded ends; their lengths,
-counts and percentages are unchanged. Time columns use opaque semantic paint
-rather than washed-out material faces. Focus, pressed, hover and disabled states share these
+counts and percentages are unchanged. Time columns use bounded semantic fades
+with fully visible high/low stops rather than washed-out material faces.
+Focus, pressed, hover and disabled states share these
 tokens; numbers use tabular figures and reduced motion disables transitions.
 Primary actions keep cyan ink and boundaries on their faint rest/hover/pressed fills.
 Foreground and surface switch atomically between themes instead of
@@ -1282,7 +1308,8 @@ existing renderers until their separately owned units replace them.
 `createDimensionalCharts().flatLayout/flatSvg` reuse the validated count span,
 outcome order and semantic color tokens. Time totals and every outcome section
 are linear from a shared zero, with no square-root encoding, positive minimum,
-lid, side, floor, glint, gradient or shine. Subpixel counts may be visually
+lid, side, floor, glint or shine. The later NEXAGRID treatment adds only local
+within-rectangle color fades; no gradient changes the encoded span. Subpixel counts may be visually
 imperceptible, but exact count links remain at least 44px in both dimensions,
 with a focus ring and full count/share accessible names. Exact-table date
 actions also remain at least 44px. No invisible outcome overlay expands across
@@ -1347,8 +1374,8 @@ rows use identity color; operation rows stack the unchanged canonical outcomes.
 Each segment's width is its count divided by the shared maximum, without a
 minimum painted size. Full labels wrap naturally; narrow layouts put the count
 on its own line. Grouped Other retains Show all and the complete exact table.
-There are no lids, floors, gradients, perspective or category-pitch calculations
-in this path. Flat time continues to use its accepted 84px rectangles and
+There are no lids, floors, perspective or category-pitch calculations
+in this path. Static fades stay inside the exact CSS bar widths. Flat time continues to use its accepted 84px rectangles and
 separate count links.
 
 The existing exact count table starts collapsed and retains the user's explicit
