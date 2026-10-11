@@ -57,8 +57,12 @@ coverage; seconds are display-only, with exact milliseconds and timing boundarie
 in the existing Glossary and measure details. The median uses the lower middle
 recorded time when there is an even number of samples.
 
-Shared app Insights gives request coverage more prominence than the result:
-**Results for 1 of 69 requests**, then **1 passed · 0 failed**, not a leading 100%.
+Shared app Insights leads with **What the record shows**: supported historical
+call reasons and separately attributed saved answer/action assessments. The same
+findings sit beside each original request in the context reader, not against
+the combined chronology or a neighboring request's changed intent.
+**Saved assessment details and counts** keeps exact verdicts, percentages and
+request coverage secondary rather than presenting a headline quality grade.
 Answer correctness, answer support and actions matching the request remain
 separate. Only identical covered and eligible request identities allow copy
 saying the three model checks cover the same requests. Equal totals alone are
@@ -103,6 +107,48 @@ not endpoint similarity. A later successful request cannot rewrite an earlier
 failed attempt. Old compacted metadata is not upgraded by default; any historical
 cause repair requires a separately reviewed exact-target guard and preservation
 proof.
+
+Current overview projections additionally supply
+`reviewStatuses: [{ interactionRef, reviewStatus }]` from the exact selected
+validated views. The presenter reuses `validateReviewStatus`, rejects duplicate
+or out-of-scope refs, and never fetches additional detail/source records for
+overview findings. Absent legacy status data is explicitly unavailable.
+`createAssessmentPresentation(...).summarize(metrics, options).findings` is the
+read-only v1 consumer shape: `operational` and `answers` lists, plus `recovery`,
+`scope`, `rationale` and `qualification`. Options accept either one `reviewStatus`
+for a single interaction or the overview `reviewStatuses`, alongside existing
+`assessmentAttempts`. Each semantic finding carries its original metric ref,
+dimension and provenance; origins/rubrics are never averaged or merged. The
+existing `.evidence` coverage and metric arithmetic are unchanged.
+
+The DOM renderer accepts an optional `findingsHost`: Analyze supplies
+`#homeFindings` before its charts; the reader supplies a host by each original
+request. Timing and secondary details stay in the original summaries.
+The experience registers that host with its existing invalidation/generation
+guards and keys overview caching by per-interaction review-status revisions,
+including attempt changes without a metric-basis change.
+
+The compact display labels each origin/rubric lane once and retains distinct
+check verdicts. A shared missing-evidence line lists observed reason types only;
+it does not pool counts or claim equal request populations. Per-check reason
+counts, coverage and methodological explanations remain in saved details.
+The v1 findings projection also identifies `singleInteraction` and each attempt
+finding's `count`; its underlying detailed wording remains available.
+
+`bindDetails` and a stable `disclosureKey` connect the saved-details disclosure
+to the existing panel-local presentation store. Overview keys use the exact
+selected interaction refs; request keys use the original interaction ref.
+The existing reading-position restoration handles Back focus after asynchronous
+request mounting, guarded against changed navigation, new input or another
+focused control. No second disclosure or focus state store is introduced.
+
+Verdict prose only restates the saved assessment, never a reconstructed
+criterion or missing-document claim. Detailed semantic reasons/anchors are
+not retained in these verdict/count facts; that limitation appears once next
+to the findings. Operational causes use the existing screened enum projection.
+Findings cover full selected interaction groups, not merely chart-matched
+calls. No richer retention, assessment rerun, report field or frozen-file change
+is introduced by this view.
 
 The current model evidence packet takes references from supported recorded result
 content, not arbitrary completion error prose. An error-only completion can therefore

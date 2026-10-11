@@ -657,6 +657,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     assessmentUI = assessmentFactories.createExperience({
         ...assessmentFactories, api, ux, textAccess, glossary: help.glossary,
+        bindDetails: (node, key) => {
+            bindDetails(node, key);
+            const saved = readingPositions.get(readingKey(route)), navigation = navigationGeneration, intent = readingIntent;
+            if (saved?.focus?.key === node.dataset.viewKey) queueMicrotask(() => {
+                const active = document.activeElement;
+                if (node.isConnected && navigation === navigationGeneration && intent === readingIntent
+                    && (active === document.body || active === $("pageTitle") || !active?.checkVisibility())) restoreReading(saved);
+            });
+        },
         refresh: () => load({ background: true }),
         onNotice: message => announce(message, "error"),
         onSaved: message => announce(message),
@@ -1894,7 +1903,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const rows = selectionRows().filter(row => ids.has(row.scenarioId));
         const scopeNote = `${chatCopy.groups(ids.size, applied.layer === "http")} across all pages · ${count(rows.length)} ${results.unit(applied.layer, rows.length)} matched. Insights include each group's full retained interaction.`;
         setText($("homeInsightScope"), `${chatCopy.groups(ids.size, applied.layer === "http")} across all pages; full retained interactions, not only matched ${results.unit(applied.layer, 2)}.`);
-        assessmentUI.overview(host, [...ids], { scopeNote });
+        assessmentUI.overview(host, [...ids], { scopeNote, findingsHost: $("homeFindings") });
     }
     function revealResults() {
         $("activityTitle").focus({ preventScroll: true });
@@ -2264,15 +2273,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             notice: "Copy includes the complete retained prompt body only, without export masking. It does not include chat details, warnings, the response or the rest of this page. Other apps and clipboard history may access your system clipboard.",
         }));
         const insightHost = el("div", "interaction-insights"), responseHost = el("section", "interaction-response");
+        const findingsHost = el("div", "interaction-findings");
         insightHost.dataset.contextGroup = scenario.scenarioId;
+        findingsHost.dataset.contextGroup = scenario.scenarioId;
         if (isSelected) body.prepend(intro);
         entries.push({ key: "prompt:" + scenario.scenarioId, at: scenario.userPrompt?.sourceTimestamp,
             scenarioId: scenario.scenarioId, relation: group.relation, kind: "prompt", render: () => {
                 const item = el("li", "journey-item");
-                item.append(requestText, responseHost);
+                item.append(requestText, findingsHost, responseHost);
                 return item;
             } });
-        assessmentUI.detail(insightHost, responseHost, scenario.scenarioId, { eager: true, placeResponse: (node, observation) => {
+        assessmentUI.detail(insightHost, responseHost, scenario.scenarioId, { eager: true, findingsHost, placeResponse: (node, observation) => {
             if (!journey.isConnected) return;
             insertEntry({ key: "response:" + observation.observationRef, at: observation.occurredAt,
                 scenarioId: scenario.scenarioId, relation: group.relation, kind: "response", render: () => node });

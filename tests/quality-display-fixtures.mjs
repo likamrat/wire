@@ -13,8 +13,8 @@ const checks = {
 
 // Invented source records and historical assessment records, entirely in memory.
 // No evaluator, capture, approval, collection, or persistence action runs.
-export function qualityDisplayFixture({ requests = 18, calls = 53, judgments = [], timed = calls - 1, finalDuration = 677960 } = {}) {
-    const evidence = Array.from({ length: requests }, (_, index) => {
+export function qualityDisplayFixture({ requests = 18, calls = 53, judgments = [], timed = calls - 1, finalDuration = 677960, records = null } = {}) {
+    const evidence = records ?? Array.from({ length: requests }, (_, index) => {
         const record = fixture(`quality-request-${index}`);
         record.sourceSessionName = "Invented quality display";
         record.userPrompt = { ...record.userPrompt, text: `Invented quality request ${index}`, sourceEventId: `quality-prompt-${index}`, sourceTimestamp: at };

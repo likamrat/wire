@@ -559,8 +559,8 @@ supported host provenance; inferred call association remains a separate fact. Th
 existing reader keeps its read/hide/copy controls and report selection stays
 separate from reading.
 
-Current Insights and new reports show Accuracy, Speed and Trust. Trust shows
-answer and action states separately. Historical Cost facts and evaluation-spending
+Saved assessment details retain Accuracy, Speed and Trust definitions, with
+answer and action states separate. Historical Cost facts and evaluation-spending
 safeguards remain intact; Cost is not a current metric. Unsupported values stay neutral and unassessed/not measured;
 their full reasons, definitions and coverage live in **Measure definitions**
 beside the overview's Insights heading, and **Details and feedback** on a single
@@ -581,10 +581,13 @@ the last applied state; uncertain results offer status lookup, never replay.
 Single-interaction feedback uses the personal verdict wording, not an objective
 percentage; aggregate summaries retain their assessed counts and coverage.
 
-The shared app Insights summary leads each quality check with its request
-coverage, then passed/failed counts or an honest unavailable state. **Results for
-1 of 69 requests** is prominent; **1 passed · 0 failed** is subordinate, never a
-dominant 100% suggesting all requests succeeded. Accuracy keeps **Answer
+Analyze places **What the record shows** before the Tools/Services charts, separating
+recorded operational reasons from attributed answer/action assessment findings.
+The request reader places the same bounded findings beside each original prompt;
+it does not duplicate the chronology or transfer a verdict to a later request.
+**Saved assessment details and counts** is a native keyboard-accessible disclosure
+with exact percentages, assessed coverage and pass/fail/missing counts. There is
+no dominant 100% suggesting all requests succeeded. Accuracy keeps **Answer
 correctness**; Trust separates **Answer support** and **Actions match request**.
 Personal action feedback keeps its distinct **Action authorization** meaning.
 Origin labels remain explicit, and single-request personal verdicts stay words.
@@ -592,6 +595,16 @@ Shared-request copy appears only when all three model checks have identical
 eligible and covered request identities, not merely equal counts. Otherwise
 each check keeps its own coverage. Missing results are neither failures nor
 evidence of queued work; no minimum sample threshold or combined grade is added.
+Primary verdict labels are compact and each origin/rubric lane is named once.
+Repeated unassessed reason types are named once per lane without combining their
+request populations or counts. Methodological explanations stay in secondary
+details so the available back-and-forth is not buried. Saved-details disclosures
+reuse the existing binder and independent scope/interaction keys for redraw,
+Back and focus restoration.
+Specific unretained semantic reasons are not reconstructed from counts. The
+explanation gap is stated once, while historical sign-in/timeout/access-denial
+signals retain their precise qualification and any safe sign-in guidance.
+Findings use existing semantic color roles in both themes, never a local palette.
 
 Recorded timing keeps separate call, recorded request/final-response, HTTP
 response-header and transport-error boundaries. `createTimingPresentation`

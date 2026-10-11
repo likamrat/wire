@@ -418,7 +418,126 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 : execution.failed ? "Inspect the recorded actions and Technical details below. Missing or screened error text is not recovered by this view." : "",
         };
     }
-    function summarize(metrics, { membershipStatus = "complete-retained", singleInteraction = false, reviewStatus = null, assessmentAttempts = null } = {}) {
+    function findingsFor(evidence, metrics, { singleInteraction, reviewStatus, reviewStatuses }) {
+        const eligible = new Set(metrics.filter(metric => qualityDimensions.includes(metric.dimension)).flatMap(metric => metric.eligibleUnitRefs));
+        const statuses = reviewStatus ? [reviewStatus] : [];
+        if (reviewStatuses !== null) {
+            if (!Array.isArray(reviewStatuses) || reviewStatus) throw new TypeError("Supply either one review status or selected review statuses.");
+            const seen = new Set();
+            for (const item of reviewStatuses) {
+                if (!item || !eligible.has(item.interactionRef) || seen.has(item.interactionRef)) throw new TypeError("Review status outside selected requests or duplicated.");
+                validateReviewStatus(item.reviewStatus);
+                seen.add(item.interactionRef); statuses.push(item.reviewStatus);
+            }
+        }
+        const operational = [], answers = [], causes = new Map();
+        const execution = evidence.execution.find(row => row.kind === "execution");
+        for (const status of statuses) for (const { cause, count } of status.execution.causes) {
+            causes.set(cause, (causes.get(cause) ?? 0) + count);
+        }
+        if (execution) {
+            const { pass, fail, unassessed, evaluatorError } = execution.counts;
+            const failedText = `${number(fail)} of ${units(execution.eligible, "recorded calls")} failed`;
+            const parts = [{ tone: "negative", text: failedText }, ...(pass ? [{ tone: "positive", text: `${number(pass)} succeeded` }] : [])];
+            operational.push({
+                kind: "execution", tone: "neutral",
+                ...(fail ? { prefix: "", parts, suffix: "." } : {}),
+                text: fail ? parts.map(part => part.text).join("; ") + "."
+                    : pass === execution.eligible && pass ? `${units(pass, "recorded calls")} completed.`
+                        : `${number(pass)} of ${units(execution.eligible, "recorded calls")} completed; ${number(unassessed + evaluatorError)} have no success or failure result.`,
+            });
+            if ([...causes.values()].reduce((sum, count) => sum + count, 0) > fail) throw new TypeError("Failure reasons exceed the selected failed calls.");
+            if (reviewStatus || reviewStatuses !== null && statuses.length === eligible.size) {
+                const totals = ["calls", "succeeded", "failed", "other"].map(key => statuses.reduce((sum, status) => sum + status.execution[key], 0));
+                if (totals.some((value, index) => value !== [execution.eligible, pass, fail, unassessed + evaluatorError][index])) {
+                    throw new TypeError("Review statuses do not match the full selected call population.");
+                }
+            }
+        }
+        if (!reviewStatus && (reviewStatuses === null || statuses.length < eligible.size)) operational.push({
+            kind: "unavailable", tone: "neutral", text: reviewStatuses === null
+                ? "Detailed call-status context is unavailable in this saved summary."
+                : `Detailed call-status context is available for ${number(statuses.length)} of ${units(eligible.size, "requests")}; other failure reasons are unavailable.`,
+        });
+        const causeLabels = {
+            "workiq-sign-in-required": "Work IQ sign-in was required for the recorded call",
+            "request-timeout": "The tool reported an MCP request timeout",
+            "access-denial": "The recorded error mentions access denial",
+            "message-screened": "Error text was screened out; the cause is unavailable",
+            "message-too-large": "Error text exceeded the inspection limit; the cause is unavailable",
+            "message-not-supplied": "The source supplied no typed error message",
+            "message-excluded": "Error text was excluded; no specific cause signal was retained",
+            "unsupported-error-format": "The recorded error format is not supported",
+            "source-error-not-supplied": "The source supplied no supported structured error details",
+            unqualified: "The cause was not retained; source omission and earlier collection cannot be distinguished",
+        };
+        for (const [cause, count] of causes) operational.push({
+            kind: "cause", cause, count, tone: "neutral",
+            text: `${causeLabels[cause]}${singleInteraction && count === 1 ? "" : ` (${units(count, "calls")})`}.`,
+        });
+        const words = {
+            accuracy: ["answer correct", "answer not correct"],
+            "answer-trust": ["answer supported", "answer not supported"],
+            "action-trust": ["actions matching the request", "actions not matching the request"],
+        };
+        for (const dimension of qualityDimensions) {
+            const group = evidence.quality[dimension];
+            for (const row of group.rows) {
+                const personal = row.provenance.origin === "user-personal";
+                const origin = personal ? "Your feedback" : "AI assessment";
+                const single = singleInteraction && row.eligible === 1;
+                const [positive, negative] = personal && dimension === "action-trust" ? ["actions authorized", "actions not authorized"] : words[dimension];
+                const parts = [];
+                if (row.counts.pass) parts.push({ tone: "positive", text: `${positive}${single ? "" : ` in ${units(row.counts.pass, "requests")}`}` });
+                if (row.counts.fail) parts.push({ tone: "negative", text: `${negative}${single ? "" : ` in ${units(row.counts.fail, "requests")}`}` });
+                const reasons = row.unassessedReasons.filter(item => item.reason !== "no-assessed-units");
+                if (row.counts.evaluatorError) reasons.push({ count: row.counts.evaluatorError, label: "Evaluator error, not a failed answer or action verdict" });
+                const missing = reasons.map(item => `${item.label}${single ? "" : ` (${units(item.count, "requests")})`}`).join("; ");
+                if (parts.length || missing) {
+                    const prefix = parts.length ? `${origin}: ` : `${origin} / ${row.label}: `;
+                    const suffix = parts.length && missing ? `. ${missing}.` : ".";
+                    answers.push({
+                        kind: parts.length ? "verdict" : "unassessed", dimension, metricRef: row.metricRef, provenance: row.provenance, tone: "neutral",
+                        text: prefix + (parts.length ? parts.map(part => part.text).join("; ") + suffix : missing + "."),
+                        ...(parts.length ? { prefix, parts, suffix } : {}),
+                    });
+                }
+            }
+        }
+        const hasVerdicts = answers.some(item => item.kind === "verdict");
+        if (!answers.length) answers.push({
+            kind: "missing", tone: "neutral",
+            text: eligible.size ? "No saved answer or action assessment is available. Tool completion alone does not establish answer quality."
+                : "No answer or action assessment coverage was supplied for this scope.",
+        });
+        const attempts = evidence.assessmentAttempts;
+        const attemptRows = reviewStatus ? [{ state: reviewStatus.assessment.latestAttempt, count: 1 }] : attempts.rows;
+        const attemptLabels = {
+            failed: "The evaluator could not complete; this is not a failed answer or action verdict",
+            uncertain: "The evaluator outcome is uncertain",
+            unavailable: "Assessment evidence or approval was unavailable",
+            pending: "An assessment attempt is pending",
+            revoked: "Assessment approval was withdrawn",
+            "not-run": "The recorded assessment run did not reach this request",
+            "not-current": "The earlier assessment attempt does not apply to the current recorded evidence",
+        };
+        for (const row of attemptRows) if (attemptLabels[row.state]) answers.push({
+            kind: "attempt", state: row.state, count: row.count, tone: "neutral",
+            text: `${attemptLabels[row.state]}${singleInteraction ? "" : ` (${units(row.count, "requests")})`}.${hasVerdicts ? " Applicable saved verdicts remain shown." : ""}`,
+        });
+        return {
+            version: 1, singleInteraction, operational, answers,
+            recovery: causes.has("workiq-sign-in-required")
+                ? "If still needed, sign in through /mcp auth workiq in Copilot. WIRE does not check current access or retry this call." : "",
+            scope: singleInteraction ? "These verdicts belong to this original request group, not later changes."
+                : "Full selected interaction groups, not only matching calls.",
+            rationale: hasVerdicts ? "Specific reasons behind these saved verdicts were not retained." : "",
+            qualification: (answers.some(item => item.provenance?.origin === "model-assessed") ? "AI judgments can be wrong. " : "")
+                + (hasVerdicts && answers.some(item => item.dimension === "action-trust")
+                    ? "Matching the request is not proof of human permission." : ""),
+        };
+    }
+    function summarize(metrics, { membershipStatus = "complete-retained", singleInteraction = false, reviewStatus = null, assessmentAttempts = null, reviewStatuses = null } = {}) {
         if (!Array.isArray(metrics)) throw new TypeError("Metrics must be supplied explicitly.");
         const slots = new Set();
         for (const metric of metrics) {
@@ -465,16 +584,18 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         const sharedCount = sharedRequests ? modelChecks[0].coverage.covered : 0;
         const readingNote = (sharedCount ? `The three AI checks cover the same ${number(sharedCount)} ${sharedCount === 1 ? "request" : "requests"}.`
             : "Read the request count for each check; they may cover different requests.") + " Missing results do not count as failed checks.";
+        const evidence = evidenceSummary(metrics, assessmentAttempts);
         return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "", reviewStatus: review,
-            evidence: evidenceSummary(metrics, assessmentAttempts) };
+            evidence, findings: findingsFor(evidence, metrics, { singleInteraction, reviewStatus, reviewStatuses }) };
     }
     return { format, summarize, band, bandVersion };
 }
 
 // DOM-only; this renderer cannot fetch, assess, save feedback, or enable capture.
-export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming } = {}) {
+export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming, findingsHost, bindDetails, disclosureKey } = {}) {
     if (typeof onDetails !== "function") throw new TypeError("A details path is required for definitions and unavailable reasons.");
     if (model.evidence?.version !== 1) throw new TypeError("A current quality evidence projection is required.");
+    if (model.findings?.version !== 1) throw new TypeError("A current saved-findings projection is required.");
     const doc = root.ownerDocument;
     const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
     function el(tag, cls, text) {
@@ -496,6 +617,95 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         heading.append(details);
     }
     section.append(heading);
+    const findings = el("section", "assessment-findings");
+    findings.setAttribute("aria-label", "What the record shows");
+    findings.append(el("h3", "", "What the record shows"));
+    const calls = el("ul", "assessment-finding-list");
+    for (const item of model.findings.operational) {
+        const entry = el("li", item.tone);
+        if (item.parts) {
+            entry.append(doc.createTextNode(item.prefix));
+            item.parts.forEach((part, index) => {
+                if (index) entry.append(doc.createTextNode("; "));
+                entry.append(el("span", part.tone, part.text));
+            });
+            entry.append(doc.createTextNode(item.suffix));
+        } else entry.textContent = item.text;
+        entry.dataset.findingKind = item.kind;
+        if (item.cause) entry.dataset.findingCause = item.cause;
+        calls.append(entry);
+    }
+    findings.append(calls);
+    if (model.findings.recovery) findings.append(el("p", "assessment-finding-recovery",
+        "If still needed: /mcp auth workiq in Copilot. No retry here."));
+    const lanes = new Map();
+    for (const group of Object.values(model.evidence.quality)) for (const row of group.rows) {
+        const key = JSON.stringify([row.provenance.origin, row.provenance.evaluator]);
+        if (!lanes.has(key)) lanes.set(key, { provenance: row.provenance, rows: [] });
+        lanes.get(key).rows.push(row);
+    }
+    for (const lane of lanes.values()) {
+        const group = el("div", "assessment-finding-group");
+        const personal = lane.provenance.origin === "user-personal";
+        const title = (personal ? "Your feedback" : "Saved AI review") + (lane.rows.some(row => row.eligible > 1) ? " (requests)" : "");
+        group.dataset.findingOrigin = lane.provenance.origin;
+        group.append(el("h4", "assessment-cell-label", title));
+        if (!personal && [...lanes.values()].filter(item => item.provenance.origin === "model-assessed").length > 1) {
+            const evaluator = lane.provenance.evaluator;
+            group.append(el("p", "assessment-origin-detail", `${evaluator.model}; ${evaluator.rubricId} v${evaluator.rubricVersion}`));
+        }
+        const list = el("ul", "assessment-compact-verdicts");
+        const reasons = new Set();
+        for (const row of lane.rows) {
+            const labels = row.dimension === "accuracy" ? ["Answer", "Correct", "Not correct"]
+                : row.dimension === "answer-trust" ? ["Support", "Supported", "Not supported"]
+                    : personal ? ["Authorization", "Authorized", "Not authorized"] : ["Intent", "Matched", "Not matched"];
+            if (row.assessed) {
+                const item = el("li"), parts = [];
+                item.dataset.findingKind = "verdict";
+                item.dataset.findingDimension = row.dimension;
+                item.dataset.metricRef = row.metricRef;
+                item.append(el("strong", "", labels[0] + ": "));
+                for (const [count, label, tone] of [[row.counts.pass, labels[1], "positive"], [row.counts.fail, labels[2], "negative"]]) {
+                    if (count) parts.push(el("span", tone, row.eligible === 1 ? label : `${number(count)} ${label.toLowerCase()}`));
+                }
+                parts.forEach((part, index) => { if (index) item.append(doc.createTextNode(", ")); item.append(part); });
+                list.append(item);
+            }
+            // This lists observed reason types, not a pooled request count or a shared population.
+            for (const reason of row.unassessedReasons) if (reason.reason !== "no-assessed-units") reasons.add(reason.label);
+            if (row.counts.evaluatorError) reasons.add("Evaluator error (not a failed verdict)");
+        }
+        if (list.childElementCount) group.append(list);
+        if (reasons.size) group.append(el("p", "assessment-finding-status", "Unassessed checks: " + [...reasons].join("; ") + "."));
+        else if (!list.childElementCount) group.append(el("p", "assessment-finding-status", "No saved verdicts."));
+        findings.append(group);
+    }
+    if (!lanes.size) findings.append(el("p", "assessment-finding-status",
+        Object.values(model.evidence.quality).some(group => group.eligible > 0)
+            ? "No saved answer or action assessment is available." : "Assessment coverage unavailable."));
+    const attemptLabels = {
+        failed: "Evaluator could not complete; not a failed quality verdict",
+        uncertain: "Evaluator outcome uncertain", unavailable: "Assessment evidence or approval unavailable",
+        pending: "Assessment pending", revoked: "Assessment approval withdrawn",
+        "not-run": "Not reached by the recorded assessment run", "not-current": "Earlier assessment attempt is not current",
+    };
+    for (const item of model.findings.answers.filter(item => item.kind === "attempt")) {
+        findings.append(el("p", "assessment-finding-status",
+            `${attemptLabels[item.state]}${model.findings.singleInteraction ? "" : ` (${number(item.count)} ${item.count === 1 ? "request" : "requests"})`}.`));
+    }
+    findings.append(el("p", "assessment-finding-limit",
+        (model.findings.rationale ? "Verdict reasons not retained. " : "")
+        + (model.findings.singleInteraction ? "Original request group only." : "Full interactions, not just matching calls.")));
+    if (findingsHost) findingsHost.replaceChildren(findings);
+    else section.append(findings);
+    const saved = el("details", "assessment-saved-details");
+    saved.append(el("summary", "", "Saved assessment details and counts"));
+    if (bindDetails) {
+        if (!disclosureKey) throw new TypeError("A stable assessment disclosure key is required.");
+        bindDetails(saved, disclosureKey);
+    }
+    saved.append(el("p", "assessment-finding-limit", [model.findings.rationale, model.findings.qualification, model.findings.scope].filter(Boolean).join(" ")));
     const execution = el("section", "assessment-execution");
     execution.append(el("h3", "", "Tool execution"));
     for (const row of model.evidence.execution) {
@@ -526,14 +736,13 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     }
     if (!model.evidence.execution.length) execution.append(el("p", "assessment-unavailable", "No tool execution measure is available for this scope."));
     execution.append(el("p", "assessment-execution-note", "Tool completion does not tell us whether the answer was correct."));
-    section.append(execution);
+    saved.append(execution);
     let reviewStatus;
     if (model.reviewStatus) {
         const status = el("div", "assessment-review-status"), facts = el("dl", "assessment-review-facts");
         status.dataset.reviewStatus = "";
         status.setAttribute("aria-label", "Recorded execution and AI quality assessment");
         for (const [label, text, help] of [
-            ["Recorded execution", model.reviewStatus.execution, model.reviewStatus.nextAction],
             ["AI quality assessment", model.reviewStatus.assessment, ""],
         ]) {
             const row = el("div"), detail = el("dd");
@@ -544,7 +753,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         }
         status.append(facts); reviewStatus = status;
     }
-    if (model.readingWarning) section.append(el("p", "assessment-unavailable", model.readingWarning));
+    if (model.readingWarning) findings.append(el("p", "assessment-unavailable", model.readingWarning));
     const help = el("details", "assessment-reading-help");
     help.append(el("summary", "", "How to read these results"),
         el("p", "", "AI reviews the recorded evidence and can be wrong. Your feedback and tool outcomes are separate. Matching the request does not prove a person gave permission."),
@@ -552,7 +761,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         el("p", "", `One request can have several tool calls. Median timing uses the recorded samples, not the total time spent in calls. Open ${detailsLabel} for exact values, denominators, timing boundaries and assessment provenance.`));
     const grid = el("div", "assessment-grid");
     const qualityHeading = el("div", "assessment-quality-heading");
-    qualityHeading.append(el("h3", "", "Quality assessment"),
+    qualityHeading.append(el("h3", "", "Saved quality assessments"),
         el("p", "assessment-takeaway", "Each check covers only the assessed requests. Missing assessments are not failed answers."));
     grid.append(qualityHeading);
     function cell(label, value, className) {
@@ -587,6 +796,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
                 coverage.append(meter);
             }
             const result = cell("Recorded verdicts", raw?.personalVerdict ?? row.resultLabel ?? row.headline, "assessment-value");
+            if (row.passShare) result.append(el("p", "assessment-pass-share", row.passShare.label));
             if (row.counts && !raw?.personalVerdict && row.assessed > 0) {
                 const value = result.querySelector(".assessment-value");
                 value.classList.add("assessment-verdicts");
@@ -613,7 +823,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         if (group.overlappingAssessments) host.append(el("p", "assessment-overlap", "Assessment lanes may cover the same requests. Do not add their counts."));
         grid.append(host);
     }
-    section.append(grid);
+    saved.append(grid);
     const attempts = model.evidence.assessmentAttempts;
     if (!reviewStatus) {
         const status = el("section", "assessment-attempts");
@@ -632,8 +842,9 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         if (attempts.rows.some(row => ["failed", "uncertain", "unavailable", "pending"].includes(row.state))) {
             status.append(el("p", "assessment-execution-note", "An unfinished or failed evaluator attempt is not a failed quality verdict."));
         }
-        section.append(status);
-    } else section.append(reviewStatus);
+        saved.append(status);
+    } else saved.append(reviewStatus);
+    section.append(saved);
     const timing = el("div");
     renderTiming(timing, model.evidence.timing.filter(row =>
         row.provenance.definitionId !== "interaction-latency" || row.measurement.value !== null), {
@@ -717,6 +928,23 @@ export const assessmentPresentationStyles = `
 .assessment-heading {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-sm) var(--space-lg)}
 .assessment-heading h2 {font-size:var(--type-section)}
 .assessment-heading button {min-height:44px}
+.assessment-findings {min-width:0;margin-block:var(--space-md);font-size:var(--type-reading);line-height:1.5;overflow-wrap:anywhere}
+.assessment-findings h3 {font-size:var(--type-section);margin:0 0 var(--space-md)}
+.assessment-finding-group {margin-block:var(--space-md)}
+.assessment-finding-group h4 {font-weight:var(--weight-medium);margin:0 0 var(--space-xs)}
+.assessment-finding-list {list-style:none;margin:0;padding:0;display:grid;gap:var(--space-xs)}
+.assessment-compact-verdicts {list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:var(--space-xs) var(--space-lg)}
+.assessment-compact-verdicts li {min-width:0}
+.assessment-compact-verdicts strong {font-weight:var(--weight-medium)}
+.assessment-finding-status {font-size:var(--type-small);line-height:1.5;margin:var(--space-xs) 0}
+.assessment-findings .positive {color:var(--performance-teal)}
+.assessment-findings .negative {color:var(--performance-red)}
+.assessment-finding-limit,.assessment-finding-recovery {font-size:var(--type-small);margin:var(--space-sm) 0 0;max-width:85ch}
+.assessment-finding-limit {color:var(--muted)}
+.assessment-saved-details {margin-block:var(--space-md);min-width:0}
+.assessment-saved-details>summary {min-height:44px;align-content:center;cursor:pointer;width:fit-content;font-size:var(--type-reading);font-weight:var(--weight-medium)}
+.assessment-saved-details>summary:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+.assessment-pass-share {font-size:var(--type-small);line-height:1.5;color:var(--muted);margin:var(--space-xs) 0 0}
 .assessment-takeaway {margin-block:var(--space-xs) var(--space-lg);max-width:72ch;font-size:var(--type-small);color:var(--muted)}
 .assessment-execution {margin-block:var(--space-lg) var(--space-xl);padding:var(--space-lg);background:var(--canvas);border-radius:var(--radius-small)}
 .assessment-execution h3,.assessment-attempts h3 {font-size:var(--type-small);font-weight:var(--weight-strong);margin:0 0 var(--space-sm)}

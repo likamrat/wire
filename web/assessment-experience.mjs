@@ -1,5 +1,5 @@
 // Serialized into the shell. Reads only versioned local projections and explicit retained text.
-export function createAssessmentExperience({ api, createPresentation, renderSummary, createControls, mountConsent, mountFeedback, ux, glossary, textAccess, refresh, onChanged, onNotice, onSaved, onAutomaticSetup }) {
+export function createAssessmentExperience({ api, createPresentation, renderSummary, createControls, mountConsent, mountFeedback, ux, glossary, textAccess, bindDetails, refresh, onChanged, onNotice, onSaved, onAutomaticSetup }) {
     let snapshot = null, contract, contractPromise, presentation, controls, generation = 0;
     let consentView, consentControl, consentSignature = "", activeFeedback, feedbackView, activeDetail, focusInteractionRef = null;
     const detailCache = new Map(), overviewCache = new Map(), pending = new Map(), readers = new Map(), hosts = new Set();
@@ -251,25 +251,41 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             unavailable: rows.filter(row => !row || row.status !== "retained" || !row.interactionRef).length,
         };
     }
-    async function overview(host, scenarioIds, { scopeNote = "" } = {}) {
+    function reviewRevisionFor(refs) {
+        const selected = new Set(refs);
+        return JSON.stringify(snapshot?.catalog.filter(row => selected.has(row.interactionRef))
+            .map(row => [row.scenarioId, row.reviewStatusRevision ?? null]));
+    }
+    async function overview(host, scenarioIds, { scopeNote = "", findingsHost } = {}) {
         hosts.add(host);
+        if (findingsHost) hosts.add(findingsHost);
         const request = {}, started = generation;
         overviewRequests.set(host, request);
-        const isCurrent = () => started === generation && host.isConnected && overviewRequests.get(host) === request;
-        if (!snapshot) { unavailable(host, "Interaction insights are unavailable. Recorded activity remains separate."); return; }
+        if (!snapshot) {
+            unavailable(host, "Interaction insights are unavailable. Recorded activity remains separate.");
+            if (findingsHost) unavailable(findingsHost, "Saved findings are unavailable. Recorded activity remains separate.");
+            return;
+        }
         const membership = mapped(scenarioIds), expected = snapshot.basis;
-        const signature = JSON.stringify([started, expected, membership.refs, membership.unavailable, scopeNote]);
+        const reviewRevision = reviewRevisionFor(membership.refs);
+        const isCurrent = () => started === generation && host.isConnected && overviewRequests.get(host) === request
+            && reviewRevision === reviewRevisionFor(membership.refs);
+        const signature = JSON.stringify([started, expected, membership.refs, membership.unavailable, scopeNote, reviewRevision]);
         if (acceptedOverviews.get(host) === signature && host.contains(document.activeElement)) return;
         acceptedOverviews.delete(host);
+        if (findingsHost) {
+            findingsHost.setAttribute("aria-busy", "true");
+            findingsHost.replaceChildren(el("p", "Reading saved findings...", "assessment-loading"));
+        }
         reserveSpace(host);
         host.setAttribute("aria-busy", "true");
         host.replaceChildren(el("p", "Reading recorded insights for this scope...", "assessment-loading"));
         try {
-            await ready();
+            if (!presentation) await ready();
             if (!isCurrent()) return;
             if (!snapshot) { unavailable(host, "Interaction insights are unavailable. Recorded activity remains separate."); return; }
             if (!sameBasis(snapshot.basis, expected)) throw new Error("Insights changed during this read. Read the current view.");
-            const key = "overview:" + basisKey(expected) + ":" + JSON.stringify(membership.refs);
+            const key = "overview:" + basisKey(expected) + ":" + JSON.stringify(membership.refs) + ":" + reviewRevision;
             await paint(host, overviewCache, key, async () => {
                 const all = snapshot.overview;
                 const data = all && JSON.stringify([...all.interactionRefs].sort()) === JSON.stringify(membership.refs)
@@ -283,35 +299,54 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     host.replaceChildren(el("h2", "Insights"), el("p", scenarioIds.length
                         ? "No verified interactions are available for these matching request groups."
                         : "No matching request groups. No interactions to summarize.", "assessment-empty"));
+                    if (findingsHost) findingsHost.replaceChildren(el("p", scenarioIds.length
+                        ? "No verified interaction association. Saved findings are unavailable for these request groups."
+                        : "No matching request groups. No saved findings for this selection.", "assessment-empty"));
                 } else {
                     const model = presentation.summarize(data.metrics, { membershipStatus: membership.unavailable ? "partial" : "complete-retained",
-                        assessmentAttempts: data.assessmentAttempts });
-                    renderSummary(host, model, { helpButton: measureHelp, detailsLabel: "Measure definitions", onDetails: trigger => showDetails(model, null, trigger) });
+                        assessmentAttempts: data.assessmentAttempts, reviewStatuses: data.reviewStatuses ?? null });
+                    renderSummary(host, model, { findingsHost, bindDetails, disclosureKey: "assessment:overview:" + JSON.stringify(membership.refs),
+                        helpButton: measureHelp, detailsLabel: "Measure definitions", onDetails: trigger => showDetails(model, null, trigger) });
                     automaticEntry(host);
                 }
+                findingsHost?.removeAttribute("aria-busy");
                 if (scopeNote && scenarioIds.length) host.append(el("p", scopeNote, "assessment-scope"));
                 if (membership.unavailable) host.append(el("p", `${membership.unavailable} request groups have no verified interaction association. They are not silently included.`, "assessment-unavailable"));
                 acceptedOverviews.set(host, signature);
-            }, isCurrent);
-        } catch (error) { if (isCurrent()) unavailable(host, error.message, () => overview(host, scenarioIds, { scopeNote })); }
+            }, isCurrent, error => {
+                if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
+            });
+        } catch (error) {
+            if (isCurrent()) {
+                unavailable(host, error.message, () => overview(host, scenarioIds, { scopeNote, findingsHost }));
+                if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
+            }
+        }
     }
     async function detail(host, responseHost, scenarioId, responseOptions = {}) {
         const detailGeneration = generation;
         hosts.add(host); hosts.add(responseHost);
+        const findingsHost = responseOptions.findingsHost;
+        if (findingsHost) {
+            hosts.add(findingsHost);
+            findingsHost.replaceChildren(el("p", "Reading what the record shows...", "assessment-loading"));
+        }
         if (!snapshot) {
             unavailable(host, "Interaction insights are unavailable. Recorded actions remain available below.");
+            if (findingsHost) unavailable(findingsHost, "Saved findings are unavailable. Recorded actions remain separate.");
             responseUnavailable(responseHost, "No response text retained.", "No attributable retained response is available.");
             return;
         }
         responseHost.setAttribute("aria-busy", "true");
         responseHost.replaceChildren(el("h2", "Response"), el("p", "Reading response availability...", "reader-empty"));
         try {
-            await ready();
+            if (!presentation || !host.isConnected) await ready();
             if (detailGeneration !== generation || !host.isConnected) return;
             const mapping = snapshot?.catalog.find(row => row.scenarioId === scenarioId);
             if (mapping?.status !== "retained" || !mapping.interactionRef) {
                 unavailable(host, mapping?.status === "unverified" ? "Interaction association is unverified. Recorded actions remain available below."
                     : "No supported interaction summary is available for these retained records.");
+                if (findingsHost) unavailable(findingsHost, "No verified assessment association for this request group.");
                 responseUnavailable(responseHost, "No response text retained.", "No attributable retained response is available.");
                 return;
             }
@@ -325,7 +360,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 if (!sameBasis(data.basis, expected) || data.interaction.interactionRef !== mapping.interactionRef) throw new Error("Interaction identity or evidence version changed.");
                 const model = presentation.summarize(data.metrics, { membershipStatus: data.interaction.membershipStatus,
                     singleInteraction: true, reviewStatus: data.reviewStatus ?? null });
-                renderSummary(host, model, { helpButton: measureHelp, onDetails: trigger => showDetails(model, data, trigger) });
+                renderSummary(host, model, { findingsHost, bindDetails, disclosureKey: "assessment:interaction:" + mapping.interactionRef,
+                    helpButton: measureHelp, onDetails: trigger => showDetails(model, data, trigger) });
                 automaticEntry(host);
                 showResponse(responseHost, data, responseOptions);
                 if (focusInteractionRef === data.interaction.interactionRef && host.checkVisibility()) {
@@ -333,10 +369,14 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     focusInteractionRef = null;
                 }
             }, () => snapshot?.catalog.find(row => row.scenarioId === scenarioId)?.reviewStatusRevision === mapping.reviewStatusRevision,
-            error => responseUnavailable(responseHost, "Response availability could not be read.", error.message, true));
+            error => {
+                if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
+                responseUnavailable(responseHost, "Response availability could not be read.", error.message, true);
+            });
         } catch (error) {
             if (detailGeneration === generation && host.isConnected) {
                 unavailable(host, error.message, () => detail(host, responseHost, scenarioId, responseOptions));
+                if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
                 responseUnavailable(responseHost, "Response availability could not be read.", error.message, true);
             }
         }
