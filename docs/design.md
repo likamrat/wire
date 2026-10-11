@@ -409,6 +409,40 @@ This changes evidence presentation, not service classification or category v3.
 Counts, layer boundaries, report patterns and assessment identities are unchanged;
 opening an explanation does not collect, re-score or rewrite a saved report.
 
+### Service-association consumer contract
+
+Canonical activity rows and the request-activity projection also carry
+`serviceAssociation`: supported `services`, evidence `basis`, `layer`, `status`
+(`identified`, `partial`, `missing`, `not-applicable`) and precise `gaps`.
+This is derived from normalized retained targets through the existing classifier,
+not from prompt text, attachments, citations or arbitrary URLs. A targetless
+retrieval remains Search by tool purpose; schema lookup remains preparation.
+Tool, outcome, identity and available target metadata are unchanged.
+
+`buildActivityAnalytics().serviceInvolvement` supplies the frozen
+`wire-service-involvement` v1 definition, `denominator`, overlapping service
+`groups` with exact `drilldownIds`, `missingDetailCount`, `notApplicableCount`
+and tool/reason `evidenceGroups`. A call with several gap reasons contributes once
+to the missing-detail count and once to its first-gap reason group; its `gaps`
+retain all reasons. Group IDs use `service:`; existing `workload:` group
+IDs, category v3, category percentages and report patterns are not reinterpreted.
+Use labeled counts/bars for involvement, not an exclusive 100% service donut.
+
+`filters.services` matches any supported association; `filters.workloads` retains
+exclusive category matching. Legacy Discovery, Multiple workloads and Unknown
+service-filter values remain category choices. `filters.includeMissingService`
+defaults to false and only broadens an active service selection; it never bypasses
+date, tool, author, outcome, source or other filters. The returned `selection`
+contains `services`, `includeMissingService`, `knownMatchIds` and disjoint
+`contextOnlyIds`, all within the final selected row set.
+The later filter control must explicitly name and allow removal of this context;
+unattributed rows must not be labeled Files. This data change does not add that UI.
+
+The projection is read-only enrichment, not evidence of new calls or a source
+omission. Report consumers must freeze its definition and membership before using
+involvement measures, and withhold deltas for absent/incompatible definitions.
+Existing frozen category reports remain readable and unchanged.
+
 This narrow change reuses Asta/Fluent, current light/navy tokens, accessible help and
 44px controls. Existing chart geometry is unchanged. Local design-search Python was
 unavailable; built-in accessibility guidance and the existing product system were used.

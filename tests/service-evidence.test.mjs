@@ -67,9 +67,9 @@ test("neutral Unknown presentation explains hosted routing, unrecognized paths a
         ["hosted-routing", "unrecognized-path", "missing-target"]);
     assert.equal(serviceCategories.serviceEvidence(rows[1]), null);
     assert.equal(serviceCategories.serviceEvidence(rows[0], "reported-api").reason, "missing-target", "API rows never borrow ask routing assumptions");
-    assert.equal(serviceCategories.serviceEvidence({ ...rows[0], endpoint: normalizeEndpoint("invalid-target") }).reason, "unsupported-target",
+    assert.equal(serviceCategories.serviceEvidence({ ...rows[0], serviceAssociation: undefined, endpoint: normalizeEndpoint("invalid-target") }).reason, "unsupported-target",
         "explicit unusable target evidence is not hidden routing");
-    assert.equal(serviceCategories.serviceEvidence({ ...rows[4], targetCount: 1, endpoint: normalizeEndpoint("not-a-relative-path") }).reason, "unsupported-target");
+    assert.equal(serviceCategories.serviceEvidence({ ...rows[4], serviceAssociation: undefined, targetCount: 1, endpoint: normalizeEndpoint("not-a-relative-path") }).reason, "unsupported-target");
     const explanation = serviceCategories.explainRows(rows);
     assert.match(explanation, /Its record does not identify a service or API path/);
     assert.doesNotMatch(explanation, /Work IQ does not expose|services.*were used|services.*it used/);
@@ -91,7 +91,7 @@ test("neutral Unknown presentation explains hosted routing, unrecognized paths a
     assert.equal(serviceCategories.evidenceGroups([rows[0]], "reported-api")[0].evidence.reason, "missing-target");
     for (const target of ["https://untrusted.invalid/v1.0/me/messages", "https://name:secret@graph.microsoft.com/v1.0/me/messages", "not-a-path"]) {
         const endpoint = normalizeEndpoint(target);
-        const evidence = serviceCategories.serviceEvidence({ ...rows[0], targetCount: 1, targets: [endpoint], endpoint });
+        const evidence = serviceCategories.serviceEvidence({ ...rows[0], serviceAssociation: undefined, targetCount: 1, targets: [endpoint], endpoint });
         assert.equal(evidence.reason, "unsupported-target", "Invalid origins/formats are not presented as a missing target or hidden routing");
         assert.match(evidence.description, /supported relative path or trusted Microsoft Graph URL/);
     }

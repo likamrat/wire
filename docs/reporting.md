@@ -31,6 +31,39 @@ pattern definitions withhold matched-pattern deltas while keeping independently 
 measures visible. Raw evidence/automatic-attempt fingerprints do not change, so regrouping
 cannot schedule another assessment. Existing saved files remain unchanged.
 
+**Service involvement** is a separate, versioned projection
+(`wire-service-involvement`, v1), not a replacement for activity-category v3.
+A call targeting Files and Mail matches either service and counts once in a combined
+selection. Each service's count includes that call once; its percentage divides by
+all canonical rows in the declared slice. Those percentages can sum above 100%.
+Missing-service rows remain in an unfiltered slice and are not assigned to a service.
+Layer units still differ: returned entries, recorded sites and code references do
+not become measured service executions.
+
+The analytics `services` filter matches supported associations. The `workloads`
+filter and existing category groups remain exclusive v3 categories; the legacy
+Discovery, Multiple workloads and Unknown choices still select their display category.
+Strict Files matching is the default. An explicit `includeMissingService: true` adds
+calls with missing or unusable service detail, respecting every other filter.
+Consumers must name that scope **Files + calls with missing service details** and
+make the extra context removable. A partially identified call may have both a known
+service and a gap; it still counts once. Discovery is not missing-service context.
+
+Returned entries use their explicit normalized endpoint, or the existing
+single-target fallback for a non-discovery call. They never inherit all parent
+batch targets or use response-array position as target evidence. An entry without
+a target in a multi-target call is **Result target not identified**. API coverage
+counts a qualifying parent once using supported call or returned-target associations;
+discovery qualifies only through returned evidence, never its schema argument.
+
+New involvement consumers receive the definition, exact canonical drilldown IDs,
+known-match IDs and context-only IDs together. Reports that adopt involvement must
+freeze that definition, the declared selection and exact membership; absent or
+different involvement definitions cannot yield involvement comparison deltas.
+Current report category counts and v3 technical patterns retain their original
+meaning and bytes; they are not historical involvement facts. No current report
+measure is replaced by this additive projection.
+
 **Service not shown** (canonical `Unknown`, previously displayed as Service not identified)
 remains a genuine evidence limit. Contextual help distinguishes service details missing
 from a Copilot-assistance record, recorded paths not recognized by WIRE, unsupported target formats and
@@ -48,6 +81,14 @@ they do not regroup calls, change scores or reinterpret existing saved reports.
 discovery can work, fail or lack a recorded completion. An absent API status is not proof
 that discovery returned no useful catalog information, and absent owned HTTP capture does
 not establish that no network traffic occurred.
+
+**No target recorded** means no usable target was retained in this record, not
+proof that the original source omitted it. Proving a source omission requires a
+qualified comparison with original evidence; this projection neither makes that
+comparison nor reconstructs missing targets. Unsupported formats, recorded paths
+WIRE cannot match to a service, and absent targets remain distinct.
+Multiple reasons can describe one call. The existing tool/reason groups count it
+once under its first gap; its association and full explanation retain every reason.
 
 The shared-file shape is documented by Microsoft Graph v1.0
 [Access shared items, single-file example](https://learn.microsoft.com/en-us/graph/api/shares-get?view=graph-rest-1.0#example-single-file).

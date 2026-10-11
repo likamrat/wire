@@ -81,7 +81,7 @@ test("purpose definitions distinguish not-applicable discovery from hosted routi
     assert.equal(serviceCategories.operation("workiq-get_schema").pathLabel, "Schema path");
     assert.equal(serviceCategories.operation("workiq-list_agents").label, "Agent discovery");
     assert.equal(serviceCategories.operation("workiq-ask").category, null);
-    assert.match(serviceCategories.operation("workiq-ask").description, /not exposed/);
+    assert.equal(serviceCategories.operation("workiq-ask").description, "Ask Copilot or a selected agent.");
     assert.equal(serviceCategories.operation("unrecognized-search_paths"), null);
 });
 
