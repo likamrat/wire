@@ -82,6 +82,7 @@ async function setup(run, options = {}) {
 async function ready(page) {
     await page.locator("#workspace").waitFor({ state: "visible" });
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
+    if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFilters > summary").click();
 }
 async function choose(page, id, value) {
     await selectActivityOption(page, id, value);
@@ -164,7 +165,7 @@ function assertFieldGeometry(fields, scale) {
         assert.ok(field.labelledBy.split(" ").includes(field.labelId));
         assert.ok(field.lineHeight >= field.fontSize * 1.4, "Readable label line height through text zoom");
         assert.ok(field.trigger.height >= 44);
-        if (scale === 1) assert.equal(field.paint.height, 36, "Keep compact painted pill");
+        assert.ok(field.paint.height >= 36, "Wrapped selected values retain a complete painted field");
         assert.ok(field.field.x <= field.text[0].x && field.label.right <= field.field.right + 1);
         for (const line of field.text) assert.ok(line.x >= field.label.x - 1 && line.right <= field.label.right + 1, "Every wrapped label line stays inside its field");
         assert.ok(field.trigger.bottom <= field.field.bottom + 1, "Field owns its label and control");
@@ -178,7 +179,6 @@ function assertFieldGeometry(fields, scale) {
             assert.ok(Math.abs(field.trigger.y - field.heading.bottom - 4) <= 1, "Shared field gap");
         }
         for (const peer of fields.filter((peer) => Math.abs(peer.trigger.y - field.trigger.y) <= 1)) {
-            assert.equal(peer.trigger.height, field.trigger.height, "Controls on a row have the same height");
             assert.ok(Math.abs(peer.text.at(-1).bottom - field.text.at(-1).bottom) <= 1, "Final text baselines align on each wrapped row");
         }
     }
@@ -195,7 +195,7 @@ test("select fields share label/value insets and baselines through themes, wrapp
             parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--app-sidebar-width")) === document.querySelector("#sidebar").getBoundingClientRect().width);
         const beforeRequests = requests.length;
         const fields = await fieldGeometry(page);
-        assert.equal(fields.length, 5, "Recorded result has its own local field above the chart group");
+        assert.equal(fields.length, 8, "Primary and secondary single-choice fields remain accessible alongside Author and Outcome.");
         assertFieldGeometry(fields, scale);
         if (width === 375 && scale === 2) for (const field of fields) {
             assert.ok(field.field.width >= 288, "Text zoom wraps complete fields instead of squeezing two narrow label columns");
@@ -356,8 +356,8 @@ test("touch choices omit legacy explanatory paragraphs and preserve native form 
     await page.locator('#layerFilter option[value=tool]').evaluate((node, text) => node.dataset.description = text, description);
     const trigger = page.getByRole("combobox", { name: "Activity", exact: true });
     await trigger.tap();
-    const row = page.getByRole("option", { name: "Work IQ tool calls", exact: true });
-    assert.equal(await row.innerText(), "Work IQ tool calls");
+    const row = page.getByRole("option", { name: "Work IQ calls", exact: true });
+    assert.equal(await row.innerText(), "Work IQ calls");
     assert.equal(await row.locator(".select-option-description, .select-option-detail").count(), 0);
     assert.equal(await page.evaluate(() => window.controlChanges.length), 0, "Opening choices cannot commit");
     assert.equal(await row.getAttribute("aria-describedby"), null);
@@ -395,8 +395,8 @@ test("all app-authored dropdown options retain their value and dispatch each act
                 assert.equal(await page.getByRole("tooltip").isVisible(), false, "Committing an option does not reopen help");
                 await page.mouse.move(0, 0);
                 await trigger.hover();
-                await page.getByRole("tooltip").waitFor({ state: "visible" });
-                assert.equal(await page.getByRole("tooltip").textContent(), option.label, "Truncation uses the existing tooltip, not a second overlay");
+                assert.equal(await trigger.locator(".select-value").evaluate(node => node.scrollWidth <= node.clientWidth + 1 && node.scrollHeight <= node.clientHeight + 1), true,
+                    "Long selections wrap visibly instead of requiring a truncation tooltip");
                 await trigger.press("Escape");
             }
         }

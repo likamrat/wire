@@ -69,6 +69,7 @@ export async function chooseTheme(page, value) {
 
 export async function selectActivityOption(page, id, value) {
     const trigger = page.locator(`[data-select-id=${JSON.stringify(id)}]`);
+    if (!await trigger.isVisible() && await page.locator("#moreFilters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await page.locator("#moreFilters > summary").click();
     if (!await trigger.isVisible() && ["collectionWindow", "collectionCadence"].includes(id)) await navigateSettings(page, "collection");
     await trigger.click();
     if (await page.locator(`#${id}`).evaluate(node => node.multiple)) {

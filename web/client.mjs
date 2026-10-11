@@ -1,4 +1,38 @@
-export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship) {
+// Shared route adapter, serialized with the shell. Matching stays in activity analytics.
+export function createFilterState(results, authorship) {
+    function canonical(route) {
+        const next = { ...route };
+        if (typeof next.services === "string") next.services = [...new Set(next.services.split(",").filter(Boolean))].sort().join(",") || undefined;
+        if (!next.services) next.includeMissingService = undefined;
+        else if (["true", "false"].includes(next.includeMissingService)) next.includeMissingService = next.includeMissingService === "true";
+        return next;
+    }
+    function query(route) {
+        const filters = { scope: route.scope || "history", includeMetadata: route.layer === "http" };
+        if (route.project) filters.projectIds = [route.project === "unscoped" ? null : route.project];
+        if (route.tool) filters.tools = [route.tool];
+        if (route.service) filters.workloads = [route.service];
+        if (route.services) {
+            filters.services = route.services.split(",");
+            if (route.includeMissingService !== undefined) filters.includeMissingService = route.includeMissingService;
+        }
+        if (route.result) filters.outcomes = results.selection(route.result);
+        if (route.authors) filters.promptAuthors = authorship.selection(route.authors);
+        if (route.endpoint) filters.endpoints = [route.endpoint];
+        if (route.session) filters.sourceSessionIds = [route.session];
+        if (route.from) filters.from = route.from;
+        if (route.to) filters.to = route.to;
+        return filters;
+    }
+    function scope(route, next) {
+        const retained = Object.fromEntries(["layer", "range", "from", "to", "bucket", "tool", "service", "services", "includeMissingService",
+            "scope", "authors", "result", "project", "endpoint"].filter(key => route[key] !== undefined).map(key => [key, route[key]]));
+        return { ...retained, ...next };
+    }
+    return { canonical, query, scope };
+}
+
+export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState) {
     const $ = (id) => document.getElementById(id);
     const time = createTimeContext();
     const authorship = createPromptAuthorship();
@@ -17,6 +51,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const dimensional = createDimensionalCharts();
     const reportScopes = createReportScope(authorship);
     const results = createRecordedResults();
+    const filterState = createFilterState(results, authorship);
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, icons: dimensionalIcons,
         createLink: (kind, row) => kind === "outcomes" && applied.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
             : kind === "services" && row.id !== "group:other" ? link("", "activity", { service: row.id, page: undefined }) : null });
@@ -382,7 +417,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.append(label, ux.helpButton(labelText, text));
         field.append(heading, control);
     }
-    fieldHelp("dateFilter", "When", "All dates uses retained evidence in this collection. Last 7/30 days include today. Custom dates include both boundary days in the display time zone. Changing dates does not collect history.");
+    fieldHelp("dateFilter", "Dates", "All dates uses retained evidence in this collection. Last 7/30 days include today. Custom dates include both boundary days in the display time zone. Changing dates does not collect history.");
+    fieldHelp("toolFilter", "Tool", "The recorded tool name, not the prompt's author. Tools and all other filters narrow the same evidence rows.");
+    fieldHelp("serviceAssociationFilter", "Service", "Match any recorded service target, including multi-service calls. Choosing a service also includes separately named missing-service context; remove its chip for strict matches. Category keeps the existing exclusive breakdowns.");
     fieldHelp("serviceFilter", "Category", () => {
         const layer = applied?.layer || route.layer || "tool";
         const selected = applied ? applied.filters.workloads?.[0] : route.service;
@@ -390,6 +427,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : help.categoryGuide([...$("serviceFilter").options].filter(option => option.value !== "all").map(option => option.value), layer);
     });
     fieldHelp("projectFilter", "Project", () => help.describeOption({ id: "projectFilter", value: route.project || "all" }));
+    fieldHelp("chatFilter", "Chat", "Filter to a retained Copilot chat or recorder source. Dates, tools, services, outcomes, authors and other choices stay applied.");
     fieldHelp("layerFilter", "Activity", () => `${help.layers[applied?.layer || route.layer || "tool"]} ${help.fields.layerFilter}`);
     fieldHelp("scopeFilter", "Collection", () => `${help.fields.scopeFilter} ${help.describeOption({ id: "scopeFilter", value: route.scope || "history" })}`);
     $("filters").querySelector(".filter-scroll").addEventListener("focusin", event => {
@@ -607,7 +645,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const aliases = { overview: "home", calls: "activity", report: "reports" };
         const view = aliases[rawView] || rawView || "home";
         const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "range", "from", "to", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task"];
+        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task"];
         const values = { view: ["home", "activity", "request", "reports", "settings", "collection-status"].includes(view) ? view : "home" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
         if (view === "reports" && !params.has("task") && (rawView === "report" || values.request)) values.task = "create";
@@ -621,6 +659,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return canonicalRoute(values);
     }
     function canonicalRoute(next) {
+        next = filterState.canonical(next);
         if (Object.hasOwn(next, "task") && (next.task !== "create" || !["reports", "request"].includes(next.view))) {
             const { task, ...rest } = next;
             next = rest;
@@ -698,10 +737,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return node;
     }
     function sessionsRoute() {
-        return route.returnToSessions || { ...sessionJourney.open(route, undefined), session: undefined };
+        return route.returnToSessions || { ...filterState.scope(route, sessionJourney.open(route, undefined)), session: undefined };
     }
     function sessionRoute(sessionId, result) {
-        return { ...sessionJourney.open(route, sessionId, result), returnToSessions: route.returnToSessions || { ...route, session: undefined, request: undefined } };
+        return { ...filterState.scope(route, sessionJourney.open(route, sessionId, result)), returnToSessions: route.returnToSessions || { ...route, session: undefined, request: undefined } };
     }
     function sessionSource(sessionId = route.session || state?.scenarios.find(s => s.scenarioId === route.request)?.sourceSessionId) {
         const source = state?.sessions?.find(s => s.sessionId === sessionId);
@@ -880,6 +919,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function actionContext(item, rows) {
         const matching = rows?.filter(row => rowsFor(route.request).some(match => match.id === row.id)).length;
         item.append(el("p", "action-context", !rows ? "Matching context unavailable" : matching ? `${matching} matching ${results.unit(applied.layer, matching)} in current view` : "Outside current view"));
+        if (rows?.some(row => analytics.serviceInvolvement?.selection.contextOnlyIds.includes(row.id))) {
+            item.append(el("p", "service-context-label", "Includes missing-service context, not a known match to the selected service."));
+        }
     }
     function scenariosInSlice() {
         // Each canonical row belongs to one displayed request, not every legacy alias.
@@ -887,16 +929,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return state.scenarios.filter((scenario) => ids.has(scenario.scenarioId));
     }
     function query() {
-        const filters = { scope: route.scope || "history", includeMetadata: route.layer === "http" };
-        if (route.project) filters.projectIds = [route.project === "unscoped" ? null : route.project];
-        if (route.service) filters.workloads = [route.service];
-        if (route.result) filters.outcomes = resultSelection(route.result);
-        if (route.authors) filters.promptAuthors = authorship.selection(route.authors);
-        if (route.endpoint) filters.endpoints = [route.endpoint];
-        if (route.session) filters.sourceSessionIds = [route.session];
-        if (route.from) filters.from = route.from;
-        if (route.to) filters.to = route.to;
-        return { layer: route.layer || "tool", groupBy: route.chart === "endpoint" ? "endpoint" : "workload", bucket: route.bucket || "week", filters, limit: 8, timeContext: viewerTime };
+        return { layer: route.layer || "tool", groupBy: route.chart === "endpoint" ? "endpoint" : "workload", bucket: route.bucket || "week", filters: filterState.query(route), limit: 8, timeContext: viewerTime };
     }
     function validateAnalytics(data, records) {
         if (!data || !Array.isArray(data.groups) || !Array.isArray(data.rows) || !data.coverage || !results.valid(data.totals)) throw new Error("Activity summaries are unavailable. No replacement counts were inferred.");
@@ -916,6 +949,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const rows = results.summarize(data.rows);
         if (!rows || ["count", ...resultKeys].some(key => rows[key] !== data.totals[key])) throw new Error("Recorded action totals do not match this snapshot.");
+        if (query().filters.services?.length) {
+            const involvement = data.serviceInvolvement, selection = involvement?.selection;
+            const ids = Array.isArray(selection?.knownMatchIds) && Array.isArray(selection?.contextOnlyIds) && [...selection.knownMatchIds, ...selection.contextOnlyIds];
+            if (involvement?.definition?.version !== 1 || involvement.denominator !== data.rows.length || !ids
+                || new Set(ids).size !== ids.length || ids.length !== data.rows.length || data.rows.some(row => !ids.includes(row.id))
+                || JSON.stringify(selection.services) !== JSON.stringify(query().filters.services)
+                || selection.includeMissingService !== (query().filters.includeMissingService === true)
+                || !selection.includeMissingService && selection.contextOnlyIds.length) {
+                throw new Error("The service focus does not match its declared rows. No broader scope was substituted.");
+            }
+        }
         for (const group of data.groups) if (!Number.isFinite(group.total) || resultKeys.some((key) => !Number.isFinite(group[key]) || group[key] < 0)) throw new Error("Recorded group counts are incomplete.");
         if (data.timeSeries && (!Array.isArray(data.timeSeries.points) || data.timeSeries.points.some((point) => !Number.isFinite(point.total)))) throw new Error("Recorded time-series data is incomplete.");
         percentages.validate(data);
@@ -1077,10 +1121,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && (queryChanged || route.range !== previousRoute.range || route.chart !== previousRoute.chart);
         const controlsOnly = refinement && !queryChanged && route.chart === previousRoute.chart;
         if (refinement && clearingFilter) {
-            const controls = { service: "serviceFilter", project: "projectFilter", scope: "scopeFilter", authors: "promptAuthorFilter", from: "dateFilter", to: "dateFilter" };
+            const controls = { tool: "toolFilter", services: "serviceAssociationFilter", includeMissingService: "serviceAssociationFilter", service: "serviceFilter",
+                project: "projectFilter", session: "chatFilter", layer: "layerFilter", scope: "scopeFilter", bucket: "bucketFilter", result: "outcomeFilter", authors: "promptAuthorFilter", from: "dateFilter", to: "dateFilter" };
             const changed = Object.keys(controls).find(key => route[key] !== previousRoute[key]);
             const trigger = changed ? $(controls[changed] + "-control") : null;
-            const target = trigger?.checkVisibility() ? trigger : $("dateFilter-control");
+            const target = trigger?.checkVisibility() ? trigger : trigger?.closest("#moreFilters") ? $("moreFiltersToggle") : $("dateFilter-control");
             ux.restoreFocus(target);
             target?.scrollIntoView({ block: "nearest", inline: "nearest" });
         }
@@ -1117,6 +1162,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         restoring = true;
         const values = {
             layerFilter: route.layer || "tool", dateFilter: route.range || "capture",
+            toolFilter: route.tool || "all", serviceAssociationFilter: route.services || "all", chatFilter: route.session || "all",
             serviceFilter: route.service || "all",
             projectFilter: route.project || "all", scopeFilter: route.scope || "history",
             bucketFilter: route.bucket || "week",
@@ -1372,6 +1418,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             { label: `${count(rows.length)} ${results.unit(applied.layer, rows.length)}` },
             { label: resultNames(resultSelection(route.result)) },
             { label: authorship.selectionLabel(applied.filters.promptAuthors) },
+            ...(route.tool ? [{ label: route.tool }] : []),
+            ...(route.services ? [{ label: $("serviceFocusScope").textContent }] : []),
             { label: route.service ? serviceLabel(route.service) : allCategories() },
             { label: project },
             { label: dates },
@@ -1409,24 +1457,50 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderFilterChips() {
         const host = $("filterChips");
         host.replaceChildren();
-        const labels = { service: categoryNoun(), result: "Result", authors: "Prompt author", project: "Copilot project", endpoint: "API path", session: "Copilot chat", scope: "Collection" };
+        const labels = { tool: "Tool", services: "Service", service: "Category", result: "Outcome", authors: "Author", project: "Copilot project",
+            endpoint: "API path", session: "Copilot chat", layer: "Activity", scope: "Collection", bucket: "Time scale" };
+        const selectedLabel = id => $(id).selectedOptions[0]?.textContent;
         for (const [key, label] of Object.entries(labels)) {
             const selectedValue = key === "authors" && applied ? authorship.filterValue(applied.filters.promptAuthors) : route[key];
-            if (!selectedValue || key === "scope" && route[key] === "history" || key === "session") continue;
-            if (key === "result" && ["home", "activity"].includes(route.view)) continue;
-            const value = key === "authors" ? authorship.selectionLabel(selectedValue) : key === "result" ? resultNames(resultSelection(route[key])) : key === "scope" ? scopeLabels[route[key]] : key === "project" ? $("projectFilter").selectedOptions[0]?.textContent : key === "session" ? "Selected Copilot chat" : key === "endpoint" ? "Selected path" : serviceLabel(route[key]);
+            if (!selectedValue || key === "scope" && selectedValue === "history" || key === "layer" && selectedValue === "tool" || key === "bucket" && selectedValue === "week") continue;
+            const value = key === "authors" ? authorship.selectionLabel(selectedValue) : key === "result" ? resultNames(resultSelection(selectedValue))
+                : key === "scope" ? scopeLabels[selectedValue] : key === "project" ? selectedLabel("projectFilter")
+                    : key === "session" ? selectedLabel("chatFilter") : key === "layer" ? selectedLabel("layerFilter")
+                        : key === "bucket" ? selectedLabel("bucketFilter") : key === "endpoint" ? "Selected path"
+                            : key === "tool" ? selectedValue : key === "services" ? selectedValue.split(",").map(serviceLabel).join(", ") : serviceLabel(selectedValue);
             const chip = button(`${label}: ${value}`, () => go(route.view === "request" ? "activity" : route.view, { [key]: undefined, request: undefined, page: undefined }), "filter-chip");
             chip.setAttribute("aria-label", `Remove ${label.toLowerCase()} filter: ${value}`);
             chip.append(ux.icon("close"));
             ux.tooltip(chip, chip.getAttribute("aria-label"));
             host.append(chip);
         }
-        if (route.view !== "home" && (route.from || route.to)) {
+        if (route.from || route.to) {
             const label = `${date(route.from)} - ${date(route.to)}`;
             const chip = button(label, () => go(route.view === "request" ? "activity" : route.view, { from: undefined, to: undefined, range: undefined, request: undefined, page: undefined }), "filter-chip");
             chip.setAttribute("aria-label", "Remove date filter: " + label);
             chip.append(ux.icon("close"));
             host.append(ux.tooltip(chip, chip.getAttribute("aria-label")));
+        }
+        const activeMore = ["service", "project", "session", "layer", "scope"].filter(key => route[key] && route[key] !== ({ layer: "tool", scope: "history" })[key]).length;
+        setText($("moreFilters").querySelector("summary"), `More filters${activeMore ? ` (${activeMore} active)` : ""}`);
+        const focus = analytics.serviceInvolvement?.selection;
+        const focused = Boolean(applied.filters.services?.length);
+        $("serviceFocus").hidden = !focused || !["home", "activity", "request"].includes(route.view);
+        const name = (applied.filters.services || []).map(serviceLabel).join(", ");
+        const noun = applied.layer === "tool" ? "calls" : results.unit(applied.layer, 2);
+        const searchedScenarios = route.view === "activity" && search ? new Set(currentViewScenarios().map(scenario => scenario.scenarioId)) : null;
+        const searchedIds = searchedScenarios ? new Set(selectionRows().filter(row => searchedScenarios.has(row.scenarioId)).map(row => row.id)) : null;
+        const visibleCount = ids => ids.filter(id => !searchedIds || searchedIds.has(id)).length;
+        setText($("serviceFocusScope"), focused ? `${name}${focus.includeMissingService ? ` + ${noun} with missing service details` : " only"}. ${count(visibleCount(focus.knownMatchIds))} known matches${focus.includeMissingService ? `; ${count(visibleCount(focus.contextOnlyIds))} context-only` : ""}.${isStale ? " Previous results; refresh before using this scope." : ""}` : "");
+        $("addServiceContext").hidden = !focused || focus.includeMissingService;
+        $("addServiceContext").disabled = isStale || isLoading;
+        setText($("addServiceContext"), `Include ${noun} with missing service details`);
+        if (focused && focus.includeMissingService) {
+            const chip = button(`${noun[0].toUpperCase() + noun.slice(1)} with missing service details (context)`,
+                () => go(route.view === "request" ? "activity" : route.view, { includeMissingService: false, request: undefined, page: undefined }), "filter-chip");
+            chip.setAttribute("aria-label", "Remove missing-service context");
+            chip.append(ux.icon("close"));
+            host.append(chip);
         }
     }
     function renderPeriodFeedback() {
@@ -1457,9 +1531,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const projects = new Map(state.scenarios.map((scenario) => [scenario.projectId || "unscoped", scenario.projectId ? scenario.project || scenario.projectId : "Copilot chat without a project"]));
         $("projectFilter").replaceChildren(option("all", "All projects"), ...[...projects].map(([id, name]) => option(id, name)));
         const workloads = analytics.filterOptions?.workloads || analytics.filterOptions?.services || [];
-        $("serviceFilter").closest(".filter-field").querySelector(".help-heading label").textContent = applied.layer === "tool" ? "Category" : "Service";
         $("serviceFilter").closest(".filter-field").querySelector(".ux-help").setAttribute("aria-label", "About " + categoryNoun());
         $("serviceFilter").replaceChildren(option("all", allCategories()), ...workloads.map((item) => option(typeof item === "string" ? item : item.id, serviceLabel(typeof item === "string" ? item : item.label))));
+        $("toolFilter").replaceChildren(option("all", "All tools"), ...(analytics.filterOptions?.tools || []).map(tool => option(tool, tool)));
+        const services = (analytics.filterOptions?.services || []).filter(value => !["Discovery", "Multiple workloads", "Unknown"].includes(value));
+        $("serviceAssociationFilter").replaceChildren(option("all", "All services"), ...services.map(value => option(value, serviceLabel(value))));
+        const chats = new Map((state.sessions || []).map(source => [source.sessionId, source.name || chatCopy.unnamed]));
+        for (const scenario of state.scenarios) if (scenario.sourceSessionId && !chats.has(scenario.sourceSessionId)) chats.set(scenario.sourceSessionId, scenario.sourceSessionName || chatCopy.unnamed);
+        $("chatFilter").replaceChildren(option("all", "All chats"), ...[...chats].map(([id, name]) => {
+            const reference = sourceReference({ sessionId: id, name });
+            return option(id, reference ? `${name} (${reference})` : name);
+        }));
         document.querySelector('[data-chart="workload"]').textContent = applied.layer === "tool" ? "By category" : "By service";
         document.querySelector('[data-chart="endpoint"]').textContent = applied.layer === "tool" ? "By path or operation" : "By API path";
         const selectedResults = resultSelection(applied.filters.outcomes);
@@ -1709,7 +1791,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const coverage = state.sessionAnalysis?.coverage;
         const period = route.from || route.to ? `${date(route.from)} to ${date(route.to)}` : coverage?.firstAt
             ? `${date(coverage.firstAt)} to ${date(coverage.lastAt)}` : "All retained dates; no dated actions in this scope";
-        return `${period} / ${route.service ? serviceLabel(route.service) : allCategories()} / ${authorship.selectionLabel(applied.filters.promptAuthors)} / ${scopeLabels[applied.filters.scope]}${route.endpoint ? " / Selected API path" : ""}${search ? " / Private request search applied" : ""}`;
+        const serviceFocus = route.services ? route.services.split(",").map(serviceLabel).join(", ")
+            + (route.includeMissingService === true ? ` + ${applied.layer === "tool" ? "calls" : results.unit(applied.layer, 2)} with missing service details` : " only") : null;
+        return `${period} / ${serviceFocus || (route.service ? serviceLabel(route.service) : allCategories())}${serviceFocus && route.service ? " / Category: " + serviceLabel(route.service) : ""}${route.tool ? " / " + route.tool : ""} / ${authorship.selectionLabel(applied.filters.promptAuthors)} / ${scopeLabels[applied.filters.scope]}${route.endpoint ? " / Selected API path" : ""}${search ? " / Private request search applied" : ""}`;
     }
     function renderSessionAnalysis() {
         const host = $("sessionAnalysis"), source = sessionSource();
@@ -1764,7 +1848,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!sessions.has(id)) sessions.set(id, []);
             sessions.get(id).push(scenario);
         }
-        if (!authorship.filterValue(applied.filters.promptAuthors) && !route.result && !route.endpoint && !route.service && !route.from && !route.to) for (const source of state.sessions || []) {
+        if (!authorship.filterValue(applied.filters.promptAuthors) && !route.result && !route.endpoint && !route.service && !route.services && !route.tool && !route.from && !route.to) for (const source of state.sessions || []) {
             if (sessions.has(source.sessionId) || route.session && source.sessionId !== route.session) continue;
             if (!source.eligible && source.sessionId !== route.session) continue;
             if (route.project && (source.projectId || "unscoped") !== route.project) continue;
@@ -1913,6 +1997,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         card.dataset.sessionId = row.sourceSessionId;
         const call = sourceCallFor(row);
         card.append(toolHeading(row.tool), el("p", "muted", `Action recorded: ${time.formatMoment(row.startedAt, applied.timeContext)}`));
+        if (analytics.serviceInvolvement?.selection.contextOnlyIds.includes(row.id)) card.append(el("p", "service-context-label", "Missing-service context, not a known match to the selected service."));
         if (["tool", "reported-api"].includes(applied.layer)) card.append(actionFields(call, row, { includeTool: false, returned: applied.layer === "reported-api" }));
         else {
             const fields = el("dl", "action-fields");
@@ -3370,11 +3455,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     $("resetView").addEventListener("click", resetView);
     document.querySelectorAll("[data-chart]").forEach((node) => node.addEventListener("click", () => go("home", { chart: node.dataset.chart, request: undefined })));
-    for (const [id, key] of Object.entries({ layerFilter: "layer", serviceFilter: "service", projectFilter: "project", scopeFilter: "scope" })) $(id).addEventListener("change", () => {
+    for (const [id, key] of Object.entries({ layerFilter: "layer", toolFilter: "tool", serviceAssociationFilter: "services", serviceFilter: "service", projectFilter: "project", chatFilter: "session", scopeFilter: "scope" })) $(id).addEventListener("change", () => {
         if (restoring) return;
         navigate(routeFor(route.view, { [key]: $(id).value === "all" && key !== "scope" ? undefined : $(id).value,
             ...(key === "layer" && $(id).value !== "tool" && route.service === "Discovery" ? { service: undefined } : {}),
-            page: undefined, request: undefined }), false, { keepFocus: key === "result" });
+            ...(key === "services" ? { includeMissingService: $(id).value !== "all" ? true : undefined } : {}),
+            page: undefined, request: undefined }), false, { keepFocus: true });
+    });
+    $("addServiceContext").addEventListener("click", () => {
+        ux.restoreFocus($("serviceAssociationFilter-control"));
+        navigate(routeFor(route.view === "request" ? "activity" : route.view, { includeMissingService: true, page: undefined, request: undefined }), false, { keepFocus: true });
     });
     $("outcomeFilter").addEventListener("change", () => {
         if (restoring) return;
@@ -3439,7 +3529,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         invalidatePreview();
         if (isLoading) return;
         appliedRoute = { ...route };
-        renderNavigation(); renderActivity(); renderViewingContext(); renderSessionAnalysis(); renderPeriodFeedback(); renderCurrentViewInsights(); updateSelection();
+        renderNavigation(); renderActivity(); renderFilterChips(); renderViewingContext(); renderSessionAnalysis(); renderPeriodFeedback(); renderCurrentViewInsights(); updateSelection();
     });
     $("clearActivitySearch").addEventListener("click", () => {
         $("activitySearch").value = ""; $("activitySearch").dispatchEvent(new Event("input")); $("activitySearch").focus();

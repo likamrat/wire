@@ -1,22 +1,32 @@
 export const periodFlowStyles = `
 #filters {display:block;padding:8px 0;border:0;background:transparent;container:activity-filters / inline-size}
-.filter-scroll {position:relative;max-width:100%;overflow:auto;overscroll-behavior-x:contain;padding:4px;scroll-padding-inline:4px;scrollbar-color:var(--control) var(--canvas)}
+.filter-scroll {position:relative;max-width:100%;padding:4px}
 .filter-scroll:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
-.period-controls {display:grid;grid-auto-flow:column;grid-auto-columns:max-content;align-items:start;gap:8px;width:max-content;min-width:100%}
-#filters .period-controls :is(.filter-field,.result-filter-field) {display:grid;grid-template-columns:max-content auto;grid-template-rows:auto auto;gap:var(--select-field-gap) 0;width:100%;min-width:max-content;max-width:none}
+.period-controls {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));align-items:start;gap:8px;width:100%;min-width:0}
+#filters .period-controls :is(.filter-field,.result-filter-field) {display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:var(--select-field-gap) 0;width:100%;min-width:0;max-width:none}
 #filters .period-controls>.home-result-filter {display:block;margin:0;min-width:0}
 #filters .period-controls :is(.filter-field,.result-filter-field)>.help-heading {
- grid-area:1/1;display:flex;min-height:44px;align-self:stretch;align-items:center;
- padding-inline-start:var(--select-value-inset);padding-inline-end:0;white-space:nowrap;text-wrap:nowrap;
+ grid-area:1/1;display:block;min-height:44px;align-self:stretch;
+ padding-inline-start:var(--select-value-inset);padding-inline-end:0;min-width:0;
 }
-#filters .period-controls .help-heading>label {white-space:nowrap;overflow-wrap:normal}
-#filters .period-controls .help-heading>.ux-help {margin:0}
+#filters .period-controls .help-heading>label {white-space:normal;overflow-wrap:anywhere}
+#filters .period-controls .help-heading>.ux-help {margin:0;margin-inline-start:var(--help-gap)}
 #filters .period-controls .local-filter-row {display:contents}
 #filters .period-controls .filter-clear-slot {grid-area:1/2;justify-self:end;align-self:center}
 #filters .period-controls .filter-clear-slot:has(>button[hidden]) {display:none}
 #filters .period-controls .select-control {grid-column:1/-1;grid-row:2;width:100%;max-width:none}
-#filters .period-controls .select-trigger {grid-template-columns:max-content 16px;padding:0 var(--select-value-inset);justify-content:space-between}
-#filters .period-controls .select-value,#filters .period-controls .result-option-label {overflow:visible;text-overflow:clip;white-space:nowrap;overflow-wrap:normal}
+#filters .period-controls .select-trigger {grid-template-columns:minmax(0,1fr) 16px;padding:8px var(--select-value-inset);justify-content:space-between}
+#filters .period-controls .select-value,#filters .period-controls .result-option-label {overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
+.more-filters {margin:4px;padding:0;border:0;background:transparent}
+.more-filters>summary {min-height:44px;width:fit-content;padding:10px 4px;color:var(--accent);font-size:var(--type-control)}
+.secondary-filters {padding-block:4px 8px}
+#filterChips {display:flex;flex-wrap:wrap;gap:4px 8px}
+#filterChips .filter-chip {max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:start}
+#filterChips .filter-chip .fluent-icon {flex:none}
+.service-focus {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:8px 0;font-size:var(--type-small)}
+.service-focus p {margin:0;max-width:100%;overflow-wrap:anywhere}
+.service-focus button {min-height:44px;max-width:100%;white-space:normal;text-align:start}
+.service-context-label {font-size:var(--type-small);color:var(--muted)}
 #filters:has(#resultSummary[data-unavailable=true])>#resultFilterScope {position:static;width:auto;height:auto;padding:0;margin:8px 4px;overflow:visible;clip-path:none;white-space:normal}
 #dateFields {display:grid;margin-top:8px;grid-template-columns:repeat(2,minmax(10em,10.5rem)) auto;width:max-content;max-width:100%;gap:8px 12px;align-items:end}
 #dateFields label {display:grid;grid-template-rows:var(--select-help-target) auto;gap:4px;min-width:0}

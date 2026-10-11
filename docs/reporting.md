@@ -43,11 +43,19 @@ not become measured service executions.
 The analytics `services` filter matches supported associations. The `workloads`
 filter and existing category groups remain exclusive v3 categories; the legacy
 Discovery, Multiple workloads and Unknown choices still select their display category.
-Strict Files matching is the default. An explicit `includeMissingService: true` adds
+Strict Files matching is the API and direct-link default. The main Service menu
+explicitly enables named missing-service context when a service is chosen.
+`includeMissingService: true` adds
 calls with missing or unusable service detail, respecting every other filter.
 Consumers must name that scope **Files + calls with missing service details** and
 make the extra context removable. A partially identified call may have both a known
 service and a gap; it still counts once. Discovery is not missing-service context.
+The context chip removes only this extension, and the scope then offers an
+explicit add-context action. Old `service=...` URLs remain exclusive category
+links; `services=...` uses associations, with omitted/false
+`includeMissingService` preserving strict membership. These browsing controls do
+not change separately selected report authors, hidden selected requests, existing
+full-interaction report scope or frozen report files.
 
 Returned entries use their explicit normalized endpoint, or the existing
 single-target fallback for a non-discovery call. They never inherit all parent

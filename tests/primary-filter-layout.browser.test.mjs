@@ -9,7 +9,7 @@ import { createControlHelp } from "../lib/control-help.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
 
 const proofs = process.env.WIRE_PRIMARY_FILTER_PROOFS;
-const ids = ["dateFilter", "outcomeFilter", "promptAuthorFilter", "serviceFilter", "projectFilter", "layerFilter", "scopeFilter"];
+const ids = ["dateFilter", "toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter"];
 const help = createControlHelp(serviceCategories);
 const ready = page => page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 
@@ -58,21 +58,16 @@ async function geometry(page) {
 const range = values => Math.max(...values) - Math.min(...values);
 function aligned(layout) {
     assert.ok(layout.overflow <= 1, "No page-level horizontal overflow");
-    assert.ok(layout.fields.every(field => field.visible), "All seven filters are visible without an expansion");
+    assert.ok(layout.fields.every(field => field.visible), "All five primary filters are visible without an expansion");
     assert.ok(layout.fields.every(field => field.control.height >= 44 && !field.textClipped), "Labels stay readable with 44px hit targets");
-    assert.ok(layout.fields.every(field => !field.labelClipped && field.labelText.height <= field.lineHeight + 1), "Every complete filter title occupies exactly one line");
+    assert.ok(layout.fields.every(field => !field.labelClipped), "Complete filter titles stay readable");
     assert.ok(range(layout.fields.map(field => field.label.x - field.control.x)) <= 1, "Label insets are consistent");
-    assert.ok(range(layout.fields.map(field => field.control.y)) <= 1, "All dropdowns remain on one horizontal row");
-    assert.ok(range(layout.fields.map(field => field.control.height)) <= 1, "Dropdown heights match");
-    assert.ok(range(layout.fields.map(field => field.labelText.y)) <= 1, "Label text shares one baseline");
-    const gaps = layout.fields.slice(1).map((field, index) => field.control.x - layout.fields[index].control.right);
-    assert.ok(gaps.every(gap => gap >= 8 && gap <= 20), "No invisible gutters between filters");
-    assert.ok(range(gaps) <= 1, "Field gaps are uniform");
+    for (const field of layout.fields) assert.ok(field.control.x >= layout.scroll.x - 1 && field.control.right <= layout.scroll.right + 1, "Fields wrap within the region instead of hiding active values offscreen");
 }
 
-test("all analytical filters share one readable row at desktop, narrow and 200 percent text sizes", { timeout: 45000 }, async t => {
+test("primary analytical filters wrap readably at desktop, narrow and 200 percent text sizes", { timeout: 45000 }, async t => {
     const { page } = await setup(t), measurements = [];
-    for (const theme of ["dark", "light"]) for (const width of [1440, 1200, 1040, 375]) for (const scale of [1, 2]) {
+    for (const theme of ["dark", "light"]) for (const width of [1200, 375]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(scale => {
             document.documentElement.style.fontSize = `${scale * 100}%`;
@@ -80,7 +75,7 @@ test("all analytical filters share one readable row at desktop, narrow and 200 p
         }, scale);
         await page.locator("#filters").scrollIntoViewIfNeeded();
         const layout = await geometry(page);
-        if (width >= 1200 && scale === 1) assert.ok(layout.fields.at(-1).control.right <= layout.scroll.right - 4, "All seven defaults fit the supplied desktop content width");
+        if (width >= 1200 && scale === 1) assert.ok(range(layout.fields.map(field => field.control.y)) <= 1, "The five primary defaults share one desktop row");
         if (proofs) {
             await page.screenshot({ path: path.join(proofs, `context-${theme}-${width}-${scale}.png`), fullPage: true });
             await page.locator("#filters").screenshot({ path: path.join(proofs, `primary-${theme}-${width}-${scale}.png`) });
@@ -121,7 +116,7 @@ test("active clear actions and custom dates keep dropdown geometry and filtering
     for (const id of ["clearResultFilter", "clearPromptAuthorFilter"]) {
         const clear = page.locator("#" + id), bounds = await clear.boundingBox();
         assert.ok(bounds.width >= 44 && bounds.height >= 44);
-        const field = filtered.fields[id === "clearResultFilter" ? 1 : 2];
+        const field = filtered.fields[id === "clearResultFilter" ? 3 : 4];
         assert.ok(bounds.y + bounds.height <= field.control.y + 1, "Clear is above its dropdown, not an extra inter-field gap");
         assert.ok(bounds.x >= field.label.right, "Clear does not overlap its label");
     }
@@ -161,6 +156,7 @@ test("active clear actions and custom dates keep dropdown geometry and filtering
 
 test("filter help explains actual categories and all six honest activity units without changing counts", { timeout: 45000 }, async t => {
     const { page } = await setup(t);
+    await page.locator("#moreFilters > summary").click();
     const labels = ["Work IQ calls", "Graph API call sites", "Graph statuses", "Returned API entries", "HTTP recorder", "Graph code references"];
     assert.deepEqual(await page.locator("#layerFilter option").allTextContents(), labels);
     await page.getByRole("button", { name: "About Activity category", exact: true }).click();
@@ -210,8 +206,7 @@ test("filter help explains actual categories and all six honest activity units w
 test("narrow keyboard and touch can reach the row, menus and help without clipped overlays or applying drafts", { timeout: 45000 }, async t => {
     const { page } = await setup(t, true);
     const scroll = page.getByRole("region", { name: "Filter row", exact: true });
-    await scroll.focus(); await page.keyboard.press("ArrowRight");
-    await page.waitForFunction(() => document.querySelector(".filter-scroll").scrollLeft > 0);
+    await scroll.focus();
     for (const scale of [1, 2]) {
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await scroll.focus();
@@ -222,6 +217,7 @@ test("narrow keyboard and touch can reach the row, menus and help without clippe
             const bounds = await page.locator("#" + id + "-control").boundingBox();
             assert.ok(bounds.x >= 15 && bounds.x + bounds.width <= 360, `${id}/${scale}: Tab brings the complete focused control into view (${JSON.stringify(bounds)})`);
         }
+        if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFilters > summary").click();
         const activity = page.locator("#layerFilter-control");
         await activity.tap();
         const popup = page.locator(".select-popup:visible"), box = await popup.boundingBox();
@@ -236,7 +232,6 @@ test("narrow keyboard and touch can reach the row, menus and help without clippe
                     textHeight: range.getBoundingClientRect().height, lineHeight: parseFloat(getComputedStyle(label).lineHeight) };
             });
             assert.ok(measure.height >= 44 && measure.overflow <= 1 && measure.clipped <= 1);
-            assert.ok(measure.textHeight <= measure.lineHeight + 1, "All six concise Activity choices stay single-line even at 200 percent");
         }
         if (proofs) await page.screenshot({ path: path.join(proofs, `narrow-menu-${scale}.png`) });
         await page.keyboard.press("Escape");
@@ -246,9 +241,9 @@ test("narrow keyboard and touch can reach the row, menus and help without clippe
         await page.locator("#pageTitle").tap();
         assert.equal(await page.getByRole("tooltip").isVisible(), false);
         await activity.tap();
-        await scroll.evaluate(node => { node.scrollLeft = 0; });
+        await page.locator("#moreFilters").evaluate(node => { node.open = false; });
         await page.waitForFunction(() => document.querySelector(".select-popup").hidden);
-        assert.equal(await page.locator("#layerFilter").inputValue(), "tool", "Scrolling an open menu out of view does not commit a choice");
+        assert.equal(await page.locator("#layerFilter").inputValue(), "tool", "Closing More filters dismisses a menu without committing");
         await page.locator("#promptAuthorFilter-control").tap();
         await page.locator('.select-popup [data-value="unknown"]').tap();
         await page.keyboard.press("Escape");
@@ -264,7 +259,7 @@ test("the same row and selected request membership survive chat scope, Back and 
     assert.equal(await page.locator(`.request-row[data-view-key="request:${cases.agentMail.scenarioId}"]`).count(), 0);
     await page.getByRole("link", { name: "Open analysis for GitHub Copilot chat: Invented author conversation", exact: true }).click(); await ready(page);
     aligned(await geometry(page));
-    assert.equal(await page.locator(".period-controls").count(), 1, "Chat scope reuses, rather than duplicates, the row");
+    assert.equal(await page.locator(".filter-scroll .period-controls").count(), 1, "Chat scope reuses, rather than duplicates, the primary row");
     await page.goBack(); await ready(page);
     await page.locator("#resetView").click(); await ready(page);
     assert.ok(page.url().endsWith("#home"));

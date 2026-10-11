@@ -57,20 +57,20 @@ restart recovery. This is not a claim of human acceptance or a live release.
 
 ## Analytical filter row
 
-Home, Activity and scoped chats share one always-present horizontal row:
-**When, Result, Author, Category (or Service), Project, Activity, Collection**.
-There is no More filters disclosure or secondary panel. Default choices fit the
-supplied desktop content width. At constrained widths, 200% text, or with long
-selected values, only the row scrolls horizontally. Its named, focusable region
-supports arrow keys, Tab and touch scrolling; no heading or selected value is
-wrapped, shrunk or ellipsized. Custom dates and an unavailable-result explanation
-stay below the row.
+Home, Activity and scoped chats share the primary **Dates, Tool, Service, Outcome,
+Author** controls. **More filters** contains the separate exclusive **Category**
+control plus **Project, Chat, Activity, Collection**; its summary indicates active
+secondary fields. Applied values remain visible as individually removable chips,
+including dates, evidence layer, chat and non-default chart time scale. The chart's
+time-scale dropdown stays in place. Opening a scoped chat retains analytical
+filters; Back restores the prior route, reading position and focus.
 
-Intrinsic field widths preserve complete text; active Clear actions may widen a
-field but never consume its dropdown's reading space. Labels align above the
-controls and use the existing 4px help gap, transparent 44px targets and 8px
-glyph-to-popup anchor. Select menus remain portaled outside the scrolling region,
-with 44px choices. A menu or tooltip closes when its anchor scrolls out of view.
+Fields wrap within the available width at narrow sizes and 200% text; selected
+values are neither ellipsized nor hidden in a horizontal scroller. Clear actions
+stay in field headers without consuming dropdown text space. Custom dates and the
+unavailable-outcome explanation remain below the fields. Existing typography,
+4px help gaps, 44px targets and portaled dropdowns remain. Closing More filters
+also dismisses a menu anchored inside it without applying a choice.
 
 Concise Activity names describe the same six evidence layers. **Graph API call
 sites** are recorded invocation sites, not measured network calls; **Graph
@@ -324,8 +324,8 @@ its label or extend over neighboring text. Inline field labels use balanced
 wrapping rather than a separate icon column. Metadata retains its final-grapheme
 attachment and uses the same geometry.
 
-Analytical filter labels are the single-line exception: their horizontal row
-scrolls rather than balancing or truncating text.
+Analytical filter fields also wrap at constrained widths; full selected values
+stay readable without horizontal scrolling or truncation.
 
 Information-help targets stay transparent on hover and press. Only the glyph
 changes to the existing ink color while its tooltip appears; the large hit area
@@ -435,8 +435,38 @@ defaults to false and only broadens an active service selection; it never bypass
 date, tool, author, outcome, source or other filters. The returned `selection`
 contains `services`, `includeMissingService`, `knownMatchIds` and disjoint
 `contextOnlyIds`, all within the final selected row set.
-The later filter control must explicitly name and allow removal of this context;
-unattributed rows must not be labeled Files. This data change does not add that UI.
+The Service control sets this explicit context state on a user selection, names
+the combined scope, and exposes a removable context chip. Removing it yields
+strict matching without changing another field; the scope offers an explicit
+add-context action. Known matches and context-only counts come from the declared
+ID sets, refined by the existing Activity private-search membership when present.
+Context action rows are named as context, never as Files. Existing category chart
+links still select categories; involvement is not substituted into their charts.
+
+### Filter route and consumer contract
+
+`createFilterState` in `web/client.mjs` is a pure route-to-query adapter, not a
+second matching engine. The shell serializes that same factory. New URL fields
+are `tool`, `services` (comma-separated, deduplicated and sorted), and
+`includeMissingService=true|false`. Omission is strict. The old singular `service`
+continues to map to `filters.workloads`; plural `services` maps only to
+`filters.services`. The Service UI remains single-choice; combined association
+links remain representable. Discovery, Multiple workloads and Unknown stay in
+Category rather than masquerading as downstream services.
+
+Other mappings remain `result -> outcomes`, `authors -> promptAuthors`,
+`project -> projectIds`, `session -> sourceSessionIds`, plus dates, scope and
+endpoint. Tool maps to `filters.tools`. Values within an array combine with OR;
+fields combine with AND in canonical activity analytics. Invalid explicit
+missing-service state reaches normal query validation, not a silent default.
+The UI verifies the involvement version, denominator and disjoint union of
+known/context IDs against accepted rows before presenting a service focus.
+Pending/failed reads retain established accepted-snapshot behavior.
+
+`filterState.scope(route, destination)` retains analytical fields for existing
+scoped-chat navigation without copying private search, request or paging state.
+The destination may explicitly override its named field. Report selections,
+separately chosen report authors and frozen report bytes are not changed.
 
 The projection is read-only enrichment, not evidence of new calls or a source
 omission. Report consumers must freeze its definition and membership before using
@@ -449,17 +479,17 @@ unavailable; built-in accessibility guidance and the existing product system wer
 
 ## Prompt author controls
 
-The shared filter row places **Author** beside When and Result, including inside
+The shared filter row places **Author** beside Dates, Tool, Service and Outcome, including inside
 a conversation. It reuses the opt-in checkbox multiselect: draft choices do not change results,
 Apply commits once, and Cancel/Escape/outside discard. All includes unverified authors; known
 Your + Agent does not. Applied counts, charts, groups and Insights use the same author scope before
 pagination and alongside existing filters. Pending and failed reads keep the last accepted selection
 with its existing counts; a late response cannot replace a newer choice.
 
-All seven analytical fields share aligned labels and consistent gaps. Existing
+The primary and secondary fields share aligned labels and consistent gaps. Existing
 Clear actions sit in their field headers, without shrinking the dropdown or
 leaving inactive clear-button gutters. Custom dates occupy a separate row.
-Constrained widths and enlarged text use the horizontal scrolling behavior above.
+Constrained widths and enlarged text use the wrapping behavior above.
 
 The single author helper supplies **Your prompt**, **Agent prompt**, or a neutral source-qualified
 **Copilot chat prompt**. Non-chat/unknown-source text retains the generic Prompt fallback.
@@ -1190,9 +1220,9 @@ to the same input row as the query. Settings, affected-chat, report-request and
 saved-report searches already use that local row and now all have explicit
 field-specific clear names. These searches filter only their documented lists,
 not report membership, source permission or display preferences. Collapsed
-More filters refinements (service/project/layer/collection) keep their existing
+More filters refinements (category/project/chat/layer/collection) keep their existing
 selectors and useful applied-scope indicators; date range remains a coordinated
-When/From/To/Apply group, not two independent date resets. Request details keep
+Dates/From/To/Apply group, not two independent date resets. Request details keep
 their scope chips because the local filter field is not present there.
 Chart/composition switches remain segmented view choices; format choices,
 disclosures, category navigation and actionable result links are not converted
@@ -1730,11 +1760,11 @@ report-facing language. The form reuses existing typography,
 semantic tokens, keyboard focus and wrapping controls rather than a new visual language.
 
 The main journey is **period -> chat -> analysis -> report** without enforcing
-a wizard on browsing. When/custom date inputs and Recorded result share one
+a wizard on browsing. Dates/custom date inputs and Outcome share one
 compact filter region. From/To labels align with the peer label/help row;
 Apply and Clear belong to the date group. Container-based wrapping keeps that
 group intact at narrow widths and enlarged text. Date boundary guidance remains
-in the When help and the inputs' accessible description, with inline errors.
+in the Dates help and the inputs' accessible description, with inline errors.
 **All retained dates** (the compatible `capture` route value) describes the
 default scope, not the initial experiment or last collection window. Its visible
 date bounds come from the accepted canonical rows. A custom single day uses the
@@ -1743,7 +1773,7 @@ half-open UTC interval. Date fields grow with text so native date segments and
 the calendar affordance remain readable. Inline errors identify missing,
 reversed or invalid bounds without replacing the accepted view. Daily, Weekly
 and Monthly are independent chart aggregation choices.
-One **More filters** disclosure retains service/project/evidence/collection
+One **More filters** disclosure retains category/project/chat/evidence/collection
 choices, described dropdowns, active-count summary and removable chips.
 After **Apply dates**, the accepted Home or Activity count remains visible with a real pending
 indicator and busy state, then updates only from the accepted snapshot and

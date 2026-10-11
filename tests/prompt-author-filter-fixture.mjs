@@ -8,7 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import assert from "node:assert/strict";
 
-export async function authorFilterFixture(t) {
+export async function authorFilterFixture(t, { serviceCases = false } = {}) {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-author-filter-"));
     const config = { appDbPath: path.join(root, "data.db"), sessionRoot: path.join(root, "session-state"),
         approved: true, enabled: false, windowDays: 30, pollSeconds: 5 };
@@ -28,6 +28,15 @@ export async function authorFilterFixture(t) {
         ["unverified", "unknown", "/me/messages", [true], older, "Invented legacy message without author evidence."],
         ["conflicting", "unknown", "/me/messages", [true], newer, "Invented conflicting author fields."],
         ["otherAgent", "agent", "/me/drive", [true], older, "Invented other-chat file request."],
+        ...(serviceCases ? [
+            ["multiFiles", "user", ["/me/drive", "/me/messages"], [true], older, "Invented multi-service request."],
+            ["failedFiles", "agent", "/me/drive", [false], older, "Invented failed file request."],
+            ["partialFiles", "user", ["/me/drive", "/unsupported/resource"], [true], older, "Invented partially mapped request."],
+            ["missingUser", "user", [], [false], older, "Invented missing-target request."],
+            ["missingAgent", "agent", [], [true], newer, "Invented delegated missing target."],
+            ["schema", "user", "/me/drive", [true], older, "Invented preparation.", "get_schema"],
+            ["assistance", "unknown", null, [true], older, "Invented assistance with no downstream target.", "ask"],
+        ] : []),
     ];
     for (const [id, name] of [[projectId, "Invented project A"], [otherProjectId, "Invented project B"]]) db.prepare("INSERT INTO projects VALUES(?,?)").run(id, name);
     const event = (type, data, timestamp) => ({ id: randomUUID(), type, data, timestamp: new Date(timestamp).toISOString() });
@@ -36,7 +45,7 @@ export async function authorFilterFixture(t) {
         db.prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(id, name, "project", null, "local");
         db.prepare("INSERT INTO workspaces VALUES(?,?,?,?,?,?,?,?,?)").run(randomUUID(), id, project, name, null, "local", "folder", "user", null);
         const events = [event("session.start", { version: 1, sessionId: id }, older - 1000)];
-        for (const [key, actor, endpoint, successes, baseAt, content] of definitions.filter(definition => (definition[0] === "otherAgent") === (id === otherChatId))) {
+        for (const [key, actor, endpoint, successes, baseAt, content, operation = "fetch"] of definitions.filter(definition => (definition[0] === "otherAgent") === (id === otherChatId))) {
             const at = baseAt + definitions.findIndex(definition => definition[0] === key) * 1000;
             const prompt = event("user.message", { content, messageId: randomUUID(), delivery: "idle", agentMode: "autopilot" }, at);
             if (actor === "agent") prompt.data.source = `agent-${randomUUID()}`;
@@ -46,8 +55,9 @@ export async function authorFilterFixture(t) {
             const callIds = [];
             successes.forEach((success, index) => {
                 const toolCallId = `invented-${key}-${index + 1}`; callIds.push(toolCallId);
-                events.push(event("tool.execution_start", { toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch",
-                    toolCallId, parentToolCallId: "invented-agent-executor", arguments: { entityUrls: [endpoint] } }, at + 100 + index * 100),
+                events.push(event("tool.execution_start", { toolName: `workiq-${operation}`, mcpServerName: "workiq", mcpToolName: operation,
+                    toolCallId, parentToolCallId: "invented-agent-executor", arguments: operation === "get_schema" ? { path: endpoint, operationType: "fetch" }
+                        : operation === "ask" ? { question: content } : { entityUrls: Array.isArray(endpoint) ? endpoint : [endpoint] } }, at + 100 + index * 100),
                 event("tool.execution_complete", { toolCallId, success, result: { structuredContent: { results: [{ statusCode: success ? 200 : 503 }] } } }, at + 150 + index * 100));
             });
             cases[key] = { key, actor, content, callIds, sourceSessionId: id, sourceEventId: prompt.id, scenarioId: `history-${id}-${prompt.id}`, at: prompt.timestamp };
