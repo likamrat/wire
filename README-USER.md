@@ -123,6 +123,44 @@ In Analyze, private search and filters select the request groups used by counts 
 
 Reply saving is off unless previously approved. To keep recorded replies in WIRE, open **Settings > Privacy & saved data > Recorded replies**, select **Save Copilot replies locally**, then **Turn on response saving**. **Discard change** restores your current choice. **What gets saved** explains the source and limits. Deliberately opening an interaction immediately reads only its displayed context's already-retained, currently authorized replies. Analyze, search and hover do not preload them. Every reply is checked independently against current access; opening context never turns saving on or reads the original source. **Copy response** copies only that response body and **Hide response** collapses it; an explicit hidden state is respected on rerender. Missing responses remain unavailable, read errors offer an explicit retry, and partial or unverified final-answer status is not upgraded. Turning response saving off removes optional text and dependent unsaved insights; activity and saved reports remain. This does not authorize model assessment.
 
+## Compare retained periods
+
+In **Analyze**, choose **Compare periods**, enter the inclusive start/end dates
+for **Period A** and **Period B**, then choose **Compare periods** in the paired
+controls. No preliminary reports are needed. Both periods come from one accepted
+stored revision in the displayed time zone. This is a stored-data read, not a
+source refresh or a new assessment.
+
+Tool, Service, Outcome, Author and More filters apply to both sides.
+**Search these interactions** matches the complete retained interaction roster,
+not just the ordinary Analyze date range or visible page. The query stays in
+browser memory/history, never in API inputs or copied URLs. Each Outcome choice
+shows separate A/B counts before that outcome filter; overlapping periods are
+not added together. Opening or ticking a menu does not apply its draft.
+
+The comparison temporarily replaces ordinary date controls, charts and rows.
+**Stop comparing** restores them, including their previous dates and private
+query. **Exact matching records** opens the existing record/context reader; Back
+restores the paired periods and opened assessment details. Report selections
+remain separate. Ordinary report actions are hidden while comparing: saving a
+comparison as a report is not implemented here yet.
+
+Read the matching-record counts separately from **full retained interaction**
+findings. An interaction can have calls outside the selected dates or filters,
+or can appear on both sides. Its saved quality checks and request-to-final-response
+time still cover that full interaction; context never expands the matching-call
+denominator. Service associations can overlap, but a canonical record counts
+once on each side. Missing-service context remains explicitly identified.
+
+Differences are **B minus A**. Shares change in **percentage points**, not percent.
+Unequal periods, different activity and incomplete assessment coverage do not
+prove improvement or causation. Median/P95 matching-call comparisons are available
+for Work IQ calls and use retained raw samples. Full-interaction timings keep
+their separate named boundaries. Zero, one measured sample, missing timing,
+unassessed checks, insufficient evidence and evaluator failures remain distinct.
+An empty period has no inferred percentage. Changes to evidence or permissions
+clear the live comparison; read the current stored view before comparing again.
+
 ## Create a report
 
 1. **Setup:** Reports opens the saved library; choose **Create a report** to start setup. Choose **Selected requests**, **Current view** or **All collected activity**, and **Prompt authors in this report** on the same surface as **No prompts**, **Masked prompts**, **Original prompts** and HTML/PDF/JSON/Markdown formats. Selection starts empty; use **Choose interactions in Analyze** or **Add to report** to select individual interactions. Author choices exclude whole interactions with their calls and scores, without deleting your base selection. Setup shows the actual included population across all pages, including selections hidden by browsing filters. Click **Scan and preview**.

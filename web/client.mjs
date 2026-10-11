@@ -697,6 +697,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onNotice: message => announce(message, "error"),
         onChanged: () => { invalidatePreview(); invalidateDialog("Score-processing approval changed. Prepare a new report preview."); },
     });
+    const periodComparisonUI = assessmentFactories.periodComparison.mount({
+        root: $("periodComparison"), toggle: $("comparePeriods"), api, time, search: localSearch, categories, results,
+        projection: createActivityProjection(time, categories, resultKeys),
+        createState: assessmentFactories.periodComparison.createState, assessmentFactories, bindDetails,
+        getContext: () => ({ snapshot: state, options: query(), route, search, isLoading, isStale }),
+        navigate: changes => navigate(routeFor("analyze", changes), false, { keepFocus: true }),
+        onSearch: value => { $("activitySearch").value = value; $("activitySearch").dispatchEvent(new Event("input")); },
+        syncFilters: () => selectControls?.sync(),
+        recordLink: (row, side, value) => link(row.tool, "request", {
+            request: row.scenarioId, call: row.id, callRevision: value.definitions.layer === "reported-api" ? String(value.revision) : undefined,
+            range: "custom", from: side.range.from, to: side.range.to,
+        }, "text-link"),
+    });
     function clearDeletedDraft(change = "changed") {
         assessmentUI.invalidate(`Collected activity or its optional evidence was ${change}. Read current insights.`);
         reportComparisonUI?.invalidate("Collected activity changed. The unfinished comparison was cleared.", true, { force: true });
@@ -722,7 +735,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const [rawView, rawQuery = ""] = hash.slice(1).split("?");
         const view = rawView === "report" ? "reports" : rawView || "analyze";
         const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision"];
+        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision", "compare", "aFrom", "aTo", "bFrom", "bTo"];
         const values = { view: ["analyze", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
         if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
@@ -2909,6 +2922,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.view === "settings" && route.section === "privacy") assessmentUI.setup($("assessmentSetup"));
         renderCoverage();
         updateSelection();
+        periodComparisonUI.update();
     }
 
     function setText(node, text) {
@@ -3255,6 +3269,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const status = await api("/api/collection/status", {});
             if (readGeneration !== collectionReadGeneration || collectionBusy) return;
             assessmentUI.observe(status.assessment);
+            periodComparisonUI.observe(status.assessment);
             automaticUI.observe();
             if (status.assessment?.pendingCleanup) {
                 if (status.assessment.kind === "artifact-deletion") {

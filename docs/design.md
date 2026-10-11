@@ -81,6 +81,133 @@ units. Category help explains available Discovery, search, services, multi-servi
 and missing-service choices; a selected category retains its shared definition.
 No category rules, source evidence, report membership or saved files change.
 
+## Direct retained-period comparison
+
+Analyze's `compare=periods` route adds `aFrom`, `aTo`, `bFrom`, `bTo`. Ordinary
+`range/from/to`, author/outcome drafts, call routes/sort and report selection
+keep their existing meanings. The component hides ordinary date controls/chips,
+charts/results and ordinary report actions only while paired comparison is
+active; normal rendering restores them on exit. Outcome labels show each side's
+canonical before-outcome counts separately, after private search and service
+refinement. Late count updates wait until an open multiselect draft is closed.
+
+`POST /api/period-comparison` is a same-origin, capability-checked, read-only
+stored-data endpoint:
+
+```js
+{
+  schemaVersion: 1,
+  expectedRevision,
+  options, // existing validated analytics options, with filters.from/to removed
+  periods: {
+    baseline: { from, to }, // inclusive local calendar dates
+    later: { from, to }
+  },
+  scenarioIds, // unique explicit IDs; [] means empty, omission is rejected
+  withinServices // supported named service refinements, combined with AND
+}
+```
+
+`snapshot.scenarios` is the complete authorized retained roster from
+`mergeEvidenceWithState`, independent of the snapshot's analytical date filter.
+The browser applies the existing private phrase matcher to that complete roster;
+only resulting IDs cross this endpoint. Private query text is not a request
+field, response field, URL parameter, log field or stored metadata. Server-side
+unknown/duplicate IDs and unknown services fail rather than widening scope.
+
+`buildPeriodComparison` captures both sides from one stored state with an exact
+revision match. It reuses `buildActivityAnalytics` for canonical extraction,
+attribution and ordinary filters, `createActivityProjection` for refined
+aggregation, and `assessmentOverview` for full selected-interaction pooling.
+Service choices retain OR semantics; each `withinServices` name is an additional
+AND. API-entry parent coverage stays broader than result/outcome-filtered rows.
+No source, retained reply payload, provider, scorer or history capture is read.
+
+The trusted **live consumer** is `periodComparisonUI.consumer()`. It returns a
+defensive copy of the accepted response only while the current route, scope,
+revision and permission state still match; otherwise it returns `null`.
+Its schema is deliberately not a saved report:
+
+```js
+{
+  kind: "retained-period-comparison", schemaVersion: 1,
+  revision, assessmentBasis, source, timeContext,
+  options, selection: { scenarioIds, withinServices },
+  definitions: { activitySchemaVersion, layer, unit, serviceInvolvement, metricProjectionVersion },
+  scope: { membership, findings, dates, interpretation },
+  periods: {
+    baseline: {
+      range, dateRange, analytics, rowIds, scenarioIds,
+      interactionRefs, unmappedScenarioIds,
+      reviewStatusRevisions,
+      assessment: { interactionRefs, metrics, reviewStatuses, assessmentAttempts },
+      interactionCoverage: [{ metricRef, slot, eligibleUnitRefs, coveredUnitRefs }]
+    },
+    later: { /* same fields as baseline */ }
+  },
+  comparison: { outcomes, matchingCallTiming, metrics }
+}
+```
+
+`analytics.rows`/`calls` contain the exact canonical matching records across all
+pages. `assessment.metrics` retain raw duration samples and each check's exact
+eligible/covered refs, counts, origins, definitions and evaluator/rubric.
+Interactions selected by a matching call are pooled in full, even when their
+other calls fall outside the period/filter. The UI names that difference and any
+cross-period overlap. Unmapped groups never become inferred assessment units.
+
+Outcome changes reuse shared outcome arithmetic without adopting its saved-report
+or causal narratives. Metric changes reuse `createWireMetricAdapter` and
+`compareMetricFacts`; differing origins, model/rubric lanes and unavailable
+measures do not receive fabricated counterpart values. Incompatible definitions
+block deltas. Shares use percentage points; no percentage/median averaging,
+cross-boundary latency total or overall grade is introduced.
+
+Acceptance checks the exact revision, assessment/source/time/definition bases,
+canonical row counts, selected scenario-to-interaction mappings, review revisions
+and per-check coverage before rendering. Both before-outcome facets must contain
+unique, well-shaped rows within the declared dates, private-ID selection and all
+other filters/refinements. Their totals are recomputed, and applying the requested
+outcomes to each facet must recover that side's exact final rows. The existing
+row predicates live in `createActivityProjection` and are shared with ordinary
+server analytics; schema/input validation and canonical extraction stay server-owned.
+
+The consumer also recomputes the projected call/coverage/service/timing fields.
+`comparePeriodCohorts` in `lib/period-comparison-math.mjs` is the sole period
+comparison assembly used by producer and consumer; it still delegates to the
+existing outcome comparator, metric adapter and metric comparator. Every supplied
+comparison fact, coverage, compatibility result and delta must equal that
+derivation over the validated cohorts/metrics, including in-range values. Invalid
+payloads clear consumer data and displayed tables/facet counts rather than
+returning a previously accepted value.
+
+The browser loads that pure helper with the existing assessment contract and
+three existing comparator/adapter modules. The server serves only those five
+explicit URL-to-file mappings under `/assets/`; it does not serve arbitrary
+directories or accept file/query parameters. The real-runtime module-closure test
+uses only health/static reads against invented ephemeral storage, without
+application startup or source discovery.
+
+Generation checks reject late reads.
+Workspace loading invalidates but never authorizes a result. An observed
+permission/deletion basis change clears the displayed result and consumer even
+when application of the next snapshot is deferred; artifact-only cleanup does
+not invalidate retained activity by itself.
+
+The later comparison-report bridge must validate this live input against its
+accepted revision and preserve its exact two memberships through the real
+privacy/disclosure/save gates. It must not invent bundle IDs/manifests or treat
+the live consumer as a saved-report authorization.
+
+Focused proof: `tests/period-comparison.test.mjs`,
+`tests/period-comparison-state.test.mjs` and
+`tests/period-comparison.browser.test.mjs`, plus the exact static module closure in
+`tests/period-comparison-assets.browser.test.mjs`. Fixtures are invented retained
+records; optional `WIRE_PERIOD_PROOFS` writes numeric snapshots and normal-render
+images outside the repository. Matching-call duration comparisons currently
+apply to the Work IQ call layer only; other layers keep their canonical counts
+and distinct full-interaction metric boundaries.
+
 ## Fresh activity and history coverage
 
 The check button and **Source and collection** form one left-aligned action row.

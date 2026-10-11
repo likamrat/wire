@@ -147,3 +147,21 @@ test("serialized factories have no import closures and preserve unsearched proje
     Object.fromEntries(Object.keys(standaloneProjection.project([], { ...scopeOptions,
         timeContext: input.analytics.timeContext, dateRange: input.analytics.dateRange }, [])).map(key => [key, input.analytics[key]])));
 });
+
+test("serialized row predicates preserve ordinary analytics date, author and missing-service selection", () => {
+    const time = createTimeContext();
+    const standalone = Function(`return (${createActivityProjection.toString()})`)()(
+        time, createServiceCategories(), Object.keys(createRecordedResults().labels("tool")));
+    const source = snapshot();
+    for (const includeMissingService of [true, false]) {
+        const filters = { scope: "history", services: ["Files"], includeMissingService, promptAuthors: ["user"],
+            outcomes: ["failure"], from: "2026-09-30", to: "2026-09-30" };
+        const bounds = { ...filters, ...time.range(filters, scopeOptions.timeContext.timeZone) };
+        const selected = source.analytics.rows.filter(row => standalone.selected(row, bounds));
+        const ordinary = buildActivityAnalytics(source.scenarios, { ...scopeOptions, filters });
+        assert.deepEqual(sorted(selected.map(row => row.id)), sorted([rowId(0), ...(includeMissingService ? [rowId(0, 1)] : []), rowId(6)]));
+        assert.deepEqual(sorted(selected.map(row => row.id)), sorted(ordinary.rows.map(row => row.id)));
+        assert.deepEqual(standalone.summarize(selected), ordinary.totals);
+        assert.equal(standalone.serviceSelected(source.analytics.rows.find(row => row.id === rowId(0, 1)), filters), includeMissingService);
+    }
+});
