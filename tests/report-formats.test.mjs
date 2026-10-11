@@ -9,7 +9,7 @@ import { assertProjectedBundle } from "../lib/privacy.mjs";
 import { normalizeReportOptions, projectPrompts } from "../lib/prompt-projection.mjs";
 import { loadBoardState, moveCard, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture } from "./helpers.mjs";
-import { fontDataUrl } from "../lib/typeface.mjs";
+import { fontDataUrl, uiFontStack } from "../lib/typeface.mjs";
 
 export function reportFixture() {
     const source = fixture();
@@ -29,7 +29,7 @@ export function reportFixture() {
 }
 
 export async function pdfText(bytes) {
-    const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
+    const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false });
     const doc = await task.promise;
     try {
         const pages = [];
@@ -82,8 +82,9 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: fo
         assert.ok(manifest.promptCoverage.mandatoryRemovals >= 3);
     }
     const paintIds = new Set([...bundle.files["product-report.html"].matchAll(/<(?:linearGradient|filter|clipPath) id="(dimensional-[a-z0-9-]+)"/g)].map(match => match[1]));
-    assert.equal(bundle.files["product-report.html"].split(`url("${fontDataUrl}")`).length - 1, 1, "Exactly one trusted bundled font is embedded");
-    const withoutLocalChartPaint = bundle.files["product-report.html"].replace(`url("${fontDataUrl}")`, "").replace(/url\(#wire-(light|dark)-r-emergence\)/g, (_, theme) => {
+    assert.equal(bundle.files["product-report.html"].includes(fontDataUrl), false, "New native reports do not embed the historical CSS font");
+    assert.ok(bundle.files["product-report.html"].includes(`--font:${uiFontStack}`));
+    const withoutLocalChartPaint = bundle.files["product-report.html"].replace(/url\(#wire-(light|dark)-r-emergence\)/g, (_, theme) => {
         assert.ok(bundle.files["product-report.html"].includes(`<clipPath id="wire-${theme}-r-emergence">`));
         return "";
     }).replace(/url\(#(wire-dark-wire-(?:letter|cable)-ink)\)/g, (_, id) => {

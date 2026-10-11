@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { buildSanitizedBundle, createExportController } from "../lib/export.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
@@ -12,13 +12,40 @@ import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { privateFixture, fixture } from "./helpers.mjs";
 import { matrixRecords } from "./report-evidence-matrix-fixtures.mjs";
+import { uiFontStack } from "../lib/typeface.mjs";
+import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
+import { renderPdf } from "../lib/pdf.mjs";
+import { adaptEvaluationReport } from "../lib/report-facts.mjs";
+import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
+import { renderComparisonHtml } from "../lib/report-presentation.mjs";
 
 async function inspectPdf(bytes) {
-    const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
+    const strict = await pdfDocumentText(bytes);
+    const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false, disableFontFace: true, fontExtraProperties: true });
     try {
-        const document = await task.promise, pages = [];
+        const document = await task.promise, pages = [], fonts = new Map(), margins = [];
         for (let number = 1; number <= document.numPages; number++) {
             const page = await document.getPage(number), viewport = page.getViewport({ scale: 1 });
+            const operators = await page.getOperatorList();
+            for (const id of new Set(operators.fnArray.flatMap((op, index) => op === OPS.setFont ? [operators.argsArray[index][0]] : []))) {
+                const font = page.commonObjs.get(id);
+                assert.equal(font.missingFile, false, font.name);
+                assert.ok(font.data?.byteLength > 0, `${font.name}: embedded font program required`);
+                fonts.set(id, { name: font.name, bytes: font.data.byteLength });
+            }
+            let paint = { font: null, color: null };
+            const stack = [];
+            for (const [index, op] of operators.fnArray.entries()) {
+                const args = operators.argsArray[index];
+                if (op === OPS.save) stack.push({ ...paint });
+                if (op === OPS.restore) paint = stack.pop();
+                if (op === OPS.setFillRGBColor) paint.color = args[0];
+                if (op === OPS.setFont) paint.font = page.commonObjs.get(args[0]).name;
+                if (op === OPS.showText) {
+                    const text = args[0].map(glyph => glyph.unicode ?? "").join("");
+                    if (text === "WIRE - local report" || text === "Page ") margins.push({ page: number, text, ...paint });
+                }
+            }
             const content = await page.getTextContent();
             for (const item of content.items.filter(item => item.str?.trim())) {
                 assert.ok(item.transform[4] >= -1 && item.transform[4] + item.width <= viewport.width + 2, `Page ${number}: horizontal text clipping`);
@@ -26,7 +53,8 @@ async function inspectPdf(bytes) {
             }
             pages.push(content.items.map(item => (item.str ?? "") + (item.hasEOL ? "\n" : " ")).join(""));
         }
-        return { pageCount: pages.length, pages, text: pages.join("\n") };
+        assert.equal(strict.pages, pages.length);
+        return { pageCount: pages.length, pages, text: pages.join("\n"), fonts: [...fonts.values()], margins, strictReaderPages: strict.pages };
     } finally { await task.destroy(); }
 }
 
@@ -80,6 +108,8 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
         assert.equal([...text.matchAll(/Completion-evidence checks:/g)].length, 1, "Only Work IQ tool checks use the call-completion boundary");
         assert.match(text, /7 eligible Work IQ calls/);
     }
+    assert.ok(pdf.margins.length >= pdf.pageCount * 2);
+    assert.ok(pdf.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === "#515767"));
     const directory = await keepProof("normal", { ...bundle.files, "pdf-extraction.json": JSON.stringify(pdf, null, 2) });
     const browser = await chromium.launch({ headless: true });
     t.after(() => browser.close());
@@ -99,15 +129,24 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
         const layout = await page.evaluate(() => ({
             width: innerWidth, bodyWidth: document.documentElement.scrollWidth,
             background: getComputedStyle(document.documentElement).backgroundColor,
+            fontFamily: getComputedStyle(document.body).fontFamily,
             fonts: [...document.fonts].map(font => ({ family: font.family, status: font.status })),
+            radius: getComputedStyle(document.querySelector(".native-bar-track")).borderRadius,
+            capsules: [...document.querySelectorAll(".native-outcome")].map(node => ({
+                radius: getComputedStyle(node).borderRadius, text: node.textContent,
+            })),
             bars: [...document.querySelectorAll(".native-bar")].map(node => ({
                 count: Number(node.dataset.count), denominator: Number(node.dataset.denominator),
                 actual: node.getBoundingClientRect().width / node.parentElement.getBoundingClientRect().width,
             })),
         }));
         assert.ok(layout.bodyWidth <= layout.width + 1, `${theme} narrow=${narrow}: body overflow`);
-        assert.equal(layout.background, theme === "dark" ? "rgb(23, 25, 28)" : "rgb(242, 243, 243)");
-        assert.ok(layout.fonts.some(font => font.status === "loaded"));
+        assert.equal(layout.background, theme === "dark" ? "rgb(15, 17, 26)" : "rgb(244, 245, 249)");
+        assert.equal(layout.fontFamily.replaceAll(" ", ""), uiFontStack.replaceAll(" ", ""));
+        assert.equal(layout.fonts.some(font => font.family === "Asta Sans"), false, "New native output does not embed the historical CSS font");
+        assert.equal(layout.radius, "999px");
+        assert.ok(layout.capsules.length);
+        assert.ok(layout.capsules.every(capsule => capsule.radius === "999px"));
         assert.ok(layout.bars.length);
         for (const bar of layout.bars) assert.ok(Math.abs(bar.actual - bar.count / bar.denominator) < 0.002, "No inflated small values");
         await page.locator("#quality > summary").focus();
@@ -129,6 +168,14 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
     }
     assert.deepEqual(external, []);
     assert.equal(await page.locator("script,iframe,img,link").count(), 0);
+    const darkHtml = bundle.previewHtml.replace('data-evidence-theme="light"', 'data-evidence-theme="dark"');
+    const darkPdf = await renderPdf(darkHtml), darkExtraction = await inspectPdf(darkPdf);
+    assert.ok(darkExtraction.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === "#515767"),
+        "Dark content still has readable shared-light text in white PDF margins");
+    if (directory) {
+        await writeFile(path.join(directory, "product-report-dark.pdf"), darkPdf);
+        await writeFile(path.join(directory, "pdf-dark-extraction.json"), JSON.stringify(darkExtraction, null, 2));
+    }
     if (directory) await writeFile(path.join(directory, "layout-proof.json"), JSON.stringify(layouts, null, 2));
     const tiny = await buildSanitizedBundle(matrixRecords("tiny-native", ["failure", ...Array(99).fill("success")]), "a".repeat(64),
         { promptMode: "none", formats: ["html", "json", "markdown"] });
@@ -179,7 +226,25 @@ test("four-format recorded context keeps changed requests, omissions and exact a
     await controller.preview("native-context", undefined, { promptMode: "none", formats: ["json"] },
         { ...selection, revision: (await loadBoardState(context)).revision });
     for (const [name, file] of Object.entries(saved.files)) assert.deepEqual(await readFile(file), files[name], "Later report preparation cannot rewrite saved bytes");
-    await keepProof("context", { ...files, "pdf-extraction.json": JSON.stringify(pdf, null, 2) });
+    const directory = await keepProof("context", { ...files, "pdf-extraction.json": JSON.stringify(pdf, null, 2) });
+    const browser = await chromium.launch({ headless: true });
+    t.after(() => browser.close());
+    const page = await browser.newPage({ javaScriptEnabled: false, viewport: { width: 390, height: 1000 } });
+    await page.route("**/*", route => route.abort());
+    for (const theme of ["light", "dark"]) {
+        await page.setContent(files["product-report.html"].toString());
+        await page.evaluate(theme => {
+            document.documentElement.dataset.evidenceTheme = theme;
+            document.documentElement.style.fontSize = "200%";
+        }, theme);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await page.locator("#recorded-context .context-reference > summary").first().focus();
+        await page.keyboard.press("Enter");
+        assert.equal(await page.locator("#recorded-context .context-reference").first().getAttribute("open"), "");
+        assert.match(await page.locator("#recorded-context").innerText(), /Reviewed three documents/);
+        assert.equal(await page.locator("#recorded-context pre").first().evaluate(node => getComputedStyle(node).borderRadius), "6px");
+        if (directory) await page.locator("#recorded-context").screenshot({ path: path.join(directory, `${theme}-390-200-context.png`) });
+    }
 });
 
 test("opening a verified historical report preserves all four format bytes and its manifest", { timeout: 120000 }, async t => {
@@ -278,4 +343,90 @@ test("mixed saved origins stay beside each native finding in HTML, Markdown and 
     assert.deepEqual(bundle.snapshot.evaluationFacts, before);
     assert.deepEqual(facts, before);
     if (directory) await page.locator("#findings").screenshot({ path: path.join(directory, "finding-origins.png") });
+});
+
+test("normal report navigation keeps every desktop target at least 44px with narrow keyboard access", async t => {
+    const { context, records } = await reportContextFixture(t);
+    const state = await loadBoardState(context);
+    const bundle = await createExportController(context).preview("native-nav", undefined,
+        { promptMode: "masked", recordedContext: true, formats: ["html", "json", "markdown"] },
+        { kind: "selected", revision: state.revision, scenarioIds: [records[1].scenarioId], promptAuthors: ["user"] });
+    const browser = await chromium.launch({ headless: true });
+    t.after(() => browser.close());
+    const page = await browser.newPage({ javaScriptEnabled: false, viewport: { width: 1280, height: 1000 } });
+    await page.route("**/*", route => route.abort());
+    await page.setContent(bundle.previewHtml);
+    const expected = [
+        ["Numbers", "#overview"], ["Timing", "#timing"], ["Recorded context", "#recorded-context"],
+        ["Examples", "#examples"], ["Operation detail", "#operations"], ["Quality results", "#quality"],
+        ["Prompt appendix", "#prompts"], ["Coverage", "#coverage"], ["Complete JSON records", "product-report.json"],
+    ];
+    const bounds = () => page.locator(".report-nav a").evaluateAll(nodes => nodes.map(node => {
+        const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
+        return { label: node.textContent, href: node.getAttribute("href"), width: rect.width, height: rect.height,
+            minHeight: style.minHeight, visible: rect.width > 0 && rect.height > 0 };
+    }));
+    const desktop = await bounds();
+    assert.deepEqual(desktop.map(item => [item.label, item.href]), expected);
+    await page.locator(".report-nav a").first().focus();
+    for (let index = 0; index < expected.length; index++) {
+        assert.equal(await page.locator(".report-nav a").nth(index).evaluate(node => node === document.activeElement), true);
+        assert.equal(await page.locator(".report-nav a").nth(index).evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+        if (index < expected.length - 1) await page.keyboard.press("Tab");
+    }
+    const directory = await keepProof("nav-target", { "product-report.html": bundle.previewHtml });
+    if (directory) await page.locator(".report-nav").screenshot({ path: path.join(directory, "desktop-100.png") });
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    const narrow = await bounds();
+    assert.deepEqual(narrow.map(item => [item.label, item.href]), expected);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.locator(".report-nav a").first().focus();
+    await page.keyboard.press("Enter");
+    assert.ok(await page.locator("#overview").evaluate(node => Math.abs(node.getBoundingClientRect().top) < innerHeight));
+    if (directory) await page.locator(".report-nav").screenshot({ path: path.join(directory, "narrow-200.png") });
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await page.emulateMedia({ media: "print" });
+    const print = await bounds();
+    if (directory) await writeFile(path.join(directory, "bounds.json"), JSON.stringify({ desktop, narrow, print }, null, 2));
+    assert.ok(desktop.every(item => item.width >= 44 && item.height >= 44),
+        `Every outlined desktop navigation anchor must be at least 44px: ${JSON.stringify(desktop)}`);
+    assert.ok(narrow.every(item => item.width >= 44 && item.height >= 44));
+    assert.ok(print.filter(item => item.visible).every(item => item.minHeight !== "44px"), "The screen target fix must not alter print minimum heights");
+});
+
+test("one new comparison PDF keeps shared margin typography in both themes and safe tokenless print fallback", { timeout: 120000 }, async () => {
+    const report = name => {
+        const records = matrixRecords(name, ["success", "failure"], { durations: [10, 20] });
+        const facts = buildReportFacts(records, { revision: 1, pseudonymKey: "a".repeat(64), evidence: records }).facts;
+        return adaptEvaluationReport(facts, { bundleId: `export-${name}`, snapshotHash: name === "earlier" ? "a".repeat(64) : "b".repeat(64),
+            disclosureReviewed: true });
+    };
+    const comparison = compareFrozenReportFacts(report("earlier"), report("later"));
+    const html = renderComparisonHtml(comparison, { bundleId: "export-print-compatibility", preparedAtDisplay: "Invented comparison",
+        sourceReports: [comparison.baseline, comparison.later] });
+    for (const theme of ["light", "dark"]) {
+        const themed = html.replace('data-evidence-theme="light"', `data-evidence-theme="${theme}"`);
+        const bytes = await renderPdf(themed), extracted = await inspectPdf(bytes);
+        assert.match(extracted.text, /Report comparison/);
+        assert.ok(extracted.margins.length >= extracted.pageCount * 2);
+        assert.ok(extracted.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === "#515767"));
+        await keepProof("comparison-margins", {
+            [`comparison-${theme}.html`]: themed, [`comparison-${theme}.pdf`]: bytes,
+            [`comparison-${theme}-extraction.json`]: JSON.stringify(extracted, null, 2),
+        });
+    }
+    for (const [name, style, expected] of [
+        ["tokenless", "", "#515767"],
+        ["print-override", ":root{--muted:#ffffff}@media print{:root{--muted:#345678}}", "#345678"],
+        ["invalid-color", ':root{--muted:\'"><div>FONT_ESCAPE_CANARY</div>\'}', "#515767"],
+    ]) {
+        const source = `<!doctype html><style>${style}</style><h1>Invented legacy renderer input</h1><p>No font fetch is permitted.</p>`;
+        const bytes = await renderPdf(source), extracted = await inspectPdf(bytes);
+        assert.doesNotMatch(extracted.text, /FONT_ESCAPE_CANARY/);
+        assert.ok(extracted.margins.length >= extracted.pageCount * 2);
+        assert.ok(extracted.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === expected), name);
+        await keepProof("comparison-margins", { [`${name}.pdf`]: bytes, [`${name}-extraction.json`]: JSON.stringify(extracted, null, 2) });
+    }
 });

@@ -190,9 +190,13 @@ available as supporting detail. HTML disclosures are native keyboard controls.
 PDF expands every disclosure and copy. JSON retains the factual snapshot rather
 than an inferred narrative.
 
-Native output uses the accepted light/charcoal tokens, bundled font and both
-theme wordmarks. Bars use exact linear fractions from zero, without minimum
-paint, gradients or perspective. Counts/shares and exact tables are readable
+Native output consumes the shared METROPOLIS typography and light/dark palette:
+`Arial,"Helvetica Neue","Segoe UI",sans-serif`, shared heading roles, control/copy
+radii and semantic outcome capsules. Both theme wordmarks remain local.
+New HTML does not embed the retained historical Asta CSS font; that licensed
+asset remains unchanged for explicit historical consumers. Bars use exact
+linear fractions from zero, without minimum paint, gradients or perspective.
+Rounded tracks do not alter their count-derived widths. Counts/shares and exact tables are readable
 without hover. A prepared report ignores narrower browsing filters: its complete
 selected interactions own every denominator. Returned API units, Graph sites,
 owned HTTP records and tool calls remain distinct.
@@ -247,6 +251,26 @@ Absent legacy involvement stays **Service involvement was not saved** even if
 older category-v3 counts exist. Current comparison adapters ignore this
 additional display field: they neither change existing deltas nor invent
 involvement comparisons. Categories remain labelled **Activity categories**.
+
+### Native print typography
+
+Native report width, gutters, bar height and print point sizes are unchanged.
+Print uses the selected report's shared palette rather than stale native-only
+ink/rule overrides. PDF generation uses locally available fonts and embeds their
+font programs; saved readers still forbid external resources and system-font
+fallback. Focused proof checks the real embedded program bytes, exact extracted
+text and page boundaries through the strict saved-PDF reader.
+
+New PDF header/footer templates use the shared font stack with their existing
+8px text and page-number placeholders. Chromium renders these margins as
+separate white documents, not children of the report body. The renderer resolves
+the document's `--muted` color in print media, then uses that foreground only if
+it is opaque and readable on white. Tokenless, invalid, transparent or
+insufficient-contrast values use the shared light palette's resolved muted
+foreground. This fallback is obtained from the shared stylesheet, not a second
+hardcoded palette. Only normalized color values and an HTML-escaped font stack
+enter template attributes. Native and new comparison PDFs share this margin
+styling; comparison layout and all saved artifact bytes remain unchanged.
 
 ### Setup consumer contract
 
