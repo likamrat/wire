@@ -2,6 +2,8 @@
 
 `lib/search-corpus.mjs` provides a process-private, derived corpus for subsequent on-device retrieval. `lib/search-corpus.d.mts` is the consumer contract. It does not install a model, rank queries, expose an HTTP endpoint, render search UI, modify analysis membership, collect original history, or persist an index.
 
+The [on-device hybrid retrieval facade](semantic-retrieval.md) consumes this contract through `index` and `deliver`. Its model provisioning is explicit and separate; no runtime transport or UI integration is activated by either module.
+
 ## Source contract
 
 | Type | Allowed input and reader | Identity and destination |

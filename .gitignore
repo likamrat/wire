@@ -1,4 +1,5 @@
 node_modules/
+assets/search-models/
 coverage/
 test-results/
 playwright-report/
