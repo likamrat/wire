@@ -38,7 +38,7 @@ test("synthetic: multiple recorded group aliases for one source message retain a
     assert.equal(model.catalog.length, 3);
     assert.equal(new Set(model.catalog.map(row => row.interactionRef)).size, 1);
     assert.equal([...model.details.values()][0].interaction.members.filter(m => m.kind === "tool-call").length, 2);
-    assert.deepEqual(assessmentOverview(state, model, []), { interactionRefs: [], metrics: [] });
+    assert.deepEqual(assessmentOverview(state, model, []), { interactionRefs: [], metrics: [], assessmentAttempts: [] });
     assert.equal(JSON.stringify(state), before);
 });
 

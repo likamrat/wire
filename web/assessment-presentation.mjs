@@ -1,5 +1,5 @@
 // The backend supplies validated, already-pooled facts; this factory only presents them.
-export function createAssessmentPresentation({ validateMetric, metricSlotKey, validateReviewStatus }) {
+export function createAssessmentPresentation({ validateMetric, metricSlotKey, validateReviewStatus, validateAssessmentAttempts }) {
     const bandVersion = "assessed-pass-share-v1";
     const dimensionLabels = { accuracy: "Accuracy", speed: "Speed", "answer-trust": "Answer trust", "action-trust": "Action trust" };
     const checkLabels = {
@@ -100,6 +100,145 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         }
         return null;
     }
+    const qualityDimensions = ["accuracy", "answer-trust", "action-trust"];
+    const units = (count, unit) => `${number(count)} ${count === 1 ? unit.replace(/s$/, "") : unit}`;
+    function coverageHeadline(count, eligible, verb) {
+        if (!eligible) return "No eligible requests";
+        if (!count && verb === "assessed") return "Quality not assessed";
+        return count === eligible ? `All ${units(eligible, "requests")} ${verb}`
+            : `${number(count)} of ${units(eligible, "requests")} ${verb}`;
+    }
+    function evidenceRow(metric) {
+        const quality = qualityDimensions.includes(metric.dimension), { covered: count, eligible } = metric.coverage;
+        const timingUnits = {
+            "tool-duration": "calls", "recorded-response-duration": "requests", "interaction-latency": "requests",
+            "http-response-duration": "HTTP responses", "http-error-duration": "HTTP transport errors",
+        };
+        const unit = quality ? "requests" : metric.dimension === "speed" ? timingUnits[metric.definitionId]
+            : metric.checkId === "recorded-tool-success" ? "calls" : "items";
+        const provenance = {
+            origin: metric.origin,
+            label: metric.origin === "model-assessed" ? "Model assessment" : metric.origin === "user-personal" ? "Your feedback" : "Local observation",
+            definitionId: metric.definitionId, definitionVersion: metric.definitionVersion,
+            checkId: metric.checkId, checkVersion: metric.checkVersion,
+            ...(metric.evaluator ? { evaluator: { ...metric.evaluator } } : {}),
+        };
+        const common = {
+            version: 1, metricRef: metric.metricRef, dimension: metric.dimension, status: metric.status,
+            label: reading(metric)?.label ?? speedLabels[metric.definitionId] ?? checkLabels[metric.checkId],
+            coverage: { count, eligible, unit }, eligible, provenance,
+        };
+        if (quality) {
+            const notAssessed = eligible - count, errors = metric.counts.evaluatorError;
+            const reasons = metric.unassessedReasons ?? (metric.counts.unassessed ? [{
+                reason: count === 0 && errors === 0 && metric.reason !== "no-assessed-units" ? metric.reason : null,
+                count: metric.counts.unassessed,
+            }] : []);
+            const labels = {
+                "missing-evidence": "Insufficient recorded evidence", "partial-evidence": "Insufficient recorded evidence",
+                "not-applicable": "Check not applicable", "unsupported-check": "Local rules do not assess quality",
+                "no-assessed-units": "No verdict recorded for this assessment",
+                "user-verdict": "Personal feedback without a pass or fail verdict",
+            };
+            return {
+                ...common, kind: "quality", assessed: count, notAssessed, counts: { ...metric.counts },
+                headline: coverageHeadline(count, eligible, "assessed"),
+                coverageLabel: `${number(count)} of ${units(eligible, unit)} assessed`,
+                resultLabel: count ? `${number(metric.counts.pass)} passed; ${number(metric.counts.fail)} failed` : "No pass or fail verdicts",
+                missingLabel: notAssessed ? `${units(notAssessed, unit)} not assessed${errors ? `; ${units(errors, "evaluator errors")}` : ""}` : "No requests left unassessed",
+                passShare: { value: metric.value, label: metric.value === null ? "No pass percentage"
+                    : `${metric.value > 0 && metric.value * 100 < 0.01 ? "<0.01" : percentages.format(metric.value * 100)}% of assessed requests passed` },
+                unassessedReasons: reasons.map(item => ({
+                    ...item, label: labels[item.reason] ?? (item.reason === null ? "Reason not retained for these unassessed requests" : reasonLabels[item.reason]),
+                })),
+                limitation: (count < eligible ? "Results describe only the assessed requests, not the overall quality of this selection."
+                    : "These are recorded assessments, not independent proof of correctness.")
+                    + (metric.origin === "model-assessed" ? " AI judgments can be wrong." : "")
+                    + (metric.dimension === "action-trust" ? metric.origin === "user-personal"
+                        ? " Personal authorization feedback is not an independent permission audit."
+                        : " Matching the request does not prove a person gave permission." : ""),
+            };
+        }
+        if (metric.dimension === "speed") {
+            return {
+                ...common, kind: "timing", timed: count, notTimed: eligible - count,
+                headline: `${number(count)} of ${units(eligible, unit)} timed`,
+                coverageLabel: `${number(count)} of ${units(eligible, unit)} timed`,
+                resultLabel: metric.value === null ? "No timing recorded" : `${reading(metric).value} median of timed ${unit}`,
+                missingLabel: eligible > count ? `${units(eligible - count, unit)} without recorded timing` : `All ${unit} timed`,
+                measurement: { value: metric.value, unit: metric.unit, aggregation: "nearest-rank-p50", boundary: metric.boundary },
+                limitation: (count < eligible ? `The median describes only the timed ${unit}; it does not establish overall speed. ` : "")
+                    + boundaryLabels[metric.boundary] + ".",
+            };
+        }
+        if (metric.checkId === "recorded-tool-success") return {
+            ...common, kind: "execution", counts: { ...metric.counts },
+            headline: `${number(metric.counts.pass)} of ${units(eligible, "calls")} succeeded`,
+            resultLabel: `${number(metric.counts.pass)} succeeded; ${number(metric.counts.fail)} failed`,
+            missingLabel: `${units(eligible - count, "calls")} without a recorded binary outcome`,
+            successShare: { value: eligible ? metric.counts.pass / eligible : null, numerator: metric.counts.pass, denominator: eligible },
+            limitation: "Recorded tool success uses all included calls, not just binary results. It does not establish answer correctness, support or permission.",
+        };
+        return {
+            ...common, kind: "observation", counts: metric.counts ? { ...metric.counts } : null,
+            headline: `${number(count)} of ${units(eligible, unit)} with recorded binary outcomes`,
+            resultLabel: metric.counts ? `${number(metric.counts.pass)} positive; ${number(metric.counts.fail)} negative` : "Local observation",
+            limitation: "Tool outcomes and evidence availability do not establish answer correctness, support or permission.",
+        };
+    }
+    function attemptEvidence(metrics, attempts) {
+        const eligibleRefs = new Set(metrics.filter(metric => qualityDimensions.includes(metric.dimension)).flatMap(metric => metric.eligibleUnitRefs));
+        const eligible = eligibleRefs.size;
+        const limitation = "Latest recorded attempt status per request. Failed or unfinished evaluator attempts are not failed answer or action verdicts; prior applicable verdicts remain shown.";
+        if (attempts == null) return {
+            status: "unavailable", coverage: { count: null, eligible: metrics.length ? eligible : null, unit: "requests" },
+            counts: null, rows: [], headline: "Assessment attempt history unavailable", limitation,
+        };
+        validateAssessmentAttempts(attempts);
+        if (attempts.some(item => !eligibleRefs.has(item.interactionRef))) throw new TypeError("Assessment attempt outside selected requests.");
+        const labels = {
+            none: "No assessment attempt recorded", pending: "Assessment pending", failed: "Evaluator attempt failed",
+            uncertain: "Evaluator outcome uncertain", unavailable: "Assessment evidence or approval unavailable",
+            complete: "Assessment attempt completed", revoked: "Assessment approval withdrawn",
+            "not-run": "Request not reached by the recorded assessment run", "not-current": "Earlier attempt is not current",
+        };
+        const counts = Object.fromEntries(Object.keys(labels).map(state => [state, attempts.filter(item => item.latestAttempt === state).length]));
+        return {
+            status: attempts.length === eligible ? "available" : "partial",
+            coverage: { count: attempts.length, eligible, unit: "requests" }, counts,
+            rows: Object.entries(counts).filter(([, count]) => count).map(([state, count]) => ({ state, count, label: labels[state] })),
+            headline: `Assessment attempt status recorded for ${number(attempts.length)} of ${units(eligible, "requests")}`,
+            limitation,
+        };
+    }
+    function evidenceSummary(metrics, assessmentAttempts) {
+        const quality = Object.fromEntries(qualityDimensions.map(dimension => {
+            const all = metrics.filter(metric => metric.dimension === dimension);
+            const assessedLanes = all.filter(metric => metric.origin !== "automatic-local");
+            const eligibleRefs = new Set(all.flatMap(metric => metric.eligibleUnitRefs));
+            const coveredRefs = new Set(assessedLanes.flatMap(metric => metric.coveredUnitRefs));
+            const eligible = all.length ? eligibleRefs.size : null, assessed = all.length ? coveredRefs.size : null;
+            const rows = assessedLanes.map(evidenceRow);
+            return [dimension, {
+                dimension, eligible, assessed, notAssessed: eligible === null ? null : eligible - assessed,
+                coverage: { count: assessed, eligible, unit: "requests" },
+                headline: eligible === null ? "Assessment coverage unavailable" : coverageHeadline(assessed, eligible, "assessed"),
+                coverageLabel: eligible === null ? "Coverage unavailable" : `${number(assessed)} of ${units(eligible, "requests")} assessed`,
+                missingLabel: eligible === null ? "No metric supplied for this scope" : `${units(eligible - assessed, "requests")} not assessed`,
+                rows, localObservations: all.filter(metric => metric.origin === "automatic-local").map(evidenceRow),
+                overlappingAssessments: assessedLanes.reduce((sum, metric) => sum + metric.coverage.covered, 0) > coveredRefs.size,
+                limitation: "Tool outcomes do not establish answer correctness, answer support or permission. "
+                    + (rows.length > 1 ? "Assessment rows may cover the same requests; do not add their counts or average their percentages."
+                        : assessed ? "Only the assessed requests have quality verdicts; missing verdicts are not failures." : "No pass or fail quality verdict is available."),
+            }];
+        }));
+        return {
+            version: 1, quality,
+            assessmentAttempts: attemptEvidence(metrics, assessmentAttempts),
+            timing: metrics.filter(metric => metric.dimension === "speed").map(evidenceRow),
+            execution: metrics.filter(metric => metric.dimension === "execution").map(evidenceRow),
+        };
+    }
     function present(metric, singleInteraction = false) {
         const ratio = metric.unit === "ratio", cost = metric.unit === "USD";
         const label = ratio ? dimensionLabels[metric.dimension] ?? checkLabels[metric.checkId] : cost
@@ -147,6 +286,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         }[metric.definitionId];
         return {
             metricRef: metric.metricRef, dimension: metric.dimension, label, value, coverage, qualification, origin, personalVerdict,
+            evidence: evidenceRow(metric),
             reading: reading(metric, personalVerdict),
             ...(timingSummary ? { summary: {
                 label: timingSummary.label,
@@ -223,7 +363,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 : execution.failed ? "Inspect the recorded actions and Technical details below. Missing or screened error text is not recovered by this view." : "",
         };
     }
-    function summarize(metrics, { membershipStatus = "complete-retained", singleInteraction = false, reviewStatus = null } = {}) {
+    function summarize(metrics, { membershipStatus = "complete-retained", singleInteraction = false, reviewStatus = null, assessmentAttempts = null } = {}) {
         if (!Array.isArray(metrics)) throw new TypeError("Metrics must be supplied explicitly.");
         const slots = new Set();
         for (const metric of metrics) {
@@ -270,7 +410,8 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         const sharedCount = sharedRequests ? modelChecks[0].coverage.covered : 0;
         const readingNote = (sharedCount ? `The three AI checks cover the same ${number(sharedCount)} ${sharedCount === 1 ? "request" : "requests"}.`
             : "Read the request count for each check; they may cover different requests.") + " Missing results do not count as failed checks.";
-        return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "", reviewStatus: review };
+        return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "", reviewStatus: review,
+            evidence: evidenceSummary(metrics, assessmentAttempts) };
     }
     return { format, summarize, band, bandVersion };
 }

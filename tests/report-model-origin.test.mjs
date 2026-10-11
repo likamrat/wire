@@ -22,6 +22,7 @@ function modelFacts(model, rubricVersion) {
                 rubricId: "wire-recorded-interaction-review", rubricVersion },
             status: "measured", reason: null, value: 1, numerator: 1, denominator: 1,
             coverage: { covered: 1, eligible: 1 }, counts: { pass: 1, fail: 0, unassessed: 0, evaluatorError: 0 },
+            unassessedReasons: [],
             coveredUnitRefs: [interactionRef],
             evidenceRefs: [...facts.metrics.find(metric => metric.checkId === "recorded-tool-success").evidenceRefs] });
     }

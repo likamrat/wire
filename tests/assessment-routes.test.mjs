@@ -39,7 +39,7 @@ test("synthetic: installed assessment reads, guarded mutation receipts and contr
     assert.equal((await post("/api/assessment/mutation/status", { schemaVersion: 1, mutationRef: mutation.mutationRef }, b)).status, 403);
     assert.equal((await post("/api/assessment/detail", { schemaVersion: 1, interactionRef, expectedSourceRevision: receipt.basis.sourceRevision + 1 }, a)).status, 409);
     const empty = await (await post("/api/assessment/overview", { schemaVersion: 1, interactionRefs: [], expectedSourceRevision: receipt.basis.sourceRevision }, a)).json();
-    assert.deepEqual(empty.data, { interactionRefs: [], metrics: [] });
+    assert.deepEqual(empty.data, { interactionRefs: [], metrics: [], assessmentAttempts: [] });
     await runtime.close();
     runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     origin = runtime.url.slice(0, -1);
