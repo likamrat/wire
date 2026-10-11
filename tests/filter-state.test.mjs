@@ -33,3 +33,11 @@ test("scoped chat navigation retains all analytical filters but not paging or pr
     assert.equal(scoped.bucket, "day");
     assert.equal(filters.scope(route, { view: "activity", result: "success" }).result, "success", "Explicit result links override only their named field.");
 });
+
+test("service chart refinements canonicalize separately from server OR filters and survive scoped navigation", () => {
+    const route = filters.canonical({ services: "Mail,Files", includeMissingService: true, withinServices: "Mail,Calendar,Mail" });
+    assert.equal(route.withinServices, "Calendar,Mail");
+    assert.deepEqual(filters.query(route), { scope: "history", includeMetadata: false, services: ["Files", "Mail"], includeMissingService: true });
+    assert.equal(filters.scope(route, { view: "analyze", session: "invented" }).withinServices, "Calendar,Mail");
+    assert.equal(filters.canonical({ withinServices: ",," }).withinServices, undefined);
+});

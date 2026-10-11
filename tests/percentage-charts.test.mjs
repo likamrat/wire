@@ -70,21 +70,16 @@ test("top annuli retain unrounded circular angles before the donut projection", 
     for (const args of [[0, 0], [-1, .5], [0, 1.1], [NaN, 1], [0, 1, 20, 20], [0, 1, Infinity, 2]]) assert.throws(() => charts.arc(...args), RangeError);
 });
 
-test("ring camera opens the annulus without roll or changing the columns, with one contained fixed extrusion", () => {
+test("flat ring is circular and contained without changing remaining native-report column geometry", () => {
     const column = createDimensionalCharts().layout({ total: 1, maximum: 1, service: "Unknown" }), f = charts.frame();
     assert.equal(column.rise / column.frontWidth, .18);
     assert.ok(column.depthY > 0);
     assert.equal(f.shear, 0);
-    assert.equal(f.compression, .68);
-    assert.ok(f.compression / .46846153846153843 > 1.4, "Top ellipse remains appreciably less foreshortened");
-    assert.ok(Math.abs(f.compression - .72) <= .04 + Number.EPSILON, "Pitch adjustment stays subtle");
-    assert.equal(f.depth, 22);
-    assert.ok(f.depth < f.inner * f.compression, "Rear inner walls do not swallow the hole");
+    assert.equal(f.compression, 1);
+    assert.equal(f.depth, 0);
+    assert.equal(f.width, f.height);
     for (const fraction of [0, .000001, ...Array.from({ length: 361 }, (_, i) => i / 360)]) {
-        const top = charts.point(f.outer, fraction), bottom = charts.point(f.outer, fraction, f.depth);
-        assert.equal(top.x, bottom.x);
-        assert.ok(Math.abs((bottom.y - top.y) * f.compression - f.depth) < 1e-12);
-        for (const p of [top, bottom]) {
+        for (const p of [charts.point(f.outer, fraction), charts.point(f.inner, fraction)]) {
             assert.ok(p.x + f.cx > 0 && p.x + f.cx < f.width);
             const y = f.cy + f.shear * p.x + f.compression * p.y;
             assert.ok(y > 0 && y < f.height);
@@ -92,28 +87,20 @@ test("ring camera opens the annulus without roll or changing the columns, with o
     }
 });
 
-test("visible walls split at silhouette boundaries without hidden rear exteriors, missing seams or inflated tiny slices", () => {
+test("flat exclusive rings have exact contiguous angles, including full-circle and tiny slices", () => {
     for (const values of [[1], [1, 1], [1, 3], [3, 1], [1, 999999], [999999, 1], Array(24).fill(1)]) {
         const data = charts.partition(values.map((value, i) => entry(`segment-${i}`, value)), sum(values.map(count => ({ count }))), { maxSlices: Math.max(2, values.length) });
-        const all = data.slices.map(slice => ({ slice, ...charts.surfaces(slice.start, slice.end) }));
-        assert.ok(all.every(g => g.depth === 22));
-        assert.ok(Math.abs(all.flatMap(g => g.outer).reduce((n, p) => n + p.end - p.start, 0) - .5) < 1e-14);
-        assert.ok(Math.abs(all.flatMap(g => g.inner).reduce((n, p) => n + p.end - p.start, 0) - .5) < 1e-14);
-        for (const g of all) {
-            assert.ok(g.top.length > 0);
-            for (const face of [...g.outer, ...g.inner]) {
-                assert.ok(face.start >= g.slice.start && face.end <= g.slice.end && face.end > face.start);
-                assert.equal(/NaN|Infinity/.test(face.d), false);
-            }
-            for (const face of g.inner) assert.ok(face.start >= .25 && face.end <= .75);
-            for (const face of g.outer) assert.ok(face.end <= .25 || face.start >= .75);
+        let cursor = 0;
+        for (const slice of charts.visualSlices(data)) {
+            assert.equal(slice.visualStart, cursor);
+            assert.equal(slice.visualFraction, slice.count / data.total);
+            assert.equal(slice.visualEnd, slice.end);
+            assert.doesNotMatch(charts.arc(slice.start, slice.end), /NaN|Infinity/);
+            cursor = slice.end;
         }
+        assert.equal(cursor, 1);
     }
-    const tiny = charts.surfaces(.999999, 1);
-    assert.equal(tiny.outer.length, 1);
-    assert.equal(tiny.outer[0].start, .999999);
-    assert.equal(tiny.inner.length, 0);
-    assert.notEqual(tiny.top, charts.surfaces(.999, 1).top);
+    assert.notEqual(charts.arc(.999999, 1), charts.arc(.999, 1));
     assert.deepEqual(charts.partition([], 0).slices, []);
 });
 
@@ -135,7 +122,7 @@ test("canonical deduplication and multi-target identity retain one call in every
     const source = records(), before = structuredClone(source), analytics = buildActivityAnalytics(source, { filters: { scope: "all" }, limit: 1 });
     const model = charts.model(analytics);
     assert.equal(model.total, 4);
-    for (const dimension of ["outcomes", "services", "tools"]) {
+    for (const dimension of ["outcomes", "categories", "tools"]) {
         assert.equal(sum(model[dimension].slices), 4);
         assert.equal(sum(model[dimension].rows), 4);
         assert.ok(Math.abs(model[dimension].slices.reduce((value, row) => value + row.fraction, 0) - 1) < 1e-15);
@@ -143,10 +130,10 @@ test("canonical deduplication and multi-target identity retain one call in every
     assert.deepEqual(Object.fromEntries(model.outcomes.rows.map(row => [row.id, row.count])), {
         failure: 1, partial: 1, success: 1, unknown: 1, other: 0, transport: 0,
     });
-    assert.equal(model.services.rows.find(row => row.id === "Multiple workloads").count, 1);
-    assert.equal(model.services.rows.find(row => row.id === "Unknown").count, 1);
+    assert.equal(model.categories.rows.find(row => row.id === "Multiple workloads").count, 1);
+    assert.equal(model.categories.rows.find(row => row.id === "Unknown").count, 1);
     assert.equal(analytics.visibleGroups.length, 1);
-    assert.ok(model.services.rows.length > 1, "Percentages ignore paginated/group-limited chart presentation");
+    assert.ok(model.categories.rows.length > 1, "Percentages ignore paginated/group-limited chart presentation");
     assert.deepEqual(model, charts.model(buildActivityAnalytics([...source].reverse(), { filters: { scope: "all" } })));
     assert.deepEqual(source, before);
 });
@@ -157,7 +144,7 @@ test("applied outcome/service/chat/date scopes stay canonical; empty and undated
         const analytics = buildActivityAnalytics(records(), { filters, timeContext: { timeZone: "America/Los_Angeles", locale: "en-US" } });
         const model = charts.model(analytics);
         assert.equal(model.total, analytics.totals.count);
-        for (const dimension of ["outcomes", "services", "tools"]) assert.equal(sum(model[dimension].slices), model.total);
+        for (const dimension of ["outcomes", "categories", "tools"]) assert.equal(sum(model[dimension].slices), model.total);
         if (!model.total) assert.equal(model.outcomes.slices.length, 0);
     }
     const [undated] = records();
@@ -204,6 +191,7 @@ test("numeric status, other status and transport outcomes retain their own perce
         [["failure", "25%"], ["other", "25%"], ["success", "25%"], ["unknown", "25%"]]);
     const analytics = buildActivityAnalytics(records());
     analytics.layer = "http";
+    for (const row of analytics.rows) row.serviceAssociation.layer = "http";
     const missing = analytics.rows.find(row => row.outcome === "unknown");
     missing.outcome = "transport";
     analytics.totals.unknown--; analytics.totals.transport++;

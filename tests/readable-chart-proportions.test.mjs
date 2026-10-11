@@ -53,7 +53,7 @@ test("the missing result is a readable data band rather than a false extra gray 
     assert.ok(mixed.segments.every(part => part.height >= 6 - 1e-10));
 });
 
-test("visual donut angles may enlarge tiny slices while exact shares and canonical partitions remain untouched", () => {
+test("flat donut angles and exact shares preserve tiny slices without inflation", () => {
     const data = percentages.partition([
         { id: "success", label: "Worked", count: 193 },
         { id: "failure", label: "Needs attention", count: 25 },
@@ -64,7 +64,7 @@ test("visual donut angles may enlarge tiny slices while exact shares and canonic
     assert.equal(visual[0].visualStart, 0);
     assert.equal(visual.at(-1).visualEnd, 1);
     const tiny = visual.find(row => row.id === "unknown");
-    assert.ok(tiny.visualFraction >= .03);
+    assert.equal(tiny.visualFraction, 1 / 219);
     assert.equal(tiny.fraction, 1 / 219);
     assert.equal(tiny.percentage, "0.5%");
     assert.equal(tiny.count, 1);

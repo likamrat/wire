@@ -69,6 +69,47 @@ test("search AND Author/Outcome/date/service context preserves before-outcome me
     exact(refine(snapshot(strictOptions), strictOptions, privateQuery), [rowId(0), rowId(6)], ["parity-request-0", "parity-request-6"]);
 });
 
+test("service chart refinement intersects the server OR set and all consumers without freezing IDs", () => {
+    const options = { ...scopeOptions, filters: { scope: "history", services: ["Files"], includeMissingService: true, outcomes: ["failure"] } };
+    const source = scopeRecords();
+    const mailOnly = structuredClone(source[1]);
+    mailOnly.scenarioId = "mail-only"; mailOnly.sourceSessionId = "mail-only";
+    mailOnly.toolCalls[0].requestArgs = { entityUrls: ["/me/messages"] };
+    mailOnly.toolCalls[0].toolSucceeded = false; mailOnly.toolCalls[0].reportedOutcome = "failed";
+    source.push(mailOnly);
+    const input = { scenarios: source, analytics: buildActivityAnalytics(source, options), exportCatalog: exportCatalogFor(source) };
+    const before = structuredClone(input), slice = refine(input, options, privateQuery, ["Mail"]);
+    exact(slice, [rowId(0)], ["parity-request-0"]);
+    assert.deepEqual(slice.analytics.serviceInvolvement.selection.knownMatchIds, [rowId(0)]);
+    assert.deepEqual(slice.analytics.serviceInvolvement.selection.contextOnlyIds, []);
+    assert.deepEqual(slice.analytics.resultFacet.rows.map(row => row.id), [rowId(0)]);
+    const report = createReportScope().resolve(input.exportCatalog, "current", slice.scenarioIds, []);
+    assert.deepEqual(report.requests.map(row => row.scenarioId), ["parity-request-0"]);
+    assert.equal(report.counts.workIqActions, 3, "Current report includes the full retained interaction, not just its matching call");
+    assert.deepEqual(input, before);
+    source[2].toolCalls[0].requestArgs = { entityUrls: ["/me/drive/root", "/me/messages"] };
+    const next = { ...input, analytics: buildActivityAnalytics(source, options) };
+    const updated = refine(next, options, privateQuery, ["Mail"]);
+    exact(updated, [rowId(0)], ["parity-request-0"]);
+    assert.deepEqual(updated.analytics.resultFacet.rows.map(row => row.id).sort(), [rowId(0), rowId(2)]);
+    const noOutcome = { ...options, filters: { ...options.filters, outcomes: undefined } };
+    exact(refine({ ...next, analytics: buildActivityAnalytics(source, noOutcome) }, noOutcome, privateQuery, ["Mail"]),
+        [rowId(0), rowId(2)], ["parity-request-0", "parity-request-2"]);
+    assert.ok(refine(next, options, privateQuery, []).rows.length > 1, "Removing the refinement restores the existing service scope");
+});
+
+test("returned-entry refinement keeps accepted pre-outcome parent coverage and never borrows the parent service", () => {
+    const options = { ...scopeOptions, layer: "reported-api", filters: { services: ["Files"], includeMissingService: true, outcomes: ["failure"] } };
+    const input = snapshot(options), result = refine(input, options, `${privateQuery} request 0`, ["Files"]);
+    const expected = input.analytics.rows.filter(row => row.scenarioId === "parity-request-0" && row.serviceAssociation.services.includes("Files"));
+    exact(result, expected.map(row => row.id), ["parity-request-0"]);
+    assert.equal(result.rows.length, 1);
+    assert.deepEqual(result.analytics.apiCoverage.calls.map(row => row.id), [rowId(0)]);
+    assert.equal(result.analytics.apiCoverage.returnedResultUnits, 2, "Parent coverage still counts the accepted parent's two returned entries");
+    assert.equal(result.analytics.apiCoverage.selectedResultUnits, 1);
+    assert.throws(() => refine({ ...input, requestActivity: undefined }, options, "", ["Files"]), /accepted returned-entry associations/);
+});
+
 test("changed evidence layers refine returned-result IDs and their explicitly broader pre-outcome parent coverage", () => {
     const options = { ...scopeOptions, layer: "reported-api", filters: { services: ["Files"], includeMissingService: true, outcomes: ["failure"] } };
     const input = snapshot(options), slice = refine(input, options, `${privateQuery} request 0`);

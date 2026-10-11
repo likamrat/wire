@@ -416,38 +416,36 @@ deduplicated `result=success,failure` list. Individual result links deliberately
 choose that one result. Current-view report membership follows the matching
 request-group union; Selected and All report scopes remain independent.
 
-Home shows dimensional glass count columns and open, front-facing,
-restrained-tilt **Recorded outcomes** and **Service share** donuts.
-**Tool names** keeps the existing composition
-switch. All use the same accepted canonical evidence layer, filters and counts;
-missing/partial/other outcomes remain distinct. Worked means tool completion,
-not task correctness or proven Graph HTTP success.
+Analyze shows **Tools** and **Services** together, with flat bars, exact counts
+and shares of the declared canonical scope. Services use supported
+`serviceInvolvement` v1 associations, not the single legacy activity category.
+One multi-service call can appear under several services but counts once in the
+view denominator. Service shares may sum above 100%; there is no service donut.
+Missing/unsupported service details and discovery/preparation are named separately,
+never assigned to Files or inferred from an assistance call.
 
-Columns use one shared square-root height scale with minimum visible positive
-bodies and result sections; zero has no data-bearing paint. Faceted glass faces
-follow those visual spans, while neutral tops mark the end, not another result.
-Reflections are omitted. Visual sizes are adjusted for readability, not measured
-quantities; the shared chart-scale help discloses the adjustment.
-Plain count links (including **2 calls**) and the default-visible exact table
-make small values readable and actionable without hover. The table associates
-dates/categories with every recorded outcome. Its collapse choice is preserved.
-**What these results mean** holds optional reading help; service definitions and
-**All categories and definitions** retain the other detailed explanations.
-There are no per-column info controls, tiny-band footnotes or donut connectors.
+**Recorded outcomes** uses a flat circular composition because each record has
+one outcome. Tool, service, category and operation bars and outcome slices keep
+linear, unrounded geometry; tiny values are not enlarged. Exact counts and
+`<0.1%` / `>99.9%` labels avoid false zero/100% shares. A zero denominator is
+explicitly not applicable. Worked means recorded tool completion, not task
+correctness or proven Graph HTTP success.
 
-Donut legends show the category, actual share and exact count together. Positive
-slices have a 3% minimum visual share, with remaining space allocated
-proportionally among larger categories; zero stays unpainted. Counts and
-percentages retain the canonical denominator; `<0.1%` and `>99.9%` prevent false
-zero/100% labels. Headings retain the unit without a standalone enlargement
-caption; accessible chart descriptions and exact-data help explain enlarged
-slices and decorative depth. **Tool names** retains proportional percentage bars.
-Unknown and multi-service categories retain their identities. Grouped Other
-members remain in the exact table. Positive outcome/service names link to their
-filtered requests. A zero total is explicitly not applicable.
+Tool/outcome labels and chart marks filter the same Analyze cohort. Service
+marks add a removable **Mail within current scope**-style intersection, retaining
+the current Service-menu OR set and any separately labeled missing-service context.
+Repeated service marks intersect; an explicit Service-menu choice replaces these
+chart refinements. Back and stored-data refresh preserve the named predicates,
+not a frozen list of IDs. Current-view reports still include the matching full
+interactions, with matching-call and full-interaction counts distinguished.
 
-Both panels reflow with the container and root text size. Existing Asta Sans,
-Fluent glyphs and light/navy themes remain. New HTML/PDF reports share the glass
+Time scales, legacy **By category**, **By path or operation**, recorded-result
+breakdowns and exact tables remain reachable. All tool and service rows stay
+visible; **Exact data and definitions** includes every outcome, including zero.
+Full labels provide 44px keyboard targets even when data paint is too small to
+click. Panels sit side by side at usable widths and stack at narrow/enlarged text.
+Existing typography, Fluent glyphs and semantic theme roles remain.
+New HTML/PDF reports retain the existing glass
 column presentation, disclosed readability scale and exact counts; previously
 saved report bytes are never rewritten.
 General history/hosted-Graph limits live once in **About this evidence**, not an

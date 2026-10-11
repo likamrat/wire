@@ -71,6 +71,18 @@ ${Object.keys(light).map(tone => `.dimensional-tone-${tone} {${faces.map(face =>
 `;
 export const dimensionalChartStyles = `
 ${dimensionalColumnStyles}
+.flat-comparison {display:grid;gap:12px;min-width:0}
+.flat-comparison-row {min-width:0}
+.flat-comparison-action {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,max-content);gap:8px 16px;align-items:center;min-height:44px;width:100%;padding:8px 0;border:0;border-radius:var(--radius-small);background:transparent;text-decoration:none;font-size:var(--type-small);color:var(--ink);text-align:start;scroll-margin-block:calc(var(--app-header-height,76px) + 16px) 16px}
+.flat-comparison-action .group-name {overflow-wrap:anywhere;min-width:0;font-family:var(--font)}
+.flat-comparison-action:is(a,button) {color:var(--accent);cursor:pointer}
+.flat-comparison-action:is(a,button):is(:hover,:active) {background:var(--canvas);color:var(--ink);border:0}
+.flat-comparison-action:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+.flat-comparison-count {font-variant-numeric:tabular-nums;font-weight:var(--weight-strong);min-width:0;overflow-wrap:anywhere}
+.flat-comparison-track {display:flex;grid-column:1/-1;height:12px;min-width:0;background:var(--canvas)}
+.flat-comparison-segment {display:block;height:100%;min-width:0;flex-shrink:0;background:var(--column-label)}
+@media(max-width:500px) {.flat-comparison-action {grid-template-columns:minmax(0,1fr)}}
+@media(forced-colors:active) {.flat-comparison-segment {background:CanvasText}.flat-comparison-action:focus-visible {outline-color:Highlight}}
 .dimensional-scroll {overflow-x:auto;overflow-y:hidden;padding:8px 4px calc(max(16px,1rem) + 1px);scrollbar-width:thin;min-width:0;max-width:100%}
 .dimensional-plot {position:relative;min-width:0;margin-inline:auto}
 .dimensional-comparison {display:grid;grid-auto-flow:column;grid-auto-columns:var(--scene-pitch);gap:0;position:relative}

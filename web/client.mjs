@@ -3,6 +3,7 @@ export function createFilterState(results, authorship) {
     function canonical(route) {
         const next = { ...route };
         if (typeof next.services === "string") next.services = [...new Set(next.services.split(",").filter(Boolean))].sort().join(",") || undefined;
+        if (typeof next.withinServices === "string") next.withinServices = [...new Set(next.withinServices.split(",").filter(Boolean))].sort().join(",") || undefined;
         if (!next.services) next.includeMissingService = undefined;
         else if (["true", "false"].includes(next.includeMissingService)) next.includeMissingService = next.includeMissingService === "true";
         return next;
@@ -26,7 +27,7 @@ export function createFilterState(results, authorship) {
     }
     function scope(route, next) {
         const retained = Object.fromEntries(["layer", "range", "from", "to", "bucket", "tool", "service", "services", "includeMissingService",
-            "scope", "authors", "result", "project", "endpoint"].filter(key => route[key] !== undefined).map(key => [key, route[key]]));
+            "withinServices", "scope", "authors", "result", "project", "endpoint"].filter(key => route[key] !== undefined).map(key => [key, route[key]]));
         return { ...retained, ...next };
     }
     return { canonical, query, scope };
@@ -34,7 +35,10 @@ export function createFilterState(results, authorship) {
 
 // Refine only an accepted canonical snapshot. Private search never becomes a server filter.
 export function createAnalysisSlice(localSearch, projection) {
-    return function slice(snapshot, options, search = "") {
+    return function slice(snapshot, options, search = "", withinServices = []) {
+        if (!Array.isArray(withinServices) || withinServices.some(service => typeof service !== "string" || !service)) {
+            throw new TypeError("Service chart refinements require named services.");
+        }
         const base = snapshot.analytics, records = new Map(snapshot.scenarios.map(scenario => [scenario.scenarioId, scenario]));
         const sources = new Map((snapshot.sessions || []).map(source => [source.sessionId, source]));
         const hasQuery = Boolean(search.trim());
@@ -43,17 +47,28 @@ export function createAnalysisSlice(localSearch, projection) {
             return localSearch.phrase(search, [scenario.userPrompt?.text, scenario.title, source?.project, source?.name,
                 scenario.project, scenario.sourceSessionName, scenario.sourceSessionId]);
         }).map(scenario => scenario.scenarioId)) : null;
-        const refineRows = rows => hasQuery ? rows.filter(row => matches.has(row.scenarioId)) : rows;
+        const searchRows = rows => hasQuery ? rows.filter(row => matches.has(row.scenarioId)) : rows;
+        const refineRows = rows => searchRows(rows).filter(row => withinServices.every(service => row.serviceAssociation?.services.includes(service)));
         const rows = refineRows(base.rows), scenarioIds = [...new Set(rows.map(row => row.scenarioId).filter(id => records.has(id)))];
         let analytics = base;
-        if (hasQuery) {
+        if (hasQuery || withinServices.length) {
             const facetRows = refineRows(base.resultFacet.rows);
+            let parentCalls;
+            if (base.layer === "reported-api") {
+                parentCalls = searchRows(base.apiCoverage.calls);
+                if (withinServices.length) {
+                    const entries = snapshot.requestActivity?.["reported-api"];
+                    if (!Array.isArray(entries)) throw new TypeError("Service-refined API parent coverage requires accepted returned-entry associations.");
+                    const parents = new Set(refineRows(entries).map(row => row.parentCallId));
+                    parentCalls = parentCalls.filter(call => parents.has(call.id));
+                }
+            }
             analytics = {
                 ...base,
                 ...projection.project(rows, { ...options, timeContext: base.timeContext, dateRange: base.dateRange }, snapshot.scenarios),
                 resultFacet: { ...base.resultFacet, rows: facetRows, totals: projection.summarize(facetRows) },
                 apiCoverage: base.layer === "reported-api"
-                    ? projection.apiCoverage(refineRows(base.apiCoverage.calls), rows) : base.apiCoverage,
+                    ? projection.apiCoverage(parentCalls, rows) : base.apiCoverage,
                 httpCoverage: base.layer === "http" ? {
                     observedResponseCount: rows.filter(row => row.observedGraphHttp).length,
                     noResponseRecordCount: rows.filter(row => !row.observedGraphHttp).length,
@@ -93,7 +108,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const analysisSlice = createAnalysisSlice(localSearch, createActivityProjection(time, categories, Object.keys(results.labels("tool"))));
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, icons: dimensionalIcons,
         createLink: (kind, row) => kind === "outcomes" && applied.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
-            : kind === "services" && row.id !== "group:other" ? link("", "activity", { service: row.id, page: undefined }) : null });
+            : kind === "services" ? link("", "activity", { withinServices: [...new Set([...(route.withinServices?.split(",") || []), row.id])].sort().join(","), page: undefined })
+                : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined }) : null });
     const percentages = percentageMath.mount($("percentageCharts"));
     const live = createLiveState();
     const fresh = createFreshActivity();
@@ -683,7 +699,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const [rawView, rawQuery = ""] = hash.slice(1).split("?");
         const view = rawView === "report" ? "reports" : rawView || "analyze";
         const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode"];
+        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode"];
         const values = { view: ["analyze", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
         if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
@@ -738,6 +754,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             settingsWarning: undefined,
             ...changes,
         };
+    }
+    function readingKey(value) {
+        const [view, query = ""] = routeUrl(value).split("?");
+        const params = new URLSearchParams(query);
+        params.sort();
+        return JSON.stringify([view, params.toString(), value.search || ""]);
     }
     function go(view, changes = {}, replace = false) {
         if (view === "activity" && changes.session) presentation.setOpen("session:" + changes.session, true);
@@ -1046,6 +1068,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (result?.revision !== undefined && result.revision !== next.revision) throw new Error("Activity changed during the read. Try again.");
             if (result?.timeContext && JSON.stringify(result.timeContext) !== JSON.stringify(config.timeContext)) throw new Error("The runtime used a different timezone. Retry the stored-data read before continuing.");
             const validated = validateAnalytics(result, next.scenarios);
+            if (route.withinServices) analysisSlice(next, config, search, route.withinServices.split(","));
             const checking = fresh.snapshot();
             if (checking.phase === "applying" && next.revision < checking.check.revision) throw new Error("The view read is older than the completed local check. Refresh stored data; no collection was repeated.");
             if (checking.phase === "applying" && next.collection?.configVersion !== checking.check.configVersion) throw new Error("The approved source changed during this check. Review the current connection before checking again.");
@@ -1138,7 +1161,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const previousRoute = route, clearingFilter = $("filterChips").contains(document.activeElement);
         const focusId = keepFocus ? document.activeElement?.id : null;
         savedArtifactUI?.leave();
-        if (appliedRoute) readingPositions.set(JSON.stringify([routeUrl(appliedRoute), appliedRoute.search || ""]), captureReading());
+        if (appliedRoute) readingPositions.set(readingKey(appliedRoute), captureReading());
         ux.hideTooltip();
         selectControls?.close();
         if ($("overlay").open) $("overlay").close();
@@ -1152,14 +1175,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("resetView").hidden = !viewChanged();
         const queryChanged = before !== JSON.stringify(query());
         // Browsing saved files is the same workspace, not a change to the frozen draft.
-        if (previousRoute.view !== "reports" || route.view !== "reports" || queryChanged) invalidatePreview();
+        if (previousRoute.view !== "reports" || route.view !== "reports" || queryChanged || route.withinServices !== previousRoute.withinServices) invalidatePreview();
         const refinement = !reset && !restorePosition && Boolean(analytics)
             && route.view === "analyze" && route.view === previousRoute.view
             && route.session === previousRoute.session && route.request === previousRoute.request
-            && (queryChanged || route.range !== previousRoute.range || route.chart !== previousRoute.chart);
-        const controlsOnly = refinement && !queryChanged && route.chart === previousRoute.chart;
+            && (queryChanged || route.range !== previousRoute.range || route.chart !== previousRoute.chart || route.withinServices !== previousRoute.withinServices);
+        const controlsOnly = refinement && !queryChanged && route.chart === previousRoute.chart && route.withinServices === previousRoute.withinServices;
         if (refinement && clearingFilter) {
-            const controls = { tool: "toolFilter", services: "serviceAssociationFilter", includeMissingService: "serviceAssociationFilter", service: "serviceFilter",
+            const controls = { tool: "toolFilter", services: "serviceAssociationFilter", includeMissingService: "serviceAssociationFilter", withinServices: "serviceAssociationFilter", service: "serviceFilter",
                 project: "projectFilter", session: "chatFilter", layer: "layerFilter", scope: "scopeFilter", bucket: "bucketFilter", result: "outcomeFilter", authors: "promptAuthorFilter", from: "dateFilter", to: "dateFilter" };
             const changed = Object.keys(controls).find(key => route[key] !== previousRoute[key]);
             const trigger = changed ? $(controls[changed] + "-control") : null;
@@ -1175,7 +1198,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (controlsOnly) { renderNavigation(); renderFilterChips(); updateSelection(); }
             else render();
         }
-        const position = readingPositions.get(JSON.stringify([routeUrl(route), search]));
+        const position = readingPositions.get(readingKey(route));
         const finishNavigation = (loaded = true) => {
             if (!loaded || navigation !== navigationGeneration || refinement || intent !== readingIntent) return;
             if (paging) { restorePager(paging); return; }
@@ -1499,6 +1522,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             chip.append(ux.icon("close"));
             host.append(chip);
         }
+        for (const service of route.withinServices?.split(",") || []) {
+            const chip = button(`${service} within current scope`, () => go(route.view === "request" ? "activity" : route.view, {
+                withinServices: route.withinServices.split(",").filter(value => value !== service).join(",") || undefined,
+                request: undefined, page: undefined,
+            }), "filter-chip");
+            chip.setAttribute("aria-label", `Remove service chart refinement: ${service}`);
+            chip.append(ux.icon("close"));
+            host.append(chip);
+        }
         const labels = { tool: "Tool", services: "Service", service: "Category", result: "Outcome", authors: "Author", project: "Copilot project",
             endpoint: "API path", session: "Copilot chat", layer: "Activity", scope: "Collection", bucket: "Time scale" };
         const selectedLabel = id => $(id).selectedOptions[0]?.textContent;
@@ -1637,8 +1669,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const reading = el("dl");
         for (const [label, text] of [
             ["Chart scale", chartType === "time"
-                ? "Time columns and their recorded-result sections use a linear count scale from zero; small values are not enlarged. Count links and the exact-data table remain usable when a section is too small to see. Separate percentage charts may enlarge small slices; their labels use actual shares."
-                : "Column heights use a shared square-root scale and minimum visible sizes; small result sections and donut slices may be enlarged. Counts stay exact; percentages use the actual totals. Neutral tops mark the end, not another result."],
+                ? "Time columns and their recorded-result sections use a linear count scale from zero; small values are not enlarged. Count links and the exact-data table remain usable when a section is too small to see. Percentage charts also preserve actual shares."
+                : "Bars use a linear count scale from zero. Counts, shares and result sections are not enlarged. Full labels and exact-data links remain usable even for tiny values."],
             ["Chart colors", chartType === "workload" ? `Color identifies the ${layer === "tool" ? "activity category" : "service"}, not its result.` : "Colors match the recorded results."],
             ["Dates and grouping", chartType === "time"
                 ? `${help.fields.bucketFilter} Weeks start Monday; daylight-saving changes follow the display time zone in the header. Last 7/30 days include today and the preceding local days.`
@@ -1676,8 +1708,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (open) renderCountTable();
             else $("countTable").replaceChildren();
         }, true);
-        percentages.update(analytics, { ...applied, search: Boolean(search) });
-        if (analytics.totals.count && chartType !== "time") $("chartFooter").prepend(el("span", "chart-size-note", "Visual sizes adjusted for readability; labels show actual counts and shares."));
+        percentages.update(analytics, { ...applied, search: Boolean(search), withinServices: route.withinServices?.split(",") || [] });
+        if (analytics.totals.count && chartType !== "time") $("chartFooter").prepend(el("span", "chart-size-note", "Linear count scale. Exact counts and recorded results are available below."));
     }
     function renderTime() {
         const series = analytics.timeSeries;
@@ -1729,7 +1761,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         chart.setAttribute("aria-describedby", "chartReadingNotes");
         viewKey(chart, "chart:" + (serviceMode ? "service" : "endpoint"));
-        chart.querySelectorAll(".dimensional-action").forEach(action => viewKey(action, "chart:group:" + action.dataset.groupId));
+        chart.querySelectorAll(".flat-comparison-action").forEach(action => viewKey(action, "chart:group:" + action.dataset.groupId));
         $("chart").append(chart);
         dimensional.refreshView(chart);
         $("chartFooter").append(guidance);
@@ -2704,7 +2736,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function render() {
         if (!state || !analytics) return;
-        slice = analysisSlice(state, applied, search);
+        slice = analysisSlice(state, applied, search, route.withinServices?.split(",") || []);
         analytics = slice.analytics;
         renderTimeContext();
         renderControls(); renderNavigation(); renderFilterChips(); renderViewingContext(); renderSessionAnalysis(); renderPeriodFeedback();
@@ -3454,7 +3486,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (restoring) return;
         navigate(routeFor(route.view, { [key]: $(id).value === "all" && key !== "scope" ? undefined : $(id).value,
             ...(key === "layer" && $(id).value !== "tool" && route.service === "Discovery" ? { service: undefined } : {}),
-            ...(key === "services" ? { includeMissingService: $(id).value !== "all" ? true : undefined } : {}),
+            ...(key === "services" ? { includeMissingService: $(id).value !== "all" ? true : undefined, withinServices: undefined } : {}),
             page: undefined, request: undefined }), false, { keepFocus: true });
     });
     $("addServiceContext").addEventListener("click", () => {

@@ -287,33 +287,27 @@ collection limit, not serial execution. The existing adjacent help explains
 these reasons without adding repeated warning paragraphs. Known retained parent
 and group identifiers remain readable and copyable.
 
-## Donut material on light surfaces
+## Flat breakdown rendering
 
-Outcome and activity-category donuts retain their glossy, extruded geometry and
-existing semantic hues. On light paper, their broad caps use restrained highlights
-mixed from the existing top and label tones instead of the near-white column cap.
-More opaque faces and darker wall stops prevent white-background washout; reduced
-rim/glint opacity keeps the gloss without glare. Hover and focus keep the stronger
-outline and gently darken the faces instead of brightening them. Column charts
-and new HTML/PDF column reports retain their existing materials. Saved files are
-not rewritten. Exact counts, percentages, minimum visible slices, category icons,
-labels, links and the exact-data disclosures are unchanged.
+Tools and service involvement use flat, proportional bars. Recorded outcomes
+alone use a circular annulus: each canonical record has exactly one outcome.
+The annulus is a true circle with exact angles, no projection, extrusion,
+gradients, minimum slices, glints or outline that could inflate tiny values.
+Zero has no data paint. The adjacent complete labels and exact counts supply
+44px keyboard targets; a tiny slice never needs a precision hit or hover.
 
-Donut inspection retains each cap and wall's resting transparency in both themes.
-The previous opaque hover/focus override exposed the near-white neutral material;
-navy's brightness multiplier then clipped it to white. Navy inspection now uses a
-small 1.05 brightness change with the stronger outline, including full-circle,
-mixed and minimum-size slices. The broad cap and front wall remain below the
-near-white glare threshold. Normal materials, glass accents, geometry and service
-hues are unchanged. Pointer-only SVG focus suppression remains narrowly scoped;
-keyboard labels retain visible focus, native navigation and 44px targets.
+All three headings retain the evidence unit. Shares use the visible canonical
+scope, including undated records and any explicitly included service context.
+Services can overlap; their counts/shares are never summed into total calls.
+Count, percentage, category and operation capabilities remain available.
+Component paint consumes existing semantic `--column-label` roles and shared
+surface/text/focus tokens; the visual-foundation owner controls both palettes.
 
-Each percentage-chart heading includes its current unit in parentheses, such as
-**Recorded outcomes (Work IQ tool calls)**, with the unit in secondary text.
-There is no separate unit/enlargement caption. The existing exact-data disclosure
-and accessible chart description retain the minimum-slice explanation; counts,
-shares, materials and adjusted geometry are unchanged. Units update with the
-selected evidence layer and keep their singular/plural wording.
+Only the shell's percentage renderer and `comparisonView` are flattened here.
+The accepted `timeView`, `flatLayout` and `flatSvg` paths are unchanged.
+Still-used `layout`, `svg`, `scene`, `plane` and `dimensionalColumnStyles` retain
+their native-report contract pending the native-report unit. No saved report
+bytes are read, regenerated or rewritten by a chart change.
 
 ## Inline help geometry
 
@@ -386,13 +380,13 @@ The detail reader keeps **Copilot assistance** as a known purpose and names its 
 **Target format not supported**, and **No target recorded**. Short on-demand explanations
 use only retained technical metadata; chart-definition and percentage disclosures describe
 the reasons present in the applied slice. Outcome counts and the result cue stay separate.
-The category uses a neutral information glyph in remaining donut/glossary cues, never a
+The category uses a neutral information glyph in remaining glossary cues, never a
 new under-column icon row. Its canonical ID, color and filter value remain `Unknown`.
 
 An applied **Service not shown** filter now explains the actual matching rows
 above Home or Activity, without requiring a disclosure. It groups exact counts by
 recorded tool and evidence reason, showing known purposes such as **Copilot assistance**
-beside `workiq-ask`. The donut's neutral legend also names those tools and reasons.
+beside `workiq-ask`. The Services breakdown separately counts the recorded gap reasons.
 Its helper uses complete, record-scoped sentences that name the missing evidence,
 not standalone labels such as "Not in this record." A single group does not repeat
 the overall count; multiple tool/reason groups retain their individual exact counts.
@@ -427,6 +421,25 @@ to the missing-detail count and once to its first-gap reason group; its `gaps`
 retain all reasons. Group IDs use `service:`; existing `workload:` group
 IDs, category v3, category percentages and report patterns are not reinterpreted.
 Use labeled counts/bars for involvement, not an exclusive 100% service donut.
+
+The breakdown model validates involvement definition id/version, denominator,
+unique canonical membership and per-row associations before rendering. Its
+`categories` partition retains the legacy exclusive category meaning; `services`
+is the separate overlapping projection. Compact gap rows use every distinct
+recorded reason, counting a call once per reason; overlapping reason totals are
+explicitly labeled and are not added to the missing-detail population.
+
+Service chart clicks append a named `withinServices` predicate to the existing
+browser analysis-slice adapter. Each predicate is ANDed with the current
+canonical rows; the server's `services` OR set and `includeMissingService` flag
+remain unchanged. Every chart, result facet (before outcome), time bin, list,
+known-match/context-only set and current-view report membership uses the refined
+slice. Returned-entry parent coverage uses accepted `requestActivity` associations,
+not parent batch position or guessed target. A stored snapshot reapplies named
+predicates, never captured row IDs. Each refinement has a removable scope chip
+and survives Back/scoped navigation. An explicit new Service-menu choice clears
+chart refinements without changing the menu's OR semantics. Current-view reports
+still include full retained interactions; matching and full counts stay separate.
 
 `filters.services` matches any supported association; `filters.workloads` retains
 exclusive category matching. Legacy Discovery, Multiple workloads and Unknown
@@ -1080,142 +1093,62 @@ safety checks with time-specific flat expectations. Shared report geometry and
 service/API count encodings are unchanged; historical files are never read or
 rewritten by this unit.
 
-### Existing comparison and percentage encodings
+### Flat Analyze breakdowns and retained report encodings
 
-Every chart separates canonical quantities, visual geometry, decoration and
-interaction. Counts, denominators, calculated percentages, filters and saved
-evidence never change for presentation. The user's later explicit instruction
-permits enlarging small columns, result sections and donut slices; it supersedes
-the earlier exact-linear-height/exact-angle restriction. Visual minimums are
-disclosed, not presented as measured quantities. Zero has no data-bearing paint;
-missing evidence stays distinct.
+The breakdown reset replaces interactive category/operation comparison columns
+and percentage rendering. This supersedes the previous square-root/minimum-size
+comparison bodies and 3%-minimum service/outcome donuts. Tool/service bars and
+outcome slices now use exact linear shares; category/operation bars use one linear
+count maximum. Missing evidence remains distinct and zero has no data paint.
+Only outcomes form a circular exclusive composition. Service associations overlap
+and are never passed to an exclusive partition or summed as total calls.
 
-The pre-reset comparison/report art direction is dimensional glass: faceted columns and open,
-front-facing, restrained-tilt donuts in light and navy. The user's correction
-concerned small-value readability and label alignment. The flat time exception
-above now takes precedence for that view. The self-contained
-factory keeps exact arithmetic separate from a shared readability allocation.
-Front and side faces agree on each allocated visual span. Neutral lids must never inherit
-the final outcome's color. Paint lids and inward-clipped rims before data faces.
-An integer SVG viewport contains the complete visual geometry. Small bands use
-solid high-contrast material and no glints or horizontal
-outlines. Larger bands retain face-bounded glass accents. The user's additional service
-chart reference applies to service, API and timeline columns alike: broad
-translucent facets, a narrow front sheen and a restrained bright corner spine,
-not matte blocks. Spines stop inside each sufficiently tall band and are absent
-from thin bands; no reflection or colored lid may impersonate a small count.
+Native mark links and full-label keyboard targets retain the same destinations,
+including modifiers. SVG-only pointer focus suppression remains scoped to the
+outcome ring; it does not remove legend focus. Disclosures expand below their
+summaries without switching layout. At narrow/enlarged text, exact-table rows
+stack their service/tool/outcome name, Count and Share rather than breaking a
+number, percent sign or heading across lines.
 
-Positive donut slices have a 3% minimum visual share. Remaining angular space is
-allocated proportionally among the larger categories, with all visual spans
-summing to one circle. Canonical partitions and displayed percentages still use
-the actual counts and denominator. The existing unit line says **small slices
-enlarged** only when needed, so a donut remains understandable without the column
-panel. One concise shared Home note explains adjusted visual sizes; existing
-exact-data help carries the detail. No mode toggle or repeated warning blocks.
+The retained native-report primitives still use the earlier dimensional glass
+encoding until the report unit replaces them: square-root scene heights,
+bounded minimum bodies/sections, aligned front/side spans and neutral lids.
+This is an explicit remaining consumer, not an Analyze toggle. Its explanation
+and exact counts remain unchanged; saved report bytes are immutable.
 
-The donut uses a bounded 360px normal-size reading surface, clamped
-to its real narrow container. Below the space needed for both chart and legend,
-the legend moves underneath; text never overlaps or shrinks to preserve a side
-layout. Hover and keyboard inspection visibly brighten and outline exactly one
-category's real faces, including previously opaque tiny slices, mixed services
-and grouped Other. Informational labels can receive inspection focus without
-inventing a filter action. Neighboring outlines remain clipped to their own
-faces. Do not restore full-row hover blocks, dotted leaders, detached tiny-outcome
-annotations or per-column info controls.
-Donut face links suppress only the browser's non-keyboard SVG focus outline:
-that native rectangle follows a face's bounding box, not its painted geometry.
-Pointer inspection keeps the existing face-bounded highlight; keyboard inspection
-keeps the visible focus ring on the semantic legend label and highlights the same
-category. Native link destinations/modifiers and `:focus-visible` remain intact.
-The rule is scoped to donut SVG links, not column/count links or tool-name bars.
-Paired cards keep the same shared row alignment with exact-data disclosures open
-or closed. Disclosure content expands below its summary; opening it must not
-switch the parent layout or move the trigger.
-
-New chart types must pass this admission gate before shipping: exact zero,
-1/2/20/200 common-readability-scale comparisons, extreme ratios, adjacent small categories,
-balanced/full/empty data, changing denominators, and preserved unknown/grouped
-members; actual rendered-path or pixel proof of unobscured data; readable labels
-and keyboard/touch association in both themes and narrow/enlarged layouts.
-Reusing policy is not sufficient without testing the new encoding. Node,
-browser serialization and newly generated reports must agree; existing report
-bytes are never rewritten. `chart-geometry-policy.browser.test.mjs` exercises
-the shared policy and current renderer families alongside their specific suites.
+Focused admission proof lives in `breakdown-view.test.mjs` and
+`breakdown-view.browser.test.mjs`: zero/tiny/extreme/overlapping counts, full labels,
+light/dark, narrow 200% text, exact tables, keyboard targets, canonical-ID
+drilldowns, no-widening service intersections and report membership. Pure
+percentage, slice and filter tests cover serialization, invalid input and scope.
+The accepted time tests remain applicable. Superseded visual-only glass matrices
+must be reconciled by the dedicated cleanup unit before integrated E2E/release;
+their obsolete expectations are not a claim of full-suite green.
 
 ## Count charts
 
-`lib/dimensional-charts.mjs` still renders glass front/side/lid geometry for
-comparison/report consumers with 116px footprints. Flat time uses 84px rectangles.
-Heights use one square-root scale per scene, with a minimum positive body of
-36px; zero stays empty. Interactive maximum height is 320px and print remains
-compact at 280px. Positive recorded-result sections have a 6px visual minimum;
-the remaining body is allocated proportionally, never overflowing its total.
-For unusually small custom extents those minimums are bounded by the extent.
-The original two-call body is about 41px instead of a thin plate. Equal totals
-retain equal body heights, with a common baseline and maximum; unchanged
-polling cannot change the geometry. Native labels and exact tables retain the
-real counts and shares.
-The neutral lid has no quantitative meaning;
-the subtle common glass floor belongs only to columns. Zero has no data paint
-and no action. Reflections and decorative connectors are omitted.
-
-Column ends are closed, softly shaded neutral planes, not the panel background
-inside a faint outline. The finish is opaque and shared across every service and
-outcome; it has no extra vertical wall or thickness and never inherits the final
-result's color. Only a restrained front seam is highlighted inside that plane,
-not a perimeter rim. This lets the end read clearly in light and navy while the
-sides retain their glossy glass treatment. Data bands paint afterward, so the
-finish cannot cover or impersonate a small result.
-
-Time and API columns stack the unchanged canonical outcomes. Missing-result
-bands have a stable base position so gray data cannot masquerade as the finish
-of a mixed-result column. Service columns
-use the existing stable service identity palette and explicit category names; service
-color is not success. Missing/partial/other results remain separate.
-
-Under-column labels are text-only: no standalone service glyph or reserved icon
-row. Service and path/operation labels use the same Asta Sans 14/20, medium
-weight (500) role from the existing typography tokens. They begin 24px below the
-common column baseline, centered on their projected column axis. Single- and
-multiline labels align on their first visible text line, not the final line;
-additional lines flow downward without a reserved two-line block. Font
-enlargement retains those roles and complete wrapping. Counts remain the
-separate prominent numeric-link role above each column. Donut legends, category
-definitions and other semantic glyphs are unaffected by this label-only change.
-
-Non-underlined count links provide 44px visible-label targets, including
-**2 calls**, without changing the data or making the plot a hidden hit region.
-Chart text links use a subtle text-color change, not filled rectangular hover
-blocks. Percentage labels fit their text within the allocated track; deliberate
-keyboard focus remains visible and softly rounded, without painting the whole
-legend row or putting text outside its target.
-Narrow legends retain icon, label and right-aligned value tracks wherever they
-fit. Do not force every value onto an indented second line at a viewport
-breakpoint; only genuinely long or enlarged text wraps within its own track.
-Painted faces and count links lead to the same filtered requests. Native
-link modifier behavior, keyboard focus, scroll position and Back remain intact.
-Count width and root text size determine category pitch and headroom, never the
-count scale. Horizontal scrolling preserves complete labels in dense views.
+`comparisonView` in `lib/dimensional-charts.mjs` renders one labeled horizontal
+row per visible category/operation, with a 44px action and exact count. Category
+rows use identity color; operation rows stack the unchanged canonical outcomes.
+Each segment's width is its count divided by the shared maximum, without a
+minimum painted size. Full labels wrap naturally; narrow layouts put the count
+on its own line. Grouped Other retains Show all and the complete exact table.
+There are no lids, floors, gradients, perspective or category-pitch calculations
+in this path. Flat time continues to use its accepted 84px rectangles and
+separate count links.
 
 The existing exact count table starts collapsed and retains the user's explicit
 expansion/collapse choice across navigation and snapshot updates.
 It associates every date/category with its counts and recorded outcomes,
 including **No result recorded**. It contains numbers and its concise caption,
 not another explanation block. Geometry/calendar help lives in the existing
-closed **What these results mean** disclosure; service definitions remain in
+closed reading-notes disclosure; service definitions remain in
 their existing disclosure. Counter/whole-column duplicate hover popups,
 per-column info buttons and detached tiny-band captions stay removed.
-The user's later clarification restores inspection of individual recorded-result
-sections: hovering either actual glass facet reveals that section's exact count
-and share of its own column immediately, without the ordinary control delay.
-Front and side belong to one inspection target, so crossing their seam does not
-flicker. Escape, departure and navigation use the shared tooltip lifecycle.
-Native count focus remains quiet and exposes the full breakdown in its accessible
-name; touch/click still drill down normally. Do not enlarge a section invisibly
-over a differently colored result or assign decorative cap area to its count.
-Decorative cap edges are subdued; thin slate results use their lighter solid
-material instead of dark label ink so a missing-result band does not read as a
-heavy lid border.
+Hovering an actual recorded-result segment retains its count/share tooltip and
+the shared Escape/departure/navigation lifecycle. Keyboard count focus exposes
+the full result breakdown in its accessible name without requiring a tooltip.
+No invisible expanded outcome region covers another result.
 
 `lib/dimensional-report.mjs` shares the same dimensional geometry in new script-free
 HTML/PDF reports, with their own concise visible explanation of the adjusted
@@ -1230,7 +1163,7 @@ old 1440px main cap on a data visualization. Other workspace blocks and supporti
 disclosures keep their 1384px content budget; prose retains its 72ch reading
 measure and exact-data tables retain content-sized columns.
 
-The shared browser chart reads its own scrollport's usable content width, not
+The flat time chart reads its own scrollport's usable content width, not
 screen or viewport width. Category pitch adapts between a readable minimum and
 a bounded comfortable maximum; physical column widths, count heights, icons and
 text never scale to fill the scene. Minimum pitch accounts for actual label
@@ -1241,11 +1174,11 @@ so focus and category identity survive resizing. The caller disconnects the
 observer before replacing a view and preserves keyed chart focus and scroll
 through snapshot updates and browser history.
 
-True excess categories remain in a named, keyboard-focusable horizontal
+True excess time bins remain in a named, keyboard-focusable horizontal
 scrollport. Visible overflow guidance follows the measured layout. There is no
 page overflow, text downscaling, category wrapping into multiple rows, automatic
-regrouping or hidden-scrollbar workaround. One- and two-column scenes stay bounded
-even in an ultra-wide card. Report preview/HTML/PDF remain document views: their
+regrouping or hidden-scrollbar workaround. Comparison labels instead flow in
+ordinary responsive rows and need no scene observer. Report preview/HTML/PDF remain document views: their
 script-free three-column scenes and common numeric scale are intentional, not
 an instruction to stretch a print document.
 
@@ -1297,42 +1230,31 @@ More filters refinements (category/project/chat/layer/collection) keep their exi
 selectors and useful applied-scope indicators; date range remains a coordinated
 Dates/From/To/Apply group, not two independent date resets. Request details keep
 their scope chips because the local filter field is not present there.
-Chart/composition switches remain segmented view choices; format choices,
+Chart switches remain segmented view choices; format choices,
 disclosures, category navigation and actionable result links are not converted
 into dropdown filters. Reset to Home keeps its established broader view reset;
 Clear selection still affects report membership only.
 
-Home keeps its count columns and adds directly labeled **Recorded outcomes**
-and **Service share** dimensional donuts. **Tool names** retains the existing composition
-switch, using recorded names rather than an inferred taxonomy. Every panel uses
-the same accepted canonical snapshot, filters, evidence unit and denominator.
+Analyze leads with simultaneous **Tools** and **Services** breakdowns. Tools
+come from recorded names; Services come from the versioned association projection,
+with short missing/unsupported/preparatory explanations. The selected view's
+exact count, unit and scope are visible above them. Recorded outcomes follow in
+one compact flat panel. Every panel uses the same accepted canonical snapshot.
 Malformed or failed reads cannot replace accepted figures with mismatched data.
-The full applied scope remains the percentage region's accessible description;
-Home's shared applied-period summary carries the visible date/count context, not
-a second paragraph of ISO dates above the donuts.
 
-Each donut has its category, exact count and percentage in an adjacent aligned
-legend. Restrained glass gradients, face-clipped rims and glints reuse the column
-materials; small slices keep opaque identity color and no decorative overlay.
-There is no floor behind donuts, no dotted leader and no extra help control.
-Tool-name rows continue to use unrounded bars.
-Positive outcome/service labels are native links to the relevant filtered
-activity; zero labels are noninteractive. Tiny categories are readable through
-their visible row, not a precision hit on a wedge or required hover. Percentages
-use honest `<0.1%` / `>99.9%` boundaries, never false zero or 100%.
+All tool/service rows remain visible, with exact count and share beside each
+full label. **Exact data and definitions** retains all outcomes, including zero,
+and the precise denominator. Native links provide direct drilldown; zero labels
+are noninteractive. Service chart refinements use the intersection contract
+above. Legacy category/operation controls and their exact count/result table
+remain below these panels, separate from overlapping service involvement.
 
-At most six positive service/tool categories are shown: up to five named rows
-plus Other. Unknown and multi-service attribution retain slots. **All categories
-and definitions** lists all members and exact counts, including zero outcomes,
-in the existing closed disclosure. No evidence or denominator is dropped.
-
-Cards span the workspace and use two equal columns at a 64rem container width,
-otherwise stacking. Inner content stays at its readable measure. Shared rows
-align headings, units, counters and disclosures without fixed-height filler.
-Labels/counts wrap at enlarged root text; symbols and words preserve meaning
-without color. The total counter is baseline-aligned with **in this view**.
-Container reflow, polling and Back retain the selected breakdown, disclosure
-and logical focus. These percentage views do not rewrite saved report bytes.
+Two columns begin at a 44rem container width and stack below it. Full labels,
+numbers and disclosures wrap at enlarged text without clipping. Semantics use
+words and icons as well as color. Reflow, polling and Back retain disclosure and
+logical focus; reading-position keys normalize query parameter order without
+changing route meanings. New native-report geometry and saved bytes are outside
+this shell-only presentation change.
 
 Analyze starts with **Analyze** and "Explore recorded interactions, calls and
 their results." **Results** moves directly to the list. Existing source/update
