@@ -83,10 +83,13 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: fo
     }
     const paintIds = new Set([...bundle.files["product-report.html"].matchAll(/<(?:linearGradient|filter|clipPath) id="(dimensional-[a-z0-9-]+)"/g)].map(match => match[1]));
     assert.equal(bundle.files["product-report.html"].split(`url("${fontDataUrl}")`).length - 1, 1, "Exactly one trusted bundled font is embedded");
-    const withoutLocalChartPaint = bundle.files["product-report.html"].replace(`url("${fontDataUrl}")`, "").replace(/url\(#wire-light-r-emergence\)/g, () => {
-        assert.match(bundle.files["product-report.html"], /<clipPath id="wire-light-r-emergence">/);
+    const withoutLocalChartPaint = bundle.files["product-report.html"].replace(`url("${fontDataUrl}")`, "").replace(/url\(#wire-(light|dark)-r-emergence\)/g, (_, theme) => {
+        assert.ok(bundle.files["product-report.html"].includes(`<clipPath id="wire-${theme}-r-emergence">`));
         return "";
-    }).replace(/url\(#(dimensional-(?:\d+-(?:(?:orange|cyan|teal|pink|slate)(?:-side|-cap)?|cap|(?:success|failure|unknown|partial|other|transport)-(?:front|side))|plane-\d+-(?:glass|reflection|shadow|surface)))\)/g, (_, id) => {
+    }).replace(/url\(#(wire-dark-wire-(?:letter|cable)-ink)\)/g, (_, id) => {
+        assert.ok(bundle.files["product-report.html"].includes(`<linearGradient id="${id}"`), "Bundled dark wordmark paint must resolve locally");
+        return "";
+    }).replace(/url\(#(dimensional-(?:\d+-(?:(?:orange|cyan|teal|pink|slate)(?:-side|-cap)?|cap|end|(?:success|failure|unknown|partial|other|transport)-(?:front|side))|plane-\d+(?:-(?:glass|reflection|shadow|surface))?))\)/g, (_, id) => {
         assert.ok(paintIds.has(id), "Every allowed chart paint/filter/clip fragment must name an existing local definition");
         return "";
     });

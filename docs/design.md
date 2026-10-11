@@ -1303,11 +1303,11 @@ summaries without switching layout. At narrow/enlarged text, exact-table rows
 stack their service/tool/outcome name, Count and Share rather than breaking a
 number, percent sign or heading across lines.
 
-The retained native-report primitives still use the earlier dimensional glass
-encoding until the report unit replaces them: square-root scene heights,
-bounded minimum bodies/sections, aligned front/side spans and neutral lids.
-This is an explicit remaining consumer, not an Analyze toggle. Its explanation
-and exact counts remain unchanged; saved report bytes are immutable.
+New native reports use compact, exact linear bars and visible counts/shares,
+not the earlier dimensional glass encoding. They lead with supported findings
+and known reasons rather than a headline score. Older saved bytes remain
+immutable. The old dimensional helper is retained only for the later, scoped
+cleanup of obsolete rendering and visual-only tests.
 
 Focused admission proof lives in `breakdown-view.test.mjs` and
 `breakdown-view.browser.test.mjs`: zero/tiny/extreme/overlapping counts, full labels,
@@ -1343,10 +1343,47 @@ the shared Escape/departure/navigation lifecycle. Keyboard count focus exposes
 the full result breakdown in its accessible name without requiring a tooltip.
 No invisible expanded outcome region covers another result.
 
-`lib/dimensional-report.mjs` shares the same dimensional geometry in new script-free
-HTML/PDF reports, with their own concise visible explanation of the adjusted
-geometry. Print groups of at most three columns retain one maximum; exact tables
-retain all outcomes. Previously saved reports are immutable.
+`lib/native-report-output.mjs` embeds the existing palette, typography and
+assessment/timing formatters in new script-free native reports.
+`lib/product-report.mjs` supplies the selected recorded population and flat tool
+rows. Known findings come first, then compact numbers and useful visuals, then
+permitted context and technical/quality detail. Native disclosures, stacked
+small-screen tables and expanded print copies preserve access without scripts.
+Previously saved reports and comparison rendering are unchanged.
+
+### Native-report cleanup inventory
+
+The dedicated cleanup owner can reconcile the following now-superseded native
+visual paths after the native report proof is accepted; this is not permission
+to remove shared app helpers or integrity/privacy tests.
+
+- `lib/dimensional-report.mjs`: `createDimensionalReportChart` and
+  `dimensionalReportStyles` no longer render new native reports.
+- `lib/report-presentation.mjs`: native-only `recordedToolScoreHtml`,
+  `evaluationSummaryHtml`, `evaluationSummaryMarkdown`, `reportScreenHeroStyles`
+  and their hero/dimension selectors have no new-native caller. Preserve
+  comparison rendering, shared number/definition formatting, branding and
+  `reportPrintPaginationStyles` where still used.
+- `tests/dimensional-report.browser.test.mjs`, the native-report cases in
+  `chart-geometry-policy.browser.test.mjs`, `chart-label-lanes.browser.test.mjs`,
+  `dimensional-guide-anchor.browser.test.mjs` and
+  `dimensional-outcome-cap.browser.test.mjs` still exercise old geometry.
+- `tests/report-hero-readability.test.mjs` and hero/3D expectations in
+  `report-evidence-matrix.browser.test.mjs` need the new native targets.
+  Preserve their numeric, accessibility, missing-value and clipping guarantees.
+  Direct old-summary tests in `report-personal-metrics.test.mjs`,
+  `report-model-origin.test.mjs` and `plain-language.browser.test.mjs` also need
+  review before removing the corresponding helper.
+- `web/dimensional-charts-styles.mjs` still supplies shared palette declarations;
+  native output currently embeds that declaration-bearing module. Its unused
+  dimensional selectors are not a reason to delete its app/flat color contract.
+  Shared `geometryPolicy`, `tone`, `servicePalette` and `outcomeTones` remain used.
+
+The local-paint allowlist in `report-formats.test.mjs` recognizes the old
+same-document plane/end gradients, both wordmark clips and bundled dark-wordmark
+paint, always
+checking that the exact local definition exists. New report bars create no SVG
+paint URLs. External assets, imports and scripts remain forbidden.
 
 ### Responsive content widths
 

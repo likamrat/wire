@@ -179,6 +179,75 @@ Markdown share those facts and denominators. Source-neutral reports call the app
 
 Saved reports are immutable. A new assessment or a new visual design does not rewrite an existing HTML, PDF, JSON or Markdown file.
 
+### New native reports
+
+New HTML, PDF and Markdown lead with **What the record shows**: recorded call
+outcomes, supported historical reasons, and separately qualified answer/action
+findings. Compact **Recorded numbers**, flat tool bars and recorded timing follow.
+Permitted bounded context precedes representative technical examples; full
+quality measures, operation tables, reviewed prompt copies and coverage remain
+available as supporting detail. HTML disclosures are native keyboard controls.
+PDF expands every disclosure and copy. JSON retains the factual snapshot rather
+than an inferred narrative.
+
+Native output uses the accepted light/charcoal tokens, bundled font and both
+theme wordmarks. Bars use exact linear fractions from zero, without minimum
+paint, gradients or perspective. Counts/shares and exact tables are readable
+without hover. A prepared report ignores narrower browsing filters: its complete
+selected interactions own every denominator. Returned API units, Graph sites,
+owned HTTP records and tool calls remain distinct.
+
+`evaluationFacts.reviewStatuses` is an optional, closed content-free projection
+of the existing selected review statuses. Each unique interaction reference must
+belong to frozen membership; execution counts must equal that interaction's
+canonical `recordedOutcomes`, **not** completion-qualified check counts. Partial
+status coverage is explicitly labelled. In particular, a legacy reported outcome
+without a completion event remains a reported outcome and an unassessed
+completion check; WIRE does not invent event IDs. Existing qualified sign-in,
+timeout and access-denial signals retain their historical meaning. Raw error
+text and semantic rationales are not added.
+
+The native adapter calls the app's existing assessment presentation and timing
+helpers over validated frozen facts. Timing retains raw milliseconds, named
+boundaries, nearest-rank median/P95 and timed/eligible populations. One sample is
+labelled as one sample, missing is not zero, and concurrent calls are never
+summed into task latency. Model/rubric and personal lanes retain separate
+percentages and coverage.
+Each finding also carries its saved origin beside the claim, including the exact
+model and rubric ID/version for each AI lane, even when different lanes have
+identical wording or counts. Technical detail is not the only place that names
+these origins.
+
+The optional field is inside the existing evaluation-facts and snapshot hashes
+and privacy validation. It does not change comparison definitions, metrics or
+pattern identities. Old facts without it remain valid and say that detailed
+call-status context was not saved; no current-data lookup fills the gap. Missing
+historical activity bins and missing semantic explanations are also stated as
+unavailable, not reconstructed. Opening an older artifact still reads its
+verified saved bytes without calling a current renderer.
+
+New facts also freeze optional `serviceInvolvement`: the exact
+`wire-service-involvement` v1 definition, explicit `tool-call` layer, keyed
+canonical member references/denominator, per-service member sets/counts, and
+missing-detail/not-applicable reference sets. This uses the existing canonical
+association projection, not a new classifier. The validator requires the same
+tool members as `recordedOutcomes`, exact counts, and complete coverage by the
+union of known, missing and not-applicable sets. Known service sets can overlap
+each other and missing-detail membership; preparation is disjoint from both.
+Shares use the explicitly covered tool calls and are not a 100% composition.
+If conflicting/unmapped records leave the assessment membership narrower than
+the operational report inventory, both counts and the coverage limitation are
+shown; missing calls are never relabelled as an absent service or silent success.
+The complete closed definition is validated without importing product code into
+the browser-shared executable contract. Its wording must remain identical to
+the existing service definition; the focused test guards that seam.
+
+The involvement field is hashed and privacy-validated inside the same facts.
+Absent legacy involvement stays **Service involvement was not saved** even if
+older category-v3 counts exist. Current comparison adapters ignore this
+additional display field: they neither change existing deltas nor invent
+involvement comparisons. Categories remain labelled **Activity categories**.
+
 ### Setup consumer contract
 
 `createReportJourney` is still presentation-only: steps 1/2/3 are Setup/Review/Save

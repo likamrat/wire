@@ -153,7 +153,7 @@ test("read-only selected overview carries exact status refs without altering met
         assert.equal(/call-status context is unavailable/.test(text(current.findings)), false);
     }
     const frozen = buildReportFacts(records.slice(0, 2), state).facts;
-    assert.equal(Object.hasOwn(frozen, "reviewStatuses"), false);
+    assert.deepEqual(frozen.reviewStatuses, model.overview.reviewStatuses);
     assert.equal(Object.hasOwn(frozen, "findings"), false);
     assert.equal(JSON.stringify(state), before);
     const duplicate = [model.overview.reviewStatuses[0], model.overview.reviewStatuses[0]];
