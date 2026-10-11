@@ -2,7 +2,7 @@
 export function createReportDraft({ contextSelector } = {}) {
     let version = 0;
     let selection = "";
-    let basis;
+    let basis, authorityBasis;
     let options = { promptMode: "masked", formats: ["html"], manualTerms: [], overrides: [] };
     let context, contextVersion = 0, contextStatus;
     const basisKeys = ["sourceRevision", "membershipRevision", "consentRevision", "overrideRevision", "deletionEpoch"];
@@ -29,7 +29,7 @@ export function createReportDraft({ contextSelector } = {}) {
         clearContext,
         bindContext(preview) {
             if (!preview.snapshot?.recordedContext) { context = undefined; contextVersion++; return true; }
-            const next = { revision: preview.revision, basis: preview.snapshot.evaluationFacts?.basis };
+            const next = { revision: preview.revision, basis: preview.snapshot.evaluationFacts?.basis ?? preview.snapshot.periodComparison?.periods.baseline.facts.basis };
             if (!Number.isSafeInteger(next.revision) || !next.basis
                 || contextStatus && (next.revision < contextStatus.revision
                     || next.revision === contextStatus.revision && (contextStatus.pending || differentBasis(next.basis, contextStatus.basis))
@@ -49,11 +49,11 @@ export function createReportDraft({ contextSelector } = {}) {
             return next.revision > context.revision || next.pending || differentBasis(next.basis, context.basis)
                 ? clearContext({ authority: true, writing }) : false;
         },
-        synchronizeBasis(snapshot, scope) {
+        synchronizeBasis(snapshot, scope, { paired = false } = {}) {
             const ids = new Set(scope.requests.flatMap(request => request.aliases));
             const ordered = rows => rows.slice().sort((a, b) => a.scenarioId.localeCompare(b.scenarioId));
             const assessment = snapshot.assessment;
-            const next = JSON.stringify([
+            const authority = JSON.stringify([
                 snapshot.boardId, snapshot.deletionVersion,
                 ordered(scope.baseRequests), ordered(scope.requests),
                 ordered(snapshot.scenarios.filter(scenario => ids.has(scenario.scenarioId))),
@@ -62,7 +62,9 @@ export function createReportDraft({ contextSelector } = {}) {
                 ordered((assessment?.catalog || []).filter(item => ids.has(item.scenarioId))),
                 // The snapshot exposes pooled model results, not per-report evaluation dependencies.
                 // A changed revision with model results therefore requires a fresh actual review.
-                assessment?.overview?.metrics?.some(metric => metric.origin === "model-assessed") ? snapshot.revision : null,
+                !paired && assessment?.overview?.metrics?.some(metric => metric.origin === "model-assessed") ? snapshot.revision : null,
+            ]);
+            const next = JSON.stringify([authority,
                 options.recordedContext && options.promptMode !== "none" ? [
                     scope.requests.map(request => contextSelector?.select(snapshot.scenarios, request.scenarioId)),
                     // Retained payload hashes are private, so a new revision requires actual review.
@@ -70,13 +72,17 @@ export function createReportDraft({ contextSelector } = {}) {
                 ] : null,
             ]);
             const changed = basis !== undefined && basis !== next;
+            const authorityChanged = authorityBasis !== undefined && authorityBasis !== authority;
             basis = next;
+            authorityBasis = authority;
             if (changed) version++;
-            return changed;
+            // Paired cohort authority excludes optional disclosure copies. Both
+            // kinds of change still invalidate the disclosure token.
+            return paired ? authorityChanged : changed;
         },
         clearSelection() {
             selection = "";
-            basis = undefined;
+            basis = authorityBasis = undefined;
             options.overrides = [];
             context = undefined;
             contextVersion++;

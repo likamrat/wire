@@ -6,38 +6,70 @@ export function createPeriodComparisonState({ time, search, contract, projection
     const sameIds = (a, b) => Array.isArray(a) && Array.isArray(b) && same([...a].sort(), [...b].sort());
     const orderedRows = rows => [...rows].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
     const require = condition => { if (!condition) throw new Error("Comparison facts do not match the accepted revision, definitions or exact membership. Read the current Analyze view."); };
-    function prepare(snapshot, options, periods, query = "", withinServices = []) {
+    function semanticScope(value, revision) {
+        const receipt = value?.receipt;
+        require(value?.status === "ready" && value.coverage === "whole-retained-corpus"
+            && receipt && Object.keys(receipt).length === 8
+            && typeof receipt.panelId === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(receipt.panelId)
+            && ["epoch", "requestId", "generation", "revision"].every(key => Number.isSafeInteger(receipt[key]) && receipt[key] >= 0)
+            && ["indexId", "modelId"].every(key => typeof receipt[key] === "string" && /^[a-f0-9]{64}$/.test(receipt[key]))
+            && ["hybrid", "lexical-only"].includes(receipt.mode) && receipt.revision === revision
+            && ["scenarioIds", "actionIds", "parentScenarioIds"].every(key => Array.isArray(value[key])
+                && value[key].every(id => typeof id === "string" && id.length) && new Set(value[key]).size === value[key].length));
+        return { scenarioIds: [...value.scenarioIds], actionIds: [...value.actionIds], parentScenarioIds: [...value.parentScenarioIds] };
+    }
+    function validateNarrowing(ids, scenarios) {
+        require(ids === undefined || Array.isArray(ids) && new Set(ids).size === ids.length
+            && ids.every(id => typeof id === "string" && scenarios.some(record => record.scenarioId === id)));
+    }
+    function prepare(snapshot, options, periods, query = "", withinServices = [], semanticSearch) {
         if (!Array.isArray(snapshot?.scenarios)) throw new Error("The complete retained interaction roster is unavailable.");
         const sources = new Map((snapshot.sessions ?? []).map(source => [source.sessionId, source]));
-        const scenarioIds = snapshot.scenarios.filter(record => {
+        if (semanticSearch !== undefined) {
+            semanticScope(semanticSearch, snapshot.revision);
+            validateNarrowing(semanticSearch.withinScenarioIds, snapshot.scenarios);
+            require(!query.trim() || semanticSearch.withinScenarioIds !== undefined);
+        }
+        const scenarioIds = semanticSearch === undefined ? snapshot.scenarios.filter(record => {
             const source = sources.get(record.sourceSessionId);
             return !query.trim() || search.phrase(query, [record.userPrompt?.text, record.title, source?.project, source?.name,
                 record.project, record.sourceSessionName, record.sourceSessionId]);
-        }).map(record => record.scenarioId).sort();
+        }).map(record => record.scenarioId).sort() : null;
         for (const range of Object.values(periods)) {
             time.calendar(range.from); time.calendar(range.to); time.range(range, options.timeContext.timeZone);
         }
         const { from, to, ...filters } = options.filters;
         return { schemaVersion: 1, expectedRevision: snapshot.revision, options: { ...options, filters },
-            periods: structuredClone(periods), scenarioIds, withinServices: [...withinServices] };
+            periods: structuredClone(periods), ...(semanticSearch === undefined ? { scenarioIds } : { semanticSelection: {
+                receipt: structuredClone(semanticSearch.receipt),
+                ...(semanticSearch.withinScenarioIds === undefined ? {} : { withinScenarioIds: [...semanticSearch.withinScenarioIds] }),
+            } }), withinServices: [...withinServices] };
     }
-    function begin(input, snapshot) {
+    function begin(input, snapshot, semanticSearch) {
         require(Array.isArray(snapshot.assessment?.catalog));
         pending = { token: ++generation, input: structuredClone(input),
             basis: structuredClone(snapshot.assessment.basis), source: structuredClone(snapshot.assessment.source),
             catalog: structuredClone(snapshot.assessment.catalog), unit: snapshot.analytics.unit,
-            scenarios: structuredClone(snapshot.scenarios) };
+            scenarios: structuredClone(snapshot.scenarios),
+            semanticMembership: input.semanticSelection ? semanticScope(semanticSearch, snapshot.revision) : null };
+        if (input.semanticSelection) {
+            validateNarrowing(input.semanticSelection.withinScenarioIds, snapshot.scenarios);
+            require(same(input.semanticSelection.receipt, semanticSearch.receipt)
+                && same(input.semanticSelection.withinScenarioIds, semanticSearch.withinScenarioIds));
+        }
         accepted = null;
         return generation;
     }
     function accept(token, value) {
         if (pending?.token !== token) return false;
         accepted = null;
-        const { input, basis, source, catalog, unit, scenarios } = pending;
+        const { input, basis, source, catalog, unit, scenarios, semanticMembership } = pending;
         require(value?.kind === "retained-period-comparison" && value.schemaVersion === 1 && value.revision === input.expectedRevision
             && same(value.assessmentBasis, basis) && same(value.source, source)
             && same(value.timeContext, time.normalize(input.options.timeContext))
-            && same(value.options, input.options) && same(value.selection, { scenarioIds: input.scenarioIds, withinServices: input.withinServices })
+            && same(value.options, input.options) && same(value.selection, { ...(semanticMembership ? { semanticMembership,
+                ...(input.semanticSelection.withinScenarioIds === undefined ? {} : { withinScenarioIds: input.semanticSelection.withinScenarioIds }) }
+                : { scenarioIds: input.scenarioIds }), withinServices: input.withinServices })
             && value.definitions?.activitySchemaVersion === 2 && value.definitions.layer === (input.options.layer ?? "tool")
             && value.definitions.unit === unit
             && value.definitions.metricProjectionVersion === contract.METRIC_PROJECTION_VERSION
@@ -59,7 +91,10 @@ export function createPeriodComparisonState({ time, search, contract, projection
             const filters = { ...input.options.filters, ...side.dateRange };
             const validRows = (rows, scope) => Array.isArray(rows) && new Set(rows.map(row => row?.id)).size === rows.length
                 && rows.every(row => row && typeof row.id === "string" && row.id.length > 0
-                    && typeof row.scenarioId === "string" && input.scenarioIds.includes(row.scenarioId)
+                    && typeof row.scenarioId === "string" && (semanticMembership
+                        ? semanticMembership.scenarioIds.includes(row.scenarioId) || semanticMembership.actionIds.includes(row.id)
+                        : input.scenarioIds.includes(row.scenarioId))
+                    && (input.semanticSelection?.withinScenarioIds === undefined || input.semanticSelection.withinScenarioIds.includes(row.scenarioId))
                     && (row.sourceSessionId === null || typeof row.sourceSessionId === "string")
                     && (row.projectId === null || typeof row.projectId === "string")
                     && typeof row.tool === "string" && row.tool.length > 0 && typeof row.scope === "string" && row.scope.length > 0
@@ -84,6 +119,12 @@ export function createPeriodComparisonState({ time, search, contract, projection
                 filters: { ...input.options.filters, ...side.range }, timeContext: value.timeContext, dateRange: side.dateRange,
             }, scenarios);
             require(Object.entries(projected).every(([field, expected]) => same(analytics[field], expected)));
+            if (semanticMembership && analytics.apiCoverage) {
+                const parents = new Set([...semanticMembership.scenarioIds, ...semanticMembership.parentScenarioIds]);
+                require(Array.isArray(analytics.apiCoverage.calls) && analytics.apiCoverage.calls.every(call => parents.has(call.scenarioId)
+                    && (input.semanticSelection.withinScenarioIds === undefined || input.semanticSelection.withinScenarioIds.includes(call.scenarioId)))
+                    && same(analytics.apiCoverage, projection.apiCoverage(analytics.apiCoverage.calls, analytics.rows)));
+            }
             const associations = side.scenarioIds.map(id => catalog.find(item => item.scenarioId === id));
             const refs = [...new Set(associations.filter(item => item?.status === "retained" && item.interactionRef).map(item => item.interactionRef))];
             require(sameIds(side.interactionRefs, refs) && sameIds(side.unmappedScenarioIds, side.scenarioIds.filter((id, index) =>
@@ -121,7 +162,7 @@ export function createPeriodComparisonState({ time, search, contract, projection
 }
 
 export function mountPeriodComparison({ root, toggle, api, time, search, categories, results, projection, createState,
-    assessmentFactories, bindDetails, getContext, navigate, onSearch, recordLink, syncFilters }) {
+    assessmentFactories, bindDetails, getContext, navigate, onSearch, recordLink, syncFilters, createReport }) {
     const doc = root.ownerDocument;
     let machine, presentation, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null;
     const snapshotKey = context => JSON.stringify([context.snapshot?.revision, context.snapshot?.assessment?.basis, context.snapshot?.assessment?.source]);
@@ -166,8 +207,15 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
     });
     const status = el("p", undefined, "context-help-note"); status.id = "periodComparisonStatus"; status.setAttribute("role", "status");
     const output = el("div"); output.id = "periodComparisonResults"; output.tabIndex = -1;
-    const notice = el("p", "Saving this comparison as a report is not available here yet. Stop comparing to create an ordinary Analyze report.", "context-help-note");
-    root.append(heading, form, dateHint, searchLabel, scope, status, output, notice);
+    const report = button("Create comparison report", () => {
+        const value = consumer();
+        if (value) createReport?.(value, getContext().semanticSearch ? { receipt: structuredClone(getContext().semanticSearch.receipt),
+            ...(value.selection.withinScenarioIds === undefined ? {} : { withinScenarioIds: [...value.selection.withinScenarioIds] }),
+        } : undefined);
+    });
+    report.id = "createPeriodReport"; report.disabled = true;
+    const notice = el("p", "Prepare exactly this comparison through Setup, disclosure Review and a separate local Save. No earlier reports are needed.", "context-help-note");
+    root.append(heading, form, dateHint, searchLabel, scope, status, output, report, notice);
     toggle.setAttribute("aria-controls", root.id);
     toggle.addEventListener("click", () => navigate({ compare: shown ? undefined : "periods" }));
     form.addEventListener("submit", event => {
@@ -213,7 +261,7 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
     const periods = route => ({ baseline: { from: route.aFrom, to: route.aTo }, later: { from: route.bFrom, to: route.bTo } });
     function signature(context) {
         return JSON.stringify([context.route.view, context.route.compare, context.snapshot?.revision, context.snapshot?.assessment?.basis,
-            context.snapshot?.assessment?.source, context.options, periods(context.route), context.search, context.route.withinServices]);
+            context.snapshot?.assessment?.source, context.options, periods(context.route), context.search, context.route.withinServices, context.semanticSearch]);
     }
     function table(caption, headers, rows) {
         const wrap = el("div", undefined, "period-comparison-table");
@@ -248,6 +296,7 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
         syncFilters();
     }
     function paint(value) {
+        report.disabled = !createReport;
         const { baseline: a, later: b } = value.periods;
         syncOutcomeChoices(value);
         const labels = results.labels(value.definitions.layer);
@@ -332,6 +381,7 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
         output.append(deltas, el("p", value.scope.dates, "context-help-note"));
     }
     async function update() {
+        report.disabled = true;
         const outcomeTrigger = doc.getElementById("outcomeFilter-control");
         if (outcomeTrigger && !outcomeObserver) {
             outcomeObserver = new MutationObserver(() => {
@@ -368,16 +418,18 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
             + (!context.options.filters.tools ? "; All tools" : "") + (!context.options.filters.services ? "; All services" : "")
             + (!context.options.filters.sourceSessionIds ? "; All chats" : "") + (!context.options.filters.projectIds ? "; All projects" : "")
             + (context.route.withinServices ? "; also within every named service: " + context.route.withinServices : "")
-            + (context.search.trim() ? ". Private search applied to the complete retained interaction roster." : ". No private search.");
+            + (context.semanticSearch ? ". Search membership applies across the whole retained corpus: interaction hits and exact action hits, not only displayed matches."
+                + (context.semanticSearch.withinScenarioIds !== undefined ? " The existing interaction phrase filter also narrows this membership." : "")
+                : context.search.trim() ? ". Private search applied to the complete retained interaction roster." : ". No private search.");
         const key = signature(context);
         syncOutcomeChoices(consumer());
-        if (context.isLoading || context.isStale || blockedSnapshot === snapshotKey(context)) {
+        if (context.isLoading || context.isStale || context.semanticSearch && context.semanticSearch.status !== "ready" || blockedSnapshot === snapshotKey(context)) {
             generation++; machine?.leave(); contextKey = key; requestKey = "";
             output.replaceChildren(); output.removeAttribute("aria-busy");
             status.textContent = "The Analyze snapshot is updating or stale. Read the current stored view before comparing.";
             status.className = "notice"; return;
         }
-        if (key === contextKey && requestKey) return;
+        if (key === contextKey && requestKey) { report.disabled = !createReport || !consumer(); return; }
         contextKey = key; requestKey = "";
         const started = ++generation; machine?.leave(); output.replaceChildren();
         if (!Object.values(periods(context.route)).every(period => period.from && period.to)) {
@@ -389,8 +441,8 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
         try {
             await ready();
             if (started !== generation || signature(getContext()) !== key) return;
-            const input = machine.prepare(context.snapshot, context.options, periods(context.route), context.search, context.route.withinServices?.split(",") ?? []);
-            const token = machine.begin(input, context.snapshot);
+            const input = machine.prepare(context.snapshot, context.options, periods(context.route), context.search, context.route.withinServices?.split(",") ?? [], context.semanticSearch);
+            const token = machine.begin(input, context.snapshot, context.semanticSearch);
             requestKey = key;
             const value = await api("/api/period-comparison", input);
             const current = getContext();
@@ -417,6 +469,7 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
         if (!value?.basis || JSON.stringify(value.basis) === JSON.stringify(context.snapshot?.assessment?.basis)
             && !(value.pendingCleanup && value.kind !== "artifact-deletion")) return;
         machine?.observe(value); machine?.leave(); generation++; requestKey = ""; blockedSnapshot = snapshotKey(context);
+        report.disabled = true;
         if (dialog.open) dialog.close();
         output.replaceChildren(); output.removeAttribute("aria-busy");
         status.className = "notice";

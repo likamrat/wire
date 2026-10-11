@@ -425,6 +425,104 @@ out-of-document links (including the companion JSON link); use the saved downloa
 buttons for companion files. In-document section links remain usable. These reader
 safety restrictions never modify saved bytes, including historical Cost content.
 
+### Report a retained-period comparison
+
+**Create comparison report** in Analyze takes the currently accepted paired view
+directly to **Setup -> Review -> Save locally**. It does not prepare or invent two
+source reports. Setup names both inclusive local date ranges, the timezone and
+each exact matching-record count. Scope and author membership are fixed for this
+draft: use **Change comparison in Analyze** to change them. Ordinary report
+scope/author choices are unchanged.
+
+None / Masked / Original, manual terms, copy edits and omission remain independent
+disclosure choices. Optional bounded recorded context uses the comparison's
+frozen author policy, including explicit unverified-author inclusion where chosen.
+It cannot enlarge either measured cohort. Setup and Save distinguish supporting
+copy groups from analytical membership. Unmapped interactions and unavailable
+context remain gaps, not reconstructed evidence.
+
+The initial `/api/preview` input supplies `periodComparison` instead of
+`selection`/`scenarioIds`; mixing them is rejected. The controller compares every
+field against `buildPeriodComparison` at the expected accepted stored revision
+before reading optional contextual copies. Only validated per-side pooled
+`assessment.metrics[].createdAt` preparation instants differ between successive
+read-model builds; these are not source-event times. All canonical identities,
+bases, definitions, raw samples, outcomes, coverage, observed-time evidence and
+comparison results must match. Frozen metrics retain the accepted preparation
+instants and withhold raw source times using the existing report projection.
+
+When live semantic search supplies the selection, the request also carries
+`semanticSelection: { receipt, withinScenarioIds? }`. The existing search owner resolves that exact
+receipt inside the accepted state gate, once at initial preview. Caller-supplied
+hit arrays never authorize export. An interaction hit includes its matching
+records; an action hit includes only that canonical layer record, not all calls
+in its parent. Broader parent identities are used only for the existing returned
+API parent-coverage population. Pending, partial, stale or non-whole-corpus
+selection cannot prepare a paired report. No query text or operational receipt is
+frozen. Clearing or browsing search after a legitimate preview does not itself
+revoke that prepared report.
+
+Optional `withinScenarioIds` retains a simultaneous legacy interaction phrase
+filter as an explicit intersection. Its IDs must be unique and present in the
+accepted complete roster; they can only narrow receipt-authorized hits and
+broader API parents. Omission means no added narrowing, while `[]` means empty.
+The saved shape uses `selection.withinScenarioRefs` and names this extra scope
+without disclosing the phrase. The same qualifier must accompany initial report
+admission; it is not reread from the search UI during Review or Save.
+
+New schema-v3 **report** artifacts optionally carry
+`periodComparison: { kind: "retained-period-report", schemaVersion: 1, ... }`
+and the identical hash-bound field in the manifest. This closed shape contains
+the accepted revision, safe source availability/revision, time/definition bases,
+projected filter/author selection, and exact per-side keyed rows and scenario
+associations. Each side separately freezes existing validated full-interaction
+evaluation facts, review statuses, raw timing samples, original per-check
+eligible/covered identities and unavailable lanes. Exact outcome and metric
+comparisons are derived by `comparePeriodCohorts`, not a second delta engine.
+No synthetic bundle IDs, `sourceReports` or union `evaluationFacts` are added.
+`records[]` contains permitted supporting copies with empty analytical arrays;
+the per-side rows, not these copies, own matching-record denominators.
+The ordinary single-range `dateSelection`/`dateRange` envelope is absent for this
+subtype; only the two explicit frozen period bounds describe its date scope.
+Returned-entry reports also retain keyed eligible parent-call/result/status
+identities and recomputed broader API coverage, separately from selected rows.
+
+HTML/PDF/Markdown lead with supported differences, exact two-side counts and
+timing, then explicitly labelled full-interaction findings, context and definitions.
+They reuse native/shared typography and paint; PDF is generated from the supported
+light document with the existing offline embedded-font reader contract.
+JSON freezes the same facts, not a regenerated screen. Incompatible or absent
+lanes withhold deltas, overlap is explicit, and no causal improvement or blended
+grade is inferred.
+
+Relevant source, permission, selected evidence, assessment, author or contextual
+changes invalidate preparation/approval. Unrelated accepted updates preserve
+valid prepared work. Review and final Save remain separate; a lost save response
+offers **Check save status**, a read-only lookup of the already allocated report
+ID, never a replay of Save. One registered artifact is safely reopenable,
+downloadable, searchable in all four formats and deletable through existing
+verified inventory handling. It is labelled **Period comparison report** and
+cannot be treated as a single source in the ordinary saved-report comparison:
+`period-report-has-two-cohorts-not-one-source`. Old reports and saved comparisons
+remain readable and byte-for-byte unchanged.
+
+Paired draft authority is tracked separately from its disclosure-copy basis:
+changing bounded context or None / Masked / Original revokes the relevant preview,
+not the accepted comparison. A new preview still requires actual review.
+Broader returned-API parent coverage has a separate private dependency signature
+over the fixed eligible parents and their canonical returned-result/status
+evidence. The producer's shared parent-selection helper is reused at preview
+completion, Review and Save. Changed parents reject the prepared report without
+adding parent-only interactions to measured rows, metrics or supporting copies;
+new unrelated interactions do not invalidate unchanged frozen parent evidence.
+
+Focused proof: `tests/period-report.test.mjs`,
+`tests/period-report-semantic.test.mjs`, and
+`tests/period-report.browser.test.mjs`. The browser proof uses invented ephemeral
+stores and the normal UI through registered reopen, including lost-response
+recovery, strict PDF font/text/page checks and narrow 200% output. Optional
+`WIRE_PERIOD_REPORT_PROOFS` keeps private output artifacts outside the repository.
+
 ### Prompt author evidence
 
 The Copilot SDK [message source contract](https://github.com/github/copilot-sdk/blob/main/nodejs/src/types.ts)

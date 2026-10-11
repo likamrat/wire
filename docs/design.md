@@ -194,10 +194,46 @@ permission/deletion basis change clears the displayed result and consumer even
 when application of the next snapshot is deferred; artifact-only cleanup does
 not invalidate retained activity by itself.
 
-The later comparison-report bridge must validate this live input against its
-accepted revision and preserve its exact two memberships through the real
-privacy/disclosure/save gates. It must not invent bundle IDs/manifests or treat
-the live consumer as a saved-report authorization.
+The **Create comparison report** bridge validates this live input against its
+accepted revision and preserves its exact two memberships through the existing
+privacy/disclosure/save gates. It never invents source bundle IDs/manifests or
+treats the live consumer as saved-report authorization. The additive closed
+frozen shape and fixed-author policy are documented in
+[Reporting](reporting.md#report-a-retained-period-comparison).
+
+An optional semantic selection replaces `scenarioIds` with
+`semanticSelection: { receipt, withinScenarioIds? }` in the read request. These fields are mutually
+exclusive. The receipt has exactly `panelId`, `epoch`, `requestId`, `generation`,
+`indexId`, `modelId`, `mode`, and `revision`. Only the existing search service's
+synchronous `membership(owner, receipt, state, layer)` resolves it; supplied
+matches cannot become authority. The resolved internal shape is exactly
+`{ scenarioIds, actionIds, parentScenarioIds }`. Canonical rows match an
+interaction ID **or** an exact layer action ID; parent IDs apply only to broader
+API parent coverage. Dates are replaced by the two chosen periods; all remaining
+filters and service OR/within-service AND rules still apply.
+
+The component's `getContext.semanticSearch` is absent for legacy private phrase
+search, or contains `status`, `receipt`, the three membership arrays, and
+`coverage: "whole-retained-corpus"`. Only `ready` is admitted; `pending`, `partial`
+and `stale` block instead of falling back to lexical matching or widening a hit to
+its parent. State preparation sends only the receipt, and acceptance checks the
+resolved response against the complete admitted membership, not a displayed
+result page. The live response uses `selection.semanticMembership` instead of
+`selection.scenarioIds`. Its report bridge passes the active receipt separately
+to initial privacy preparation; the frozen report contains only keyed membership,
+never receipt/panel/query fields. Existing legacy inputs are unchanged.
+
+When a legacy interaction phrase filter is also visible,
+`getContext.semanticSearch.withinScenarioIds` carries that existing browser
+matcher's unique IDs from the complete retained scenario/source roster, before
+ordinary dates. Preparation requires this qualifier rather than discarding the
+phrase. Unknown/malformed IDs fail against the accepted roster. The server uses
+it only as an additional **AND** after receipt-authorized scenario/action hits,
+for final rows, pre-outcome facets and broader API parents. Omitted means no
+additional narrowing; `[]` means no matches. The live selection retains
+`withinScenarioIds`, and the report freezes keyed `withinScenarioRefs`. Neither
+qualifier grants membership or transmits the phrase; a legitimately prepared
+report remains independent of later search browsing.
 
 Focused proof: `tests/period-comparison.test.mjs`,
 `tests/period-comparison-state.test.mjs` and

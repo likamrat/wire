@@ -1,0 +1,220 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { privateFixture } from "./helpers.mjs";
+import { periodFixture } from "./period-comparison-fixture.mjs";
+import { buildPeriodComparison } from "../lib/period-comparison.mjs";
+import { acceptPeriodReport, freezePeriodReport, validatePeriodReport } from "../lib/period-report.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { loadBoardState, updateBoardState, replaceEvidence } from "../lib/store.mjs";
+import { reportContextFixture } from "./report-context-fixture.mjs";
+import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
+import { buildAssessmentModel, buildReportFacts } from "../lib/assessment-read-model.mjs";
+
+async function setup(t) {
+    const fixture = periodFixture();
+    fixture.records[0].toolCalls.find(call => call.toolCallId === "period-calendar").requestArgs = { entityUrls: ["/me/calendarView"] };
+    const assessed = qualityDisplayFixture({ records: fixture.records, judgments: ["pass", "fail", "pass", "unassessed", "error"], finalDuration: null }).state;
+    const app = await privateFixture(t, fixture.records);
+    await updateBoardState(app.context, state => { state.pseudonymKey = assessed.pseudonymKey; state.personalEvaluation = assessed.personalEvaluation; });
+    const state = await loadBoardState(app.context), input = { ...fixture.input, expectedRevision: state.revision };
+    const value = buildPeriodComparison(state, input);
+    return { ...app, state, value, options: { formats: ["html", "json", "markdown"], promptMode: "masked", timeContext: value.timeContext } };
+}
+
+test("authoritative paired admission rejects numeric, membership, scope and stale tampering", () => {
+    const { state, input } = periodFixture(), value = buildPeriodComparison(state, input);
+    for (const mutate of [
+        copy => { copy.comparison.outcomes.change.failure = 0; },
+        copy => { copy.periods.baseline.rowIds.reverse(); },
+        copy => { copy.periods.later.interactionCoverage[0].coveredUnitRefs.pop(); },
+        copy => { copy.options.filters.services = ["Mail"]; },
+        copy => { copy.revision--; },
+        copy => { copy.authorPolicy = "fake"; },
+        copy => { copy.periods.baseline.assessment.metrics[0].observedTime.undatedUnits++; },
+        copy => { copy.periods.baseline.assessment.metrics[0].createdAt = "not-an-instant"; },
+    ]) {
+        const copy = structuredClone(value); mutate(copy);
+        assert.throws(() => acceptPeriodReport(state, copy));
+    }
+    const frozen = freezePeriodReport(state, acceptPeriodReport(state, value), "2026-10-11T10:00:00.000Z").frozen;
+    assert.deepEqual(frozen.comparison, value.comparison);
+    assert.ok(frozen.comparison.metrics.some(item => (item.baseline ?? item.later).basis === "model-assessment"));
+    assert.equal(frozen.periods.baseline.rows.length, 3);
+    assert.equal(frozen.periods.baseline.facts.metrics[0].coverage.eligible, 4, "full interaction checks are separate from 3 matching calls");
+    for (const mutate of [
+        copy => { copy.periods.baseline.totals.count++; },
+        copy => { copy.periods.later.rows[0].scenarioRef = "raw-private-id"; },
+        copy => { copy.periods.baseline.facts.metrics[0].counts.pass++; },
+        copy => { copy.periods.baseline.range.to = "2026-03-09"; },
+        copy => { copy.selection.promptAuthors = ["user"]; },
+        copy => { copy.source.path = "private"; },
+        copy => { copy.comparison.metrics[0].result = null; },
+    ]) {
+        const copy = structuredClone(frozen); mutate(copy);
+        assert.throws(() => validatePeriodReport(copy));
+    }
+});
+
+test("successive authoritative builds differ only in valid pooled preparation instants and remain admissible", async () => {
+    const { state, input } = periodFixture(), first = buildPeriodComparison(state, input);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const second = buildPeriodComparison(state, input);
+    assert.notEqual(first.periods.baseline.assessment.metrics[0].createdAt, second.periods.baseline.assessment.metrics[0].createdAt);
+    assert.doesNotThrow(() => acceptPeriodReport(state, first));
+    const frozen = freezePeriodReport(state, acceptPeriodReport(state, first), new Date().toISOString()).frozen;
+    assert.equal(frozen.periods.baseline.facts.metrics[0].createdAt, first.periods.baseline.assessment.metrics[0].createdAt);
+});
+
+test("current-source qualification freezes exact model lanes despite a divergent persisted source; ordinary defaults are unchanged", () => {
+    const { state, input } = periodFixture(), source = structuredClone(state.personalEvaluation.source);
+    state.personalEvaluation.source = { available: false, sourceConfigRef: null, sourceConfigRevision: 0 };
+    const value = buildPeriodComparison(state, input, { model: buildAssessmentModel(state, { source }) });
+    assert.ok(value.comparison.metrics.some(item => (item.baseline ?? item.later).basis === "model-assessment"));
+    const frozen = freezePeriodReport(state, acceptPeriodReport(state, value, { source }), "2026-10-11T10:00:00.000Z").frozen;
+    assert.deepEqual(frozen.comparison, value.comparison);
+    assert.throws(() => acceptPeriodReport(state, value), /differs from the accepted/);
+    const options = { preparedAt: "2026-10-11T10:00:00.000Z" };
+    assert.deepEqual(buildReportFacts(state.evidence, state, options),
+        buildReportFacts(state.evidence, state, { ...options, source: state.personalEvaluation.source }));
+});
+
+test("one paired report uses existing actual disclosure and separate local save", async t => {
+    const { context, value, options } = await setup(t), controller = createExportController(context);
+    const preview = await controller.preview("owner", undefined, options, undefined, value);
+    const frozen = preview.snapshot.periodComparison;
+    assert.deepEqual(frozen.comparison, value.comparison);
+    assert.equal(preview.snapshot.evaluationFacts, undefined);
+    assert.equal(preview.snapshot.selectionScope, undefined);
+    assert.ok(preview.records.every(record => record.toolCalls.length === 0), "copies are not a third analytical population");
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    await assert.rejects(controller.confirm("owner", preview.previewId, true, value.timeContext), /disclosure review/);
+    const reviewed = await controller.review("owner", preview.previewId, true, value.timeContext);
+    assert.equal(reviewed.privacy.reviewerConfirmed, true);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    const saved = await controller.confirm("owner", preview.previewId, true, value.timeContext);
+    assert.equal(saved.state.exports.length, 1);
+    const snapshot = JSON.parse(await readFile(saved.bundle.files["product-report.json"], "utf8"));
+    assert.deepEqual(snapshot.periodComparison, frozen);
+    assert.equal(saved.bundle.reportType, "period-comparison");
+    assert.match(preview.previewHtml, /What differs/);
+    assert.match(preview.files["product-report.md"], /No calls|Full-interaction|full retained/);
+    await assert.rejects(controller.confirm("owner", preview.previewId, true, value.timeContext), /Preview not found/);
+});
+
+test("paired payload is mutually exclusive with ordinary selections", async t => {
+    const { context, value, options } = await setup(t), controller = createExportController(context);
+    await assert.rejects(controller.preview("owner", ["anything"], options, undefined, value), /cannot be combined/);
+    await assert.rejects(controller.preview("owner", undefined, options, { kind: "all", revision: value.revision }, value), /cannot be combined/);
+});
+
+test("unrelated updates preserve reviewed pair; selected evidence and permission changes reject without writing", async t => {
+    const { context, value, options } = await setup(t), controller = createExportController(context);
+    const preview = await controller.preview("owner", undefined, options, undefined, value);
+    await controller.review("owner", preview.previewId, true, value.timeContext);
+    await updateBoardState(context, state => { state.cards["period-request-9"].workflowState = "reviewing"; });
+    const saved = await controller.confirm("owner", preview.previewId, true, value.timeContext);
+    assert.equal(saved.state.exports.length, 1);
+    for (const mutate of [
+        state => { state.personalEvaluation.overrideRevision++; },
+        state => { state.personalEvaluation.consent.revision++; },
+    ]) {
+        const state = await loadBoardState(context);
+        const fresh = buildPeriodComparison(state, { ...periodFixture().input, expectedRevision: state.revision });
+        const pending = await controller.preview("owner", undefined, options, undefined, fresh);
+        await controller.review("owner", pending.previewId, true, fresh.timeContext);
+        await updateBoardState(context, mutate);
+        await assert.rejects(controller.confirm("owner", pending.previewId, true, fresh.timeContext), /Assessment evidence changed/);
+        assert.equal((await loadBoardState(context)).exports.length, 1);
+    }
+});
+
+test("held PDF preparation rejects changed authority before returning any preview or writing", async t => {
+    const { context, value, options } = await setup(t);
+    let started, release;
+    const waiting = new Promise(resolve => { started = resolve; }), gate = new Promise(resolve => { release = resolve; });
+    const controller = createExportController(context, undefined, async () => {
+        started(); await gate; return Buffer.from("%PDF-invented-gate-test");
+    });
+    const pending = controller.preview("owner", undefined, { ...options, formats: ["pdf"] }, undefined, value);
+    await waiting;
+    await updateBoardState(context, state => { state.personalEvaluation.consent.revision++; });
+    release();
+    await assert.rejects(pending, /Assessment evidence changed/);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+});
+
+test("retained-source append preserves a prepared cohort, but a selected-record edit revokes it", async t => {
+    const { context, value, options } = await setup(t), controller = createExportController(context);
+    const preview = await controller.preview("owner", undefined, options, undefined, value);
+    await controller.review("owner", preview.previewId, true, value.timeContext);
+    const before = await loadBoardState(context), records = structuredClone(before.evidence);
+    const unrelated = structuredClone(records.at(-1));
+    unrelated.scenarioId = "unrelated-append"; unrelated.sourceSessionId = "unrelated-append-chat";
+    unrelated.userPrompt.sourceEventId = "unrelated-append-prompt";
+    unrelated.toolCalls[0].toolCallId = "unrelated-append-call"; unrelated.toolCalls[0].startEventId = "unrelated-append-start";
+    records.push(unrelated);
+    await replaceEvidence(context, () => ({ records }));
+    await controller.confirm("owner", preview.previewId, true, value.timeContext);
+    const current = await loadBoardState(context);
+    const fresh = buildPeriodComparison(current, { ...periodFixture().input, expectedRevision: current.revision });
+    const pending = await controller.preview("owner", undefined, options, undefined, fresh);
+    await controller.review("owner", pending.previewId, true, value.timeContext);
+    records[0].userPrompt.text += " changed recorded intent";
+    await replaceEvidence(context, () => ({ records }));
+    await assert.rejects(controller.confirm("owner", pending.previewId, true, value.timeContext), /Selected evidence changed/);
+    assert.equal((await loadBoardState(context)).exports.length, 1);
+});
+
+test("saving a period report never rewrites previously registered ordinary report bytes", async t => {
+    const { context, options } = await setup(t), controller = createExportController(context);
+    let state = await loadBoardState(context);
+    const old = await controller.preview("owner", undefined, options, { kind: "selected", revision: state.revision, scenarioIds: ["period-request-1"] });
+    await controller.review("owner", old.previewId, true, options.timeContext);
+    const saved = await controller.confirm("owner", old.previewId, true, options.timeContext);
+    const bytes = new Map(await Promise.all(Object.values(saved.bundle.files).map(async file => [file, await readFile(file)])));
+    state = await loadBoardState(context);
+    const value = buildPeriodComparison(state, { ...periodFixture().input, expectedRevision: state.revision });
+    const paired = await controller.preview("owner", undefined, options, undefined, value);
+    await controller.review("owner", paired.previewId, true, options.timeContext);
+    await controller.confirm("owner", paired.previewId, true, options.timeContext);
+    for (const [file, expected] of bytes) assert.deepEqual(await readFile(file), expected);
+    assert.equal((await loadBoardState(context)).exports.length, 2);
+});
+
+test("paired context and original/masked/none/edit/omit copies never enlarge either matching or assessment population", async t => {
+    const { context, records } = await reportContextFixture(t);
+    const state = await loadBoardState(context);
+    const input = { schemaVersion: 1, expectedRevision: state.revision, options: {
+        layer: "tool", groupBy: "workload", bucket: "day", timeContext: { timeZone: "UTC", locale: "en-US" },
+        filters: { scope: "history", promptAuthors: ["user"], services: ["Files"] },
+    }, periods: { baseline: { from: "2026-09-01", to: "2026-10-02" }, later: { from: "2026-09-01", to: "2026-10-02" } },
+    scenarioIds: [records[1].scenarioId], withinServices: [] };
+    const value = buildPeriodComparison(state, input), controller = createExportController(context);
+    assert.equal(value.periods.baseline.rowIds.length, 1);
+    let prior;
+    for (const promptMode of ["original", "masked", "none"]) {
+        const options = { promptMode, formats: ["html", "json", "markdown"], recordedContext: true, timeContext: input.options.timeContext };
+        const preview = await controller.preview("owner", undefined, options, undefined, value);
+        assert.deepEqual(preview.snapshot.periodComparison.comparison, value.comparison);
+        assert.equal(preview.snapshot.periodComparison.periods.baseline.rows.length, 1);
+        if (promptMode === "none") {
+            assert.equal(preview.snapshot.recordedContext, undefined);
+            assert.ok(preview.records.every(record => record.prompts.every(prompt => prompt.text === null)));
+        } else {
+            assert.ok(preview.snapshot.recordedContext.coverage.entries > 1);
+            if (promptMode === "masked") assert.doesNotMatch(JSON.stringify(preview.snapshot), /reply@example|first@example/);
+            prior = { preview, options };
+        }
+    }
+    const reply = prior.preview.contextReview.find(copy => copy.kind === "response" && copy.original?.includes("Here are three"));
+    assert.ok(reply);
+    const edited = await controller.preview("owner", undefined, { ...prior.options, overrides: [{ key: reply.key, text: "Edited permitted explanation" }] }, undefined, value);
+    assert.match(edited.previewHtml, /Edited permitted explanation/);
+    assert.deepEqual(edited.snapshot.periodComparison.periods.baseline.rows, prior.preview.snapshot.periodComparison.periods.baseline.rows);
+    assert.deepEqual(edited.snapshot.periodComparison.periods.baseline.interactionCoverage, prior.preview.snapshot.periodComparison.periods.baseline.interactionCoverage);
+    assert.deepEqual(edited.snapshot.periodComparison.comparison, prior.preview.snapshot.periodComparison.comparison);
+    const omitted = await controller.preview("owner", undefined, { ...prior.options, overrides: [{ key: reply.key, omit: true }] }, undefined, value);
+    assert.equal(omitted.snapshot.recordedContext.entries.find(entry => entry.key === reply.key).text, null);
+    assert.deepEqual(omitted.snapshot.periodComparison.comparison, value.comparison);
+});

@@ -48,7 +48,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             else control.removeAttribute("aria-current");
         });
         text(nodes.progress, phase === "saved" ? "Report saved" : phase === "unavailable" ? "Saved report unavailable" : `Step ${step} of 3`);
-        text(nodes.summary, bundle ? "Saved files use the reviewed snapshot." : model.requestCount ? `${({ selected: "Selected requests", current: "Current view", all: "All collected activity" })[model.scope]} / ${model.authorLabel ? model.authorLabel + " / " : ""}${modes[model.promptMode]} / ${formatNames() || "Choose a format"}` : "Nothing is included automatically.");
+        text(nodes.summary, bundle ? "Saved files use the reviewed snapshot." : model.requestCount ? `${({ selected: "Selected requests", current: "Current view", all: "All collected activity", period: "Two frozen comparison cohorts" })[model.scope]} / ${model.authorLabel ? model.authorLabel + " / " : ""}${modes[model.promptMode]} / ${formatNames() || "Choose a format"}` : "Nothing is included automatically.");
         text(nodes.context, model.entry
             ? `GitHub Copilot chat: ${model.entry.sessionName || "Copilot chat name not recorded"} / ${model.entry.projectId ? "Copilot project: " + (model.entry.projectName || "Name unavailable") : "Copilot chat without a project"}. Complete eligible groups across all retained dates and services; new groups are not added automatically.`
             : "");
@@ -316,7 +316,9 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
                 }
                 const summary = el("dl", "report-save-summary");
                 for (const [label, content] of [
-                    ["Requests", `${value.records.length} request group${value.records.length === 1 ? "" : "s"} / ${model.authorLabel}`],
+                    ["Requests", value.snapshot?.periodComparison
+                        ? `${value.snapshot.periodComparison.periods.baseline.rows.length} matching records in Period A; ${value.snapshot.periodComparison.periods.later.rows.length} in Period B. ${value.records.length} supporting-copy groups; no combined analytical cohort.`
+                        : `${value.records.length} request group${value.records.length === 1 ? "" : "s"} / ${model.authorLabel}`],
                     ["Prompt copies", modes[value.promptMode]],
                     ["Files", value.formats.map(format => format === "markdown" ? "Markdown" : format.toUpperCase()).join(", ")],
                 ]) {

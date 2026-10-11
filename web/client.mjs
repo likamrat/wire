@@ -129,6 +129,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const historyStatus = createCollectionStatus();
     const sessionJourney = createSessionJourney();
     let reportEntry = null, reportJourney, reportComparisonUI, savedArtifactUI, artifactRefreshRequired = false, contextReturnKey, savedReportView;
+    let periodReport = null, periodReportInvalid = false;
     const sessionReportButton = button("Create report for this Copilot chat", createSessionReport, "primary");
     sessionReportButton.id = "createSessionReport";
     sessionReportButton.hidden = true;
@@ -727,6 +728,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         navigate: changes => navigate(routeFor("analyze", changes), false, { keepFocus: true }),
         onSearch: value => { $("activitySearch").value = value; $("activitySearch").dispatchEvent(new Event("input")); },
         syncFilters: () => selectControls?.sync(),
+        createReport: (value, semanticSelection) => {
+            if (exportWriting || isLoading || isStale) return;
+            const ids = [...new Set(Object.values(value.periods).flatMap(side => side.scenarioIds))];
+            if (!ids.length) { announce("Neither period has matching retained records. Choose periods with activity before creating a report.", "error"); return; }
+            clearReportSelection();
+            periodReport = { value, semanticSelection, returnTo: { ...route, search }, timeContext: structuredClone(viewerTime) };
+            periodReportInvalid = false;
+            for (const id of ids) selected.add(id);
+            draft.clearSelection();
+            go("reports", { task: "create", request: undefined });
+        },
         recordLink: (row, side, value) => link(row.tool, "request", {
             request: row.scenarioId, call: row.id, callRevision: value.definitions.layer === "reported-api" ? String(value.revision) : undefined,
             range: "custom", from: side.range.from, to: side.range.to,
@@ -736,6 +748,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         assessmentUI.invalidate(`Collected activity or its optional evidence was ${change}. Read current insights.`);
         reportComparisonUI?.invalidate("Collected activity changed. The unfinished comparison was cleared.", true, { force: true });
         selected.clear();
+        periodReport = null; periodReportInvalid = false;
         reportScope = "selected";
         reportEntry = null;
         draft.clearSelection();
@@ -895,6 +908,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (isLoading || isStale || requestIds === null) { announce("Copilot chat report scope is unavailable. Refresh before selecting request groups.", "error"); return; }
         if (!requestIds.length) { announce("No eligible collected request groups are available for this Copilot chat. Check its collection coverage or choose another Copilot chat."); return; }
         selected.clear();
+        periodReport = null; periodReportInvalid = false;
         for (const id of requestIds) selected.add(id);
         reportScope = "selected";
         reportEntry = { scope: "selected", sessionId: source.sessionId, sessionName: source.name, projectId: source.projectId, projectName: source.project, requestIds, returnTo: { ...route, view: "activity", request: undefined } };
@@ -2523,12 +2537,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         detailOwner = "request:" + route.request;
     }
     function reportSelection(kind = reportScope) {
+        if (periodReport && kind === reportScope) {
+            const value = periodReport.value;
+            return reportScopes.resolve(state?.exportCatalog, "selected", [],
+                [...new Set(Object.values(value.periods).flatMap(side => side.scenarioIds))], authorship.selection(value.options.filters?.promptAuthors));
+        }
         return reportScopes.resolve(state?.exportCatalog, kind, state ? currentViewScenarios().map((s) => s.scenarioId) : [], [...selected], reportAuthors);
     }
     function clearReportSelection() {
         if (exportWriting) return;
         reportScope = "selected";
         reportEntry = null;
+        periodReport = null; periodReportInvalid = false;
         selected.clear();
         draft.clearSelection();
         invalidatePreview();
@@ -2547,6 +2567,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function updateSelection() {
         if (!state) return;
         const value = reportSelection();
+        const activeAuthors = periodReport ? authorship.selection(periodReport.value.options.filters?.promptAuthors) : reportAuthors;
+        if (periodReport) {
+            const expected = [...new Set(Object.values(periodReport.value.periods).flatMap(side => side.scenarioIds))].sort();
+            if (JSON.stringify([...selected].sort()) !== JSON.stringify(expected)) {
+                periodReportInvalid = true;
+                invalidatePreview("The comparison selection changed. Return to Analyze and create a new comparison report.");
+            }
+        }
         const unknownSelected = reportScope === "selected" && [...selected].some((id) => !state.scenarios.some((s) => s.scenarioId === id));
         if (!exportWriting && !isLoading && !isStale && value.available) {
             if (draft.observeContext({ revision: state.revision, assessment: state.assessment })) {
@@ -2554,9 +2582,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 invalidatePreview("Recorded context changed. Prepare a new preview; ordinary prompt edits are kept.");
             }
             const token = draft.token();
-            draft.select([reportScope, "authors:" + reportAuthors.join(","), ...value.requests.map((r) => r.scenarioId)]);
-            draft.synchronizeTime(viewerTime, dateSelection());
-            draft.synchronizeBasis(state, value);
+            draft.select([reportScope, "authors:" + activeAuthors.join(","), ...value.requests.map((r) => r.scenarioId)]);
+            draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : dateSelection());
+            if (draft.synchronizeBasis(state, value, { paired: Boolean(periodReport) }) && periodReport) periodReportInvalid = true;
+            if (periodReport && JSON.stringify(periodReport.timeContext) !== JSON.stringify(viewerTime)) periodReportInvalid = true;
             if (!draft.current(token)) invalidatePreview("The report scope, source or review basis changed. Return to Setup and scan again; unchanged draft choices are kept.");
         }
         for (const kind of ["all", "current", "selected"]) {
@@ -2565,9 +2594,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             document.querySelector(`[name=reportScope][value=${kind}]`).checked = reportScope === kind;
         }
         $("scopeSummary").textContent = !state.exportCatalog ? "Report scope is unavailable. Refresh before previewing." : unknownSelected ? "A selected request is no longer available. Choose a fresh selection." : reportScopes.summary(value);
-        for (const option of $("reportPromptAuthorFilter").options) option.selected = reportAuthors.includes(option.value);
-        $("reportPromptAuthorFilter").disabled = exportWriting;
-        document.querySelectorAll("[name=reportScope],[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
+        for (const option of $("reportPromptAuthorFilter").options) option.selected = activeAuthors.includes(option.value);
+        $("reportPromptAuthorFilter").disabled = exportWriting || Boolean(periodReport);
+        document.querySelectorAll("[name=reportScope]").forEach(control => { control.disabled = exportWriting || Boolean(periodReport); });
+        document.querySelectorAll("[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
         $("reportRecordedContext").checked = draft.options().recordedContext === true && draft.options().promptMode !== "none";
         $("reportRecordedContext").disabled = exportWriting || draft.options().promptMode === "none";
         setText($("reportPromptAuthorSummary"), `${count(value.requests.length)} of ${count(value.baseRequests.length)} request groups in the base scope included.${value.authorExcludedRequestGroups ? ` ${count(value.authorExcludedRequestGroups)} left out with their calls and scores. The base selection is kept.` : ""}`);
@@ -2590,7 +2620,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("scopeExclusions").textContent = x
             ? `Collection exclusions: ${x.syntheticRequestGroups} synthetic request groups; ${x.diagnosticRequestGroups} diagnostic groups; ${x.unknownSourceRequestGroups} groups with unknown source identity; ${x.requestGroupsWithoutEligibleEvidence} alias-only or excluded groups. ${x.duplicateEvidenceRecords} duplicate evidence records, ${x.unidentifiableEvidenceRecords} unidentifiable records and ${x.platformDiagnosticEvidenceRecords} platform diagnostic records are excluded. ${x.excludedOrDuplicateEvidenceRecords} evidence records excluded or deduplicated overall. ${value.excludedRequestedGroups} requested groups have no eligible evidence. These overlapping categories are not additive. Missing projects remain unscoped, not excluded. Hidden calls, missing logs and new chats are not inferred.`
             : "Fresh scope information is required.";
-        const inclusion = unknownSelected ? "A selected request is no longer available" : reportScopes.inclusion(value);
+        const inclusion = periodReport
+            ? `One comparison report / ${periodReport.value.periods.baseline.rowIds.length} matching records in A / ${periodReport.value.periods.later.rowIds.length} in B`
+            : unknownSelected ? "A selected request is no longer available" : reportScopes.inclusion(value);
         const activity = route.view === "analyze";
         for (const id of ["selectionSummary", "previewSelectionSummary", "activitySelectionSummary"]) setText($(id), inclusion);
         let compactSelection = $("activitySelectionCompact");
@@ -2617,11 +2649,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("pageAction").hidden = !value.requests.length;
             $("pageAction").classList.add("quiet");
         } else $("pageAction").classList.remove("quiet");
-        $("exportBtn").disabled = isLoading || isStale || !state.exportCatalog || value.available === false || unknownSelected || !value.requests.length || !draft.options().formats.length;
+        let pairedSummary = $("periodReportScope");
+        if (!pairedSummary) {
+            pairedSummary = el("section", "report-period-scope"); pairedSummary.id = "periodReportScope";
+            $("reportPopulationNote").before(pairedSummary);
+        }
+        pairedSummary.hidden = !periodReport;
+        $("reportsView").querySelector(".scope-choices").hidden = Boolean(periodReport);
+        if (periodReport) {
+            const { baseline: a, later: b } = periodReport.value.periods;
+            $("reportPopulationNote").textContent = `Period A: ${a.rowIds.length} matching records; Period B: ${b.rowIds.length}. Full-interaction assessment coverage remains separate. ${value.requests.length} supporting-copy groups are not a combined analytical cohort.`;
+            $("scopeSummary").textContent = $("reportPopulationNote").textContent;
+            $("scopeExplanation").textContent = "This report freezes the comparison accepted in Analyze. It does not use ordinary Current view full-interaction call counts.";
+            $("reportMatchingContext").hidden = true;
+            $("reportPromptAuthorSummary").textContent = "Authors and matching records are fixed to this comparison. None / Masked / Original changes copies, not membership.";
+            pairedSummary.replaceChildren(el("h3", "", "Report this comparison"),
+                el("p", "", `Period A: ${a.range.from} to ${a.range.to}. Period B: ${b.range.from} to ${b.range.to}. ${time.label(periodReport.timeContext)}.`),
+                el("p", "", "Authors and matching records are fixed to this comparison. Change them in Analyze and create a new comparison report."),
+                button("Change comparison in Analyze", () => {
+                    const returnTo = periodReport.returnTo;
+                    clearReportSelection();
+                    navigate(returnTo);
+                }));
+        }
+        $("exportBtn").disabled = isLoading || isStale || periodReportInvalid || !state.exportCatalog || value.available === false || unknownSelected || !value.requests.length || !draft.options().formats.length;
         reportJourney?.update({
-            requestCount: value.requests.length, scope: reportScope, authorLabel: authorship.selectionLabel(reportAuthors),
-            scopeReady: !isLoading && !isStale && Boolean(state.exportCatalog) && value.available !== false && !unknownSelected,
-            scopeIssue: isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : "",
+            requestCount: value.requests.length, scope: periodReport ? "period" : reportScope, authorLabel: authorship.selectionLabel(activeAuthors),
+            scopeReady: !isLoading && !isStale && !periodReportInvalid && Boolean(state.exportCatalog) && value.available !== false && !unknownSelected,
+            scopeIssue: periodReportInvalid ? "The accepted comparison changed. Return to Analyze and create a new comparison report." : isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : "",
             promptMode: draft.options().promptMode, formats: draft.options().formats,
             timeLabel: time.label(applied?.timeContext || viewerTime), entry: reportEntry,
         });
@@ -2676,7 +2731,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 actions.append(ux.tooltip(control, help.actions.review));
                 ux.explainDisabled(control, "Wait for a current activity snapshot before changing review labels.");
             }
-            if (reportScope === "selected") actions.append(ux.tooltip(button("Remove", () => {
+            if (reportScope === "selected" && !periodReport) actions.append(ux.tooltip(button("Remove", () => {
                 for (const id of state.exportCatalog.requests.find((r) => r.scenarioId === scenario.scenarioId).aliases) selected.delete(id);
                 reportEntry = null;
                 invalidatePreview(); renderReports(); updateSelection();
@@ -2708,7 +2763,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const formats = (bundle.formats || []).map(format => format === "markdown" ? "Markdown" : format.toUpperCase()).join(", ");
             const groups = bundle.selectionScope?.requestGroups;
             const label = [
-                bundle.kind === "comparison" ? "Comparison" : "Report",
+                bundle.kind === "comparison" ? "Comparison" : bundle.reportType === "period-comparison" ? "Period comparison report / two frozen cohorts" : "Report",
                 date === "Time not recorded" ? "Preparation time unavailable" : `Prepared ${date}`,
                 mode, formats,
                 Number.isSafeInteger(groups) && groups >= 0 ? `${count(groups)} request group${groups === 1 ? "" : "s"}` : "",
@@ -2743,7 +2798,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 openButton.setAttribute("aria-label", bundle.kind === "comparison" ? "Open saved comparison" : "Open saved report");
                 viewKey(openButton, "open-bundle:" + bundle.bundleId);
             }
-            if (bundle.kind !== "comparison") content.append(button("Compare saved reports", () => reportComparisonUI.open(), "quiet"));
+            if (bundle.kind !== "comparison" && bundle.reportType !== "period-comparison") content.append(button("Compare saved reports", () => reportComparisonUI.open(), "quiet"));
+            if (bundle.reportType === "period-comparison") content.append(el("p", "", "Two frozen matching-record cohorts. Supporting copies are not a third analytical cohort."));
             content.append(button(bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", event => savedArtifactUI.open({
                 artifactKind: bundle.kind === "comparison" ? "comparison" : "report",
                 artifactId: bundle.bundleId, label: `${bundle.preparedAtDisplay || time.formatTime(bundle.preparedAt, viewerTime)} / ${bundle.bundleId}`,
@@ -2767,7 +2823,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             content.append(downloads);
             const row = el("details", "detail-disclosure saved-report");
             const summary = el("summary", "saved-report-summary"), identity = el("span", "saved-report-identity");
-            identity.append(el("span", "saved-report-name", bundle.kind === "comparison" ? "Comparison" : "Report"),
+            identity.append(el("span", "saved-report-name", bundle.kind === "comparison" ? "Comparison" : bundle.reportType === "period-comparison" ? "Period comparison report" : "Report"),
                 el("span", "", date === "Time not recorded" ? "Preparation time unavailable" : `Prepared ${date}`));
             if (labelCounts.get(label) > 1) identity.append(el("span", "saved-report-disambiguation", bundle.bundleId));
             const metadata = el("span", "saved-report-metadata");
@@ -2789,7 +2845,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const dialog = el("dialog", "assessment-dialog saved-report-dialog");
         dialog.setAttribute("aria-label", "Saved report");
         const header = el("div", "dialog-head"), close = button("Close saved report", () => dialog.close(), "quiet");
-        header.append(el("h2", "", "Saved report"), close);
+        header.append(el("h2", "", bundle.reportType === "period-comparison" ? "Saved period comparison report" : "Saved report"), close);
         const body = el("div", "assessment-dialog-body");
         body.append(el("p", "", "Reading the frozen saved HTML. Nothing is regenerated."));
         dialog.append(header, body); document.body.append(dialog);
@@ -3464,7 +3520,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.pending(progress, true);
         body.append(progress);
         try {
-            const preview = await api("/api/preview", { selection, options: draft.options() });
+            const preview = await api("/api/preview", { ...(periodReport ? { periodComparison: periodReport.value,
+                ...(periodReport.semanticSelection ? { semanticSelection: periodReport.semanticSelection } : {}) } : { selection }), options: draft.options() });
             if (!ensureCurrentTime() || !draft.current(operation) || !reportJourney.isReviewOpen()) {
                 if (preview.previewId) await api("/api/cancel-preview", { previewId: preview.previewId });
                 return;
@@ -3493,8 +3550,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const mode = preview.promptMode || "none";
         const formats = (preview.formats || ["markdown"]).map((f) => f === "markdown" ? "Markdown" : f.toUpperCase()).join(", ");
         const snapshotDetails = el("details", "detail-disclosure report-snapshot-details");
-        snapshotDetails.append(el("summary", "", "Included evidence and preparation details"), el("p", "report-confirmation", `One report · ${chatCopy.groups(preview.records.length)} included. ${modeLabels[mode]} / ${formats}`));
+        snapshotDetails.append(el("summary", "", "Included evidence and preparation details"), el("p", "report-confirmation",
+            preview.snapshot?.periodComparison ? `One paired report / ${preview.records.length} supporting-copy groups. ${modeLabels[mode]} / ${formats}`
+                : `One report · ${chatCopy.groups(preview.records.length)} included. ${modeLabels[mode]} / ${formats}`));
         body.append(steps, snapshotDetails);
+        if (preview.snapshot?.periodComparison) {
+            const { baseline, later } = preview.snapshot.periodComparison.periods;
+            snapshotDetails.append(el("p", "report-confirmation", `Two frozen cohorts: ${baseline.rows.length} matching records in Period A; ${later.rows.length} in Period B. Supporting copies do not add analytical calls or assessment units.`));
+        }
         if (reportEntry) snapshotDetails.append(el("p", "report-confirmation", `GitHub Copilot chat: ${reportEntry.sessionName} / ${reportEntry.projectId ? "Copilot project: " + reportEntry.projectName : "Copilot chat without a project"}. Complete eligible request groups from this Copilot chat only.`));
         if (preview.snapshot?.selectionScope) {
             const scope = preview.snapshot.selectionScope;
@@ -3668,6 +3731,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("clearPreviewSelection").disabled = true;
             $("closeDialog").disabled = true;
             feedback.textContent = "Saving the confirmed local files. This write cannot be cancelled now; no action will be replayed if the response is uncertain.";
+            const expectedBundleId = activePreview.bundleId;
             try {
                 const result = await api("/api/export", { previewId: activePreview.previewId, confirmed: true, timeContext: viewerTime });
                 if (!draft.current(operation)) return;
@@ -3684,7 +3748,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 reportJourney.saved(result.bundle, { available });
                 if (route.view !== "reports") announce(available ? "Local report saved: " + result.bundle.bundleDir + ". Disclosure reviewed; not a privacy certification."
                     : "The saved report is no longer available. Its downloads have been removed.", available ? "" : "stale");
-            } catch (error) { feedback.className = "notice error"; feedback.setAttribute("role", "alert"); feedback.textContent = error.message + " Read current saved reports before preparing a new preview; the write may have completed."; confirm.textContent = "Export not confirmed"; reportJourney.failed(feedback.textContent); }
+            } catch (error) {
+                feedback.className = "notice error"; feedback.setAttribute("role", "alert");
+                feedback.textContent = error.message + " Read current saved reports before preparing a new preview; the write may have completed.";
+                confirm.textContent = "Export not confirmed"; reportJourney.failed(feedback.textContent);
+                if (preview.snapshot?.periodComparison) {
+                    const recovery = button("Check save status", async () => {
+                        recovery.disabled = true;
+                        try {
+                            if (!await load({ afterExport: true })) throw new Error("Saved history is unavailable; no save was repeated.");
+                            const saved = state.exports.find(item => item.bundleId === expectedBundleId);
+                            if (!saved) throw new Error("No registered receipt is available for this report. The outcome remains unconfirmed; no save was repeated.");
+                            activePreview = null;
+                            reportJourney.saved(saved, { available: true });
+                        } catch (error) { reportJourney.failed(error.message); }
+                        finally { if (recovery.isConnected) recovery.disabled = false; }
+                    });
+                    $("reportSaveBody").append(recovery);
+                }
+            }
             finally { ux.pending(confirm, false); exportWriting = false; reportJourney.writing(false); $("closeDialog").disabled = false; $("clearPreviewSelection").disabled = false; updateSelection(); }
         }, "primary");
         ux.pending(confirm, false);
@@ -3899,13 +3981,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.tooltip(control, "Empty this report selection and discard its preview and per-copy edits. Keep captured evidence, review labels, saved reports, filters and prompt/format choices.");
     });
     document.querySelectorAll("[name=reportScope]").forEach((control) => control.addEventListener("change", () => {
-        if (exportWriting) return;
+        if (exportWriting || periodReport) return;
         reportScope = control.value;
         reportEntry = null;
         invalidatePreview(); renderReports();
     }));
     $("reportPromptAuthorFilter").addEventListener("change", () => {
-        if (exportWriting) return;
+        if (exportWriting || periodReport) return;
         reportAuthors = authorship.selection([...$("reportPromptAuthorFilter").selectedOptions].map(option => option.value));
         invalidatePreview("Prompt authors changed. Review the updated report membership before saving.");
         renderReports();

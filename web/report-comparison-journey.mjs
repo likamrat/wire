@@ -188,7 +188,8 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
                     `Report ID: ${item.bundleId}`,
                 ].filter(Boolean).join(" · ");
                 option.disabled = !["available", "legacy-outcomes-only"].includes(item.comparisonEligibility);
-                if (option.disabled) option.textContent += " (structured facts unavailable)";
+                if (option.disabled) option.textContent += item.comparisonEligibility === "period-report-has-two-cohorts-not-one-source"
+                    ? " (two-cohort period report; open directly)" : " (structured facts unavailable)";
                 select.append(option);
             }
             select.value = selected;
