@@ -365,7 +365,7 @@ test("first Home through approved fresh collection, selected dates, exact reques
     }
     async function approveAndSave() {
         assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false, "No disclosure approval is borrowed");
-        assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
         await page.locator(".attestation input[data-review-control]").check();
         await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
         await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
@@ -469,7 +469,7 @@ test("first Home through approved fresh collection, selected dates, exact reques
     await page.route("**/api/preview", async route => { const response = await route.fetch(); arrived(); await hold; await route.fulfill({ response }); }, { times: 1 });
     await page.locator("#exportBtn").click(); await pending;
     assert.equal(await page.locator("#reportReviewBody .pending-indicator").isVisible(), true);
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
+    await page.getByRole("button", { name: "Back to setup", exact: true }).click();
     const cancelled = page.waitForResponse(response => response.url().endsWith("/api/cancel-preview"));
     release(); await cancelled;
     assert.equal((await loadBoardState(app.context)).exports.length, 1);

@@ -209,7 +209,7 @@ test("focus zone change invalidates in-flight preview and reviewed snapshot with
     const changed = page.waitForResponse(r => r.url().endsWith("/api/snapshot"));
     await page.evaluate(() => { globalThis.testZone = "Asia/Kathmandu"; window.dispatchEvent(new Event("focus")); });
     await changed; await ready(page);
-    assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
     assert.ok(!requests.some(r => r.path === "/api/export"));
     assert.equal((await loadBoardState(context)).revision, initial.revision);
     assert.deepEqual(errors, []);

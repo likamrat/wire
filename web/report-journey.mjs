@@ -1,12 +1,13 @@
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.
 export function createReportJourney({ root, cancelReview, clearSelection, chooseRequests, showSourceIssues, downloadFile, openSavedReport, onStateChange } = {}) {
-    const labels = ["Requests", "Contents", "Review", "Save"];
-    const questions = ["Choose requests", "Choose report contents", "Review your report", "Save your reviewed report"];
+    const labels = ["Setup", "Review", "Save locally"];
+    const questions = ["Set up your report", "Review your report", "Save your reviewed report"];
     const modes = { none: "No prompts", masked: "Masked prompts", original: "Original prompts" };
     let step = 1, reached = 1, phase = "draft", preview, bundle, failure = "";
     let model = { requestCount: 0, scope: "selected", scopeReady: false, scopeIssue: "", promptMode: "masked", formats: ["html"], timeLabel: "", entry: null };
     let nodes;
     const positions = new Map();
+    const suspendedControls = new Map();
     function rememberStep() {
         if (!nodes) return;
         const panel = nodes.panels[step - 1], focus = root.ownerDocument.activeElement;
@@ -22,12 +23,11 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
     function reason(target) {
         if (isWriting()) return "Wait for the current local save to finish.";
         if (target === 1) return "";
-        if (target === 4 && phase === "saved") return "";
-        if (!ready()) return model.scopeIssue || "Choose at least one readable request in step 1.";
+        if (target === 3 && phase === "saved") return "";
+        if (!ready()) return model.scopeIssue || "Choose at least one readable request in Setup.";
+        if (!preview) return model.formats.length ? "Choose the report contents, then scan and preview in Setup." : "Choose at least one format in Setup.";
         if (target === 2) return "";
-        if (!preview) return model.formats.length ? "Choose contents, then scan and preview in step 2." : "Choose at least one format in step 2.";
-        if (target === 3) return "";
-        return ["reviewed", "saved"].includes(phase) ? "" : "Review the report and explicitly approve disclosure in step 3.";
+        return ["reviewed", "saved"].includes(phase) ? "" : "Review the actual report and explicitly approve disclosure in Review.";
     }
     function text(node, value) {
         if (node && node.textContent !== value) node.textContent = value;
@@ -47,8 +47,8 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             if (target === step) control.setAttribute("aria-current", "step");
             else control.removeAttribute("aria-current");
         });
-        text(nodes.progress, phase === "saved" ? "Report saved" : phase === "unavailable" ? "Saved report unavailable" : `Step ${step} of 4`);
-        text(nodes.summary, bundle ? "Saved files use the reviewed snapshot." : model.requestCount ? `${model.authorLabel ? model.authorLabel + " / " : ""}${step > 1 ? `${modes[model.promptMode]} / ${formatNames() || "Choose a format"}` : ({ selected: "Selected requests", current: "Current view", all: "All collected activity" })[model.scope]}` : "Nothing is included automatically.");
+        text(nodes.progress, phase === "saved" ? "Report saved" : phase === "unavailable" ? "Saved report unavailable" : `Step ${step} of 3`);
+        text(nodes.summary, bundle ? "Saved files use the reviewed snapshot." : model.requestCount ? `${({ selected: "Selected requests", current: "Current view", all: "All collected activity" })[model.scope]} / ${model.authorLabel ? model.authorLabel + " / " : ""}${modes[model.promptMode]} / ${formatNames() || "Choose a format"}` : "Nothing is included automatically.");
         text(nodes.context, model.entry
             ? `GitHub Copilot chat: ${model.entry.sessionName || "Copilot chat name not recorded"} / ${model.entry.projectId ? "Copilot project: " + (model.entry.projectName || "Name unavailable") : "Copilot chat without a project"}. Complete eligible groups across all retained dates and services; new groups are not added automatically.`
             : "");
@@ -59,12 +59,9 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         text(nodes.choose, model.entry ? "Back to Copilot chat" : "Choose interactions in Analyze");
         nodes.choose.hidden = ready();
         nodes.choose.classList.toggle("primary", !ready());
-        nodes.next.disabled = Boolean(reason(2));
-        nodes.next.classList.toggle("primary", ready());
-        nodes.next.setAttribute("aria-describedby", nodes.gap.id);
         nodes.backButtons.forEach(control => {
             control.disabled = isWriting();
-            if (control.dataset.target === "3") text(control, preview ? "Back to review" : "Back to contents");
+            if (control.dataset.target === "2") text(control, preview ? "Back to review" : "Back to setup");
         });
         const returnToSave = nodes.reviewActions.querySelector("#reportReturnToSave");
         if (returnToSave) returnToSave.hidden = phase !== "reviewed";
@@ -74,12 +71,21 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         text(nodes.error, failure);
         if (nodes.feedback) nodes.feedback.hidden = Boolean(failure);
         nodes.reviewHost.setAttribute("aria-busy", String(phase === "scanning"));
-        text(nodes.headings[3], phase === "saved" ? "Your report is saved" : phase === "unavailable" ? "Saved report unavailable"
-            : phase === "writing" ? "Saving your report" : phase === "blocked" && step === 4 ? "Save not confirmed" : "Save your reviewed report");
+        for (const control of root.querySelectorAll("[data-review-control]")) {
+            if (!model.scopeReady) {
+                if (!suspendedControls.has(control)) suspendedControls.set(control, control.disabled);
+                control.disabled = true;
+            } else if (suspendedControls.has(control)) {
+                if (preview && ["ready", "reviewed"].includes(phase)) control.disabled = suspendedControls.get(control);
+                suspendedControls.delete(control);
+            }
+        }
+        text(nodes.headings[2], phase === "saved" ? "Your report is saved" : phase === "unavailable" ? "Saved report unavailable"
+            : phase === "writing" ? "Saving your report" : phase === "blocked" && step === 3 ? "Save not confirmed" : "Save your reviewed report");
         if (focus) {
-            const samePreview = step < 3 || reading?.previewId === preview?.previewId;
+            const samePreview = step < 2 || reading?.previewId === preview?.previewId;
             const prior = reading?.focus;
-            const replacement = step === 3 ? nodes.reviewActions.querySelector("#reportReturnToSave") : null;
+            const replacement = step === 2 ? nodes.reviewActions.querySelector("#reportReturnToSave") : null;
             const target = prior?.isConnected && prior.checkVisibility() && !prior.disabled ? prior
                 : replacement?.checkVisibility() && !replacement.disabled ? replacement : null;
             if (reading && samePreview && target && nodes.panels[step - 1].contains(target)) {
@@ -94,18 +100,18 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         }
     }
     function go(target) {
-        if (!Number.isInteger(target) || target < 1 || target > 4 || reason(target)) return false;
+        if (!Number.isInteger(target) || target < 1 || target > 3 || reason(target)) return false;
         const returning = target < step;
         rememberStep();
-        if (["saved", "unavailable"].includes(phase) && target < 4) {
+        if (["saved", "unavailable"].includes(phase) && target < 3) {
             bundle = undefined;
             phase = "draft";
-            reached = 2;
+            reached = 1;
             failure = "";
             nodes?.saveHost.replaceChildren();
             nodes?.saveActions.replaceChildren();
         }
-        if (phase === "scanning" && target < 3) {
+        if (phase === "scanning" && target < 2) {
             cancelReview?.();
             phase = "draft";
             if (nodes) nodes.reviewHost.replaceChildren();
@@ -118,9 +124,10 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
     function invalidate(message) {
         if (isWriting() || phase === "saved" || phase === "unavailable") return;
         const hadPreview = Boolean(preview) || phase === "scanning";
+        suspendedControls.clear();
         preview = undefined;
         phase = "draft";
-        reached = Math.min(reached, 2);
+        reached = Math.min(reached, 1);
         if (nodes) {
             for (const control of root.querySelectorAll("[data-review-control]")) {
                 control.disabled = true;
@@ -129,8 +136,8 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             nodes.saveHost.replaceChildren();
             nodes.saveActions.replaceChildren();
         }
-        if ((hadPreview || message !== undefined || failure) && step >= 3) {
-            failure = message ?? "This preview is no longer current. Return to Contents and scan again before approving or saving.";
+        if ((hadPreview || message !== undefined || failure) && step >= 2) {
+            failure = message ?? "This preview is no longer current. Return to Setup and scan again before approving or saving.";
         }
         paint();
     }
@@ -138,7 +145,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         if (bundle?.bundleId !== bundleId) return false;
         bundle = preview = undefined;
         phase = "unavailable";
-        reached = 2;
+        reached = 1;
         failure = "";
         if (nodes) {
             const message = nodes.el("p", "", "This saved report is no longer available. Its downloads have been removed. Source activity and other saved reports are unchanged.");
@@ -152,6 +159,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
     function clear() {
         if (isWriting()) return false;
         positions.clear();
+        suspendedControls.clear();
         preview = bundle = undefined;
         step = reached = 1;
         phase = "draft";
@@ -207,7 +215,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         nav.append(list);
         const existingStart = root.querySelector(".report-start");
         existingStart.firstElementChild.classList.add("report-heading-context");
-        existingStart.querySelector("p").textContent = "Choose requests, prepare the copies, review, then save locally.";
+        existingStart.querySelector("p").textContent = "Set up the included interactions and contents, review the actual copies, then save locally.";
         const scan = byId("exportBtn"), scanWrapper = scan.closest(".ux-disabled-help") || scan;
         const controls = root.querySelector(".report-preview-controls");
         controls.append(summary);
@@ -222,10 +230,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         const issues = button("View source issues", () => showSourceIssues?.(), "quiet");
         const scope = root.querySelector(".export-scope"), choices = scope.querySelector(".scope-choices");
         const selectedChoice = choices.querySelector('[value="selected"]').closest("label");
-        const alternatives = el("details", "detail-disclosure report-other-scope");
-        alternatives.append(el("summary", "", "Use current view or all collected activity"));
-        for (const label of [...choices.querySelectorAll(":scope > label")]) if (label !== selectedChoice) alternatives.append(label);
-        choices.replaceChildren(selectedChoice, alternatives);
+        choices.prepend(selectedChoice);
         const scopeDetails = byId("scopeDetails");
         scopeDetails.append(byId("scopeSummary"), byId("reportMatchingContext"));
         // Keep detailed units/exclusions available without making them the first task.
@@ -236,48 +241,41 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         const authorChoice = root.querySelector(".report-author-choice");
         scopeLayout.append(scope, authorChoice);
         panels[0].append(scopeLayout);
-        const next = button("Continue to contents", () => go(2), "primary");
         const firstFooter = el("div", "report-stage-actions");
-        firstFooter.append(gap, choose, issues, next);
-        panels[0].append(firstFooter, scopeDetails, byId("reportRequests"));
-        panels[1].append(root.querySelector(".report-options"), byId("reportTimeContext"));
-        const contentsFooter = el("div", "report-stage-actions");
-        const backRequests = button("Back to requests", () => go(1));
-        backButtons.push(backRequests);
-        contentsFooter.append(backRequests, scanWrapper);
-        panels[1].append(contentsFooter);
+        firstFooter.append(gap, choose, issues, scanWrapper);
+        panels[0].append(root.querySelector(".report-options"), byId("reportTimeContext"), firstFooter, scopeDetails, byId("reportRequests"));
         // Revisiting unchanged choices returns to the same frozen review; it never records approval.
         scan.addEventListener("click", event => {
             if (!preview) return;
             event.preventDefault();
             event.stopImmediatePropagation();
-            go(3);
+            go(2);
         }, true);
         const reviewHost = el("div", "report-review-body"), saveHost = el("div", "report-save-body");
         reviewHost.id = "reportReviewBody";
         saveHost.id = "reportSaveBody";
-        panels[2].append(reviewHost);
-        panels[3].append(saveHost);
+        panels[1].append(reviewHost);
+        panels[2].append(saveHost);
         const reviewActions = el("div", "report-next-actions"), saveActions = el("div", "report-next-actions");
-        for (const [panel, label, target] of [[panels[2], "Back to contents", 2], [panels[3], "Back to review", 3]]) {
-            const footer = el("div", "report-stage-actions"), back = button(label, () => go(target === 3 && !preview ? 2 : target));
+        for (const [panel, label, target] of [[panels[1], "Back to setup", 1], [panels[2], "Back to review", 2]]) {
+            const footer = el("div", "report-stage-actions"), back = button(label, () => go(target === 2 && !preview ? 1 : target));
             back.dataset.target = String(target);
             backButtons.push(back);
-            footer.append(back, target === 2 ? reviewActions : saveActions);
+            footer.append(back, target === 1 ? reviewActions : saveActions);
             panel.append(footer);
         }
         const toolbar = root.querySelector(".report-toolbar");
         toolbar.hidden = true;
         root.insertBefore(shell, byId("savedReportsPanel"));
         shell.append(...panels);
-        nodes = { panels, steps, stepHints, headings, backButtons, progress, summary, context, gap, choose, issues, next, scan, error, reviewHost, saveHost, reviewActions, saveActions, el, button };
+        nodes = { panels, steps, stepHints, headings, backButtons, progress, summary, context, gap, choose, issues, scan, error, reviewHost, saveHost, reviewActions, saveActions, el, button };
         paint();
     }
     return {
         snapshot, reason, go, invalidate, clear,
         get reviewHost() { return nodes?.reviewHost; },
         get saveHost() { return nodes?.saveHost; },
-        isReviewOpen: () => (Boolean(preview) || step >= 3 && phase !== "saved") && (!root || !root.hidden),
+        isReviewOpen: () => (Boolean(preview) || step >= 2 && phase !== "saved") && (!root || !root.hidden),
         update(patch) {
             model = { ...model, ...structuredClone(patch) };
             paint();
@@ -288,7 +286,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             preview = bundle = undefined;
             failure = "";
             phase = "scanning";
-            step = reached = 3;
+            step = reached = 2;
             nodes?.reviewHost.replaceChildren();
             nodes?.saveHost.replaceChildren();
             nodes?.reviewActions.replaceChildren();
@@ -339,7 +337,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
                     nodes.reviewActions.append(nodes.reviewControl);
                 }
                 body.querySelector(".dialog-actions")?.remove();
-                const returnToSave = nodes.button("Continue to save", () => go(4), "primary");
+                const returnToSave = nodes.button("Continue to save", () => go(3), "primary");
                 returnToSave.id = "reportReturnToSave";
                 returnToSave.hidden = true;
                 nodes.reviewActions.append(returnToSave);
@@ -351,7 +349,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             if (phase !== "ready" || !preview) return false;
             rememberStep();
             phase = "reviewed";
-            step = reached = 4;
+            step = reached = 3;
             if (nodes) {
                 nodes.reviewActions.querySelector("#reportReturnToSave").hidden = false;
                 nodes.reviewControl?.setAttribute("hidden", "");
@@ -369,7 +367,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             phase = "blocked";
             failure = message;
             preview = undefined;
-            reached = Math.min(reached, 3);
+            reached = Math.min(reached, 2);
             if (nodes) {
                 for (const control of root.querySelectorAll("[data-review-control]")) control.disabled = true;
             }
@@ -387,7 +385,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             const savedBundle = bundle;
             preview = undefined;
             phase = "saved";
-            step = reached = 4;
+            step = reached = 3;
             failure = "";
             if (!available) { invalidateSavedReport(value.bundleId); return; }
             if (nodes) {

@@ -236,7 +236,7 @@ test("Settings cannot grant report review or revive an invalidated frozen previe
     await page.goBack(); await ready(page);
     assert.equal(await page.locator(".attestation input[data-review-control]").isDisabled(), true);
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
-    assert.equal(await page.locator("#reportStage4").isVisible(), false);
+    assert.equal(await page.locator("#reportStage3").isVisible(), false);
     assert.match(await page.locator("#reportJourneyError").innerText(), /no longer current/);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     assert.ok(!posts.some(row => ["/api/privacy-review", "/api/export"].includes(row.path)));

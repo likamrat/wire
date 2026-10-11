@@ -228,16 +228,17 @@ test("request Back restores its nested page, expanded prompt, selection and link
 });
 
 test("report-flow Back returns to the originating request-selection position, not the page heading", async t => {
-    const { page } = await setup(t, { route: "#reports" });
+    const { page } = await setup(t, { route: "#reports", previewOnly: true });
     await chooseReportScope(page, "all");
     await page.locator("#reportRequests > summary").click();
-    const next = page.getByRole("button", { name: "Continue to contents", exact: true });
+    const next = page.locator("#exportBtn");
     await next.scrollIntoViewIfNeeded(); await next.focus(); await frames(page);
     const before = { y: (await next.boundingBox()).y, scroll: await page.evaluate(() => scrollY) };
     await startTrace(page, "#reportStage1 .report-stage-actions button");
     await next.click();
     await expect(page.locator("#reportStage2")).toBeVisible();
-    await page.getByRole("button", { name: "Back to requests", exact: true }).click(); await frames(page);
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
+    await page.getByRole("button", { name: "Back to setup", exact: true }).click(); await frames(page);
     await finishTrace(page, "report-stage-back");
     const after = { y: (await next.boundingBox()).y, scroll: await page.evaluate(() => scrollY) };
     t.diagnostic(JSON.stringify({ before, after }));
@@ -433,7 +434,7 @@ test("context-return hrefs keep modifier-click behavior and keyboard return", as
     await expect(drill).toBeFocused();
 });
 
-test("Back from a synthetic unsaved review restores its Contents action without granting disclosure", async t => {
+test("Back from a synthetic unsaved review restores its Setup action without granting disclosure", async t => {
     const { page, requests } = await setup(t, { route: "#reports", previewOnly: true });
     await chooseReportScope(page, "all"); await reportContents(page);
     await page.locator('[name=promptMode][value=none]').check();
@@ -442,8 +443,8 @@ test("Back from a synthetic unsaved review restores its Contents action without 
     const before = (await scan.boundingBox()).y;
     await scan.click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click(); await frames(page);
-    await expect(page.locator("#reportStage2")).toBeVisible();
+    await page.getByRole("button", { name: "Back to setup", exact: true }).click(); await frames(page);
+    await expect(page.locator("#reportStage1")).toBeVisible();
     await expect(scan).toBeFocused();
     assert.equal((await scan.boundingBox()).y, before);
     assert.ok(!requests.some(url => ["/api/privacy-review", "/api/export"].includes(url)));

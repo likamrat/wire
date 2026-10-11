@@ -18,9 +18,9 @@ test("a saved target becomes unavailable without erasing the draft selection or 
     assert.equal(journey.snapshot().phase, "unavailable");
     assert.equal(journey.snapshot().requestCount, 1);
     assert.deepEqual(journey.snapshot().formats, ["html"]);
-    assert.equal(journey.go(2), true);
+    assert.equal(journey.go(1), true);
     assert.equal(journey.snapshot().phase, "draft");
-    assert.equal(journey.go(4), false);
+    assert.equal(journey.go(3), false);
 });
 test("late target receipts do not clear a saved successor or its unfinished preview", () => {
     const journey = ready();
@@ -28,7 +28,7 @@ test("late target receipts do not clear a saved successor or its unfinished prev
     journey.saved(report("successor"));
     assert.equal(journey.invalidateSavedReport("first"), false);
     assert.equal(journey.snapshot().completed, true);
-    journey.go(2);
+    journey.go(1);
     journey.beginScan();
     journey.previewReady({ previewId: "new-preview", privacy: { allSelectedFieldsScanned: true } });
     assert.equal(journey.invalidateSavedReport("successor"), false);
@@ -49,5 +49,5 @@ test("a late successful save receipt with known absence never exposes ready down
     journey.saved(report("gone"), { available: false });
     assert.equal(journey.snapshot().phase, "unavailable");
     assert.equal(journey.snapshot().completed, false);
-    assert.equal(journey.go(4), false);
+    assert.equal(journey.go(3), false);
 });

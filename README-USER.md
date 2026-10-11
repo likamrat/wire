@@ -125,14 +125,15 @@ Reply saving is off unless previously approved. To keep recorded replies in WIRE
 
 ## Create a report
 
-1. **Requests:** Open **Reports** in navigation (on mobile, open **Menu > Reports**), choose **Create a report**, then **Choose requests in Activity**. Tick requests and return via **Review selection** or **Reports > Continue draft**. **Add to report** works from interaction details. Selection starts empty; other scopes are under **Use current view or all collected activity**. Use **Prompt authors in this report** to narrow that scope, then **Apply**. Your-only leaves out agent-originated interactions, including their calls and scores; unverified authors are a separate choice. Browsing filters do not discard hidden selected requests. Review the included/excluded group counts, then click **Continue to contents**.
-2. **Contents:** Choose **No prompts**, **Masked prompts** or **Original prompts**, and HTML, PDF, JSON or Markdown. Click **Scan and preview**.
-3. **Review:** Read the preview, prompt copies and privacy findings. **Inspect exact files** and **Included evidence and preparation details** show the underlying copies and counts. **Edit or omit this report copy** affects only exports; then **Rebuild preview**. Check approval and **Complete disclosure review**.
-4. **Save:** Check the approved requests, prompt mode and formats, then click **Confirm local export**. Use **Open saved report** or **Download**. Reopen files through **Saved reports > Open**.
+1. **Setup:** Reports opens the saved library; choose **Create a report** to start setup. Choose **Selected requests**, **Current view** or **All collected activity**, and **Prompt authors in this report** on the same surface as **No prompts**, **Masked prompts**, **Original prompts** and HTML/PDF/JSON/Markdown formats. Selection starts empty; use **Choose interactions in Analyze** or **Add to report** to select individual interactions. Author choices exclude whole interactions with their calls and scores, without deleting your base selection. Setup shows the actual included population across all pages, including selections hidden by browsing filters. Click **Scan and preview**.
+2. **Review:** Read the actual preview, prompt copies and privacy findings. **Inspect exact files** and **Included evidence and preparation details** show the underlying copies and counts. **Edit or omit this report copy** affects only exports; then **Rebuild preview**. Check approval and **Complete disclosure review**.
+3. **Save locally:** Check the approved requests, prompt mode and formats, then click **Confirm local export**. Use **Open saved report** or **Download**. Reopen files through **Saved reports > Open**.
 
 Back and the next action stay together in each step. Opening scope details and
-optional request labels is not a required step. Back to Contents keeps an unchanged preview;
-changing its choices requires a new scan and disclosure review.
+optional request labels is not a required step. Back to Setup keeps an unchanged preview;
+changing report choices or relevant source data requires a new scan and disclosure review.
+Unrelated browsing keeps the draft. A pending or failed read blocks saving until the
+report basis is verified again; an uncertain save is checked in saved history, never repeated automatically.
 
 Review masked copies too. Detected credentials are removed even in Original mode. Saving uploads nothing.
 Author membership and prompt text are separate: **No prompts** hides text, not interactions.

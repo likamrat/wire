@@ -267,8 +267,8 @@ test("component family hover matrix uses mounted routes and their effective pain
         await inspect(".report-review-body button[data-review-control]", "primary disclosure review");
         await page.locator(".report-review-body button[data-review-control]").click();
         await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-        await inspect("#reportStage4 button[data-review-control]", "primary confirm save");
-        await page.locator("#reportStage4 button[data-review-control]").click();
+        await inspect("#reportStage3 button[data-review-control]", "primary confirm save");
+        await page.locator("#reportStage3 button[data-review-control]").click();
         await page.locator("#reportsView[data-report-phase=saved]").waitFor();
         await inspect(".report-downloads button", "saved download action");
         await navigateMain(page, "settings"); await ready();

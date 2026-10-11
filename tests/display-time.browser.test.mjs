@@ -102,7 +102,7 @@ test("display preference governs calendar data, reset, reload, navigation and ne
     assert.equal(requests.findLast(r => r.path === "/api/preview").input.options.timeContext.timeZone, "UTC");
     await selectZone(page, "America/Los_Angeles");
     await navigateMain(page, "reports"); await ready(page);
-    assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
 });
 
 test("explicit zones govern day, week and month totals across the repeated fall-back hour", { timeout: 90000 }, async t => {

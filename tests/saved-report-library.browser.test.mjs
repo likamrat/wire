@@ -86,7 +86,7 @@ test("Reports opens directly on the library and switching to creation preserves 
     await page.goBack();
     assert.match(page.url(), /task=create/);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
-    assert.equal(await page.locator("#reportsView").getAttribute("data-report-step"), "4");
+    assert.equal(await page.locator("#reportsView").getAttribute("data-report-step"), "3");
     assert.equal(await page.getByRole("button", { name: "Confirm local export", exact: true }).isEnabled(), true);
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), true);
     assert.equal(requests.slice(countBefore).some(url => ["/api/cancel-preview", "/api/preview", "/api/export"].includes(url)), false);
@@ -96,10 +96,10 @@ test("Reports opens directly on the library and switching to creation preserves 
     await page.getByRole("link", { name: "Continue draft", exact: true }).click();
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
     await shot(page, "entry-preserved-draft");
-    const cancelled = page.waitForRequest(request => request.url().endsWith("/api/cancel-preview"));
+    const cancelledBefore = requests.filter(url => url === "/api/cancel-preview").length;
     await navigateMain(page, "activity");
-    await cancelled;
-    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft", "Leaving Reports still invalidates reviewed previews");
+    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed", "Unrelated navigation preserves the verified report basis");
+    assert.equal(requests.filter(url => url === "/api/cancel-preview").length, cancelledBefore);
 });
 
 test("Analyze chat create intent, request return and explicit creation deep links bypass the library without losing selection", { timeout: 30000 }, async t => {

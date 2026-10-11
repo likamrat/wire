@@ -563,7 +563,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             route = { ...route, from: time.addDays(to, 1 - Number(route.range)), to };
             rememberRoute(route, true);
         }
-        draft.synchronizeTime(viewerTime, dateSelection());
+        if (draft.synchronizeTime(viewerTime, dateSelection())) invalidatePreview("The report time or date basis changed. Return to Setup and scan again.");
         renderTimeContext();
     }
     function renderTimeContext() {
@@ -1090,10 +1090,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!background || fresh.snapshot().phase === "waiting") fresh.retryApply();
         syncTime();
         const config = query();
-        if (!background) {
-            invalidatePreview();
-            invalidateDialog("The activity snapshot is updating. Close and prepare a new report preview.");
-        }
         isLoading = true;
         isStale = Boolean(analytics);
         $("deleteAllReports").disabled = true;
@@ -1230,8 +1226,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         syncControls();
         $("resetView").hidden = !viewChanged();
         const queryChanged = before !== JSON.stringify(query());
-        // Browsing saved files is the same workspace, not a change to the frozen draft.
-        if (previousRoute.view !== "reports" || route.view !== "reports" || queryChanged || route.withinServices !== previousRoute.withinServices) invalidatePreview();
+        // Navigation is not report consent. Reconcile the exact report basis after a verified read.
+        if (reportJourney?.snapshot().phase === "scanning" || $("reportReviewBody")?.querySelector('[data-review-control][data-pending=true]')) invalidatePreview();
         const refinement = !reset && !restorePosition && Boolean(analytics)
             && route.view === "analyze" && route.view === previousRoute.view
             && route.session === previousRoute.session && route.request === previousRoute.request
@@ -1423,7 +1419,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const titles = {
             analyze: ["Analyze", "Explore recorded interactions, calls and their results."],
             request: ["Request details", "Read the prompt and available response, then inspect the recorded evidence."],
-            reports: route.task === "create" ? ["Create a report", "Choose requests and contents, review the copies, then save local files."]
+            reports: route.task === "create" ? ["Create a report", "Set up scope and contents, review the actual copies, then save locally."]
                 : ["Reports", "Find, open and manage your saved reports."],
             settings: ["Settings", "Manage your local connection, permission and collection preferences."],
             "collection-status": ["Collection status", "Check collection health and find gaps in local Copilot chat history."],
@@ -2511,8 +2507,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!state) return;
         const value = reportSelection();
         const unknownSelected = reportScope === "selected" && [...selected].some((id) => !state.scenarios.some((s) => s.scenarioId === id));
-        draft.select([reportScope, "authors:" + reportAuthors.join(","), ...value.requests.map((r) => r.scenarioId)]);
-        draft.synchronizeTime(viewerTime, dateSelection());
+        if (!exportWriting && !isLoading && !isStale && value.available) {
+            const token = draft.token();
+            draft.select([reportScope, "authors:" + reportAuthors.join(","), ...value.requests.map((r) => r.scenarioId)]);
+            draft.synchronizeTime(viewerTime, dateSelection());
+            draft.synchronizeBasis(state, value);
+            if (!draft.current(token)) invalidatePreview("The report scope, source or review basis changed. Return to Setup and scan again; unchanged draft choices are kept.");
+        }
         for (const kind of ["all", "current", "selected"]) {
             const scope = reportSelection(kind), size = scope.requests.length;
             $("scopeCount-" + kind).textContent = scope.available ? chatCopy.groups(size) : "Count unavailable";
@@ -2521,6 +2522,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("scopeSummary").textContent = !state.exportCatalog ? "Report scope is unavailable. Refresh before previewing." : unknownSelected ? "A selected request is no longer available. Choose a fresh selection." : reportScopes.summary(value);
         for (const option of $("reportPromptAuthorFilter").options) option.selected = reportAuthors.includes(option.value);
         $("reportPromptAuthorFilter").disabled = exportWriting;
+        document.querySelectorAll("[name=reportScope],[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
         setText($("reportPromptAuthorSummary"), `${count(value.requests.length)} of ${count(value.baseRequests.length)} request groups in the base scope included.${value.authorExcludedRequestGroups ? ` ${count(value.authorExcludedRequestGroups)} left out with their calls and scores. The base selection is kept.` : ""}`);
         $("scopeExplanation").textContent = reportEntry && reportScope === "selected"
             ? `GitHub Copilot chat: ${reportEntry.sessionName}. Complete eligible request groups across all retained dates, services and pages, not just the analysis slice. The chosen groups stay fixed until you change selection; new groups are not added automatically.`
@@ -2529,6 +2531,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : "Complete eligible evidence for the matching request groups, not only individual chart actions. Current view includes all matching pages and private search; selected requests may be outside these filters. Known aliases are included once.";
         const reportIds = new Set(value.requests.flatMap(request => request.aliases));
         const currentIds = new Set(currentViewScenarios().map(s => s.scenarioId));
+        const hidden = value.requests.filter(request => !request.aliases.some(id => currentIds.has(id))).length;
+        $("reportPopulationNote").textContent = value.available && !unknownSelected && value.requests.length
+            ? `${count(value.requests.length)} complete request group${value.requests.length === 1 ? "" : "s"} / ${count(value.counts.workIqActions)} Work IQ tool call${value.counts.workIqActions === 1 ? "" : "s"} across all pages.${hidden ? ` Includes ${chatCopy.groups(hidden)} outside the current browsing filters.` : ""} Calls and scores use these groups, not just the visible chart matches. Other evidence units and exclusions are detailed below.`
+            : "";
         const matching = results.summarize(selectionRows().filter(row => reportIds.has(row.scenarioId) && currentIds.has(row.scenarioId)));
         $("reportMatchingContext").replaceChildren(resultLine(applied?.layer || "tool", matching, { scope: "Matching view results, not the full report", label: `${count(matching?.count)} matching ${results.unit(applied?.layer || "tool", matching?.count)} in the current view` }));
         $("reportMatchingContext").append(el("p", "context-help-note", `Report counts above include complete eligible request groups; the matching results here do not. Snapshot revision ${count(state.revision)}; frozen only when you prepare a preview.`));
@@ -3550,7 +3556,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const feedback = el("p", "muted");
         feedback.setAttribute("role", "status");
         const review = button("Complete disclosure review", async () => {
-            if (!ensureCurrentTime() || !checkbox.checked || !draft.current(operation)) return;
+            if (isLoading || isStale || !ensureCurrentTime() || !checkbox.checked || !draft.current(operation)) return;
             review.disabled = checkbox.disabled = true;
             feedback.textContent = "Recording your disclosure review...";
             ux.pending(review, true);
@@ -3573,7 +3579,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         review.dataset.reviewControl = "";
         checkbox.addEventListener("change", () => { review.disabled = !checkbox.checked || !draft.current(operation); });
         const confirm = button("Confirm local export", async () => {
-            if (exportWriting || !ensureCurrentTime() || !draft.current(operation) || activePreview?.privacy?.reviewerConfirmed !== true || !reportJourney.isReviewOpen()) return;
+            if (exportWriting || isLoading || isStale || !ensureCurrentTime() || !draft.current(operation) || activePreview?.privacy?.reviewerConfirmed !== true || !reportJourney.isReviewOpen()) return;
             confirm.disabled = true;
             ux.pending(confirm, true);
             exportWriting = true;
@@ -3724,7 +3730,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         search = $("activitySearch").value; activityPage = 0;
         route = { ...route, search, page: undefined };
         rememberRoute(route, true);
-        invalidatePreview();
         if (isLoading) return;
         appliedRoute = { ...route };
         render();
@@ -3803,6 +3808,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.tooltip(control, "Empty this report selection and discard its preview and per-copy edits. Keep captured evidence, review labels, saved reports, filters and prompt/format choices.");
     });
     document.querySelectorAll("[name=reportScope]").forEach((control) => control.addEventListener("change", () => {
+        if (exportWriting) return;
         reportScope = control.value;
         reportEntry = null;
         invalidatePreview(); renderReports();

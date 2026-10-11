@@ -72,24 +72,24 @@ test("synthetic report review is explicit, separate, and cannot execute markup",
         await reportContents(page);
         await page.locator("#exportBtn").click();
         await page.locator(".attestation input").waitFor();
-        assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
         await page.locator(".report-document > details > summary").first().click();
         assert.equal(await page.locator(".report-document table").count(), 1);
         assert.equal(await page.locator(".report-document script").count(), 0);
         assert.equal(await page.evaluate(() => globalThis.injected), undefined);
         assert.equal((await page.locator(".report-document").innerText()).includes("<summary>"), false);
         await page.locator(".attestation input").check();
-        assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
         await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
         await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
         assert.equal(requests.length, 1);
         assert.deepEqual(state.exports, [], "Disclosure review alone cannot register a saved report");
         await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
         await page.waitForFunction(() => ["saved", "unavailable", "blocked"].includes(document.querySelector("#reportsView")?.dataset.reportPhase));
-        assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "saved", await page.locator("#reportStage4").innerText());
+        assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "saved", await page.locator("#reportStage3").innerText());
         assert.deepEqual(requests.map((item) => item.path), ["/api/privacy-review", "/api/export"]);
         assert.equal(requests[1].input.previewId, "synthetic-preview");
         assert.deepEqual(state.exports.map(bundle => bundle.bundleId), ["synthetic-bundle"]);
-        assert.equal(await page.locator("#reportStage4 .report-saved-id").textContent(), "synthetic-bundle");
+        assert.equal(await page.locator("#reportStage3 .report-saved-id").textContent(), "synthetic-bundle");
     } finally { await browser.close(); await new Promise((resolve) => server.close(resolve)); }
 });

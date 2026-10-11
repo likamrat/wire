@@ -187,8 +187,8 @@ test("UX-003 deleting the displayed saved report removes its ready result", { ti
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     assert.equal((await loadBoardState(context)).exports.length, 0);
-    assert.equal(await page.locator("#reportStage4 .report-save-success").count(), 0, "A deleted report must not still be claimed ready");
-    assert.equal(await page.locator("#reportStage4 .report-downloads button").count(), 0, "A deleted report has no download controls");
+    assert.equal(await page.locator("#reportStage3 .report-save-success").count(), 0, "A deleted report must not still be claimed ready");
+    assert.equal(await page.locator("#reportStage3 .report-downloads button").count(), 0, "A deleted report has no download controls");
 });
 
 test("UX-001 non-copy source and contents invalidations never retain the copy-only rebuild action", { timeout: 60000 }, async t => {
@@ -201,7 +201,7 @@ test("UX-001 non-copy source and contents invalidations never retain the copy-on
     await read; await page.locator('#workspace[aria-busy="false"]').waitFor();
     assert.equal(await page.getByRole("button", { name: "Rebuild preview", exact: true }).count(), 0);
     assert.match(await page.locator("#reportJourneyError").textContent(), /new|fresh.*preview/i);
-    assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
     for (const choice of ["mode", "format", "scope"]) {
         await scanReport(page);
         if (choice === "scope") await chooseReportScope(page, "selected");
@@ -210,8 +210,8 @@ test("UX-001 non-copy source and contents invalidations never retain the copy-on
             if (choice === "mode") await page.locator("[name=promptMode][value=original]").check();
             else await page.locator("#formatOptions input[value=json]").check();
         }
-        assert.equal(await page.getByRole("button", { name: "3. Review", exact: true }).isDisabled(), true);
-        assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "2. Review", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
         assert.equal(await page.getByRole("button", { name: "Rebuild preview", exact: true }).count(), 0);
     }
     assert.equal(requests.filter(value => value === "/api/export").length, 0);
@@ -263,8 +263,8 @@ test("UX-003 cross-tab named deletion invalidates only the displayed target thro
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=unavailable]").waitFor({ timeout: 15000 });
-    assert.equal(await page.locator("#reportStage4 .report-downloads button").count(), 0);
-    assert.match(await page.locator("#reportStage4").textContent(), /no longer available/);
+    assert.equal(await page.locator("#reportStage3 .report-downloads button").count(), 0);
+    assert.match(await page.locator("#reportStage3").textContent(), /no longer available/);
     const final = await loadBoardState(context);
     assert.deepEqual(final.exports, original.exports);
     assert.deepEqual(await hashes(final.exports), bytes);
@@ -293,8 +293,8 @@ test("UX-003 late completed deletion receipt cannot clear a successor saved repo
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "saved");
-    assert.equal(await page.locator("#reportStage4 .report-saved-id").textContent(), successor.bundleId);
-    assert.ok(await page.locator("#reportStage4 .report-downloads button").count());
+    assert.equal(await page.locator("#reportStage3 .report-saved-id").textContent(), successor.bundleId);
+    assert.ok(await page.locator("#reportStage3 .report-downloads button").count());
     assert.equal(requests.filter(value => value === "/api/artifact-deletion/confirm").length, 1);
     assert.equal(requests.filter(value => value === "/api/artifact-deletion/status").length, 1);
 });
@@ -321,7 +321,7 @@ test("UX-003 a delayed export receipt cannot claim a report deleted before the r
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     release();
     await page.locator("#reportsView[data-report-phase=unavailable]").waitFor();
-    assert.equal(await page.locator("#reportStage4 .report-save-success,#reportStage4 .report-downloads button").count(), 0);
+    assert.equal(await page.locator("#reportStage3 .report-save-success,#reportStage3 .report-downloads button").count(), 0);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await other.close();
 });
@@ -339,7 +339,7 @@ test("UX-003 an in-flight download is not dispatched after the displayed target 
     }, { times: 1 });
     const downloads = [];
     page.on("download", download => downloads.push(download.suggestedFilename()));
-    await page.locator("#reportStage4").getByRole("button", { name: "Download product-report.html", exact: true }).click();
+    await page.locator("#reportStage3").getByRole("button", { name: "Download product-report.html", exact: true }).click();
     await pending;
     const dialog = await deleteReport(page, saved.bundleId);
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
@@ -389,7 +389,7 @@ test("UX-003 confirmed save with failed availability refresh stays explicit and 
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     assert.match(await page.locator("#reportJourneyError").textContent(), /save was confirmed.*availability could not be checked.*do not save it again/);
     assert.match(await page.locator("#message").textContent(), /use Retry without repeating the save/);
-    assert.equal(await page.locator("#reportStage4 .report-save-success,#reportStage4 .report-downloads button").count(), 0);
+    assert.equal(await page.locator("#reportStage3 .report-save-success,#reportStage3 .report-downloads button").count(), 0);
     assert.equal((await loadBoardState(context)).exports.length, 1);
     assert.equal(requests.filter(value => value === "/api/export").length, 1);
     const refresh = await revealStoredRefresh(page);

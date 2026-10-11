@@ -362,7 +362,7 @@ test("integrated app has readable aligned type and exact-copy controls in both t
         await page.waitForFunction(() => window.clipboardWrites.length === 5);
         assert.equal(await page.evaluate(() => window.clipboardWrites[4]), exactCommand);
         assert.equal(await page.locator(".attestation input").last().isChecked(), false);
-        assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
         await inspect("preview");
         assert.equal(await page.evaluate(() => window.clipboardReads), 0);
         await page.close();

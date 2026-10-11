@@ -3,8 +3,8 @@
 ## Saved report library
 
 Reports opens directly on the saved library, expanded by default. The top-level
-**Saved reports / Create a report** links separate browsing from the unchanged
-Requests / Contents / Review / Save flow; users do not pass the wizard to find
+**Saved reports / Create a report** links separate browsing from the
+Setup / Review / Save locally flow; users do not pass creation to find
 search. **Continue draft** returns to unfinished work and **Saved report details**
 returns to the most recent save state. Activity's explicit create action goes
 straight to creation. `#reports?task=create` and the legacy `#report` creation
@@ -14,7 +14,7 @@ Switching tasks within the same Reports context preserves choices, selection,
 prepared review and disclosure approval. Browser Back restores the task and
 library search/page. Relevant source, permission, filter and evidence changes
 still invalidate previews; switching tasks does not bypass their checks.
-The saved library remains separate from Requests / Contents / Review / Save.
+The saved library remains separate from Setup / Review / Save locally.
 It uses the existing metadata search and six-item paginated history, not another
 list or search implementation. Reports and comparisons have explicit labels and
 separate counts. The range and Previous/Next remain together; the saved-library-only
@@ -110,17 +110,20 @@ accessibility/layout guidance and the existing product contract were used.
 
 ## Report creation journey
 
-Reports uses one task surface for Requests, Contents, Review and Save. Its compact
+Reports uses one task surface for Setup, Review and Save locally. Its compact
 step navigation, selection summary and current stage stay together. The existing
-blue accent identifies the current step, visited steps and the next enabled
+theme accent identifies the current step, visited steps and the next enabled
 action; it is not a quality score. Analytical **Reset to Home** remains available
 in its other contexts, not in Reports.
 
-Requests starts empty. Scope and prompt-author membership sit side by side when
+Setup starts empty. Scope and prompt-author membership sit side by side when
 space allows, with matching labels, then stack at narrow or enlarged-text widths.
 Prerequisites appear beside the local action area instead of below a disabled
 future step. Clear selection appears only when there is a selection to clear.
 Optional request labels and scope details follow the actions; neither is a gate.
+All three scopes are visible alongside their actual all-page counts. Prompt mode
+and formats share Setup, not another preliminary step. Hidden selected groups
+remain included and are counted explicitly.
 
 Every stage keeps Back and its next action together. Review retains the formatted
 copy, prompt comparison/edit/omit tools, scan findings and explicit disclosure
@@ -547,9 +550,9 @@ cues rather than success/failure colors. Your prompt uses a dedicated cyan token
 on light surfaces and brighter on navy, distinct from ordinary blue links and violet Agent.
 The list marker and detail heading share that token; prompt bodies retain normal reading colors.
 Labels remain visible.
-The report Requests flow has its own explicit author membership choice; it narrows the chosen base
+Report Setup has its own explicit author membership choice; it narrows the chosen base
 scope without deleting hidden selections. Complete interactions, not agent-executed individual calls,
-are the membership unit. Prompt-text disclosure remains a separate Contents choice.
+are the membership unit. Prompt-text disclosure remains a separate choice within Setup.
 
 ## Interaction insights
 
@@ -1479,7 +1482,7 @@ truncated. Plain-text/JSON reports do not carry visual title styling.
 | Request | Selected result marked within bounded retained prompts, calls, known failure reasons and authorized replies | Text opens immediately with original roles, inferred-association limits and missing evidence. Exact arguments and original per-group counts/verdicts remain secondary. | Follow the available back-and-forth without another context gate, guessed task boundaries or new source reads. |
 | Collection status | Collector state and next step, readable/eligible coverage, Chat history gap summary and compact search | Closed short reason groups, six chats per page; closed Technical details for inventory, exclusions, limits and stored refresh. Home check results and Activity link here. | Know whether collection is working, inspect missing activity when relevant and avoid treating every gap as a repair task. |
 | Settings | Display, Connection & permission, Collection preferences | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
-| Reports | Current-stage work, one-report inclusion summary, Clear selection and four-step navigation | Requests shows scope and a disclosure with four requests per page. Contents holds the three prompt modes, four formats and Scan and preview. Saved history stays separate, six reports per page. | Choose membership, then contents, without confronting every control at once. |
+| Reports | Current-stage work, one-report inclusion summary, Clear selection and three-step navigation | Setup combines scope, authors, three prompt modes, four formats and Scan and preview. Detailed included requests remain four per page; saved history stays separate, six reports per page. | Choose membership and contents together, then review the actual disclosure before a separate local save. |
 | Review and Save | Review shows the frozen formatted preview, scope, incomplete-source/removal totals, limitations and unchecked attestation. Save shows the separate final confirmation, then actual file downloads. | Review opens six original/copy comparisons per page, retaining edits when paging; exact-file disclosures remain available. Save is reached only after explicit disclosure review. | Compare and approve the copies, then deliberately save; paging or changing stages never grants consent. |
 
 Summary outcomes cover all matching actions, not just the visible result page.
@@ -2124,9 +2127,9 @@ across every page and alias. It explicitly includes full retained dates/services
 not the current failure/date slice. Those IDs remain fixed as new requests arrive.
 The source chat/project context stays visible before review.
 
-Four numbered stages make the remaining task explicit: **Requests**, **Contents**,
-**Review**, **Save**. Requests shows membership and keeps broader All/Current scopes
-under a disclosure. Contents holds all three prompt modes and four formats, with
+Three numbered stages make the remaining task explicit: **Setup**, **Review**,
+**Save locally**. Setup shows all three scopes, author inclusion, actual membership,
+all three prompt modes and four formats together, with
 one **Scan and preview** action. Review presents the formatted document inline,
 then optional exact-copy comparisons; no modal hides the sidebar. Explicit
 unchecked attestation and disclosure review lead to Save, where the separate
@@ -2391,8 +2394,8 @@ keyboard reading. The accepted analysis-scope and filter-controls fixtures
 still prove all-page cohort parity, delayed-response guards and draft filters.
 
 There is no global **Export report** action in the rail/header/mobile shell.
-Open **Reports** in top navigation for its existing Requests, Contents,
-Review and Save flow. Contextual **Add to report**, **Review selection** and
+Open **Reports** in top navigation for the saved library, then **Create a report**
+for Setup, Review and Save locally. Contextual **Add to report**, **Review selection** and
 chat-specific report creation remain. Navigation preserves deliberate empty
 selection, current draft, filters, privacy gates and saved/downloaded artifacts.
 
@@ -2419,7 +2422,7 @@ Empty views point to this same control rather than adding competing resets.
 
 Manual stored-data refresh is disabled while a report scan/review or prepared
 snapshot remains open, during a write, or while Settings edits are pending.
-Back to Contents alone keeps the prepared snapshot; changing report choices uses
+Back to Setup alone keeps the prepared snapshot; changing report choices uses
 existing invalidation, and completing the report releases the guard. A small
 state notification from report presentation synchronizes only the native control
 and its concise explanation. It never loads data, cancels a preview, navigates or

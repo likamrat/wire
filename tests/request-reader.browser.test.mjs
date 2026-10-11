@@ -204,7 +204,7 @@ test("inclusion from a broader report scope is not mislabeled as an individually
     const { page, url } = await setup(t);
     await page.goto(url + "#request?request=reader"); await ready(page);
     await navigateMain(page, "reports"); await ready(page);
-    await page.locator(".report-other-scope > summary").click();
+    await page.locator("#reportCreateLink").click();
     await page.locator('[name="reportScope"][value="all"]').check();
     await page.goBack(); await ready(page);
     assert.match(await page.locator(".request-actions").textContent(), /included through the current report scope/);

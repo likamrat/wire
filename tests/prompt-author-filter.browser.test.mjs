@@ -120,10 +120,10 @@ test("report author choice narrows selected base membership without losing hidde
     assert.equal(preview.records.length, 1);
     assert.equal(preview.records[0].toolCalls.length, 2);
     assert.ok(preview.records[0].prompts.every(prompt => prompt.text === null));
-    await page.getByRole("button", { name: "1. Requests", exact: true }).click();
+    await page.getByRole("button", { name: "1. Setup", exact: true }).click();
     await setAuthors(page, ["agent"], "reportPromptAuthorFilter");
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft");
-    assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
     await setAuthors(page, ["user", "agent", "unknown"], "reportPromptAuthorFilter");
     assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 request groups/);
     await navigateMain(page, "activity"); await ready(page);

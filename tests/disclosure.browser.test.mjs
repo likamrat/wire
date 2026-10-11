@@ -125,7 +125,7 @@ test("complete session groups, bounded cards, accessible independent toggles and
     assert.equal(new Set(current.records.map(r => r.scenarioId)).size, 114);
     assert.ok(current.records.some(record => record.scenarioId === selected.records[0].scenarioId));
     await cancelReportPreview(page);
-    await page.getByRole("button", { name: "1. Requests", exact: true }).click();
+    await page.getByRole("button", { name: "1. Setup", exact: true }).click();
     await page.locator("#reportRequests>summary").click();
     assert.equal(await page.locator("#reportList .report-entry").count(), 4);
     assert.match(await page.locator("#reportList").innerText(), /1-4 of 114 report requests/);
@@ -240,12 +240,12 @@ test("bounded prompt review retains edits and consent gates; presentation never 
     await page.getByRole("button", { name: "Next prompt copies", exact: true }).click();
     await page.getByRole("button", { name: "Previous prompt copies", exact: true }).click();
     assert.equal(await page.locator(".prompt-comparison textarea").first().inputValue(), "SYNTHETIC EDIT KEPT ACROSS PAGES");
-    assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
     assert.equal(await page.locator(".attestation [data-review-control]").isDisabled(), true);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
     await page.locator(".attestation [data-review-control]:not(:disabled)").waitFor();
-    assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
     await page.locator("#reportsView [data-clear-selection]").first().click();
     assert.equal(await page.locator("#previewSelectionSummary").innerText(), "No requests selected");
     assert.equal((await loadBoardState(context)).exports.length, 0);

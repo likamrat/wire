@@ -10,16 +10,12 @@ export async function openReportCreation(page) {
 export async function reportContents(page) {
     await openReportCreation(page);
     const reports = page.locator("#reportsView");
-    if (await reports.getAttribute("data-report-step") !== "2") {
-        if (await reports.getAttribute("data-report-step") === "1") await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
-        else await page.getByRole("button", { name: "2. Contents", exact: true }).click();
-    }
+    if (await reports.getAttribute("data-report-step") !== "1") await page.getByRole("button", { name: "1. Setup", exact: true }).click();
 }
 
 export async function chooseReportScope(page, value) {
     await openReportCreation(page);
-    if (await page.locator("#reportsView").getAttribute("data-report-step") !== "1") await page.getByRole("button", { name: "1. Requests", exact: true }).click();
-    if (value !== "selected" && !await page.locator(".report-other-scope").evaluate(node => node.open)) await page.locator(".report-other-scope > summary").click();
+    if (await page.locator("#reportsView").getAttribute("data-report-step") !== "1") await page.getByRole("button", { name: "1. Setup", exact: true }).click();
     await page.locator(`[name=reportScope][value=${value}]`).check();
 }
 
@@ -29,7 +25,7 @@ export async function inspectReportCopies(page) {
 }
 
 export async function cancelReportPreview(page) {
-    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
+    await page.getByRole("button", { name: "Back to setup", exact: true }).click();
 }
 
 export async function scanReport(page) {

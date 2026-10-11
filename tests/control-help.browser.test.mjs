@@ -258,7 +258,7 @@ test("report scopes, privacy and source meanings are available before actions wi
     await readTooltip(page, page.locator("#recordBtn"), help.actions.recordBtn);
     await navigateMain(page, "reports");
     const before = requests.length;
-    await page.locator(".report-other-scope > summary").click();
+    await reportContents(page);
     for (const [value, description] of Object.entries(help.reportScopes)) {
         const choice = page.locator(`[name=reportScope][value=${value}]`).locator("..");
         assert.ok((await choice.innerText()).includes(description), `${value}: description is visible before choosing`);
@@ -272,7 +272,7 @@ test("report scopes, privacy and source meanings are available before actions wi
     assert.match(await page.locator("#reportsView").innerText(), /Detected credentials are still removed/);
     assert.match(await page.locator("#reportsView").innerText(), /does not authorize uploading or publishing/);
     await readTooltip(page, page.locator("#exportBtn"), help.actions.exportBtn);
-    await page.getByRole("button", { name: "1. Requests", exact: true }).click();
+    await page.getByRole("button", { name: "1. Setup", exact: true }).click();
     await page.locator(".report-scope-details > summary").click();
     await readTooltip(page, page.getByRole("button", { name: "About Ready for report", exact: true }), help.reviewStates.ready_to_export);
     assert.equal(requests.length, before);

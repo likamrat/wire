@@ -135,7 +135,11 @@ Pass-share colors use versioned presentation bands: below 50%, 50% to below 75%,
 
 ## Saving a report
 
-The existing **Requests -> Contents -> Review -> Save** flow stays deliberate and empty-first. Choose the request groups, prompt mode and formats, review the actual copies, then confirm the local save.
+The **Setup -> Review -> Save locally** flow stays deliberate and empty-first.
+Setup combines Selected/Current/All scope, author inclusion, prompt text mode and
+all four formats. Its counts use the actual full-interaction population across
+all pages, not the visible list. It names selected groups outside browsing filters.
+Reports navigation still opens the saved library; Create a report opens Setup.
 
 The current step and selection share one task header. Each stage has a local
 Back/next action area; missing prerequisites appear there, not under future steps.
@@ -145,10 +149,10 @@ supporting details, not extra steps. Reports has no analytical Reset to Home.
 Review keeps **Included evidence and preparation details**, **Inspect exact files**,
 prompt copies and privacy findings available beside the formatted preview.
 Save shows the approved membership, prompt mode and formats before the separate
-**Confirm local export** action. Back to Contents can retain an unchanged prepared
+**Confirm local export** action. Back to Setup can retain an unchanged prepared
 snapshot; stored-data refresh remains disabled while it exists.
 
-**Prompt authors in this report** is an explicit membership choice in Requests, separate from
+**Prompt authors in this report** is an explicit membership choice in Setup, separate from
 No prompts / Masked / Original. It intersects the chosen Selected requests, Current view or All
 collected activity base scope. Your-only excludes agent-originated and unverified interactions,
 including their complete calls and scores; select the unverified category explicitly to include it.
@@ -174,6 +178,35 @@ Markdown share those facts and denominators. Source-neutral reports call the app
 - Changes to selected evidence, relevant captured evidence, feedback or permission state can invalidate a draft. Unrelated activity does not change a report whose exact selected evidence remains unchanged.
 
 Saved reports are immutable. A new assessment or a new visual design does not rewrite an existing HTML, PDF, JSON or Markdown file.
+
+### Setup consumer contract
+
+`createReportJourney` is still presentation-only: steps 1/2/3 are Setup/Review/Save
+locally. `beginScan` opens actual Review; only the export controller's confirmed
+disclosure response calls `reviewed()`. The separate final confirmation owns the
+local write. Back to Setup returns to the same preview only when unchanged.
+No report persistence, schema, preview/review/export endpoint or permission contract changes.
+
+`createReportScope.resolve` supplies canonical requests, aliases, base membership,
+author exclusions and full-interaction counts. `updateSelection` synchronizes this
+with `createReportDraft`; private search stays browser-only and is represented to
+report APIs by IDs, never query text. Pending/failed reads gate review/save without
+discarding copies. Accepted reads compare selected source content and aliases,
+base/included membership, author/options, time/date basis, source permissions,
+feedback/deletion revisions and assessment mapping. Unrelated source/browsing
+changes can keep verified approval; same-count identity swaps cannot. Global
+feedback/permission invalidations are conservative. When model results exist, the
+snapshot does not expose selected evaluation dependencies, so a revision change
+requires a new review without deleting copy edits. Backend validation is authoritative.
+
+**Next report-context seam:** keep these analytical request IDs and counts unchanged.
+This unit retains existing originating/follow-up/tool-argument text behavior; it
+does not add adjacent interactions or replies. The later bounded-context proposal
+must apply author/privacy rules before presenting copies, keep contextual text
+separate from analytic membership, and enter the existing scan/edit/omit/rebuild
+and actual-disclosure gates. Setup's `reportPopulationNote` describes analytical
+membership; `scopeDetails` retains separate units/exclusions. Neither is a
+context-inclusion approval. Do not infer new report content from a reader visit.
 
 New readable reports and comparisons explain the checks in **How to read these
 results** or **Reading notes**. HTML/PDF, Markdown and the comparison reader reuse

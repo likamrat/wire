@@ -7,6 +7,20 @@ function chosen(journey, count = 2) {
     journey.update({ requestCount: count, scopeReady: true, formats: ["html", "pdf", "json", "markdown"] });
 }
 
+test("Setup leads directly to actual Review, then a separate local Save", () => {
+    const journey = createReportJourney();
+    chosen(journey);
+    assert.equal(journey.go(2), false, "Setup cannot bypass scanning to reach Review");
+    journey.beginScan();
+    assert.equal(journey.snapshot().step, 2);
+    journey.previewReady(preview);
+    assert.equal(journey.go(3), false, "A preview is not disclosure approval");
+    journey.reviewed();
+    assert.equal(journey.snapshot().step, 3);
+    assert.equal(journey.snapshot().completed, false, "Disclosure approval is not a save");
+    assert.equal(journey.go(4), false, "There is no fourth preliminary stage");
+});
+
 test("state notifications track prepared, revisited, cancelled and completed report guards without side effects", () => {
     const states = [];
     const journey = createReportJourney({ onStateChange: () => states.push(journey.snapshot()) });
@@ -14,12 +28,12 @@ test("state notifications track prepared, revisited, cancelled and completed rep
     journey.beginScan();
     journey.previewReady(preview);
     assert.equal(states.at(-1).hasPreview, true);
-    journey.go(2);
-    assert.equal(states.at(-1).hasPreview, true, "Back to Contents preserves the prepared report.");
+    journey.go(1);
+    assert.equal(states.at(-1).hasPreview, true, "Back to Setup preserves the prepared report.");
     journey.invalidate();
     assert.equal(states.at(-1).hasPreview, false);
     journey.beginScan();
-    journey.go(2);
+    journey.go(1);
     assert.equal(states.at(-1).phase, "draft");
     journey.beginScan();
     journey.previewReady(preview);
@@ -39,16 +53,16 @@ test("report starts empty and stages require scope, scan and explicit review in 
     assert.equal(journey.go(2), false);
     assert.match(journey.reason(2), /Choose at least one readable request/);
     chosen(journey);
-    assert.equal(journey.go(2), true);
+    assert.equal(journey.go(2), false);
     assert.equal(journey.go(3), false);
     assert.equal(journey.reviewed(), false);
     journey.beginScan();
     assert.equal(journey.snapshot().phase, "scanning");
     assert.equal(journey.previewReady({ ...preview, privacy: {} }), false);
     assert.equal(journey.previewReady(preview), true);
-    assert.equal(journey.go(4), false);
+    assert.equal(journey.go(3), false);
     assert.equal(journey.reviewed(), true);
-    assert.equal(journey.snapshot().step, 4);
+    assert.equal(journey.snapshot().step, 3);
 });
 
 test("revisiting unchanged choices keeps one snapshot, while invalidation removes presentation approval", () => {
@@ -58,12 +72,25 @@ test("revisiting unchanged choices keeps one snapshot, while invalidation remove
     journey.previewReady(preview);
     journey.reviewed();
     assert.equal(journey.go(1), true);
+    assert.equal(journey.go(2), true);
     assert.equal(journey.go(3), true);
-    assert.equal(journey.go(4), true);
     journey.invalidate("The timezone changed.");
     assert.equal(journey.snapshot().hasPreview, false);
-    assert.equal(journey.go(4), false);
+    assert.equal(journey.go(3), false);
     assert.equal(journey.reviewed(), false);
+});
+
+test("an unverified read gates Save without manufacturing or discarding explicit review", () => {
+    const journey = createReportJourney();
+    chosen(journey);
+    journey.beginScan(); journey.previewReady(preview); journey.reviewed();
+    journey.go(1);
+    journey.update({ scopeReady: false, scopeIssue: "Wait for a current activity snapshot." });
+    assert.equal(journey.go(3), false);
+    assert.equal(journey.snapshot().phase, "reviewed");
+    journey.update({ scopeReady: true, scopeIssue: "" });
+    assert.equal(journey.go(3), true);
+    assert.equal(journey.snapshot().completed, false);
 });
 
 test("Back during scan cancels once and late preview cannot revive it", () => {
@@ -71,7 +98,7 @@ test("Back during scan cancels once and late preview cannot revive it", () => {
     const journey = createReportJourney({ cancelReview: () => { cancelled++; } });
     chosen(journey);
     journey.beginScan();
-    assert.equal(journey.go(2), true);
+    assert.equal(journey.go(1), true);
     assert.equal(cancelled, 1);
     assert.equal(journey.previewReady(preview), false);
     assert.equal(journey.snapshot().phase, "draft");
@@ -91,7 +118,7 @@ test("write cannot be cancelled or double-entered; uncertain response cannot bec
     assert.equal(journey.snapshot().phase, "blocked");
     assert.equal(journey.snapshot().completed, false);
     journey.failed("Save response is uncertain. Read saved reports before continuing.");
-    assert.equal(journey.go(4), false);
+    assert.equal(journey.go(3), false);
     assert.throws(() => journey.saved({ bundleId: "empty", files: {} }), /links are unavailable/);
 });
 
@@ -118,20 +145,20 @@ test("factory is self-contained for serialization and missing formats block scan
     chosen(journey);
     journey.update({ formats: [] });
     assert.equal(journey.beginScan(), null);
-    assert.match(journey.reason(3), /Choose at least one format/);
-    assert.equal(journey.go(2), true);
+    assert.match(journey.reason(2), /Choose at least one format/);
+    assert.equal(journey.go(1), true);
 });
 
-test("revisiting contents after a completed save starts a draft, not a success-shaped next report", () => {
+test("revisiting Setup after a completed save starts a draft, not a success-shaped next report", () => {
     const journey = createReportJourney();
     chosen(journey);
     journey.beginScan();
     journey.previewReady(preview);
     journey.reviewed();
     journey.saved({ bundleId: "saved", files: { "product-report.html": "private-file" } });
-    assert.equal(journey.go(2), true);
+    assert.equal(journey.go(1), true);
     assert.equal(journey.snapshot().phase, "draft");
     assert.equal(journey.snapshot().completed, false);
     assert.equal(journey.snapshot().requestCount, 2);
-    assert.equal(journey.go(4), false);
+    assert.equal(journey.go(3), false);
 });

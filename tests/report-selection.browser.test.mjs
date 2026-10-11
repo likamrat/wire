@@ -246,7 +246,7 @@ test("selection summaries and shared pills stay compact and unclipped in light/n
         assert.equal(await page.locator("#previewSelectionSummary").textContent(), "One report · 18 request groups included");
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `reports-included-${theme}-${width}.png`), fullPage: true });
         await reportContents(page);
-        const report = await page.locator("#reportStage2 .report-stage-actions").evaluate(node => {
+        const report = await page.locator("#reportStage1 .report-stage-actions").evaluate(node => {
             const box = node.getBoundingClientRect();
             const button = node.querySelector("#exportBtn"), style = getComputedStyle(button);
             return { left: box.left, right: box.right, overflow: node.scrollWidth > node.clientWidth, buttonHeight: button.getBoundingClientRect().height, radius: style.borderRadius };

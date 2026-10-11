@@ -110,14 +110,14 @@ test("chat wording across the real date, analysis, result, request, report and i
     await page.getByRole("button", { name: "Create report for this Copilot chat", exact: true }).click();
     assert.match(await page.locator(".report-entry-context").innerText(), /GitHub Copilot chat: Historical session title/);
     assert.equal(await page.getByRole("button", { name: "Back to Copilot chat", exact: true }).count(), 1);
-    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
+    assert.equal(await page.locator("#reportStage1 #promptOptions").isVisible(), true);
     assert.equal(await page.locator("[name=promptMode]").count(), 3);
     assert.equal(await page.locator("#formatOptions input").count(), 4);
     await page.getByRole("button", { name: "Scan and preview", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=ready]").waitFor();
     assert.match(await page.locator(".report-confirmation").nth(1).innerText(), /from this Copilot chat only/);
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
-    assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
     await navigateMain(page, "settings"); await ready(page);
     await page.waitForResponse(response => response.url().endsWith("/api/collection/status"));
     assert.match(await page.locator("#connectionTitle").locator("..").innerText(), /GitHub Copilot chat source/);

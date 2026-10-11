@@ -187,6 +187,6 @@ test("filter, result, evidence and report explanations have discoverable help wi
     await page.getByRole("tooltip").waitFor({ state: "visible" });
     assert.equal(await page.locator("#evidence-tooltip").count(), 1);
     await page.keyboard.press("Escape");
-    assert.equal(await page.locator("#reportStage3").isVisible(), true);
-    assert.equal(await page.getByRole("button", { name: "4. Save", exact: true }).isDisabled(), true);
+    assert.equal(await page.locator("#reportStage2").isVisible(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
 }));
