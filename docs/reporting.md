@@ -609,7 +609,7 @@ Editing or omitting a prompt copy disables approval until you select **Rebuild p
 ### Finding and opening saved reports
 
 **Reports** opens on the saved library, not the creation wizard. Choose **Create
-a report** to enter the existing four-stage flow, or **Continue draft** to return
+a report** to enter **Setup -> Review -> Save locally**, or **Continue draft** to return
 to unfinished choices and review. **Saved reports** switches back without clearing
 selection or invalidating an otherwise unchanged prepared review. Browser Back
 and Forward restore these tasks and the saved-library search/page. The explicit
@@ -628,9 +628,28 @@ stored report bodies or prompts.
 Rows show preparation time, prompt mode and format availability. **Open** reads
 the registered frozen HTML directly; **Manage** reveals full identity, request-group
 count, preparation details, downloads, comparison and individual deletion actions.
-No saved HTML is regenerated. Missing HTML and unknown metadata remain explicit.
-**About saved reports** holds the search/privacy boundary and **Refresh stored data**;
-refresh retains its existing draft/review guards.
+This applies to ordinary reports and saved comparisons: no saved HTML is
+regenerated or restyled, including historical typography and missing facts.
+Missing HTML and unknown metadata remain explicit; other formats are available
+through verified downloads. **About saved reports** holds the search/privacy
+boundary. The single **Refresh** retains its existing source and draft/review
+guards; read-only **Retry** appears only when recovery is needed.
+
+`POST /api/artifact-file` accepts only `{bundleId, kind, format}`, with `kind`
+`report` or `comparison` and `format` `html`, `pdf`, `json`, `markdown` or
+`manifest`. There is no caller-supplied path or filename. The read-only board
+gate calls `readSavedArtifactFile`; `readSavedComparisonFile` is the comparison
+consumer adapter. The result identifies the artifact, format, filename, media
+type, file SHA-256, registered manifest hash and index fingerprint alongside the
+exact bytes (base64 over HTTP). Registered ownership, independent disclosure,
+closed index/manifest inventory, manifest hash and file hash/length must agree.
+Manifest downloads return the original hash-checked manifest itself.
+
+The library no longer uses the legacy `/api/report-file` download path. Corrupt,
+unregistered, missing or unverified legacy files produce an explicit error, never
+a regenerated copy or automatic alternate-format fallback. A source-reply
+permission change does not revoke an independently permitted saved file; removing
+that saved artifact does. Pending reader responses cannot replace a newer reader.
 
 Preparation time is not the activity period. Reports appear newest-prepared first;
 exact timestamp ties use newest registration first. Unknown dates follow in original
@@ -659,7 +678,13 @@ Recorded outcome pairs lead, followed by measures with a value on either side.
 Measures unavailable on both sides are named in a compact disclosure; opening it
 shows their separate reasons, origins and exact coverage. A one-sided measured
 value is never folded away as missing. New HTML/PDF/Markdown comparisons follow
-the same value-first order; PDF includes the expanded missing-measure detail.
+the same value-first order and shared scope/overlap/matched-pattern coverage notes.
+The PDF and ordinary browser print both include unopened missing-measure details.
+The app comparison supports its current light/dark theme. Newly generated frozen
+HTML explicitly uses light (not an implicit dark-mode feature); PDFs use that same
+light source. Manually changing a frozen HTML theme attribute is not an app route
+or supported saved-file theme setting. Current marks consume the shared orange
+failed-call fades, with exact proportions and readable counts unchanged.
 
 Matching uses saved technical metadata and versioned definitions, not private prompt similarity. New and absent patterns remain visible. An absent pattern is not a zero failure rate and does not mean an issue was fixed.
 
@@ -667,9 +692,15 @@ Different traffic proportions can change the overall percentage without any indi
 
 Older reports remain readable. Supported frozen JSON can provide a read-only outcome comparison, but a readable-only legacy report cannot reconstruct complete membership from a chart or PDF. Missing definitions, incompatible versions or absent structured facts are explained rather than guessed.
 
-If a measure exists on only one side, that side retains its value, coverage and origin label; the other side says **Not saved**, and no change is calculated. An older saved comparison that omitted this summary can restore its display from its own validated frozen source facts. The view labels that restoration; it does not reassess current activity, replace explicitly withheld values, recalculate the saved comparison, or rewrite any saved file.
+If a measure exists on only one side, that side retains its value, coverage and origin label; the other side says **Not saved**, and no change is calculated. The existing structured comparison API can restore an omitted legacy display summary from validated frozen source facts and labels that compatibility display. Library **Open** does not use that reconstruction: it reads the original saved file, including any **Not preserved** result. Neither path reassesses current activity, replaces explicitly withheld values, recalculates the saved comparison or rewrites saved files.
 
-To save a comparison, select its formats, review its disclosure, and confirm Save. The comparison keeps its own frozen results and projected source facts, bound to the exact source report IDs and hashes. It is self-contained.
+To save a comparison, select its formats and **Prepare comparison copy**. Review
+the actual formatted frozen preview and **Inspect exact files**; the PDF stays in
+memory until Save. **Confirm disclosure** and **Save comparison** remain separate.
+The saved comparison keeps its own frozen results and projected source facts,
+bound to the exact source report IDs and hashes. It is self-contained. If the Save
+response is lost, **Read saved comparisons** checks the library without repeating
+Save or manufacturing a new disclosure approval.
 
 ## Deletion and retained copies
 

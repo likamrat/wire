@@ -11,6 +11,7 @@ export function createReportComparison() {
     ]);
     const comparisonNote = "The reports may cover different requests or time periods. A change between them does not tell you what caused it. Returned API entries, recorded Graph sites and HTTP recorder records are counted separately.";
     const labels = { success: "Succeeded", failure: "Failed", partial: "Partial", unknown: "Unknown", other: "Other", transport: "No response" };
+    const outcomeTone = outcome => ({ success: "teal", failure: "pink", transport: "pink", partial: "orange", unknown: "slate", other: "slate" })[outcome];
     const reasons = {
         "unsupported-check": "No supported check for this evidence",
         "missing-evidence": "Not enough recorded evidence",
@@ -137,6 +138,39 @@ export function createReportComparison() {
         return { available, unavailable, unavailableLabel: [...new Set(unavailable.map(metric =>
             metric.metric === "speed" ? metricDefinitionLabel(metric) || dimensions.speed : dimensions[metric.metric]))].join(" · ") };
     }
+    function scopeNotes(model) {
+        const notes = [];
+        const scopeLabels = {
+            "selectionKind-not-recorded": "report selection scope was not saved",
+            "timeZone-not-recorded": "report time zone was not saved",
+            "collectionDefinition-not-recorded": "collection definition was not saved",
+            "selection-kind-differs": "report selection scopes differ",
+            "selected-timezone-differs": "report time zones differ",
+            "collection-definition-differs": "collection definitions differ",
+            "per-call-time-windows-unverified": "per-call activity dates cannot be verified",
+            "complete-history-not-established": "complete history is not established",
+        };
+        if (model.scopeDifferences?.length) notes.push(`Scope differences: ${model.scopeDifferences.map(code => scopeLabels[code] ?? code.replaceAll("-", " ")).join("; ")}.`);
+        const primary = model.layerComparisons?.[model.primaryLayer] ?? model.toolComparison;
+        const units = model.primaryEvidence?.unitLabel ?? "calls";
+        if (primary?.overlap) notes.push(primary.overlap.verified
+            ? `${formatNumber(primary.overlap.sharedCount, 0)} ${units} occur in both snapshots; ${formatNumber(primary.overlap.changedCount, 0)} have changed recorded outcomes or pattern assignments.`
+            : `Repeated ${units} between these reports could not be verified.`);
+        if (primary?.matched) {
+            const coverage = side => {
+                const value = primary.matched[`${side}Coverage`];
+                return `${formatNumber(value.numerator, 0)} of ${formatNumber(value.denominator, 0)} ${units}${value.percent === null ? " (not applicable)" : ` (${formatValue(value.percent, "percent")})`}`;
+            };
+            notes.push(`Matched-pattern coverage: ${coverage("baseline")} earlier; ${coverage("later")} later. Unmatched patterns remain separate.`);
+        }
+        for (const [kind, layer] of Object.entries(model.layerComparisons ?? {})) {
+            if (kind === "tool-call") continue;
+            if (kind === "graph-code-reference") notes.push(`Code references: ${layer.baselineCount ?? "not recorded"} earlier; ${layer.laterCount ?? "not recorded"} later. ${layer.note}`);
+            else if (layer.raw) notes.push(`${layer.unit}: ${layer.raw.baseline.count} earlier; ${layer.raw.later.count} later. ${layer.note}`);
+            else notes.push(`${layer.unit}: not saved in both reports. ${layer.note}`);
+        }
+        return notes;
+    }
     function render(root, model, { onInspectPattern } = {}) {
         if (!root?.ownerDocument || typeof root.replaceChildren !== "function") throw new TypeError("Comparison rendering requires a document element.");
         if (!model || model.schemaVersion !== 1 || !Array.isArray(model.metrics)) throw new TypeError("Comparison rendering requires a supported model.");
@@ -230,7 +264,7 @@ export function createReportComparison() {
                 const strip = el("div", "comparison-outcome-strip");
                 strip.setAttribute("aria-hidden", "true");
                 for (const outcome of Object.keys(labels)) if (totals[outcome]) {
-                    const segment = el("span", `comparison-outcome-${outcome}`);
+                    const segment = el("span", `comparison-outcome-${outcome} dimensional-tone-${outcomeTone(outcome)}`);
                     segment.style.flexGrow = String(totals[outcome]);
                     strip.append(segment);
                 }
@@ -311,16 +345,7 @@ export function createReportComparison() {
         for (const text of readingNotes) notes.append(el("p", "", text));
         notes.append(el("p", "", comparisonNote));
         notes.append(el("p", "", "Pass-share colors describe assessed results only: below 50%, 50–74%, 75–89%, and 90%+. They are not a combined quality grade."));
-        if (model.scopeDifferences?.length) notes.append(el("p", "", `Scope differences: ${model.scopeDifferences.map(code => code.replaceAll("-", " ")).join("; ")}.`));
-        if (tool?.overlap) notes.append(el("p", "", tool.overlap.verified ? `${tool.overlap.sharedCount} calls occur in both snapshots.` : "Repeated calls between these reports could not be verified."));
-        for (const [kind, layer] of Object.entries(model.layerComparisons ?? {})) {
-            if (kind === "tool-call") continue;
-            if (kind === "graph-code-reference") {
-                notes.append(el("p", "", `Code references: ${layer.baselineCount ?? "not recorded"} earlier; ${layer.laterCount ?? "not recorded"} later. ${layer.note}`));
-            } else if (layer.raw) {
-                notes.append(el("p", "", `${layer.unit}: ${layer.raw.baseline.count} earlier; ${layer.raw.later.count} later. ${layer.note}`));
-            }
-        }
+        for (const text of scopeNotes(model)) notes.append(el("p", "", text));
         details.append(notes);
         panel.append(details);
         root.replaceChildren(panel);
@@ -329,6 +354,8 @@ export function createReportComparison() {
         presentation,
         readingNotes,
         comparisonNote,
+        scopeNotes,
+        outcomeTone,
         formatValue,
         metricPresentation,
         comparisonSidePresentation,
@@ -349,7 +376,7 @@ export function createReportComparison() {
 export const reportComparisonStyles = `
 .report-comparison{color:var(--ink);font-family:var(--font);font-size:var(--type-body,.875rem);line-height:var(--leading-ui,1.43);font-variant-numeric:tabular-nums;min-width:0}
 .comparison-takeaway{margin:0 0 24px}.comparison-takeaway h2{font-size:var(--type-section,1.125rem);line-height:var(--leading-section,1.333);margin:0 0 6px}.comparison-takeaway p{margin:0;line-height:var(--leading-reading,1.625)}
-.comparison-notice{padding:16px;background:var(--canvas);border:1px solid var(--rule);border-radius:12px}
+.comparison-notice{padding:16px;background:var(--canvas);border:1px solid var(--rule);border-radius:var(--radius)}
 .comparison-metrics,.comparison-patterns{width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 28px;font-size:var(--type-body,.875rem)}
 .comparison-metrics caption,.comparison-patterns caption{text-align:left;font-size:var(--type-section,1.125rem);font-weight:var(--weight-strong,600);margin:0 0 14px}
 .comparison-metrics th,.comparison-metrics td,.comparison-patterns th,.comparison-patterns td{padding:14px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule);overflow-wrap:anywhere}
@@ -366,12 +393,13 @@ export const reportComparisonStyles = `
 .comparison-unavailable .comparison-metric-value{font-size:var(--type-body,.875rem)}
 .comparison-report-choice{flex:1 1 16rem;min-width:0}.comparison-report-choice label{display:flex;flex-direction:column;gap:var(--space-sm)}
 .comparison-report-identity{margin:0;font-size:var(--type-caption,.75rem)}.comparison-report-identity p{margin:0 0 8px}
-.comparison-score-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));border:1px solid var(--rule);border-radius:20px;background:var(--paper);overflow:hidden;margin:18px 0 26px}
+.comparison-prepared-files{min-width:0;margin:16px 0}.comparison-prepared-files .report-frame{width:100%;min-height:420px;height:60vh;border:1px solid var(--rule);border-radius:var(--radius-small);background:var(--paper)}
+.comparison-prepared-files summary{min-height:44px;padding:12px 0;cursor:pointer;overflow-wrap:anywhere}.comparison-prepared-files pre{max-height:24rem;max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.comparison-prepared-files :is(summary,pre):focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.comparison-score-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper);overflow:hidden;margin:18px 0 26px}
 .comparison-score{padding:22px;min-width:0}.comparison-score+.comparison-score{border-left:1px solid var(--rule)}.comparison-score h3{font-size:1rem;margin:0 0 8px}
 .comparison-score-value{display:block;font-size:var(--type-score,3rem);letter-spacing:-.04em;line-height:1.2;margin:7px 0;overflow-wrap:anywhere}
-.comparison-outcome-strip{display:flex;gap:0;height:10px;border-radius:4px;overflow:hidden;margin:18px 0}.comparison-outcome-strip span{flex-basis:0}
-.comparison-outcome-success{background:var(--chart-teal-mid,#18aaa9)}.comparison-outcome-failure,.comparison-outcome-transport{background:var(--chart-pink-mid,#e95b92)}
-.comparison-outcome-partial{background:var(--chart-orange-mid,#f58a33)}.comparison-outcome-unknown,.comparison-outcome-other{background:var(--chart-slate-mid,#7a92b0)}
+.comparison-outcome-strip{display:flex;gap:0;height:10px;border-radius:var(--radius-pill);overflow:hidden;margin:18px 0}.comparison-outcome-strip span{flex-basis:0;min-width:0;background:var(--column-label);background-image:linear-gradient(90deg,var(--chart-mark-low),var(--chart-mark-high))}
 .comparison-outcome-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,5rem),1fr));gap:12px;margin:0}.comparison-outcome-counts dt{font-size:var(--type-caption,.75rem);color:var(--muted)}
 .comparison-outcome-counts dd{font-size:1.25rem;font-weight:600;margin:3px 0 0}
 .comparison-pattern-title{display:block;min-height:44px;max-width:100%;border:0;border-radius:var(--radius-small,8px);background:none;padding:5px 0;text-align:left;color:var(--accent);font:inherit;font-weight:var(--weight-strong,600);overflow-wrap:anywhere;cursor:pointer}
@@ -395,5 +423,5 @@ button.comparison-pattern-title:is(:hover,:active){background:transparent;color:
  .comparison-score{padding:15px}.comparison-score-value{font-size:2.5rem}.comparison-score h3{font-size:.9375rem}
  .comparison-outcome-counts{gap:10px}.comparison-outcome-counts dt{font-size:.75rem}.comparison-outcome-counts dd{font-size:1.125rem}
 }
-@media(forced-colors:active){.comparison-outcome-strip span{border:1px solid CanvasText}.comparison-metric-value{color:CanvasText!important}}
+@media(forced-colors:active){.comparison-outcome-strip span{background:CanvasText;border:1px solid CanvasText}.comparison-metric-value{color:CanvasText!important}}
 `;

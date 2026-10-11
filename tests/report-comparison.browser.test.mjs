@@ -7,6 +7,8 @@ import { createReportComparison, reportComparisonStyles } from "../web/report-co
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { tokens } from "../web/tokens.mjs";
 import { fontFaceStyles } from "../lib/typeface.mjs";
+import { dimensionalColumnStyles } from "../web/dimensional-charts-styles.mjs";
+import { contrast, hue, measureChartPaint } from "./color-measurements.mjs";
 
 const ratio = (metric, pass) => ({
     metric, kind: "pass-rate", definitionId: `${metric}-checks`, definitionVersion: 1, unit: "percent",
@@ -35,7 +37,7 @@ test("comparison uses the loaded font and remains readable across root-text size
         await context.route("**/*", route => { requests.push(route.request().url()); return route.abort(); });
         const page = await context.newPage(), errors = [];
         page.on("pageerror", error => errors.push(error.message));
-        await page.setContent(`<html data-evidence-theme="light"><head><style>${fontFaceStyles}${tokens}${reportComparisonStyles}
+        await page.setContent(`<html data-evidence-theme="light"><head><style>${fontFaceStyles}${tokens}${dimensionalColumnStyles}${reportComparisonStyles}
             *{box-sizing:border-box}body{margin:0;padding:24px;background:var(--page);font-family:var(--font)}
             main{max-width:1100px;margin:auto} .proof-label{font-size:var(--type-caption);color:var(--muted)}</style></head>
             <body><main><p class="proof-label">Synthetic component proof · not collected evidence</p><div id="comparison"></div></main></body></html>`);
@@ -50,7 +52,7 @@ test("comparison uses the loaded font and remains readable across root-text size
         const doc = await cdp.send("DOM.getDocument");
         const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: ".comparison-metric-value" });
         const fonts = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
-        assert.ok(fonts.fonts.some(font => font.isCustomFont && /Asta/i.test(font.familyName)), "The metric uses embedded Asta, not a fallback");
+        assert.ok(fonts.fonts.some(font => /Arial|Liberation Sans/.test(font.familyName)), "The metric uses the approved local Arial stack");
         await page.getByText("Scope, coverage and reading notes", { exact: true }).click();
         for (const note of createReportComparison().readingNotes) assert.ok((await page.locator(".comparison-reading").innerText()).includes(note));
         for (const theme of ["light", "dark"]) for (const width of [320, 375, 414, 768, 1200, 2560]) for (const size of ["100%", "200%"]) {
@@ -69,6 +71,20 @@ test("comparison uses the loaded font and remains readable across root-text size
             assert.ok(bounds.page <= width + 1, `${theme}/${width}/${size}: horizontal page overflow ${bounds.page}`);
             assert.deepEqual(bounds.clipped, [], `${theme}/${width}/${size}: clipped values`);
             assert.deepEqual(bounds.clippedNotes, [], `${theme}/${width}/${size}: clipped explanations`);
+            const paint = await page.evaluate(measureChartPaint, ".comparison-outcome-strip span");
+            assert.ok(paint.length > 0);
+            for (const mark of paint) {
+                assert.equal(mark.gradient, true, "Comparison marks consume the shared restrained fade");
+                assert.equal(mark.colors.length, 2);
+                for (const color of mark.colors) assert.ok(contrast(color, mark.background) >= 3);
+            }
+            const failed = await page.evaluate(measureChartPaint, ".comparison-outcome-failure");
+            for (const mark of failed) for (const color of mark.colors) assert.ok(hue(color) >= 20 && hue(color) <= 32, "Failed-call marks stay orange, not yellow");
+            const fractions = await page.locator(".comparison-outcome-strip span").evaluateAll(nodes => nodes.map(node => ({
+                actual: node.getBoundingClientRect().width / node.parentElement.getBoundingClientRect().width,
+                expected: Number(node.style.flexGrow) / [...node.parentElement.children].reduce((sum, child) => sum + Number(child.style.flexGrow), 0),
+            })));
+            assert.ok(fractions.every(value => Math.abs(value.actual - value.expected) < 0.002), "Paint preserves exact segment fractions");
             if (process.env.WIRE_REPORT_PROOFS && size === "100%" && (width === 1200 && theme === "light" || width === 375 && theme === "dark")) {
                 await mkdir(process.env.WIRE_REPORT_PROOFS, { recursive: true });
                 await page.screenshot({ path: path.join(process.env.WIRE_REPORT_PROOFS, `comparison-${theme}-${width}.png`), fullPage: true });

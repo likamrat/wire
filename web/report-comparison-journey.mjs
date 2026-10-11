@@ -43,6 +43,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         input.addEventListener("change", () => invalidate("Formats changed. Prepare and review a fresh comparison copy."));
     }
     const reviewHost = el("section", undefined, "comparison-review");
+    const preparedFiles = el("section", undefined, "comparison-prepared-files");
     const prepare = button("Prepare comparison copy", prepareCopy);
     const reviewLabel = el("label"), reviewCheck = el("input");
     reviewCheck.type = "checkbox";
@@ -50,7 +51,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
     const approve = button("Confirm disclosure", confirmReview);
     const save = button("Save comparison", saveCopy, "primary");
     const readSaved = button("Read saved comparisons", () => refresh());
-    reviewHost.append(formats, prepare, reviewLabel, approve, save, readSaved);
+    reviewHost.append(formats, prepare, preparedFiles, reviewLabel, approve, save, readSaved);
     root.replaceChildren(heading, intro, selectors, actions, status, savedBack, savedContent, content, reviewHost);
     root.hidden = true;
     const pair = () => ({ baselineId: baseline.value, laterId: later.value });
@@ -76,8 +77,11 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         save.hidden = !preview || unknownSave;
         save.disabled = writing || artifactPending || !approved || !reviewCheck.checked;
         readSaved.hidden = !unknownSave;
+        preparedFiles.hidden = !preview || unknownSave;
+        if (!preview) preparedFiles.replaceChildren();
         root.setAttribute("aria-busy", String(writing));
-        selectors.hidden = actions.hidden = content.hidden = savedMode;
+        selectors.hidden = actions.hidden = savedMode;
+        content.hidden = savedMode || Boolean(preview) || unknownSave;
         savedBack.hidden = savedContent.hidden = !savedMode;
         if (savedMode) reviewHost.hidden = true;
         for (const select of [baseline, later]) {
@@ -133,9 +137,28 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         try {
             const result = await api("/api/report-comparison/preview", { ...pair(), formats: selectedFormats(), timeContext: timeContext() });
             if (token !== generation || selected !== signature()) { cancelPrevious(result); return; }
-            if (result.kind !== "comparison" || typeof result.previewId !== "string" || !result.comparison || result.privacy?.allSelectedFieldsScanned !== true) throw new Error("A complete reviewed-comparison preview was not returned.");
+            if (result.kind !== "comparison" || typeof result.previewId !== "string" || !result.comparison || result.privacy?.allSelectedFieldsScanned !== true
+                || typeof result.previewHtml !== "string" || !result.files || !Object.keys(result.files).length) throw new Error("A complete reviewed-comparison preview was not returned.");
             preview = result; approved = false; reviewCheck.checked = false;
             comparison = result.comparison; renderer.render(content, comparison);
+            const frame = el("iframe", undefined, "report-frame");
+            frame.title = "Prepared comparison copy";
+            frame.setAttribute("sandbox", "");
+            frame.setAttribute("referrerpolicy", "no-referrer");
+            frame.srcdoc = result.previewHtml;
+            const exact = el("details");
+            exact.append(el("summary", "Inspect exact files"));
+            for (const [name, value] of Object.entries(result.files)) {
+                if (typeof value === "string") {
+                    const detail = el("details"), text = el("pre", value);
+                    text.tabIndex = 0;
+                    text.setAttribute("aria-label", name);
+                    detail.append(el("summary", "Inspect exact " + name), text);
+                    exact.append(detail);
+                } else exact.append(el("p", `${name}: PDF prepared locally in memory. It is written only after disclosure review and separate Save.`));
+            }
+            preparedFiles.replaceChildren(el("h3", "Review the prepared comparison"),
+                el("p", "All selected formats share these frozen facts. Original report files remain unchanged."), frame, exact);
             message("Review this exact comparison and confirm disclosure before saving. No files have been written.");
         } catch (error) { if (token === generation) message(error.message, true); }
         finally { if (token === generation) { writing = false; paint(); } }

@@ -2788,12 +2788,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             content.append(el("p", "mono", `Report ID: ${bundle.bundleId}`));
             const outer = el("article", "saved-library-row");
             let openButton;
-            if (bundle.kind !== "comparison") {
-                if (bundle.files?.["product-report.html"]) openButton = button("Open", event => openSavedReport(bundle, event.currentTarget), "quiet");
-                else content.append(el("p", "muted", "HTML was not saved. Read one of the saved downloads below."));
-            } else {
-                openButton = button("Open", () => reportComparisonUI.open(bundle.bundleId), "quiet");
-            }
+            const htmlName = bundle.kind === "comparison" ? "comparison-report.html" : "product-report.html";
+            if (bundle.files?.[htmlName]) openButton = button("Open", event => openSavedReport(bundle, event.currentTarget), "quiet");
+            else content.append(el("p", "muted", "HTML was not saved. Read one of the saved downloads below."));
             if (openButton) {
                 openButton.setAttribute("aria-label", bundle.kind === "comparison" ? "Open saved comparison" : "Open saved report");
                 viewKey(openButton, "open-bundle:" + bundle.bundleId);
@@ -2842,10 +2839,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function openSavedReport(bundle, trigger) {
         ux.hideTooltip();
         savedReportView?.dialog.close();
+        const kind = bundle.kind === "comparison" ? "comparison" : "report";
+        const title = kind === "comparison" ? "Saved comparison" : bundle.reportType === "period-comparison" ? "Saved period comparison report" : "Saved report";
         const dialog = el("dialog", "assessment-dialog saved-report-dialog");
-        dialog.setAttribute("aria-label", "Saved report");
-        const header = el("div", "dialog-head"), close = button("Close saved report", () => dialog.close(), "quiet");
-        header.append(el("h2", "", bundle.reportType === "period-comparison" ? "Saved period comparison report" : "Saved report"), close);
+        dialog.setAttribute("aria-label", kind === "comparison" ? "Saved comparison" : "Saved report");
+        const header = el("div", "dialog-head"), close = button("Close saved " + kind, () => dialog.close(), "quiet");
+        header.append(el("h2", "", title), close);
         const body = el("div", "assessment-dialog-body");
         body.append(el("p", "", "Reading the frozen saved HTML. Nothing is regenerated."));
         dialog.append(header, body); document.body.append(dialog);
@@ -2861,16 +2860,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }, { once: true });
         dialog.showModal(); close.focus();
         try {
-            const result = await api("/api/report/open", { bundleId: bundle.bundleId });
+            const result = kind === "comparison"
+                ? await api("/api/artifact-file", { bundleId: bundle.bundleId, kind, format: "html" })
+                : await api("/api/report/open", { bundleId: bundle.bundleId });
             if (!dialog.open || savedReportView !== current || current.invalid) return;
+            if (kind === "comparison") {
+                if (result.artifact?.kind !== kind || result.format !== "html" || result.name !== "comparison-report.html"
+                    || result.encoding !== "base64" || result.manifestHash !== bundle.manifestHash || typeof result.data !== "string") {
+                    throw new Error("The verified saved comparison file is unavailable. Nothing was regenerated.");
+                }
+                result.html = new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(result.data), c => c.charCodeAt(0)));
+            }
             if (result.artifact?.bundleId !== bundle.bundleId || typeof result.html !== "string"
-                || !state.exports?.some(entry => entry.bundleId === bundle.bundleId)) throw new Error("This saved report is no longer available.");
+                || !state.exports?.some(entry => entry.bundleId === bundle.bundleId && entry.manifestHash === current.manifestHash)) throw new Error("This saved artifact is no longer available.");
             const mode = ({ none: "No prompts", masked: "Masked prompts", original: "Original prompts" })[result.artifact.promptMode] ?? "Prompt mode not recorded";
             body.replaceChildren(el("p", "", `Prepared ${result.artifact.preparedAtDisplay || time.formatTime(result.artifact.preparedAt, viewerTime)} / ${mode}`),
                 el("p", "mono", `Report ID: ${bundle.bundleId}`),
                 el("p", "muted", "Frozen saved copy. Today's activity, scores and report choices do not change it. Section links work here; use the saved download buttons outside this reader for companion files."));
+            if (result.artifact.sourceReports?.some(source => !source.available)) body.append(el("p", "muted",
+                "An original report is no longer available. This independently reviewed saved copy is unchanged."));
             const frame = el("iframe", "report-frame");
-            frame.title = "Frozen saved report";
+            frame.title = "Frozen saved " + kind;
             frame.setAttribute("sandbox", "");
             frame.setAttribute("referrerpolicy", "no-referrer");
             // Parse in an inert template: opening frozen bytes must not load or navigate to companion content.
@@ -2905,8 +2915,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     async function downloadReportFile(bundle, name, isCurrent = () => true) {
-        const result = await api("/api/report-file", { bundleId: bundle.bundleId, name });
-        if (!isCurrent() || !state.exports?.some(entry => entry.bundleId === bundle.bundleId)) throw new Error("This saved report is no longer available. No download was started.");
+        const kind = bundle.kind === "comparison" ? "comparison" : "report";
+        const prefix = kind === "comparison" ? "comparison-report" : "product-report";
+        const formats = { [`${prefix}.html`]: "html", [`${prefix}.pdf`]: "pdf", [`${prefix}.json`]: "json",
+            [`${prefix}.md`]: "markdown", "coverage-and-redaction-manifest.json": "manifest" };
+        if (!Object.hasOwn(formats, name)) throw new Error("This saved file format is unsupported. No download was started.");
+        const result = await api("/api/artifact-file", { bundleId: bundle.bundleId, kind, format: formats[name] });
+        if (!isCurrent() || !state.exports?.some(entry => entry.bundleId === bundle.bundleId && entry.manifestHash === bundle.manifestHash)
+            || result.artifact?.bundleId !== bundle.bundleId || result.artifact?.kind !== kind || result.name !== name
+            || result.format !== formats[name] || result.manifestHash !== bundle.manifestHash || result.encoding !== "base64"
+            || typeof result.data !== "string") throw new Error("This verified saved file is no longer available. No download was started.");
         const bytes = Uint8Array.from(atob(result.data), c => c.charCodeAt(0));
         const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
         const anchor = el("a");

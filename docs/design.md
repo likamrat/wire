@@ -44,8 +44,24 @@ users to manually keep a receipt or repeat a destructive request.
 Search, page, disclosures and Back retain their prior state; deletions clamp
 the surviving page. Loading and failed snapshot states disable the new bulk
 entry. The immutable saved reader and refresh/draft guards are unchanged.
-Layout retains Asta Sans, Fluent, light/navy tokens, visible focus and 44px
-controls, wrapping at narrow widths and 200% text without truncating labels.
+Layout consumes the current shared METROPOLIS Arial stack, compact outlines,
+capsules and light/dark tokens, with visible focus and 44px controls, wrapping at
+narrow widths and 200% text without truncating labels. Comparison marks use the
+shared restrained fades and orange failed-call identity, not a separate palette.
+
+Both **Report** and **Comparison** Open actions read actual verified frozen HTML
+inside the same inert reader. Closing returns focus to the library entry without
+changing report or comparison drafts. A **Period comparison report** remains one
+report with two frozen cohorts: directly readable, but not an ordinary comparison
+side. Entries without HTML expose that limit and their verified downloads.
+Structured compatibility views are not substituted for historical file contents.
+
+Preparing a new saved-report comparison shows its frozen formatted copy and exact
+text files before disclosure confirmation. Save is separate; an uncertain Save
+offers a saved-library read, not replay. The app's comparison view follows its
+current light/dark theme, while new frozen comparison HTML explicitly stays light,
+including on a dark OS. Browser print expands unopened coverage disclosures.
+Changing the app theme never restyles existing saved files.
 
 The supplied screenshot and Distill playbook informed this simplification.
 Local catalogue execution was unavailable (no Python runtime); the installed

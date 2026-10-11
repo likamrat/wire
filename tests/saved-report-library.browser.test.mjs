@@ -60,7 +60,10 @@ test("Reports opens directly on the library and switching to creation preserves 
     assert.equal(await page.locator(".report-journey").isVisible(), false);
     assert.equal(await page.locator("#savedReportSearch").isVisible(), true);
     assert.equal(await page.locator("#savedReportSearch").getAttribute("placeholder"), "Search saved reports");
-    assert.ok((await page.locator("#savedReportSearch").boundingBox()).y < 500, "Finding a report does not require passing the wizard");
+    assert.equal(await page.locator("#savedReportsPanel").isVisible(), true);
+    assert.equal(await page.locator("#reportCreatePanel").isVisible(), false, "Finding a report does not require passing Setup");
+    await page.locator("#savedReportSearch").focus();
+    assert.equal(await page.locator("#savedReportSearch").evaluate(node => node === document.activeElement), true);
     await shot(page, "entry-library-first");
     const create = page.getByRole("link", { name: "Create a report", exact: true });
     assert.match(await create.getAttribute("href"), /task=create/);
@@ -226,7 +229,7 @@ test("small, empty and error library states retain accessible controls at narrow
     const gate = new Promise(resolve => { release = resolve; });
     t.after(() => release());
     await page.route("**/api/snapshot", async route => { await gate; await route.fulfill({ status: 503, json: { error: "Synthetic saved-list read unavailable." } }); }, { times: 1 });
-    await page.locator("#refreshBtn").click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await page.locator('#workspace[aria-busy="true"]').waitFor();
     assert.equal(await page.locator("#deleteAllReports").isDisabled(), true, "A pending list does not permit a new deletion preview");
     await shot(page, "library-loading");
