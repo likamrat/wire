@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
 import { dimensionalColumnStyles } from "../web/dimensional-charts-styles.mjs";
+import { tokens } from "../web/tokens.mjs";
 import { contrast, hue, pairwise } from "./color-measurements.mjs";
 
 const charts = createDimensionalCharts();
@@ -13,7 +14,8 @@ test("every classifier category and Other owns a distinct non-red service palett
     assert.equal(new Set(ids.map(id => charts.tone(id))).size, ids.length);
     assert.ok(Object.isFrozen(charts.servicePalette));
     for (const theme of ["light", "dark"]) {
-        const background = theme === "light" ? "#eaf0f7" : "#233a55";
+        const themeTokens = tokens.match(new RegExp(`:root\\[data-evidence-theme=${theme}\\] \\{([^}]+)\\}`))[1];
+        const backgrounds = ["paper", "canvas", "hover"].map(role => themeTokens.match(new RegExp(`--${role}:(#[a-f0-9]+);`))[1]);
         for (const face of ["top", "mid", "base", "side", "cap", "label"]) {
             const colors = ids.map(id => charts.servicePalette[id][theme][face]);
             assert.equal(new Set(colors).size, ids.length, `${theme} ${face} must not reuse colors`);
@@ -30,7 +32,8 @@ test("every classifier category and Other owns a distinct non-red service palett
         for (const id of ids) {
             const entry = charts.servicePalette[id];
             assert.ok(Object.isFrozen(entry) && Object.isFrozen(entry[theme]));
-            assert.ok(contrast(entry[theme].label, background) >= 4.5, `${id} ${theme} label on inset surface`);
+            for (const background of backgrounds) assert.ok(contrast(entry[theme].label, background) >= 4.5, `${id} ${theme} label on ${background}`);
+            if (theme === "light") assert.ok(contrast(entry.light.label, "#ffffff") >= 4.5, `${id} on native report paper`);
             for (const [face, color] of Object.entries(entry[theme])) {
                 assert.ok(dimensionalColumnStyles.includes(`--chart-${entry.token}-${face}:${color};`));
             }

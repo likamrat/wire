@@ -6,29 +6,29 @@ const services = theme => Object.fromEntries(Object.values(servicePalette).map(e
     entry.token, faces.map(face => entry[theme][face]),
 ]));
 const light = {
-    orange: ["#ffad54", "#f58a33", "#ffd991", "#edb04c", "#fff0c5", "#954209"],
-    cyan: ["#54b8ec", "#318ccc", "#9ee2f3", "#5387c0", "#d0f4fc", "#155f94"],
-    teal: ["#4ed2c7", "#18aaa9", "#a6ead0", "#42b5c0", "#c7fff1", "#116d67"],
-    pink: ["#f88fb6", "#e95b92", "#f8bfce", "#d66594", "#ffe1ed", "#9d2859"],
-    slate: ["#a4b6cd", "#7a92b0", "#d2deea", "#8b9cb5", "#e8f2fc", "#455e7b"],
-    violet: ["#a18ae7", "#8864e3", "#ddd3f7", "#7954c5", "#eee7ff", "#704ace"],
+    orange: ["#c59663", "#c59663", "#c59663", "#c59663", "#c59663", "#87521d"],
+    cyan: ["#79aabd", "#79aabd", "#79aabd", "#79aabd", "#79aabd", "#285e79"],
+    teal: ["#72aaa0", "#72aaa0", "#72aaa0", "#72aaa0", "#72aaa0", "#22685e"],
+    pink: ["#c58a9f", "#c58a9f", "#c58a9f", "#c58a9f", "#c58a9f", "#a03461"],
+    slate: ["#929ea6", "#929ea6", "#929ea6", "#929ea6", "#929ea6", "#58656e"],
+    violet: ["#a093bd", "#a093bd", "#a093bd", "#a093bd", "#a093bd", "#6b4e92"],
     ...services("light"),
 };
 const dark = {
-    orange: ["#ffbd71", "#e69644", "#aa7148", "#dca168", "#ffddb0", "#ffd091"],
-    cyan: ["#78d0f1", "#39a4d5", "#396d9b", "#528cae", "#b4efff", "#93e3f3"],
-    teal: ["#78e4d3", "#2ac0b0", "#377c83", "#52b2b0", "#b2ffe8", "#8cebd7"],
-    pink: ["#ffa4c6", "#df72a1", "#89537f", "#bc85ab", "#ffd6ec", "#ffb3cd"],
-    slate: ["#bdcfe1", "#92acc6", "#4d6a8a", "#8ba1be", "#e1efff", "#d2e0ee"],
-    violet: ["#c1abf6", "#9674eb", "#66538e", "#8e76b5", "#e3d5ff", "#b39aff"],
+    orange: ["#b99165", "#b99165", "#b99165", "#b99165", "#b99165", "#dcb789"],
+    cyan: ["#729eaf", "#729eaf", "#729eaf", "#729eaf", "#729eaf", "#92c6da"],
+    teal: ["#6caaa0", "#6caaa0", "#6caaa0", "#6caaa0", "#6caaa0", "#94c7bf"],
+    pink: ["#b68197", "#b68197", "#b68197", "#b68197", "#b68197", "#e3a0bb"],
+    slate: ["#88969f", "#88969f", "#88969f", "#88969f", "#88969f", "#b3bdc5"],
+    violet: ["#9c89b9", "#9c89b9", "#9c89b9", "#9c89b9", "#9c89b9", "#c6b0df"],
     ...services("dark"),
 };
 const tokens = palette => Object.entries(palette).map(([tone, colors]) => colors.map((color, index) => `--chart-${tone}-${faces[index]}:${color};`).join("")).join("");
 export const dimensionalColumnStyles = `
-:root {${tokens(light)}--glass-front-opacity:.87;--glass-side-opacity:.68;--glass-cap-opacity:.73;--glass-glint:.32;--glass-rim:#fff;--glass-end-light:#dce2e7;--glass-end-shade:#bcc8d1;--glass-ground-light:#eaf2f8;--glass-ground-dark:#aec4d6;--glass-ground-rule:#92acbf;--glass-shadow:#52738d}
-@media(prefers-color-scheme:dark) {:root:not([data-evidence-theme]) {${tokens(dark)}--glass-end-light:#82909d;--glass-end-shade:#60707f}}
+:root {${tokens(light)}--glass-front-opacity:1;--glass-side-opacity:1;--glass-cap-opacity:1;--glass-glint:0;--glass-rim:transparent;--glass-end-light:#d0d5d5;--glass-end-shade:#d0d5d5;--glass-ground-light:transparent;--glass-ground-dark:transparent;--glass-ground-rule:transparent;--glass-shadow:transparent}
+@media(prefers-color-scheme:dark) {:root:not([data-evidence-theme]) {${tokens(dark)}--glass-end-light:#535b61;--glass-end-shade:#535b61}}
 :root[data-evidence-theme=light] {${tokens(light)}}
-:root[data-evidence-theme=dark] {${tokens(dark)}--glass-front-opacity:.81;--glass-side-opacity:.6;--glass-cap-opacity:.63;--glass-glint:.17;--glass-rim:#e5f5ff;--glass-end-light:#82909d;--glass-end-shade:#60707f;--glass-ground-light:#34516b;--glass-ground-dark:#213e59;--glass-ground-rule:#759ab5;--glass-shadow:#081929}
+:root[data-evidence-theme=dark] {${tokens(dark)}--glass-end-light:#535b61;--glass-end-shade:#535b61}
 ${Object.keys(light).map(tone => `.dimensional-tone-${tone} {${faces.map(face => `--column-${face}:var(--chart-${tone}-${face});`).join("")}color:var(--column-mid)}`).join("\n")}
 .dimensional-stop-top {stop-color:var(--column-top)}
 .dimensional-stop-mid {stop-color:var(--column-mid)}

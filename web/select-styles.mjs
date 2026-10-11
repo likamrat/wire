@@ -60,7 +60,7 @@ export const selectStyles = `
  position:fixed;inset:auto;margin:0;z-index:var(--layer-select);box-sizing:border-box;
  width:240px;max-width:min(360px,calc(100vw - 16px));max-height:320px;overflow:auto;overscroll-behavior:contain;
  padding:6px;border:1px solid var(--rule);border-radius:var(--select-radius);
- background:var(--paper);color:var(--ink);box-shadow:0 8px 24px color-mix(in srgb,var(--page),transparent 30%),var(--shadow);
+ background:var(--paper);color:var(--ink);box-shadow:var(--shadow);
  font:var(--type-control)/var(--leading-control) var(--font);scrollbar-width:thin;scrollbar-color:var(--control) transparent;
 }
 .select-popup::backdrop {background:transparent}

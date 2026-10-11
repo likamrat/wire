@@ -743,7 +743,7 @@ actions behind it, and choose what to include in a short technical report.
 The installed Taste redesign guidance informed hierarchy, spacing, navigation,
 interaction states and restraint. Its marketing-page prescriptions do not fit
 this product. The app uses bundled Asta Sans with system fallbacks and its own coherent
-light/blue-dark palette, without external imagery, decorative animation or
+light/charcoal palette, without external imagery, decorative animation or
 invented metrics. The shapes are Fluent-inspired, not an official Fluent UI
 component implementation. This targeted navigation change uses predictable
 hierarchy (variance 3), no decorative motion (motion 2), and ordinary app density
@@ -898,15 +898,48 @@ changes routes or clears report choices/drafts. App-owned `data-evidence-theme`
 attributes and palette tokens are separate from host-injected defaults.
 The nonce-authorized head script applies the saved choice before body rendering.
 
-`web/tokens.mjs` owns interface colors and radii.
+`web/tokens.mjs` owns interface colors and radii. The shared visual foundation
+replaces the former blue/navy palette, not the Fluent controls or typography.
 `createDimensionalCharts().servicePalette` in `lib/dimensional-charts.mjs` owns
-all 12 service identities and the separate grouped Other presentation;
+all canonical service/category identities and the separate grouped Other presentation;
 `web/dimensional-charts-styles.mjs` consumes it for material and readable ink in
 both themes. Service tokens never reuse outcome tokens.
-Light uses cool airy page/surface
-layers; Dark uses a deep navy page (`#142236`), blue-gray paper (`#1b2e46`) and
-brighter inset surfaces (`#233a55`), never a black background. Blue is the
-interaction accent; outcome colors have separate accessible chart tokens.
+Light uses neutral page (`#f2f3f3`), paper (`#fcfcfc`) and inset (`#e9ebeb`)
+surfaces. Dark complements it with charcoal page (`#17191c`), paper (`#202327`)
+and inset (`#2a2e32`) surfaces. Muted teal is the interaction accent, with faded
+selected fills; it is not a success or quality grade. Both explicit preferences
+and the first-paint system CSS use the same pair.
+
+Existing `--page`, `--paper`, `--canvas`, `--hover`, `--ink`, `--muted`,
+`--rule`, `--control`, `--focus` and pill roles remain the consumer contract.
+`--rule` separates content; `--control` identifies input boundaries. Primary
+actions use `--accent-fill`, `--accent-hover`, `--accent-pressed` with the same
+`--on-accent` ink. Selection retains its stroke/checkmark/ARIA; keyboard focus
+retains its outline; disabled/loading controls retain readable muted ink on
+canvas. Error, warning, success, unknown and the four performance roles stay
+separate. User author cues are subdued cyan; Agent/chat identity stays violet.
+Outcome tones remain success/teal, failure/pink, partial/orange, unknown/slate,
+other/violet and transport/cyan. Service IDs, ordering and non-red hue families
+are unchanged; light and dark label/mid pairs retain minimum OKLab distance 7
+(x100), and labels reach 4.5:1 on paper, inset and hover surfaces.
+
+Shared surfaces no longer cast floating shadows (`--shadow:none`). Dropdowns
+retain their boundary; focus and selection strokes are not decorative shadows.
+Outcome material faces are solid, glints/rims/ground paint are transparent, and
+neutral end paint has no highlight gradient. These are paint changes only:
+time, breakdown and percentage owners still replace their own legacy geometry.
+This foundation does not claim to remove 3D paths across all components.
+New native reports consume the shared semantic palette; historical saved files
+are not regenerated. The report owner separately applies the completed treatment
+to new output layouts.
+
+`tests/visual-foundation.browser.test.mjs` uses only invented retained records
+through the real renderer. It checks Analyze, request reading and the Settings
+rail/pane at desktop and 375px/200% text, computed text/control/semantic-mark
+contrast, selection preservation, focus, hover/press, loading/error and disabled
+states. It also inspects existing dialog-shell paint without opening a source
+review. `WIRE_FOUNDATION_PROOFS` optionally saves local screenshots and computed
+measurements; no proof artifacts belong in source control.
 Counts, labels and exact tables retain the meaning independently of color.
 Chart tooltips, accessible exact-data tables and form controls follow the resolved color scheme.
 
@@ -950,10 +983,10 @@ share a width but size to their content; prompt choices have matching rows and
 format pills use an equal-width responsive grid. Data remains rectangular and aligned,
 not capsule-shaped. Focus, pressed, hover and disabled states share these
 tokens; numbers use tabular figures and reduced motion disables transitions.
-Primary actions keep `--accent-fill` and `--on-accent` paired at rest, hover and
-press. Foreground and surface switch atomically between themes instead of
+Primary actions keep `--on-accent` paired with their rest/hover/pressed fills.
+Foreground and surface switch atomically between themes instead of
 interpolating only the background through an unreadable intermediate color.
-Border and shadow feedback remain. Browser coverage measures composed
+Flat fill, border and focus feedback remain. Browser coverage measures composed
 pseudo-element surfaces, nested text and icons across pointer, keyboard,
 selected and disabled states, including enlarged text and actual animation frames.
 Pill-style button, navigation and result links remain native anchors: the anchor

@@ -106,8 +106,8 @@ p {max-width:72ch}
 .quiet:hover:not(:disabled),.quiet:active:not(:disabled) {background:var(--hover);color:var(--ink)}
 .primary {--action-radius:var(--radius-primary);font-weight:var(--weight-strong)}
 .primary:not(:disabled),.primary:hover:not(:disabled),.primary:active:not(:disabled) {background:var(--accent-fill);border-color:var(--accent-fill);color:var(--on-accent);font-weight:600}
-.primary:hover:not(:disabled) {box-shadow:inset 0 0 0 2px var(--on-accent)}
-.primary:active:not(:disabled) {box-shadow:inset 0 0 0 3px var(--on-accent)}
+.primary:hover:not(:disabled) {background:var(--accent-hover);border-color:var(--accent-hover)}
+.primary:active:not(:disabled) {background:var(--accent-pressed);border-color:var(--accent-pressed)}
 button.danger {white-space:normal;overflow-wrap:anywhere}
 button.danger:not(:disabled) {background:var(--paper);color:var(--danger);border-color:var(--danger)}
 button.danger:hover:not(:disabled) {background:color-mix(in srgb,var(--danger) 6%,var(--paper))}
@@ -572,8 +572,8 @@ ${textAction}.quiet:not([aria-pressed])::before {background:transparent;border-c
 ${textAction}.quiet:not([aria-pressed]):hover:not(:disabled)::before {background:var(--hover)}
 ${textAction}.quiet:not([aria-pressed]):active:not(:disabled)::before {background:var(--pill-pressed)}
 ${textAction}.primary:not(:disabled)::before {background:var(--accent-fill);border-color:var(--accent-fill)}
-${textAction}.primary:hover:not(:disabled)::before {box-shadow:inset 0 0 0 2px var(--on-accent)}
-${textAction}.primary:active:not(:disabled)::before {box-shadow:inset 0 0 0 3px var(--on-accent)}
+${textAction}.primary:hover:not(:disabled)::before {background:var(--accent-hover);border-color:var(--accent-hover)}
+${textAction}.primary:active:not(:disabled)::before {background:var(--accent-pressed);border-color:var(--accent-pressed)}
 ${textAction}.danger:not(:disabled)::before {background:var(--paper);border-color:var(--danger)}
 ${textAction}.danger:hover:not(:disabled)::before {background:color-mix(in srgb,var(--danger) 6%,var(--paper))}
 ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb,var(--danger) 10%,var(--paper));box-shadow:inset 0 0 0 1px var(--danger)}
