@@ -265,6 +265,18 @@ test("off capture, missing retained text and unmatched same-chat records remain 
 
 test("late eager answers cannot survive navigation or revoked access; no mutation is replayed", { timeout: 40000 }, async t => {
     const app = await setup(t), { page, runtime, records, context } = app;
+    let sourceChecks = 0;
+    // Unified Refresh needs a receipt before applying a snapshot; never read the invented source paths.
+    await page.route("**/api/collection/now", async route => {
+        sourceChecks++;
+        const status = await runtime.collector.status();
+        await route.fulfill({ json: { ...status, check: {
+            schemaVersion: 2, id: "invented-context-refresh", revision: status.revision, beforeRevision: status.revision,
+            configVersion: status.configVersion, completedAt: "2026-10-01T12:00:00.000Z", outcome: "complete",
+            changes: { added: 0, updated: 0, items: [] }, coverage: {},
+            sourcesChecked: 0, eligibleSources: 0, pendingSources: 0, partialSources: 0, skippedSources: 0,
+        } } });
+    });
     let release, reached;
     const intercepted = new Promise(resolve => { reached = resolve; });
     await page.route("**/api/assessment/evidence", async route => {
@@ -276,13 +288,15 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
     await page.goto(runtime.url + "#request?request=" + records[0].scenarioId); await ready(page);
     await intercepted;
     await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
-    release(); await frames(page);
+    const leftResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/evidence"));
+    release(); await (await leftResponse).finished(); await frames(page);
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
     await page.unroute("**/api/assessment/evidence");
     let releaseStale, sawStale;
     const pending = new Promise(resolve => { sawStale = resolve; });
     await page.route("**/api/assessment/evidence", async route => {
         const response = await route.fetch();
+        assert.equal((await response.json()).basis.consentRevision, 1);
         sawStale();
         await new Promise(resolve => { releaseStale = resolve; });
         await route.fulfill({ response });
@@ -294,13 +308,28 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
             categories: [], revokedAt: "2026-10-01T12:00:00.000Z" };
     });
     await app.acceptFixtureChange();
-    await (await revealStoredRefresh(page)).click(); await ready(page);
-    await expect(page.locator(".interaction-response:visible").first()).toContainText("No response text retained.");
-    releaseStale(); await frames(page);
+    const revoked = await loadBoardState(context);
+    const revokedSnapshot = page.waitForResponse(async response => {
+        if (!response.ok() || !response.url().endsWith("/api/snapshot")) return false;
+        const snapshot = await response.json();
+        return snapshot.revision === revoked.revision
+            && snapshot.assessment?.basis.consentRevision === revoked.personalEvaluation.consent.revision;
+    });
+    await (await revealStoredRefresh(page)).click();
+    await (await revokedSnapshot).finished();
+    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "complete");
+    await expect(page.locator("#freshActivity")).toHaveAttribute("data-revision", String(revoked.revision));
+    await ready(page);
+    const revokedResponse = page.locator(`[data-context-kind="prompt"][data-context-group="${records[1].scenarioId}"] .interaction-response`);
+    await expect(revokedResponse).toContainText("No response text retained.");
+    await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
+    const staleResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/evidence"));
+    releaseStale(); await (await staleResponse).finished(); await frames(page);
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
     await page.unroute("**/api/assessment/evidence");
     const reads = app.payloadReads.length;
     await page.reload(); await ready(page);
-    await expect(page.locator(".interaction-response:visible").first()).toContainText("No response text retained.");
+    await expect(revokedResponse).toContainText("No response text retained.");
     assert.equal(app.payloadReads.length, reads, "Revoked payloads aren't fetched on reopening");
+    assert.equal(sourceChecks, 1, "The fixture source check is never replayed by the late answer or reload");
 });
