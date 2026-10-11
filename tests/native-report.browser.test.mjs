@@ -18,6 +18,7 @@ import { renderPdf } from "../lib/pdf.mjs";
 import { adaptEvaluationReport } from "../lib/report-facts.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { renderComparisonHtml } from "../lib/report-presentation.mjs";
+import { contrast, hue, measureChartPaint } from "./color-measurements.mjs";
 
 async function inspectPdf(bytes) {
     const strict = await pdfDocumentText(bytes);
@@ -149,6 +150,22 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
         assert.ok(layout.capsules.every(capsule => capsule.radius === "999px"));
         assert.ok(layout.bars.length);
         for (const bar of layout.bars) assert.ok(Math.abs(bar.actual - bar.count / bar.denominator) < 0.002, "No inflated small values");
+        layout.paint = await page.evaluate(measureChartPaint, ".native-bar");
+        for (const mark of layout.paint) {
+            assert.ok(mark.local && mark.gradient && mark.colors.length === 2, "Native CSS marks consume the shared two-stop fade");
+            assert.notEqual(mark.colors[0], mark.colors[1]);
+            assert.equal(mark.opacity, 1);
+            for (const color of mark.colors) assert.ok(contrast(color, mark.background) >= 3, `${theme}: entire native fade is readable`);
+        }
+        layout.orange = await page.evaluate(measureChartPaint, ".native-bar.dimensional-tone-pink,.native-bar.dimensional-tone-service-mail");
+        assert.ok(layout.orange.length >= 2, "Both failed-call and Mail marks are present");
+        for (const mark of layout.orange) for (const color of mark.colors) {
+            assert.ok(hue(color) >= 20 && hue(color) <= 32, `${theme}: failure and Mail remain orange, not yellow`);
+        }
+        layout.outcomeLabels = await page.locator(".native-outcome").evaluateAll(nodes => nodes.map(node => ({
+            text: node.textContent, color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor,
+        })));
+        for (const label of layout.outcomeLabels) assert.ok(contrast(label.color, label.background) >= 4.5, label.text);
         await page.locator("#quality > summary").focus();
         await page.keyboard.press("Enter");
         assert.equal(await page.locator("#quality").getAttribute("open"), "");
@@ -179,13 +196,26 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
     if (directory) await writeFile(path.join(directory, "layout-proof.json"), JSON.stringify(layouts, null, 2));
     const tiny = await buildSanitizedBundle(matrixRecords("tiny-native", ["failure", ...Array(99).fill("success")]), "a".repeat(64),
         { promptMode: "none", formats: ["html", "json", "markdown"] });
-    await page.setContent(tiny.previewHtml);
-    const small = await page.locator('.native-bar[data-count="1"][data-denominator="100"]').evaluate(node =>
-        node.getBoundingClientRect().width / node.parentElement.getBoundingClientRect().width);
-    assert.ok(Math.abs(small - 0.01) < 0.002, "A 1% outcome must not become a minimum-sized 3D segment");
-    assert.match(await page.locator(".native-bar-results").innerText(), /1 failed \(1%\)/);
     const tinyDirectory = await keepProof("tiny", tiny.files);
-    if (tinyDirectory) await page.locator("#breakdowns").screenshot({ path: path.join(tinyDirectory, "exact-one-percent.png") });
+    const tinyPaint = [];
+    for (const theme of ["light", "dark"]) {
+        await page.setContent(tiny.previewHtml);
+        await page.evaluate(theme => { document.documentElement.dataset.evidenceTheme = theme; }, theme);
+        const small = await page.locator('.native-bar[data-count="1"][data-denominator="100"]').evaluate(node =>
+            node.getBoundingClientRect().width / node.parentElement.getBoundingClientRect().width);
+        assert.ok(Math.abs(small - 0.01) < 0.002, "A 1% outcome must not become a minimum-sized segment");
+        assert.match(await page.locator(".native-bar-results").innerText(), /1 failed \(1%\)/);
+        const paint = await page.evaluate(measureChartPaint, '.native-bar[data-count="1"][data-denominator="100"]');
+        assert.equal(paint.length, 1);
+        assert.ok(paint[0].gradient && paint[0].colors.length === 2);
+        for (const color of paint[0].colors) {
+            assert.ok(contrast(color, paint[0].background) >= 3);
+            assert.ok(hue(color) >= 20 && hue(color) <= 32);
+        }
+        tinyPaint.push({ theme, fraction: small, paint });
+        if (tinyDirectory) await page.locator("#breakdowns").screenshot({ path: path.join(tinyDirectory, `${theme}-exact-one-percent.png`) });
+    }
+    if (tinyDirectory) await writeFile(path.join(tinyDirectory, "paint-proof.json"), JSON.stringify(tinyPaint, null, 2));
 });
 
 test("four-format recorded context keeps changed requests, omissions and exact anchors through real review and save", { timeout: 120000 }, async t => {

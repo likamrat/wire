@@ -195,8 +195,13 @@ Native output consumes the shared METROPOLIS typography and light/dark palette:
 radii and semantic outcome capsules. Both theme wordmarks remain local.
 New HTML does not embed the retained historical Asta CSS font; that licensed
 asset remains unchanged for explicit historical consumers. Bars use exact
-linear fractions from zero, without minimum paint, gradients or perspective.
-Rounded tracks do not alter their count-derived widths. Counts/shares and exact tables are readable
+linear fractions from zero, without minimum paint or perspective. Their CSS
+marks consume the shared `--chart-mark-low` / `--chart-mark-high` within-mark
+fade (including the shared service fade strength); no palette or SVG definitions
+are copied into a second native chart engine. Failed-call and Mail chart marks
+use the current shared orange identity, not yellow. Rounded tracks and fades
+do not alter count-derived widths, segment boundaries or zero/tiny values.
+Counts/shares and exact tables are readable
 without hover. A prepared report ignores narrower browsing filters: its complete
 selected interactions own every denominator. Returned API units, Graph sites,
 owned HTTP records and tool calls remain distinct.
