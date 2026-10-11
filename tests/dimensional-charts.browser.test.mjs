@@ -71,14 +71,14 @@ async function ready(page) {
     await openActivitySessions(page);
 }
 async function measure(page) {
-    return page.locator(".dimensional-column").evaluateAll(nodes => nodes.map(svg => {
+    return page.locator(".dimensional-column,.flat-time-column").evaluateAll(nodes => nodes.map(svg => {
         const rect = node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, right: r.right, bottom: r.bottom }; };
         const action = svg.closest("button,a");
         return {
             total: Number(svg.dataset.total), maximum: Number(svg.dataset.maximum),
-            frontHeight: Number(svg.dataset.frontHeight), extent: Number(svg.dataset.plotHeight), depth: Number(svg.dataset.depth),
+            frontHeight: Number(svg.dataset.frontHeight ?? svg.getAttribute("height")), extent: Number(svg.dataset.plotHeight), depth: Number(svg.dataset.depth || 0),
             svg: rect(svg), action: rect(action),
-            front: [...svg.querySelectorAll(".dimensional-front")].map(node => {
+            front: [...svg.querySelectorAll(".dimensional-front,.flat-time-segment")].map(node => {
                 const matrix = node.getScreenCTM();
                 return { ...rect(node), count: Number(node.dataset.count), edgeHeight: node.height.baseVal.value * matrix.d,
                     baseY: new DOMPoint(0, node.y.baseVal.value + node.height.baseVal.value).matrixTransform(matrix).y };
@@ -169,7 +169,7 @@ test("time and API path faces retain result counts, tiny values, gaps, labels an
     if (proofDir) await page.locator(".chart-panel").screenshot({ path: path.join(proofDir, "forced-colors.png") });
 }));
 
-test("45 daily labels remain aligned and scrollable without overlapping caps or plot-sized targets", { timeout: 20000 }, async () => {
+test("45 daily labels remain aligned and scrollable with exact flat geometry and count targets", { timeout: 20000 }, async () => {
     const dense = Array.from({ length: 45 }, (_, index) => {
         const record = structuredClone(records[0]);
         record.scenarioId = `synthetic-dense-${index}`;
@@ -186,7 +186,7 @@ test("45 daily labels remain aligned and scrollable without overlapping caps or 
         assert.equal(columns.length, 45);
         assert.equal(await page.locator(".dimensional-time-labels > span").count(), 45);
         for (let index = 0; index < columns.length; index++) {
-            assert.equal(columns[index].frontHeight, 320, "Equal values stay equal even in a dense plot");
+            assert.equal(columns[index].frontHeight, 200, "Equal values stay equal even in a dense plot");
             assert.ok(columns[index].action.width <= 84);
             if (index) assert.ok(columns[index].svg.x - columns[index - 1].svg.right >= 8);
         }
@@ -252,7 +252,7 @@ test("weekly 9/28/9/121/50 small faces drill down once with local dates and rest
                 assert.match(await page.locator(".session-requests .pager").innerText(), /of 9 request groups/);
                 await page.goBack(); await ready(page);
             }
-            await page.locator(".time-column").first().locator(".dimensional-front").click(); await ready(page);
+            await page.locator(".time-column").first().locator(".flat-time-segment").click(); await ready(page);
             await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
             assert.equal(await page.locator("#activityCount").innerText(), "217");
         } finally { await local.close(); }

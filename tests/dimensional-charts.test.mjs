@@ -6,6 +6,47 @@ const charts = createDimensionalCharts();
 const values = (success, failure = 0) => ({ success, failure, unknown: 0, partial: 0, other: 0, transport: 0 });
 const model = (total, maximum = 100, extra = {}) => charts.layout({ total, maximum, values: values(total), ...extra });
 
+test("flat time columns use one exact linear scale without minimum bodies or result sections", () => {
+    const maximum = 100_000, plotHeight = 200;
+    for (const total of [0, 1, 2, 20, 200, maximum]) {
+        const input = { total, maximum, plotHeight, values: values(Math.max(0, total - 1), Math.min(1, total)) };
+        const original = structuredClone(input), flat = charts.flatLayout(input);
+        assert.equal(flat.height, total / maximum * plotHeight);
+        assert.ok(Math.abs(flat.segments.reduce((sum, segment) => sum + segment.height, 0) - flat.height) < 1e-12);
+        assert.equal(flat.segments.reduce((sum, segment) => sum + segment.count, 0), total);
+        for (const segment of flat.segments) assert.ok(Math.abs(segment.height - segment.count / maximum * plotHeight) < 1e-12);
+        assert.deepEqual(input, original);
+        const svg = charts.flatSvg(input);
+        if (!total) assert.equal(svg, "");
+        else {
+            assert.match(svg, /aria-hidden="true"/);
+            assert.doesNotMatch(svg, /Gradient|matrix|transform|path |stroke|glint|cap|side|ground/);
+        }
+    }
+    const browser = new Function(`return (${createDimensionalCharts.toString()})()`)();
+    const mixed = { total: 121, maximum: 200, values: { success: 50, unknown: 9, partial: 28, other: 9, transport: 2, failure: 23 } };
+    assert.deepEqual(browser.flatLayout(mixed), charts.flatLayout(mixed));
+    assert.equal(browser.flatSvg(mixed), charts.flatSvg(mixed));
+    assert.deepEqual(charts.flatLayout(mixed).segments.map(part => part.key), ["unknown", "success", "partial", "other", "transport", "failure"]);
+    assert.equal(charts.flatLayout({ total: 1, maximum: 200, values: values(1), service: "Files" }).height, 1);
+    const extreme = charts.flatLayout({ total: Number.MAX_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER,
+        values: values(Number.MAX_SAFE_INTEGER - 1, 1) });
+    assert.equal(extreme.segments.at(-1).height, 1 / Number.MAX_SAFE_INTEGER * 200, "Subtraction of painted heights cannot erase a tiny positive segment");
+});
+
+test("flat count geometry rejects invalid values and preserves contiguous exact outcome boundaries", () => {
+    const input = { total: 4, maximum: 4, values: values(3, 1) };
+    const flat = charts.flatLayout(input);
+    assert.equal(flat.segments[0].top, flat.segments[1].bottom);
+    assert.equal(flat.segments.at(-1).top, 0);
+    for (const total of [-1, .5, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => charts.flatLayout({ ...input, total }), /safe count/);
+    assert.throws(() => charts.flatLayout({ ...input, maximum: 3 }), /denominator/);
+    assert.throws(() => charts.flatLayout({ ...input, values: values(4, 1) }), /must equal/);
+    assert.throws(() => charts.flatLayout({ ...input, values: { success: 4 } }), /Every recorded/);
+    for (const width of [0, -1, Infinity]) assert.throws(() => charts.flatLayout({ ...input, width }), /positive/);
+    for (const plotHeight of [0, -1, Infinity]) assert.throws(() => charts.flatLayout({ ...input, plotHeight }), /positive|finite/);
+});
+
 test("glass columns share a readability scale independent of material and projection", () => {
     assert.equal(model(30).frontHeight, model(30, 100, { service: "Teams" }).frontHeight);
     assert.equal(model(80).frontHeight / model(20).frontHeight, 2);

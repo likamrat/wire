@@ -57,6 +57,18 @@ The main filter row shows **Dates, Tool, Service, Outcome, Author**. **More filt
 
 Choose **Dates > Custom dates**, enter **From/To**, then **Apply dates**. Dates are inclusive; **All dates** means all retained dates in the chosen collection, not a new scan. In **Outcome**, tick one or more statuses, then **Apply**. The view stays unchanged while you choose; **Cancel**, Escape or clicking outside discards your draft. **Clear** beside the label restores all results without clearing other filters. An empty draft cannot be applied. Choices within Author or Outcome combine with OR; different filters combine with AND. The chart's time-scale control remains available.
 
+**Activity over time** uses flat, linear columns: twice as many matching records
+means twice the height. Daily, Weekly and Monthly follow the display time zone;
+weeks start Monday. Colors retain their recorded-result meaning. Small columns
+and result sections are not enlarged; their exact count links and **Exact counts
+and recorded results** table remain usable. Choosing a column or table date
+narrows the same Analyze slice, retaining search, Author, Outcome and service
+context; Back restores it. Partial date ranges remain bounded by your selection.
+Undated records stay in the matching total but are listed separately, never
+assigned a date. A zero bin means no matching retained records in that bin, not
+proof that no real activity occurred. Separate count/percentage views retain
+their existing choices and denominators.
+
 **Service** matches recorded service associations, including calls with multiple targets. Choosing Files declares **Files + calls with missing service details**: known matches and separately counted context, with no duplicate calls. Remove the **Calls with missing service details (context)** chip for Files-only matching; the scope then offers an explicit way to include context again. Discovery stays preparation, not missing-service context. **Category** still provides the original exclusive category breakdown, including Discovery, multi-service calls and Service not shown; existing category links keep their meaning.
 
 Use **Author** to choose **Your prompts**, **Agent prompts**, or both, then **Apply**. **All authors** also includes **Author unverified**; choosing just Your + Agent leaves unverified authors out. The same choice works inside a conversation and combines with dates, results, services and projects. Cancel, Escape or clicking outside keeps the previous view. Clear restores all authors without changing the other filters.

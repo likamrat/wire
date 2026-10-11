@@ -1045,6 +1045,43 @@ widths rather than ellipsizing, abbreviating or shrinking the selected label.
 
 ## Quantitative chart contract
 
+### Flat Analyze time view
+
+The approved experience reset replaces **only the interactive time view** with
+flat 2D columns. This supersedes the earlier glass/time rules below; comparison
+columns, percentage charts and newly generated report charts retain their
+existing renderers until their separately owned units replace them.
+
+`createDimensionalCharts().flatLayout/flatSvg` reuse the validated count span,
+outcome order and semantic color tokens. Time totals and every outcome section
+are linear from a shared zero, with no square-root encoding, positive minimum,
+lid, side, floor, glint, gradient or shine. Subpixel counts may be visually
+imperceptible, but exact count links remain at least 44px in both dimensions,
+with a focus ring and full count/share accessible names. Exact-table date
+actions also remain at least 44px. No invisible outcome overlay expands across
+another result. Short timelines use 160px of quantitative height; others use
+200px. This changes the plot extent, not the linear ratios.
+
+The existing Daily/Weekly/Monthly picker, percentage-view controls, exact table,
+canonical IDs, activity units, query/filter scope and native date links are
+unchanged. `activity-projection.mjs` remains the sole server/browser bin math:
+display-zone/DST boundaries and clipped partial ranges pass through without
+rebinning. Undated records remain outside the chart; gap copy explicitly limits
+zero to qualifying retained records. Count-label/font measurements control
+horizontal spacing, not painted heights. Narrow/enlarged text can scroll dates
+or use the exact table; keyboard focus reveals the complete count action.
+
+Focused coverage: `flat-time.browser.test.mjs` uses invented source records
+through the normal shell for bins/outcome shares, DST, partial bounds, scoped
+date click/Back, query/Author/Outcome/service context, empty/undated/extreme
+counts, light/dark and narrow 200% text. The existing small-column, level,
+interaction, unit/font and geometry tests retain their numerical and input
+safety checks with time-specific flat expectations. Shared report geometry and
+service/API count encodings are unchanged; historical files are never read or
+rewritten by this unit.
+
+### Existing comparison and percentage encodings
+
 Every chart separates canonical quantities, visual geometry, decoration and
 interaction. Counts, denominators, calculated percentages, filters and saved
 evidence never change for presentation. The user's later explicit instruction
@@ -1053,10 +1090,10 @@ the earlier exact-linear-height/exact-angle restriction. Visual minimums are
 disclosed, not presented as measured quantities. Zero has no data-bearing paint;
 missing evidence stays distinct.
 
-The approved art direction is dimensional glass: faceted columns and open,
+The pre-reset comparison/report art direction is dimensional glass: faceted columns and open,
 front-facing, restrained-tilt donuts in light and navy. The user's correction
-concerned small-value readability and label alignment, not rejection of 3D.
-Do not substitute flat columns or outcome/service bars. The self-contained
+concerned small-value readability and label alignment. The flat time exception
+above now takes precedence for that view. The self-contained
 factory keeps exact arithmetic separate from a shared readability allocation.
 Front and side faces agree on each allocated visual span. Neutral lids must never inherit
 the final outcome's color. Paint lids and inward-clipped rims before data faces.
@@ -1107,8 +1144,8 @@ the shared policy and current renderer families alongside their specific suites.
 
 ## Count charts
 
-`lib/dimensional-charts.mjs` renders actual glass front/side/lid geometry.
-Interactive time footprints are 84px; comparison/report footprints are 116px.
+`lib/dimensional-charts.mjs` still renders glass front/side/lid geometry for
+comparison/report consumers with 116px footprints. Flat time uses 84px rectangles.
 Heights use one square-root scale per scene, with a minimum positive body of
 36px; zero stays empty. Interactive maximum height is 320px and print remains
 compact at 280px. Positive recorded-result sections have a 6px visual minimum;

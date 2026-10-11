@@ -1635,7 +1635,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const notes = $("chartReadingNotes");
         const reading = el("dl");
         for (const [label, text] of [
-            ["Chart scale", "Column heights use a shared square-root scale and minimum visible sizes; small result sections and donut slices may be enlarged. Counts stay exact; percentages use the actual totals. Neutral tops mark the end, not another result."],
+            ["Chart scale", chartType === "time"
+                ? "Time columns and their recorded-result sections use a linear count scale from zero; small values are not enlarged. Count links and the exact-data table remain usable when a section is too small to see. Separate percentage charts may enlarge small slices; their labels use actual shares."
+                : "Column heights use a shared square-root scale and minimum visible sizes; small result sections and donut slices may be enlarged. Counts stay exact; percentages use the actual totals. Neutral tops mark the end, not another result."],
             ["Chart colors", chartType === "workload" ? `Color identifies the ${layer === "tool" ? "activity category" : "service"}, not its result.` : "Colors match the recorded results."],
             ["Dates and grouping", chartType === "time"
                 ? `${help.fields.bucketFilter} Weeks start Monday; daylight-saving changes follow the display time zone in the header. Last 7/30 days include today and the preceding local days.`
@@ -1674,12 +1676,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else $("countTable").replaceChildren();
         }, true);
         percentages.update(analytics, { ...applied, search: Boolean(search) });
-        if (analytics.totals.count) $("chartFooter").prepend(el("span", "chart-size-note", "Visual sizes adjusted for readability; labels show actual counts and shares."));
+        if (analytics.totals.count && chartType !== "time") $("chartFooter").prepend(el("span", "chart-size-note", "Visual sizes adjusted for readability; labels show actual counts and shares."));
     }
     function renderTime() {
         const series = analytics.timeSeries;
         if (!series?.points?.length) {
             $("chart").append(empty("No dated activity is available", "The captured records do not include usable dates for this slice. Service and API-path views remain available."));
+            if (series?.undatedCount) $("chartFooter").append(el("span", "", `${count(series.undatedCount)} undated records are not plotted.`));
             return;
         }
         const points = series.points;
@@ -1690,7 +1693,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             summary: point => `${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${results.unit(applied.layer, point.total)}. ${groupSummary(point)}.`,
             createAction: point => link("", "activity", { range: "custom", from: point.from, to: point.to, page: undefined }),
             inspect: inspectColumnSection,
-            onOverflow: overflowing => { guidance.textContent = overflowing ? "Scroll for more categories." : ""; },
+            onOverflow: overflowing => { guidance.textContent = overflowing ? "Scroll for more dates, or open the exact data below." : ""; },
         });
         chart.removeAttribute("aria-label");
         chart.setAttribute("aria-labelledby", "chartTitle");
@@ -1699,7 +1702,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         chart.querySelectorAll(".time-slot").forEach((slot, index) => viewKey(slot.firstElementChild, "chart:time:" + points[index].date));
         $("chart").append(chart);
         dimensional.refreshView(chart);
-        $("chartFooter").append(guidance);
+        $("chartFooter").append(el("span", "chart-size-note", `Linear count scale. ${series.gapMeaning}`), guidance);
         if (series.undatedCount) $("chartFooter").append(el("span", "", `${count(series.undatedCount)} undated records are not plotted.`));
     }
     function drillTime(point) {

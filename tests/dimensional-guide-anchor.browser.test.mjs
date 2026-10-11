@@ -47,7 +47,7 @@ async function measure(page) {
             const b = node.getBoundingClientRect();
             return { x: b.x, y: b.y, right: b.right, bottom: b.bottom, width: b.width, height: b.height, center: b.x + b.width / 2 };
         };
-        const svg = cell.querySelector(".dimensional-column");
+        const svg = cell.querySelector(".dimensional-column,.flat-time-column");
         const caption = cell.querySelector(".dimensional-category-label,.dimensional-report-label");
         const label = cell.querySelector(".group-name,.dimensional-report-label") || document.querySelectorAll(".dimensional-time-labels>span")[index];
         const value = cell.querySelector(".dimensional-count,strong");
@@ -55,18 +55,18 @@ async function measure(page) {
         const css = caption && getComputedStyle(caption, "::before");
         const pseudo = css && !["none", "normal"].includes(css.content) && css.display !== "none";
         const line = cell.querySelector(".dimensional-guide");
-        const faces = [...cell.querySelectorAll(".dimensional-front,.dimensional-side,.dimensional-cap")].map(box);
+        const faces = [...cell.querySelectorAll(".dimensional-front,.dimensional-side,.dimensional-cap,.flat-time-segment")].map(box);
         const record = {
             label: label.textContent, valueText: value.textContent, cell: box(cell), value: box(value), labelBox: box(label), icon: box(icon),
             guideCount: cell.querySelectorAll(".dimensional-guide").length + Number(Boolean(pseudo)),
             action: box(cell.querySelector("button")), zero: !svg,
             paintCenter: faces.length ? (Math.min(...faces.map(face => face.x)) + Math.max(...faces.map(face => face.right))) / 2 : null,
             total: Number(svg?.dataset.total || 0), maximum: Number(svg?.dataset.maximum || 1), extent: Number(svg?.dataset.plotHeight || 280),
-            edge: Number(svg?.dataset.frontHeight || 0),
-            counts: [...cell.querySelectorAll(".dimensional-front")].map(face => Number(face.dataset.count)),
+            edge: Number(svg?.dataset.frontHeight ?? svg?.getAttribute("height") ?? 0),
+            counts: [...cell.querySelectorAll(".dimensional-front,.flat-time-segment")].map(face => Number(face.dataset.count)),
         };
         if (!svg) return record;
-        const front = cell.querySelector(".dimensional-front");
+        const front = cell.querySelector(".dimensional-front,.flat-time-segment");
         const vertex = new DOMPoint(front.x.baseVal.value, front.y.baseVal.value + front.height.baseVal.value)
             .matrixTransform(front.getScreenCTM());
         let guide = null;
@@ -109,7 +109,8 @@ function aligned(rows, context, { time = false, scaledSvg = false, minimumCleara
                 assert.ok(Math.abs(row.paintCenter - row.labelBox.center) <= 1, `${name}: text stays on the painted silhouette midpoint, not corner`);
                 assert.ok(Math.abs(row.base - rows.find(item => !item.zero).base) < .03, `${name}: common zero baseline`);
             }
-            assert.ok(Math.abs(row.edge - Math.max(36, Math.sqrt(row.total / row.maximum) * row.extent)) < .01, `${name}: disclosed readable height`);
+            assert.ok(Math.abs(row.edge - (time ? row.total / row.maximum * row.extent
+                : Math.max(36, Math.sqrt(row.total / row.maximum) * row.extent))) < .01, `${name}: declared count scale`);
             assert.equal(row.counts.reduce((sum, count) => sum + count, 0), row.total, `${name}: exact segment counts`);
             if (row.action) {
                 assert.ok(row.action.width <= 116.01 && row.action.height <= row.extent + 23.05, `${name}: no enlarged action rectangle`);

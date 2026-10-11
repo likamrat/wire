@@ -43,7 +43,7 @@ async function mount(page, groups, { width, theme, scale = 1, mode = "path", con
                 help: mode === "service" ? item => window.ux.helpButton(item.label, `Synthetic definition of ${item.label}.`) : undefined,
             }));
     }, { groups, mode, icons: dimensionalIcons });
-    await page.locator(".dimensional-column,.time-zero").first().waitFor();
+    await page.locator(".dimensional-column,.flat-time-column,.time-zero").first().waitFor({ state: "attached" });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
@@ -56,7 +56,7 @@ async function measure(page) {
         const slots = [...scroll.querySelectorAll(".dimensional-category,.time-slot")];
         const timeLabels = [...scroll.querySelectorAll(".dimensional-time-labels>span")];
         const columns = slots.map((cell, index) => {
-            const svg = cell.querySelector(".dimensional-column"), fronts = [...cell.querySelectorAll(".dimensional-front")];
+            const svg = cell.querySelector(".dimensional-column,.flat-time-column"), fronts = [...cell.querySelectorAll(".dimensional-front,.flat-time-segment")];
             const point = (front, y) => new DOMPoint(0, y).matrixTransform(front.getScreenCTM()).y;
             const label = cell.querySelector(".group-name") || timeLabels[index], range = document.createRange();
             range.selectNodeContents(label);
@@ -168,23 +168,23 @@ test("intrinsic labels and help clear the real scrollport and caption at normal 
     } finally { await browser.close(); }
 });
 
-test("one and two monthly columns share one level glass floor without reflection artifacts", { timeout: 30000 }, async () => {
+test("one and two monthly columns share one flat zero baseline without decorative surfaces", { timeout: 30000 }, async () => {
     const browser = await chromium.launch(), failures = [], results = [];
     try {
         const page = await browser.newPage({ reducedMotion: "reduce" });
         for (const theme of ["light", "dark"]) for (const width of [375, 1200]) for (const length of [1, 2]) {
             const groups = [group("Sep 1", 187), group("Oct 1", 30, 1)].slice(0, length);
             await mount(page, groups, { width, theme, mode: "time" });
-            const floor = await page.locator(".dimensional-plot").evaluate(plot => ({
+            const floor = await page.locator(".flat-time-plot").evaluate(plot => ({
                 decoration: plot.querySelectorAll(".dimensional-ground-surface,.dimensional-reflection").length,
-                baselines: plot.querySelectorAll(".dimensional-ground-edge").length,
-                feet: [...plot.querySelectorAll(".dimensional-front")].map(front =>
+                baselines: getComputedStyle(plot.querySelector(".time-chart")).borderBottomWidth,
+                feet: [...plot.querySelectorAll(".flat-time-segment")].map(front =>
                     new DOMPoint(0, front.y.baseVal.value + front.height.baseVal.value).matrixTransform(front.getScreenCTM()).y),
             }));
             const key = `monthly-${theme}-${width}-${length}`;
             results.push({ key, ...floor });
-            assert.equal(floor.decoration, 1);
-            assert.equal(floor.baselines, 1);
+            assert.equal(floor.decoration, 0);
+            assert.equal(floor.baselines, "1px");
             if (floor.feet.some(y => Math.abs(y - floor.feet[0]) > .03)) failures.push(`${key}: columns disagree on zero baseline`);
             if (width === 1200 && length === 2) await save(key, floor, page);
         }

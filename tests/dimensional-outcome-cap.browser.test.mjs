@@ -162,7 +162,7 @@ test("integrated client keeps exact outcome/help/table shares and help focus thr
         page.setDefaultTimeout(3000);
         page.on("pageerror", error => errors.push(error.message));
         await page.goto(`http://127.0.0.1:${server.address().port}/`); await ready(page);
-        assert.deepEqual(await page.locator(".dimensional-column").evaluateAll(nodes => nodes.map(n => +n.dataset.total)), [121, 28]);
+        assert.deepEqual(await page.locator(".flat-time-column").evaluateAll(nodes => nodes.map(n => +n.dataset.total)), [121, 28]);
         const control = page.locator(".time-column").first();
         await control.focus();
         assert.equal(await page.getByRole("tooltip").isVisible(), false);
@@ -178,7 +178,7 @@ test("integrated client keeps exact outcome/help/table shares and help focus thr
         await page.locator("#tableDisclosure>summary").click();
         assert.deepEqual(await page.locator("#countTable tbody tr").first().locator("td").allTextContents(), ["Sep 21, 2026", "121", "113", "7", "1"]);
         await selectActivityOption(page, "outcomeFilter", "unknown"); await ready(page);
-        assert.deepEqual(await page.locator(".dimensional-column").evaluateAll(nodes => nodes.map(n => +n.dataset.total)), [1, 1]);
+        assert.deepEqual(await page.locator(".flat-time-column").evaluateAll(nodes => nodes.map(n => +n.dataset.total)), [1, 1]);
         await page.locator(".time-column").first().focus();
         assert.equal(await page.getByRole("tooltip").isVisible(), false);
         assert.match(await page.locator(".time-column").first().getAttribute("aria-label"), /1 no result recorded \(100%\)/);

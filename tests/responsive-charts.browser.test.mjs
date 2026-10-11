@@ -68,19 +68,19 @@ async function measure(page) {
             const r = node.getBoundingClientRect();
             return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height, center: r.x + r.width / 2 };
         };
-        const scroll = document.querySelector(".dimensional-scroll"), scene = document.querySelector(".dimensional-plot");
+        const scroll = document.querySelector(".dimensional-scroll"), scene = document.querySelector(".dimensional-plot,.flat-time-plot");
         const main = document.querySelector("#main"), panel = document.querySelector(".chart-panel");
         return {
             viewport: innerWidth, pageOverflow: document.documentElement.scrollWidth - innerWidth,
             main: main && rect(main), panel: rect(panel), scroll: { ...rect(scroll), client: scroll.clientWidth, extent: scroll.scrollWidth, left: scroll.scrollLeft },
-            scene: rect(scene), pitch: parseFloat(scene.style.getPropertyValue("--scene-pitch")),
+            scene: rect(scene), flat: scene.classList.contains("flat-time-plot"), pitch: parseFloat(scene.style.getPropertyValue("--scene-pitch")),
             guidance: document.querySelector("#chartFooter")?.textContent || "",
             columns: [...scene.querySelectorAll(".dimensional-category,.time-slot")].map(node => {
-                const faces = [...node.querySelectorAll(".dimensional-front,.dimensional-side,.dimensional-cap")].map(rect);
-                const svg = node.querySelector(".dimensional-column"), action = node.querySelector("button,a");
+                const faces = [...node.querySelectorAll(".dimensional-front,.dimensional-side,.dimensional-cap,.flat-time-segment")].map(rect);
+                const svg = node.querySelector(".dimensional-column,.flat-time-column"), action = node.querySelector("button,a");
                 return { slot: rect(node), label: node.querySelector(".group-name") && rect(node.querySelector(".group-name")),
                     count: rect(node.querySelector(".dimensional-count")), total: Number(svg?.dataset.total || 0), maximum: Number(svg?.dataset.maximum || 1),
-                    edge: Number(svg?.dataset.frontHeight || 0), extent: Number(svg?.dataset.plotHeight || 280), action: action && rect(action),
+                    edge: Number(svg?.dataset.frontHeight ?? svg?.getAttribute("height") ?? 0), extent: Number(svg?.dataset.plotHeight || 280), action: action && rect(action),
                     paintCenter: faces.length ? (Math.min(...faces.map(r => r.x)) + Math.max(...faces.map(r => r.right))) / 2 : null };
             }),
         };
@@ -92,7 +92,8 @@ function valid(metrics) {
         assert.ok(Math.abs(column.count.center - column.slot.center) < 1, "Exact value stays on the painted centerline");
         if (column.label) assert.ok(Math.abs(column.label.center - column.slot.center) < 1, "Label stays centered");
         if (column.paintCenter !== null) assert.ok(Math.abs(column.paintCenter - column.slot.center) < 1, "Glass silhouette stays centered");
-        assert.ok(Math.abs(column.edge - (column.total ? Math.max(36, Math.sqrt(column.total / column.maximum) * column.extent) : 0)) < .01, "Visual height matches the declared readability scale");
+        assert.ok(Math.abs(column.edge - (metrics.flat ? column.total / column.maximum * column.extent
+            : column.total ? Math.max(36, Math.sqrt(column.total / column.maximum) * column.extent) : 0)) < .01, "Visual height matches the declared count scale");
         if (column.action) assert.ok(column.action.width <= 116 && column.action.height <= column.extent + 23.05, "No invisible expanded hit target");
     }
 }

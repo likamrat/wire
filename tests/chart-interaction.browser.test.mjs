@@ -104,7 +104,7 @@ async function facts(page) {
     return page.locator("#homeView").evaluate(root => ({
         total: root.querySelector(".percentage-section").dataset.total,
         legends: [...root.querySelectorAll(".percentage-legend-row")].map(node => [node.dataset.category, node.dataset.count, node.dataset.percentage, node.textContent]),
-        geometry: [...root.querySelectorAll(".percentage-face,.dimensional-column")].map(node =>
+        geometry: [...root.querySelectorAll(".percentage-face,.dimensional-column,.flat-time-column")].map(node =>
             ["d", "data-category", "data-start", "data-end", "data-count", "data-exact-fraction", "data-total", "data-maximum", "data-front-height"]
                 .map(key => node.getAttribute(key))),
     }));
@@ -156,7 +156,7 @@ async function cancelPress(page, face, surface, name) {
 async function drillAndReturn(page, control, expectedCount, snapshots, painted = false) {
     const before = await facts(page), home = page.url(), href = await control.getAttribute("href");
     if (painted) {
-        const point = await paintedPoint(control.locator(".percentage-face,.dimensional-front").first());
+        const point = await paintedPoint(control.locator(".percentage-face,.dimensional-front,.flat-time-segment").first());
         await page.mouse.click(point.x, point.y);
     } else await page.keyboard.press("Enter");
     await page.waitForURL(url => url.hash === href); await ready(page);
@@ -231,7 +231,7 @@ test("column/timeline/service/API links and passive tool bars do not share the S
         for (const mode of ["time", "workload", "endpoint"]) {
             await page.locator(`[data-chart="${mode}"]`).click(); await ready(page);
             const action = page.locator("#chart .time-column,#chart .dimensional-action").first();
-            const face = action.locator(".dimensional-front").first(), column = action.locator(".dimensional-column");
+            const face = action.locator(".dimensional-front,.flat-time-segment").first(), column = action.locator(".dimensional-column,.flat-time-column");
             const count = Number(await column.getAttribute("data-total"));
             assert.equal(await column.locator("a").count(), 0, "Columns use an HTML action, not SVG focus proxies");
             const point = await paintedPoint(face);
@@ -246,7 +246,7 @@ test("column/timeline/service/API links and passive tool bars do not share the S
             await drillAndReturn(page, action, count, snapshots, true);
             if (mode === "time") {
                 assert.ok(await page.locator(".time-zero").count() > 0, "Dated gap covers unpainted zero buckets");
-                assert.equal(await page.locator(".time-zero .dimensional-column,.time-zero a,.time-zero button").count(), 0);
+                assert.equal(await page.locator(".time-zero svg,.time-zero a,.time-zero button").count(), 0);
             }
         }
         const service = page.locator('[data-percentage-card="composition"]');
@@ -274,7 +274,7 @@ test("column/timeline/service/API links and passive tool bars do not share the S
     }
     await selectActivityOption(page, "outcomeFilter", "partial"); await ready(page);
     assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "0");
-    assert.equal(await page.locator(".percentage-face,.percentage-bar,.dimensional-column").count(), 0);
+    assert.equal(await page.locator(".percentage-face,.percentage-bar,.dimensional-column,.flat-time-column").count(), 0);
     assert.equal(await page.locator(".percentage-empty").count(), 2);
 });
 

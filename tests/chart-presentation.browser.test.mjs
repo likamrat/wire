@@ -112,7 +112,7 @@ test("chart help is closed, unit-bearing and preserves reading state without cha
     for (const mode of ["workload", "endpoint", "time"]) {
         await page.locator(`[data-chart=${mode}]`).click(); await ready(page);
         assert.equal(await page.locator("#tableDisclosure").evaluate(n => n.open), true);
-        assert.match(await page.locator("#chartReadingNotes").textContent(), /square-root scale and minimum visible sizes/);
+        assert.match(await page.locator("#chartReadingNotes").textContent(), mode === "time" ? /linear count scale from zero/ : /square-root scale and minimum visible sizes/);
         assert.doesNotMatch(await page.locator(".chart-panel").innerText(), /Peak/);
         assert.ok((await page.locator(".dimensional-count").allTextContents()).every(text => /^\d[\d,]* calls?$/.test(text)));
     }
@@ -122,7 +122,7 @@ test("chart help is closed, unit-bearing and preserves reading state without cha
     assert.deepEqual(await page.locator(".dimensional-count").allTextContents(), totals.map(n => `${n} calls`));
 });
 
-test("all evidence units and large values fit their projected columns at 100/200% text", { timeout: 30000 }, async () => {
+test("all evidence units and large values fit flat time and projected comparison columns at 100/200% text", { timeout: 30000 }, async () => {
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1600, height: 1100 }, reducedMotion: "reduce" });
     try {
         await page.setContent(`<style>${styles}</style><div id="test-host" style="width:360px;max-width:100%"></div>`);
@@ -146,12 +146,12 @@ test("all evidence units and large values fit their projected columns at 100/200
             for (const scale of [1, 2]) {
                 await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
                 await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-                const measured = await page.locator(".dimensional-plot").evaluate(root => {
+                const measured = await page.locator(".dimensional-plot,.flat-time-plot").evaluate(root => {
                     const box = n => { const r = n.getBoundingClientRect(); return { x: r.x, right: r.right, y: r.y, bottom: r.bottom, width: r.width }; };
                     return { plot: box(root), documentOverflow: document.documentElement.scrollWidth - innerWidth,
                         labels: [...root.querySelectorAll(".dimensional-count")].map(n => ({ ...box(n), text: n.textContent, font: parseFloat(getComputedStyle(n).fontSize) })),
-                        columns: [...root.querySelectorAll(".dimensional-column")].map(n => ({
-                            total: Number(n.dataset.total), maximum: Number(n.dataset.maximum), height: Number(n.dataset.frontHeight), extent: Number(n.dataset.plotHeight),
+                        columns: [...root.querySelectorAll(".dimensional-column,.flat-time-column")].map(n => ({
+                            total: Number(n.dataset.total), maximum: Number(n.dataset.maximum), height: Number(n.dataset.frontHeight ?? n.getAttribute("height")), extent: Number(n.dataset.plotHeight),
                         })),
                         centers: [...root.querySelectorAll(".time-slot,.dimensional-category")].map(n => { const r = box(n); return r.x + r.width / 2; }) };
                 });
@@ -165,13 +165,14 @@ test("all evidence units and large values fit their projected columns at 100/200
                     if (index) assert.ok(measured.labels[index - 1].right + 8 <= label.x,
                         `Neighboring values never overlap: ${layer}/${time}/${scale} ${JSON.stringify({ previous: measured.labels[index - 1], label, plot: measured.plot })}`);
                 });
-                for (const column of measured.columns) assert.ok(Math.abs(column.height - Math.max(36, Math.sqrt(column.total / column.maximum) * column.extent)) < 1e-10);
+                for (const column of measured.columns) assert.ok(Math.abs(column.height - (time
+                    ? column.total / column.maximum * column.extent : Math.max(36, Math.sqrt(column.total / column.maximum) * column.extent))) < 1e-10);
             }
-            await page.locator(".dimensional-plot button").last().focus();
+            await page.locator(".dimensional-plot button,.flat-time-plot button").last().focus();
             await page.keyboard.press("Shift+Tab");
             await page.keyboard.press("Tab");
             assert.equal(await page.getByRole("tooltip").isVisible(), false);
-            assert.match(await page.locator(".dimensional-plot button").last().getAttribute("aria-label"), new RegExp(String(Number.MAX_SAFE_INTEGER)));
+            assert.match(await page.locator(".dimensional-plot button,.flat-time-plot button").last().getAttribute("aria-label"), new RegExp(String(Number.MAX_SAFE_INTEGER)));
             await page.keyboard.press("Escape");
         }
     } finally { await browser.close(); }
@@ -198,14 +199,14 @@ test("loaded-font changes invalidate count-label pitch without changing values o
         document.querySelector("#font-chart").append(view);
         charts.refreshView(view);
     }, createDimensionalCharts.toString());
-    const measure = () => page.locator(".dimensional-plot").evaluate(plot => ({
+    const measure = () => page.locator(".flat-time-plot").evaluate(plot => ({
         container: plot.parentElement.clientWidth, sampleSize: getComputedStyle(plot.querySelector(".dimensional-time-labels>span")).fontSize,
-        pitch: parseFloat(plot.style.getPropertyValue("--scene-pitch")),
+        pitch: plot.querySelector(".time-slot").getBoundingClientRect().width,
         counts: [...plot.querySelectorAll(".dimensional-count")].map(node => ({
             width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height, text: node.textContent,
         })),
-        columns: [...plot.querySelectorAll(".dimensional-column")].map(node => ({
-            total: node.dataset.total, maximum: node.dataset.maximum, height: node.dataset.frontHeight,
+        columns: [...plot.querySelectorAll(".flat-time-column")].map(node => ({
+            total: node.dataset.total, maximum: node.dataset.maximum, height: node.getAttribute("height"),
         })),
     }));
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
