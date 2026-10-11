@@ -70,7 +70,7 @@ export function createAnalysisSlice(localSearch, projection) {
     };
 }
 
-export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState, createAnalysisSlice, createActivityProjection) {
+export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState, createAnalysisSlice, createActivityProjection, createRequestContext) {
     const $ = (id) => document.getElementById(id);
     const time = createTimeContext();
     const authorship = createPromptAuthorship();
@@ -109,6 +109,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const issueAttempts = new Map();
     const presentation = createDisclosureState(), readingPositions = new Map();
     const textAccess = createTextAccess(ux, presentation, authorship, metadata);
+    const requestContext = createRequestContext();
     let detailOwner = "page";
     let collection, collectionSettings, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
     mountSidebarNavigation();
@@ -2044,23 +2045,62 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return checkbox;
     }
     function renderRequest() {
+        if (route.view !== "request") return;
         captureReading();
-        const scenario = state.scenarios.find((item) => item.scenarioId === route.request);
+        const context = requestContext.select(state.scenarios, route.request);
         const body = $("requestContent");
-        const priorInsightHeight = body.dataset.viewKey === "request:" + route.request
-            ? body.querySelector(".interaction-insights")?.getBoundingClientRect().height ?? 0 : 0;
-        const priorResponseHeight = body.dataset.viewKey === "request:" + route.request
-            ? body.querySelector(".interaction-response")?.getBoundingClientRect().height ?? 0 : 0;
         body.replaceChildren();
-        if (!scenario) {
+        if (!context.groups.length) {
             body.append(empty("This interaction is not available", "It may no longer be in the current local collection. Return to Analyze to choose another interaction."));
             return;
         }
-        detailOwner = "request:" + scenario.scenarioId;
+        detailOwner = "request:" + route.request;
         viewKey(body, detailOwner);
+        const heading = el("h2", "", "What was asked and what came back");
+        heading.id = "requestContextTitle";
+        const contextHeader = el("section", "request-context-heading");
+        contextHeader.append(heading, el("p", "context-help-note", context.limitation));
+        if (context.groups.length > 1) contextHeader.append(el("p", "context-help-note", "Nearby groups are linked by recorded messages, not a confirmed task or continuation."));
+        const boundary = el("details", "reader-details");
+        boundary.append(el("summary", "", "How this context is linked"), el("p", "", context.boundary),
+            el("p", "", "Prompt-to-call and nearby-follow-up associations remain inferred. A retained group is not proof of a human task, its intent or its boundaries."));
+        contextHeader.append(boundary);
+        for (const gap of context.gaps) contextHeader.append(el("p", "reader-empty", gap));
+        const journey = el("ol", "journey request-context-timeline");
+        journey.setAttribute("aria-labelledby", heading.id);
+        const summaries = el("section", "request-context-summaries");
+        summaries.append(el("h2", "", "Counts and saved assessment scope"),
+            el("p", "context-help-note", "Each result below keeps its original recorded group and assessment scope. Nearby messages do not change an old verdict or judge a later reply against an earlier request. No assessment is rerun here."));
+        body.append(contextHeader, journey, summaries);
+        const entries = [], seen = new Set(), rendered = [];
+        const relationLabel = relation => relation === "selected" ? "Selected interaction"
+            : relation === "preceding" ? "Earlier linked context" : "Following linked context";
+        function insertEntry(entry) {
+            const content = entry.render(), item = content.tagName === "LI" ? content : el("li", "journey-item");
+            if (content !== item) item.append(content);
+            item.dataset.contextGroup = entry.scenarioId;
+            item.dataset.contextKind = entry.kind ?? "action";
+            viewKey(item, entry.key);
+            const moment = typeof entry.at === "string" && Number.isFinite(Date.parse(entry.at))
+                ? `${entry.kind === "response" ? "Response recorded" : entry.kind === "prompt" || entry.kind === "follow-up" ? "Message recorded" : "Action started"}: ${timestamp(entry.at)}`
+                : "Time not recorded; position in the chronology is unknown.";
+            const label = el("p", "context-entry-label", `${relationLabel(entry.relation)} / ${moment}`);
+            item.prepend(label);
+            if (entry.kind === "prompt" && entry.relation === "selected") {
+                item.id = "selectedContext";
+                item.setAttribute("aria-current", "true");
+                label.classList.add("context-selected-label");
+            }
+            const index = rendered.findIndex(other => requestContext.compare(entry, other) < 0);
+            journey.insertBefore(item, index < 0 ? null : rendered[index].node);
+            if (index < 0) rendered.push({ ...entry, node: item });
+            else rendered.splice(index, 0, { ...entry, node: item });
+            detailOwner = "request:" + route.request;
+        }
+        for (const group of context.groups) {
+        const scenario = group.scenario, isSelected = group.relation === "selected";
+        detailOwner = "request:" + scenario.scenarioId;
         const rows = rowsFor(scenario.scenarioId);
-        const canonicalTools = fullRowsFor(scenario.scenarioId, "tool");
-        const singleTool = canonicalTools?.length === 1 && !scenario.graphActivities?.length && !scenario.httpRecords?.length;
         const full = fullRowsFor(scenario.scenarioId);
         const sameScope = full && full.length === rows.length && full.every(row => rows.some(match => match.id === row.id));
         const outcome = el("section", "request-outcome");
@@ -2071,19 +2111,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!sameScope) {
             const matching = el("div", "request-matching");
             matching.append(el("p", "muted", "Matching this view"), matchingResults(scenario.scenarioId),
-                el("p", "context-help-note", "Recorded results above cover the entire request group. Actions below identify matching and nonmatching context."));
+                el("p", "context-help-note", "Recorded results cover this original group only. The chronology identifies matching and nonmatching actions; linked context does not enlarge the Analyze or report selection."));
             outcome.append(matching);
-        }
-        if (singleTool) {
-            const call = sourceCallFor(canonicalTools[0]);
-            const fields = actionFields(call, canonicalTools[0]);
-            fields.classList.add("request-outcome-action");
-            outcome.append(fields);
-            const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(row => row.parentCallId === canonicalTools[0].id);
-            const returned = returnedDetails(call, canonicalTools[0], apiRows);
-            if (returned) outcome.append(returned);
-            const failure = recordedFailure(call, ["failure", "transport"].includes(canonicalTools[0].outcome));
-            if (failure) outcome.append(el("p", "action-error", failure));
         }
         const intro = el("div", "request-intro");
         const source = sessionSource(scenario.sourceSessionId);
@@ -2097,17 +2126,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (originKind !== "copilot-chat" && project.classList.contains("unscoped")) project.textContent = "Project not recorded";
         sourceMeta.append(project, el("p", "request-time", requestTiming.summary(scenario, applied.timeContext)));
         intro.append(sourceIdentity, sourceMeta);
-        const requestText = el("section", "request-original");
+        const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
         requestText.append(textAccess.render(scenario.userPrompt, {
-            key: "request:" + scenario.scenarioId, mode: "complete",
+            key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true,
             originKind,
             notice: "Copy includes the complete retained prompt body only, without export masking. It does not include chat details, warnings, the response or the rest of this page. Other apps and clipboard history may access your system clipboard.",
         }));
         const insightHost = el("div", "interaction-insights"), responseHost = el("section", "interaction-response");
-        if (priorInsightHeight) insightHost.style.minHeight = `${priorInsightHeight}px`;
-        if (priorResponseHeight) responseHost.style.minHeight = `${priorResponseHeight}px`;
-        body.append(intro, requestText, responseHost, insightHost);
-        assessmentUI.detail(insightHost, responseHost, scenario.scenarioId);
+        insightHost.dataset.contextGroup = scenario.scenarioId;
+        if (isSelected) body.prepend(intro);
+        entries.push({ key: "prompt:" + scenario.scenarioId, at: scenario.userPrompt?.sourceTimestamp,
+            scenarioId: scenario.scenarioId, relation: group.relation, kind: "prompt", render: () => {
+                const item = el("li", "journey-item");
+                item.append(requestText, responseHost);
+                return item;
+            } });
+        assessmentUI.detail(insightHost, responseHost, scenario.scenarioId, { eager: true, placeResponse: (node, observation) => {
+            if (!journey.isConnected) return;
+            insertEntry({ key: "response:" + observation.observationRef, at: observation.occurredAt,
+                scenarioId: scenario.scenarioId, relation: group.relation, kind: "response", render: () => node });
+        } });
         const original = scenario.userPrompt;
         const support = el("div", "request-support");
         const provenance = el("div");
@@ -2120,25 +2158,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ["Coverage", scenario.coverageNote], ["Assessment", scenario.assessedFinding],
         ]));
         support.append(disclosure("Technical source record", provenance));
-        if (scenario.followUpPrompts?.length) {
-            const followups = el("div");
-            followups.append(el("p", "context-help-note", help.notices.followup));
-            const followupList = el("div");
-            followups.append(followupList);
-            pagedList(followupList, scenario.followUpPrompts.map((followup, index) => ({ followup, index })), {
-                key: detailOwner + ":followups", noun: "follow-ups",
-                renderItem: ({ followup, index }) => {
-                    detailOwner = `request:${scenario.scenarioId}:followup:${followup.sourceEventId || JSON.stringify([followup.sourceTimestamp, followup.text])}`;
-                    const available = followup.status !== "unavailable" && typeof followup.text === "string" && followup.text.trim();
-                    const detail = disclosure("Follow-up " + (index + 1) + " / " + textAccess.caption(followup).toLowerCase(), available ? followup.text : el("p", "original-availability", "Prompt not available"), "original-prompt");
-                    detail.append(el("p", "context-help-note", authorship.reason(followup)));
-                    if (["partial", "truncated"].includes(followup.status)) detail.append(el("p", "original-availability", "Only part of the original was recorded. Missing text is not reconstructed."));
-                    detail.append(facts([["Timestamp", timestamp(followup.sourceTimestamp)]]));
-                    return detail;
-                },
-            });
-            detailOwner = "request:" + scenario.scenarioId;
-            support.append(disclosure("Nearby follow-ups / inferred associations", followups));
+        for (const message of context.messages.filter(message => message.scenarioId === scenario.scenarioId && message.kind === "follow-up")) {
+            const followup = el("section", "request-context-prompt");
+            followup.append(el("p", "context-help-note", "Nearby retained message / inferred follow-up, not a confirmed continuation."),
+                textAccess.render(message.source, { key: message.key, mode: "complete", initialOpen: true, originKind }));
+            if (message.source.association) followup.append(el("p", "context-help-note", message.source.association));
+            entries.push({ ...message, relation: group.relation, render: () => followup });
         }
         const actions = el("section", "request-actions");
         actions.setAttribute("aria-labelledby", "requestReportTitle");
@@ -2159,12 +2184,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.tooltip(pick, selected.has(scenario.scenarioId) ? help.actions.removeRequest : help.actions.selectRequest);
         actions.append(reportContext, pick);
         const recorded = el("section", "request-recorded");
-        const recordedTitle = el("h2", "request-actions-heading", "Recorded actions");
-        recordedTitle.id = "requestRecordedTitle";
+        const recordedTitle = el("h3", "request-actions-heading", relationLabel(group.relation));
+        recordedTitle.id = "requestRecordedTitle-" + encodeURIComponent(scenario.scenarioId);
         recorded.setAttribute("aria-labelledby", recordedTitle.id);
-        recorded.append(recordedTitle, outcome);
-        const journey = el("div", "journey-pages"), entries = [];
-        const seen = new Set();
+        recorded.append(recordedTitle, el("p", "context-help-note", "Original group prompt recorded: " + timestamp(scenario.userPrompt?.sourceTimestamp)), outcome, insightHost);
+        const entryStart = entries.length;
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (applied.layer === "tool" ? rows : undefined);
         for (const tool of scenario.toolCalls || []) {
             const row = canonical?.find(item => tool.toolCallId ? item.toolCallId === tool.toolCallId : item.id === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
@@ -2178,19 +2202,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             item.append(actionHeading(tool.tool || "Recorded assistant action", row?.workload, row));
             const result = resultLine("tool", row ? results.summarize([row]) : null, { help: explanations.tool, heading: results.heading("tool") });
             result.classList.add("journey-result");
-            if (!singleTool) item.append(result);
+            item.append(result);
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
-            if (!singleTool) {
-                if (apiRows?.length) item.append(resultLine("reported-api", results.summarize(apiRows), { heading: results.heading("reported-api") }));
-                else if (row?.workload !== "Discovery") item.append(el("p", "result-missing-api", apiRows ? "API metadata: None recorded." : "API metadata: Unavailable."));
-            }
+            if (apiRows?.length) item.append(resultLine("reported-api", results.summarize(apiRows), { heading: results.heading("reported-api") }));
+            else if (row?.workload !== "Discovery") item.append(el("p", "result-missing-api", apiRows ? "API metadata: None recorded." : "API metadata: Unavailable."));
             if (!sameScope) actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
             const failure = recordedFailure(tool, ["failure", "transport"].includes(row?.outcome));
-            if (failure && !singleTool) item.append(el("p", "action-error", failure));
+            if (failure) item.append(el("p", "action-error", failure),
+                el("p", "context-help-note", "Historical call evidence only; it does not establish current sign-in or permission state."));
             const sourceCall = sourceCallFor(row) || tool;
-            const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: !singleTool });
+            const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false });
             if (fields.childElementCount) item.append(fields);
-            if (!singleTool && row) {
+            if (row) {
                 const returned = returnedDetails(sourceCall, row, apiRows);
                 if (returned) item.append(returned);
             }
@@ -2261,14 +2284,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return item;
             } });
         }
-        entries.sort((a, b) => {
-            const left = Date.parse(a.startedAt), right = Date.parse(b.startedAt);
-            return Number.isFinite(left) && Number.isFinite(right) ? left - right : Number.isFinite(left) ? -1 : Number.isFinite(right) ? 1 : 0;
+        for (const entry of entries.slice(entryStart)) Object.assign(entry, {
+            at: entry.startedAt, scenarioId: scenario.scenarioId, relation: group.relation, kind: "action",
         });
-        if (!entries.length) journey.append(el("p", "", "No individual action details were retained."));
-        else pagedList(journey, entries, { key: "journey:" + scenario.scenarioId, noun: "action records", listTag: "ol", listClass: "journey", renderItem: entry => entry.render() });
-        recorded.append(journey);
-        body.append(recorded, actions);
+        if (entryStart === entries.length) recorded.append(el("p", "", "No individual action details were retained."));
+        summaries.append(recorded);
+        if (isSelected) body.append(actions);
         for (const item of analytics.journeys || []) {
             if (item.scenarioId !== scenario.scenarioId || item.association === "none") continue;
             const relation = item.association === "same-prompt-after-failure" ? "A Graph request follows a Work IQ failure in this prompt group." : item.association === "explicit-transition" ? "The record contains an explicit transition to Graph." : "Work IQ and Graph activity occur in the same prompt group.";
@@ -2276,7 +2297,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         detailOwner = "request:" + scenario.scenarioId;
         provenance.append(el("p", "context-help-note", "Counts use separate recorded units, not a combined total. Visible Graph statuses belong to request sites. Recorded completion does not establish task correctness."));
-        body.append(support);
+        recorded.append(support);
+        }
+        entries.sort(requestContext.compare);
+        for (const entry of entries) insertEntry(entry);
+        detailOwner = "request:" + route.request;
     }
     function reportSelection(kind = reportScope) {
         return reportScopes.resolve(state?.exportCatalog, kind, state ? currentViewScenarios().map((s) => s.scenarioId) : [], [...selected], reportAuthors);

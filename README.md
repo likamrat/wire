@@ -105,7 +105,7 @@ folder, and never share a writable directory between application processes.
 
 The store keeps immutable content-addressed evidence snapshots separately from
 atomic review state. Exact original prompts and follow-ups are available locally
-on demand. An adjacent follow-up is an inferred association, not proof of causal
+when an interaction is opened. An adjacent follow-up is an inferred association, not proof of causal
 intent. API response entity bodies and credential-shaped captures are excluded.
 
 ### Personal interaction insights
@@ -914,23 +914,33 @@ scans and currently eligible sources are separate counts, not a progress
 fraction. The visible scope note distinguishes missing chat history from hosted
 Work IQ's internal Graph requests, which local logs cannot reveal. Neither
 limitation changes a recorded action's result.
-Request pages retain the source-chat journey and expose originals and
-technical fields progressively. Browser Back/Forward restore the route.
+Request pages show bounded retained context immediately: the selected group,
+at most one exact-message-linked neighbor in either direction, and the selected
+group's retained follow-up when it is not already a displayed origin.
+Same-chat message IDs and consistent recorded times support adjacency, not
+task membership or causality. Browser Back/Forward restore the route.
 **Prompt** shows at most 170 graphemes in a body-size paragraph with a
 bounded reading width, ending at a word boundary when possible. **View
 interaction** is a separate native link. **Read prompt** expands the exact
 retained value in place when it differs; **Hide prompt** closes the local
 original without navigating, changing selection or copying it. Partial/missing
 source text is labeled, never filled in; existing copy buttons copy their exact
-authorized source or report-copy value. Full originals are mounted lazily, and
-their reading state survives refresh and Back.
+authorized source or report-copy value. List previews mount originals on demand;
+the opened request reader mounts available text immediately, including long
+prompts. Explicit Hide choices survive refresh and Back.
 
-The complete **Prompt** reader keeps compact **Read**/**Hide** controls and
+The complete **Prompt** reader keeps explicit **Read prompt**/**Hide prompt** controls and
 **Copy prompt**. **Author not verified** means the retained record does not
 verify who wrote it; a user-role message, coordinator message or legacy
 human-authored attribution is not proof of identity. **Prompt provenance**
 keeps the original attribution available. Missing text says **Prompt not
 available**. Tool arguments and assistant responses remain separate.
+Displayed replies use only the existing consent- and basis-checked retained-text
+endpoint after deliberately opening the request, never overview/search preload,
+source rereads, new capture or AI. Recorded response timestamps determine their
+positions without asserting finality. Missing reply text is shown with its own
+group; missing timestamps are not reconstructed. Counts and saved verdicts remain
+scoped to their original groups. No report context producer is added.
 
 Request cards now show **matching results**, not an overall verdict on the
 request. For example, a failure slice can show **1 of 3 Work IQ tool calls in this request group match this view**

@@ -19,11 +19,12 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }
         return end < compact.length ? compact.slice(0, end).trimEnd() + "..." : compact;
     }
-    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind }) {
+    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind, initialOpen }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
         const complete = mode === "complete", partial = ["partial", "truncated"].includes(source?.status);
+        const initiallyOpen = initialOpen ?? (complete && (subject === "response" || retained(source)?.length <= 1200));
         label ??= "Read " + (complete ? "" : partial ? "retained " : "full ") + noun;
         copyLabel ??= "Copy " + noun;
         const text = retained(source), preview = text === null && subject === "response" ? "Original not available" : excerpt(source);
@@ -125,7 +126,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             if (!actions.parentNode) root.append(actions);
         }
         function paint() {
-            const open = presentation.isOpen(stateKey, complete && (subject === "response" || text.length <= 1200));
+            const open = presentation.isOpen(stateKey, initiallyOpen);
             control.setAttribute("aria-expanded", String(open));
             const actionLabel = open ? "Hide " + noun : label;
             control.textContent = actionLabel;
@@ -176,11 +177,13 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         control.addEventListener("click", event => {
             event.preventDefault();
             event.stopPropagation();
-            presentation.setOpen(stateKey, !presentation.isOpen(stateKey, complete && (subject === "response" || text.length <= 1200)));
+            presentation.setOpen(stateKey, !presentation.isOpen(stateKey, initiallyOpen));
             paint();
         });
         paint();
         return root;
     }
-    return { excerpt, render, caption };
+    return { excerpt, render, caption,
+        isOpen: (key, initial = true) => presentation.isOpen("text:" + key, initial),
+        setOpen: (key, open) => presentation.setOpen("text:" + key, open) };
 }

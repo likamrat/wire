@@ -295,7 +295,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             }, isCurrent);
         } catch (error) { if (isCurrent()) unavailable(host, error.message, () => overview(host, scenarioIds, { scopeNote })); }
     }
-    async function detail(host, responseHost, scenarioId) {
+    async function detail(host, responseHost, scenarioId, responseOptions = {}) {
+        const detailGeneration = generation;
         hosts.add(host); hosts.add(responseHost);
         if (!snapshot) {
             unavailable(host, "Interaction insights are unavailable. Recorded actions remain available below.");
@@ -306,7 +307,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         responseHost.replaceChildren(el("h2", "Response"), el("p", "Reading response availability...", "reader-empty"));
         try {
             await ready();
-            if (!host.isConnected) return;
+            if (detailGeneration !== generation || !host.isConnected) return;
             const mapping = snapshot?.catalog.find(row => row.scenarioId === scenarioId);
             if (mapping?.status !== "retained" || !mapping.interactionRef) {
                 unavailable(host, mapping?.status === "unverified" ? "Interaction association is unverified. Recorded actions remain available below."
@@ -326,7 +327,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     singleInteraction: true, reviewStatus: data.reviewStatus ?? null });
                 renderSummary(host, model, { helpButton: measureHelp, onDetails: trigger => showDetails(model, data, trigger) });
                 automaticEntry(host);
-                showResponse(responseHost, data);
+                showResponse(responseHost, data, responseOptions);
                 if (focusInteractionRef === data.interaction.interactionRef && host.checkVisibility()) {
                     ux.restoreFocus(host.querySelector("button"));
                     focusInteractionRef = null;
@@ -334,8 +335,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             }, () => snapshot?.catalog.find(row => row.scenarioId === scenarioId)?.reviewStatusRevision === mapping.reviewStatusRevision,
             error => responseUnavailable(responseHost, "Response availability could not be read.", error.message, true));
         } catch (error) {
-            if (host.isConnected) {
-                unavailable(host, error.message, () => detail(host, responseHost, scenarioId));
+            if (detailGeneration === generation && host.isConnected) {
+                unavailable(host, error.message, () => detail(host, responseHost, scenarioId, responseOptions));
                 responseUnavailable(responseHost, "Response availability could not be read.", error.message, true);
             }
         }
@@ -347,6 +348,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         return details;
     }
     function responseUnavailable(host, message, reason, failed = false) {
+        host.hidden = false;
         host.style.minHeight = "";
         host.removeAttribute("aria-busy");
         const state = el("p", message, failed ? "reader-empty error" : "reader-empty");
@@ -354,15 +356,28 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         host.replaceChildren(el("h2", "Response"), state);
         responseDetails(host, reason);
     }
-    function showResponse(host, view) {
+    function showResponse(host, view, { eager = false, placeResponse } = {}) {
         host.style.minHeight = "";
         host.removeAttribute("aria-busy");
-        host.replaceChildren(el("h2", "Response"));
-        const answers = view.observations.filter(item => item.kind === "answer" && item.availability === "available");
+        host.replaceChildren(el("h2", eager ? "Recorded assistant response" : "Response"));
+        const answers = view.consent.state === "enabled"
+            ? view.observations.filter(item => item.kind === "answer" && item.availability === "available") : [];
         if (!answers.length) {
             responseUnavailable(host, "No response text retained.", view.consent.state !== "enabled"
                 ? "Optional response capture is off. The available evidence contains no readable response text."
                 : "No attributable response text was retained.");
+            return;
+        }
+        if (eager && (placeResponse || answers.length > 1)) {
+            host.replaceChildren();
+            host.hidden = Boolean(placeResponse);
+            for (const answer of answers) {
+                const entry = el("section", undefined, "interaction-response");
+                hosts.add(entry);
+                if (placeResponse) placeResponse(entry, answer);
+                else host.append(entry);
+                showResponse(entry, { ...view, observations: [answer] }, { eager: true });
+            }
             return;
         }
         host.append(el("p", "Recorded response; final-answer status unverified.", "reader-empty"));
@@ -376,7 +391,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             label.append(select); host.append(label);
         }
         let readGeneration = 0;
-        const reader = el("div"), load = button("Read response", async () => {
+        const reader = el("div"), load = button("Read response", event => readResponse(event));
+        async function readResponse(event) {
             const started = generation;
             const responseRead = ++readGeneration;
             const restoreFocus = document.activeElement === load;
@@ -384,14 +400,16 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             reader.replaceChildren(el("p", "Reading already-retained response..."));
             try {
                 const observation = answers.find(item => item.observationRef === select.value) ?? answers[0];
+                const key = "response:" + observation.observationRef + ":" + basisKey(view.basis);
                 const data = await read("get_interaction_evidence", {
                     schemaVersion: 1, interactionRef: view.interaction.interactionRef, observationRef: observation.observationRef, expectedBasis: view.basis,
                 }, view.basis);
                 if (started !== generation || responseRead !== readGeneration || !reader.isConnected) return;
                 if (data.observationRef !== observation.observationRef || typeof data.text !== "string" || !sameBasis(data.basis, view.basis)
                     || !["full-record", "bounded-fragment"].includes(data.completeness) || data.finality !== "unverified") throw new Error("The response does not match this evidence context.");
+                if (event) textAccess.setOpen(key, true);
                 reader.replaceChildren(textAccess.render({ text: data.text, status: data.completeness === "bounded-fragment" ? "partial" : "available" }, {
-                    key: "response:" + observation.observationRef + ":" + basisKey(view.basis), mode: "complete", subject: "response",
+                    key, mode: "complete", subject: "response",
                     notice: "Copy includes the complete retained response body only, not the prompt or page metadata. It is original, unmasked text and is not included in reports. Other apps and clipboard history may access your system clipboard. This is recorded response text, not a verified final answer. Reading uses only already-retained local evidence.",
                 }));
                 load.hidden = true;
@@ -410,7 +428,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     if (restoreFocus && !load.hidden && (document.activeElement === load || document.activeElement === document.body)) ux.restoreFocus(load);
                 }
             }
-        });
+        }
         load.classList.remove("quiet");
         for (const existing of readers.keys()) if (!existing.isConnected) readers.delete(existing);
         readers.set(reader, () => {
@@ -423,6 +441,11 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         select.addEventListener("change", () => { readGeneration++; reader.replaceChildren(); reader.removeAttribute("aria-busy"); load.disabled = false; load.hidden = false; about.hidden = false; });
         host.append(load, reader);
         const about = responseDetails(host, "This is recorded response text, not a verified final answer. Reading opens only the already-retained local evidence; it does not run Work IQ or retrieve new source content.");
+        if (eager) {
+            const key = "response:" + answers[0].observationRef + ":" + basisKey(view.basis);
+            if (textAccess.isOpen(key)) void readResponse();
+            else reader.append(el("p", "Response text is hidden.", "reader-empty"));
+        }
     }
     function showDetails(model, view, trigger) {
         if (!trigger.isConnected || !trigger.checkVisibility()) return;

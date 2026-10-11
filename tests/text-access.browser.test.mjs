@@ -51,10 +51,10 @@ test("request detail has one complete-text reader without navigation or report s
     const control = intro.locator(".full-text-toggle");
     assert.equal(await control.count(), 1, "One obvious request-text control, without a second preview");
     assert.equal(await intro.locator(".full-text-preview").count(), 0);
-    assert.equal(await control.textContent(), "Read prompt");
-    assert.equal(await intro.locator(".full-text-body").count(), 0, "Closed previews must not mount hidden originals");
+    assert.equal(await control.textContent(), "Hide prompt");
+    assert.equal(await intro.locator(".full-text-body pre").textContent(), original, "The interaction opens its available retained context immediately");
     const route = page.url(), selection = await page.locator("#activitySelectionSummary").textContent();
-    await control.focus(); await page.keyboard.press("Enter");
+    await control.focus();
     assert.equal(await intro.locator(".full-text-body pre").textContent(), original);
     assert.equal(await control.getAttribute("aria-expanded"), "true");
     assert.equal(await control.textContent(), "Hide prompt");
@@ -109,7 +109,6 @@ test("full-text reading survives an incoming snapshot and Back with report membe
     await row.locator(".full-text-toggle").click();
     await row.locator(".request-link").click(); await ready(page);
     const control = page.locator(".request-original .full-text-toggle");
-    await control.click();
     const pre = page.locator(".request-original .full-text-body pre");
     await pre.evaluate(node => window.scrollTo(0, node.offsetTop + 120));
     await control.focus();
@@ -137,7 +136,6 @@ test("partial and unavailable sources are explicit instead of inventing complete
         const intro = page.locator(".request-original");
         if (status === "partial") {
             assert.match(await intro.innerText(), /Only part of the original was recorded/);
-            await intro.locator(".full-text-toggle").click();
             assert.equal(await intro.locator("pre").textContent(), text);
         } else {
             assert.match(await intro.innerText(), /Prompt not available/);
@@ -153,7 +151,7 @@ test("partial and unavailable sources are explicit instead of inventing complete
     }
 });
 
-test("original and follow-up disclosures never copy placeholders or hide recorded-source gaps", { timeout: 30000 }, async t => {
+test("original and immediate follow-ups never copy placeholders or hide recorded-source gaps", { timeout: 30000 }, async t => {
     const { page, url } = await setup(t, { status: "unavailable", text: null }, [
         { status: "partial", text: "SYNTHETIC retained fragment" },
         { status: "unavailable", text: null },
@@ -163,10 +161,9 @@ test("original and follow-up disclosures never copy placeholders or hide recorde
     const request = page.locator(".request-original");
     assert.match(await request.innerText(), /Prompt not available/);
     assert.equal(await request.locator(".ux-copy").count(), 0);
-    await page.getByText("Nearby follow-ups / inferred associations", { exact: true }).click();
     for (const i of [1, 2, 3]) {
-        const followup = page.locator("summary").filter({ hasText: new RegExp(`^Follow-up ${i} / prompt$`) }).locator("..");
-        await followup.locator(":scope>summary").click();
+        const followup = page.locator('[data-context-kind="follow-up"]').nth(i - 1);
+        assert.match(await followup.innerText(), /inferred follow-up, not a confirmed continuation/);
         if (i === 1) {
             assert.match(await followup.innerText(), /Only part of the original was recorded/);
             assert.equal(await followup.locator("pre").textContent(), "SYNTHETIC retained fragment");

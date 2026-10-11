@@ -1491,7 +1491,7 @@ truncated. Plain-text/JSON reports do not carry visual title styling.
 | Analyze overview | Filters, totals, charts, result legend, coverage warning and Results link | Retain collapsed explanations and glossary. Exact data renders on opening, 24 rows per page with complete plotted/category totals. | Understand the slice and jump directly to its results. |
 | Analyze results | Interactions / Calls, local search, report controls, prompt/author, chat/project context, tools, categories and matching outcomes | Page eight interactions or canonical matching rows directly, without chat expansion. Reuse the existing interaction reader and recorded-action renderer. | Find and open a recorded interaction without learning chat grouping. |
 | Chat-filtered Analyze | Analyze heading, exact source context, project, ambiguous-name reference, canonical results, date/service/collection summary, coverage and chat report action | Technical source record retains exact IDs and provenance. Source outcome links switch to the same Calls list. Empty or unreadable sources retain coverage/recovery links. | Optionally narrow by chat without making it the entry gate. |
-| Request | Recorded outcomes and known failure details first, source context once, one exact prompt reader, chronological actions | Long prompt text opens without an excerpt or internal height limit. Technical details, provenance and inferred follow-ups stay secondary; action and follow-up lists remain paged by six. | Understand what is known, read the retained prompt and inspect its actions without duplicate summaries or navigation. |
+| Request | Selected result marked within bounded retained prompts, calls, known failure reasons and authorized replies | Text opens immediately with original roles, inferred-association limits and missing evidence. Exact arguments and original per-group counts/verdicts remain secondary. | Follow the available back-and-forth without another context gate, guessed task boundaries or new source reads. |
 | Collection status | Collector state and next step, readable/eligible coverage, Chat history gap summary and compact search | Closed short reason groups, six chats per page; closed Technical details for inventory, exclusions, limits and stored refresh. Home check results and Activity link here. | Know whether collection is working, inspect missing activity when relevant and avoid treating every gap as a repair task. |
 | Settings | Display, Connection & permission, Collection preferences | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
 | Reports | Current-stage work, one-report inclusion summary, Clear selection and four-step navigation | Requests shows scope and a disclosure with four requests per page. Contents holds the three prompt modes, four formats and Scan and preview. Saved history stays separate, six reports per page. | Choose membership, then contents, without confronting every control at once. |
@@ -1940,15 +1940,17 @@ Report selection rows show full eligible request outcomes separately from the
 matching view, while the scope header names the revision that will be frozen at
 preview. Existing report scope, privacy, prompt modes and format choices are unchanged.
 
-**Request details** starts with compact source/chat context and the actual prompt
-and response reading sections. Insights follow the source content. A named
-**Recorded actions** section groups the existing results, exact tool/path and
-retained failure detail with their chronological action history. A missing reason says
+**Request details** starts with compact source/chat context and **What was asked
+and what came back**: immediately visible retained prompts, follow-ups, actions
+and independently authorized replies, ordered by their recorded timestamps.
+The selected prompt is marked; context is not a new analytical cohort.
+**Counts and saved assessment scope** follows the source content and keeps each
+group's results and Insights separate. A missing reason says
 **Failure details were not recorded.** Returned API errors retain their own
 attribution; they are not invented root causes for a parent tool failure.
 Matching/full counts appear separately only when the selected layer's scopes
-differ; tool/API/Graph/HTTP units are never summed. A single action does not
-repeat its result badge in three adjacent blocks. Mixed actions retain their
+differ; tool/API/Graph/HTTP units are never summed. Action results appear in the
+chronology, with the original group's counts in the secondary section. Mixed actions retain their
 own outcomes and matching-context labels.
 
 The chat name, project and request time appear once in the body. The breadcrumb
@@ -1961,12 +1963,12 @@ The focused matching-action list does not add another chat title/project,
 source toggle or one-chat pager under the existing analysis header. A distinct
 matching summary remains when it differs from the source's pre-result totals.
 
-There is one **Your prompt**, **Agent prompt**, or neutral source-appropriate reader beside the recorded source context, before
-interaction insights and chronological actions, never another excerpt on the detail
+There is one **Your prompt**, **Agent prompt**, or neutral source-appropriate reader per retained message in the recorded chronology, before
+interaction insights, never another excerpt on the detail
 page. Its single header aligns explicit **Read prompt**/**Hide prompt** and
 **Copy prompt** controls; response readers use the equivalent response labels.
-Text up to 1,200 UTF-16 code units opens initially; longer
-text starts closed. Explicit per-request choices override this initial default.
+Available context text opens initially regardless of length. Explicit per-reader
+Hide choices override this request-page default; list previews retain their existing behavior.
 The complete recorded message uses the reading-text role at a maximum 72ch measure,
 natural wrapping and document scrolling, without a nested frame or height cap.
 It is source evidence, not an editable report copy. Supported explicit sources,
@@ -2017,11 +2019,37 @@ scroll and same-text selection survive snapshots and Back; selection offsets
 never transfer to a different or changed retained value. Disclosure state is
 panel memory only, not another private-text persistence surface.
 
-Actions are ordered by recorded start time, with missing times last and no
-invented timing. Lists remain six records per page. Arguments, responses,
-provenance and inferred follow-ups remain discoverable after the actions.
-Nearby follow-ups and Work IQ/Graph sequences are associations, not causal
-explanations or evidence of task correctness.
+The request chronology is immediately readable, without a follow-up disclosure
+or six-item action pager. Missing event times sort last and are explicitly unknown.
+A missing reply stays with its group as an availability notice, not an invented
+timestamped event. Exact arguments and technical provenance remain secondary.
+Nearby follow-ups and Work IQ/Graph sequences remain associations, not causal
+explanations or evidence of task correctness. Historical failure signals never
+establish current sign-in state.
+
+`createRequestContext().select(authorizedRecords, anchorId)` in
+`web/request-context.mjs` is the reusable, pure context boundary. It returns
+`{ anchorId, groups, messages, gaps, boundary, limitation }`; groups retain their
+original scenario references and `selected`/`preceding`/`following` relation.
+Messages retain their exact source objects, status and authorship. A neighbor
+requires a unique matching follow-up/origin source-event ID in the same chat
+with consistent, nondecreasing timestamps. Ambiguous or untimed links add a gap
+instead of a group. Traversal is one hop only; a neighbor's unused follow-ups
+do not widen it. `compare({ at }, { at })` orders known instants stably and puts
+unknown times last. This helper neither authorizes payloads nor defines report
+membership, privacy or analytical denominators.
+
+The normal source extractor retains at most one following user-role message per
+group; it does not retain a full chat. An optional retained answer remains behind
+the existing interaction/evidence reader's independent current consent, source,
+membership, basis and generation checks. The request-only eager option removes
+the initial Read-response gate, not these checks. Each available answer uses its
+own recorded `occurredAt`; final-answer status stays unverified. Read errors do not
+retry automatically. Intentional Hide state suppresses eager rereads, and
+navigation, stale basis and revocation invalidate pending or visible private text.
+No source, capture, evaluation, report projection or retention schema changes are
+part of this reader. Focused proof is in `tests/request-context.test.mjs`,
+`tests/context-reading.browser.test.mjs` and the existing text/detail reader tests.
 
 Text-access audit boundaries:
 

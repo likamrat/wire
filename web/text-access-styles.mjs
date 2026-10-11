@@ -86,6 +86,17 @@ export const textAccessStyles = `
 .journey-item {overflow-wrap:anywhere}
 .journey-item .ux-inline-code {margin-block:4px}
 .journey-pages>.list-pager:not(:has(button)) {min-height:0;margin:8px 0 12px}
+.request-context-heading {margin-bottom:20px}
+.request-context-heading>h2 {margin-bottom:8px}
+.request-context-timeline {margin-block:16px}
+.request-context-timeline>.journey-item {min-width:0;padding-block:8px 20px}
+.request-context-timeline>.journey-item[aria-current=true] {border-inline-start-color:var(--accent)}
+.request-context-timeline .context-entry-label {font-size:var(--type-caption);line-height:var(--leading-caption);margin:0 0 12px}
+.request-context-timeline .context-selected-label {color:var(--accent);font-weight:var(--weight-strong)}
+.request-context-timeline :is(.request-original,.request-context-prompt,.interaction-response) {padding:0;margin:0;border:0;border-radius:0;background:none;min-width:0}
+.request-context-timeline .reader-state-partial {color:var(--warning)}
+.request-context-summaries>.request-recorded {margin-top:16px;padding-top:16px}
+.request-context-summaries .interaction-insights {margin-block:16px}
 @media(max-width:600px) {
  .request-original,.interaction-response {padding:16px}
  .full-text-reader-actions {flex-basis:100%;margin-inline-start:0;justify-content:flex-start}

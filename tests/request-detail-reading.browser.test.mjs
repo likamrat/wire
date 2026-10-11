@@ -35,7 +35,7 @@ function retainedResponse(text, record) {
     return contract.validateInteractionView(view);
 }
 
-async function setup(t, { text = "Find the synthetic planning note.", status = "full", actor = "unknown", calls = true, responseText, detailError = false, chatOrigin = true, sourceEvent } = {}) {
+async function setup(t, { text = "Find the synthetic planning note.", status = "full", actor = "unknown", calls = true, responseText, responseMode = "success", detailError = false, chatOrigin = true, sourceEvent } = {}) {
     const record = fixture("detail-reading");
     record.sourceSessionName = "Synthetic planning chat";
     if (!chatOrigin) record.sourceHost = "imported-json";
@@ -72,7 +72,7 @@ async function setup(t, { text = "Find the synthetic planning note.", status = "
         } });
         window.installClipboardProof();
     });
-    const responseState = { mode: "success", finish: null };
+    const responseState = { mode: responseMode, finish: null };
     if (responseText !== undefined) {
         const view = retainedResponse(responseText, record);
         const envelope = data => ({ schemaVersion: 1, basis: view.basis, data });
@@ -174,7 +174,7 @@ test("normal-page Copy writes only the full exact retained prompt and reports re
     const body = exact + "Long retained wording. ".repeat(100) + "\nEND OF PROMPT\n";
     const { page, requests } = await setup(t, { text: body, status: "partial" });
     const prompt = page.locator(".request-original");
-    await prompt.getByRole("button", { name: "Read prompt", exact: true }).click();
+    assert.equal(await prompt.locator(".full-text-content").textContent(), body, "Opening an interaction immediately shows even a long retained prompt");
     const copy = prompt.getByRole("button", { name: "Copy prompt", exact: true });
     const reads = contentReads(requests);
     await copy.focus(); await page.keyboard.press("Enter");
@@ -250,17 +250,14 @@ test("unavailable and zero-action requests stay honest; partial/full prompt copi
     }
 });
 
-test("normal response reader has explicit local Read, exact Copy and local Hide with busy/error feedback", { timeout: 60000 }, async t => {
+test("normal response reader opens retained text immediately with explicit Retry, exact Copy and local Hide", { timeout: 60000 }, async t => {
     const responseText = "SYNTHETIC RESPONSE ONLY\r\n  exact response spaces  \n"
         + exact.replace("SYNTHETIC original prompt", "A retained response fragment") + "END OF RESPONSE";
-    const { page, requests, responseState } = await setup(t, { responseText });
-    const host = page.locator(".interaction-response");
+    const { page, requests, responseState } = await setup(t, { responseText, responseMode: "pending" });
+    const host = page.locator(".interaction-response:visible");
     const evidenceReads = () => requests.filter(request => new URL(request.url).pathname === "/api/assessment/evidence").length;
     const read = host.getByRole("button", { name: "Read response", exact: true });
     await read.waitFor();
-    assert.equal(evidenceReads(), 0, "The normal page does not automatically read private response text");
-    responseState.mode = "pending";
-    await read.focus(); await page.keyboard.press("Enter");
     await host.getByText("Reading already-retained response...", { exact: true }).waitFor();
     assert.equal(await read.isDisabled(), true);
     assert.equal(evidenceReads(), 1);
@@ -271,7 +268,7 @@ test("normal response reader has explicit local Read, exact Copy and local Hide 
     assert.match(await host.innerText(), /Synthetic retained-text read failed/);
     assert.equal(await host.locator(".ux-copy").count(), 0);
     assert.equal(await read.isDisabled(), false);
-    assert.equal(await read.evaluate(node => node === document.activeElement), true, "Keyboard error returns to the available retry action");
+    assert.equal(evidenceReads(), 1, "An eager-read failure is not automatically retried");
     await capture(page, "response-error", ".interaction-response");
     responseState.mode = "success";
     await read.click();
@@ -326,9 +323,12 @@ test("composed author helpers give truthful readable source and actor cues on th
             await page.setViewportSize({ width, height: 1000 });
             await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
             await chooseTheme(page, theme);
-            const paint = await heading.evaluate(node => ({ color: getComputedStyle(node).color,
-                background: getComputedStyle(node.closest(".request-original")).backgroundColor,
-                clipped: node.scrollWidth > node.clientWidth + 1 }));
+            const paint = await heading.evaluate(node => {
+                let background = node;
+                while (background.parentElement && ["rgba(0, 0, 0, 0)", "transparent"].includes(getComputedStyle(background).backgroundColor)) background = background.parentElement;
+                return { color: getComputedStyle(node).color, background: getComputedStyle(background).backgroundColor,
+                    clipped: node.scrollWidth > node.clientWidth + 1 };
+            });
             assert.ok(contrast(paint.color, paint.background) >= 4.5, `${theme}/${actor}: readable author cue`);
             assert.equal(paint.clipped, false);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
