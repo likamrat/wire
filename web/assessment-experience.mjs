@@ -284,7 +284,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                         ? "No verified interactions are available for these matching request groups."
                         : "No matching request groups. No interactions to summarize.", "assessment-empty"));
                 } else {
-                    const model = presentation.summarize(data.metrics, { membershipStatus: membership.unavailable ? "partial" : "complete-retained" });
+                    const model = presentation.summarize(data.metrics, { membershipStatus: membership.unavailable ? "partial" : "complete-retained",
+                        assessmentAttempts: data.assessmentAttempts });
                     renderSummary(host, model, { helpButton: measureHelp, detailsLabel: "Measure definitions", onDetails: trigger => showDetails(model, null, trigger) });
                     automaticEntry(host);
                 }
@@ -471,7 +472,9 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         measures.append(el("summary", "Recorded measures and definitions"));
         for (const row of [...Object.values(model.groups).flat(), ...model.diagnostics]) {
             const section = el("section", undefined, "assessment-definition");
-            section.append(el("h3", row.label), el("p", row.details.join(" ")));
+            const facts = el("ul", undefined, "assessment-detail-facts");
+            for (const detail of row.details) facts.append(el("li", detail));
+            section.append(el("h3", row.label), facts);
             measures.append(section);
         }
         measures.append(el("p", "Pass-share colors are visual bands (v1): below 50% red, 50 to below 75% orange, 75 to below 90% gold, and 90 to 100% teal. They are not quality guarantees. Duration does not use these bands.", "assessment-band-note"));

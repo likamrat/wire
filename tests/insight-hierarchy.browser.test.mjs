@@ -61,6 +61,7 @@ function withQuality(metrics, mode) {
             value: covered ? pass / covered : null, reason: covered ? null : mode === "error" ? "evaluator-failure" : "missing-evidence",
             numerator: pass, denominator: covered, coverage: { covered, eligible },
             counts: { pass, fail: covered - pass, unassessed: mode === "error" ? 0 : eligible - covered, evaluatorError: mode === "error" ? eligible : 0 },
+            unassessedReasons: mode === "error" || covered === eligible ? [] : [{ reason: "missing-evidence", count: eligible - covered }],
             coveredUnitRefs: metric.eligibleUnitRefs.slice(0, covered),
             evidenceRefs: covered ? [`evidence-${(900 + index).toString(16).padStart(32, "0")}`] : [],
         });
@@ -176,8 +177,8 @@ async function geometry(host) {
         return { overflow: document.documentElement.scrollWidth > innerWidth + 1, background: getComputedStyle(document.body).backgroundColor,
             textScale: parseFloat(getComputedStyle(document.documentElement).fontSize) / 16,
             fontLoaded: [...document.fonts].some(font => font.family.includes("Asta Sans") && font.status === "loaded"),
-            groups: [...root.querySelectorAll(".assessment-dimension")].map(group => ({
-                title: group.querySelector("h3").textContent, box: box(group),
+            groups: [...root.querySelectorAll(".assessment-dimension,.assessment-timing")].map(group => ({
+                title: group.querySelector("h3,h4").textContent, box: box(group),
                 rows: [...group.querySelectorAll(".assessment-fact")].map(row => ({
                     dimension: row.dataset.dimension, band: row.dataset.band, bandVersion: row.dataset.bandVersion,
                     display: getComputedStyle(row).display, border: getComputedStyle(row).borderTopWidth,
@@ -198,22 +199,22 @@ function contrast(foreground, background) {
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 function hierarchyIssues(layout) {
-    const issues = [], reference = layout.groups.find(group => group.title === "Speed").rows[0];
+    const issues = [];
     for (const group of layout.groups) for (const [index, row] of group.rows.entries()) {
         const prefix = `${row.dimension}/${index}`;
         if (!row.label || row.label.tag !== "H4") issues.push(`${prefix}: missing measure heading`);
         const quality = row.dimension !== "speed";
-        for (const [role, item, size] of [["label", row.label, 14], ["value", row.value, quality ? 14 : 22], ["coverage", row.coverage, quality ? 22 : 12]]) {
+        for (const [role, item, size] of [["label", row.label, 16], ["value", row.value, quality ? 16 : 22], ["coverage", row.coverage, 16]]) {
             if (item && Math.abs(parseFloat(item.size) - size * layout.textScale) > 0.01) issues.push(`${prefix}: ${role} is not the required ${size}px text role`);
         }
         if (row.label && row.dimension === "accuracy" && row.label.text !== "Answer correctness") issues.push(`${prefix}: incorrect Accuracy measure label`);
-        if (row.label && ["size", "weight", "line"].some(key => row.label[key] !== reference.label[key])) issues.push(`${prefix}: label typography differs from Speed`);
-        const first = quality ? row.coverage : row.value, second = quality ? row.value : row.coverage;
-        if (row.label && (row.label.box.bottom > first.box.y || first.box.bottom > second.box.y + 1)) issues.push(`${prefix}: reading hierarchy overlaps`);
-        if (row.label && Math.abs(first.box.y - (row.origin ?? row.label).box.bottom - 8) > 1) issues.push(`${prefix}: headline gap differs`);
-        if (Math.abs(second.box.y - first.box.bottom - 4) > 1) issues.push(`${prefix}: result gap differs`);
+        const parts = [row.label, row.coverage, row.value].filter(Boolean);
+        for (let a = 0; a < parts.length; a++) for (let b = a + 1; b < parts.length; b++) {
+            const x = parts[a].box, y = parts[b].box;
+            if (Math.min(x.right, y.right) > Math.max(x.x, y.x) + 1
+                && Math.min(x.bottom, y.bottom) > Math.max(x.y, y.y) + 1) issues.push(`${prefix}: reading cells overlap`);
+        }
         if (index && row.border !== "1px") issues.push(`${prefix}: missing restrained divider`);
-        if (index && row.label && row.label.box.y - group.rows[index - 1].box.bottom < 32) issues.push(`${prefix}: insufficient measure separation`);
         for (const item of [row.label, row.value, row.coverage, row.origin, row.reason].filter(Boolean)) {
             if (contrast(item.color, layout.background) < 4.5) issues.push(`${prefix}: insufficient contrast for ${item.text}`);
             if (item.box.x < group.box.x - 1 || item.box.right > group.box.right + 1
@@ -221,13 +222,8 @@ function hierarchyIssues(layout) {
                     || rect.y < item.box.y - 2 || rect.bottom > item.box.bottom + 2)) issues.push(`${prefix}: clipped ${item.text}`);
         }
     }
-    for (const [index, group] of layout.groups.entries()) {
-        const peers = layout.groups.filter(other => other !== group && Math.abs(other.box.y - group.box.y) < 1);
-        for (const other of peers) for (let row = 1; row < Math.min(group.rows.length, other.rows.length); row++) {
-            if (Math.abs(group.rows[row].box.y - other.rows[row].box.y) > 1) issues.push(`${group.title}/${other.title}: divider ${row} is not aligned across columns`);
-        }
-        if (!peers.length && Math.abs(group.box.bottom - group.rows.at(-1).box.bottom) > 1) issues.push(`${group.title}: stacked category has empty trailing tracks`);
-        if (index && !peers.length && group.box.y < layout.groups[index - 1].box.bottom) issues.push(`${group.title}: stacked categories overlap`);
+    for (const [index, group] of layout.groups.entries()) if (index && group.box.y < layout.groups[index - 1].box.bottom) {
+        issues.push(`${group.title}: assessment groups overlap`);
     }
     if (layout.overflow) issues.push("Page has horizontal overflow");
     if (!layout.fontLoaded) issues.push("Asta Sans did not load");
@@ -236,12 +232,15 @@ function hierarchyIssues(layout) {
 async function assertFacts(host, model) {
     for (const dimension of ["accuracy", "answer-trust", "action-trust"]) {
         const facts = host.locator(`[data-dimension="${dimension}"]`);
-        const expected = model.groups[dimension];
-        assert.deepEqual(await facts.locator(".assessment-value").allTextContents(), expected.map(row => row.reading?.value ?? row.value));
-        assert.deepEqual(await facts.locator(".assessment-coverage").allTextContents(), expected.map(row => row.reading?.coverage ?? row.coverage));
-        assert.deepEqual(await facts.evaluateAll(nodes => nodes.map(node => node.dataset.band)), expected.map(row => row.band));
+        const group = model.evidence.quality[dimension], expected = group.rows.length ? group.rows : [group];
+        assert.deepEqual(await facts.locator(".assessment-value").allTextContents(), expected.map(row => {
+            const personal = model.groups[dimension].find(raw => raw.metricRef === row.metricRef)?.personalVerdict;
+            return personal ?? (row.assessed > 0 && row.counts ? `${row.counts.pass} passed ${row.counts.fail} failed` : row.resultLabel ?? row.headline);
+        }));
+        assert.deepEqual(await facts.locator(".assessment-coverage").allTextContents(), expected.map(row => row.coverageLabel));
+        assert.deepEqual(await facts.evaluateAll(nodes => nodes.map(node => node.dataset.band)), expected.map(() => "neutral"));
         for (const [index, row] of expected.entries()) {
-            if (["Model assessment", "Your feedback"].includes(row.origin)) assert.ok((await facts.nth(index).textContent()).includes(row.origin));
+            if (row.provenance) assert.ok((await facts.nth(index).textContent()).includes(row.provenance.label));
         }
     }
     assert.equal(await host.locator("[data-dimension=cost]").count(), 0);
@@ -264,10 +263,9 @@ test("Insights lead with check coverage and align dividers across normal surface
             await page.mouse.move(0, 0);
             await assertFacts(host, expected);
             assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-value').allTextContents(), ["3.07 s", "29.71 s"]);
-            assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-coverage').allTextContents(), ["3 of 4 calls timed \u00b7 Median", "2 of 4 requests timed \u00b7 Median"]);
+            assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-coverage').allTextContents(), ["3 of 4 calls timed", "2 of 4 requests timed"]);
             const layout = await geometry(host), name = `${mode}-${theme}-${width}-${zoom}`;
-            if (zoom === 100 && width === 464) assert.notEqual(layout.groups[0].box.y, layout.groups[1].box.y, "Narrow categories stack without empty shared tracks.");
-            if (zoom === 100 && width === 472) assert.equal(layout.groups[0].box.y, layout.groups[1].box.y, "Shared tracks begin when two columns fit.");
+            assert.ok(layout.groups[0].box.bottom <= layout.groups[1].box.y, "Checks remain separate rows at every size.");
             evidence.push({ name, ...layout }); issues.push(...hierarchyIssues(layout).map(issue => `${name}: ${issue}`));
             if (proofs && ["unassessed", "ordinary", "personal", "mixed", "different", "error"].includes(mode)) {
                 await capture(page, host, name);
@@ -283,7 +281,7 @@ test("Insights lead with check coverage and align dividers across normal surface
     const activity = page.locator("#activityInsights");
     await assertFacts(activity, formatter.summarize(f.overview(f.model.overview.interactionRefs).metrics));
     await page.locator("#activitySearch").fill("Synthetic hierarchy request 0");
-    await page.waitForFunction(() => document.querySelector("#activityInsights")?.textContent.includes("Results for 1 of 1 request")
+    await page.waitForFunction(() => document.querySelector("#activityInsights")?.textContent.includes("1 of 1 request assessed")
         && document.querySelector("#activityInsights")?.getAttribute("aria-busy") !== "true");
     const ref = f.model.catalog.find(row => row.scenarioId === "hierarchy-0").interactionRef;
     await assertFacts(activity, formatter.summarize(f.overview([ref]).metrics));
@@ -298,7 +296,7 @@ test("Insights lead with check coverage and align dividers across normal surface
     await page.goto(f.origin + "#request?request=hierarchy-0"); await ready(page, ".interaction-insights");
     const detail = page.locator(".interaction-insights");
     await assertFacts(detail, formatter.summarize(withQuality(f.model.details.get(ref).metrics, "personal"), { singleInteraction: true }));
-    assert.deepEqual(await detail.locator('[data-band]:not([data-band="neutral"]) .assessment-value').allTextContents(), ["Correct", "Supported", "Not authorized"]);
+    assert.deepEqual(await detail.locator('.assessment-check .assessment-value').allTextContents(), ["Correct", "Supported", "Not authorized"]);
     for (const theme of ["light", "dark"]) for (const width of [1440, 375, 320]) for (const zoom of [100, 200]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(zoom => { document.documentElement.style.fontSize = zoom + "%"; }, zoom);
@@ -313,7 +311,7 @@ test("Insights lead with check coverage and align dividers across normal surface
     await page.goto(f.origin + "#home"); await ready(page, "#homeInsights");
     await page.waitForFunction(() => document.querySelector("#homeInsights .assessment-scoring-status")?.textContent.includes("Assessing"));
     assert.match(await page.locator("#homeInsights").innerText(), /Automatic scores: Assessing.*values below cover only this view's included interactions/);
-    assert.deepEqual(await page.locator('#homeInsights [data-dimension="accuracy"] .assessment-value').allTextContents(), ["No result"]);
+    assert.deepEqual(await page.locator('#homeInsights [data-dimension="accuracy"] .assessment-value').allTextContents(), ["Quality not assessed"]);
     evidence.push({ name: "pending", text: await page.locator("#homeInsights").innerText() });
     if (proofs) await writeFile(path.join(proofs, "geometry.json"), JSON.stringify({ evidence, issues, calls: f.calls }, null, 2));
     assert.deepEqual(issues, []);
@@ -333,11 +331,11 @@ test("one of 69 checked requests reads before passed counts without hiding exact
     }
     if (proofs) await writeFile(path.join(proofs, "one-of-69.json"), JSON.stringify(layouts, null, 2));
     assert.deepEqual(layouts.flatMap(hierarchyIssues), []);
-    assert.match(await host.locator(".assessment-takeaway").innerText(), /same 1 request\. Missing results do not count as failed checks/);
-    assert.deepEqual(await host.locator(".assessment-check .assessment-coverage").allTextContents(), Array(3).fill("Results for 1 of 69 requests"));
-    assert.deepEqual(await host.locator(".assessment-check .assessment-value").allTextContents(), Array(3).fill("1 passed \u00b7 0 failed"));
+    assert.match(await host.locator(".assessment-takeaway").innerText(), /Missing assessments are not failed answers/);
+    assert.deepEqual(await host.locator(".assessment-check .assessment-coverage").allTextContents(), Array(3).fill("1 of 69 requests assessed"));
+    assert.deepEqual(await host.locator(".assessment-check .assessment-value").allTextContents(), Array(3).fill("1 passed 0 failed"));
     assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-value').allTextContents(), ["2.96 s", "16.82 s"]);
-    assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-coverage').allTextContents(), ["225 of 226 calls timed \u00b7 Median", "8 of 69 requests timed \u00b7 Median"]);
+    assert.deepEqual(await host.locator('[data-dimension="speed"] .assessment-coverage').allTextContents(), ["225 of 226 calls timed", "8 of 69 requests timed"]);
     assert.doesNotMatch(await host.locator(".assessment-grid").innerText(), /100%|independent ground truth|proof of authorization/);
     await host.getByText("How to read these results", { exact: true }).focus();
     await page.keyboard.press("Enter");
@@ -367,16 +365,17 @@ test("Insights help and definitions remain accessible without initiating actions
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(zoom => { document.documentElement.style.fontSize = zoom + "%"; }, zoom);
         for (const dimension of ["Accuracy", "Speed", "Trust"]) {
-        const help = host.getByRole("button", { name: `About ${dimension}`, exact: true });
+        const help = host.getByRole("button", { name: `About ${dimension}`, exact: true }).first();
         await help.scrollIntoViewIfNeeded(); await help.focus();
         const target = await help.evaluate(node => {
             const rect = node.getBoundingClientRect(), css = getComputedStyle(node);
             const label = node.previousElementSibling, range = document.createRange(); range.selectNodeContents(label);
+            const last = [...range.getClientRects()].at(-1), icon = node.querySelector("svg").getBoundingClientRect();
             return { width: rect.width, height: rect.height, outline: css.outlineWidth,
-                gap: node.querySelector("svg").getBoundingClientRect().left - range.getBoundingClientRect().right };
+                gap: icon.left - last.right, wrapped: icon.top >= last.bottom && icon.left <= label.getBoundingClientRect().left + 5 };
         });
         assert.ok(target.width >= 44 && target.height >= 44); assert.notEqual(target.outline, "0px");
-        assert.ok(Math.abs(target.gap - 4) < 1);
+        assert.ok(Math.abs(target.gap - 4) < 1 || target.wrapped, `${dimension}/${theme}/${width}/${zoom}: help gap ${target.gap}`);
         await page.keyboard.press("Enter"); await tooltip.waitFor({ state: "visible" });
         assert.match(await tooltip.innerText(), dimension === "Accuracy" ? /tool can work.*wrong answer/ : dimension === "Trust" ? /does not prove a person gave permission/ : /separate times.*seconds/);
         const anchor = await help.evaluate(node => {

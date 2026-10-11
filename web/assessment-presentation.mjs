@@ -419,7 +419,9 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
 // DOM-only; this renderer cannot fetch, assess, save feedback, or enable capture.
 export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback" } = {}) {
     if (typeof onDetails !== "function") throw new TypeError("A details path is required for definitions and unavailable reasons.");
+    if (model.evidence?.version !== 1) throw new TypeError("A current quality evidence projection is required.");
     const doc = root.ownerDocument;
+    const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
     function el(tag, cls, text) {
         const node = doc.createElement(tag);
         if (cls) node.className = cls;
@@ -438,7 +440,39 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         details.addEventListener("click", () => onDetails(details));
         heading.append(details);
     }
-    section.append(heading, el("p", "assessment-takeaway", model.readingNote));
+    section.append(heading);
+    const execution = el("section", "assessment-execution");
+    execution.append(el("h3", "", "Tool execution"));
+    for (const row of model.evidence.execution) {
+        const observed = el("div", "assessment-observed-fact");
+        observed.dataset.observation = row.provenance.checkId;
+        const title = row.kind === "execution" ? `${number(row.eligible)} recorded calls` : row.label;
+        observed.append(el("h4", "", title));
+        if (row.kind === "execution") {
+            const facts = el("dl", "assessment-count-strip");
+            for (const [label, count, tone] of [
+                ["Succeeded", row.counts.pass, ""], ["Failed", row.counts.fail, "negative"],
+                ["No success/failure result", row.counts.unassessed, ""], ["Check errors", row.counts.evaluatorError, ""],
+            ]) {
+                if (!count && ["No success/failure result", "Check errors"].includes(label)) continue;
+                const item = el("div"), value = el("dd", count ? tone : "", number(count));
+                item.append(value, el("dt", "", label)); facts.append(item);
+            }
+            observed.append(facts);
+        } else {
+            const http = ["returned-status-2xx", "graph-output-status-2xx", "owned-http-status-2xx"].includes(row.provenance.checkId);
+            observed.append(el("p", "assessment-observation-result", http
+                ? `${number(row.counts.pass)} HTTP 2xx; ${number(row.counts.fail)} HTTP 4xx/5xx`
+                    + (row.counts.unassessed ? `; ${number(row.counts.unassessed)} other or missing status` : "")
+                    + (row.counts.evaluatorError ? `; ${number(row.counts.evaluatorError)} check errors` : "")
+                : row.resultLabel));
+        }
+        execution.append(observed);
+    }
+    if (!model.evidence.execution.length) execution.append(el("p", "assessment-unavailable", "No tool execution measure is available for this scope."));
+    execution.append(el("p", "assessment-execution-note", "Tool completion does not tell us whether the answer was correct."));
+    section.append(execution);
+    let reviewStatus;
     if (model.reviewStatus) {
         const status = el("div", "assessment-review-status"), facts = el("dl", "assessment-review-facts");
         status.dataset.reviewStatus = "";
@@ -453,54 +487,126 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
             if (help) detail.append(el("p", "assessment-review-help", help));
             facts.append(row);
         }
-        status.append(facts); section.append(status);
+        status.append(facts); reviewStatus = status;
     }
     if (model.readingWarning) section.append(el("p", "assessment-unavailable", model.readingWarning));
     const help = el("details", "assessment-reading-help");
     help.append(el("summary", "", "How to read these results"),
-        el("p", "", "Start with the request count. A result for one request does not tell you about the others. Pass percentages use only passed and failed checks; missing results are left out."),
         el("p", "", "AI reviews the recorded evidence and can be wrong. Your feedback and tool outcomes are separate. Matching the request does not prove a person gave permission."),
-        el("p", "", "No result, too little evidence and a check that could not run are different states. None means the answer failed or a review is queued."),
-        el("p", "", `One request can have several tool calls. Speed shows the middle recorded times, not a total of those calls. Tool-call time and request-to-final-response time have separate coverage. Open ${detailsLabel} for exact times, counts, definitions and the AI model and review rules (rubric).`));
+        el("p", "", "An unassessed request, insufficient evidence and an evaluator error are different states. None means the answer failed or a review is queued."),
+        el("p", "", `One request can have several tool calls. Median timing uses the recorded samples, not the total time spent in calls. Open ${detailsLabel} for exact values, denominators, timing boundaries and assessment provenance.`));
     const grid = el("div", "assessment-grid");
-    function appendRows(host, rows) {
+    const qualityHeading = el("div", "assessment-quality-heading");
+    qualityHeading.append(el("h3", "", "Quality assessment"),
+        el("p", "assessment-takeaway", "Each check covers only the assessed requests. Missing assessments are not failed answers."));
+    grid.append(qualityHeading);
+    function cell(label, value, className) {
+        const item = el("div", "assessment-cell");
+        item.append(el("span", "assessment-cell-label", label), el("p", className, value));
+        return item;
+    }
+    for (const key of ["accuracy", "answer-trust", "action-trust"]) {
+        const group = model.evidence.quality[key], host = el("section", "assessment-dimension");
+        host.dataset.qualityDimension = key;
+        const rows = group.rows.length ? group.rows : [group];
         for (const row of rows) {
-            const value = el("div", "assessment-fact");
-            const available = ["measured", "estimated"].includes(row.status);
-            const quality = row.dimension !== "speed";
-            value.classList.toggle("assessment-check", quality);
-            value.classList.toggle("assessment-fact-unavailable", !available);
-            value.dataset.dimension = row.dimension;
-            value.dataset.band = row.band;
-            value.dataset.bandVersion = row.bandVersion;
-            const pairedPersonal = rows.some(other => other.dimension === row.dimension && other.origin === "Your feedback");
-            const originLabel = row.origin === "Model assessment" ? "Model assessment" : row.origin === "Your feedback" ? "Your feedback"
-                : row.origin === "Automatic local observation" && pairedPersonal ? "Automatic" : "";
-            value.append(el("h4", "assessment-fact-label", row.reading?.label ?? row.summary?.label ?? row.label));
-            if (originLabel) value.append(el("p", "assessment-origin", originLabel));
-            const result = el("p", "assessment-value", row.reading?.value ?? row.value);
-            const coverage = el("p", "assessment-coverage", row.reading?.coverage ?? row.summary?.coverage ?? row.coverage);
-            value.append(...(quality ? [coverage, result] : [result, coverage]));
-            if (!available && !quality) value.append(el("p", "assessment-unavailable-reason", row.qualification));
-            host.append(value);
+            const raw = model.groups[key].find(item => item.metricRef === row.metricRef);
+            const fact = el("div", "assessment-fact assessment-check");
+            fact.dataset.dimension = key;
+            fact.dataset.band = "neutral";
+            fact.dataset.bandVersion = model.bandVersion;
+            const label = el("div", "assessment-check-title"), title = el("div", "assessment-dimension-heading");
+            title.append(el("h4", "assessment-fact-label", row.label ?? model.groups[key][0].reading.label));
+            if (helpButton) title.append(helpButton(key === "accuracy" ? "accuracy" : "trust"));
+            label.append(title);
+            if (row.provenance) label.append(el("p", "assessment-origin", row.provenance.label));
+            if (row.provenance?.evaluator && group.rows.filter(other => other.provenance.origin === "model-assessed").length > 1) {
+                label.append(el("p", "assessment-origin-detail", row.provenance.evaluator.model),
+                    el("p", "assessment-origin-detail", `${row.provenance.evaluator.rubricId} v${row.provenance.evaluator.rubricVersion}`));
+            }
+            const coverage = cell("Assessment coverage", row.coverageLabel, "assessment-coverage");
+            if (row.coverage.eligible > 0 && row.coverage.count !== null) {
+                const meter = el("meter", "assessment-coverage-meter");
+                meter.min = 0; meter.max = row.coverage.eligible; meter.value = row.coverage.count;
+                meter.setAttribute("aria-label", row.coverageLabel);
+                coverage.append(meter);
+            }
+            const result = cell("Recorded verdicts", raw?.personalVerdict ?? row.resultLabel ?? row.headline, "assessment-value");
+            if (row.counts && !raw?.personalVerdict && row.assessed > 0) {
+                const value = result.querySelector(".assessment-value");
+                value.classList.add("assessment-verdicts");
+                value.replaceChildren(el("span", row.counts.pass ? "positive" : "", `${number(row.counts.pass)} passed`),
+                    doc.createTextNode(" "), el("span", row.counts.fail ? "negative" : "", `${number(row.counts.fail)} failed`));
+            }
+            const missing = cell("What is missing", row.missingLabel, "assessment-missing");
+            const reasonsToShow = row.unassessedReasons?.filter(reason =>
+                reason.reason !== "no-assessed-units" || row.unassessedReasons.length > 1) ?? [];
+            if (reasonsToShow.length) {
+                const reasons = el("ul", "assessment-reasons");
+                for (const reason of reasonsToShow) {
+                    const item = el("li");
+                    item.append(el("strong", "", number(reason.count)), doc.createTextNode(` ${reason.label}`));
+                    reasons.append(item);
+                }
+                missing.append(reasons);
+            }
+            if (row.counts?.evaluatorError) missing.append(el("p", "assessment-unavailable-reason",
+                `${number(row.counts.evaluatorError)} evaluator errors; not failed verdicts`));
+            fact.append(label, coverage, result, missing);
+            host.append(fact);
         }
+        if (group.overlappingAssessments) host.append(el("p", "assessment-overlap", "Assessment lanes may cover the same requests. Do not add their counts."));
+        grid.append(host);
     }
-    for (const [key, title] of [["accuracy", "Accuracy"], ["speed", "Speed"], ["trust", "Trust"]]) {
-        const group = el("section", "assessment-dimension");
-        const heading = el("div", "assessment-dimension-heading");
-        heading.append(el("h3", "", title));
-        if (helpButton) heading.append(helpButton(key));
-        group.append(heading);
-        let rows = key === "trust" ? [...model.groups["answer-trust"], ...model.groups["action-trust"]] : model.groups[key];
-        if (key === "speed") {
-            const available = rows.filter(row => row.status === "measured");
-            rows = available.length ? available : rows.slice(0, 1);
+    section.append(grid);
+    const attempts = model.evidence.assessmentAttempts;
+    if (!reviewStatus) {
+        const status = el("section", "assessment-attempts");
+        status.append(el("h3", "", "Assessment activity"));
+        if (attempts.rows.length) {
+            const list = el("ul", "assessment-attempt-list");
+            for (const row of attempts.rows) {
+                const item = el("li");
+                item.dataset.attemptState = row.state;
+                item.append(el("strong", "", `${number(row.count)} ${row.count === 1 ? "request" : "requests"}`), el("span", "", row.label));
+                list.append(item);
+            }
+            status.append(list);
+        } else status.append(el("p", "assessment-unavailable", attempts.headline));
+        if (attempts.status === "partial") status.append(el("p", "assessment-unavailable", attempts.headline));
+        if (attempts.rows.some(row => ["failed", "uncertain", "unavailable", "pending"].includes(row.state))) {
+            status.append(el("p", "assessment-execution-note", "An unfinished or failed evaluator attempt is not a failed quality verdict."));
         }
-        appendRows(group, rows);
-        grid.append(group);
+        section.append(status);
+    } else section.append(reviewStatus);
+    const timing = el("section", "assessment-timing");
+    const timingHeading = el("div", "assessment-dimension-heading");
+    timingHeading.append(el("h3", "", "Recorded timing"));
+    if (helpButton) timingHeading.append(helpButton("speed"));
+    timing.append(timingHeading);
+    for (const row of model.evidence.timing) {
+        // Unsupported verified end-to-end latency duplicates the recorded-response row.
+        if (row.provenance.definitionId === "interaction-latency" && row.measurement.value === null) continue;
+        const fact = el("div", "assessment-fact");
+        fact.dataset.dimension = "speed";
+        const labels = { "tool-duration": "Tool calls", "recorded-response-duration": "Request to final response" };
+        fact.append(el("h4", "assessment-fact-label", labels[row.provenance.definitionId] ?? row.label));
+        const milliseconds = row.measurement.value;
+        let duration = "Not measured";
+        if (milliseconds !== null) {
+            const seconds = Math.round(milliseconds / 10) / 100;
+            duration = milliseconds > 0 && milliseconds < 10 ? "<0.01 s" : seconds < 60 ? `${number(seconds)} s`
+                : seconds < 3600 ? `${Math.floor(seconds / 60)} min ${number(seconds % 60)} s`
+                    : `${Math.floor(seconds / 3600)} h ${Math.floor(seconds % 3600 / 60)} min ${number(seconds % 60)} s`;
+        }
+        const value = cell(row.timed === 0 ? "No measured samples" : row.timed === 1 ? "Single measured sample" : "Median of measured samples", duration, "assessment-value");
+        const coverage = cell("Timing coverage", row.coverageLabel, "assessment-coverage");
+        if (row.notTimed) coverage.append(el("p", "assessment-unavailable-reason", row.missingLabel));
+        if (row.timed === 1 && row.eligible > 1) value.append(el("p", "assessment-unavailable-reason", "One sample, not overall performance"));
+        fact.append(value, coverage); timing.append(fact);
     }
-    grid.style.setProperty("--assessment-rows", String(Math.max(...Array.from(grid.children, group => group.childElementCount))));
-    section.append(grid, help);
+    if (!model.evidence.timing.length) timing.append(el("p", "assessment-unavailable", "No timing measures were supplied for this scope."));
+    section.append(timing, help);
     root.replaceChildren(section);
     return section;
 }
@@ -513,26 +619,55 @@ export const assessmentPresentationStyles = `
 .assessment-heading h2 {font-size:var(--type-section)}
 .assessment-heading button {min-height:44px}
 .assessment-takeaway {margin-block:var(--space-xs) var(--space-lg);max-width:72ch;font-size:var(--type-small);color:var(--muted)}
+.assessment-execution {margin-block:var(--space-lg) var(--space-xl);padding:var(--space-lg);background:var(--canvas);border-radius:var(--radius-small)}
+.assessment-execution h3,.assessment-attempts h3 {font-size:var(--type-small);font-weight:var(--weight-strong);margin:0 0 var(--space-sm)}
+.assessment-observed-fact {display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-sm) var(--space-2xl)}
+.assessment-observed-fact h4 {font-size:var(--type-reading);font-weight:var(--weight-medium);margin:0}
+.assessment-observed-fact+.assessment-observed-fact {margin-top:var(--space-md);padding-top:var(--space-md);border-top:1px solid var(--rule)}
+.assessment-count-strip {display:flex;flex-wrap:wrap;gap:var(--space-lg) var(--space-2xl);margin:0;font-variant-numeric:tabular-nums}
+.assessment-count-strip dd {margin:0;font-size:var(--type-data-value);font-weight:var(--weight-strong)}
+.assessment-count-strip dt {font-size:var(--type-caption);color:var(--muted)}
+.assessment-execution-note,.assessment-observation-result {font-size:var(--type-small);line-height:1.5;margin:var(--space-sm) 0 0;color:var(--muted)}
+.assessment-observation-result {margin:0}
+.assessment-attempts {margin-top:var(--space-lg);padding-top:var(--space-lg);border-top:1px solid var(--rule)}
+.assessment-attempt-list {display:flex;flex-wrap:wrap;gap:var(--space-md) var(--space-2xl);list-style:none;padding:0;margin:0}
+.assessment-attempt-list li {display:grid;gap:var(--space-xs);font-size:var(--type-small)}
+.assessment-attempt-list span {color:var(--muted)}
 .assessment-scoring-status {margin-block:var(--space-sm);font-size:var(--type-caption);line-height:1.5;color:var(--muted)}
-.assessment-grid {display:grid;grid-template-columns:1fr;gap:var(--space-xl);padding-block:var(--space-lg);border-top:1px solid var(--rule)}
+.assessment-grid {display:grid;grid-template-columns:1fr;margin-top:var(--space-md)}
+.assessment-quality-heading h3,.assessment-timing h3 {font-size:var(--type-section);margin:0}
+.assessment-quality-heading .assessment-takeaway {margin-block:var(--space-xs) var(--space-lg)}
 .assessment-scope {margin-block:var(--space-md) 0;padding-top:var(--space-md);border-top:1px solid var(--rule);max-width:none;font-size:var(--type-caption);line-height:1.5;color:var(--muted)}
-.assessment-dimension {min-width:0}
-@container assessment-summary (min-width:calc(26rem + 24px)) {
- .assessment-grid {grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))}
- .assessment-dimension {display:grid;grid-template-rows:subgrid;grid-row:span var(--assessment-rows);row-gap:0}
+.assessment-dimension {min-width:0;border-top:1px solid var(--rule)}
+.assessment-dimension-heading {display:block;font-size:var(--type-reading);line-height:var(--leading-ui)}
+.assessment-dimension-heading h3,.assessment-dimension-heading h4 {display:inline;margin:0}
+.assessment-dimension-heading>.ux-help {margin-inline-start:var(--help-gap)}
+.assessment-fact {display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-md) var(--space-xl);min-width:0;overflow-wrap:anywhere;padding-block:var(--space-lg)}
+.assessment-fact + .assessment-fact {border-top:1px solid var(--rule)}
+.assessment-fact-label {margin:0;font-size:var(--type-reading);line-height:var(--leading-ui);font-weight:var(--weight-strong);color:var(--ink)}
+.assessment-value,.assessment-coverage {font-size:var(--type-reading);font-weight:var(--weight-strong);line-height:1.5;margin:0;font-variant-numeric:tabular-nums}
+.assessment-missing {font-size:var(--type-small);font-weight:var(--weight-medium);line-height:1.5;margin:0}
+.assessment-reasons {list-style:none;padding:0;margin:var(--space-sm) 0 0;display:grid;gap:var(--space-xs);font-size:var(--type-caption);line-height:1.5;color:var(--muted)}
+.assessment-coverage-meter {display:block;width:100%;max-width:15rem;height:6px;margin-top:var(--space-sm);border:0;background:var(--rule);border-radius:3px}
+.assessment-coverage-meter::-webkit-meter-bar {background:var(--rule);border:0;border-radius:3px}
+.assessment-coverage-meter::-webkit-meter-optimum-value {background:var(--accent)}
+.assessment-coverage-meter::-moz-meter-bar {background:var(--accent)}
+.assessment-verdicts {display:flex;flex-wrap:wrap;gap:var(--space-xs) var(--space-lg)}
+.assessment-verdicts span {white-space:nowrap}
+.assessment-summary .positive {color:var(--performance-teal)}
+.assessment-summary .negative {color:var(--performance-red)}
+.assessment-overlap {font-size:var(--type-small);line-height:1.5;color:var(--muted);margin-block:0 var(--space-md)}
+.assessment-cell {min-width:0}
+.assessment-cell-label {display:block;font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin-bottom:var(--space-xs)}
+.assessment-timing {margin-block:var(--space-xl);padding-top:var(--space-lg);border-top:1px solid var(--rule)}
+.assessment-timing .assessment-value {font-size:var(--type-data-value)}
+@container assessment-summary (min-width:42rem) {
+ .assessment-fact {grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1.4fr)}
+ .assessment-check {grid-template-columns:minmax(0,1.1fr) minmax(0,1.1fr) minmax(0,.8fr) minmax(0,1.3fr)}
+ .assessment-check-title {align-self:center}
 }
-.assessment-dimension h3 {margin:0 0 var(--space-sm);font-size:var(--type-small);font-weight:var(--weight-strong)}
-.assessment-dimension-heading {display:flex;align-items:center;gap:var(--space-xs);margin-bottom:var(--space-sm)}
-.assessment-dimension-heading h3 {margin:0}
-.assessment-fact {min-width:0;overflow-wrap:anywhere}
-.assessment-fact + .assessment-fact {margin-top:var(--space-lg);padding-top:var(--space-lg);border-top:1px solid var(--rule)}
-.assessment-fact-label {margin:0;font-size:var(--type-small);line-height:var(--leading-ui);font-weight:var(--weight-strong);color:var(--muted)}
-.assessment-value {font-size:var(--type-data-value);font-weight:var(--weight-strong);line-height:var(--leading-data-value);margin-block:var(--space-sm) var(--space-xs)}
-.assessment-coverage {font-size:var(--type-caption);line-height:var(--leading-ui);color:var(--ink);margin:0}
-.assessment-origin,.assessment-qualification,.assessment-unavailable-reason {font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:var(--space-xs) 0 0}
-.assessment-origin {font-weight:var(--weight-strong)}
-.assessment-check .assessment-coverage {font-size:var(--type-data-value);line-height:var(--leading-data-value);font-weight:var(--weight-strong);margin-top:var(--space-sm)}
-.assessment-check .assessment-value {font-size:var(--type-small);line-height:var(--leading-ui);margin-block:var(--space-xs) 0}
+.assessment-origin,.assessment-origin-detail,.assessment-qualification,.assessment-unavailable-reason {font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:var(--space-xs) 0 0}
+.assessment-origin {font-weight:var(--weight-medium)}
 .assessment-reading-help {font-size:var(--type-small);color:var(--muted)}
 .assessment-reading-help summary {min-height:44px;align-content:center;cursor:pointer;width:fit-content}
 .assessment-reading-help p {max-width:80ch;line-height:1.5;margin-block:var(--space-sm)}
@@ -561,6 +696,7 @@ html:has(.assessment-dialog:modal) {overflow:hidden;scrollbar-gutter:stable}
 .assessment-dialog label {display:flex;flex-direction:column;gap:var(--space-sm);margin-block:var(--space-lg)}
 .assessment-definition {padding-block:var(--space-md);border-bottom:1px solid var(--rule)}
 .assessment-definition h3 {font-size:var(--type-small)}
+.assessment-detail-facts {display:grid;gap:var(--space-sm);padding-left:var(--space-lg);font-size:var(--type-small);line-height:1.5}
 .measure-glossary dt {font-size:var(--type-small);font-weight:var(--weight-strong)}
 .measure-glossary dd {margin:var(--space-xs) 0 0;font-size:var(--type-small);line-height:1.5;color:var(--muted)}
 .assessment-band-note,.assessment-unavailable,.assessment-loading {color:var(--muted);font-size:var(--type-small)}
