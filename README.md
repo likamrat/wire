@@ -802,51 +802,59 @@ Hosted Work IQ internals are not observable here. Imported evidence reports its
 actual source, status availability and limitations; it does not replay historical
 commands, acquire credentials, or manufacture downstream HTTP traffic.
 
-Start with a period on Home, then **Choose a Copilot chat**. **Apply dates** shows pending
-feedback and then exact Copilot-chat/request-group/tool-call counts from the applied snapshot,
-in the effective display time zone. It keeps keyboard focus on Apply and carries the
-period to the chat list. Applying a new period inside chat analysis updates
-that same analysis rather than forcing another wizard. A failed update labels the
-previous results; a late response cannot replace a newer route.
+Open **Analyze** to see the overview and matching interactions together.
+**Results** moves keyboard focus and reading position directly to the list, without
+changing the route or filters. Each row opens its exact recorded interaction;
+choosing or expanding a chat is not required. Top navigation is **Analyze,
+Reports, Settings**, including on narrow screens. The wordmark returns to Analyze.
+Reports opens the saved library, with unfinished drafts still available.
 
-Home starts with **Work IQ in your Copilot chats** and one short sentence: "Inspect
-recorded Work IQ activity from GitHub Copilot chats and prepare product feedback
-reports." The existing period selector, Choose a Copilot chat action and evidence follow
-in document and keyboard order. Routine health does not precede them, including
-while the first snapshot loads. The existing **About this evidence** disclosure
-starts closed and explains recorded results and request grouping.
+**Apply dates** retains accepted results until an updated snapshot is ready,
+keeps focus on Apply, and applies the same scope to charts, rows and current-view
+report membership. A failed update labels the previous results; a late response
+cannot replace a newer route. The existing **About this evidence** disclosure
+starts closed and explains recorded results and interaction-group boundaries.
 **Collection status → Technical details** distinguishes Work IQ calls, returned
 API metadata and separately recorded Graph requests. Tool names and service
 categories do not prove requests or HTTP status. The evidence-adjacent scope
 note remains visible. Polling does
 not collapse help, move focus or announce routine check timestamps.
 
-Service, result, project, evidence layer and collection refinements live behind
-one **More filters** disclosure. Its active count and removable chips retain the
-selected values even when closed; Reset view and Back/Forward remain independent.
+**Dates, Tool, Service, Outcome and Author** stay in the main filter row.
+**More filters** retains Category, Project, Chat, Activity and Collection.
+Its active count and removable chips retain the selected values even when closed;
+**Reset Analyze** and Back/Forward remain independent.
 A period filters **already collected** evidence, not source history. When the
 period extends beyond the known checked window, a visible warning names that
 window and links to history preferences in Settings (`#settings?section=history`);
 it never widens backfill or grants approval automatically. Empty results do not
 claim that no activity occurred. Source errors remain visible outside the filters.
 
-The searchable Activity list introduces **GitHub Copilot chats**, then labels
-each exact name with **Copilot chat name**, separately from its Copilot project
-(or **Copilot chat without a project**). Same-name chats show their distinct IDs.
-Groups start collapsed, eight chats per page. **Open analysis** inspects the
-latest collected evidence for that chat; it does not run a prompt or API call.
-Choosing a chat keeps the visible date, service, activity layer and collection,
-but clears incompatible project, result, API-path and private-request filters.
-**Back to Copilot chats** restores the originating list, search and page.
+Analyze pages eight **interactions**, not eight chats. Rows retain the available
+prompt excerpt, author, source chat/project, tools, service/category and matching
+outcomes. Source names are optional context links; **Chat** in More filters also
+keeps sources without matching evidence available for coverage inspection. The
+results list never adds metadata-only chats to its analytical population.
 
-The chooser also retains eligible chats with no matching recorded evidence,
-so they can open their coverage/collection analysis. Its summary counts only
-evidence-bearing chats alongside the request groups, then separately names
-the additional chats **without matching evidence**. **All listed Copilot chats**
-on the paginator includes both populations. This inventory is not a claim that
-every listed chat contributed a request group. Date/service/result/path filters
-retain the existing matching-only list behavior; metadata-only name/project
-search results remain inspectable without inventing activity.
+**Interactions / Calls** switches the same exact analytical slice. Calls reuses
+the existing recorded-action renderer and pages canonical rows, without treating
+service associations or legacy aliases as additional calls. It opens the existing
+interaction reader; dedicated call sorting and exact-action context navigation
+are separate work, not implied by this entry.
+
+**Search these interactions** keeps the existing local phrase matching across
+retained prompts, titles and chat/project context. It is not global or semantic
+search. Charts, summaries, rows and current-view report IDs share the same
+all-page matched membership. Insights and ordinary reports still include full
+selected interactions; their scope notes distinguish them from matching calls.
+Private queries stay in browser history state, never URLs or browser storage.
+Back/Forward restores the mode, filters, query, page, scroll and focused row;
+report selection hidden by later filters remains selected.
+
+Canonical entry is `#analyze`; `#analyze?mode=calls` opens Calls. Existing
+`#home`, `#overview`, `#activity` and `#calls` links normalize to equivalent
+Analyze scope. Legacy chat/result Activity links open Calls. Request, Reports,
+saved-library, draft, Settings and Collection status routes remain available.
 
 The focused analysis names the chat and project, the recorded count and
 results, the date/service scope and any known history gaps. The header supplies the display time zone. The
@@ -863,12 +871,13 @@ The search input keeps a concise placeholder and a visible label; its adjacent
 help explains chat/project/request matching. Long queries remain editable in
 the native input and are never copied into URLs.
 
-Home also retains Work IQ activity over time. Switch to services or API paths,
-then select a chart row or time period to open its filtered Activity list. Dates,
+Analyze retains Work IQ activity over time and the existing outcome,
+category/service, timing and answer-insight summaries. Switch to categories or API paths,
+then select a chart row or time period to narrow its interaction list. Dates,
 projects, services, results and activity layers are encoded in local routes.
 Small info buttons explain service categories, results and report choices on
 hover, keyboard focus or tap without changing filters. An expandable service
-glossary is available on Home. The filters use local rounded
+glossary is available in Analyze. The filters use local rounded
 popups with concise choice rows and full keyboard navigation. Definitions belong
 in field help and existing details, not in each choice or a per-option tooltip.
 The shared renderer accepts `data-detail` only for distinguishing identity
@@ -1016,10 +1025,10 @@ source code from the scan file.
 
 ## Reports and disclosure
 
-Open **Reports** in the sidebar, or **Menu > Reports** on narrow screens, to
-use the existing report creator. There is no redundant global Export button.
-Home, Activity and Reports retain their routes, filters and current draft;
-the mobile drawer closes with Escape or an outside click and restores Menu focus.
+Open **Reports** in top navigation to find saved reports or continue/create a
+draft. There is no redundant global Export button. Analyze, Reports and Settings
+retain filters and the current draft; the same full navigation labels wrap on
+narrow screens without a drawer.
 
 From a focused analysis, **Create report for this Copilot chat** replaces the draft
 membership with only that chat's canonical eligible request groups, across
@@ -1031,7 +1040,7 @@ Selection alone writes nothing.
 Reports follows four numbered stages: **Requests**, **Contents**, **Review**,
 and **Save**. Continue from the request scope to prompt/privacy and format
 choices, then **Scan and preview**. Review the formatted document inline, with
-the sidebar still available, and open the prompt-copy comparisons as needed.
+top navigation still available, and open the prompt-copy comparisons as needed.
 An unchecked attestation and **Complete disclosure review** lead to the separate
 final **Confirm local export** action. Success exposes the actual local file
 downloads; an uncertain response never retries or claims a successful save.

@@ -42,7 +42,8 @@ async function setup(t, { readerBoundaries = false } = {}) {
             assert.deepEqual(errors, []);
             assert.ok(requests.every(request => new URL(request.url).origin === new URL(runtime.url).origin), "No external requests");
             assert.ok(requests.filter(request => request.method === "POST").every(request =>
-                ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"]
+                ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview",
+                    "/api/report-artifacts/list", "/api/evaluation/automatic/summary"]
                     .includes(new URL(request.url).pathname)), "Navigation is read-only");
         } finally { for (const action of cleanup) await action(); }
     });
@@ -85,9 +86,9 @@ async function assertLinkStates(page, link, label, focusSelector) {
     assert.equal(await link.evaluate(node => node.tagName === "A" && node.hasAttribute("href") && node.tabIndex === 0), true, `${label}: native link`);
 }
 
-test("only the full graphical wordmark is the native Home target, not its subtitle", { timeout: 60000 }, async t => {
+test("only the full graphical wordmark is the native Analyze target, not its subtitle", { timeout: 60000 }, async t => {
     const { page, runtime } = await setup(t);
-    await navigateMain(page, "activity");
+    await navigateMain(page, "reports");
     await ready(page);
     await page.locator(".brand-caption").hover();
     await capture(page, "header-subtitle-hover", ".app-header");
@@ -95,9 +96,9 @@ test("only the full graphical wordmark is the native Home target, not its subtit
     const interactive = await caption.evaluate(node => Boolean(node.closest("a,button,[role=link],[tabindex]")));
     if (proofs) await writeFile(path.join(proofs, "subtitle.json"), JSON.stringify({ interactive }, null, 2));
     assert.equal(interactive, false, "Subtitle must be plain text outside the Home anchor");
-    const brand = page.locator(".brand a[data-nav=home]");
+    const brand = page.locator(".brand a[data-nav=analyze]");
     assert.equal(await brand.count(), 1, "One Home link around both theme variants");
-    assert.match(await brand.getAttribute("aria-label"), /WIRE.*Home/);
+    assert.match(await brand.getAttribute("aria-label"), /WIRE.*Analyze/);
     assert.equal(await brand.locator(".brand-logo").count(), 2);
     assert.equal(await brand.locator(".brand-caption,a,button,[tabindex]").count(), 0);
     for (const theme of ["light", "dark"]) {
@@ -106,7 +107,7 @@ test("only the full graphical wordmark is the native Home target, not its subtit
         await caption.click();
         assert.equal(page.url(), activity, "Clicking the subtitle does not navigate");
         const href = await brand.getAttribute("href");
-        assert.equal(href, await page.locator("nav [data-nav=home]").getAttribute("href"), "Existing scoped Home route");
+        assert.equal(href, await page.locator("nav [data-nav=analyze]").getAttribute("href"), "Shared scoped Analyze route");
         const paint = () => brand.evaluate(node => [node, ...node.querySelectorAll("*")]
             .filter(item => item.checkVisibility()).map(item => {
                 const style = getComputedStyle(item);
@@ -144,7 +145,7 @@ test("only the full graphical wordmark is the native Home target, not its subtit
         await ready(page);
         await brand.focus();
         await page.keyboard.press("Tab");
-        assert.equal(await page.locator("#displayTimeZoneLink").evaluate(node => node === document.activeElement), true, "Subtitle is not a tab stop");
+        assert.equal(await page.locator("nav [data-nav=analyze]").evaluate(node => node === document.activeElement), true, "Top navigation follows the wordmark; subtitle is not a tab stop");
         const popupPromise = page.context().waitForEvent("page");
         await brand.click({ modifiers: ["Control"] });
         const popup = await popupPromise;

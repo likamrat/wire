@@ -1,4 +1,11 @@
-// Apply the display-only preference before paint, like the theme preference.
+export function mountMainNavigation() {
+    const header = document.querySelector(".app-header");
+    const measure = () => document.documentElement.style.setProperty("--app-header-height", Math.ceil(header.getBoundingClientRect().height) + "px");
+    new ResizeObserver(measure).observe(header);
+    measure();
+}
+
+// Legacy sidebar preference retained for compatibility; the top navigation does not use it.
 export function initializeNavigationPreference() {
     const key = "workiq-evidence.navigation";
     const root = document.documentElement, listeners = new Set();

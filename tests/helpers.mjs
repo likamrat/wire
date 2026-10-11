@@ -20,14 +20,16 @@ export function exportCatalogFor(records) {
 }
 
 export async function navigateMain(page, view) {
-    const link = page.locator(`nav [data-nav=${view}]`);
-    await page.waitForFunction(() => {
-        const mobile = matchMedia("(max-width:699px)").matches;
-        return document.querySelector("#navigationContent")?.parentElement?.id === (mobile ? "drawerContent" : "sidebar")
-            && document.querySelector("#navigationToggle").hidden === !mobile;
-    });
-    if (!await link.isVisible()) await page.locator("#navigationToggle").click();
-    await link.click();
+    if (view === "collection-status") {
+        const link = page.locator('a[href^="#collection-status"]:visible').first();
+        if (await link.count()) await link.click();
+        else {
+            await page.locator('nav [data-nav="settings"]').click();
+            await page.locator('a[href^="#collection-status"]:visible').first().click();
+        }
+        return;
+    }
+    await page.locator(`nav [data-nav=${["home", "activity", "overview"].includes(view) ? "analyze" : view}]`).click();
 }
 
 export async function revealStoredRefresh(page) {
@@ -50,8 +52,7 @@ export async function navigateSettings(page, category) {
     await page.locator(`[data-settings-section=${category}]`).waitFor({ state: "visible" });
 }
 
-// Tests inspecting request cards deliberately open the visible session groups.
-// Default-closed behavior is exercised separately in disclosure.browser.test.mjs.
+// Compatibility helper: Analyze already renders matching interactions directly.
 export async function openActivitySessions(page) {
     if (!await page.locator("#activityView").isVisible()) return;
     const closed = page.locator(".session-toggle[aria-expanded=false]");

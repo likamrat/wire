@@ -61,7 +61,7 @@ async function setup(t) {
     return { page, context, records, traffic, snapshot: () => snapshot, preview: () => { allowPreview = true; } };
 }
 async function overviewIds(page, snapshot, expected, home = false) {
-    const host = page.locator(home ? "#homeInsights" : "#activityInsights");
+    const host = page.locator("#homeInsights");
     await expect(host).not.toHaveAttribute("aria-busy", "true");
     const refs = sorted(snapshot.assessment.catalog.filter(row => expected.includes(row.scenarioId) && row.status === "retained").map(row => row.interactionRef));
     await expect.poll(async () => {
@@ -75,11 +75,11 @@ async function homeCount(page, count) {
     await expect(page.locator("#meaningMatched")).toHaveText(`${count} Work IQ tool call${count === 1 ? "" : "s"}`);
 }
 
-test("private search has one all-page cohort across Home, Activity, scoped actions, full detail and current report preview", { timeout: 45000 }, async t => {
+test("private search has one all-page Analyze cohort across summaries, scoped Calls, full detail and current report preview", { timeout: 45000 }, async t => {
     const app = await setup(t), { page, traffic } = app;
     const choose = async (field, value) => { await selectActivityOption(page, field, value); await ready(page); };
     await page.locator("#activitySearch").fill(privateQuery);
-    await expect(page.locator("#periodResult")).toHaveText("9 Copilot chats / 9 request groups with 11 Work IQ tool calls.");
+    await expect(page.locator("#activityListSummary")).toContainText("9 interactions with 11 matching Work IQ tool calls");
     await overviewIds(page, app.snapshot(), ids([0, 1, 2, 3, 4, 5, 6, 7, 8]));
     await openActivitySessions(page);
     const first = await page.locator(".request-row").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey.slice(8)));
@@ -105,20 +105,21 @@ test("private search has one all-page cohort across Home, Activity, scoped actio
     await choose("dateFilter", "custom");
     await page.locator("#fromFilter").fill("2026-09-30"); await page.locator("#toFilter").fill("2026-09-30");
     await page.locator("#applyDates").click(); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("2 Copilot chats / 2 request groups with 3 Work IQ tool calls.");
+    await expect(page.locator("#activityListSummary")).toContainText("2 interactions with 3 matching Work IQ tool calls");
     await expect(page.locator("#serviceFocusScope")).toContainText("2 known matches; 1 context-only");
     await overviewIds(page, app.snapshot(), ids([0, 6]));
-    await expect(page.locator("#activityInsights .assessment-scope")).toContainText("3 Work IQ tool calls matched");
-    await expect(page.locator("#activityInsights")).toContainText("4 recorded calls");
+    await expect(page.locator("#homeInsights .assessment-scope")).toContainText("3 Work IQ tool calls matched");
+    await expect(page.locator("#homeInsights")).toContainText("4 recorded calls");
     await openActivitySessions(page);
     assert.deepEqual(sorted(await page.locator(".request-row").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey.slice(8)))), ids([0, 6]));
-    await page.getByRole("link", { name: "Open analysis for GitHub Copilot chat: Invented parity chat 0", exact: true }).click(); await ready(page);
+    await page.getByRole("link", { name: "Filter to Copilot chat: Invented parity chat 0", exact: true }).click(); await ready(page);
+    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     await expect(page.locator("#activitySearch")).toHaveValue(privateQuery);
     assert.deepEqual(sorted(await page.locator(".matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId))), [rowId(0), rowId(0, 1)]);
     await expect(page.locator(".matched-action .service-context-label")).toHaveCount(1);
     await page.locator(".matched-action .request-link").first().click(); await ready(page);
     await expect(page.locator("#requestView")).toContainText("Outside current view");
-    await page.goBack(); await ready(page); await page.goBack(); await ready(page);
+    await page.goBack(); await ready(page); await page.goBack(); await ready(page); await page.goBack(); await ready(page);
     await navigateMain(page, "home"); await homeCount(page, 3);
     await expect(page.locator("#serviceFocusScope")).toContainText("2 known matches; 1 context-only");
     await overviewIds(page, app.snapshot(), ids([0, 6]), true);
@@ -150,7 +151,7 @@ test("private search has one all-page cohort across Home, Activity, scoped actio
     await page.getByRole("button", { name: "Remove private search", exact: true }).click(); await homeCount(page, 3);
     await navigateMain(page, "activity");
     await page.locator("#activitySearch").fill("NO_PARITY_MATCH");
-    await expect(page.locator("#periodResult")).toContainText("0 request groups with 0 Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toContainText("0 interactions with 0 matching Work IQ tool calls");
     await navigateMain(page, "home"); await homeCount(page, 0);
     await expect(page.locator("#serviceFocusScope")).toContainText("0 known matches; 0 context-only");
     await overviewIds(page, app.snapshot(), [], true);
@@ -164,7 +165,7 @@ test("private search has one all-page cohort across Home, Activity, scoped actio
     await navigateMain(page, "activity");
     await page.locator("#clearActivitySearch").click();
     await page.getByRole("button", { name: "Remove missing-service context", exact: true }).click(); await ready(page);
-    await expect(page.locator("#periodResult")).toContainText("2 request groups with 2 Work IQ tool calls");
+    await expect(page.locator("#activityListSummary")).toContainText("2 interactions with 2 matching Work IQ tool calls");
     await choose("outcomeFilter", "all");
     await choose("promptAuthorFilter", "all");
     await choose("serviceAssociationFilter", "all");
@@ -240,9 +241,9 @@ test("a new accepted source revision and evidence layer replace all local projec
     await (await revealStoredRefresh(page)).click(); await ready(page);
     assert.ok(app.snapshot().revision > revision);
     await overviewIds(page, app.snapshot(), ids([0]));
-    await expect(page.locator("#activityInsights")).toContainText("0.6 s");
+    await expect(page.locator("#homeInsights")).toContainText("0.6 s");
     await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
-    await expect(page.locator("#periodResult")).toContainText("1 request group with 4 tool-returned API results");
+    await expect(page.locator("#activityListSummary")).toContainText("1 interaction with 4 matching tool-returned API results");
     await navigateMain(page, "home");
     await expect(page.locator("#activityCount")).toHaveText("4");
     await expect(page.locator("#percentageCharts .percentage-section")).toHaveAttribute("data-total", "4");

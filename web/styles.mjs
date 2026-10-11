@@ -579,4 +579,35 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
  .session-group .session-drill {padding-inline:8px}
  .session-summary,.session-requests {padding-inline:0}
 }
+.analyze-shell>main {width:100%;margin:0;padding:28px 28px 64px}
+.app-header .primary-navigation {flex-direction:row;flex-wrap:wrap;gap:4px;min-width:0}
+.app-header .primary-navigation a {display:flex;min-height:44px;padding:8px 14px;border:0;border-radius:6px;font-size:var(--type-control);line-height:var(--leading-control);white-space:normal;overflow-wrap:anywhere}
+.app-header .primary-navigation a[aria-current=page] {color:var(--ink);background:var(--accent-soft)}
+.analyze-shell .header-inner {gap:8px 24px}
+#resultsLink {display:inline-flex;align-items:center;min-height:44px;padding:8px}
+#analyzeModes {flex-wrap:wrap;align-self:center;width:auto}
+#analyzeModes a {min-height:44px}
+#analyzeModes a[aria-current=true]::before {background:var(--accent-soft);border-color:var(--accent)}
+#activityView>.section-heading {justify-content:start}
+#activityView>.section-heading>.filter-field {margin-inline-start:auto}
+.analyze-result-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-block:12px}
+.analyze-result-actions .report-selection-bar {margin:0}
+#activityList>.request-row {grid-template-columns:44px minmax(0,1fr);padding:16px 8px;border-bottom:1px solid var(--rule);border-radius:0}
+.interaction-select {display:grid;place-items:center;min-width:44px;min-height:44px;cursor:pointer;border-radius:var(--radius-small)}
+.interaction-select:focus-within {outline:2px solid var(--focus);outline-offset:2px}
+.interaction-select input {margin:0}
+.interaction-context {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;font-size:var(--type-small)}
+.interaction-context>.text-link {display:inline-flex;align-items:center;min-height:44px;overflow-wrap:anywhere}
+.interaction-context .project-context {margin:0}
+.interaction-tools {font-size:var(--type-small);color:var(--muted);margin-top:8px}
+@media(max-width:699px) {
+ .analyze-shell>main {padding:24px 16px 48px}
+ .analyze-shell .header-inner {gap:4px 12px}
+ .app-header .primary-navigation {flex-basis:100%}
+ .app-header .primary-navigation a {flex:1 1 auto;padding:8px}
+ #activityView>.section-heading {align-items:stretch}
+ #analyzeModes {align-self:start}
+ #activityView>.section-heading>.filter-field {margin-inline-start:0;width:100%}
+ #activityView>.section-heading>.filter-field input {width:100%}
+}
 `;

@@ -118,12 +118,13 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
     assert.match(await page.locator("#filterChips").innerText(), /Invented project A/);
     assert.match(await page.locator("#moreFilters > summary").innerText(), /1 active/);
     await navigateMain(page, "activity"); await ready(page);
-    await page.getByRole("link", { name: "Open analysis for GitHub Copilot chat: Invented author conversation", exact: true }).click(); await ready(page);
+    await page.getByRole("link", { name: "Filter to Copilot chat: Invented author conversation", exact: true }).first().click(); await ready(page);
+    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     exact("Scoped chat preserves every filter", ["multiFiles", "partialFiles", "missingUser"]);
     assert.equal(requests.at(-1).filters.projectIds[0], app.projectId);
     assert.deepEqual(await page.locator(".matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId).sort()), ids(["multiFiles", "partialFiles", "missingUser"]));
     assert.equal(await page.locator(".matched-action .service-context-label").count(), 1);
-    await page.goBack(); await ready(page);
+    await page.goBack(); await ready(page); await page.goBack(); await ready(page);
     exact("Back returns equivalent analytical scope", ["multiFiles", "partialFiles", "missingUser"]);
     await page.locator("#activitySearch").fill(app.cases.missingUser.content);
     await openActivitySessions(page);

@@ -28,7 +28,7 @@ export function createReportScope(authorship) {
             const c = value.counts;
             if (!value.requests.length) return value.authorExcludedRequestGroups
                 ? `None of the ${plural(value.baseRequests.length, "request group")} in this scope match the prompt authors. Your base selection is kept; change the author choice to include them.`
-                : "No requests selected. Select requests in Activity or deliberately choose Current view or All collected activity.";
+                : "No requests selected. Select interactions in Analyze or deliberately choose Current view or All collected activity.";
             const narrowed = value.authorExcludedRequestGroups ? `${value.requests.length.toLocaleString()} of ${plural(value.baseRequests.length, "request group")} match the prompt authors` : plural(value.requests.length, "request group");
             return `${narrowed}: ${plural(c.workIqActions, "Work IQ tool call")}, ${plural(c.returnedApiResults, "tool-returned API result")}, ${plural(c.graphRequestSites, "recorded Graph request site")} (${c.graphVisibleStatuses.toLocaleString()} with visible status), ${plural(c.ownedHttpRecords, "owned HTTP record")}, ${plural(c.graphCodeReferences, "Graph code reference")}. These are separate units, not a combined total.`;
         },

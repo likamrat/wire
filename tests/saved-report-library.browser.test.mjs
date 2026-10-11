@@ -102,7 +102,7 @@ test("Reports opens directly on the library and switching to creation preserves 
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft", "Leaving Reports still invalidates reviewed previews");
 });
 
-test("Activity create intent, request return and explicit creation deep links bypass the library without losing selection", { timeout: 30000 }, async t => {
+test("Analyze chat create intent, request return and explicit creation deep links bypass the library without losing selection", { timeout: 30000 }, async t => {
     const { page, requests } = await setup(t, 2);
     const origin = new URL(page.url()).origin;
     await page.goto(origin + "/#activity?session=test-session");
@@ -112,7 +112,7 @@ test("Activity create intent, request return and explicit creation deep links by
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
     assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request group/);
     await page.goBack();
-    assert.match(page.url(), /#activity/);
+    assert.match(page.url(), /#analyze/);
     await page.goForward();
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
     assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request group/);

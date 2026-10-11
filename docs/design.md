@@ -1297,13 +1297,11 @@ without color. The total counter is baseline-aligned with **in this view**.
 Container reflow, polling and Back retain the selected breakdown, disclosure
 and logical focus. These percentage views do not rewrite saved report bytes.
 
-Home starts with **Work IQ in your Copilot chats** and one seven-word purpose sentence:
-"Explore recorded activity and prepare feedback reports."
-**Check for new activity** is Home's first action, followed by
-the existing period selector, Choose a Copilot chat action and evidence
-in main-content document and keyboard order. No routine collector card
-precedes the task, even during loading. This is a dashboard correction, not a
-hero, new wizard or competing call to action.
+Analyze starts with **Analyze** and "Explore recorded interactions, calls and
+their results." **Results** moves directly to the list. Existing source/update
+controls, filters and overview follow; report selection and creation sit with
+the results. No routine collector card precedes the task, even during loading.
+There is no chat chooser or new wizard.
 
 The fresh-data control pairs the primary action with a concise result after a check,
 not an always-on health card or a repeated idle instruction. **Source and collection**
@@ -1311,11 +1309,11 @@ contains local Copilot history, the intake window and direct
 **Source** and **Collection settings** links to the existing Settings categories.
 It keeps the background-paused state explicit and never enables it as a side
 effect. Unapproved sources route to review. **Refresh stored data** is a quiet
-secondary action inside this disclosure on Home/Activity, beside saved history
+secondary action inside this disclosure on Analyze, beside saved history
 in Reports, and within the relevant evidence/settings section elsewhere. It reads
 the retained snapshot without scanning source history or reloading app code.
 The global header has no duplicate refresh action.
-On unapproved Home, the fresh control is the sole source-review action.
+On unapproved Analyze, the fresh control is the sole source-review action.
 The generic connection notice adds only retained-evidence availability when
 applicable, not another setup link. Other views keep their connection action;
 blocking errors, paused collection and initial-import guidance remain visible.
@@ -1453,50 +1451,46 @@ truncated. Plain-text/JSON reports do not carry visual title styling.
 
 | Surface | Keep visible | Disclosure / list decision | User job |
 | --- | --- | --- | --- |
-| Home | Filters, viewing context, totals, chart, result legend, coverage warning | Retain collapsed explanations and glossary. Exact data renders on opening, 24 rows per page with complete plotted/category totals. | Understand the slice, then inspect exact values without a hidden large table. |
-| Activity | Exact chat name, distinct project/unscoped context, compact reference for same-name or unnamed sources, one request-group-to-call count line, actionable recorded successes/failures, report-inclusion count | The repeated name-field label is screen-reader-only. Group the complete filtered set **before** paging eight chats. Overview groups start closed; each opened group renders six request groups per page. Eligible chats with no captured calls can still open analysis. | Choose a recognizable Copilot chat, then inspect its collected evidence independently. |
-| Chat analysis | Exact chat name as the primary heading, a recorded project when present, compact reference only for ambiguous/unnamed sources, canonical results, date/service/collection summary, coverage and report action | The existing Technical source record disclosure pattern holds exact source ID, recorded name, source host and project facts without a new card. Worked and Needs attention links render six matching canonical actions per page. | Inspect results without losing chat/filter context; create a report for this chat only. |
+| Analyze overview | Filters, totals, charts, result legend, coverage warning and Results link | Retain collapsed explanations and glossary. Exact data renders on opening, 24 rows per page with complete plotted/category totals. | Understand the slice and jump directly to its results. |
+| Analyze results | Interactions / Calls, local search, report controls, prompt/author, chat/project context, tools, categories and matching outcomes | Page eight interactions or canonical matching rows directly, without chat expansion. Reuse the existing interaction reader and recorded-action renderer. | Find and open a recorded interaction without learning chat grouping. |
+| Chat-filtered Analyze | Analyze heading, exact source context, project, ambiguous-name reference, canonical results, date/service/collection summary, coverage and chat report action | Technical source record retains exact IDs and provenance. Source outcome links switch to the same Calls list. Empty or unreadable sources retain coverage/recovery links. | Optionally narrow by chat without making it the entry gate. |
 | Request | Recorded outcomes and known failure details first, source context once, one exact prompt reader, chronological actions | Long prompt text opens without an excerpt or internal height limit. Technical details, provenance and inferred follow-ups stay secondary; action and follow-up lists remain paged by six. | Understand what is known, read the retained prompt and inspect its actions without duplicate summaries or navigation. |
 | Collection status | Collector state and next step, readable/eligible coverage, Chat history gap summary and compact search | Closed short reason groups, six chats per page; closed Technical details for inventory, exclusions, limits and stored refresh. Home check results and Activity link here. | Know whether collection is working, inspect missing activity when relevant and avoid treating every gap as a repair task. |
 | Settings | Display, Connection & permission, Collection preferences | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
 | Reports | Current-stage work, one-report inclusion summary, Clear selection and four-step navigation | Requests shows scope and a disclosure with four requests per page. Contents holds the three prompt modes, four formats and Scan and preview. Saved history stays separate, six reports per page. | Choose membership, then contents, without confronting every control at once. |
 | Review and Save | Review shows the frozen formatted preview, scope, incomplete-source/removal totals, limitations and unchecked attestation. Save shows the separate final confirmation, then actual file downloads. | Review opens six original/copy comparisons per page, retaining edits when paging; exact-file disclosures remain available. Save is reached only after explicit disclosure review. | Compare and approve the copies, then deliberately save; paging or changing stages never grants consent. |
 
-Chat buttons expose `aria-expanded` and `aria-controls`; **Open analysis** is a
-separate link, never a nested control. Summary outcomes cover all matching actions
-in the filtered chat, not just the visible six requests. Individual request
-outcomes retain the matching-versus-full denominator. Report-inclusion counts
-cover the whole chat (including requests outside the current filters), count
-canonical request owners once, and remain visible when its cards are unmounted.
-Missing source IDs have separate unattributed request groups and no invented
-chat drilldown. Same-name chats include their source IDs. Project kind is
+Summary outcomes cover all matching actions, not just the visible result page.
+Individual interaction outcomes retain the matching-versus-full denominator.
+Report-inclusion counts include selection outside the current filters and count
+canonical owners once, even when their rows are unmounted. Missing source IDs
+remain visible without an invented chat drilldown. Same-name chats include
+distinguishing source references. Project kind is
 shown when the mapping records it; a folder project is not relabeled a repository.
 
-**Choose a Copilot chat** is the prominent Home next step after the period results and
-opens the matching list, retaining the applied period and refinements.
-Choosing **Open analysis** retains the analytical filters and private query
-while narrowing to the selected chat. A result link retains its originating slice,
+**Results** is the prominent Analyze shortcut to the direct list.
+Choosing a source-context link retains the analytical filters and private query
+while narrowing to that chat. A source result link retains its originating slice,
 including private search, and narrows to that one source-chat ID. Both are
-native links with independent disclosure and information controls. Back to
-chats restores the list route/search/page in browser history state; private
+native links with independent information controls. Back to Analyze
+restores the list route/search/page in browser history state; private
 search never enters copied URLs. A success or failure deep link opens the matching
 actions without manual hunting. Unknown and nonexecuted evidence has no
 success/failure action. Neither does a zero or unavailable count.
 
-Activity search uses the precise **Find a Copilot chat or request group** label and a short
+Analyze search uses **Search these interactions** and a short
 **Search** placeholder. Help explains the searchable chat names,
 projects and requests without stuffing a sentence into the input. Its native
 single-line editing, horizontal caret scrolling and exact query value are
 preserved. Control and label height grow with enlarged text; result labels wrap
 only when needed, with no text shrinking or clipped capsule edges.
 
-The focused chat header leads with the exact recorded name, without a repeated
-**Copilot chat name** label, generic review instruction, default no-project sentence
-or prominently displayed UUID. A recorded project remains useful context.
+The chat-filtered Analyze header keeps the recorded source name and project as
+context, without replacing the Analyze identity or prominently displaying a UUID.
 **Technical source record** uses the existing native disclosure style, not another
 box, for the complete ID, source host, recorded name and project facts. Request
 details retain their existing source/provenance disclosure and exact chat navigation.
-Same-name and unnamed sources have a compact ID suffix in the chooser and analysis
+Same-name and unnamed sources have a compact ID suffix in direct rows and the analysis
 header; the suffix lengthens when needed to distinguish the current sources.
 It describes the native analysis link for assistive technology; it never replaces
 the complete on-demand ID or changes source identity. The breadcrumb retains
@@ -2244,87 +2238,68 @@ snapshot reload versus source collection, diagnostic recording, independent revi
 downloads of already frozen reports. Clipboard and follow-up limitations remain
 visible beside the relevant private text; they are not disclosure approvals.
 
-Home, Activity and Reports are stable top-level destinations. Hash routes encode
-the current filters and selected request/chat. Breadcrumbs and browser
-Back/Forward preserve the route; navigating away closes an open modal and
-invalidates its preview.
+**Analyze, Reports and Settings** are the three main destinations, exposed as
+native top-navigation links. Collection status remains reachable through source,
+coverage and Settings links; it is not removed or merged into configuration.
+The wordmark targets Analyze. The same visible links wrap on narrow screens
+and at 200% text, retaining 44px targets, full labels, tonal current state and
+keyboard focus. `mountMainNavigation` measures only the header for scroll
+offsets. The old collapse preference is neither read nor changed; no drawer,
+sidebar width or navigation-storage dependency participates in the new shell.
 
-The persistent left sidebar uses one native navigation landmark with two static
-groups: **Explore** (Home, Activity, Reports) and **Manage** (Collection status,
-Settings). Quiet 14/20 regular rows have 44px minimum targets, 8px/10px padding,
-a 24px icon track, 10px label gap and 6px corners. Group captions and a hairline separate tasks
-from management. There is no resting row border or outlined selected button;
-tonal selection, the filled Fluent glyph and `aria-current` identify the page.
-Visible keyboard focus rings remain distinct and do not move neighboring rows.
+`createSessionJourney().canonical` normalizes `home`, `overview`, `activity`
+and `calls` into `analyze`. `mode=calls` selects the existing flat action
+renderer; the default is direct interactions. The shared route parser preserves
+all filter keys and treats legacy `activity?session=...&result=...` as Calls.
+Old routes normalize with replaceState, not another history step.
+`routeFor`, `readRoute`, `rememberRoute`, `applyRoute` and reading-position
+restoration remain the single router. Search stays in history.state only.
+Requests retain the originating mode/page so Back and the reader's return link
+restore the actual list, not a chat chooser. Selection and draft choices remain
+panel state and are not silently narrowed when a selected row leaves the view.
 
-All five full labels and group captions stay on one line, including at 200% root
-text. The rail sizes intrinsically above its 208px desktop/176px intermediate
-minimum; the existing resize observer matches the main offset to its measured
-width. No font shrinking, clipping or ellipsis. Below 700px the same navigation
-nodes move into a drawer with 12px inline insets and up to 304px usable width;
-Menu, Escape, Close and outside-click focus return retain their semantics.
-The wordmark remains a Home link, separate from the collapse control. No new
-destinations or Settings layout changes.
+`renderHome` / `#homeView` remain internal names for the unchanged chart group,
+not a second destination. `renderActivity` / `#activityView` now consume
+`createAnalysisSlice` directly: eight canonical interactions or eight canonical
+matching rows per outer page, using the existing pager and stable view keys.
+`requestCard`, `matchingAction`, `textAccess` and the request reader remain the
+rendering seams. Metadata-only chats stay in the Chat filter and coverage flow,
+never in the matched list. One `#homeInsights` consumer shows full-interaction
+insights with the explicit matching-call scope note; the duplicate Activity
+insight host and chat-expansion entry are removed.
 
-A native 44px panel control at the top of the desktop rail exposes **Collapse
-navigation** / **Expand navigation** and `aria-expanded`. Collapse retains all five
-native anchors, their accessible names, tonal selection and filled current glyph;
-only labels and group captions become visually hidden. The desktop rail becomes
-69px (65px at the intermediate breakpoint) through its intrinsic content and
-padding, not a second main-offset system. The same resize observer publishes
-`--app-sidebar-width`; main, filters and existing chart observers consume the real
-released area. A deliberate desktop toggle glides for 320ms with a decelerating
-cubic-bezier curve. The rail animates between its measured intrinsic widths;
-the same observer publishes each fractional width so content and charts move
-with it, without an independent offset animation or a final pixel snap.
-Labels fade out promptly and fade back in after expansion starts, while group
-caption space closes smoothly. Icons stay on one fixed track; text is neither
-scaled nor wrapped. Rapid toggles start from the current rendered width and
-opacity rather than jumping back to an endpoint. Resizing, entering the drawer,
-backgrounding the page or enabling reduced motion cancels transient geometry
-and settles to the current choice. Initial loads, cross-panel preference updates
-and reduced-motion toggles apply the final layout immediately.
+The existing four analysis areas, exact counts, percentage charts, date-scale
+controls and diagnostics stay above the results landmark. **Results** focuses
+and scrolls to it without a navigation or data read. Local **Search these
+interactions**, **Interactions / Calls**, report inclusion and **Create report**
+stay with the direct rows. Neither chart geometry/palette nor global search,
+Refresh semantics, report setup or the immediate-context reader is redesigned
+by this unit. Calls does not claim the later sorting/exact-action investigation.
 
-The control and compact icons use the shared tooltip portal, contrast surface
-and right-side placement where it fits. Pointer departure, Escape, activation,
-restored focus and no-resurrection rules remain shared. Keyboard focus stays
-outlined. Touch activates the same native controls, and Expand makes all labels
-visible without requiring hover. No extra icon-only mobile rail is introduced.
-The original nodes still move into the native drawer below 700px. Crossing that
-breakpoint preserves the desktop choice and moves focus off a newly hidden rail
-to Menu; closing the drawer restores Menu without reopening help.
-
-`workiq-evidence.navigation` stores only `expanded` / `collapsed` in browser
-local storage, applied before paint like the theme preference. A known storage
-failure warns explicitly and shows a panel-only notice; the next explicit choice
-can retry. Collapse does not navigate, fetch evidence, rerender the workspace,
-alter selection, rebuild a report preview or reset a Settings draft. Other
-same-origin panels can synchronize this non-sensitive display choice without
-taking focus from a form. The isolated tests in
-`navigation-collapse.browser.test.mjs` cover real shell width, keyboard/pointer/
-touch, history/drafts, comparison layout, reading dialogs, mobile focus, themes,
-200% text, empty/populated views and storage recovery. Frame-by-frame browser
-measurements additionally prove intermediate widths, synchronized main/chart
-reflow, label opacity, reversal continuity and no completion jump.
+`analyze-entry.browser.test.mjs` exercises the normal source-rendered shell with
+invented isolated records, direct open/Back/Forward, private search, cross-page
+IDs, report membership, legacy aliases, Calls, stale recovery and narrow
+keyboard reading. The accepted analysis-scope and filter-controls fixtures
+still prove all-page cohort parity, delayed-response guards and draft filters.
 
 There is no global **Export report** action in the rail/header/mobile shell.
-Open **Reports** (mobile: **Menu > Reports**) for its existing Requests, Contents,
+Open **Reports** in top navigation for its existing Requests, Contents,
 Review and Save flow. Contextual **Add to report**, **Review selection** and
 chat-specific report creation remain. Navigation preserves deliberate empty
 selection, current draft, filters, privacy gates and saved/downloaded artifacts.
 
-**Reset to Home** sits directly below the analytical controls on Home/Activity,
-including chat-scoped Activity. Its content-width action group aligns with the
+**Reset Analyze** sits directly below the analytical controls, including
+chat-filtered Analyze. Its content-width action group aligns with the
 leading edge of the filter row, not the far edge of a full-width empty row.
 When custom dates are open, it follows their From/To/Apply controls. It remains
-outside the horizontally scrolling seven-filter row so narrow and enlarged-text
+outside the primary filter row so narrow and enlarged-text
 views can reach it without scrolling to the last filter. Request details retain
 the same single action beside their current scope; Reports, Settings and
 Collection status do not show it. It appears whenever the analytical route
-differs from Home defaults. It returns to all retained dates and the weekly Work IQ chart,
+differs from Analyze defaults. It returns to Interactions, all retained dates and the weekly Work IQ chart,
 clearing primary/secondary filters, chart choice, time scale, chat/request/path
 scope, outer pagination and private search. It creates a
-history entry, so Back restores the prior slice and Forward returns to Home.
+history entry, so Back restores the prior slice and Forward returns to default Analyze.
 Private search travels in browser history state, never a copied route URL.
 Theme, report prompt/format choices, report selection, review state, consent
 and recorded/exported data are not reset. The resulting view conveys a successful

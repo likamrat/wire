@@ -53,10 +53,10 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             ? `GitHub Copilot chat: ${model.entry.sessionName || "Copilot chat name not recorded"} / ${model.entry.projectId ? "Copilot project: " + (model.entry.projectName || "Name unavailable") : "Copilot chat without a project"}. Complete eligible groups across all retained dates and services; new groups are not added automatically.`
             : "");
         nodes.context.hidden = !nodes.context.textContent;
-        text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable requests in this Copilot chat. Return to the chat or check source issues." : "Choose at least one readable request in Activity, or use another scope above."));
+        text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable requests in this Copilot chat. Return to the chat or check source issues." : "Choose at least one readable interaction in Analyze, or use another scope above."));
         nodes.gap.hidden = ready();
         nodes.issues.hidden = ready() || !model.entry || !showSourceIssues;
-        text(nodes.choose, model.entry ? "Back to Copilot chat" : "Choose requests in Activity");
+        text(nodes.choose, model.entry ? "Back to Copilot chat" : "Choose interactions in Analyze");
         nodes.choose.hidden = ready();
         nodes.choose.classList.toggle("primary", !ready());
         nodes.next.disabled = Boolean(reason(2));
@@ -217,7 +217,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         error.setAttribute("role", "alert");
         error.tabIndex = -1;
         shell.append(error);
-        const gap = el("p", "report-scope-gap"), choose = button("Choose requests in Activity", () => chooseRequests?.(), "primary");
+        const gap = el("p", "report-scope-gap"), choose = button("Choose interactions in Analyze", () => chooseRequests?.(), "primary");
         gap.id = "reportScopeGap";
         const issues = button("View source issues", () => showSourceIssues?.(), "quiet");
         const scope = root.querySelector(".export-scope"), choices = scope.querySelector(".scope-choices");

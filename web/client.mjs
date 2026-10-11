@@ -111,12 +111,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const textAccess = createTextAccess(ux, presentation, authorship, metadata);
     let detailOwner = "page";
     let collection, collectionSettings, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
-    const sidebar = mountSidebarNavigation(ux);
+    mountSidebarNavigation();
     let reportScope = "selected";
     let reportAuthors = authorship.selection();
     mountThemeControl(theme, ux);
-    document.querySelectorAll(".primary-navigation [data-nav]").forEach((node) => node.prepend(ux.icon(node.dataset.nav), ux.icon(`${node.dataset.nav}-selected`)));
-    for (const [id, icon] of Object.entries({ navigationToggle: "menu", closeNavigation: "close", refreshBtn: "refresh", checkActivity: "refresh", resetView: "reset", closeDialog: "close" })) {
+    for (const [id, icon] of Object.entries({ refreshBtn: "refresh", checkActivity: "refresh", resetView: "reset", closeDialog: "close" })) {
         $(id).prepend(ux.icon(icon));
         $(id).classList.add("icon-action");
     }
@@ -485,7 +484,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return selected.length !== 1 ? help.describeOption({ id: "outcomeFilter", value: "all" }, { layer })
             : `Menu counts are before result filtering; other filters still apply. ${help.resultHelp(selected[0], layer)}`;
     }));
-    fieldHelp("activitySearch", "Find a Copilot chat or request group", help.fields.activitySearch);
+    fieldHelp("activitySearch", "Search these interactions", help.fields.activitySearch);
     const activitySearchInput = $("activitySearch"), activitySearchRow = el("div", "search-input-row");
     activitySearchInput.replaceWith(activitySearchRow);
     activitySearchRow.append(activitySearchInput, $("clearActivitySearch"));
@@ -517,7 +516,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function dateInput(value) {
         if (!value) return "";
         try { return value.includes("T") ? time.day(value, (applied?.timeContext || viewerTime).timeZone) : time.calendar(value); }
-        catch { announce("Invalid date filter. Choose real calendar dates or use Reset to Home.", "error"); return ""; }
+        catch { announce("Invalid date filter. Choose real calendar dates or use Reset Analyze.", "error"); return ""; }
     }
     function dateSelection() {
         return { range: route.range || (route.from || route.to ? "custom" : "capture"), ...(route.from ? { from: route.from } : {}), ...(route.to ? { to: route.to } : {}) };
@@ -681,12 +680,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function readRoute(hash = location.hash, navigationState = history.state) {
         const [rawView, rawQuery = ""] = hash.slice(1).split("?");
-        const aliases = { overview: "home", calls: "activity", report: "reports" };
-        const view = aliases[rawView] || rawView || "home";
+        const view = rawView === "report" ? "reports" : rawView || "analyze";
         const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task"];
-        const values = { view: ["home", "activity", "request", "reports", "settings", "collection-status"].includes(view) ? view : "home" };
+        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode"];
+        const values = { view: ["analyze", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
+        if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
         if (view === "reports" && !params.has("task") && (rawView === "report" || values.request)) values.task = "create";
         if (navigationState?.evidenceView?.url === hash && typeof navigationState.evidenceView.search === "string") values.search = navigationState.evidenceView.search;
         if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToSessions) values.returnToSessions = navigationState.evidenceView.returnToSessions;
@@ -698,7 +697,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return canonicalRoute(values);
     }
     function canonicalRoute(next) {
-        next = filterState.canonical(next);
+        next = filterState.canonical(sessionJourney.canonical(next));
         if (Object.hasOwn(next, "task") && (next.task !== "create" || !["reports", "request"].includes(next.view))) {
             const { task, ...rest } = next;
             next = rest;
@@ -725,10 +724,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return "#" + next.view + (params.size ? "?" + params.toString() : "");
     }
     function routeFor(view, changes = {}) {
+        view = sessionJourney.canonical({ view }).view;
         return {
             ...route, view,
             request: ["request", "reports"].includes(view) ? route.request : undefined,
-            origin: view === "request" ? (route.view === "reports" ? "reports" : route.origin || "activity") : undefined,
+            origin: view === "request" ? (route.view === "reports" ? "reports" : route.origin || "analyze") : undefined,
             task: view === "reports" ? (route.view === "reports" ? route.task : route.origin === "reports" ? "create" : undefined)
                 : view === "request" && route.view === "reports" ? route.task : undefined,
             issues: view === "settings" ? route.issues : undefined,
@@ -771,7 +771,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             if (next.session) presentation.setOpen("session:" + next.session, true);
-            navigate(next, false, { restorePosition: next.view === "collection-status" && route.view === "activity" && Boolean(route.session) });
+            navigate(next, false, { restorePosition: next.view === "collection-status" && route.view === "analyze" && Boolean(route.session) });
         });
         return node;
     }
@@ -1023,7 +1023,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         syncAuthorFilter();
         renderTimeContext();
         if (!background) {
-            if (!analytics || !refinement && route.view !== "home") setText($("periodResult"), "Updating this period...");
+            if (!analytics) setText($("periodResult"), "Updating this period...");
             $("periodResult").setAttribute("aria-busy", "true");
             $("pageAction").setAttribute("aria-disabled", "true");
         }
@@ -1140,12 +1140,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (appliedRoute) readingPositions.set(JSON.stringify([routeUrl(appliedRoute), appliedRoute.search || ""]), captureReading());
         ux.hideTooltip();
         selectControls?.close();
-        sidebar.close(false);
         if ($("overlay").open) $("overlay").close();
         const before = JSON.stringify(query());
         if (["range", "from", "to"].some(key => route[key] !== next[key])) dateDraft = null;
         route = canonicalRoute(next);
-        if (["settings", "collection-status"].includes(route.view)) rememberRoute(route, true);
+        rememberRoute(route, true);
         search = route.search || "";
         activityPage = Math.max(0, Number.parseInt(route.page || "0", 10) || 0);
         syncControls();
@@ -1154,7 +1153,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         // Browsing saved files is the same workspace, not a change to the frozen draft.
         if (previousRoute.view !== "reports" || route.view !== "reports" || queryChanged) invalidatePreview();
         const refinement = !reset && !restorePosition && Boolean(analytics)
-            && ["home", "activity"].includes(route.view) && route.view === previousRoute.view
+            && route.view === "analyze" && route.view === previousRoute.view
             && route.session === previousRoute.session && route.request === previousRoute.request
             && (queryChanged || route.range !== previousRoute.range || route.chart !== previousRoute.chart);
         const controlsOnly = refinement && !queryChanged && route.chart === previousRoute.chart;
@@ -1189,6 +1188,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             else if (keepFocus) ux.restoreFocus($(focusId));
             else if (position) restoreReading(position);
+            else if (route.view === "analyze" && previousRoute.view === "analyze" && route.mode !== previousRoute.mode) revealResults();
             else if (mounted && !revealSessionResult()) { $("pageTitle").focus({ preventScroll: true }); window.scrollTo(0, 0); }
         };
         if (update instanceof Promise) update.then(finishNavigation);
@@ -1227,7 +1227,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             .filter(option => !requested.length || requested.includes(option.value)).map(option => option.value));
         else delete $("outcomeFilter").dataset.pendingValue;
         $("clearResultFilter").hidden = !accepted.length && (!isLoading || !requested.length);
-        const scope = route.view === "home" ? "All charts" : "Activity";
+        const scope = "Analyze";
         const text = applied.layer === "code-reference"
             ? "Result filtering is unavailable: execution is not observed." + (accepted.length ? " Clear the previous result filter to include references." : "")
             : `${scope}: ${resultNames(accepted)}${accepted.length ? " only" : ""}. Option counts are before result filtering.`;
@@ -1249,11 +1249,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText($("promptAuthorFilterHelp"), `${authorship.selectionLabel(accepted)}. Calls stay with their originating prompt.${isLoading ? " Updating view..." : ""}`);
     }
     function viewChanged() {
-        const defaults = { view: "home", chart: "time", bucket: "week", range: "capture", layer: "tool", scope: "history", page: "0" };
+        const defaults = { view: "analyze", chart: "time", bucket: "week", range: "capture", layer: "tool", scope: "history", page: "0" };
         return Object.entries(route).some(([key, value]) => !["localSearch", "settingsWarning"].includes(key) && value !== undefined && value !== null && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key)) && String(value) !== defaults[key]);
     }
     async function resetView() {
-        const next = { view: "home" };
+        const next = { view: "analyze" };
         await navigate(next, false, { reset: true });
     }
     function renderStoredRefresh() {
@@ -1283,7 +1283,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return loaded;
     }
     function renderNavigation() {
-        const active = route.view === "request" ? "activity" : route.view;
+        const active = route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
             node.href = routeUrl(routeFor(view, { request: undefined, task: undefined }));
@@ -1291,21 +1291,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else node.removeAttribute("aria-current");
         });
         const settings = route.view === "settings", operational = route.view === "collection-status", configurationOrStatus = settings || operational;
-        for (const [view, id] of Object.entries({ home: "homeView", activity: "activityView", request: "requestView", reports: "reportsView", settings: "settingsView", "collection-status": "collectionStatusView" })) $(id).hidden = route.view !== view;
+        for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
+            for (const id of ids) $(id).hidden = route.view !== view;
+        }
+        $("resultsLink").hidden = route.view !== "analyze";
         $("filters").hidden = configurationOrStatus || route.view === "request" || route.view === "reports";
         $("projectContextHelp").hidden = configurationOrStatus || route.view === "reports";
         $("filterChips").hidden = configurationOrStatus || route.view === "reports";
         $("coverage").hidden = configurationOrStatus;
         $("coverageNotice").hidden = configurationOrStatus;
-        $("activityCollectionLink").hidden = !["activity", "request"].includes(route.view);
+        $("activityCollectionLink").hidden = !["analyze", "request"].includes(route.view);
         $("settingsDraftNotice").hidden = settings || !collectionSettings?.hasDraft();
         renderSettingsNavigation();
         syncLocalSearchFields();
         renderCollectionNotice();
         renderFreshActivity();
         const titles = {
-            home: ["Work IQ in your Copilot chats", "Explore recorded activity and prepare feedback reports."],
-            activity: [route.session ? sessionSource()?.name : "Choose a Copilot chat", route.session ? "" : "Explore GitHub Copilot chats and their recorded tool calls."],
+            analyze: ["Analyze", "Explore recorded interactions, calls and their results."],
             request: ["Request details", "Read the prompt and available response, then inspect the recorded evidence."],
             reports: route.task === "create" ? ["Create a report", "Choose requests and contents, review the copies, then save local files."]
                 : ["Reports", "Find, open and manage your saved reports."],
@@ -1313,7 +1315,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             "collection-status": ["Collection status", "Check collection health and find gaps in local Copilot chat history."],
         };
         $("pageTitle").textContent = titles[route.view][0];
-        $("pageTitle").classList.toggle("copilot-chat-name", route.view === "activity" && Boolean(route.session) && applied.layer !== "http");
         $("pageTitle").tabIndex = -1;
         $("pageIntro").textContent = titles[route.view][1];
         $("pageIntro").hidden = !titles[route.view][1];
@@ -1322,7 +1323,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("pageIdentity").textContent = applied.layer === "http" ? "Recorder source" : chatCopy.nameLabel;
         $("sessionAnalysis").setAttribute("aria-label", applied.layer === "http" ? "Recorder source analysis" : "Copilot chat analysis");
         $("pageProject").replaceChildren();
-        if (source && route.view === "activity") {
+        if (source && route.view === "analyze" && route.session) {
+            $("pageProject").append(el("p", "context-source", (applied.layer === "http" ? "Recorder source: " : "Copilot chat: ") + source.name));
             if (source.projectId) $("pageProject").append(projectContext(source));
             const reference = sourceReference(source);
             if (reference) $("pageProject").append(el("span", "source-reference", reference));
@@ -1333,25 +1335,24 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ["Project", source.projectId ? source.project || source.projectId : null], ["Project ID", source.projectId],
             ], { inlineHelp: false }), "source-header-details", "source:" + source.sessionId));
         }
-        const actions = { home: [applied.layer === "http" ? "Choose a recorder source" : "Choose a Copilot chat", "activity"], activity: [route.session ? "Create report for this Copilot chat" : "Review selection", "reports"], request: ["Review selection", "reports"], reports: ["Back to activity", "activity"], settings: ["Back to activity", "activity"], "collection-status": ["Back to activity", "activity"] };
+        const actions = { analyze: ["Create report", "reports"], request: ["Review selection", "reports"], reports: ["Back to Analyze", "analyze"], settings: ["Back to Analyze", "analyze"], "collection-status": ["Back to Analyze", "analyze"] };
         const [label, target] = actions[route.view];
         $("pageAction").textContent = label;
         $("pageAction").href = routeUrl(routeFor(target, target === "reports" ? { task: "create" } : {}));
-        if (route.view === "home") $("pageAction").href = routeUrl(routeFor("activity", { session: undefined, request: undefined, page: undefined }));
-        const actionHost = route.view === "home" ? $("periodActions") : route.view === "reports" ? $("pageHeadingActions") : route.view === "request" ? $("activitySelectionContext") : $("pagePrimaryActions");
+        const actionHost = route.view === "analyze" ? $("analyzeResultActions") : route.view === "reports" ? $("pageHeadingActions") : route.view === "request" ? $("activitySelectionContext") : $("pagePrimaryActions");
         if ($("pageAction").parentElement !== actionHost) {
             if (route.view === "reports") actionHost.prepend($("pageAction"));
             else actionHost.append($("pageAction"));
         }
-        $("pageAction").hidden = configurationOrStatus || route.view === "activity" || route.view === "request" && !reportSelection().requests.length;
+        $("pageAction").hidden = configurationOrStatus || route.view === "request" && !reportSelection().requests.length;
         $("pageAction").classList.toggle("button-link", route.view !== "request");
         $("pageAction").classList.toggle("text-link", route.view === "request");
-        sessionReportButton.hidden = route.view !== "activity" || !route.session || applied.layer === "http";
+        sessionReportButton.hidden = route.view !== "analyze" || !route.session || applied.layer === "http";
         $("resetView").hidden = configurationOrStatus || route.view === "reports" || !viewChanged();
-        const resetHost = ["home", "activity"].includes(route.view) ? $("filterTools") : $("scopeResetActions");
+        const resetHost = route.view === "analyze" ? $("filterTools") : $("scopeResetActions");
         if ($("resetView").parentElement !== resetHost) resetHost.append($("resetView"));
         $("scopeResetActions").hidden = route.view !== "request";
-        const refreshHost = ["home", "activity"].includes(route.view) ? $("freshHelpBody")
+        const refreshHost = route.view === "analyze" ? $("freshHelpBody")
             : route.view === "reports" ? $("savedLibraryHelpBody")
             : route.view === "settings" ? $("settingsView")
             : route.view === "collection-status" ? $("collectionSetup") : $("coverage");
@@ -1362,14 +1363,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         renderStoredRefresh();
         const requestAvailable = state.scenarios.some(scenario => scenario.scenarioId === route.request);
-        const returnRoute = route.view === "activity" && route.session ? sessionsRoute()
-            : route.view === "request" ? routeFor(requestAvailable && route.origin === "reports" ? "reports" : "activity", requestAvailable ? {} : { request: undefined }) : null;
+        const returnRoute = route.view === "analyze" && route.session ? sessionsRoute()
+            : route.view === "request" ? routeFor(requestAvailable && route.origin === "reports" ? "reports" : "analyze", requestAvailable ? {} : { request: undefined }) : null;
         const returnLabel = returnRoute?.view === "collection-status" ? "Back to history gaps"
-            : route.view === "activity" ? applied.layer === "http" ? "Back to recorder sources" : "Back to Copilot chats"
-            : !requestAvailable ? "Back to activity" : route.origin === "reports" ? "Back to report scope" : "Back to filtered activity";
+            : route.view === "analyze" ? "Back to Analyze"
+            : route.origin === "reports" && requestAvailable ? "Back to report scope" : "Back to results";
         const returnKey = JSON.stringify([returnRoute, returnLabel]);
         if (returnKey !== contextReturnKey) {
-            const back = returnRoute ? route.view === "activity" ? routeLink(returnLabel, returnRoute, "button-link")
+            const back = returnRoute ? route.view === "analyze" ? routeLink(returnLabel, returnRoute, "button-link")
                 : link(returnLabel, returnRoute.view, requestAvailable ? {} : { request: undefined }, "button-link") : null;
             if (back) back.id = "contextBack";
             $("contextReturn").replaceChildren(...(back ? [back] : []));
@@ -1384,21 +1385,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if ($("pageHeadingActions").parentElement !== contextHost) contextHost.append($("pageHeadingActions"));
         const activeClear = reports ? $("reportClearSelection") : $("activityClearSelection");
         if (activeClear.parentElement !== $("pageHeadingActions")) $("pageHeadingActions").append(activeClear);
+        const selectionHost = route.view === "analyze" ? $("analyzeResultActions") : document.querySelector(".page-heading");
+        if ($("reportSelectionBar").parentElement !== selectionHost) {
+            if (route.view === "analyze") selectionHost.prepend($("reportSelectionBar"));
+            else selectionHost.append($("reportSelectionBar"));
+        }
         const crumbs = $("breadcrumbs");
         crumbs.replaceChildren();
-        if (route.view !== "home") {
-            crumbs.append(link("Home", "home", { request: undefined, page: undefined }));
-            if (!configurationOrStatus && (route.view === "request" || route.session)) {
-                crumbs.append(el("span", "", "/"), routeLink(sessionsRoute().view === "collection-status" ? "History gaps" : applied.layer === "http" ? "Recorder sources" : "Copilot chats", sessionsRoute()));
-                if (source) {
-                    const sourceLabel = applied.layer === "http" ? "Recorder source" : "GitHub Copilot chat";
-                    const sourceLink = routeLink(sourceLabel, { ...route, view: "activity", session: source.sessionId, request: undefined });
-                    sourceLink.setAttribute("aria-label", sourceLabel + ": " + source.name);
-                    crumbs.append(el("span", "", "/"), sourceLink);
-                }
-            }
-            crumbs.append(el("span", "", "/"), el("span", "", settings ? "Settings" : operational ? "Collection status" : route.view === "request" ? "Full request group" : route.view === "reports" ? "Reports" : route.session ? "Analysis" : applied.layer === "http" ? "Recorder sources" : "Copilot chats"));
+        if (route.view !== "analyze") {
+            crumbs.append(link("Analyze", "analyze", { request: undefined }));
+            crumbs.append(el("span", "", "/"), el("span", "", settings ? "Settings" : operational ? "Collection status" : route.view === "request" ? "Interaction" : "Reports"));
         }
+        crumbs.hidden = !crumbs.childElementCount;
         $("exploreLink").href = routeUrl(routeFor("activity"));
         $("backToSelection").href = routeUrl(routeFor("activity"));
         renderReportTask();
@@ -1428,7 +1426,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const rows = selectionRows();
         const evidenceHost = $("serviceEvidenceSummary");
         const evidenceGroups = categories.evidenceGroups(rows, applied.layer);
-        evidenceHost.hidden = !["home", "activity"].includes(route.view) || route.service !== "Unknown" || !evidenceGroups.length;
+        evidenceHost.hidden = route.view !== "analyze" || route.service !== "Unknown" || !evidenceGroups.length;
         evidenceHost.replaceChildren();
         if (!evidenceHost.hidden) {
             const heading = el("h2", "", "Why the service is not shown");
@@ -1528,7 +1526,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText($("moreFilters").querySelector("summary"), `More filters${activeMore ? ` (${activeMore} active)` : ""}`);
         const focus = analytics.serviceInvolvement?.selection;
         const focused = Boolean(applied.filters.services?.length);
-        $("serviceFocus").hidden = !focused || !["home", "activity", "request"].includes(route.view);
+        $("serviceFocus").hidden = !focused || !["analyze", "request"].includes(route.view);
         const name = (applied.filters.services || []).map(serviceLabel).join(", ");
         const noun = applied.layer === "tool" ? "calls" : results.unit(applied.layer, 2);
         setText($("serviceFocusScope"), focused ? `${name}${focus.includeMissingService ? ` + ${noun} with missing service details` : " only"}. ${count(focus.knownMatchIds.length)} known matches${focus.includeMissingService ? `; ${count(focus.contextOnlyIds.length)} context-only` : ""}.${isStale ? " Previous results; refresh before using this scope." : ""}` : "");
@@ -1544,26 +1542,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function renderPeriodFeedback() {
-        $("periodFeedback").hidden = !["home", "activity"].includes(route.view);
+        $("periodFeedback").hidden = route.view !== "analyze";
         if ($("periodFeedback").hidden) return;
         const rows = selectionRows();
         const model = periodFlow({ rows, filters: applied.filters, coverage: state.collection?.config?.approved ? state.collection.checkedWindow : state.coverage, timeContext: applied.timeContext, session: Boolean(route.session), stale: isStale, layer: applied.layer, unit: results.unit(applied.layer, rows.length) });
-        const home = route.view === "home";
-        $("periodFeedback").classList.toggle("home-period-summary", home);
-        if (home) {
-            setText(homeCount, count(rows.length));
-            setText(homeUnit, results.unit(applied.layer, rows.length));
-            $("periodResult").replaceChildren(...(isStale ? ["Previous results: "] : []), homeCount, " ", homeUnit);
-        } else setText($("periodResult"), model.summary);
+        $("periodFeedback").classList.add("home-period-summary");
+        setText(homeCount, count(rows.length));
+        setText(homeUnit, results.unit(applied.layer, rows.length));
+        $("periodResult").replaceChildren(...(isStale ? ["Previous results: "] : []), homeCount, " ", homeUnit);
         $("periodResult").dataset.revision = String(state.revision);
         setText($("periodHint"), isStale ? "The update failed. The last applied period is still shown; retry before using these results."
             : !state.scenarios.length && !collection?.config ? "No activity has been collected."
-                : home && model.requests ? `${applied.filters.from || applied.filters.to ? `${applied.filters.from ? date(applied.filters.from, true) : "Beginning"} - ${applied.filters.to ? date(applied.filters.to, true) : "Latest retained"}` : "All retained dates"} · ${applied.layer === "http" ? `${count(model.sessions)} recorder sources` : chatCopy.count(model.sessions)}`
+                : model.requests ? `${count(model.requests)} ${applied.layer === "http" ? "record group" : "interaction"}${model.requests === 1 ? "" : "s"} · ${applied.filters.from || applied.filters.to ? `${applied.filters.from ? date(applied.filters.from, true) : "Beginning"} - ${applied.filters.to ? date(applied.filters.to, true) : "Latest retained"}` : "All retained dates"} · ${applied.layer === "http" ? `${count(model.sessions)} recorder sources` : chatCopy.count(model.sessions)}`
                     : model.next);
         setText($("periodCoverageText"), model.warning);
         $("periodCoverage").hidden = !model.warning;
         $("periodHistoryLink").hidden = !model.historyLink;
-        if (route.view === "home") $("pageAction").hidden = !model.requests || isStale;
     }
     function renderControls() {
         resultLabels = results.labels(applied.layer);
@@ -1657,7 +1651,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!analytics.totals.count) {
             $("chart").append(!state.scenarios.length && !collection?.config
                 ? empty("No collected activity yet", "Nothing is collected without your source approval.")
-                : empty("No activity in this slice", layer === "recorded-http" ? "No HTTP status is visible for these requests. Try Direct Graph requests to inspect what was requested." : layer === "direct-request" ? "No qualifying recorded Graph request sites were found in these inspected records. Code references and recorder diagnostics are separate evidence." : layer === "http" ? "No recorder diagnostics match. These are separate from workplace activity." : "Try another date, service, or activity source, or use Reset to Home beside the filters."));
+                : empty("No activity in this slice", layer === "recorded-http" ? "No HTTP status is visible for these requests. Try Direct Graph requests to inspect what was requested." : layer === "direct-request" ? "No qualifying recorded Graph request sites were found in these inspected records. Code references and recorder diagnostics are separate evidence." : layer === "http" ? "No recorder diagnostics match. These are separate from workplace activity." : "Try another date, service, or activity source, or use Reset Analyze beside the filters."));
         } else if (chartType === "time") renderTime();
         else renderComparison();
         const selectedResults = resultSelection(applied.filters.outcomes);
@@ -1808,22 +1802,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return slice?.scenarios.slice() || [];
     }
     function renderCurrentViewInsights() {
-        const host = route.view === "home" ? $("homeInsights") : route.view === "activity" ? $("activityInsights") : null;
+        const host = route.view === "analyze" ? $("homeInsights") : null;
         if (!host) return;
         const scenarios = currentViewScenarios();
         const ids = new Set(scenarios.map(item => item.scenarioId));
         const rows = selectionRows().filter(row => ids.has(row.scenarioId));
         const scopeNote = `${chatCopy.groups(ids.size, applied.layer === "http")} across all pages · ${count(rows.length)} ${results.unit(applied.layer, rows.length)} matched. Insights include each group's full retained interaction.`;
-        if (route.view === "home") setText($("homeInsightScope"), `${chatCopy.groups(ids.size, applied.layer === "http")} across all pages; full retained interactions, not only matched ${results.unit(applied.layer, 2)}.`);
-        assessmentUI.overview(host, [...ids], { scopeNote: route.view === "activity" ? scopeNote : "" });
+        setText($("homeInsightScope"), `${chatCopy.groups(ids.size, applied.layer === "http")} across all pages; full retained interactions, not only matched ${results.unit(applied.layer, 2)}.`);
+        assessmentUI.overview(host, [...ids], { scopeNote });
+    }
+    function revealResults() {
+        $("activityTitle").focus({ preventScroll: true });
+        $("activityView").scrollIntoView({ block: "start" });
     }
     function revealSessionResult() {
-        if (route.view !== "activity" || !route.session || !inspectSelectedResults()) return false;
-        const group = $("activityList").querySelector(".matched-action")?.closest(".session-group");
-        if (!group) return false;
-        group.tabIndex = -1;
-        group.focus({ preventScroll: true });
-        group.scrollIntoView({ block: "start" });
+        if (route.view !== "analyze" || route.mode !== "calls") return false;
+        revealResults();
         return true;
     }
     function sessionScopeText() {
@@ -1837,7 +1831,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderSessionAnalysis() {
         const host = $("sessionAnalysis"), source = sessionSource();
         host.replaceChildren();
-        host.hidden = route.view !== "activity" || !route.session;
+        host.hidden = route.view !== "analyze" || !route.session;
         if (host.hidden) return;
         const context = state.sessionAnalysis;
         const rows = context?.rows && slice.refineRows(context.rows);
@@ -1877,137 +1871,47 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const scenarios = currentViewScenarios();
         scenarios.sort((a, b) => String(b.userPrompt?.sourceTimestamp || b.capturedAt || "").localeCompare(String(a.userPrompt?.sourceTimestamp || a.capturedAt || "")));
         const host = $("activityList");
-        const inspecting = Boolean(route.session && inspectSelectedResults());
+        const calls = route.mode === "calls";
+        const items = presentation.ordered((calls ? "calls:" : "interactions:") + sliceKey(),
+            calls ? selectionRows() : scenarios, item => calls ? item.id : item.scenarioId);
+        const noun = calls ? results.unit(applied.layer, 2) : applied.layer === "http" ? "record groups" : "interactions";
+        $("activityTitle").textContent = calls ? applied.layer === "tool" ? "Calls" : results.unit(applied.layer, 2) : applied.layer === "http" ? "Record groups" : "Interactions";
+        for (const node of document.querySelectorAll("[data-analyze-mode]")) {
+            const active = calls === (node.dataset.analyzeMode === "calls");
+            node.href = routeUrl(routeFor("analyze", { mode: node.dataset.analyzeMode === "calls" ? "calls" : undefined, page: undefined }));
+            if (active) node.setAttribute("aria-current", "true");
+            else node.removeAttribute("aria-current");
+        }
+        $("activityView").dataset.revision = String(state.revision);
+        const unlinked = selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId)).length;
+        $("activityListSummary").textContent = `${count(scenarios.length)} ${applied.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"} with ${count(selectionRows().length)} matching ${results.unit(applied.layer, selectionRows().length)} across all pages. Filters and private search apply to the overview and both lists. Opening an interaction includes its full retained evidence.${unlinked ? ` ${count(unlinked)} records have no retained interaction; they remain available in Calls.` : ""}`;
+        $("activityListSummary").hidden = false;
         host.replaceChildren();
-        $("activityListSummary").textContent = "";
-        $("activityListSummary").hidden = inspecting;
-        const sessions = new Map();
-        for (const scenario of scenarios) {
-            const id = scenario.sourceSessionId || "unattributed:" + scenario.scenarioId;
-            if (!sessions.has(id)) sessions.set(id, []);
-            sessions.get(id).push(scenario);
+        activityPage = Math.min(activityPage, Math.max(0, Math.ceil(items.length / pageSize) - 1));
+        if (!items.length) {
+            host.append(empty(!state.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
+                search ? "Try a different phrase or clear the private search. Other filters and report selections stay."
+                    : "Change a filter or use Reset Analyze to explore retained evidence. Source approval and collection settings are unchanged."));
         }
-        if (!authorship.filterValue(applied.filters.promptAuthors) && !route.result && !route.endpoint && !route.service && !route.services && !route.tool && !route.from && !route.to) for (const source of state.sessions || []) {
-            if (sessions.has(source.sessionId) || route.session && source.sessionId !== route.session) continue;
-            if (!source.eligible && source.sessionId !== route.session) continue;
-            if (route.project && (source.projectId || "unscoped") !== route.project) continue;
-            if (!localSearch.phrase(search, [source.name, source.project, source.sessionId])) continue;
-            sessions.set(source.sessionId, []);
-        }
-        if (!sessions.size) {
-            host.append(empty("No requests match", search ? "Try a different phrase, clear the private-text search, or use Reset to Home." : "Change a filter or use Reset to Home to explore all recorded activity."));
-            $("activityPager").replaceChildren();
-            return;
-        }
-        const groups = presentation.ordered("sessions:" + sliceKey(), [...sessions], group => group[0]);
-        activityPage = Math.min(activityPage, Math.max(0, Math.ceil(groups.length / pageSize) - 1));
-        const visible = groups.slice(activityPage * pageSize, (activityPage + 1) * pageSize);
-        $("activityTitle").textContent = route.session ? route.result ? `Matching ${results.unit(applied.layer, 2)}` : "Recorded request groups" : applied.layer === "http" ? "Choose a recorder source" : "Choose a Copilot chat";
-        const unattributed = groups.filter(([, requests]) => requests.length && !requests[0].sourceSessionId).length;
-        const withoutMatches = groups.filter(([, requests]) => !requests.length).length;
-        const matchedSources = groups.length - unattributed - withoutMatches;
-        const sourceCount = applied.layer === "http" ? `${count(matchedSources)} recorder source${matchedSources === 1 ? "" : "s"}` : chatCopy.count(matchedSources);
-        const additionalSources = applied.layer === "http" ? `${count(withoutMatches)} recorder source${withoutMatches === 1 ? "" : "s"}` : chatCopy.count(withoutMatches);
-        if (route.session) {
-            $("activityListSummary").textContent = `${chatCopy.groups(scenarios.length, applied.layer === "http")} in ${sourceCount} with matching evidence${unattributed ? ` and ${count(unattributed)} unattributed groups` : ""}.${withoutMatches ? ` Also listed: ${additionalSources} without matching evidence.` : ""} Counts and result pills use current filters and private search.${route.result ? " Full request-group context remains available." : ""}`;
-        } else {
-            const notes = [];
-            if (withoutMatches) notes.push(scenarios.length
-                ? `Also listed: ${additionalSources} without matching evidence.`
-                : `The listed ${applied.layer === "http" ? "recorder source" : "Copilot chat"}${withoutMatches === 1 ? " has" : "s have"} no matching evidence in this view.`);
-            if (unattributed) notes.push(`${chatCopy.groups(unattributed, applied.layer === "http")} ${unattributed === 1 ? "has" : "have"} no source identity.`);
-            $("activityListSummary").textContent = notes.join(" ");
-        }
-        $("activityListSummary").hidden = inspecting || !$("activityListSummary").textContent;
-        for (const [sessionId, requests] of visible) {
-            const key = "session:" + sessionId, group = viewKey(el("section", "session-group"), key);
-            const initiallyOpen = Boolean(route.session) || Boolean(search.trim() && groups.length === 1 && requests.length === 1);
-            group.dataset.sessionId = sessionId;
-            const heading = el("div", "session-heading"), title = el("h3"), content = el("div", "session-requests");
-            const source = requests.length && !requests[0].sourceSessionId ? null : sessionSource(sessionId);
-            const name = source?.name || requests[0]?.sourceSessionName || (source ? chatCopy.unnamed : "Unattributed request");
-            const summaryId = "session-summary-" + encodeURIComponent(sessionId);
-            content.id = "session-requests-" + encodeURIComponent(sessionId);
-            const toggle = button("", () => {
-                presentation.setOpen(key, !presentation.isOpen(key, initiallyOpen));
-                paintRequests();
-            }, "session-toggle quiet");
-            toggle.id = "session-toggle-" + encodeURIComponent(sessionId);
-            const identity = el("span", "session-title");
-            identity.append(el("span", "session-label visually-hidden", source ? applied.layer === "http" ? "Recorder source" : chatCopy.nameLabel : "Source Copilot chat not recorded"), el("span", "session-name" + (source && applied.layer !== "http" ? " copilot-chat-name" : ""), name));
-            toggle.append(ux.icon("chevron"), identity);
-            toggle.setAttribute("aria-controls", content.id);
-            toggle.setAttribute("aria-describedby", summaryId);
-            title.append(toggle);
-            heading.append(title);
-            if (source) {
-                const drill = routeLink("Open analysis", sessionRoute(sessionId), "session-drill text-link");
-                drill.setAttribute("aria-label", (applied.layer === "http" ? "Open analysis for recorder source: " : "Open analysis for GitHub Copilot chat: ") + name);
-                heading.append(drill);
-            }
-            const summary = el("div", "session-summary");
-            summary.id = summaryId;
-            const requestIds = new Set(requests.map(item => item.scenarioId));
-            const matchingRows = selectionRows().filter(row => requestIds.has(row.scenarioId));
-            const matching = results.summarize(matchingRows);
-            const meta = el("div", "session-meta");
-            meta.append(projectContext(source || requests[0]));
-            const reference = sourceReference(source);
-            if (reference) {
-                const marker = el("span", "source-reference", reference);
-                marker.id = "source-reference-" + encodeURIComponent(sessionId);
-                meta.append(marker);
-                heading.querySelector(".session-drill")?.setAttribute("aria-describedby", marker.id);
-            }
-            const selectedCount = el("span", "session-selected");
-            selectedCount.dataset.sessionSelection = sessionId;
-            meta.append(selectedCount);
-            const matchingLine = resultLine(applied.layer, matching, {
-                scope: applied.layer === "tool" ? "Matching Work IQ tool-call results in these request groups" : "Matching evidence results in these groups",
-                label: chatCopy.relationship(requests.length, matching?.count, results.unit(applied.layer, matching?.count), applied.layer === "http"),
-                sessionId: route.session && route.result ? undefined : source?.sessionId,
-            });
-            const sourceRows = state.sessionAnalysis?.rows && slice.refineRows(state.sessionAnalysis.rows);
-            const sameSourceScope = sourceRows && sourceRows.length === matchingRows.length && sourceRows.every(row => matchingRows.some(match => match.id === row.id));
-            if (inspecting) {
-                summary.append(selectedCount);
-                if (!sameSourceScope) summary.append(matchingLine);
-            } else summary.append(meta, matchingLine);
-            if (!requests.length && source?.unavailable) summary.append(el("p", "context-help-note", "Saved history unavailable. Open analysis to inspect coverage."));
-            if (!inspecting) group.append(heading);
-            group.append(summary, content);
-            const ordered = presentation.ordered("requests:" + key + sliceKey(), requests, item => item.scenarioId);
-            function paintRequests() {
-                const open = inspecting || presentation.isOpen(key, initiallyOpen);
-                toggle.setAttribute("aria-expanded", String(open));
-                content.hidden = !open;
-                if (open && route.session && inspectSelectedResults()) pagedList(content, matchingRows, { key: "matching:" + key + sliceKey(), noun: `matching ${results.unit(applied.layer, 2)}`, renderItem: matchingAction });
-                else if (open) pagedList(content, ordered, { key: key + sliceKey(), noun: applied.layer === "http" ? "record groups" : "request groups", renderItem: requestCard });
-                else { captureReading(); content.replaceChildren(); }
-            }
-            paintRequests();
-            host.append(group);
-        }
+        for (const item of items.slice(activityPage * pageSize, (activityPage + 1) * pageSize)) host.append(calls ? matchingAction(item) : requestCard(item));
         const pager = viewKey($("activityPager"), "pager:activity");
-        pager.hidden = Boolean(route.session) && groups.length === 1;
-        const pageSubject = unattributed ? "source groups" : applied.layer === "http" ? "recorder sources" : groups.length === 1 ? "Copilot chat" : "Copilot chats";
-        const pageLabel = withoutMatches ? "Listed " + pageSubject : pageSubject[0].toUpperCase() + pageSubject.slice(1);
+        pager.hidden = !items.length;
         pager.setAttribute("role", "navigation");
-        pager.setAttribute("aria-label", unattributed ? "Source group list pages" : applied.layer === "http" ? "Recorder source list pages" : "Copilot chat list pages");
-        pager.replaceChildren(el("span", "", `${pageLabel} ${activityPage * pageSize + 1}-${Math.min((activityPage + 1) * pageSize, groups.length)} of ${groups.length}`));
+        pager.setAttribute("aria-label", "Analyze result pages");
+        pager.replaceChildren(el("span", "", `${activityPage * pageSize + 1}-${Math.min((activityPage + 1) * pageSize, items.length)} of ${items.length} ${noun}`));
         const position = pager.firstElementChild;
         position.id = "activityPagePosition";
         position.dataset.pagePosition = "";
         position.tabIndex = -1;
-        if (groups.length > pageSize) {
-            const turnPage = offset => navigate(routeFor("activity", { page: Math.max(0, activityPage + offset) }), false,
+        if (items.length > pageSize) {
+            const turnPage = offset => navigate(routeFor("analyze", { page: Math.max(0, activityPage + offset) }), false,
                 { paging: capturePager(pager, offset) });
             const prev = button("Previous", () => turnPage(-1));
             prev.disabled = activityPage === 0;
             prev.dataset.pageDirection = "-1";
             prev.setAttribute("aria-describedby", position.id);
             const next = button("Next", () => turnPage(1));
-            next.disabled = (activityPage + 1) * pageSize >= groups.length;
+            next.disabled = (activityPage + 1) * pageSize >= items.length;
             next.dataset.pageDirection = "1";
             next.setAttribute("aria-describedby", position.id);
             pager.append(prev, next);
@@ -2057,11 +1961,24 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             card.append(el("p", "context-help-note", `${row.status ? `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}. ` : ""}${help.resultHelp(row.outcome, applied.layer)}`));
         }
         if (scenario) {
+            card.append(interactionContext(scenario));
             card.append(textAccess.render(scenario.userPrompt, { key: "action:" + row.id, originKind: authorship.originKind(scenario),
                 navigationNode: link("View interaction", "request", { request: scenario.scenarioId }, "request-link text-link"),
             }));
         } else card.append(el("p", "muted", "Full request details were not retained."));
         return card;
+    }
+    function interactionContext(scenario) {
+        const context = el("div", "interaction-context"), source = sessionSource(scenario.sourceSessionId);
+        if (source) {
+            const chat = routeLink(source.name, sessionRoute(source.sessionId), "text-link");
+            chat.setAttribute("aria-label", "Filter to Copilot chat: " + source.name);
+            context.append(chat);
+            const reference = sourceReference(source);
+            if (reference) context.append(el("span", "source-reference", reference));
+        } else context.append(el("span", "muted", "Source chat not recorded"));
+        context.append(projectContext(source || scenario));
+        return context;
     }
     function requestCard(scenario) {
         const rows = rowsFor(scenario.scenarioId), row = viewKey(el("article", "request-row"), "request:" + scenario.scenarioId);
@@ -2077,8 +1994,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             { label: requestTiming.summary(scenario, applied.timeContext) },
         ]);
         meta.classList.add("request-meta");
-        content.append(meta, matchingResults(scenario.scenarioId));
-        row.append(selectionCheckbox(scenario), content);
+        const tools = [...new Set(rows.map(row => row.tool).filter(Boolean))];
+        content.append(interactionContext(scenario), meta);
+        if (tools.length) content.append(el("p", "interaction-tools", tools.join(", ")));
+        content.append(matchingResults(scenario.scenarioId));
+        const selection = el("label", "interaction-select");
+        selection.append(selectionCheckbox(scenario));
+        row.append(selection, content);
         return row;
     }
     function updateSessionSelections() {
@@ -2128,7 +2050,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? body.querySelector(".interaction-response")?.getBoundingClientRect().height ?? 0 : 0;
         body.replaceChildren();
         if (!scenario) {
-            body.append(empty("This request is not available", "It may no longer be in the current local collection. Return to Activity to choose another request."));
+            body.append(empty("This interaction is not available", "It may no longer be in the current local collection. Return to Analyze to choose another interaction."));
             return;
         }
         detailOwner = "request:" + scenario.scenarioId;
@@ -2406,7 +2328,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? `Collection exclusions: ${x.syntheticRequestGroups} synthetic request groups; ${x.diagnosticRequestGroups} diagnostic groups; ${x.unknownSourceRequestGroups} groups with unknown source identity; ${x.requestGroupsWithoutEligibleEvidence} alias-only or excluded groups. ${x.duplicateEvidenceRecords} duplicate evidence records, ${x.unidentifiableEvidenceRecords} unidentifiable records and ${x.platformDiagnosticEvidenceRecords} platform diagnostic records are excluded. ${x.excludedOrDuplicateEvidenceRecords} evidence records excluded or deduplicated overall. ${value.excludedRequestedGroups} requested groups have no eligible evidence. These overlapping categories are not additive. Missing projects remain unscoped, not excluded. Hidden calls, missing logs and new chats are not inferred.`
             : "Fresh scope information is required.";
         const inclusion = unknownSelected ? "A selected request is no longer available" : reportScopes.inclusion(value);
-        const activity = route.view === "activity";
+        const activity = route.view === "analyze";
         for (const id of ["selectionSummary", "previewSelectionSummary", "activitySelectionSummary"]) setText($(id), inclusion);
         let compactSelection = $("activitySelectionCompact");
         if (!compactSelection) {
@@ -2454,7 +2376,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             host.replaceChildren();
             if (!open) return;
             setText($("reportRequestSearchCount"), `0 of ${count(requests.length)} report requests shown.`);
-            if (!requests.length) { host.append(empty("No requests selected", "Select requests in Activity or choose a scope above. Your captured evidence and saved reports are still here.")); return; }
+            if (!requests.length) { host.append(empty("No requests selected", "Select interactions in Analyze or choose a scope above. Your captured evidence and saved reports are still here.")); return; }
             const query = localQuery("reportRequestSearch");
             const matching = requests.filter(scenario => localSearch.matches(query, [scenario.userPrompt?.text, scenario.title, scenario.sourceSessionName, sessionSource(scenario.sourceSessionId)?.name, scenario.project, scenario.sourceSessionId]));
             setText($("reportRequestSearchCount"), `${count(matching.length)} of ${count(requests.length)} report requests shown. All ${count(requests.length)} remain included.`);
@@ -2694,8 +2616,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             el("p", "coverage-counts", `${scopeLabels[applied.filters.scope] || "Selected collection"}: ${count(c.scenarioCount)} ${http ? "record" : "request"} group${c.scenarioCount === 1 ? "" : "s"} from ${sources} in ${count(c.projectCount)} project${c.projectCount === 1 ? "" : "s"}.${unscoped}`),
             el("p", "coverage-scope", "Counts include only matching records. The date filter selects saved evidence, not the history to collect."),
         );
-        if (route.view === "activity" && !route.session) body.append(el("p", "activity-list-explanation",
-            "Matching counts cover all pages and follow the current filters and private search. A listed chat without matching evidence may have recorded history outside this view. Insights include each matching group's full retained interaction, so their scope can be wider than the matching activity."));
+        if (route.view === "analyze") body.append(el("p", "activity-list-explanation",
+            "Matching counts cover all pages and follow the current filters and private search. Interactions open directly; Chat in More filters is optional context. Insights include each matching group's full retained interaction, so their scope can be wider than the matching calls. Chats without matching evidence remain available through Chat and Collection status."));
         if (c.unknownSessionRows) body.append(el("p", "coverage-warning", `${count(c.unknownSessionRows)} matching records have no known source chat; they are not included in the chat count.`));
         if (!coverage.graphHistory && ["direct-request", "recorded-http", "code-reference"].includes(applied.layer)) {
             body.append(el("p", "coverage-warning", "Direct Graph history has not been scanned in this collection. Coverage is unknown, not zero."));
@@ -2759,10 +2681,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderTimeContext();
         renderControls(); renderNavigation(); renderFilterChips(); renderViewingContext(); renderSessionAnalysis(); renderPeriodFeedback();
         detailOwner = route.view;
-        if (route.view === "home") {
+        if (route.view === "analyze") {
             renderHome();
-        }
-        if (route.view === "activity") {
             renderActivity();
         }
         renderCurrentViewInsights();
@@ -2888,7 +2808,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderCollectionNotice() {
         const hasEvidence = Boolean(state?.scenarios.length);
         const notice = historyStatus.entry(collection, { hasEvidence, unavailable: Boolean(collectionReadError), reason: collectionReadReason });
-        const setupHandled = route.view === "home" && !collection?.config?.approved && !collection?.error && notice?.severity === "normal";
+        const setupHandled = route.view === "analyze" && !collection?.config?.approved && !collection?.error && notice?.severity === "normal";
         const host = $("collectionNotice");
         host.hidden = ["settings", "collection-status"].includes(route.view) || !notice || setupHandled && !hasEvidence
             || !$("message").hidden && $("message").dataset.connectionFailure === "true";
@@ -2926,7 +2846,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderFreshActivity() {
         const host = $("freshActivity"), model = fresh.snapshot(), approved = collection?.config?.approved;
-        host.hidden = !["home", "activity"].includes(route.view);
+        host.hidden = route.view !== "analyze";
         host.dataset.phase = model.phase;
         host.dataset.checkId = model.check?.id || "";
         host.dataset.revision = model.check ? String(model.check.revision) : "";
@@ -3002,7 +2922,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             collectionBusy = false;
             collectionSettings?.setChecking(false);
             renderFreshActivity();
-            if (initiatingControl === $("checkActivity") && document.activeElement === document.body && route.view === "home") ux.restoreFocus(initiatingControl);
+            if (initiatingControl === $("checkActivity") && document.activeElement === document.body && route.view === "analyze") ux.restoreFocus(initiatingControl);
             clearTimeout(pollTimer);
             pollTimer = setTimeout(pollCollection, 5000);
         }
@@ -3486,6 +3406,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault(); go(node.dataset.nav, { request: undefined, task: undefined });
     }));
+    $("resultsLink").addEventListener("click", event => { event.preventDefault(); revealResults(); });
+    for (const node of document.querySelectorAll("[data-analyze-mode]")) node.addEventListener("click", event => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        go("analyze", { mode: node.dataset.analyzeMode === "calls" ? "calls" : undefined, page: undefined });
+    });
     for (const id of ["pageAction", "exploreLink", "backToSelection", "reportLibraryLink", "reportCreateLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
@@ -3660,7 +3586,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         invalidatePreview("Prompt authors changed. Review the updated report membership before saving.");
         renderReports();
     });
-    ux.explainDisabled($("exportBtn"), () => isStale || isLoading ? "Wait for a current activity snapshot." : !draft.options().formats.length ? "Select at least one export format." : "Select requests in Activity or choose Current view or All collected activity. Review labels do not control export eligibility.");
+    ux.explainDisabled($("exportBtn"), () => isStale || isLoading ? "Wait for a current activity snapshot." : !draft.options().formats.length ? "Select at least one export format." : "Select interactions in Analyze or choose Current view or All collected activity. Review labels do not control export eligibility.");
     document.querySelectorAll("[name=promptMode]").forEach((control) => control.addEventListener("change", () => {
         draft.change({ promptMode: control.value, overrides: [] });
         invalidatePreview(); updateSelection();
@@ -3759,7 +3685,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     syncControls();
-    if (["settings", "collection-status"].includes(route.view)) rememberRoute(route, true);
+    rememberRoute(route, true);
     load().then(ok => {
         if (!ok) return;
         if (route.view === "settings") revealSetting();
