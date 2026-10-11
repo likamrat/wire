@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { privateFixture, navigateMain, selectActivityOption, revealStoredRefresh, chooseTheme } from "./helpers.mjs";
+import { privateFixture, navigateMain, selectActivityOption, revealStoredRefresh, chooseTheme, restoreLegacySearch } from "./helpers.mjs";
 import { chooseReportScope, reportContents, cancelReportPreview } from "./report-journey-helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 
@@ -91,7 +91,7 @@ test("normal Analyze entry directly opens exact interactions and restores query,
     await page.locator("#resultsLink").focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#activityTitle")).toBeFocused();
     assert.match(page.url(), /#analyze$/);
-    await page.locator("#activitySearch").fill(privateQuery);
+    await restoreLegacySearch(page, privateQuery);
     await expect(page.locator("#activityCount")).toHaveText("11");
     await expect(page.locator("#activityListSummary")).toContainText("9 interactions with 11 matching Work IQ tool calls");
     const first = await rowIds(page);
@@ -162,7 +162,7 @@ test("normal Analyze entry directly opens exact interactions and restores query,
     await expect(page.locator("#scopeCount-current")).toHaveText("2 request groups");
     await navigateMain(page, "analyze"); await ready(page);
     await page.locator('[data-analyze-mode="interactions"]').click();
-    await page.locator("#activitySearch").fill("NO_ANALYZE_MATCH");
+    await restoreLegacySearch(page, "NO_ANALYZE_MATCH");
     await expect(page.locator("#activityCount")).toHaveText("0");
     await expect(page.locator("#activityList")).toContainText("No matching interactions");
     await navigateMain(page, "reports"); await page.locator("#reportCreateLink").click();

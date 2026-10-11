@@ -9,7 +9,8 @@ import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { buildAssessmentModel, assessmentOverview, buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { createControlHelp } from "../lib/control-help.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
-import { evaluationSummaryHtml, reportPresentationStyles, renderComparisonHtml } from "../lib/report-presentation.mjs";
+import { renderComparisonHtml } from "../lib/report-presentation.mjs";
+import { buildSanitizedBundle } from "../lib/export.mjs";
 import { adaptReportMetric } from "../lib/report-facts.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { contract, quality, samples } from "./assessment-ui-fixtures.mjs";
@@ -47,12 +48,14 @@ function syntheticResults() {
                 checkId: { accuracy: "request-requirements-corroborated", "answer-trust": "recorded-answer-support", "action-trust": "action-intent-alignment" }[dimension],
                 eligibleUnitRefs: [view.interaction.interactionRef],
                 coveredUnitRefs: verdict === "unassessed" ? [] : [view.interaction.interactionRef],
+                unassessedReasons: verdict === "unassessed" ? [{ reason: "missing-evidence", count: 1 }] : [],
                 evaluator: { provider: "github-copilot", model: "synthetic-review-model", rubricId: "wire-recorded-interaction-review", rubricVersion: 1 },
             });
             if (verdict === "unassessed") metric.reason = "missing-evidence";
             if (index === 1 && dimension === "action-trust") Object.assign(metric, {
                 status: "evaluator-error", reason: "evaluator-failure",
                 counts: { pass: 0, fail: 0, unassessed: 0, evaluatorError: 1 },
+                unassessedReasons: [],
             });
             view.metrics.push(contract.validateMetric(metric));
         }
@@ -77,7 +80,8 @@ test("plain explanations work in the normal renderer for mixed and missing resul
         disclosureReviewed: true, patternVersion: 1, metrics: facts.metrics.filter(metric => contract.CURRENT_DIMENSIONS.includes(metric.dimension)).map(adaptReportMetric), toolRows: [],
         scope: { selectionKind: "selected", timeZone: "UTC", collectionDefinition: "synthetic", callTimesAvailable: false, historyComplete: false } });
     const comparison = compareFrozenReportFacts(report("a"), report("b"));
-    const reportHtml = `<!doctype html><html lang="en" data-evidence-theme="light"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${reportPresentationStyles}</style></head><body class="comparison-document"><h1>Synthetic report</h1>${evaluationSummaryHtml(facts)}</body></html>`;
+    const reportHtml = (await buildSanitizedBundle(records, state.pseudonymKey,
+        { promptMode: "none", formats: ["html"] }, undefined, undefined, facts)).previewHtml;
     const comparisonHtml = renderComparisonHtml(comparison, { bundleId: "export-synthetic", preparedAtDisplay: "Synthetic comparison",
         sourceReports: [comparison.baseline, comparison.later] });
     const server = createServer(async (req, res) => {
@@ -129,26 +133,29 @@ test("plain explanations work in the normal renderer for mixed and missing resul
         proof.push({ name, text: await locator.innerText() });
         if (proofDir) await locator.screenshot({ path: path.join(proofDir, `${name}.png`) });
     }
-    for (const [route, host] of [["#home", "#homeInsights"], ["#activity", "#activityInsights"]]) {
+    for (const route of ["#home", "#activity"]) {
         await page.goto(origin + route);
-        const insights = page.locator(host);
+        const insights = page.locator("#homeInsights");
+        if (!await insights.locator(".assessment-saved-details").evaluate(node => node.open)) await insights.locator(".assessment-saved-details > summary").click();
         await insights.locator(".assessment-grid").waitFor();
         const text = await insights.innerText();
-        assert.match(text, /Results for 2 of 3 requests/);
-        assert.match(text, /Results for 1 of 3 requests/);
+        assert.match(text, /2 of 3 requests assessed/);
+        assert.match(text, /1 of 3 requests assessed/);
         assert.match(text, /3 of 4 calls timed/);
         assert.match(text, /1 of 3 requests timed/);
         assert.doesNotMatch(text, /three AI checks cover the same/);
         const help = insights.getByRole("button", { name: "About Accuracy", exact: true });
+        await page.mouse.move(0, 0);
         await help.hover();
         await page.getByRole("tooltip").waitFor();
         assert.equal(await page.getByRole("tooltip").innerText(), glossary.accuracy.definition);
         await page.keyboard.press("Escape");
         await capture(route.slice(1), insights);
     }
-    for (const [id, expected] of [["plain-assessed", /0 passed.*1 failed/s], ["plain-mixed", /Not enough evidence[\s\S]*Check could not run/], ["plain-missing", /No result/]]) {
+    for (const [id, expected] of [["plain-assessed", /0 passed.*1 failed/s], ["plain-mixed", /Insufficient recorded evidence[\s\S]*evaluator error/], ["plain-missing", /not assessed|No verdict/]]) {
         await page.goto(origin + `#request?request=${id}`);
         const insights = page.locator(".interaction-insights");
+        if (!await insights.locator(".assessment-saved-details").evaluate(node => node.open)) await insights.locator(".assessment-saved-details > summary").click();
         await insights.locator(".assessment-grid").waitFor();
         assert.match(await insights.innerText(), expected);
         await capture(id, insights);
@@ -159,7 +166,7 @@ test("plain explanations work in the normal renderer for mixed and missing resul
         await chooseTheme(page, theme);
         await page.evaluate(size => document.documentElement.style.fontSize = `${size}%`, size);
         for (const term of ["accuracy", "speed", "trust"]) {
-            const help = insights.getByRole("button", { name: `About ${glossary[term].label}`, exact: true });
+            const help = insights.getByRole("button", { name: `About ${glossary[term].label}`, exact: true }).first();
             await help.focus();
             await page.keyboard.press("Enter");
             const tooltip = page.getByRole("tooltip");
@@ -200,9 +207,8 @@ test("plain explanations work in the normal renderer for mixed and missing resul
         await page.goto(origin + route);
         for (const theme of ["light", "dark"]) {
             await page.evaluate(theme => { document.documentElement.dataset.evidenceTheme = theme; document.documentElement.style.fontSize = "200%"; }, theme);
-            const disclosure = page.getByText("How to read these results", { exact: true });
-            if (await disclosure.count() && !await disclosure.evaluate(node => node.parentElement.open)) await disclosure.click();
-            const notes = page.locator(".reading-notes");
+            const notes = page.locator(route === "/synthetic-report" ? "#quality" : ".reading-notes");
+            if (await notes.evaluate(node => node.tagName === "DETAILS" && !node.open)) await notes.locator("summary").click();
             assert.match(await notes.innerText(), /A successful tool call does not prove the answer was correct/);
             assert.match(await notes.innerText(), /Missing results are left out/);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);

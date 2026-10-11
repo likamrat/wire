@@ -30,18 +30,17 @@ test("a single-group legend explains the missing evidence without repeating the 
     const browser = await chromium.launch(); t.after(async () => { await browser.close(); await runtime.close(); });
     const page = await browser.newPage({ viewport: { width: 1280, height: 1100 }, colorScheme: "dark" });
     await page.goto(runtime.url + "#home?bucket=week&service=Unknown"); await ready(page);
-    const composition = page.locator('[data-percentage-card="composition"]');
-    assert.equal(await composition.locator(".percentage-evidence").textContent(),
-        "Copilot assistance via workiq-ask. These records do not identify a service or API path.");
-    assert.equal(await composition.locator(".percentage-legend-row").getAttribute("data-count"), "5");
-    assert.equal(await composition.locator(".percentage-legend-row").getAttribute("data-percentage"), "100%");
+    const composition = page.locator('[data-percentage-card="services"]');
+    assert.match(await composition.innerText(), /5 with missing service details/);
+    assert.match(await composition.locator(".percentage-gap-list").innerText(), /Not in this record\s+5/);
+    assert.equal(await composition.locator(".percentage-legend-row").count(), 0, "Missing details are not a fabricated service");
     for (const width of [1280, 375]) {
         await page.setViewportSize({ width, height: 1100 });
         await page.evaluate(size => { document.documentElement.style.fontSize = size; }, width === 375 ? "200%" : "100%");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         if (proofDir) {
             await mkdir(proofDir, { recursive: true });
-            const visibleCopy = width === 375 ? composition.locator(".percentage-legend") : composition;
+            const visibleCopy = width === 375 ? composition.locator(".percentage-coverage") : composition;
             await visibleCopy.screenshot({ path: path.join(proofDir, `single-group-dark-${width}.png`) });
         }
     }
@@ -83,19 +82,17 @@ test("the Unknown-filtered entry explains its actual calls before any disclosure
     await page.setViewportSize({ width: 1280, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await page.goto(runtime.url + "#home?bucket=week&service=Unknown"); await ready(page);
-    const composition = page.locator('[data-percentage-card="composition"]');
-    assert.match(await composition.locator(".percentage-evidence").innerText(), /Copilot assistance[\s\S]*workiq-ask/);
-    const reasonLines = await composition.locator(".percentage-evidence p").allTextContents();
+    const composition = page.locator('[data-percentage-card="services"]');
+    const reasonLines = await composition.locator(".percentage-gap-list > div").allTextContents();
     assert.equal(reasonLines.length, 3);
-    assert.ok(reasonLines.every(line => line.includes(": 1 Work IQ tool call. ")), "Separate tool/reason groups retain their exact counts with units");
-    assert.match(reasonLines[0], /Copilot assistance via workiq-ask: 1 Work IQ tool call\. This record does not identify a service or API path\./);
-    assert.doesNotMatch(reasonLines.join(" "), /Not in this record/);
+    assert.deepEqual(await composition.locator(".percentage-gap-list dd").allTextContents(), ["1", "1", "1"]);
+    assert.match(reasonLines.join(" "), /Not in this record.*Path not recognized.*No target recorded/);
+    assert.match(await composition.locator(".percentage-denominator").innerText(), /Work IQ tool calls/);
     if (proofDir) {
         await mkdir(proofDir, { recursive: true });
         await composition.screenshot({ path: path.join(proofDir, "multiple-groups-dark-1280.png") });
     }
-    assert.equal(await composition.locator(".percentage-label").getAttribute("aria-describedby"),
-        await composition.locator(".percentage-evidence").getAttribute("id"));
+    assert.equal(await composition.locator(".percentage-label").count(), 0);
     assert.equal(await composition.locator("details").evaluate(node => node.open), false);
     await page.goto(runtime.url + "#request?request=service-evidence&service=Unknown"); await ready(page);
     assert.equal(await explanation.isVisible(), false, "A full request must not be described as only the originating Unknown slice.");
@@ -136,10 +133,9 @@ test("whole category view and detail explain remaining service evidence without 
         assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "6");
         assert.match(await page.locator("#chart").innerText(), /Service not shown/);
         assert.equal(await page.locator(".dimensional-category-label svg").count(), 0);
-        const composition = page.locator('[data-percentage-card="composition"]');
-        const unknown = composition.locator('[data-category="Unknown"].percentage-legend-row');
-        assert.equal(await unknown.getAttribute("data-count"), "3");
-        assert.match(await unknown.innerText(), /Service not shown/);
+        const composition = page.locator('[data-percentage-card="services"]');
+        assert.match(await composition.innerText(), /3 with missing service details/);
+        assert.equal(await composition.locator('[data-category="Unknown"]').count(), 0);
         if (!await composition.locator("details").evaluate(node => node.open)) await composition.locator("summary").click();
         const explanation = await composition.locator(".percentage-exact").innerText();
         assert.match(explanation, /Its record does not identify a service or API path/);
@@ -158,7 +154,7 @@ test("whole category view and detail explain remaining service evidence without 
         assert.equal(await dataService(unrecognized), "Path not recognized");
         const missing = page.locator('[data-tool-call-id="service-evidence-call-4"]');
         assert.equal(await dataService(missing), "No target recorded");
-        assert.match(await page.locator('[data-tool-call-id="service-evidence-call-2"]').innerText(), /Files[\s\S]*Tool failed/);
+        assert.match(await page.locator('[data-tool-call-id="service-evidence-call-2"]').textContent(), /Files[\s\S]*Tool failed/);
         assert.match(await page.locator('[data-tool-call-id="service-evidence-call-5"]').innerText(), /Schema lookup[\s\S]*Not applicable[\s\S]*Schema path/);
         await ask.getByRole("button", { name: "About Copilot assistance", exact: true }).click();
         assert.match(await page.getByRole("tooltip").innerText(), /Its record does not identify a service or API path/);
@@ -178,7 +174,7 @@ test("whole category view and detail explain remaining service evidence without 
     assert.match(page.url(), /service=Unknown/);
     await selectActivityOption(page, "outcomeFilter", ["failure"]); await ready(page);
     assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "0");
-    assert.match(await page.locator('[data-percentage-card="composition"]').innerText(), /No activity in this applied view/);
+    assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /No activity in this applied view/);
 });
 
 test("new readable report retains the neutral evidence reasons and safe shared-file paths", { timeout: 30000 }, async t => {

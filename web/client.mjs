@@ -1641,7 +1641,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         crumbs.hidden = !crumbs.childElementCount;
         $("exploreLink").href = routeUrl(routeFor("activity"));
-        $("backToSelection").href = routeUrl(routeFor("activity"));
         renderReportTask();
     }
     function renderReportTask() {
@@ -2205,7 +2204,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             next.setAttribute("aria-describedby", position.id);
             pager.append(prev, next);
         }
-        updateSessionSelections();
     }
     function recordedFailure(tool, failed = false) {
         const errors = (tool?.apiResults || []).filter(result => result.errorCode || result.statusCode >= 400)
@@ -2299,18 +2297,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         selection.append(selectionCheckbox(scenario));
         row.append(selection, content);
         return row;
-    }
-    function updateSessionSelections() {
-        const reportRequests = reportSelection().requests;
-        for (const node of document.querySelectorAll("[data-session-selection]")) {
-            const id = node.dataset.sessionSelection;
-            const requests = state.scenarios.filter(s => (s.sourceSessionId || "unattributed:" + s.scenarioId) === id);
-            const ids = new Set(requests.map(s => s.scenarioId));
-            const total = reportRequests.filter(request => request.aliases.some(id => ids.has(id))).length;
-            renderSelectionCount(node, total, requests.length);
-            node.title = `${chatCopy.groups(total)} in this Copilot chat included in report, across its retained dates and pages. Complete eligible request groups, not only matching calls.`;
-            node.hidden = false;
-        }
     }
     function renderSelectionCount(node, total, maximum) {
         let number = node.querySelector(".selection-number");
@@ -2716,7 +2702,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? `One comparison report / ${periodReport.value.periods.baseline.rowIds.length} matching records in A / ${periodReport.value.periods.later.rowIds.length} in B`
             : unknownSelected ? "A selected request is no longer available" : reportScopes.inclusion(value);
         const activity = route.view === "analyze";
-        for (const id of ["selectionSummary", "previewSelectionSummary", "activitySelectionSummary"]) setText($(id), inclusion);
+        for (const id of ["previewSelectionSummary", "activitySelectionSummary"]) setText($(id), inclusion);
         let compactSelection = $("activitySelectionCompact");
         if (!compactSelection) {
             compactSelection = el("p");
@@ -2772,7 +2758,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             promptMode: draft.options().promptMode, formats: draft.options().formats,
             timeLabel: time.label(applied?.timeContext || viewerTime), entry: reportEntry,
         });
-        updateSessionSelections();
         selectControls?.sync();
         renderStoredRefresh();
         renderReportTask();
@@ -3914,7 +3899,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         event.preventDefault();
         go("analyze", { mode: node.dataset.analyzeMode === "calls" ? "calls" : undefined, page: undefined });
     });
-    for (const id of ["pageAction", "exploreLink", "backToSelection", "reportLibraryLink", "reportCreateLink"]) $(id).addEventListener("click", (event) => {
+    for (const id of ["pageAction", "exploreLink", "reportLibraryLink", "reportCreateLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         const reportTask = event.currentTarget.closest("#reportTaskNav");

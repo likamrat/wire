@@ -6,7 +6,8 @@ import { buildSanitizedBundle } from "../lib/export.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { normalizeMetricFact } from "../lib/report-metric-comparison.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
-import { evaluationSummaryHtml, evaluationSummaryMarkdown, renderComparisonHtml, renderComparisonMarkdown } from "../lib/report-presentation.mjs";
+import { renderComparisonHtml, renderComparisonMarkdown } from "../lib/report-presentation.mjs";
+import { nativeQualityHtml, nativeQualityMarkdown } from "../lib/native-report-output.mjs";
 import { createReportComparison } from "../web/report-comparison.mjs";
 import { fixture } from "./helpers.mjs";
 
@@ -32,7 +33,7 @@ function modelFacts(model, rubricVersion) {
 test("new readable report summaries show each frozen model and rubric version rather than current defaults", () => {
     for (const [model, version] of [["fixture-model-a", 1], ["archived-model-b", 7]]) {
         const { facts } = modelFacts(model, version), before = JSON.stringify(facts);
-        for (const text of [evaluationSummaryHtml(facts), evaluationSummaryMarkdown(facts).join("\n")]) {
+        for (const text of [nativeQualityHtml({ evaluationFacts: facts }), nativeQualityMarkdown({ evaluationFacts: facts }).join("\n")]) {
             assert.ok(text.includes(model));
             assert.ok(text.includes(`rubric wire-recorded-interaction-review v${version}`),
                 "The readable summary dropped the frozen rubric ID/version.");
@@ -48,7 +49,7 @@ test("new readable formats share plain reading notes without changing frozen fac
     const formatter = createReportComparison();
     const a = comparisonFact({ evaluatorModel: "fixture-model", rubricId: "fixture-rules", rubricVersion: 1 });
     const comparison = compareFrozenReportFacts(report("a", a), report("b", structuredClone(a)));
-    const texts = [evaluationSummaryHtml(facts), evaluationSummaryMarkdown(facts).join("\n"),
+    const texts = [nativeQualityHtml({ evaluationFacts: facts }), nativeQualityMarkdown({ evaluationFacts: facts }).join("\n"),
         renderComparisonHtml(comparison, snapshot(comparison)), renderComparisonMarkdown(comparison, snapshot(comparison))];
     for (const text of texts) for (const note of formatter.readingNotes) assert.ok(text.includes(note));
     assert.match(formatter.readingNotes.join(" "), /passed plus failed.*Missing results are left out/);
@@ -95,8 +96,8 @@ for (const [model, version] of [["fixture-model-a", 1], ["archived-model-b", 7]]
             .every(metric => metric.evaluator.model === model && metric.evaluator.rubricVersion === version
                 && metric.numerator === 1 && metric.denominator === 1 && metric.coverage.covered === 1 && metric.coverage.eligible === 1));
         const different = modelFacts("another-model", version + 1);
-        evaluationSummaryHtml(different.facts);
-        evaluationSummaryMarkdown(different.facts);
+        nativeQualityHtml({ evaluationFacts: different.facts });
+        nativeQualityMarkdown({ evaluationFacts: different.facts });
         assert.equal(JSON.stringify(facts), original);
         for (const [name, bytes] of Object.entries(bundle.files)) assert.deepEqual(Buffer.from(bytes), before[name], "Later formatting never rewrites an existing frozen copy.");
     });

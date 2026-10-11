@@ -9,18 +9,14 @@ need separate approval and are not enabled by installing WIRE.
 
 | Page | Use |
 | --- | --- |
-| Home | Refresh recorded activity; filter dates and results. |
-| Activity | Choose a Copilot chat, inspect interactions and select requests. |
+| Analyze | Filter the overview, read interactions directly, inspect calls and select report requests. |
 | Reports | Find, open and manage saved reports, or switch to creating a report. |
 | Collection status | Check whether collection is running, find chats with history gaps and see any available next step. |
 | Settings | **Connection & updates**, **Privacy & saved data**, **AI reviews**, **Display** and **Troubleshooting**. |
 
-Use **Collapse navigation** at the top of the sidebar for an icon rail and more
-content space. Hover or focus an icon for its name; **Expand navigation** restores
-the full labels, including by touch. The sidebar and page glide together; reduced
-motion uses an immediate change. The browser remembers this display choice
-without changing filters, selected requests or unfinished forms. On narrow
-screens, **Menu** opens full navigation; **Escape** or **Close** returns to the page.
+The top navigation keeps Analyze, Reports and Settings available and wraps on
+narrow screens. Earlier Home and Activity links open Analyze; no chat chooser
+is required before reading interactions.
 
 ## Inspect an interaction
 
@@ -65,7 +61,7 @@ the full timestamps and limits. **Refresh** stays above the page; **Retry** appe
 for safe read/status recovery. The optional network
 diagnostic does not check collection and is not a required next step.
 
-The main filter row shows **Dates, Tool, Service, Outcome, Author**. **More filters** keeps **Category, Project, Chat, Activity, Collection** available. Applied choices stay visible below, even when More filters is closed, and can be removed individually. The same controls work in Home, Activity and a scoped chat. On smaller screens or with larger text, fields and selected values wrap rather than disappearing offscreen; Tab reaches each control.
+The main filter row shows **Dates, Tool, Service, Outcome, Author**. **More filters** keeps **Category, Project, Chat, Activity, Collection** available. Applied choices stay visible below, even when More filters is closed, and can be removed individually. The same controls work throughout Analyze, including a scoped chat. On smaller screens or with larger text, fields and selected values wrap rather than disappearing offscreen; Tab reaches each control.
 
 Choose **Dates > Custom dates**, enter **From/To**, then **Apply dates**. Dates are inclusive; **All dates** means all retained dates in the chosen collection, not a new scan. In **Outcome**, tick one or more statuses, then **Apply**. The view stays unchanged while you choose; **Cancel**, Escape or clicking outside discards your draft. **Clear** beside the label restores all results without clearing other filters. An empty draft cannot be applied. Choices within Author or Outcome combine with OR; different filters combine with AND. The chart's time-scale control remains available.
 

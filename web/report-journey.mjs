@@ -264,8 +264,6 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             footer.append(back, target === 1 ? reviewActions : saveActions);
             panel.append(footer);
         }
-        const toolbar = root.querySelector(".report-toolbar");
-        toolbar.hidden = true;
         root.insertBefore(shell, byId("savedReportsPanel"));
         shell.append(...panels);
         nodes = { panels, steps, stepHints, headings, backButtons, progress, summary, context, gap, choose, issues, scan, error, reviewHost, saveHost, reviewActions, saveActions, el, button };

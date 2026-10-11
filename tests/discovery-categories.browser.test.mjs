@@ -51,10 +51,10 @@ test("Discovery reads consistently across whole charts, filters and action detai
         await page.goto(runtime.url + "#home?range=capture&chart=workload"); await ready(page);
         await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent === "8 Work IQ tool calls");
         await chooseTheme(page, theme);
-        assert.equal(await page.locator("#chartTitle").innerText(), "Activity categories");
+        assert.equal(await page.locator("#chartTitle").textContent(), "Activity categories");
         assert.match(await page.locator("#meaningMatched").textContent(), /^8 Work IQ tool calls$/);
-        assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').innerText(), "Category");
-        assert.match(await page.locator('[data-percentage-card="composition"]').innerText(), /Activity-category share/);
+        assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').textContent(), "Category");
+        assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /3 discovery \/ preparation; not service execution/);
         assert.equal(await page.locator('#serviceFilter option[value="Discovery"]').count(), 1);
         assert.equal(await page.locator('#serviceFilter option[value="Unknown"]').count(), 1);
         await screenshot(page, `${theme}-${width}-whole-chart`);
@@ -72,8 +72,8 @@ test("Discovery reads consistently across whole charts, filters and action detai
         const schema = page.locator('[data-tool-call-id="invented-call-1"]');
         assert.match(await schema.innerText(), /Schema lookup/);
         assert.match(await schema.innerText(), /Schema path\s+\/me\/messages/);
-        assert.match(await schema.innerText(), /Tool failed/);
-        assert.match(await page.locator('[data-tool-call-id="invented-call-2"]').innerText(), /Agent discovery[\s\S]*No result recorded/);
+        assert.match(await schema.textContent(), /Tool failed/);
+        assert.match(await page.locator('[data-tool-call-id="invented-call-2"]').textContent(), /Agent discovery[\s\S]*No result recorded/);
         assert.match(await page.locator('[data-tool-call-id="invented-call-3"]').textContent(), /Copilot assistance[\s\S]*Not in this record/);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         const sizes = await page.locator(".journey-item > details > summary").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
@@ -95,7 +95,7 @@ test("Discovery reads consistently across whole charts, filters and action detai
     await screenshot(page, "discovery-filtered-three");
     await selectActivityOption(page, "outcomeFilter", ["partial"]); await ready(page);
     await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent.startsWith("0 "));
-    assert.match(await page.locator('[data-percentage-card="composition"]').innerText(), /No activity in this applied view/);
+    assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /No activity in this applied view/);
     await screenshot(page, "discovery-zero");
     await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);
     await selectActivityOption(page, "serviceFilter", "Unknown"); await ready(page);
@@ -103,8 +103,8 @@ test("Discovery reads consistently across whole charts, filters and action detai
     await selectActivityOption(page, "serviceFilter", "Discovery"); await ready(page);
     await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
     assert.doesNotMatch(page.url(), /service=Discovery/);
-    assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').innerText(), "Service");
-    assert.equal(await page.locator("#chartTitle").innerText(), "Services involved");
+    assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').textContent(), "Category");
+    assert.equal(await page.locator("#chartTitle").textContent(), "Services involved");
     assert.match(await page.locator("#meaningMatched").textContent(), /^1 tool-returned API result$/);
     assert.equal(await page.locator('#serviceFilter option[value="Discovery"]').count(), 0);
     const single = discoveryFixture();
@@ -112,8 +112,9 @@ test("Discovery reads consistently across whole charts, filters and action detai
     single.toolCalls = single.toolCalls.slice(0, 1);
     await replaceEvidence(context, () => ({ records: [single], importCoverage: { counts: { includedSessions: 1 }, roster: [] } }));
     await page.goto(runtime.url + "#request?request=single-discovery&range=capture"); await ready(page);
-    assert.match(await page.locator(".journey-item").innerText(), /API discovery/);
-    assert.match(await page.locator(".request-outcome-action").innerText(), /Data service\s+Not applicable/);
+    const singleAction = page.locator('.journey-item[data-tool-call-id="invented-call-0"]');
+    assert.match(await singleAction.innerText(), /API discovery/);
+    assert.match(await singleAction.innerText(), /Data service\s+Not applicable/);
     assert.equal(await page.locator("#requestView dt").filter({ hasText: /^Purpose$/ }).count(), 1);
     assert.doesNotMatch(await page.locator("#requestView").innerText(), /Service not identified|API metadata: None recorded|API path\s+Not recorded/);
     assert.match(await page.locator(".full-request-results").textContent(), /1 Work IQ tool call[\s\S]*1 Worked/);

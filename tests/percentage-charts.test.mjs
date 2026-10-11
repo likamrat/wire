@@ -60,7 +60,7 @@ test("top five plus Other preserves unknown/mixed attribution, exact members and
     assert.throws(() => charts.partition(rows, total, { preserve: rows.map(row => row.id) }), RangeError);
 });
 
-test("top annuli retain unrounded circular angles before the donut projection", () => {
+test("flat annuli retain unrounded circular angles", () => {
     assert.match(charts.arc(0, 1), / 104A104 104 0 1 1/);
     assert.equal((charts.arc(0, 1).match(/A/g) || []).length, 4);
     assert.equal((charts.arc(0, .25).match(/A/g) || []).length, 2);
@@ -70,10 +70,8 @@ test("top annuli retain unrounded circular angles before the donut projection", 
     for (const args of [[0, 0], [-1, .5], [0, 1.1], [NaN, 1], [0, 1, 20, 20], [0, 1, Infinity, 2]]) assert.throws(() => charts.arc(...args), RangeError);
 });
 
-test("flat ring is circular and contained without changing remaining native-report column geometry", () => {
-    const column = createDimensionalCharts().layout({ total: 1, maximum: 1, service: "Unknown" }), f = charts.frame();
-    assert.equal(column.rise / column.frontWidth, .18);
-    assert.ok(column.depthY > 0);
+test("flat ring is circular and contained", () => {
+    const f = charts.frame();
     assert.equal(f.shear, 0);
     assert.equal(f.compression, 1);
     assert.equal(f.depth, 0);

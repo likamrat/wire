@@ -36,7 +36,10 @@ test("report hierarchy belongs to the current task, with local actions and consi
     assert.deepEqual(typography[1], typography[2]);
     assert.equal(await page.locator("#reportStage1>.report-stage-actions").getByRole("button", { name: "Choose interactions in Analyze", exact: true }).count(), 1);
     assert.equal(await page.locator("#exportBtn").isDisabled(), true);
-    assert.ok((await page.locator("#reportStepTitle1").boundingBox()).y < 600, "The chosen creation task remains in the first viewport below its workspace switch.");
+    assert.ok(await page.locator("#reportStepTitle1").evaluate(node => {
+        const box = node.getBoundingClientRect(), header = document.querySelector(".app-header").getBoundingClientRect();
+        return box.y >= header.bottom && box.bottom <= innerHeight;
+    }), "The chosen creation task remains in the first viewport below its workspace switch.");
     await chooseReportScope(page, "all");
     assert.equal(await page.locator("#reportStage1 #promptOptions").isVisible(), true);
     assert.equal(await page.locator("#reportStage1 #formatOptions").isVisible(), true);

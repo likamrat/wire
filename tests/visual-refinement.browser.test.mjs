@@ -314,7 +314,7 @@ test("appearance toggle preserves keyboard semantics, focus, layout and in-progr
     assert.equal(await page.locator("input[name=promptMode][value=original]").isChecked(), true);
     assert.equal(await page.locator(".format-choices input[value=pdf]").isChecked(), true);
     assert.equal(await page.locator("#manualTerms").inputValue(), "Synthetic masking draft");
-    assert.equal(await page.locator("#selectionSummary").innerText(), "One report · 1 request group included");
+    assert.equal(await page.locator("#previewSelectionSummary").innerText(), "One report · 1 request group included");
     assert.equal(page.url(), route, "Theme does not replace route state");
     assert.equal(requests.length, requestCount, "Theme never reloads activity or invalidates a report");
 }));

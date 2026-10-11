@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { privateFixture } from "./helpers.mjs";
+import { privateFixture, restoreLegacySearch } from "./helpers.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
@@ -39,7 +39,7 @@ test("paired Setup copy options revoke disclosure without invalidating the uncha
     });
     await page.goto(server.url + "#analyze?services=Files&includeMissingService=true");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#activitySearch").fill(periodQuery);
+    await restoreLegacySearch(page, periodQuery);
     await page.locator("#comparePeriods").click();
     for (const [label, value] of [
         ["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],

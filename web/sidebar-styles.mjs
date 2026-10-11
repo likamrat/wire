@@ -62,7 +62,6 @@ body>main {width:calc(100% - var(--app-sidebar-width,208px));margin-left:var(--a
 .report-selection-bar {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:12px 0;font-size:var(--type-small)}
 .report-selection-bar>p {font-weight:var(--weight-medium)}
 .report-selection-bar button {min-height:44px;padding:6px 12px;color:var(--accent)}
-.report-toolbar {flex-wrap:wrap}
 .dialog-head .report-selection-actions {justify-content:flex-end}
 #savedReportCount {font-weight:var(--weight-medium)}
 #formatOptions {container-type:inline-size}

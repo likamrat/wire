@@ -37,7 +37,7 @@ p {max-width:72ch}
 .filters select,.collection-tools button,.search-label input,.bucket-control select,
 .view-switch button,.chart-footer button,.filter-chip {font-size:var(--type-control);line-height:var(--leading-control)}
 .group-name,.chart-actions,.journey-item p,.detail-disclosure,.report-start p,.report-entry p,
-.report-toolbar,.notice,.empty-state p,.loading-state p,.attestation,.result-summary button,details p,#takeaway {font-size:var(--type-small)}
+.notice,.empty-state p,.loading-state p,.attestation,.result-summary button,details p,#takeaway {font-size:var(--type-small)}
 .request-link {font-size:var(--type-body);line-height:1.6}
 .request-intro p,.report-document {font-size:var(--type-reading);line-height:var(--leading-reading)}
 .request-intro .muted {font-size:var(--type-caption)}
@@ -50,11 +50,9 @@ code {overflow-wrap:anywhere}
 table,.report-document table {font-size:var(--type-caption);line-height:1.6}
 td,th {padding:12px 8px}
 th.numeric,.numeric,.row-total,.result-count,.facts dd {font-variant-numeric:tabular-nums}
-.chart-heading,.section-heading,.session-heading,.dialog-head {align-items:center}
+.chart-heading,.section-heading,.dialog-head {align-items:center}
 .chart-heading h2 {margin-right:auto}
-.chart-heading,.section-heading,.session-heading,.report-toolbar {flex-wrap:wrap}
-.session-heading>a {min-width:0}
-.session-heading>.muted {overflow-wrap:anywhere}
+.chart-heading,.section-heading {flex-wrap:wrap}
 .request-intro,.journey-item,.report-entry,.report-document,.dialog-body,#detail,#reportList {min-width:0;max-width:100%}
 .report-document li {overflow-wrap:anywhere}
 .prompt-choice input[type=radio],.format-choices input[type=checkbox],.attestation input[type=checkbox],.request-row input[type=checkbox] {width:18px;height:18px;min-width:18px;min-height:18px;padding:0;flex:0 0 auto}

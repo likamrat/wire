@@ -279,7 +279,7 @@ test("reset preserves report selection and invalidates a pending preview without
     assert.equal(new URL(page.url()).hash, "#home");
     await page.locator("nav [data-nav=reports]").click();
     assert.equal(await page.locator("#exportBtn").isEnabled(), true, "Selection remains ready; reset only changed navigation");
-    assert.match(await page.locator("#selectionSummary").textContent(), /1/);
+    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1/);
     assert.equal(requests.filter(request => request.path === "/api/preview").length, 1);
 }));
 

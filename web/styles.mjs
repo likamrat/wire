@@ -18,7 +18,7 @@ import { homeResultFilterStyles } from "./home-result-filter-styles.mjs";
 import { promptAuthorStyles } from "./prompt-author-styles.mjs";
 
 // These components already own their painted surface independently of their hit target.
-const textAction = ":is(button,a.button-link):not(.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.session-toggle,.filter-chip,.report-step,.comparison-pattern-title,.time-column,.chart-row,.dimensional-action,.chart-data-action)";
+const textAction = ":is(button,a.button-link):not(.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.filter-chip,.report-step,.comparison-pattern-title,.time-column,.chart-row,.chart-data-action)";
 
 export const styles = `
 /* Fluent-inspired shapes, not an official Fluent component implementation. */
@@ -206,8 +206,6 @@ details p {margin:8px 0;color:var(--muted)}
 .section-heading {display:flex;gap:16px;justify-content:space-between;align-items:end;margin:var(--space-xl) 0}
 .search-label {display:flex;flex-direction:column;gap:4px;color:var(--muted)}
 .search-label input {width:240px}
-.session-heading {display:flex;justify-content:space-between;gap:16px;align-items:center;margin:var(--space-xl) 0 4px;font-size:13px}
-.session-heading a {font-weight:600;text-decoration:none;overflow-wrap:anywhere}
 .request-row {display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:start;gap:12px;padding:16px;border:1px solid var(--rule);border-radius:var(--radius-small);background:var(--paper);margin-top:8px}
 .request-row input {margin-top:4px}
 .request-link {color:var(--ink);text-decoration:none;display:block;overflow-wrap:anywhere}
@@ -240,7 +238,6 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font:12px
 .report-start {display:flex;align-items:start;justify-content:space-between;gap:24px;padding:24px;border:1px solid var(--rule);border-radius:var(--radius);background:var(--paper)}
 .report-start>button {flex-shrink:0}
 .report-start p {color:var(--muted);margin-top:6px}
-.report-toolbar {display:flex;justify-content:space-between;gap:16px;align-items:center;padding:16px 0;border-block:1px solid var(--rule)}
 .report-entry {display:flex;align-items:start;gap:16px;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--rule)}
 .report-entry>div:first-child {min-width:0;flex:1}
 .report-entry .actions {display:flex;flex-wrap:wrap;gap:8px;justify-content:end}
@@ -316,7 +313,7 @@ dialog::backdrop {background:var(--scrim)}
  .search-label,.search-label input {width:100%}
  .request-row {grid-template-columns:24px minmax(0,1fr)}
  .request-row>.status {grid-column:2}
- .report-start,.report-toolbar,.report-entry {align-items:start;flex-direction:column}
+ .report-start,.report-entry {align-items:start;flex-direction:column}
  .report-entry .actions {justify-content:start}
  .dialog-head {padding:12px 16px}
  .dialog-body {padding:16px}
@@ -479,26 +476,9 @@ ${selectStyles}
 .report-matching-context {border-top:1px solid var(--rule);padding-top:8px;margin-top:12px}
 .report-entry>div:first-child {max-width:100%;align-self:stretch}
 .list-summary {font-size:var(--type-small);color:var(--muted);max-width:80ch}
-.session-group {padding:12px 0;border-bottom:1px solid var(--rule);min-width:0}
-.session-group {scroll-margin-top:110px}
-.session-group .session-heading {display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 16px;margin:0}
-.session-heading h3 {flex:1 1 20rem;min-width:0;margin:0}
-.session-toggle {display:flex;align-items:center;gap:var(--pill-gap);text-align:left;white-space:normal;padding:6px var(--pill-inset);min-height:44px;color:var(--ink);font-size:var(--type-body);font-weight:600;max-width:100%}
-.session-toggle>span {min-width:0;overflow-wrap:anywhere}
-.session-toggle>.fluent-icon {flex:none;transform:rotate(-90deg)}
-.session-toggle[aria-expanded=true]>.fluent-icon {transform:rotate(0)}
-.session-drill {display:inline-flex;align-items:center;min-height:44px;font-size:var(--type-small)}
-.session-meta {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;font-size:var(--type-small);color:var(--muted)}
-.session-summary {padding:0 8px}
-.session-summary .recorded-results {margin-top:6px;gap:6px 12px}
-.session-selected {font-weight:600;color:var(--accent)}
-.session-requests {padding:4px 8px 8px}
-.session-title {display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
 .session-label {font-size:var(--type-small);font-weight:400;color:var(--muted)}
-.session-name {overflow-wrap:anywhere}
 .copilot-chat-name {color:var(--copilot-chat-title);overflow-wrap:anywhere}
-.session-name.copilot-chat-name {font-weight:600}
-.session-title,.result-unit {min-width:0;overflow-wrap:anywhere}
+.result-unit {min-width:0;overflow-wrap:anywhere}
 .session-id {font-size:var(--type-small);color:var(--muted);overflow-wrap:anywhere}
 .page-heading #pageIdentity {margin:0 0 4px}
 #pageProject {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
@@ -538,7 +518,7 @@ ${percentageChartStyles}
 ${contextualActionStyles}
 ${homeResultFilterStyles}
 ${promptAuthorStyles}
-.button-link,.full-text-toggle,.session-toggle,.view-switch button,.percentage-switch button,
+.button-link,.full-text-toggle,.view-switch button,
 .result-summary .result-with-help>button:not(.ux-help),.filter-chip,.format-choices label,
 .report-step,.request-actions button:not(.ux-help,.ux-copy),.contextual-actions button:not(.ux-help,.ux-copy),
 .report-stage-actions button:not(.ux-help,.ux-copy),.report-entry .actions button:not(.ux-help,.ux-copy),
@@ -581,9 +561,6 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 @media(max-width:500px) {
  .recorded-results {gap:6px 14px}
  .recorded-results .result-unit {flex-basis:100%}
- .session-group .session-heading {align-items:start}
- .session-group .session-drill {padding-inline:8px}
- .session-summary,.session-requests {padding-inline:0}
 }
 .analyze-shell>main {width:100%;margin:0;padding:28px 28px 64px}
 .app-header .primary-navigation {flex-direction:row;flex-wrap:wrap;gap:4px;min-width:0}

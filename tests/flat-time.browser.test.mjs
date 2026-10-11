@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary } from "./helpers.mjs";
+import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, restoreLegacySearch } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 import { rgb, contrast, measureChartPaint } from "./color-measurements.mjs";
 
@@ -187,7 +187,7 @@ test("date links retain private query, Author, Outcome, service context and cano
         call.startedAt = row.scenarioId === "parity-request-6" ? "2026-03-09T07:00:00Z" : "2026-03-08T10:00:00Z";
     }
     const { page, analytics } = await setup(t, source);
-    await page.locator("#activitySearch").fill(privateQuery);
+    await restoreLegacySearch(page, privateQuery);
     await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
     await selectActivityOption(page, "promptAuthorFilter", "user"); await ready(page);
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
@@ -226,7 +226,7 @@ test("tiny and extreme source counts remain linear and actionable; empty and und
     await count.click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("1");
     await page.goBack(); await ready(page);
-    await page.locator("#activitySearch").fill("NO_TIME_MATCH");
+    await restoreLegacySearch(page, "NO_TIME_MATCH");
     await expect(page.locator("#activityCount")).toHaveText("0");
     await expect(page.locator("#chart")).toContainText("No activity in this slice");
     assert.equal(await page.locator(".flat-time-column,.time-zero").count(), 0);
@@ -235,4 +235,41 @@ test("tiny and extreme source counts remain linear and actionable; empty and und
     await expect(undated.page.locator("#chart")).toContainText("No dated activity is available");
     await expect(undated.page.locator("#chartFooter")).toContainText("1 undated");
     assert.equal(await undated.page.locator(".flat-time-column,.time-zero").count(), 0);
+});
+
+test("actual tiny result marks expose exact count/share tooltips and quiet keyboard links", async t => {
+    const row = fixture("section-inspection"), base = row.toolCalls[0];
+    row.toolCalls = Array.from({ length: 121 }, (_, index) => ({
+        ...base, toolCallId: `section-${index}`, startEventId: `section-start-${index}`,
+        toolSucceeded: index < 113 ? true : index < 120 ? false : undefined,
+        reportedOutcome: index < 113 ? "succeeded" : index < 120 ? "failed" : undefined,
+    }));
+    const { page } = await setup(t, [row], "UTC");
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        const column = page.locator(".time-column");
+        for (const [key, count] of [["success", 113], ["failure", 7], ["unknown", 1]]) {
+            const mark = column.locator(`[data-segment="${key}"]`);
+            await mark.hover();
+            await expect(page.getByRole("tooltip")).toContainText(`${count} of 121 Work IQ tool calls`);
+            if (key === "unknown") await expect(page.getByRole("tooltip")).toContainText("(0.8%)");
+            assert.equal(await mark.getAttribute("data-count"), String(count));
+            assert.equal(Number(await mark.getAttribute("height")), count / 121 * 160);
+            await page.keyboard.press("Escape"); await expect(page.getByRole("tooltip")).toBeHidden();
+        }
+        await column.focus();
+        await expect(page.getByRole("tooltip")).toBeHidden();
+        await page.keyboard.press("Enter"); await ready(page);
+        await expect(page.locator("#activityCount")).toHaveText("121");
+        await page.goBack(); await ready(page);
+        await page.setViewportSize({ width: 375, height: 1000 });
+        await page.locator('[data-chart="endpoint"]').click(); await ready(page);
+        const mark = page.locator('.flat-comparison-segment[data-segment="unknown"]');
+        await mark.hover();
+        await expect(page.getByRole("tooltip")).toContainText("1 of 121");
+        const box = await page.getByRole("tooltip").boundingBox();
+        assert.ok(box.x >= 0 && box.x + box.width <= 375);
+        await page.keyboard.press("Escape");
+        await page.locator('[data-chart="time"]').click(); await ready(page);
+    }
 });

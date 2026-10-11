@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { privateFixture, fixture, chooseTheme, navigateMain, revealStoredRefresh, selectActivityOption } from "./helpers.mjs";
+import { privateFixture, fixture, chooseTheme, navigateMain, revealStoredRefresh, selectActivityOption, restoreLegacySearch } from "./helpers.mjs";
 import { chooseReportScope, reportContents, inspectReportCopies, scanReport, openReportLibrary, openReportCreation } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WORKIQ_JOURNEY_PROOFS;
@@ -219,7 +219,7 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     await navigateMain(page, "activity"); await ready(page);
-    await page.locator("#activitySearch").fill(privateQuery);
+    await restoreLegacySearch(page, privateQuery);
     await navigateMain(page, "reports"); await openReportCreation(page);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
     assert.match(await page.locator("#reportPopulationNote").textContent(), /Includes 1 request group outside the current browsing filters/);
@@ -274,7 +274,7 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     await navigateMain(page, "activity");
-    await page.locator("#activitySearch").fill("setup target 10");
+    await restoreLegacySearch(page, "setup target 10");
     await navigateMain(page, "reports"); await openReportCreation(page);
     assert.equal(await page.locator("#scopeCount-current").textContent(), "1 request group");
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft", "Same count is not the same membership");
@@ -282,7 +282,7 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     assert.notDeepEqual(changed.records, current.records);
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
     await navigateMain(page, "activity");
-    await page.locator("#activitySearch").fill("NO_INCLUDED_INTERACTION");
+    await restoreLegacySearch(page, "NO_INCLUDED_INTERACTION");
     await navigateMain(page, "reports"); await reportContents(page);
     assert.equal(await page.locator("#scopeCount-current").textContent(), "0 request groups");
     assert.equal(await page.locator("#exportBtn").isDisabled(), true);
@@ -322,7 +322,7 @@ test("preserved Selected review saves original frozen copies after an unrelated 
     assert.equal((await loadBoardState(context)).exports.length, 0);
 
     await navigateMain(page, "activity"); await ready(page);
-    await page.locator("#activitySearch").fill("UNRELATED_BROWSE");
+    await restoreLegacySearch(page, "UNRELATED_BROWSE");
     records[1].userPrompt.text = "UNRELATED_BROWSE changed invented wording";
     await replaceEvidence(context, () => ({ records }));
     const updated = await loadBoardState(context);

@@ -4,7 +4,6 @@ import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { buildSanitizedBundle } from "../lib/export.mjs";
-import { createReportComparison } from "../web/report-comparison.mjs";
 import { reportMatrixCases } from "./report-evidence-matrix-fixtures.mjs";
 import { buildExportCatalog } from "../lib/export-selection.mjs";
 
@@ -14,47 +13,50 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
         const context = await browser.newContext({ javaScriptEnabled: false });
         const externalRequests = [];
         await context.route("**/*", route => { externalRequests.push(route.request().url()); return route.abort(); });
-        const page = await context.newPage(), format = createReportComparison();
+        const page = await context.newPage();
         for (const scenario of reportMatrixCases()) {
             const selected = scenario.canonicalSelection ? buildExportCatalog(scenario.records).records : scenario.records;
             const bundle = await buildSanitizedBundle(selected, "b".repeat(64), { promptMode: "none", formats: ["html"] });
             await page.setContent(bundle.previewHtml);
             await page.evaluate(() => document.fonts.ready);
             const expected = scenario.expected;
-            const plotted = expected.graph
-                ? { count: expected.graph, success: 1, failure: 1, partial: 0, unknown: 1 }
-                : { ...expected, count: expected.calls };
-            const charts = await page.locator(".dimensional-column").evaluateAll(nodes => nodes.map(node => ({
-                total: Number(node.dataset.total), maximum: Number(node.dataset.maximum), height: Number(node.dataset.frontHeight),
-                segments: [...node.querySelectorAll(".dimensional-front")].map(segment => ({
-                    count: Number(segment.dataset.count), height: Number(segment.getAttribute("height")),
-                    outcome: ["success", "failure", "partial", "unknown", "other", "transport"].find(name => segment.classList.contains(name)),
-                })),
+            const bars = await page.locator("#breakdowns > .native-breakdowns > section").first().locator(".native-bar").evaluateAll(nodes => nodes.map(node => ({
+                count: Number(node.dataset.count), denominator: Number(node.dataset.denominator),
+                width: node.getBoundingClientRect().width, track: node.parentElement.getBoundingClientRect().width,
+                tone: [...node.classList].find(name => name.startsWith("dimensional-tone-")).replace("dimensional-tone-", ""),
             })));
-            assert.equal(charts.reduce((sum, chart) => sum + chart.total, 0), plotted.count, `${scenario.name}: all chart columns total their explicitly named evidence units`);
-            if (expected.graph) assert.match(await page.locator(".dimensional-report").first().innerText(), /request sites|recorded-request-site/);
+            assert.equal(bars.reduce((sum, bar) => sum + bar.count, 0), expected.calls, `${scenario.name}: only tool calls enter tool bars`);
             const outcomeCounts = { success: 0, failure: 0, partial: 0, unknown: 0, other: 0, transport: 0 };
-            for (const chart of charts) {
-                assert.equal(chart.segments.reduce((sum, segment) => sum + segment.count, 0), chart.total);
-                assert.ok(Math.abs(chart.segments.reduce((sum, segment) => sum + segment.height, 0) - chart.height) < 1e-6);
-                for (const segment of chart.segments) {
-                    assert.ok(segment.count > 0 && segment.height > 0);
-                    assert.ok(Math.abs(segment.height / chart.height - segment.count / chart.total) < 1e-9, "Painted segment height represents its actual count share");
-                    outcomeCounts[segment.outcome] += segment.count;
-                }
+            const outcomes = { teal: "success", pink: "failure", orange: "partial", slate: "unknown", violet: "other", cyan: "transport" };
+            for (const bar of bars) {
+                assert.equal(bar.denominator, expected.calls);
+                assert.ok(bar.count > 0 && bar.width > 0);
+                assert.ok(Math.abs(bar.width - bar.track * bar.count / bar.denominator) < .02, "Exact shared denominator; no inflated minimum");
+                outcomeCounts[outcomes[bar.tone]] += bar.count;
             }
-            for (const outcome of ["success", "failure", "partial", "unknown"]) assert.equal(outcomeCounts[outcome], plotted[outcome]);
-            if (expected.calls && expected.success + expected.failure) {
-                assert.equal(await page.locator(".report-tool-score strong").innerText(), format.formatValue(expected.success / expected.calls * 100, "percent"));
+            for (const outcome of ["success", "failure", "partial", "unknown"]) assert.equal(outcomeCounts[outcome], expected[outcome]);
+            if (expected.graph) {
+                const graph = bundle.snapshot.evaluationFacts.recordedOutcomes.filter(row => row.kind === "graph-request-site");
+                assert.equal(graph.length, expected.graph);
+                assert.deepEqual(graph.map(row => row.outcome).sort(), ["failure", "success", "unknown"]);
+                assert.match(await page.locator("#operations").innerText(), /recorded request|request sites/i);
+            }
+            assert.equal(await page.locator(".report-tool-score,.report-dimensions,.dimensional-column").count(), 0);
+            await page.locator("#quality > summary").click();
+            const quality = page.locator("#quality tbody");
+            assert.match(await quality.innerText(), /Not assessed/);
+            for (const label of ["Trust: answers", "Trust: actions"]) {
+                assert.match(await quality.locator("tr").filter({ hasText: label }).innerText(), /Not assessed/);
+            }
+            const timing = page.locator("#timing tbody tr").filter({ hasText: /^Tool calls/ });
+            if (expected.calls) {
+                assert.match(await timing.innerText(), new RegExp(`${expected.timed} of ${expected.calls} calls? timed`));
+                assert.match(await timing.locator("td").first().innerText(), expected.median === null ? /Not measured/
+                    : new RegExp(`\\(${expected.median} ms\\)`));
             } else {
-                assert.equal(await page.locator(".report-tool-score").count(), 0);
+                assert.match(await timing.innerText(), /0 of 0 calls timed/);
+                assert.match(await timing.locator("td").first().innerText(), /Not measured/);
             }
-            const dimensions = page.locator(".report-dimension");
-            assert.deepEqual(await dimensions.locator(":scope > h2").allTextContents(), ["Accuracy", "Speed", "Trust"]);
-            assert.match(await dimensions.nth(0).innerText(), /Not assessed/);
-            assert.equal((await dimensions.nth(2).innerText()).match(/Not assessed/g)?.length, 2, "Answer and action trust both remain explicitly unassessed");
-            const speed = await dimensions.nth(1).locator(".comparison-metric-value").first().innerText();
-            assert.equal(speed, expected.median === null ? "Not measured" : format.formatValue(expected.median, "ms"));
             for (const theme of ["light", "dark"]) for (const width of [320, 768, 1200]) for (const size of ["100%", "200%"]) {
                 await page.setViewportSize({ width, height: 1000 });
                 await page.evaluate(({ theme, size }) => {
@@ -63,7 +65,7 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
                 }, { theme, size });
                 const layout = await page.evaluate(() => ({
                     pageWidth: document.documentElement.scrollWidth,
-                    clipped: [...document.querySelectorAll(".report-dimension .comparison-metric-value,.report-tool-score strong")]
+                    clipped: [...document.querySelectorAll(".native-counts strong,.native-bar-heading strong,#quality td,#timing td")]
                         .filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent),
                 }));
                 assert.ok(layout.pageWidth <= width + 1, `${scenario.name}/${theme}/${width}/${size}: page overflow ${layout.pageWidth}`);

@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
-import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, revealStoredRefresh, exportCatalogFor } from "./helpers.mjs";
+import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, revealStoredRefresh, exportCatalogFor, restoreLegacySearch } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 import { contrast, measureChartPaint } from "./color-measurements.mjs";
 import { chooseReportScope } from "./report-journey-helpers.mjs";
@@ -39,7 +39,7 @@ function records() {
 }
 async function setup(t, source = records()) {
     const original = structuredClone(source), requests = [], errors = [], denied = [];
-    let last, fail = false, corrupt = false, activeSource = source, revision = 1;
+    let last, fail = false, corrupt = false, activeSource = source, revision = 1, pending;
     const server = createServer(async (req, res) => {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
@@ -50,13 +50,19 @@ async function setup(t, source = records()) {
         requests.push({ route: req.url, input });
         res.setHeader("Content-Type", "application/json");
         if (req.method === "POST" && req.url === "/api/snapshot") {
+            if (pending) await pending;
             if (fail) { res.writeHead(503); res.end('{"error":"Invented read failure"}'); return; }
             last = buildActivityAnalytics(activeSource, input);
             if (corrupt) last.serviceInvolvement.definition = { ...last.serviceInvolvement.definition, version: 2 };
             res.end(JSON.stringify({ revision, scenarios: activeSource, exports: [], exportCatalog: exportCatalogFor(activeSource),
+                collection: { state: "not-configured", revision, configVersion: 0, connected: false, config: null,
+                    cadence: { pollSeconds: 5 }, metrics: {}, historyIssues: [] },
                 requestActivity: buildRequestActivity(activeSource), coverage: { notes: [] }, analytics: { ...last, revision } }));
         } else if (req.method === "POST" && req.url === "/api/evaluation/automatic/summary") {
             res.end(JSON.stringify(automaticScoreOffSummary()));
+        } else if (req.method === "POST" && req.url === "/api/collection/status") {
+            res.end(JSON.stringify({ state: "not-configured", revision, configVersion: 0, connected: false, config: null,
+                cadence: { pollSeconds: 5 }, metrics: {}, historyIssues: [] }));
         } else {
             denied.push(req.url); res.writeHead(403); res.end('{"error":"Invented read-only fixture only."}');
         }
@@ -77,7 +83,12 @@ async function setup(t, source = records()) {
     });
     await page.goto(url + "/#analyze?mode=calls&bucket=day"); await ready(page);
     return { page, url, source, requests, analytics: () => last, fail: value => { fail = value; }, corrupt: value => { corrupt = value; },
-        change: value => { activeSource = value; revision++; } };
+        change: value => { activeSource = value; revision++; },
+        hold: () => {
+            let release;
+            pending = new Promise(resolve => { release = resolve; });
+            return () => { pending = null; release(); };
+        } };
 }
 async function capture(page, name, selector = ".percentage-section") {
     if (!proofs) return;
@@ -181,7 +192,7 @@ test("normal renderer shows Tools and Services together with exact involvement, 
 test("tool/service/outcome links and context removal keep private search, dates, author union, outcome union and Back selection", async t => {
     const { page, url, source, requests, analytics } = await setup(t);
     await page.goto(url + "/#analyze?mode=calls&range=custom&from=2026-09-30&to=2026-09-30&authors=user&result=failure,success"); await ready(page);
-    await page.locator("#activitySearch").fill(privateQuery); await ready(page);
+    await restoreLegacySearch(page, privateQuery); await ready(page);
     await selectActivityOption(page, "serviceAssociationFilter", "Files"); await ready(page);
     await expect(page.locator("#serviceFocusScope")).toContainText("context-only");
     const matchingScenarios = new Set(source.filter(record => record.userPrompt.text.includes(privateQuery)).map(record => record.scenarioId));
@@ -353,7 +364,7 @@ test("zero, tiny, empty and incompatible snapshots never fabricate a share or re
     assert.equal(await card(page, "tools").innerText(), content);
     await expect(page.locator("#collectionNotice")).toBeVisible();
     corrupt(false); await (await revealStoredRefresh(page)).click(); await ready(page);
-    await page.locator("#activitySearch").fill("NO_BREAKDOWN_MATCH"); await ready(page);
+    await restoreLegacySearch(page, "NO_BREAKDOWN_MATCH"); await ready(page);
     await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", "0");
     assert.equal(await page.locator(".percentage-slice,.percentage-bar").count(), 0);
     await expect(card(page, "tools")).toContainText("Percentages are not applicable");
@@ -376,4 +387,34 @@ test("returned entries keep their own unit and accepted target refinement while 
     await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", "0");
     await expect(card(page, "outcomes")).toContainText("Percentages are not applicable");
     assert.equal(await page.locator(".percentage-slice,.percentage-bar").count(), 0);
+});
+
+test("chart disclosures and label focus survive pending reads, unchanged revisions and view changes", async t => {
+    const { page, source, hold, change } = await setup(t);
+    const tools = card(page, "tools"), summary = tools.locator("summary");
+    await summary.click(); await expect(tools.locator("table")).toBeVisible();
+    await summary.focus();
+    const text = await tools.innerText(), release = hold();
+    t.after(release);
+    await page.evaluate(() => document.querySelector("#refreshBtn").click());
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
+    assert.equal(await tools.innerText(), text, "Pending data never masquerades as a zero or empties accepted evidence");
+    release(); await ready(page);
+    await expect(summary).toBeFocused();
+    await expect(tools.locator("details")).toHaveAttribute("open", "");
+    change(structuredClone(source));
+    await page.evaluate(() => document.querySelector("#refreshBtn").click()); await ready(page);
+    await expect(page.locator(".percentage-section")).toHaveAttribute("data-revision", "2");
+    await expect(summary).toBeFocused();
+    await page.locator("#tableDisclosure > summary").click();
+    for (const chart of ["workload", "endpoint", "time"]) {
+        await page.locator(`[data-chart="${chart}"]`).click(); await ready(page);
+        await expect(page.locator("#tableDisclosure")).toHaveAttribute("open", "");
+        await expect(tools.locator("details")).toHaveAttribute("open", "");
+        await expect(page.locator("#chartReadingNotes")).toContainText("linear count scale from zero");
+    }
+    await page.locator("#tableDisclosure > summary").click();
+    await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
+    await page.goBack(); await ready(page);
+    assert.equal(await page.locator("#tableDisclosure").evaluate(node => node.open), false);
 });

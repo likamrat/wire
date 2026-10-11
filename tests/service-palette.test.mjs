@@ -50,8 +50,8 @@ test("service colors survive factory serialization, reordering, subsets, zero an
     const orders = [ids, [...ids].reverse(), ids.filter((_, index) => index % 2), [ids[9]], [], [...ids.slice(5), ...ids.slice(0, 5)]];
     for (const order of orders) for (const service of order) for (const total of [0, 1, 9, 121]) {
         assert.equal(browser.tone(service), charts.servicePalette[service].token);
-        const geometry = browser.layout({ total, maximum: 121, service, plotHeight: 200 });
-        assert.equal(geometry.frontHeight, total ? Math.max(36, Math.sqrt(total / 121) * 200) : 0);
+        const geometry = browser.flatLayout({ total, maximum: 121, service, plotHeight: 200 });
+        assert.equal(geometry.height, total / 121 * 200);
         if (total) {
             assert.equal(geometry.segments[0].tone, charts.servicePalette[service].token);
             assert.equal(geometry.segments[0].key, "category");

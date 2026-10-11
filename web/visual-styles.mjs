@@ -17,7 +17,6 @@ export const visualStyles = `
 .view-switch {border:0}
 .result-summary .result-with-help>button:not(.ux-help) {border-color:var(--pill-border);background:var(--pill-fill);color:var(--pill-ink);min-height:44px}
 .result-summary .result-with-help>button:not(.ux-help):hover {background:var(--pill-hover)}
-.session-heading {display:block;margin:28px 0 8px}
 .session-identity {display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;min-width:0}
 .session-identity>a {font-size:var(--type-body);min-width:0;overflow-wrap:anywhere}
 .project-context {display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:0;font-size:var(--type-small);line-height:1.5;min-width:0;max-width:100%}

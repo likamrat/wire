@@ -487,11 +487,12 @@ Count, percentage, category and operation capabilities remain available.
 Component paint consumes existing semantic `--column-label` roles and shared
 surface/text/focus tokens; the visual-foundation owner controls both palettes.
 
-Only the shell's percentage renderer and `comparisonView` are flattened here.
-The accepted `timeView`, `flatLayout` and `flatSvg` paths are unchanged.
-Still-used `layout`, `svg`, `scene`, `plane` and `dimensionalColumnStyles` retain
-their native-report contract pending the native-report unit. No saved report
-bytes are read, regenerated or rewritten by a chart change.
+The shell's percentage renderer, `comparisonView`, `timeView`, `flatLayout` and
+`flatSvg` are the supported flat paths. Native reports use their own exact bars.
+The obsolete projected renderer and its orphan report generator are removed.
+`dimensionalColumnStyles` remains the shared palette and within-mark gradient
+closure; service identities and serializer-safe factories remain unchanged.
+No saved report bytes are regenerated or rewritten by a chart change.
 
 ## Inline help geometry
 
@@ -1352,10 +1353,8 @@ widths rather than ellipsizing, abbreviating or shrinking the selected label.
 
 ### Flat Analyze time view
 
-The approved experience reset replaces **only the interactive time view** with
-flat 2D columns. This supersedes the earlier glass/time rules below; comparison
-columns, percentage charts and newly generated report charts retain their
-existing renderers until their separately owned units replace them.
+Analyze time uses flat 2D columns. Category/operation comparisons and native
+reports use flat bars; only exclusive outcome shares use a circular annulus.
 
 `createDimensionalCharts().flatLayout/flatSvg` reuse the validated count span,
 outcome order and semantic color tokens. Time totals and every outcome section
@@ -1368,7 +1367,7 @@ actions also remain at least 44px. No invisible outcome overlay expands across
 another result. Short timelines use 160px of quantitative height; others use
 200px. This changes the plot extent, not the linear ratios.
 
-The existing Daily/Weekly/Monthly picker, percentage-view controls, exact table,
+The existing Daily/Weekly/Monthly picker, outcome shares, exact table,
 canonical IDs, activity units, query/filter scope and native date links are
 unchanged. `activity-projection.mjs` remains the sole server/browser bin math:
 display-zone/DST boundaries and clipped partial ranges pass through without
@@ -1380,13 +1379,13 @@ or use the exact table; keyboard focus reveals the complete count action.
 Focused coverage: `flat-time.browser.test.mjs` uses invented source records
 through the normal shell for bins/outcome shares, DST, partial bounds, scoped
 date click/Back, query/Author/Outcome/service context, empty/undated/extreme
-counts, light/dark and narrow 200% text. The existing small-column, level,
-interaction, unit/font and geometry tests retain their numerical and input
-safety checks with time-specific flat expectations. Shared report geometry and
-service/API count encodings are unchanged; historical files are never read or
-rewritten by this unit.
+counts, light/dark and narrow 200% text. `responsive-charts.browser.test.mjs`
+retains dense dates, monthly baselines, hidden/container/font changes and
+observer disposal. Small-column, flat-outcome and pure geometry tests retain
+exact arithmetic and invalid-input safeguards. Historical files are never
+regenerated.
 
-### Flat Analyze breakdowns and retained report encodings
+### Flat Analyze breakdowns and native reports
 
 The breakdown reset replaces interactive category/operation comparison columns
 and percentage rendering. This supersedes the previous square-root/minimum-size
@@ -1406,17 +1405,18 @@ number, percent sign or heading across lines.
 New native reports use compact, exact linear bars and visible counts/shares,
 not the earlier dimensional glass encoding. They lead with supported findings
 and known reasons rather than a headline score. Older saved bytes remain
-immutable. The old dimensional helper is retained only for the later, scoped
-cleanup of obsolete rendering and visual-only tests.
+immutable. No projected geometry helper is needed to read a frozen file.
 
 Focused admission proof lives in `breakdown-view.test.mjs` and
 `breakdown-view.browser.test.mjs`: zero/tiny/extreme/overlapping counts, full labels,
 light/dark, narrow 200% text, exact tables, keyboard targets, canonical-ID
 drilldowns, no-widening service intersections and report membership. Pure
 percentage, slice and filter tests cover serialization, invalid input and scope.
-The accepted time tests remain applicable. Superseded visual-only glass matrices
-must be reconciled by the dedicated cleanup unit before integrated E2E/release;
-their obsolete expectations are not a claim of full-suite green.
+The accepted time tests remain applicable. Superseded glass/material/pitch and
+composition-switch matrices are consolidated into current-renderer tests.
+`percentage-charts.browser.test.mjs` retains exact tiny/full-circle paint,
+keyboard/pointer separation, locale/extreme counts and long-label disclosure
+coverage. Report tests retain original facts, privacy and immutable-byte checks.
 
 ## Count charts
 
@@ -1424,8 +1424,9 @@ their obsolete expectations are not a claim of full-suite green.
 row per visible category/operation, with a 44px action and exact count. Category
 rows use identity color; operation rows stack the unchanged canonical outcomes.
 Each segment's width is its count divided by the shared maximum, without a
-minimum painted size. Full labels wrap naturally; narrow layouts put the count
-on its own line. Grouped Other retains Show all and the complete exact table.
+minimum painted size. Full labels wrap naturally; narrow chart containers put
+the count on its own line, including a narrow host inside a wide viewport and
+enlarged text. Grouped Other retains Show all and the complete exact table.
 There are no lids, floors, perspective or category-pitch calculations
 in this path. Static fades stay inside the exact CSS bar widths. Flat time continues to use its accepted 84px rectangles and
 separate count links.
@@ -1451,33 +1452,19 @@ permitted context and technical/quality detail. Native disclosures, stacked
 small-screen tables and expanded print copies preserve access without scripts.
 Previously saved reports and comparison rendering are unchanged.
 
-### Native-report cleanup inventory
+### Supported presentation boundaries
 
-The dedicated cleanup owner can reconcile the following now-superseded native
-visual paths after the native report proof is accepted; this is not permission
-to remove shared app helpers or integrity/privacy tests.
+`native-report-output.mjs` owns native findings, timing and quality details.
+The obsolete native headline-score/summary helpers and their CSS are removed
+from `report-presentation.mjs`; that module retains frozen comparison rendering,
+shared formatting/branding and `reportPrintPaginationStyles`. Licensed font
+exports still support explicit comparison consumers.
 
-- `lib/dimensional-report.mjs`: `createDimensionalReportChart` and
-  `dimensionalReportStyles` no longer render new native reports.
-- `lib/report-presentation.mjs`: native-only `recordedToolScoreHtml`,
-  `evaluationSummaryHtml`, `evaluationSummaryMarkdown`, `reportScreenHeroStyles`
-  and their hero/dimension selectors have no new-native caller. Preserve
-  comparison rendering, shared number/definition formatting, branding and
-  `reportPrintPaginationStyles` where still used.
-- `tests/dimensional-report.browser.test.mjs`, the native-report cases in
-  `chart-geometry-policy.browser.test.mjs`, `chart-label-lanes.browser.test.mjs`,
-  `dimensional-guide-anchor.browser.test.mjs` and
-  `dimensional-outcome-cap.browser.test.mjs` still exercise old geometry.
-- `tests/report-hero-readability.test.mjs` and hero/3D expectations in
-  `report-evidence-matrix.browser.test.mjs` need the new native targets.
-  Preserve their numeric, accessibility, missing-value and clipping guarantees.
-  Direct old-summary tests in `report-personal-metrics.test.mjs`,
-  `report-model-origin.test.mjs` and `plain-language.browser.test.mjs` also need
-  review before removing the corresponding helper.
-- `web/dimensional-charts-styles.mjs` still supplies shared palette declarations;
-  native output currently embeds that declaration-bearing module. Its unused
-  dimensional selectors are not a reason to delete its app/flat color contract.
-  Shared `geometryPolicy`, `tone`, `servicePalette` and `outcomeTones` remain used.
+`dimensional-charts-styles.mjs` retains shared palette declarations and local
+gradient stops but no projected faces, lids, floors or glints. Shared
+`geometryPolicy.span`, `tone`, `servicePalette` and `outcomeTones` remain used.
+Native-report, report-evidence-matrix, model-origin and personal-metric tests
+exercise actual native output rather than a superseded summary generator.
 
 The local-paint allowlist in `report-formats.test.mjs` recognizes the old
 same-document plane/end gradients, both wordmark clips and bundled dark-wordmark
@@ -1508,9 +1495,9 @@ True excess time bins remain in a named, keyboard-focusable horizontal
 scrollport. Visible overflow guidance follows the measured layout. There is no
 page overflow, text downscaling, category wrapping into multiple rows, automatic
 regrouping or hidden-scrollbar workaround. Comparison labels instead flow in
-ordinary responsive rows and need no scene observer. Report preview/HTML/PDF remain document views: their
-script-free three-column scenes and common numeric scale are intentional, not
-an instruction to stretch a print document.
+ordinary responsive rows and need no scene observer. Report preview/HTML/PDF
+remain script-free document views with exact bars and reflowing text/tables,
+not an instruction to stretch a print document.
 
 ## User journey
 
@@ -2206,15 +2193,14 @@ frozen, and selected-content/options changes require a new review. Original and
 masked prompts still use the existing privacy gate. No report files are written
 by collection, connection, pause, selection or preview.
 
-**Home** offers a period and one Choose a Copilot chat action before its aggregate chart.
-Over-time, service and API-path views use the same canonical data. Date, project,
-service, result and activity-source filters retain their semantics; secondary
-refinements are in More filters. Exact chart data is
+**Analyze** puts the overview and matching interactions together, with a Calls
+mode for exact actions. There is no mandatory chat chooser or collapsed
+chat-first list. Time, category and API-path views use the same canonical data.
+Date, project, service, outcome and activity-source filters retain their
+semantics; secondary refinements are in More filters. Exact chart data remains
 available as a table; color is never the only source of meaning.
 
-**Activity** groups recognizable private request excerpts by source chat.
-The full GitHub Copilot chats introduction precedes standalone Copilot chat labels and
-separately labelled Copilot projects beside the requests.
+Interaction rows retain source-chat links and separately labeled Copilot projects.
 The filter spells out **GitHub Copilot project**, with concise hover/focus help
 distinguishing that context from a repository. Project names alone never imply
 repository links. Unscoped records

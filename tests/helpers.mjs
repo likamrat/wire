@@ -38,6 +38,15 @@ export async function revealStoredRefresh(page) {
     return await retry.isVisible() ? retry : page.locator("#checkActivity");
 }
 
+export async function restoreLegacySearch(page, search) {
+    await page.evaluate(search => {
+        history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView, url: location.hash, search } }, "");
+        dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
+    }, search);
+    await page.waitForFunction(search => document.querySelector("#activitySearch").value === search
+        && document.querySelector("#workspace").getAttribute("aria-busy") === "false", search);
+}
+
 export async function navigateSettings(page, category) {
     category = { collection: "connection", history: "connection", data: "privacy", evidence: "privacy" }[category] || category;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));

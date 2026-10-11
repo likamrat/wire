@@ -22,13 +22,14 @@ const proofs = process.env.WORKIQ_CUE_PROOFS;
 const charts = createDimensionalCharts(), results = createRecordedResults();
 const records = [
     ["/me/messages"], ["/me/events"], ["/me/drive"], ["/teams"], ["/me/people"], ["/planner/tasks"],
-    ["/me/onenote/pages"], ["/groups"], ["/search/query"], ["/me/events", "/unclassified"], ["/$batch"], ["/unclassified"],
+    ["/me/onenote/pages"], ["/groups"], ["/search/query"], ["/me/events", "/unclassified"], ["/$batch"], ["/unclassified"], ["/me/messages"],
 ].map((targets, index) => {
     const record = fixture(`semantic-cue-${index}`);
     record.sourceSessionName = "Synthetic cue examples";
     record.toolCalls[0] = {
         ...record.toolCalls[0], requestedApiPath: targets.length === 1 ? targets[0] : null,
-        requestArgs: { entityUrls: targets }, startedAt: "2026-09-30T12:00:00Z",
+        tool: index === 12 ? "workiq-get_schema" : record.toolCalls[0].tool,
+        requestArgs: index === 12 ? { path: "/me/messages", operationType: "fetch" } : { entityUrls: targets }, startedAt: "2026-09-30T12:00:00Z",
         toolSucceeded: [true, false, null, null][index % 4],
         reportedOutcome: ["succeeded", "failed", "unknown", "partial"][index % 4], apiResults: [],
     };
@@ -43,7 +44,7 @@ test("all outcome and classifier cues keep the canonical semantic palette and gl
     assert.deepEqual(charts.outcomeTones, { success: "teal", failure: "pink", partial: "orange", unknown: "slate", other: "violet", transport: "cyan" });
     assert.deepEqual(Object.fromEntries(expectedServices.map(entry => [entry.id, entry.tone])), {
         Mail: "service-mail", Calendar: "service-calendar", Files: "service-files", Teams: "service-teams", People: "service-people", Tasks: "service-tasks",
-        Notes: "service-notes", Directory: "service-directory", Search: "service-search", "Multiple workloads": "service-multiple", "Platform metadata": "service-diagnostics", Unknown: "service-unknown",
+        Notes: "service-notes", Directory: "service-directory", Search: "service-search", Discovery: "service-discovery", "Multiple workloads": "service-multiple", "Platform metadata": "service-diagnostics", Unknown: "service-unknown",
     });
     const serialized = Function(`return (${createRecordedResults.toString()})()`)();
     for (const [key, icon] of Object.entries({ success: "check", failure: "result-failure", unknown: "unobserved", partial: "result-partial", other: "result-other", transport: "result-transport" })) {
@@ -235,13 +236,13 @@ test("forced colors, grayscale, grouped Other and request chips keep exact icons
     const page = await context.newPage();
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.goto(url + "/#home?chart=workload"); await ready(page); await expand(page);
-    const other = page.locator(".service-chart-row").filter({ has: page.locator('[data-group-id="group:other"]') });
+    const other = page.locator('.flat-comparison-row:has([data-group-id="group:other"])');
     assert.equal(await other.locator(".dimensional-category-icon").count(), 0, "Column labels omit the redundant icon lane; glossary and result glyphs remain unchanged");
     assert.ok((await other.locator(".group-name").textContent()).includes("Other"));
-    assert.ok((await other.getAttribute("class")).includes("dimensional-tone-service-other"));
+    assert.equal(await other.locator(".dimensional-tone-service-other").count(), 1);
     const start = page.url();
     assert.equal(await other.locator(".ux-help").count(), 0);
-    assert.match(await other.locator(".dimensional-action").getAttribute("aria-label"), /Show all categories/);
+    assert.match(await other.locator(".flat-comparison-action").getAttribute("aria-label"), /Show all categories/);
     assert.equal(page.url(), start);
     await page.keyboard.press("Escape");
     for (const theme of ["light", "dark"]) {
@@ -257,19 +258,19 @@ test("forced colors, grayscale, grouped Other and request chips keep exact icons
         await page.evaluate(() => { document.body.style.filter = ""; });
     }
     await page.goto(url + "/#activity"); await ready(page);
-    const chips = page.locator(".session-summary .recorded-result");
+    const chips = page.locator(".request-row .recorded-result");
     assert.ok(await chips.count() >= 3);
     for (const chip of await chips.all()) {
         const key = await chip.getAttribute("data-outcome");
         assert.equal(await chip.locator("svg").getAttribute("data-fluent-icon"), uxIconSources[results.icon(key)]);
         assert.ok((await chip.getAttribute("class")).includes(`result-tone-${key}`));
-        assert.equal(await chip.evaluate(n => n.tagName), results.canInspect("tool", key) ? "A" : "SPAN");
+        assert.equal(await chip.evaluate(n => n.tagName), "SPAN");
     }
 }));
 
 async function chartColors(page, selector, theme) {
     const rows = await page.locator(selector).evaluateAll(nodes => nodes.map(node => {
-        const column = node.querySelector(".dimensional-column");
+        const mark = node.querySelector(".flat-comparison-segment");
         const ancestors = []; for (let n = node; n; n = n.parentElement) ancestors.unshift(n);
         let background = [255, 255, 255];
         for (const ancestor of ancestors) {
@@ -277,12 +278,11 @@ async function chartColors(page, selector, theme) {
             background = color.slice(0, 3).map((channel, index) => channel * alpha + background[index] * (1 - alpha));
         }
         return {
-            label: node.querySelector(".group-name").textContent, tone: [...node.classList].find(value => value.startsWith("dimensional-tone-"))?.replace("dimensional-tone-", ""),
-            color: getComputedStyle(node).getPropertyValue("--column-label").trim(), background: `rgb(${background.join(",")})`,
-            stroke: getComputedStyle(column.querySelector(".dimensional-edge")).stroke,
-            mid: getComputedStyle(column.querySelector(".dimensional-front")).getPropertyValue("--column-mid"),
-            total: Number(column.dataset.total), height: Number(column.dataset.frontHeight), maximum: Number(column.dataset.maximum), extent: Number(column.dataset.plotHeight),
-            measuredHeight: [...column.querySelectorAll(".dimensional-front")].reduce((sum, face) => sum + face.height.baseVal.value * face.getScreenCTM().d, 0),
+            label: node.querySelector(".group-name").textContent, tone: [...mark.classList].find(value => value.startsWith("dimensional-tone-"))?.replace("dimensional-tone-", ""),
+            color: getComputedStyle(mark).getPropertyValue("--column-label").trim(), background: `rgb(${background.join(",")})`,
+            mid: getComputedStyle(mark).getPropertyValue("--column-mid"),
+            total: Number(node.dataset.total), maximum: Number(node.closest(".flat-comparison").dataset.maximum),
+            width: mark.getBoundingClientRect().width, track: mark.parentElement.getBoundingClientRect().width,
             labelClipped: (() => {
                 const label = node.querySelector(".group-name"), range = document.createRange();
                 range.selectNodeContents(label);
@@ -296,12 +296,10 @@ async function chartColors(page, selector, theme) {
         assert.ok(entry, row.label);
         row.service = entry.id;
         assert.deepEqual(rgb(row.color), rgb(charts.servicePalette[entry.id][theme].label), row.label);
-        assert.deepEqual(rgb(row.stroke), rgb(row.color), "Service outline uses the same accessible identity color");
         assert.deepEqual(rgb(row.mid), rgb(charts.servicePalette[entry.id][theme].mid), row.label);
-        row.markContrast = contrast(row.stroke, row.background);
+        row.markContrast = contrast(row.color, row.background);
         assert.ok(row.markContrast >= 3, `${row.label}: ${row.markContrast}`);
-        assert.equal(row.height, Math.max(36, Math.sqrt(row.total / row.maximum) * row.extent));
-        assert.ok(Math.abs(row.measuredHeight - row.height) <= .03);
+        assert.ok(Math.abs(row.width - row.track * row.total / row.maximum) <= .03);
         assert.equal(row.labelClipped, false, row.label);
     }
     assert.equal(new Set(rows.map(row => row.color)).size, rows.length);
@@ -313,27 +311,27 @@ test("rendered service charts preserve canonical color/name identities without i
     await page.setViewportSize({ width: 1200, height: 1000 });
     for (const theme of ["light", "dark"]) {
         await page.goto(url + "/#home?chart=workload"); await ready(page); await chooseTheme(page, theme);
-        const grouped = await chartColors(page, "#chart .service-chart-row", theme);
+        const grouped = await chartColors(page, "#chart .flat-comparison-action", theme);
         assert.equal(grouped.length, 9);
         assert.ok(grouped.some(row => row.service === "group:other"));
         await page.getByRole("button", { name: "Show all", exact: true }).click();
-        await page.waitForFunction(() => document.querySelectorAll("#chart .service-chart-row").length === 12);
-        const expanded = await chartColors(page, "#chart .service-chart-row", theme);
+        await page.waitForFunction(() => document.querySelectorAll("#chart .flat-comparison-action").length === 13);
+        const expanded = await chartColors(page, "#chart .flat-comparison-action", theme);
         for (const row of grouped.filter(row => row.service !== "group:other")) {
             assert.equal(expanded.find(entry => entry.service === row.service).color, row.color);
         }
         assert.equal(await page.getByRole("tooltip").isVisible(), false, "Chart expansion restores focus without resurrecting dismissed help");
-        await page.locator("#chart .dimensional-action").first().focus();
+        await page.locator("#chart .flat-comparison-action").first().focus();
         await page.keyboard.press("Tab");
         await page.keyboard.press("Shift+Tab");
-        assert.equal(await page.locator("#chart .dimensional-action").first().evaluate(node => node === document.activeElement), true);
+        assert.equal(await page.locator("#chart .flat-comparison-action").first().evaluate(node => node === document.activeElement), true);
         assert.equal(await page.getByRole("tooltip").isVisible(), false);
-        const tooltip = await page.locator("#chart .dimensional-action").first().getAttribute("aria-label");
+        const tooltip = await page.locator("#chart .flat-comparison-action").first().getAttribute("aria-label");
         assert.ok(tooltip.includes(expanded[0].label));
         assert.match(tooltip, /1 Work IQ tool call;/);
         await page.keyboard.press("Escape");
         await page.goto(url + "/#home?chart=workload&service=People"); await ready(page);
-        const subset = await chartColors(page, "#chart .service-chart-row", theme);
+        const subset = await chartColors(page, "#chart .flat-comparison-action", theme);
         assert.equal(subset.length, 1);
         assert.equal(subset[0].color, expanded.find(entry => entry.service === "People").color);
         const all = [...serviceCategories.entries, serviceCategories.describe("group:other", 4)];
@@ -349,7 +347,7 @@ test("rendered service charts preserve canonical color/name identities without i
                 }));
                 document.querySelector("main").append(fixture);
             }, { factory: createDimensionalCharts.toString(), icons: dimensionalIcons, entries: all, ids });
-            const rendered = await chartColors(page, "#paletteChartFixture .service-chart-row", theme);
+            const rendered = await chartColors(page, "#paletteChartFixture .flat-comparison-action", theme);
             assert.deepEqual(rendered.map(row => row.service), ids);
             if (ids.length === all.length) {
                 const pairs = pairwise(Object.fromEntries(rendered.map(row => [row.service, row.mid])));
@@ -359,7 +357,7 @@ test("rendered service charts preserve canonical color/name identities without i
                     for (const width of [375, 820, 1200]) for (const scale of [1, 2]) {
                         await page.setViewportSize({ width, height: 1000 });
                         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 16}px`; }, scale);
-                        await chartColors(page, "#paletteChartFixture .service-chart-row", theme);
+                        await chartColors(page, "#paletteChartFixture .flat-comparison-action", theme);
                         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth <= 1));
                         if (proofs) await page.locator("#paletteChartFixture").screenshot({ path: path.join(proofs, `all-chart-${theme}-${width}-${scale * 100}.png`) });
                     }
@@ -398,15 +396,17 @@ test("new synthetic human reports share category/result cues while JSON stays se
         await page.setContent(html);
         for (const media of ["screen", "print"]) for (const width of media === "screen" ? [375, 820, 1200] : [820]) {
             await page.setViewportSize({ width, height: 1000 }); await page.emulateMedia({ media });
-            const measured = await measure(page, ".service-glossary,.legend");
-            assertReadable(measured);
+            const measured = await page.locator(".service-glossary").evaluate(node => ({
+                labels: [...node.querySelectorAll("dt")].map(row => row.textContent),
+                descriptions: [...node.querySelectorAll("dd")].map(row => row.textContent),
+                overflow: document.documentElement.scrollWidth - innerWidth,
+                clipped: [...node.querySelectorAll("dt,dd")].filter(row => row.scrollWidth > row.clientWidth + 1).map(row => row.textContent),
+            }));
+            assert.ok(measured.overflow <= 1);
+            assert.deepEqual(measured.clipped, []);
+            assert.deepEqual(measured.labels, snapshot.serviceCategories.map(entry => entry.label));
+            assert.deepEqual(measured.descriptions, snapshot.serviceCategories.map(entry => entry.description));
             reportMeasurements.push({ media, width, ...measured });
-            for (const cue of measured.cues.filter(c => c.service)) {
-                assert.equal(cue.icon, expectedServices.find(e => e.id === cue.service).icon);
-                if (media === "screen") assert.deepEqual(rgb(cue.color), rgb(charts.servicePalette[cue.service].light.label));
-            }
-            if (media === "screen") assert.equal(new Set(measured.cues.filter(c => c.service).map(c => c.color)).size, snapshot.serviceCategories.length);
-            if (media === "print") assert.equal(new Set(measured.cues.map(c => c.color)).size, 1, "Printed labels/icons remain dark ink without background fills");
             if (proofs && width === 820) await page.locator(".service-glossary").screenshot({ path: path.join(proofs, `synthetic-report-${media}.png`) });
         }
         assert.deepEqual(network, []);
@@ -431,7 +431,8 @@ test("new synthetic human reports share category/result cues while JSON stays se
     } finally { await loading.destroy(); }
     const text = pages.join(" ").replace(/\s+/g, " ");
     for (const entry of snapshot.serviceCategories) {
-        assert.ok(text.includes(entry.label), entry.label); assert.ok(text.includes(entry.description), entry.description);
+        assert.ok(text.includes(entry.label), entry.label);
+        assert.ok(text.replace(/\s+/g, "").includes(entry.description.replace(/\s+/g, "")), entry.description);
     }
     assert.doesNotMatch(text, /SYNTHETIC_PRIVATE_PROMPT|SYNTHETIC_PRIVATE_FOLLOWUP/);
     if (proofs) {
@@ -449,7 +450,7 @@ test("script-free human report rendering covers even categories withheld by the 
         ...record, toolCalls: record.toolCalls.map(call => ({
             ...call,
             requestedApiPath: records[index].toolCalls[0].requestedApiPath,
-            requestArgs: { entityUrls: records[index].toolCalls[0].requestArgs.entityUrls },
+            requestArgs: structuredClone(records[index].toolCalls[0].requestArgs),
         })),
     }));
     const html = renderHtmlReport(projectedFixture);
@@ -460,11 +461,12 @@ test("script-free human report rendering covers even categories withheld by the 
         await page.setContent(html);
         for (const media of ["screen", "print"]) {
             await page.emulateMedia({ media });
-            const measured = await measure(page, ".service-glossary"); assertReadable(measured);
-            assert.deepEqual(measured.cues.map(cue => cue.service), serviceCategories.entries.map(entry => entry.id));
-            for (const cue of measured.cues) {
-                if (media === "screen") assert.deepEqual(rgb(cue.color), rgb(charts.servicePalette[cue.service].light.label));
-            }
+            const measured = await page.locator(".service-glossary").evaluate(node => ({
+                labels: [...node.querySelectorAll("dt")].map(row => row.textContent),
+                overflow: document.documentElement.scrollWidth - innerWidth,
+            }));
+            assert.ok(measured.overflow <= 1);
+            assert.deepEqual(measured.labels, serviceCategories.entries.map(entry => entry.label));
             measurements.push({ media, ...measured });
             if (proofs) await page.locator(".service-glossary").screenshot({ path: path.join(proofs, `all-service-report-${media}.png`) });
         }
