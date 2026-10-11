@@ -1,5 +1,61 @@
-// The backend supplies validated, already-pooled facts; this factory only presents them.
-export function createAssessmentPresentation({ validateMetric, metricSlotKey, validateReviewStatus, validateAssessmentAttempts }) {
+import { createActivityProjection } from "../lib/activity-projection.mjs";
+
+// Reuse the canonical nearest-rank calculation, never a percentile of medians.
+export function createTimingPresentation(summarize = createActivityProjection(null, null, ["unknown"]).summarize) {
+    const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+    const definitions = {
+        "tool-start-to-completion": ["Tool calls", "calls", "Call start to recorded completion"],
+        "recorded-request-to-final-answer": ["Request to final response", "requests", "Recorded request to final response; not tool-call time"],
+        "verified-request-to-final-answer": ["Whole-interaction latency", "requests", "Verified request to final answer"],
+        "http-dispatch-to-response-headers": ["HTTP response time", "HTTP responses", "Dispatch to response headers"],
+        "http-dispatch-to-transport-error": ["Time to HTTP transport error", "HTTP transport errors", "Dispatch to transport error"],
+    };
+    function duration(milliseconds) {
+        if (milliseconds === null) return "Not measured";
+        if (!Number.isFinite(milliseconds) || milliseconds < 0) throw new TypeError("A duration must be nonnegative milliseconds or null.");
+        if (milliseconds > 0 && milliseconds < 10) return "<0.01 s";
+        const hundredths = Math.round(milliseconds / 10);
+        const seconds = number(hundredths % 6000 / 100);
+        return hundredths < 6000 ? `${seconds} s`
+            : hundredths < 360000 ? `${number(Math.floor(hundredths / 6000))} min ${seconds} s`
+                : `${number(Math.floor(hundredths / 360000))} h ${Math.floor(hundredths % 360000 / 6000)} min ${seconds} s`;
+    }
+    function fromSummary(summary, eligible, boundary) {
+        const definition = definitions[boundary];
+        if (!definition) throw new TypeError("A supported recorded timing boundary is required.");
+        const { sampleCount: timed, p50Ms, p95Ms } = summary;
+        if (!Number.isSafeInteger(eligible) || !Number.isSafeInteger(timed) || timed < 0 || timed > eligible
+            || (timed === 0 ? p50Ms !== null || p95Ms !== null
+                : !Number.isFinite(p50Ms) || p50Ms < 0 || !Number.isFinite(p95Ms) || p95Ms < p50Ms)) {
+            throw new TypeError("Timing values must match the measured and eligible population.");
+        }
+        const [label, unit, boundaryLabel] = definition, notTimed = eligible - timed;
+        return {
+            kind: "timing", label, timed, eligible, notTimed, boundaryLabel,
+            coverage: { count: timed, eligible, unit },
+            coverageLabel: `${number(timed)} of ${number(eligible)} ${eligible === 1 ? unit.replace(/s$/, "") : unit} timed`,
+            missingLabel: notTimed ? `${number(notTimed)} ${notTimed === 1 ? unit.replace(/s$/, "") : unit} without recorded timing` : eligible ? `All ${unit} timed` : `No eligible ${unit}`,
+            measurement: { value: p50Ms, unit: "ms", aggregation: "nearest-rank-p50", boundary },
+            distribution: { sampleCount: timed, p50Ms, p95Ms, method: "nearest-rank; available samples only" },
+            display: { median: duration(p50Ms), p95: duration(p95Ms), state: timed === 0 ? "missing" : timed === 1 ? "single" : "distribution" },
+            resultLabel: timed === 0 ? "Not measured" : timed === 1 ? `${duration(p50Ms)} single measured sample`
+                : `Median ${duration(p50Ms)}; P95 ${duration(p95Ms)}`,
+            limitation: timed === 1 ? "One sample, not overall performance."
+                : notTimed ? `Only timed ${unit} are represented; missing timing is not zero.` : "Recorded samples only, not overall task time.",
+        };
+    }
+    function fromMetric(metric) {
+        const summary = summarize(metric.samples.map(sample => ({ durationMs: sample.value, outcome: "unknown" }))).duration;
+        if (summary.sampleCount !== metric.coverage.covered || summary.p50Ms !== metric.value) {
+            throw new TypeError("Retained timing samples do not match the metric.");
+        }
+        return fromSummary(summary, metric.coverage.eligible, metric.boundary);
+    }
+    return { duration, fromSummary, fromMetric };
+}
+
+// The backend supplies validated facts and retained samples; this factory only presents them.
+export function createAssessmentPresentation({ validateMetric, metricSlotKey, validateReviewStatus, validateAssessmentAttempts, timing = createTimingPresentation() }) {
     const bandVersion = "assessed-pass-share-v1";
     const dimensionLabels = { accuracy: "Accuracy", speed: "Speed", "answer-trust": "Answer trust", "action-trust": "Action trust" };
     const checkLabels = {
@@ -94,8 +150,8 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         if (metric.dimension === "speed") {
             const unit = metric.definitionId === "tool-duration" ? "calls" : metric.definitionId === "recorded-response-duration" ? "requests" : "items";
             return {
-                value: metric.value === null ? "Not measured" : metric.value > 0 && metric.value < 10 ? "<0.01 s" : `${number(metric.value / 1000)} s`,
-                coverage: `${number(covered)} of ${number(eligible)} ${unit} timed${metric.value === null ? "" : " \u00b7 Median"}`,
+                value: timing.duration(metric.value),
+                coverage: `${number(covered)} of ${number(eligible)} ${unit} timed${covered === 1 ? " \u00b7 Single sample" : covered > 1 ? " \u00b7 Median / P95" : ""}`,
             };
         }
         return null;
@@ -161,14 +217,8 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         }
         if (metric.dimension === "speed") {
             return {
-                ...common, kind: "timing", timed: count, notTimed: eligible - count,
+                ...common, ...timing.fromMetric(metric),
                 headline: `${number(count)} of ${units(eligible, unit)} timed`,
-                coverageLabel: `${number(count)} of ${units(eligible, unit)} timed`,
-                resultLabel: metric.value === null ? "No timing recorded" : `${reading(metric).value} median of timed ${unit}`,
-                missingLabel: eligible > count ? `${units(eligible - count, unit)} without recorded timing` : `All ${unit} timed`,
-                measurement: { value: metric.value, unit: metric.unit, aggregation: "nearest-rank-p50", boundary: metric.boundary },
-                limitation: (count < eligible ? `The median describes only the timed ${unit}; it does not establish overall speed. ` : "")
-                    + boundaryLabels[metric.boundary] + ".",
             };
         }
         if (metric.checkId === "recorded-tool-success") return {
@@ -280,6 +330,11 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         if (metric.counts) details.push(`${number(metric.counts.pass)} passed, ${number(metric.counts.fail)} failed, ${number(metric.counts.unassessed)} unassessed, ${number(metric.counts.evaluatorError)} check errors.`);
         if (metric.pricing) details.push(`${metric.pricing.method === "recorded-charge" ? "Recorded charge" : "Versioned rate card"}, pricing version ${metric.pricing.version}.`);
         if (metric.evaluator) details.push(`Model ${metric.evaluator.model}; rubric ${metric.evaluator.rubricId} v${metric.evaluator.rubricVersion}.`);
+        if (metric.dimension === "speed") {
+            const row = timing.fromMetric(metric);
+            details.push(`${row.timed === 1 ? "Single sample" : "Median"}: ${metric.value === null ? "Not measured" : `${metric.value} ms`}. `
+                + `P95: ${row.timed > 1 ? `${row.distribution.p95Ms} ms` : "Not shown without multiple samples"}. Nearest rank; retained samples only.`);
+        }
         const timingSummary = {
             "tool-duration": { label: "Tool calls", unit: "calls" },
             "recorded-response-duration": { label: "Request to final response", unit: "requests" },
@@ -290,7 +345,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
             reading: reading(metric, personalVerdict),
             ...(timingSummary ? { summary: {
                 label: timingSummary.label,
-                coverage: `${metric.value !== null ? "Median \u00b7 " : ""}${number(metric.coverage.covered)} / ${number(metric.coverage.eligible)} ${timingSummary.unit} timed`,
+                coverage: `${metric.coverage.covered === 1 ? "Single sample \u00b7 " : metric.coverage.covered > 1 ? "Median \u00b7 " : ""}${number(metric.coverage.covered)} / ${number(metric.coverage.eligible)} ${timingSummary.unit} timed`,
             } } : {}),
             band: ratio && !["execution", "evidence"].includes(metric.dimension) ? band(metric.value) : "neutral",
             bandVersion, status: metric.status, details, basis: { ...metric.basis },
@@ -417,7 +472,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
 }
 
 // DOM-only; this renderer cannot fetch, assess, save feedback, or enable capture.
-export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback" } = {}) {
+export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming } = {}) {
     if (typeof onDetails !== "function") throw new TypeError("A details path is required for definitions and unavailable reasons.");
     if (model.evidence?.version !== 1) throw new TypeError("A current quality evidence projection is required.");
     const doc = root.ownerDocument;
@@ -579,34 +634,78 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         }
         section.append(status);
     } else section.append(reviewStatus);
-    const timing = el("section", "assessment-timing");
-    const timingHeading = el("div", "assessment-dimension-heading");
-    timingHeading.append(el("h3", "", "Recorded timing"));
-    if (helpButton) timingHeading.append(helpButton("speed"));
-    timing.append(timingHeading);
-    for (const row of model.evidence.timing) {
-        // Unsupported verified end-to-end latency duplicates the recorded-response row.
-        if (row.provenance.definitionId === "interaction-latency" && row.measurement.value === null) continue;
-        const fact = el("div", "assessment-fact");
-        fact.dataset.dimension = "speed";
-        const labels = { "tool-duration": "Tool calls", "recorded-response-duration": "Request to final response" };
-        fact.append(el("h4", "assessment-fact-label", labels[row.provenance.definitionId] ?? row.label));
-        const milliseconds = row.measurement.value;
-        let duration = "Not measured";
-        if (milliseconds !== null) {
-            const seconds = Math.round(milliseconds / 10) / 100;
-            duration = milliseconds > 0 && milliseconds < 10 ? "<0.01 s" : seconds < 60 ? `${number(seconds)} s`
-                : seconds < 3600 ? `${Math.floor(seconds / 60)} min ${number(seconds % 60)} s`
-                    : `${Math.floor(seconds / 3600)} h ${Math.floor(seconds % 3600 / 60)} min ${number(seconds % 60)} s`;
-        }
-        const value = cell(row.timed === 0 ? "No measured samples" : row.timed === 1 ? "Single measured sample" : "Median of measured samples", duration, "assessment-value");
-        const coverage = cell("Timing coverage", row.coverageLabel, "assessment-coverage");
-        if (row.notTimed) coverage.append(el("p", "assessment-unavailable-reason", row.missingLabel));
-        if (row.timed === 1 && row.eligible > 1) value.append(el("p", "assessment-unavailable-reason", "One sample, not overall performance"));
-        fact.append(value, coverage); timing.append(fact);
-    }
-    if (!model.evidence.timing.length) timing.append(el("p", "assessment-unavailable", "No timing measures were supplied for this scope."));
+    const timing = el("div");
+    renderTiming(timing, model.evidence.timing.filter(row =>
+        row.provenance.definitionId !== "interaction-latency" || row.measurement.value !== null), {
+        title: detailsLabel === "Measure definitions" ? "Recorded timing in full interactions" : "Recorded timing",
+        helpButton: helpButton ? () => helpButton("speed") : null,
+    });
     section.append(timing, help);
+    root.replaceChildren(section);
+    return section;
+}
+
+export function renderRecordedTiming(root, rows, { title = "Recorded timing", helpButton, action } = {}) {
+    const doc = root.ownerDocument;
+    function el(tag, cls, text) {
+        const node = doc.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    const section = el("section", "assessment-timing");
+    section.setAttribute("aria-label", title);
+    const heading = el("div", "assessment-heading");
+    heading.append(el("h3", "", title));
+    if (helpButton) heading.append(helpButton());
+    if (action) heading.append(action);
+    section.append(heading);
+    for (const row of rows) {
+        const fact = el("div", "assessment-fact recorded-timing-row");
+        fact.dataset.dimension = "speed";
+        fact.dataset.timingBoundary = row.measurement.boundary;
+        fact.dataset.timingState = row.display.state;
+        const identity = el("div");
+        identity.append(el("h4", "assessment-fact-label", row.label), el("p", "timing-boundary", row.boundaryLabel));
+        const values = el("div", "timing-values");
+        for (const [label, value] of row.timed > 1 ? [["Median", row.display.median], ["P95", row.display.p95]]
+            : [[row.timed ? "Single measured sample" : "No measured samples", row.display.median]]) {
+            const item = el("div");
+            item.append(el("span", "assessment-cell-label", label), el("p", "assessment-value", value));
+            values.append(item);
+        }
+        const coverage = el("div", "timing-population");
+        coverage.append(el("p", "assessment-coverage", row.coverageLabel));
+        if (row.notTimed || !row.eligible) coverage.append(el("p", "assessment-unavailable-reason", row.missingLabel));
+        coverage.append(el("p", "assessment-unavailable-reason", row.limitation));
+        fact.append(identity, values, coverage);
+        if (row.timed > 1 && row.distribution.p95Ms > 0) {
+            const scale = el("div", "timing-scale");
+            scale.setAttribute("role", "img");
+            scale.setAttribute("aria-label", `Linear duration scale from 0 to ${row.display.p95}. Dot: median ${row.display.median}. Line: P95 ${row.display.p95}.`);
+            const track = el("div", "timing-track"), median = el("span", "timing-median"), p95 = el("span", "timing-p95");
+            median.style.left = `${row.distribution.p50Ms / row.distribution.p95Ms * 100}%`;
+            track.append(median, p95);
+            scale.append(track, el("span", "timing-scale-key", "0 s \u00b7 Dot = median \u00b7 Line = P95"));
+            fact.append(scale);
+        }
+        const details = el("details", "timing-exact");
+        details.append(el("summary", "", "Exact timing and boundary"));
+        const facts = el("dl", "timing-exact-facts");
+        for (const [label, value] of [
+            ["Boundary", row.boundaryLabel], ["Boundary ID", row.measurement.boundary],
+            [row.timed === 1 ? "Single sample" : "Median", row.measurement.value === null ? "Not measured" : `${row.measurement.value} ms`],
+            ["P95", row.timed > 1 ? `${row.distribution.p95Ms} ms` : "Not shown without multiple samples"],
+            ["Population", `${row.coverageLabel}; ${row.notTimed} without recorded timing`],
+            ["Method", "Nearest rank over retained samples for this boundary. No summed concurrent calls or averaged medians."],
+        ]) {
+            const item = el("div");
+            item.append(el("dt", "", label), el("dd", "", value));
+            facts.append(item);
+        }
+        details.append(facts); fact.append(details); section.append(fact);
+    }
+    if (!rows.length) section.append(el("p", "assessment-unavailable", "Not measured. No supported timing samples for this scope."));
     root.replaceChildren(section);
     return section;
 }
@@ -661,7 +760,29 @@ export const assessmentPresentationStyles = `
 .assessment-cell-label {display:block;font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin-bottom:var(--space-xs)}
 .assessment-timing {margin-block:var(--space-xl);padding-top:var(--space-lg);border-top:1px solid var(--rule)}
 .assessment-timing .assessment-value {font-size:var(--type-data-value)}
+.assessment-timing .assessment-heading>a {display:inline-flex;align-items:center;min-height:44px}
+.recorded-timing-row {display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-md) var(--space-xl);padding-block:var(--space-lg);min-width:0;overflow-wrap:anywhere}
+.recorded-timing-row+.recorded-timing-row {border-top:1px solid var(--rule)}
+.timing-boundary,.timing-scale-key {font-size:var(--type-caption);color:var(--muted);line-height:1.5;margin:var(--space-xs) 0 0}
+.timing-values {display:flex;flex-wrap:wrap;gap:var(--space-md) var(--space-xl)}
+.timing-values>div {min-width:0}
+.timing-scale {grid-column:1/-1;max-width:36rem;min-width:0}
+.timing-track {position:relative;height:2px;margin:var(--space-sm) 6px var(--space-md);background:var(--muted)}
+.timing-median {position:absolute;top:50%;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--ink)}
+.timing-p95 {position:absolute;right:0;top:50%;transform:translate(50%,-50%);height:16px;width:3px;background:var(--ink)}
+.timing-exact {grid-column:1/-1;min-width:0;font-size:var(--type-small)}
+.timing-exact summary {min-height:44px;align-content:center;cursor:pointer;width:fit-content}
+.timing-exact summary:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+.timing-exact-facts {margin:var(--space-sm) 0;display:grid;gap:var(--space-sm);line-height:1.5}
+.timing-exact-facts>div {display:flex;flex-wrap:wrap;gap:var(--space-xs) var(--space-lg)}
+.timing-exact-facts dt {font-weight:var(--weight-strong)}
+.timing-exact-facts dd {margin:0;min-width:0}
+#recordedTiming {container:recorded-timing / inline-size}
+@container recorded-timing (min-width:42rem) {
+ .recorded-timing-row {grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.3fr)}
+}
 @container assessment-summary (min-width:42rem) {
+ .recorded-timing-row {grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.3fr)}
  .assessment-fact {grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1.4fr)}
  .assessment-check {grid-template-columns:minmax(0,1.1fr) minmax(0,1.1fr) minmax(0,.8fr) minmax(0,1.3fr)}
  .assessment-check-title {align-self:center}

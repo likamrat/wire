@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { chromium } from "@playwright/test";
 import { createAssessmentExperience } from "../web/assessment-experience.mjs";
-import { createAssessmentPresentation, renderAssessmentSummary, assessmentPresentationStyles } from "../web/assessment-presentation.mjs";
+import { createAssessmentPresentation, renderAssessmentSummary, assessmentPresentationStyles, createTimingPresentation, renderRecordedTiming } from "../web/assessment-presentation.mjs";
+import { createActivityProjection } from "../lib/activity-projection.mjs";
 import { createAssessmentControls } from "../web/assessment-controls.mjs";
 import { mountConsentSetup, mountPersonalFeedback } from "../web/assessment-control-views.mjs";
 import { createTextAccess } from "../web/text-access.mjs";
@@ -93,8 +94,10 @@ async function setup(t, initialView = currentView()) {
     await page.addStyleTag({ content: styles + assessmentPresentationStyles });
     await page.addScriptTag({ content: `
         window.createExperience = ${createAssessmentExperience.toString()};
-        window.createPresentation = ${createAssessmentPresentation.toString()};
-        window.renderSummary = ${renderAssessmentSummary.toString()};
+        const timing = (${createTimingPresentation.toString()})((${createActivityProjection.toString()})(null, null, ["unknown"]).summarize);
+        const renderTiming = ${renderRecordedTiming.toString()};
+        window.createPresentation = contract => (${createAssessmentPresentation.toString()})({ ...contract, timing });
+        window.renderSummary = (root, model, options) => (${renderAssessmentSummary.toString()})(root, model, { ...options, renderTiming });
         window.createControls = ${createAssessmentControls.toString()};
         window.mountConsent = ${mountConsentSetup.toString()};
         window.mountFeedback = ${mountPersonalFeedback.toString()};

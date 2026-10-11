@@ -593,9 +593,26 @@ eligible and covered request identities, not merely equal counts. Otherwise
 each check keeps its own coverage. Missing results are neither failures nor
 evidence of queued work; no minimum sample threshold or combined grade is added.
 
-Speed keeps separate call and request boundaries, displaying seconds with its
-own timed coverage. Exact milliseconds and unchanged percentage/count facts,
-definitions, models and rubrics remain in the existing details panel.
+Recorded timing keeps separate call, recorded request/final-response, HTTP
+response-header and transport-error boundaries. `createTimingPresentation`
+uses `createActivityProjection(...).summarize` over each metric's retained raw
+samples; the existing exact `measurement` remains unchanged and `distribution`
+adds `sampleCount`, `p50Ms`, `p95Ms` and the nearest-rank method. The shell
+injects this dependency when serializing the presenter. Two or more samples
+show named Median/P95 values; one shows a single measured sample, and none
+shows Not measured. Display rounding is separate from unrounded milliseconds
+in each row's native disclosure and the existing definitions panel.
+
+`renderRecordedTiming` is shared by Insights and Analyze's `#recordedTiming`.
+Analyze consumes the exact refined `analytics.totals.duration` and
+`analytics.rows.length` for the tool layer, with a same-scope Calls link;
+it never substitutes full-interaction counts or invents a timing boundary
+for other activity layers. Insights explicitly labels its wider full-interaction
+scope. Neither surface averages medians, sums concurrent calls, or treats a
+duration as a quality percentage. A dot and line mark median/P95 on a compact
+linear scale from zero to that row's P95 when multiple nonzero samples make
+the scale meaningful. Other percentage/count facts, models and rubrics stay
+unchanged.
 **How to read these results** explains repeated AI limitations and median timing
 once. Automatic-score processing status stays visible after the results, rather
 than preceding their scope. Partial-membership warnings remain visible.

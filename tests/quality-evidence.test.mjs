@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAssessmentPresentation } from "../web/assessment-presentation.mjs";
+import { createAssessmentPresentation, createTimingPresentation } from "../web/assessment-presentation.mjs";
+import { createActivityProjection } from "../lib/activity-projection.mjs";
 import { contract, quality, samples } from "./assessment-ui-fixtures.mjs";
 import { buildAssessmentModel, buildReportFacts, assessmentDependencies, assessmentOverview } from "../lib/assessment-read-model.mjs";
 import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
@@ -154,7 +155,7 @@ test("timing states retain exact milliseconds and boundary-specific units with i
     assert.equal(row.headline, "1 of 18 requests timed");
     assert.deepEqual(row.coverage, { count: 1, eligible: 18, unit: "requests" });
     assert.deepEqual(row.measurement, { value: 677960, unit: "ms", aggregation: "nearest-rank-p50", boundary: metric.boundary });
-    assert.match(row.limitation, /only the timed requests.*not.*overall speed/);
+    assert.match(row.limitation, /One sample, not overall performance/);
     assert.match(row.missingLabel, /17 requests/);
     assert.equal(presentation.format(samples.makeDuration([0])).evidence.measurement.value, 0);
     assert.equal(presentation.format(samples.makeDuration([])).evidence.measurement.value, null);
@@ -269,7 +270,10 @@ test("actual read-model pooling preserves metric-specific verdicts and absent co
 });
 
 test("browser-serialized factory and server use exactly the same evidence model", () => {
-    const browserFactory = Function(`return (${createAssessmentPresentation.toString()});`)();
+    const browserFactory = Function(`
+        const timing = (${createTimingPresentation.toString()})((${createActivityProjection.toString()})(null, null, ["unknown"]).summarize);
+        return contract => (${createAssessmentPresentation.toString()})({ ...contract, timing });
+    `)();
     const metrics = [model("accuracy", { pass: 2, unassessed: 106 }), samples.makeDuration([41100])];
     assert.deepEqual(browserFactory(contract).summarize(metrics).evidence, presentation.summarize(metrics).evidence);
     assert.deepEqual(presentation.summarize([]).evidence.quality.accuracy.coverage,

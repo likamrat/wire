@@ -106,6 +106,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const results = createRecordedResults();
     const filterState = createFilterState(results, authorship);
     const analysisSlice = createAnalysisSlice(localSearch, createActivityProjection(time, categories, Object.keys(results.labels("tool"))));
+    const timingPresentation = assessmentFactories.timing;
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, icons: dimensionalIcons,
         createLink: (kind, row) => kind === "outcomes" && applied.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
             : kind === "services" ? link("", "activity", { withinServices: [...new Set([...(route.withinServices?.split(",") || []), row.id])].sort().join(","), page: undefined })
@@ -1709,7 +1710,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else $("countTable").replaceChildren();
         }, true);
         percentages.update(analytics, { ...applied, search: Boolean(search), withinServices: route.withinServices?.split(",") || [] });
+        renderAnalyzeTiming();
         if (analytics.totals.count && chartType !== "time") $("chartFooter").prepend(el("span", "chart-size-note", "Linear count scale. Exact counts and recorded results are available below."));
+    }
+    function renderAnalyzeTiming() {
+        const host = $("recordedTiming");
+        // Other activity layers do not identify a common start/completion boundary.
+        host.hidden = applied.layer !== "tool";
+        if (host.hidden) { host.replaceChildren(); return; }
+        const row = timingPresentation.fromSummary(analytics.totals.duration, analytics.rows.length, "tool-start-to-completion");
+        row.label = "Matching tool calls";
+        const action = analytics.rows.length ? link("View matching calls", "activity", { mode: "calls", page: undefined }, "text-link") : null;
+        if (action) viewKey(action, "timing:matching-calls");
+        assessmentFactories.renderTiming(host, [row], { action });
+        bindDetails(host.querySelector(".timing-exact"), "recordedTiming:" + sliceKey());
     }
     function renderTime() {
         const series = analytics.timeSeries;
