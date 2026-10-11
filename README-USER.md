@@ -9,7 +9,7 @@ need separate approval and are not enabled by installing WIRE.
 
 | Page | Use |
 | --- | --- |
-| Home | Check for new activity; filter dates and results. |
+| Home | Refresh recorded activity; filter dates and results. |
 | Activity | Choose a Copilot chat, inspect interactions and select requests. |
 | Reports | Find, open and manage saved reports, or switch to creating a report. |
 | Collection status | Check whether collection is running, find chats with history gaps and see any available next step. |
@@ -24,12 +24,23 @@ screens, **Menu** opens full navigation; **Escape** or **Close** returns to the 
 
 ## Inspect an interaction
 
-**Check for new activity** reads approved local histories without rerunning Work IQ or Graph queries. **Refresh stored data** rereads collected evidence.
+**Refresh** checks approved local histories and reads the latest stored activity
+without rerunning Work IQ or Graph queries. Automatic collection keeps its current
+configuration; paused collection stays paused. Before source approval, Refresh
+only reads stored activity. **Review source & connect** remains a separate action.
+
+Accepted results, filters and report selections stay while updating. Finish an
+open report review or save/cancel Settings edits before refreshing. **Retry**
+appears for read/status recovery and never repeats a source check or save. If a
+source-check response is lost, its outcome stays unconfirmed even when newer
+stored activity is available; Refresh and Retry remain read-only in this tab,
+including after reload. Browser recovery-storage failures also block source
+checks explicitly. This protection does not correlate operations across tabs.
 
 **No new recorded activity** means that manual check added no records or updates;
 it does not mean every history is available. **Chat history** shows the known
 unavailable, limited or still-reading chat counts from that check. Open
-**Source and collection**, beside the check button, for its recorded primary
+**Source and collection**, beside Refresh, for its recorded primary
 reasons, reading limits and possible next steps. **View current history issues**
 opens the existing chat-by-chat details; later background checks may have changed
 that list.
@@ -50,7 +61,8 @@ chats, open a reason, then open a chat for its retained activity or additional
 limits. Each chat is counted once, even when several limits apply.
 Paused or disconnected collection points to the relevant existing Settings
 control. Current collection errors stay visible; **Technical details** holds
-the full timestamps, limits and **Refresh stored data**. The optional network
+the full timestamps and limits. **Refresh** stays above the page; **Retry** appears
+for safe read/status recovery. The optional network
 diagnostic does not check collection and is not a required next step.
 
 The main filter row shows **Dates, Tool, Service, Outcome, Author**. **More filters** keeps **Category, Project, Chat, Activity, Collection** available. Applied choices stay visible below, even when More filters is closed, and can be removed individually. The same controls work in Home, Activity and a scoped chat. On smaller screens or with larger text, fields and selected values wrap rather than disappearing offscreen; Tab reaches each control.

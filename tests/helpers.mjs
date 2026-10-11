@@ -33,15 +33,9 @@ export async function navigateMain(page, view) {
 }
 
 export async function revealStoredRefresh(page) {
-    const control = page.locator("#refreshBtn");
-    if (await page.locator("#savedReportsPanel #refreshBtn").count() && !await page.locator("#savedReportsPanel").isVisible()) await page.locator("#reportLibraryLink").click();
-    for (const id of ["freshHelp", "bundles", "savedLibraryHelp", "coverage"]) {
-        const owner = page.locator(`#${id}`);
-        if (await owner.locator("#refreshBtn").count() && !await owner.evaluate(node => node.open)) {
-            await owner.locator(":scope > summary").click();
-        }
-    }
-    return control;
+    // Legacy callers now use the one Refresh journey, or its read-only recovery.
+    const retry = page.locator("#refreshBtn");
+    return await retry.isVisible() ? retry : page.locator("#checkActivity");
 }
 
 export async function navigateSettings(page, category) {

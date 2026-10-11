@@ -307,7 +307,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         entry.signature = signature;
         entry.selectedValue = selectedKey;
         const state = select.dataset.selectState;
-        const text = state === "loading" ? "Loading options..." : state === "stale" ? "Refresh stored data to choose" :
+        const text = state === "loading" ? "Loading options..." : state === "stale" ? "Refresh to choose" :
             entry.multiple && selected.length > 1 ? selected.length === options.length ? select.dataset.allLabel || "All results" : `${selected.length} ${select.dataset.selectionNoun || "statuses"}`
                 : select.selectedOptions[0]?.label || (options.length ? "Choose an option" : "No options available");
         const presentation = JSON.stringify([text, selectedKey, state]);

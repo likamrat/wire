@@ -76,7 +76,7 @@ export const periodFlowStyles = `
 .fresh-context {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;min-width:0}
 .fresh-context p {margin:0;font-size:.875rem}
 .fresh-links {display:flex;flex-wrap:wrap;gap:var(--pill-gap);max-width:100%}
-.fresh-links a,#freshIssues {display:inline-flex;align-items:center;min-height:44px}
+.fresh-links a,#freshIssues,#freshSourceSetup {display:inline-flex;align-items:center;min-height:44px}
 #checkActivity {min-height:var(--pill-height);white-space:normal;text-align:center;justify-self:start}
 #freshHelp {border:0;background:transparent;padding:0;margin:0}
 #freshHelp>summary {display:list-item;width:fit-content;min-height:44px;padding:10px 4px;color:var(--accent);font-size:.875rem;overflow-wrap:anywhere}

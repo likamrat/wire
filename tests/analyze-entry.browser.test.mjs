@@ -245,7 +245,8 @@ test("legacy scopes, Calls paging, retained stale results and narrow keyboard en
 test("empty source still exposes Analyze recovery and existing Reports and Settings", { timeout: 15000 }, async t => {
     const { page } = await setup(t, []);
     await expect(page.locator("#activityList")).toContainText("No collected activity yet");
-    await expect(page.locator("#checkActivity")).toHaveText("Review source & connect");
+    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
+    await expect(page.locator("#freshSourceSetup")).toBeVisible();
     await expect(page.locator("#activityCount")).toHaveText("0");
     await page.locator('[data-analyze-mode="calls"]').click();
     await expect(page.locator("#activityList")).toContainText("No collected activity yet");

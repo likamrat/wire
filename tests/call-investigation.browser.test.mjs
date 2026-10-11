@@ -88,6 +88,10 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     await page.locator("#fromFilter").fill("2026-09-30"); await page.locator("#toFilter").fill("2026-09-30");
     await page.locator("#applyDates").click(); await ready(page);
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
+    const refreshOrigin = page.url();
+    await page.locator("#checkActivity").click(); await ready(page);
+    assert.equal(page.url(), refreshOrigin, "Refresh preserves the exact filtered Calls route");
+    await expect(page.locator("#activitySearch")).toHaveValue("synthetic documents");
     await expect(page.locator("#callSortControls")).toBeVisible();
     await expect(page.locator("#callTimingScope")).toContainText("2 unavailable");
     const expected = app.snapshot().analytics.rows.slice().sort((a, b) =>

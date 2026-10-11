@@ -528,7 +528,7 @@ test("dialog, scroll, disabled, empty, loading, stale and dynamically replaced o
     for (const state of ["loading", "stale"]) {
         await page.locator("#testScope").evaluate((node, state) => node.dataset.selectState = state, state);
         await page.waitForFunction(() => document.querySelector("#testScope-control").disabled);
-        assert.match(await trigger.textContent(), state === "loading" ? /Loading/ : /Refresh stored data/);
+        assert.match(await trigger.textContent(), state === "loading" ? /Loading/ : /Refresh to choose/);
     }
     await page.locator("#testScope").evaluate((node) => { delete node.dataset.selectState; node.replaceChildren(); });
     await page.waitForFunction(() => document.querySelector("#testScope-control").textContent.includes("No options"));

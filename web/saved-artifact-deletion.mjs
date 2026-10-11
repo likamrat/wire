@@ -100,7 +100,7 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
                 : "The saved " + (value.artifact.artifactKind === "comparison" ? "comparison" : "report") + " was deleted. Source activity and other saved objects are unchanged.");
             paint();
             const displayedGeneration = generation;
-            if (await onDeleted(bulk ? { scope: value.scope, artifacts: value.artifacts } : value.artifact) === false) message("Deletion completed, but the saved list could not refresh. Use Refresh stored data; do not repeat deletion.", true);
+            if (await onDeleted(bulk ? { scope: value.scope, artifacts: value.artifacts } : value.artifact) === false) message("Deletion completed, but the saved list could not refresh. Use Retry; do not repeat deletion.", true);
             if (dialog.open && generation === displayedGeneration) cancel.focus();
         } else if (value.phase === "not-started") {
             phase = "not-started"; forget(); message("No committed deletion was found. Nothing was retried. Close this dialog and start a fresh preview if needed.");

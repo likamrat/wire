@@ -388,12 +388,12 @@ test("UX-003 confirmed save with failed availability refresh stays explicit and 
     await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     assert.match(await page.locator("#reportJourneyError").textContent(), /save was confirmed.*availability could not be checked.*do not save it again/);
-    assert.match(await page.locator("#message").textContent(), /use Refresh stored data without repeating the save/);
+    assert.match(await page.locator("#message").textContent(), /use Retry without repeating the save/);
     assert.equal(await page.locator("#reportStage4 .report-save-success,#reportStage4 .report-downloads button").count(), 0);
     assert.equal((await loadBoardState(context)).exports.length, 1);
     assert.equal(requests.filter(value => value === "/api/export").length, 1);
     const refresh = await revealStoredRefresh(page);
-    assert.equal(await refresh.innerText(), "Refresh stored data");
+    assert.equal(await refresh.innerText(), "Retry");
     assert.equal(await refresh.isEnabled(), true);
     await refresh.click();
     await page.locator('#workspace[aria-busy="false"]').waitFor();

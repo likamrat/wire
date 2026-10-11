@@ -162,7 +162,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             const c = result.counts;
             status(`Recollected ${c.records} request record${c.records === 1 ? "" : "s"}.${c.restoredPrompts ? ` Restored ${c.restoredPrompts} original prompt${c.restoredPrompts === 1 ? "" : "s"}.` : ""} Saved reports and comparisons are unchanged.`);
             update(); dialog.scrollTop = 0; $("recollectClose").focus();
-            if (!await onCommitted()) status("Recollection completed, but the view could not refresh. Use Refresh stored data. Do not repeat the operation.", true);
+            if (!await onCommitted()) status("Recollection completed, but the view could not refresh. Use Retry. Do not repeat the operation.", true);
         } else if (result.phase === "not-started") {
             phase = "editing"; preview = undefined; receipt = undefined;
             sessionStorage.removeItem(storageKey);

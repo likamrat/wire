@@ -45,7 +45,7 @@ export const settingsMarkup = `
       <div id="approvedConnection" hidden>
         <p><strong>Local Copilot chats</strong> <span id="connectionApproval" class="approved-label">Approved</span></p>
         <p id="connectionSummary" class="settings-help"></p>
-        <div class="settings-actions"><span id="sourceEditAction"><button id="editSource" type="button">Change source</button></span><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" disabled>Check for new activity</button></div>
+        <div class="settings-actions"><span id="sourceEditAction"><button id="editSource" type="button">Change source</button></span><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button></div>
       </div>
       <div id="unapprovedConnection" hidden>
         <p>Collect local Copilot activity, including original prompts. Review the source paths before connecting.</p>
@@ -291,7 +291,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
             pauseCollection: latest?.config?.enabled
                 ? "Pause future local collection without removing retained evidence."
                 : "Resume local collection from the previously approved source.",
-            collectNow: "Check approved local histories once, even while collection is paused.",
+            collectNow: "Refresh recorded activity without changing source approval or the pause state.",
             reviewSource: "Open the local source paths for review before granting permission.",
             connectCollection: !approved ? "Approve these local paths and start collection with the chosen preferences."
                 : latest.config.enabled ? "Validate and approve these paths, then collect from the replacement source."
@@ -313,8 +313,10 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
                     : "Change a source path before approving a replacement.";
                 else if (!busy && !uncertain && !stale && id === "saveCollection" && !changed) reason = "Change a preference before saving.";
             }
-            ux.tooltip(control, control.disabled ? reason : consequence);
-            ux.explainDisabled(control, reason, { compact: true });
+            if (id !== "collectNow") {
+                ux.tooltip(control, control.disabled ? reason : consequence);
+                ux.explainDisabled(control, reason, { compact: true });
+            }
             explanations.set(id, control.disabled ? "Unavailable: " + reason : consequence);
         }
         setText("settingsDraftStatus", stale ? "Connection settings changed in another panel. Your edits are kept. Cancel changes to load the current connection before saving."
@@ -391,7 +393,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         act("/api/collection/enabled", { enabled: !latest.config.enabled, ...guard() }, latest.config.enabled ? "Collection paused. Retained evidence is still available." : "Collection resumed for the approved source.");
     });
     $("collectNow").addEventListener("click", () => {
-        if (!$("collectNow").disabled) act("/api/collection/now", {}, result => result.checkMessage);
+        if (!$("collectNow").disabled) $("checkActivity").click();
     });
     $("reloadSettings").addEventListener("click", async () => {
         if (busy) return;
@@ -409,6 +411,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         event.preventDefault(); event.returnValue = "";
     });
     return { receive, hasDraft: () => dirty() || editing, isBusy: () => busy, explain: id => explanations.get(id) || "",
+        canRefresh: () => !busy && !uncertain && !stale && !dirty() && !editing,
         setSection(section) {
             if (visibleSection === section) return;
             visibleSection = section;

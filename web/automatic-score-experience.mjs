@@ -107,7 +107,7 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
         catch (error) {
             if (error.code === "approval_superseded") return;
             if (client.snapshot().phase === "not-started" || error.code === "request_rejected") submittedView?.rejected(error.message);
-            else if (client.snapshot().phase === "complete") onNotice("Approval is saved, but this view could not refresh. Use Refresh stored data; do not approve again.");
+            else if (client.snapshot().phase === "complete") onNotice("Approval is saved, but this view could not refresh. Use Retry; do not approve again.");
             else submittedView?.uncertain(error.message);
             renderRow();
         }
@@ -219,7 +219,7 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
                 stopConfirmed = true;
                 clearStopReceipt(); await finish(null, body);
             } catch (error) {
-                if (stopConfirmed) onNotice("Scoring stopped, but this view could not refresh. Use Refresh stored data.");
+                if (stopConfirmed) onNotice("Scoring stopped, but this view could not refresh. Use Retry.");
                 else if (error.code === "request_rejected") {
                     clearStopReceipt(); confirm.disabled = false;
                     status.textContent = error.message + " Stop was not sent. Review and confirm again.";

@@ -97,7 +97,7 @@ test("stopped runtime keeps only the accepted view and returns through read-only
     await expect(page.locator("#message")).toContainText("Local runtime unavailable");
     await screenshot(page, "runtime-offline-retained");
     await restart();
-    await page.locator("#message").getByRole("button", { name: "Try again" }).click();
+    await page.locator("#message").getByRole("button", { name: "Retry" }).click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#message")).toBeHidden();
     await expectSavedMetrics(page);
@@ -114,7 +114,7 @@ test("no accepted snapshot means no claim of retained evidence; retry loads the 
     assert.doesNotMatch(await page.locator("#message").innerText(), /retained evidence.*available|last recorded snapshot/i);
     await screenshot(page, "initial-read-error");
     await page.unroute("**/api/snapshot");
-    await page.locator("#message").getByRole("button", { name: "Try again" }).click();
+    await page.locator("#message").getByRole("button", { name: "Retry" }).click();
     await expect(page.locator("#workspace")).toBeVisible();
     await expectSavedMetrics(page);
 });

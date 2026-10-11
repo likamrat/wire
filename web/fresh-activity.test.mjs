@@ -2,6 +2,81 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createFreshActivity } from "./fresh-activity.mjs";
 
+test("restored pending source status stays read-only after a fresh stored snapshot", () => {
+    const flow = createFreshActivity({ sourceUnknown: true });
+    assert.equal(flow.begin(), null);
+    flow.retryApply();
+    flow.applied(12, "approved", []);
+    assert.equal(flow.snapshot().phase, "unconfirmed");
+    assert.equal(flow.begin(), null);
+});
+
+test("a storage safety latch blocks dispatch without denying an already confirmed source receipt", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.collected(token, { schemaVersion: 2, id: "known", revision: 9, configVersion: "approved",
+        completedAt: "2026-10-05T20:00:00Z", outcome: "complete", changes: { added: 0, updated: 0, items: [] } });
+    flow.blockSource("Recovery marker could not be cleared.");
+    flow.applied(9, "approved", []);
+    assert.equal(flow.snapshot().message, "No new recorded activity.");
+    assert.equal(flow.snapshot().check.id, "known");
+    assert.equal(flow.snapshot().sourceUnknown, false);
+    assert.equal(flow.snapshot().sourceBlocked, true);
+    assert.equal(flow.begin(), null);
+});
+
+test("unapproved refresh reads stored evidence without inventing a source receipt or completeness", () => {
+    const flow = createFreshActivity(), token = flow.begin({ checkSource: false });
+    assert.equal(flow.snapshot().phase, "applying");
+    assert.equal(flow.begin(), null);
+    assert.equal(flow.snapshot().check, null);
+    assert.equal(flow.applied(7, null, []), true);
+    assert.equal(flow.snapshot().phase, "complete");
+    assert.equal(flow.snapshot().message, "Stored activity refreshed.");
+    assert.match(flow.snapshot().context, /No source history was checked/);
+    assert.equal(flow.fail(token, "Late read"), false);
+});
+
+test("unknown check outcome permits only safe reads, never inferring correlation from a newer revision", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.fail(token, "Response lost");
+    assert.equal(flow.snapshot().sourceUnknown, true);
+    assert.equal(flow.begin(), null, "A lost receipt is not permission to repeat source work");
+    flow.retryApply();
+    assert.equal(flow.snapshot().phase, "applying");
+    assert.equal(flow.applied(8, "approved", []), true);
+    assert.equal(flow.snapshot().phase, "unconfirmed");
+    assert.match(flow.snapshot().message, /source check unconfirmed/);
+    flow.retryApply();
+    flow.applied(10, "changed", []);
+    assert.equal(flow.snapshot().check, null);
+    assert.match(flow.snapshot().message, /unconfirmed/);
+    assert.equal(flow.begin(), null, "Later evidence or a new connection cannot unlock replay");
+});
+
+test("a failed stored read can retry without a source check or fabricated source failure", () => {
+    const flow = createFreshActivity(), token = flow.begin({ checkSource: false });
+    flow.fail(token, "Stored snapshot unavailable");
+    assert.equal(flow.snapshot().message, "Stored view not updated.");
+    assert.equal(flow.snapshot().sourceUnknown, false);
+    flow.retryApply();
+    assert.equal(flow.snapshot().phase, "applying");
+    assert.equal(flow.applied(9, null, []), true);
+    assert.equal(flow.snapshot().phase, "complete");
+});
+
+test("safe recovery drops an obsolete confirmed receipt without pretending it applied to a different source", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.collected(token, { schemaVersion: 2, id: "old-source", revision: 9, configVersion: "old",
+        completedAt: "2026-10-05T20:00:00Z", outcome: "complete", changes: { added: 0, updated: 0, items: [] } });
+    flow.fail(token, "Source changed during read");
+    flow.retryApply({ configVersion: "new" });
+    assert.equal(flow.snapshot().check, null);
+    assert.equal(flow.snapshot().phase, "applying");
+    flow.applied(10, "new", []);
+    assert.equal(flow.snapshot().message, "Stored activity refreshed.");
+    assert.equal(flow.snapshot().sourceUnknown, false);
+});
+
 test("a check completes only after its committed revision is applied; excluded changes stay explicit", () => {
     const flow = createFreshActivity(), token = flow.begin();
     assert.equal(flow.snapshot().phase, "checking");
@@ -27,7 +102,7 @@ test("a check completes only after its committed revision is applied; excluded c
 
 test("late failures cannot overwrite a newer check and failed reads never claim applied success", () => {
     const flow = createFreshActivity(), old = flow.begin();
-    flow.fail(old, "Source unavailable");
+    flow.fail(old, "Source unavailable", { rejected: true });
     assert.equal(flow.snapshot().phase, "error");
     const current = flow.begin();
     assert.notEqual(current, old);

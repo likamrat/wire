@@ -20,6 +20,7 @@ const event = (type, data) => ({ id: randomUUID(), type, timestamp: new Date().t
 const call = id => event("tool.execution_start", { toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch", toolCallId: id, arguments: { entityUrls: ["/me/messages"] } });
 const complete = (id, success = true) => event("tool.execution_complete", { toolCallId: id, success });
 const jsonl = events => events.map(e => JSON.stringify(e) + "\n").join("");
+const sourceCheckKey = "workiq-evidence.source-check.v1";
 const ready = async page => {
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
     await page.evaluate(() => document.fonts.ready);
@@ -54,19 +55,19 @@ async function fixture(t, approved = true, timers = false, pageOptions = {}, met
     }
     async function check() {
         await page.locator("#checkActivity").click();
-        await page.waitForFunction(() => ["complete", "partial", "error"].includes(document.querySelector("#freshActivity").dataset.phase));
+        await page.waitForFunction(() => ["complete", "partial", "error", "unconfirmed"].includes(document.querySelector("#freshActivity").dataset.phase));
         await ready(page);
     }
     return { root, context, config, db, page, writes, receipts, source, check,
         runtime: () => runtime, restart: async () => { await runtime.close(); runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } }); } };
 }
 
-test("Choose a Copilot chat checks grounded metadata174 and retains its view on genuinely incompatible mappings", { timeout: 30000 }, async t => {
+test("Refresh checks grounded metadata174 and retains its view on genuinely incompatible mappings", { timeout: 30000 }, async t => {
     const app = await fixture(t, true, false, {}, true), { page } = app;
     const source = await app.source([event("user.message", { content: "Invented metadata174 request" }), call("compatible"), complete("compatible")]);
     const configFile = path.join(app.context.dataDir, "collector", "config.json"), configBefore = await readFile(configFile);
     await page.goto(app.runtime().url + "#activity"); await ready(page);
-    assert.match(await page.locator("#activityView").innerText(), /Choose a Copilot chat/);
+    assert.match(await page.locator("#activityView").innerText(), /No collected activity yet/);
     await app.check();
     assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "complete");
     assert.equal(await page.locator("#freshStatus").innerText(), "1 new activity record.");
@@ -284,7 +285,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter"); await check.pending;
     await proof("checking", "#checkActivity", true);
     await proof("checking-status", "#freshStatus", true);
-    assert.equal(await page.locator("#checkActivity").innerText(), "Check for new activity");
+    assert.equal(await page.locator("#checkActivity").innerText(), "Refresh");
     assert.equal(await page.locator("#checkActivity").evaluate(node => getComputedStyle(node).fontWeight), beforeWeight, "Pending state preserves the control's font weight.");
     assert.equal((await page.locator("#checkActivity").boundingBox()).width, buttonBox.width);
     assert.equal(await page.locator("#chart").innerHTML(), beforeChart);
@@ -373,9 +374,9 @@ test("first Home through approved fresh collection, selected dates, exact reques
     }
     await page.goto(app.runtime().url); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "0");
-    assert.equal(await page.locator("#checkActivity").innerText(), "Review source & connect");
+    assert.equal(await page.locator("#checkActivity").innerText(), "Refresh");
     await stage("01-first-home", "Review source & connect");
-    await page.locator("#checkActivity").click();
+    await page.locator("#freshSourceSetup").click();
     await page.locator("#reviewSource").click();
     await page.locator("#sourceDatabase").fill(app.config.appDbPath);
     await page.locator("#sourceSessions").fill(app.config.sessionRoot);
@@ -927,19 +928,195 @@ test("partial, bounded and failed checks retain honest coverage and last good Ho
         assert.match(page.url(), /#collection-status.*setting=issues/);
         await page.locator(".history-reason>summary").first().click();
         await page.locator(".history-issue").first().waitFor();
-        assert.match(await page.locator("#collectionIssuesBody").innerText(), /Saved Copilot chat history file not found/i);
+        assert.match(await page.locator("#collectionIssuesBody").innerText(), /History file not found \(1\)/);
 });
 
-test("unapproved Home action routes to source review without approving or reading histories", async t => {
+test("unapproved Refresh reads retained activity and leaves source review as a separate deliberate action", async t => {
         const app = await fixture(t, false), { page } = app;
         await app.source([event("user.message", { content: "Synthetic unapproved activity" }), call("not-approved")]);
         await page.goto(app.runtime().url); await ready(page);
-        assert.equal(await page.locator("#checkActivity").innerText(), "Review source & connect");
-        await page.locator("#checkActivity").click();
+        assert.equal(await page.locator("#checkActivity").innerText(), "Refresh");
+        await app.check();
+        assert.match(page.url(), /#analyze/);
+        assert.equal(await page.locator("#freshStatus").innerText(), "Stored activity refreshed.");
+        assert.match(await page.locator("#freshContextMessage").innerText(), /No source history was checked/);
+        assert.equal(await page.locator("#refreshBtn").isVisible(), false);
+        await page.locator("#freshSourceSetup").click();
         assert.match(page.url(), /#settings.*section=connection.*setting=source/);
         assert.equal(await page.locator("#reviewSource").isVisible(), true);
         assert.deepEqual(app.writes, []);
         assert.equal((await loadBoardState(app.context)).evidence?.length ?? 0, 0);
+});
+
+test("unknown Refresh stays read-only across foreign receipts, delayed source completion and session renewal", { timeout: 45000 }, async t => {
+    const app = await fixture(t), { page } = app;
+    const source = await app.source([event("user.message", { content: "Invented retained activity" }), call("one"), complete("one")]);
+    await app.runtime().collector.collectNow();
+    const before = await loadBoardState(app.context);
+    const configBefore = await readFile(path.join(app.context.dataDir, "collector", "config.json"));
+    await page.goto(app.runtime().url); await ready(page);
+    await appendFile(source.file, jsonl([event("user.message", { content: "Invented delayed update" }), call("delayed"), complete("delayed")]));
+    const requests = [];
+    page.on("request", request => { if (request.method() === "POST") requests.push(new URL(request.url()).pathname); });
+    // The response is lost before the delayed source operation can be observed.
+    await page.route("**/api/collection/now", route => route.abort(), { times: 1 });
+    await app.check();
+    assert.equal(app.writes.length, 1);
+    assert.match(await page.locator("#freshContextMessage").textContent(), /outcome unknown/);
+    assert.equal(await page.locator("#activityCount").innerText(), "1");
+    assert.equal(await page.evaluate(key => sessionStorage.getItem(key), sourceCheckKey), "pending");
+    await page.reload(); await ready(page);
+    assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "unconfirmed");
+    assert.equal(app.writes.length, 1, "Reload restores the pending guard without dispatching");
+    const foreign = { ...(await app.runtime().collector.status()).lastCheck, id: "invented-foreign-manual-check" };
+    await page.route("**/api/collection/status", async route => {
+        const response = await route.fetch(), status = await response.json();
+        await route.fulfill({ response, json: { ...status, lastCheck: foreign } });
+    });
+    await page.locator("#refreshBtn").focus(); await page.keyboard.press("Enter"); await ready(page);
+    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "unconfirmed");
+    assert.equal(await page.locator("#freshActivity").getAttribute("data-check-id"), "");
+    assert.equal(app.writes.length, 1, "A foreign completed status receipt is not authorization to replay");
+    assert.equal((await loadBoardState(app.context)).revision, before.revision);
+    await app.runtime().collector.collectNow(); // The original synthetic delayed operation finally settles.
+    await page.unroute("**/api/collection/status");
+    await app.check();
+    assert.equal(await page.locator("#activityCount").innerText(), "2", "Latest stored evidence remains usable");
+    assert.match(await page.locator("#freshStatus").innerText(), /source check unconfirmed/);
+    assert.equal(await page.locator("#freshActivity").getAttribute("data-check-id"), "", "No unrelated receipt is adopted");
+    assert.equal(app.writes.length, 1);
+    await page.route("**/api/snapshot", route => route.fulfill({ status: 403, json: { code: "session_expired", error: "Invented connection renewal" } }), { times: 1 });
+    await app.check();
+    assert.ok(requests.includes("/api/session"), "Exercise real safe-read reauthentication");
+    assert.equal(app.writes.length, 1, "Renewal cannot authorize another check");
+    assert.match(await page.locator("#freshStatus").innerText(), /source check unconfirmed/);
+    assert.deepEqual(await readFile(path.join(app.context.dataDir, "collector", "config.json")), configBefore);
+    assert.equal(requests.some(value => /\/(?:configure|enabled|preview|privacy-review|export|start|qualify|confirm)$/.test(value)), false);
+    if (process.env.WIRE_REFRESH_PROOFS) {
+        await mkdir(process.env.WIRE_REFRESH_PROOFS, { recursive: true });
+        for (const theme of ["light", "dark"]) {
+            await chooseTheme(page, theme);
+            await page.screenshot({ path: path.join(process.env.WIRE_REFRESH_PROOFS, `${theme}-unknown-outcome.png`) });
+        }
+    }
+});
+
+for (const mode of ["pending", "malformed", "read-denied", "write-denied", "write-dropped", "clear-denied", "clear-dropped"]) {
+    test(`Refresh recovery storage ${mode} keeps the tab safe without discarding a known receipt`, { timeout: 20000 }, async t => {
+        const app = await fixture(t), { page } = app;
+        await app.source([event("user.message", { content: "Invented storage-guard activity" }), call("one"), complete("one")]);
+        await page.addInitScript(({ key, mode }) => {
+            const get = Storage.prototype.getItem, set = Storage.prototype.setItem, remove = Storage.prototype.removeItem;
+            if (mode === "pending" || mode === "malformed") sessionStorage.setItem(key, mode === "pending" ? "pending" : "invalid");
+            Storage.prototype.getItem = function (name) {
+                if (name === key && mode === "read-denied") throw new DOMException("Invented denied read", "SecurityError");
+                return get.call(this, name);
+            };
+            Storage.prototype.setItem = function (name, value) {
+                if (name === key && mode === "write-denied") throw new DOMException("Invented denied write", "QuotaExceededError");
+                if (name === key && mode === "write-dropped") return;
+                return set.call(this, name, value);
+            };
+            Storage.prototype.removeItem = function (name) {
+                if (name === key && mode === "clear-denied") throw new DOMException("Invented denied clear", "SecurityError");
+                if (name === key && mode === "clear-dropped") return;
+                return remove.call(this, name);
+            };
+        }, { key: sourceCheckKey, mode });
+        await page.route("**/api/collection/now", async route => {
+            assert.equal(await page.evaluate(key => sessionStorage.getItem(key), sourceCheckKey), "pending", "Marker is verified before source dispatch");
+            await route.continue();
+        });
+        await page.goto(app.runtime().url); await ready(page);
+        await app.check();
+        const known = mode.startsWith("clear-");
+        assert.equal(app.writes.length, known ? 1 : 0);
+        if (known) {
+            assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "complete");
+            assert.notEqual(await page.locator("#freshActivity").getAttribute("data-check-id"), "");
+            assert.equal(await page.locator("#freshStatus").innerText(), "1 new activity record.");
+            assert.match(await page.locator("#freshContextMessage").innerText(), /could not clear/);
+            assert.doesNotMatch(await page.locator("#freshStatus").innerText(), /unconfirmed/);
+        } else {
+            assert.equal((await loadBoardState(app.context)).evidence?.length ?? 0, 0);
+            assert.match(await page.locator("#freshContextMessage").innerText(), /never repeats|read-only/);
+        }
+        await app.check();
+        assert.equal(app.writes.length, known ? 1 : 0, "A safe stored read does not lift the storage or unknown latch");
+    });
+}
+
+test("one Refresh and legacy Settings alias preserve paused state, useful unapproved reading and keyboard recovery", { timeout: 45000 }, async t => {
+    const app = await fixture(t), { page } = app;
+    await app.source([event("user.message", { content: "Invented alias activity" }), call("one"), complete("one")]);
+    await page.goto(app.runtime().url + "#settings?setting=collect-now"); await ready(page);
+    assert.equal(await page.locator("#checkActivity").evaluate(node => node === document.activeElement), true);
+    assert.equal(app.writes.length, 0, "Landing on the old target never dispatches");
+    assert.equal(await page.locator("#collectNow").isVisible(), false);
+    for (const view of ["analyze", "reports", "settings"]) {
+        await navigateMain(page, view);
+        assert.equal(await page.getByRole("button", { name: "Refresh", exact: true }).count(), 1);
+        assert.equal(await page.locator("#refreshBtn").isVisible(), false);
+    }
+    await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
+    assert.equal((await app.runtime().collector.status()).config.enabled, false);
+    assert.equal(await page.evaluate(key => sessionStorage.getItem(key), sourceCheckKey), null, "A validated receipt clears the pending marker");
+    await navigateMain(page, "analyze"); await ready(page);
+    assert.equal(await page.locator("#activityCount").textContent(), "1");
+    await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented stored read failure" } }), { times: 1 });
+    await app.check();
+    assert.equal(await page.locator("#refreshBtn").isVisible(), true);
+    const writes = app.writes.length;
+    await page.route("**/api/collection/status", async route => {
+        const response = await route.fetch(), status = await response.json();
+        await route.fulfill({ response, json: { ...status, configVersion: "invented-changed-source" } });
+    });
+    await page.locator("#refreshBtn").click(); await ready(page);
+    assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "error");
+    assert.match(await page.locator("#freshContextMessage").textContent(), /source changed during the stored read/);
+    assert.equal(app.writes.length, writes);
+    await page.unroute("**/api/collection/status");
+    let enter, release;
+    const entered = new Promise(resolve => { enter = resolve; }), gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    await page.route("**/api/collection/status", async route => { enter(); await gate; const response = await route.fetch(); await route.fulfill({ response }); }, { times: 1 });
+    await page.locator("#refreshBtn").focus(); await page.keyboard.press("Enter"); await entered;
+    assert.equal(await page.locator("#refreshBtn").isDisabled(), true);
+    await page.evaluate(() => { document.querySelector("#refreshBtn").click(); document.querySelector("#checkActivity").click(); });
+    release(); await ready(page);
+    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
+    assert.equal(app.writes.length, writes);
+    assert.equal(await page.locator("#checkActivity").evaluate(node => node === document.activeElement), true, "Recovery returns focus when Retry disappears");
+});
+
+test("manual Refresh keeps unrelated report draft choices and selection while applying new stored evidence", { timeout: 30000 }, async t => {
+    const app = await fixture(t), { page } = app;
+    await app.source([event("user.message", { content: "Invented selected draft request" }), call("selected"), complete("selected")]);
+    await app.runtime().collector.collectNow();
+    await page.goto(app.runtime().url); await ready(page);
+    await page.locator(".interaction-select").first().check();
+    await navigateMain(page, "reports"); await reportContents(page);
+    await page.locator("#additionalMasking > summary").click();
+    await page.locator("#manualTerms").fill("INVENTED_MASKING_TERM");
+    const selection = await page.locator("#previewSelectionSummary").textContent();
+    const choices = await page.locator("#formatOptions input").evaluateAll(nodes => nodes.map(node => [node.value, node.checked]));
+    await app.source([event("user.message", { content: "Invented unrelated new request" }), call("unrelated"), complete("unrelated")]);
+    await app.check();
+    assert.equal(await page.locator("#manualTerms").inputValue(), "INVENTED_MASKING_TERM");
+    assert.equal(await page.locator("#previewSelectionSummary").textContent(), selection);
+    assert.deepEqual(await page.locator("#formatOptions input").evaluateAll(nodes => nodes.map(node => [node.value, node.checked])), choices);
+    const after = await loadBoardState(app.context);
+    assert.equal(after.evidence.flatMap(record => record.toolCalls).length, 2);
+    assert.equal(after.exports.length, 0);
+    assert.deepEqual(app.writes, ["/api/collection/now"]);
+    await scanReport(page);
+    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request/);
+    assert.equal(await page.locator("#checkActivity").isDisabled(), true, "Refresh cannot replace a frozen report review");
+    assert.equal(await page.locator("#checkActivity").locator("..").getAttribute("tabindex"), "0", "The blocked Refresh has a reachable explanation");
+    const writes = app.writes.length;
+    await page.evaluate(() => { document.querySelector("#checkActivity").click(); document.querySelector("#refreshBtn").click(); });
+    assert.equal(app.writes.length, writes);
 });
 
 test("old status failures cannot replace a completed check and reconnect never replays collection", { timeout: 60000 }, async t => {
@@ -971,6 +1148,8 @@ test("old status failures cannot replace a completed check and reconnect never r
         assert.match(await page.locator("#freshContextMessage").innerText(), /not replayed/);
         assert.equal(await page.locator("#activityCount").innerText(), "1");
         await app.check();
+        assert.equal(app.writes.length, before + 1, "Recovery after rejection first reads status and stored data only");
+        await app.check();
         assert.match(await page.locator("#freshStatus").innerText(), /No new recorded activity/);
         assert.equal(app.writes.length, before + 2);
 });
@@ -980,8 +1159,7 @@ test("a review opened during checking stays frozen until leaving review, without
         const source = await app.source([event("user.message", { content: "Synthetic selected request" }), call("one"), complete("one")]);
         await page.goto(app.runtime().url); await ready(page); await app.check();
         await navigateMain(page, "activity"); await ready(page);
-        await page.locator(".session-toggle").first().click();
-        await page.locator('[id^="select-request-"]').first().check();
+        await page.locator(".interaction-select").first().check();
         await navigateMain(page, "home"); await ready(page);
         await appendFile(source.file, jsonl([event("user.message", { content: "Synthetic unselected fresh request" }), call("two"), complete("two")]));
         let release, entered;

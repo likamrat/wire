@@ -122,7 +122,7 @@ test("freshness groups source help with the action and explains check-wide gaps"
                 await page.locator("#freshHelp>summary").focus(); await page.keyboard.press("Enter");
                 assert.equal(await page.locator("#freshHelp>summary").evaluate(node => getComputedStyle(node).outlineStyle !== "none"), true);
                 assert.match(await page.locator("#freshHelp").innerText(), /cannot establish whether missing activity belongs in this view/);
-                assert.equal(await page.locator("#freshHelpBody #refreshBtn").count(), 1, "Reload stays in the contextual disclosure");
+                assert.equal(await page.locator("#refreshBtn").isVisible(), false, "A partial check is not a second refresh/read choice");
                 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
                 const clipped = await page.locator("#freshHelp p,#freshHelp dt,#freshHelp dd").evaluateAll(nodes => nodes.filter(node => {
                     const r = node.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(node);
@@ -140,6 +140,8 @@ test("freshness groups source help with the action and explains check-wide gaps"
             await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(process.env.WIRE_FRESH_PROOF_DIR, `${theme}-${width}-${scale}-error.png`), fullPage: true });
         }
+        await page.locator("#refreshBtn").click();
+        await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
     }
     if (process.env.WIRE_FRESH_PROOF_DIR) await writeFile(path.join(process.env.WIRE_FRESH_PROOF_DIR, "state-layout.json"), JSON.stringify(measurements, null, 2));
     assert.equal(detailedReads, 0, "No personal issue inventory fetched by repeated checks, help, themes or text resizing");

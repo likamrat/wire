@@ -1,35 +1,52 @@
-// Serialized with the client. Completion belongs to a check AND an applied snapshot.
-export function createFreshActivity() {
+// Serialized with the client. Source completion needs its receipt AND an applied snapshot.
+export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" } = {}) {
     let sequence = 0, phase = "idle", check = null, message = "", context = "", coverage = "", details = "";
+    if (sourceUnknown) {
+        phase = "unconfirmed";
+        message = "Earlier source check unconfirmed.";
+        context = "Refresh and Retry read stored activity and status only; the earlier check is not repeated.";
+    }
     return {
-        snapshot: () => ({ token: sequence, phase, check, message, context, coverage, details }),
+        snapshot: () => ({ token: sequence, phase, check, message, context, coverage, details, sourceUnknown, sourceWarning, sourceBlocked: Boolean(sourceWarning) }),
         busy: () => ["checking", "applying", "waiting"].includes(phase),
-        fail(token, error) {
+        blockSource(reason) {
+            sourceWarning = reason;
+            if (phase === "checking") {
+                phase = "error";
+                message = "Source check not started.";
+                context = "Previous view kept.";
+            }
+        },
+        fail(token, error, { rejected = false } = {}) {
             if (token !== sequence || !["checking", "applying"].includes(phase)) return false;
+            const checking = phase === "checking";
+            if (checking) sourceUnknown = !rejected;
             phase = "error";
-            message = check ? "Check finished; view not updated." : "Local check not confirmed.";
-            context = `Previous view kept. ${error}`;
+            message = check ? "Check finished; view not updated." : checking ? "Local check not confirmed." : "Stored view not updated.";
+            context = `Previous view kept. ${error}` + (sourceUnknown ? " Source check outcome unknown; Retry does not repeat it." : "");
             coverage = ""; details = "";
             return true;
         },
         defer() {
             if (phase === "applying") {
                 phase = "waiting";
-                message = "Check finished; view waiting.";
+                message = check ? "Check finished; view waiting." : "Stored view waiting.";
                 context = "Close the current review or finish editing to apply it. Your preview stays frozen.";
             }
         },
-        retryApply() {
-            if (["error", "waiting"].includes(phase) && check) {
+        retryApply({ configVersion } = {}) {
+            if (["error", "waiting", "unconfirmed", "applying"].includes(phase)) {
+                if (check && configVersion !== undefined && configVersion !== check.configVersion) check = null;
                 phase = "applying";
-                message = "Applying checked activity...";
+                message = check ? "Applying checked activity..." : "Reading stored activity...";
                 context = "Reading stored evidence; collection is not repeated.";
             }
         },
-        begin() {
-            if (["checking", "applying", "waiting"].includes(phase)) return null;
+        begin({ checkSource = true } = {}) {
+            if (["checking", "applying", "waiting"].includes(phase) || checkSource && (sourceUnknown || sourceWarning)) return null;
             sequence++;
-            phase = "checking"; check = null; message = "Checking local Copilot history...";
+            phase = checkSource ? "checking" : "applying"; check = null;
+            message = checkSource ? "Checking local Copilot history..." : "Reading stored activity...";
             context = ""; coverage = ""; details = "";
             return sequence;
         },
@@ -41,12 +58,21 @@ export function createFreshActivity() {
                 throw new Error("The runtime did not confirm a completed local check. The previous view is kept.");
             }
             if (receipt.changes.added + receipt.changes.updated > 0 && (!Number.isSafeInteger(receipt.beforeRevision) || receipt.revision <= receipt.beforeRevision)) {
-                throw new Error("The check claimed new evidence without a newer committed revision. Refresh stored data; no collection was repeated.");
+                throw new Error("The check claimed new evidence without a newer committed revision. Retry the stored read; no collection was repeated.");
             }
             check = receipt; phase = "applying"; message = "Applying checked activity...";
+            sourceUnknown = false;
             return true;
         },
         applied(revision, configVersion, rows) {
+            if (phase === "applying" && !check) {
+                phase = sourceUnknown ? "unconfirmed" : "complete";
+                message = sourceUnknown ? "Stored data refreshed; source check unconfirmed." : "Stored activity refreshed.";
+                context = sourceUnknown
+                    ? "The source check outcome is unknown. Retry reads stored data and current status only; it never repeats the check."
+                    : "No source history was checked.";
+                return true;
+            }
             if (phase === "error" && !check) {
                 message = "Stored data refreshed; check still unconfirmed.";
                 context = "Only stored evidence was read. " + context.replace(/^(Previous view kept|Only stored evidence was read)\. /, "");

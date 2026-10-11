@@ -24,7 +24,7 @@ export function createReportScope(authorship) {
             };
         },
         summary(value) {
-            if (!value.available) return "Report result counts are unavailable. Refresh stored data before previewing; missing counts are not zero.";
+            if (!value.available) return "Report result counts are unavailable. Refresh before previewing; missing counts are not zero.";
             const c = value.counts;
             if (!value.requests.length) return value.authorExcludedRequestGroups
                 ? `None of the ${plural(value.baseRequests.length, "request group")} in this scope match the prompt authors. Your base selection is kept; change the author choice to include them.`

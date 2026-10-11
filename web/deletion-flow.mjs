@@ -86,7 +86,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             setStatus(`Deleted ${result.counts.records} records${result.linkedInsights?.interactions ? " and linked insights" : ""}. Saved reports and comparisons, source files and collection preferences are unchanged. New activity can still be collected.`);
             update();
             $("deleteCancel").focus();
-            if (!await onCommitted()) setStatus(`Deleted ${result.counts.records} records. The view could not refresh; use Refresh stored data. Do not repeat deletion. Saved reports are unchanged.`, true);
+            if (!await onCommitted()) setStatus(`Deleted ${result.counts.records} records. The view could not refresh; use Retry. Do not repeat deletion. Saved reports are unchanged.`, true);
         } else if (result.phase === "not-started") {
             flow.edit(scope());
             form.hidden = false;

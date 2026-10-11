@@ -113,7 +113,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined }) : null });
     const percentages = percentageMath.mount($("percentageCharts"));
     const live = createLiveState();
-    const fresh = createFreshActivity();
+    const sourceCheckKey = "workiq-evidence.source-check.v1";
+    let sourcePending = false, sourceStorageWarning = "";
+    try {
+        const stored = sessionStorage.getItem(sourceCheckKey);
+        sourcePending = stored !== null;
+        if (stored !== null && stored !== "pending") sourceStorageWarning = "Stored source-check status is invalid. Source refresh stays read-only in this tab.";
+    } catch {
+        sourcePending = true;
+        sourceStorageWarning = "This tab cannot read its source-check recovery state. Source refresh stays read-only.";
+    }
+    const fresh = createFreshActivity({ sourceUnknown: sourcePending, sourceWarning: sourceStorageWarning });
     let collectionReadGeneration = 0;
     const historyStatus = createCollectionStatus();
     const sessionJourney = createSessionJourney();
@@ -356,7 +366,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const approved = collection?.config?.approved;
         if (entry.id === "source") return !$("sourceEditor").hidden ? "sourceDatabase" : approved ? "editSource" : "reviewSource";
         if (entry.id === "source-paths") return !$("sourceEditor").hidden ? "sourceDatabase" : approved ? "approvedSourceTitle" : "reviewSource";
-        if (!approved && ["source-paths", "collection-state", "collect-now"].includes(entry.id)) return "reviewSource";
+        if (!approved && ["source-paths", "collection-state"].includes(entry.id)) return "reviewSource";
         if (entry.id === "save-preferences" && $("preferenceActions").hidden) return "settingsDraftStatus";
         return entry.target;
     }
@@ -619,7 +629,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         node.setAttribute("role", kind === "error" ? "alert" : "status");
         node.hidden = false;
         if (retry) {
-            const control = button("Try again", refreshStoredData, "quiet");
+            const control = button("Retry", refreshStoredData, "quiet");
             control.dataset.storedRefreshRetry = "";
             control.setAttribute("aria-describedby", "storedRefreshHelp");
             node.append(control);
@@ -841,7 +851,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function createSessionReport() {
         const source = sessionSource(), requestIds = sessionJourney.reportIds(state?.exportCatalog, source?.sessionId);
-        if (isLoading || isStale || requestIds === null) { announce("Copilot chat report scope is unavailable. Refresh stored data before selecting request groups.", "error"); return; }
+        if (isLoading || isStale || requestIds === null) { announce("Copilot chat report scope is unavailable. Refresh before selecting request groups.", "error"); return; }
         if (!requestIds.length) { announce("No eligible collected request groups are available for this Copilot chat. Check its collection coverage or choose another Copilot chat."); return; }
         selected.clear();
         for (const id of requestIds) selected.add(id);
@@ -1071,7 +1081,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         percentages.validate(data);
         return data;
     }
-    async function load({ background = false, afterExport = false, refinement = false } = {}) {
+    async function load({ background = false, afterExport = false, refinement = false, expectedSource } = {}) {
         if (exportWriting && !afterExport) {
             announce("The confirmed local save is still running. This view will refresh when it finishes; the write is not replayed.");
             return false;
@@ -1108,15 +1118,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const next = await api("/api/snapshot", config);
             if (request !== generation) return false;
             const result = next.analytics;
-            if (timeChanged()) return load();
+            if (timeChanged()) return load({ background, afterExport, refinement, expectedSource });
             if (!Array.isArray(next.scenarios)) throw new Error("Recorded requests are unavailable.");
             if (result?.revision !== undefined && result.revision !== next.revision) throw new Error("Activity changed during the read. Try again.");
             if (result?.timeContext && JSON.stringify(result.timeContext) !== JSON.stringify(config.timeContext)) throw new Error("The runtime used a different timezone. Retry the stored-data read before continuing.");
             const validated = validateAnalytics(result, next.scenarios);
             if (route.withinServices) analysisSlice(next, config, search, route.withinServices.split(","));
             const checking = fresh.snapshot();
-            if (checking.phase === "applying" && next.revision < checking.check.revision) throw new Error("The view read is older than the completed local check. Refresh stored data; no collection was repeated.");
-            if (checking.phase === "applying" && next.collection?.configVersion !== checking.check.configVersion) throw new Error("The approved source changed during this check. Review the current connection before checking again.");
+            if (expectedSource !== undefined && next.collection?.configVersion !== expectedSource) throw new Error("The approved source changed during the stored read. Retry current status and stored activity; no source check was repeated.");
+            if (checking.phase === "applying" && checking.check && next.revision < checking.check.revision) throw new Error("The view read is older than the completed local check. Retry the stored read; no collection was repeated.");
+            if (checking.phase === "applying" && checking.check && next.collection?.configVersion !== checking.check.configVersion) throw new Error("The approved source changed during this check. Review the current connection before checking again.");
             if (state && next.revision < state.revision) throw new Error("An older snapshot was rejected. The current view is kept.");
             if (next.sessionAnalysis && (next.sessionAnalysis.revision !== next.revision || !results.valid(next.sessionAnalysis.totals))) throw new Error("Source analysis does not match this snapshot. Retry the stored-data read before continuing.");
             const reading = captureReading();
@@ -1329,25 +1340,59 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const report = reportJourney?.snapshot();
         const reviewing = report?.hasPreview || report?.phase === "scanning";
         const editing = collectionSettings?.hasDraft() || collectionSettings?.isBusy();
-        const blocked = isLoading || collectionBusy || exportWriting || reviewing || editing;
+        const blocked = isLoading || collectionBusy || exportWriting || reviewing || editing || ["checking", "applying"].includes(fresh.snapshot().phase);
         for (const control of [$("refreshBtn"), $("collectionRetry"), ...document.querySelectorAll("[data-stored-refresh-retry]")]) control.disabled = blocked;
+        $("checkActivity").disabled = blocked || fresh.busy() || collectionSettings?.canRefresh() === false;
+        ux.explainDisabled($("checkActivity"), editing ? "Save or cancel your Settings edits before refreshing."
+            : reviewing ? "Finish this report, or change its choices in Setup, before refreshing."
+            : collectionSettings?.canRefresh() === false ? collectionSettings.explain("collectNow")
+            : "Wait for the current activity update to finish.", { compact: true });
+        const phase = fresh.snapshot().phase;
+        $("storedRefresh").hidden = !["error", "unconfirmed"].includes(phase) && !fresh.snapshot().sourceBlocked && !collectionReadError && !(isStale && !isLoading);
         setText($("storedRefreshHelp"), reviewing
-            ? "Finish this report, or change its choices in Contents, before refreshing stored data."
-            : editing ? "Save or cancel your Settings edits before refreshing stored data."
+            ? "Finish this report, or change its choices in Setup, before refreshing."
+            : editing ? "Save or cancel your Settings edits before refreshing."
             : exportWriting ? "The saved report will be shown when its current write finishes."
-            : "Read the latest stored snapshot without checking source history. Filters and report selections stay.");
+            : "Retry reads stored activity and current status only. It never repeats a source check or save.");
     }
     async function refreshStoredData(event) {
         renderStoredRefresh();
-        if ($("refreshBtn").disabled) return;
+        if ($("refreshBtn").disabled || ["checking", "applying"].includes(fresh.snapshot().phase)) return;
         const initiator = document.activeElement === event?.currentTarget ? event.currentTarget : null;
         const intent = readingIntent, navigation = navigationGeneration, context = route;
-        const pending = load(), request = generation;
+        fresh.retryApply();
+        if (fresh.snapshot().phase !== "applying") fresh.begin({ checkSource: false });
+        collectionReadGeneration++;
+        const readGeneration = collectionReadGeneration;
+        clearTimeout(pollTimer);
+        $("workspace").setAttribute("aria-busy", "true");
+        renderFreshActivity();
+        let statusError, expectedSource;
+        try {
+            const status = await api("/api/collection/status", {});
+            if (readGeneration !== collectionReadGeneration) return false;
+            expectedSource = status.configVersion;
+            fresh.retryApply({ configVersion: status.configVersion });
+            renderCollection(status);
+        } catch (error) { statusError = error; }
+        if (readGeneration !== collectionReadGeneration) return false;
+        if ($("overlay").open || reportJourney?.isReviewOpen() || collectionSettings?.hasDraft()) {
+            fresh.defer();
+            $("workspace").setAttribute("aria-busy", "false");
+            $("newDataNotice").hidden = false;
+            renderFreshActivity();
+            pollTimer = setTimeout(pollCollection, 5000);
+            return false;
+        }
+        const pending = load({ background: true, expectedSource }), request = generation;
         const loaded = await pending;
+        if (statusError && (!loaded || !state?.collection)) collectionUnavailable(statusError.message, statusError.reason);
+        // An unrelated lastCheck cannot confirm or unlock a source request whose response was lost.
+        renderFreshActivity();
         if (loaded && request === generation && navigation === navigationGeneration && context === route
-            && intent === readingIntent && initiator?.isConnected && initiator.checkVisibility() && !initiator.disabled
+            && intent === readingIntent && initiator?.isConnected
             && (document.activeElement === document.body || document.activeElement === initiator)) {
-            ux.restoreFocus(initiator);
+            ux.restoreFocus(initiator.checkVisibility() && !initiator.disabled ? initiator : $("checkActivity"));
         }
         return loaded;
     }
@@ -1421,15 +1466,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const resetHost = route.view === "analyze" ? $("filterTools") : $("scopeResetActions");
         if ($("resetView").parentElement !== resetHost) resetHost.append($("resetView"));
         $("scopeResetActions").hidden = route.view !== "request";
-        const refreshHost = route.view === "analyze" ? $("freshHelpBody")
-            : route.view === "reports" ? $("savedLibraryHelpBody")
-            : route.view === "settings" ? $("settingsView")
-            : route.view === "collection-status" ? $("collectionSetup") : $("coverage");
-        if ($("storedRefresh").parentElement !== refreshHost) {
-            const summary = refreshHost.querySelector(":scope > summary");
-            if (summary) summary.after($("storedRefresh"));
-            else refreshHost.append($("storedRefresh"));
-        }
         renderStoredRefresh();
         const requestAvailable = state.scenarios.some(scenario => scenario.scenarioId === route.request);
         const returnRoute = route.view === "analyze" && route.session ? sessionsRoute()
@@ -2482,7 +2518,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("scopeCount-" + kind).textContent = scope.available ? chatCopy.groups(size) : "Count unavailable";
             document.querySelector(`[name=reportScope][value=${kind}]`).checked = reportScope === kind;
         }
-        $("scopeSummary").textContent = !state.exportCatalog ? "Report scope is unavailable. Refresh stored data before previewing." : unknownSelected ? "A selected request is no longer available. Choose a fresh selection." : reportScopes.summary(value);
+        $("scopeSummary").textContent = !state.exportCatalog ? "Report scope is unavailable. Refresh before previewing." : unknownSelected ? "A selected request is no longer available. Choose a fresh selection." : reportScopes.summary(value);
         for (const option of $("reportPromptAuthorFilter").options) option.selected = reportAuthors.includes(option.value);
         $("reportPromptAuthorFilter").disabled = exportWriting;
         setText($("reportPromptAuthorSummary"), `${count(value.requests.length)} of ${count(value.baseRequests.length)} request groups in the base scope included.${value.authorExcludedRequestGroups ? ` ${count(value.authorExcludedRequestGroups)} left out with their calls and scores. The base selection is kept.` : ""}`);
@@ -3020,35 +3056,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderFreshActivity() {
         const host = $("freshActivity"), model = fresh.snapshot(), approved = collection?.config?.approved;
-        host.hidden = route.view !== "analyze";
+        host.hidden = false;
         host.dataset.phase = model.phase;
         host.dataset.checkId = model.check?.id || "";
         host.dataset.revision = model.check ? String(model.check.revision) : "";
         const control = $("checkActivity");
-        const text = approved ? "Check for new activity" : "Review source & connect";
+        const text = "Refresh";
         if (control.lastChild?.nodeType === Node.TEXT_NODE) control.lastChild.textContent = text;
-        control.disabled = fresh.busy() || collectionBusy || isLoading || exportWriting || Boolean(collectionSettings?.hasDraft());
         ux.pending(control, ["checking", "applying"].includes(model.phase));
-        ux.explainDisabled(control, collectionSettings?.hasDraft() ? "Save or cancel your Settings edits before checking the approved source." : "Wait for the current activity update to finish.", { compact: true });
+        $("freshSourceSetup").hidden = Boolean(approved);
         setText($("freshScope"), approved
             ? `Local Copilot history · ${collection.config.windowDays}-day window`
             : "Choose which local Copilot history this app can read.");
-        const completed = ["complete", "partial"].includes(model.phase);
+        const completed = ["complete", "partial"].includes(model.phase) && Boolean(model.check);
         setText($("freshChecked"), completed ? `Manual check ${timestamp(model.check.completedAt)}` : "");
         $("freshChecked").hidden = !completed;
-        setText($("freshStatus"), model.message || (approved ? "Check for newly recorded calls and results." : "Review a source before checking activity."));
+        setText($("freshStatus"), model.message || (approved ? "Refresh recorded activity." : "Refresh reads stored activity only. Approve a source separately to check history."));
         ux.pending($("freshStatus"), ["checking", "applying"].includes(model.phase));
         $("freshStatus").hidden = approved && model.phase === "idle";
-        setText($("freshContextMessage"), model.context);
-        $("freshContextMessage").hidden = !model.context;
+        setText($("freshContextMessage"), [model.context, model.sourceWarning].filter(Boolean).join(" "));
+        $("freshContextMessage").hidden = !model.context && !model.sourceWarning;
         setText($("freshCheckDetails"), model.details);
         $("freshCheckDetails").hidden = !model.details;
         setText($("freshCoverageAnnouncement"), model.coverage);
         $("freshStatus").dataset.severity = model.phase === "error" ? "error" : model.phase === "partial" ? "warning" : "normal";
-        $("freshIssues").hidden = !["partial", "error"].includes(model.phase);
-        $("freshIssues").href = model.phase === "error" ? "#collection-status" : "#collection-status?setting=issues";
-        setText($("freshIssues"), model.phase === "error" ? "Review collection status" : model.coverage);
-        $("freshResult").hidden = $("freshStatus").hidden && !model.context && !completed;
+        $("freshIssues").hidden = !["partial", "error", "unconfirmed"].includes(model.phase);
+        $("freshIssues").href = model.phase === "partial" ? "#collection-status?setting=issues" : "#collection-status";
+        setText($("freshIssues"), model.phase === "partial" ? model.coverage : "Review collection status");
+        $("freshResult").hidden = $("freshStatus").hidden && !model.context && !model.sourceWarning && !completed && !collectionReadError && !isStale;
         const gapDetails = $("freshCoverageDetails");
         gapDetails.hidden = model.phase !== "partial";
         if (!gapDetails.hidden && gapDetails.dataset.checkId !== model.check.id) {
@@ -3070,18 +3105,39 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         renderStoredRefresh();
     }
-    async function checkActivity() {
-        if (collectionBusy || fresh.busy()) return null;
+    function clearSourceCheckMarker() {
+        try {
+            sessionStorage.removeItem(sourceCheckKey);
+            if (sessionStorage.getItem(sourceCheckKey) !== null) throw new Error("Pending marker remains.");
+        } catch {
+            fresh.blockSource("This tab could not clear its source-check recovery marker. Source refresh stays read-only.");
+        }
+    }
+    async function checkActivity(event) {
+        renderFreshActivity();
+        if ($("checkActivity").disabled) return null;
+        if (fresh.snapshot().sourceUnknown || fresh.snapshot().sourceBlocked || fresh.snapshot().phase === "error" || collectionReadError || isStale) return refreshStoredData(event);
         const initiatingControl = document.activeElement;
-        const token = fresh.begin();
+        const checkSource = collection?.config?.approved === true;
+        const token = fresh.begin({ checkSource });
+        if (token === null) return null;
         collectionBusy = true;
         collectionReadGeneration++;
         clearTimeout(pollTimer);
         collectionSettings?.setChecking(true);
         renderFreshActivity();
         try {
+            if (!checkSource) return await load({ background: true });
+            try {
+                sessionStorage.setItem(sourceCheckKey, "pending");
+                if (sessionStorage.getItem(sourceCheckKey) !== "pending") throw new Error("Pending marker was not saved.");
+            } catch {
+                fresh.blockSource("This tab cannot preserve source-check recovery state. No source check was sent; Refresh and Retry remain read-only.");
+                return false;
+            }
             const result = await api("/api/collection/now", {});
-            fresh.collected(token, result.check);
+            if (!fresh.collected(token, result.check)) return false;
+            clearSourceCheckMarker();
             renderCollection(result);
             renderFreshActivity();
             if ($("overlay").open || reportJourney?.isReviewOpen() || collectionSettings?.hasDraft()) {
@@ -3090,13 +3146,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             } else await load({ background: true });
             return { ...result, checkMessage: fresh.snapshot().message };
         } catch (error) {
-            fresh.fail(token, error.message);
-            throw error;
+            fresh.fail(token, error.message, { rejected: error.code === "request_rejected" });
+            if (error.code === "request_rejected") clearSourceCheckMarker();
+            return false;
         } finally {
             collectionBusy = false;
             collectionSettings?.setChecking(false);
             renderFreshActivity();
-            if (initiatingControl === $("checkActivity") && document.activeElement === document.body && route.view === "analyze") ux.restoreFocus(initiatingControl);
+            if (initiatingControl === $("checkActivity") && document.activeElement === document.body) ux.restoreFocus(initiatingControl);
             clearTimeout(pollTimer);
             pollTimer = setTimeout(pollCollection, 5000);
         }
@@ -3222,7 +3279,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 reviewing: $("overlay").open || deletionUI.isOpen() || recollectionUI.isOpen() || reportJourney?.isReviewOpen(), loading: isLoading || collectionBusy || fresh.snapshot().phase === "error",
                 editing: collectionSettings.hasDraft() || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) || Boolean(document.querySelector(".select-popup:not([hidden])")),
             });
-            setText($("newDataNotice"), fresh.snapshot().phase === "error" ? "Stored evidence has changed. Use Refresh stored data; the earlier check has not been applied."
+            setText($("newDataNotice"), fresh.snapshot().phase === "error" ? "Stored evidence has changed. Retry the stored read; the earlier source check is not repeated."
                 : collectionSettings.hasDraft() ? "New evidence is available. Your unsaved Settings changes are kept; save or cancel them to update automatically." : "New data is available. Your report preview stays frozen; close it to update the activity view.");
             $("newDataNotice").hidden = action !== "defer" || status.revision === state?.revision;
             const canApply = !isLoading && !$("overlay").open && !deletionUI.isOpen() && !recollectionUI.isOpen() && !reportJourney?.isReviewOpen() && !collectionSettings.hasDraft()
@@ -3533,7 +3590,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (!draft.current(operation)) return;
                 if (!loaded) {
                     reportJourney.failed("The report save was confirmed, but its availability could not be checked. Read saved history before downloading; do not save it again.");
-                    announce("The report save was confirmed. Current saved files could not be checked; use Refresh stored data without repeating the save.", "stale");
+                    announce("The report save was confirmed. Current saved files could not be checked; use Retry without repeating the save.", "stale", true);
                     return;
                 }
                 const available = state.exports.some(bundle => bundle.bundleId === result.bundle.bundleId);
@@ -3732,11 +3789,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.restoreFocus($("dateFilter-control"));
         go(route.view, { from: undefined, to: undefined, range: undefined, request: undefined, page: undefined });
     });
-    $("checkActivity").addEventListener("click", () => {
-        if ($("checkActivity").disabled) return;
-        if (!collection?.config?.approved) { go("settings", { section: "connection", setting: "source" }); return; }
-        checkActivity().catch(error => { fresh.fail(fresh.snapshot().token, error.message); renderFreshActivity(); });
-    });
+    $("checkActivity").addEventListener("click", checkActivity);
     document.querySelectorAll("[data-settings-link]").forEach(node => node.addEventListener("click", event => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();

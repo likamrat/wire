@@ -619,11 +619,11 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         }
     }
     async function setup(host) {
-        if (!snapshot) { unavailable(host, "Reply-saving settings are unavailable. Use Refresh stored data."); return; }
+        if (!snapshot) { unavailable(host, "Reply-saving settings are unavailable. Use Refresh."); return; }
         try {
             await ready();
             if (!host.isConnected) return;
-            if (!snapshot) { unavailable(host, "Reply-saving settings are unavailable. Use Refresh stored data."); return; }
+            if (!snapshot) { unavailable(host, "Reply-saving settings are unavailable. Use Refresh."); return; }
             const signature = basisKey(snapshot.basis);
             if (consentSignature === signature && consentView) { consentView.render(); return; }
             const data = await read("get_assessment_consent", { schemaVersion: 1 }, snapshot.basis);

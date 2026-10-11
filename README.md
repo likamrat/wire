@@ -148,7 +148,7 @@ same shortcut in **Activity**. Choose **Custom date range** (initially blank) or
 **All collected activity**, then **Preview deletion**. The separate red-accented
 confirmation names the exact count, scope and consequences. **Cancel** or Escape
 before confirmation changes no stored activity. **Change scope** revokes the
-preview. View filters, Clear selection, Reset view and Refresh stored data never delete.
+preview. View filters, Clear selection, Reset view and Refresh never delete.
 
 Deletion counts distinct calls, Graph sites/code references and HTTP diagnostics,
 not the sum of overlapping analytics layers. Canonical call/start-event aliases
@@ -305,16 +305,18 @@ the existing history preferences. New checks keep the approved paths, history
 window and limits. Empty results mean no matching retained evidence, not proof
 that no activity occurred. Older retained evidence is not removed.
 
-Home's **Check for new activity** reads the currently approved local Copilot
-metadata and histories, then recomputes the Home visualization. **Source** opens
+**Refresh** reads the currently approved local Copilot metadata and histories,
+then applies the stored view. Its single control is available across Analyze,
+Reports and Settings. **Source** opens
 the approved paths in Settings; **Collection settings** opens the existing
-history-window and cadence pane. With no approval, the Home action instead opens
-source review; it does not connect or approve anything automatically.
+history-window and cadence pane. With no approval, Refresh reads stored activity
+only; **Review source & connect** opens source review separately. Refresh never
+connects, approves, expands the history window or resumes paused collection.
 
 The action checks for newly **recorded** calls and results. It does not run new
 Work IQ/Microsoft 365/Graph queries, replay prompts, scan repository contents or
-make hosted internal HTTP visible. **Refresh stored data** only rereads already collected
-evidence, and **Reports** provides a separate reviewed file-saving flow.
+make hosted internal HTTP visible. Response saving, assessment and the reviewed
+report-saving flow remain independently controlled.
 
 Progress distinguishes checking from applying the view. A completed check returns
 its own ID, committed revision, added/updated evidence identities and coverage
@@ -322,8 +324,35 @@ limits. The client accepts completion only after applying that revision or later
 with the same approved source configuration. It reports no-change, late-result
 updates, partial checks and changes outside the current filters/evidence layer
 without widening the view. A failed check or snapshot read retains the previous
-visualization; Refresh stored data can retry applying a confirmed check without repeating
-collection. Unknown mutation responses are never automatically replayed.
+visualization; **Retry** reads status and the stored snapshot, applying a confirmed
+check without repeating collection. In-progress edits, frozen disclosure review
+and save recovery retain their existing guards. Ordinary refresh uses the
+background read path so unrelated updates do not discard report drafts.
+
+The existing collector protocol does not correlate a lost response to a client
+request ID. A newer `lastCheck`, idle status, new revision or renewed connection
+therefore cannot establish the outcome of that request or unlock another source
+dispatch. This panel remains read-only after an unknown check outcome; neither
+Refresh nor Retry replays it. Status receipts are never adopted as this attempt's
+receipt. This conservative limitation is intentional; no backend protocol was
+expanded.
+
+Before dispatch the client writes and verifies the tab-scoped
+`workiq-evidence.source-check.v1` sessionStorage sentinel (`pending` only). Reload
+restores the read-only latch. A directly correlated validated receipt or guaranteed
+pre-dispatch rejection can clear it; failed storage reads/writes/verification
+block source dispatch explicitly. A failed clear keeps source dispatch blocked
+without denying an already confirmed receipt. This is tab-session protection,
+not cross-tab or durable runtime-wide correlation; status cannot resolve it.
+
+Settings consumers: `checkActivity` is the visible unified **Refresh** control;
+the `collect-now` setting/search alias targets it without dispatching.
+`collectNow` is a hidden compatibility event alias with existing
+edit/uncertain/stale guards, not an independent settings mutation.
+`refreshBtn`, `collectionRetry` and `[data-stored-refresh-retry]` are read/status
+recovery only. `freshActivity` exposes its phase and confirmed check ID/revision;
+`unconfirmed` is not success or completeness. Source setup remains
+`#settings?section=connection&setting=source`.
 
 Home and Activity group the check button with **Source and collection**, with
 the result directly below. Status length cannot push source help to the page edge.
@@ -537,7 +566,8 @@ or promise that another check recreates the file. Previously collected evidence
 stays. Technical codes and chat identifiers remain secondary support details.
 The closed **Technical details** section labels counters with their units and
 explains the unchanged history window, file/entry read limits and context limits.
-It also contains the existing **Refresh stored data** action, not a source check.
+The shared **Refresh** action stays above the page; **Retry** appears only for
+safe stored-view/status recovery, not as a second refresh choice.
 With no reported gaps the search and empty reason list are hidden. Unchecked,
 importing and failed states never become a successful empty-history message.
 
@@ -596,7 +626,7 @@ The root convention is documented by `copilot help environment` and GitHub's
 No agent tools, session wake-ups or model loops are used by the runtime.
 
 Current mappings are enumerated in 250-row pages every 30 seconds and on
-**Check for new activity**, up to 10,000 chats and 20,000 workspaces. Archive fields,
+**Refresh** of an approved source, up to 10,000 chats and 20,000 workspaces. Archive fields,
 execution location, workspace host and actual app-to-CLI IDs determine eligibility.
 Duplicate workspaces for one local source are read once; ambiguous projects,
 unmapped chats, missing logs and nonlocal sources have explicit dispositions.
@@ -628,7 +658,7 @@ PID fails closed. The first connection backs up state metadata in
 import files and exports are preserved; no legacy files are deleted.
 
 Collection is owned by the runtime, not a browser or chat. **Pause collection**
-persists across restarts; **Check for new activity** is a deliberate one-cycle read even
+persists across restarts; **Refresh** is a deliberate one-cycle read even
 while paused. Closing a canvas does not pause collection. Shutdown waits for the
 current bounded cycle and releases its lock; restarting resumes from checkpoints
 when enabled. No OS startup service or scheduled task is installed. Offline app
@@ -665,7 +695,7 @@ Reports may omit activity that could not be collected; available chats continue
 and prior evidence is kept. Partial gaps stay inspectable in Collection status; an unavailable
 collection source stays an error. When checks are running but all eligible
 histories are unreadable, the page states both facts rather than confusing
-collector activity with successful coverage. Initial import/checking and paused states stay explicit. **Check for new activity**
+collector activity with successful coverage. Initial import/checking and paused states stay explicit. **Refresh**
 remains the existing bounded local read, not an API retry or missing-file repair.
 Collection status retains full local timestamps, source inventory, check frequency
 and technical limits. Source paths and approval stay in Settings.
