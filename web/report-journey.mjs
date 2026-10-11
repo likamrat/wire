@@ -308,7 +308,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
                     const prompts = value.promptReview || [];
                     const missing = prompts.filter(prompt => prompt.status !== "full" || prompt.original === null).length;
                     const removals = prompts.reduce((total, prompt) => total + prompt.changes.length, 0);
-                    disclosure.append(el("summary", "", `Inspect ${prompts.length} prompt copies / ${removals} removals / ${missing} incomplete sources`));
+                    disclosure.append(el("summary", "", `Inspect ${prompts.length} ${value.snapshot?.recordedContext ? "report" : "prompt"} copies / ${removals} removals / ${missing} incomplete sources`));
                     comparison.replaceWith(disclosure);
                     disclosure.append(comparison);
                     const frame = body.querySelector(".report-frame");

@@ -96,7 +96,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const periodFlow = createPeriodFlow(time, chatCopy);
     let viewerTime = time.detect();
     let displayTimeSettings;
-    const draft = createReportDraft();
+    const draft = createReportDraft({ contextSelector: createRequestContext() });
+    const renderedContextBundles = new Set();
     const ux = createEvidenceUX(uxIcons);
     const metadata = createInlineMetadata(ux);
     const categories = createServiceCategories();
@@ -667,6 +668,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return load();
         },
     });
+    let ignoringStaleContextStatus = false;
     assessmentUI = assessmentFactories.createExperience({
         ...assessmentFactories, api, ux, textAccess, glossary: help.glossary,
         bindDetails: (node, key) => {
@@ -683,10 +685,30 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onSaved: message => announce(message),
         onAutomaticSetup: trigger => automaticUI.open(trigger),
         onChanged: () => {
+            if (ignoringStaleContextStatus) return;
+            draft.clearContext({ authority: true, writing: exportWriting });
+            scrubContextPreview();
             invalidatePreview();
             invalidateDialog("Recorded evidence, permission or feedback changed. Prepare a new report preview.");
         },
     });
+    function scrubContextPreview() {
+        for (const bundle of renderedContextBundles) {
+            for (const copy of bundle.contextReview ?? []) if (copy.kind === "response") {
+                copy.original = copy.text = null;
+                copy.segments = [];
+            }
+            for (const entry of bundle.snapshot?.recordedContext?.entries ?? []) if (entry.kind === "response") entry.text = null;
+            bundle.previewHtml = "";
+            bundle.files = {};
+        }
+        renderedContextBundles.clear();
+        const body = $("reportReviewBody");
+        if (body?.dataset.recordedContext !== "true") return;
+        for (const frame of body.querySelectorAll(".report-frame")) frame.srcdoc = "";
+        body.replaceChildren();
+        delete body.dataset.recordedContext;
+    }
     automaticUI = assessmentFactories.createAutomaticExperience({
         root: $("automaticScoreSetup"), api, ux,
         onStatus: status => assessmentUI.scoringStatus(status),
@@ -723,6 +745,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("detail").replaceChildren();
     }
     function invalidatePreview(message) {
+        if (message !== "" || !$("reportReviewBody")?.dataset.recordedContext || !draft.contextCurrent(draft.contextToken())) {
+            draft.clearContext({ writing: exportWriting });
+            scrubContextPreview();
+        }
         if (exportWriting) return;
         draft.invalidate();
         if (message !== "") $("reportReviewBody")?.querySelector(".rebuild-preview")?.remove();
@@ -2523,6 +2549,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const value = reportSelection();
         const unknownSelected = reportScope === "selected" && [...selected].some((id) => !state.scenarios.some((s) => s.scenarioId === id));
         if (!exportWriting && !isLoading && !isStale && value.available) {
+            if (draft.observeContext({ revision: state.revision, assessment: state.assessment })) {
+                scrubContextPreview();
+                invalidatePreview("Recorded context changed. Prepare a new preview; ordinary prompt edits are kept.");
+            }
             const token = draft.token();
             draft.select([reportScope, "authors:" + reportAuthors.join(","), ...value.requests.map((r) => r.scenarioId)]);
             draft.synchronizeTime(viewerTime, dateSelection());
@@ -2538,6 +2568,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const option of $("reportPromptAuthorFilter").options) option.selected = reportAuthors.includes(option.value);
         $("reportPromptAuthorFilter").disabled = exportWriting;
         document.querySelectorAll("[name=reportScope],[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
+        $("reportRecordedContext").checked = draft.options().recordedContext === true && draft.options().promptMode !== "none";
+        $("reportRecordedContext").disabled = exportWriting || draft.options().promptMode === "none";
         setText($("reportPromptAuthorSummary"), `${count(value.requests.length)} of ${count(value.baseRequests.length)} request groups in the base scope included.${value.authorExcludedRequestGroups ? ` ${count(value.authorExcludedRequestGroups)} left out with their calls and scores. The base selection is kept.` : ""}`);
         $("scopeExplanation").textContent = reportEntry && reportScope === "selected"
             ? `GitHub Copilot chat: ${reportEntry.sessionName}. Complete eligible request groups across all retained dates, services and pages, not just the analysis slice. The chosen groups stay fixed until you change selection; new groups are not added automatically.`
@@ -3265,11 +3297,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const readGeneration = collectionReadGeneration;
         try {
             if (collectionBusy) return;
-            if (!ensureCurrentTime()) return;
+            if (exportWriting ? !Number.isSafeInteger(draft.contextRevision()) : !ensureCurrentTime()) return;
             const status = await api("/api/collection/status", {});
             if (readGeneration !== collectionReadGeneration || collectionBusy) return;
-            assessmentUI.observe(status.assessment);
+            if (draft.observeContext(status, { writing: exportWriting })) {
+                scrubContextPreview();
+                if (!exportWriting) invalidatePreview("Recorded context changed or became unavailable. Prepare a new preview; ordinary prompt edits are kept.");
+            }
             periodComparisonUI.observe(status.assessment);
+            if (exportWriting) return;
+            ignoringStaleContextStatus = Number.isSafeInteger(draft.contextRevision()) && status.revision < draft.contextRevision();
+            try { assessmentUI.observe(status.assessment); }
+            finally { ignoringStaleContextStatus = false; }
             automaticUI.observe();
             if (status.assessment?.pendingCleanup) {
                 if (status.assessment.kind === "artifact-deletion") {
@@ -3431,6 +3470,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 return;
             }
             if (preview.privacy?.allSelectedFieldsScanned !== true || !preview.files || !preview.previewId) throw new Error("The local privacy scan is incomplete. Export is blocked.");
+            if (!draft.bindContext(preview)) {
+                await api("/api/cancel-preview", { previewId: preview.previewId });
+                throw new Error("Recorded context changed while preparing this preview. Read current activity and prepare a new preview.");
+            }
             activePreview = preview;
             renderPreview(body, preview, operation);
         } catch (error) {
@@ -3442,6 +3485,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderPreview(body, preview, operation) {
         detailOwner = "preview:" + preview.previewId;
         body.replaceChildren();
+        body.dataset.recordedContext = String(Boolean(preview.snapshot?.recordedContext));
+        const contextToken = draft.contextToken();
         const steps = el("ol", "privacy-steps");
         steps.append(el("li", "", "Local scan"), el("li", "current", "Disclosure review"), el("li", "", "Confirm local write"));
         const modeLabels = { none: "No prompts", masked: "Masked prompts", original: "Original prompts" };
@@ -3458,6 +3503,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (preview.timeContext) snapshotDetails.append(el("p", "report-time-context", `Report timezone: ${time.label(preview.timeContext)}. Locale: ${preview.timeContext.locale}. Prepared: ${preview.snapshot.preparedAtDisplay}.`));
         body.append(el("p", "report-privacy-note", mode === "original" ? "Personal wording will be included in local files. Detected credentials are removed even in Original mode. This is not permission to publish or upload." : mode === "none" ? "Request, follow-up and tool question text is omitted. Originals remain available here locally." : "Your retained wording is masked, not rewritten or summarized. Check unlabelled names and confidential meaning yourself."));
+        if (preview.snapshot?.recordedContext) {
+            const context = preview.snapshot.recordedContext;
+            const note = el("section", "report-context-review");
+            note.append(el("h3", "", "Recorded context in this report"),
+                el("p", "", `${context.coverage.entries} context entries; ${context.coverage.included} included, ${context.coverage.omitted} omitted, ${context.coverage.unavailable} unavailable, ${context.coverage.partial} partial. Context does not add analytical requests, calls, timing samples or verdicts.`),
+                el("p", "muted", context.boundary), el("p", "muted", context.limitation));
+            for (const gap of new Set(context.anchors.flatMap(anchor => anchor.gaps))) note.append(el("p", "context-help-note", gap));
+            body.append(note);
+        }
         const changed = () => {
             const canRebuild = activePreview === preview || body.querySelector(".rebuild-preview");
             invalidatePreview(canRebuild ? "" : undefined);
@@ -3469,19 +3523,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 body.prepend(warning);
             }
         };
-        if (preview.promptReview?.length) {
+        const reviewCopies = [...(preview.promptReview ?? []), ...(preview.contextReview ?? [])];
+        if (reviewCopies.length) {
             const comparisons = el("section", "prompt-comparisons");
             const comparisonHeading = el("h3", "help-heading", "Originals and report copies");
             comparisonHeading.append(ux.helpButton("highlighted report copies", "Highlighted spans show replacements in the report copy, not changes to your original. Credential removals are mandatory; category counts describe replacements."));
             comparisons.append(comparisonHeading, el("p", "muted", "Original text stays unchanged. Highlighted report spans show local masking. Edits affect this report only."));
             comparisons.append(el("p", "context-help-note", help.notices.clipboard));
-            const incomplete = preview.promptReview.filter(prompt => prompt.status !== "full" || prompt.original === null).length;
-            const removals = preview.promptReview.reduce((sum, prompt) => sum + prompt.changes.length, 0);
-            comparisons.append(el("p", "prompt-review-summary", `${count(preview.promptReview.length)} prompt copies across all pages; ${count(incomplete)} incomplete or unavailable sources; ${count(removals)} removals. Review every relevant copy; changing pages does not approve disclosure.`));
+            const incomplete = reviewCopies.filter(prompt => prompt.status !== "full" || prompt.original === null).length;
+            const removals = reviewCopies.reduce((sum, prompt) => sum + prompt.changes.length, 0);
+            comparisons.append(el("p", "prompt-review-summary", `${count(reviewCopies.length)} report copies across all pages; ${count(incomplete)} incomplete, excluded or unavailable sources; ${count(removals)} removals. Review every relevant copy; changing pages does not approve disclosure.`));
             const copies = el("div");
-            pagedList(copies, preview.promptReview, { key: "copies:" + preview.previewId, noun: "prompt copies", renderItem: prompt => {
+            pagedList(copies, reviewCopies, { key: "copies:" + preview.previewId, noun: "report copies", renderItem: prompt => {
                 detailOwner = "preview:" + preview.previewId + ":" + prompt.key;
-                const displayLabel = prompt.kind === "origin" ? textAccess.caption(prompt) : prompt.kind === "tool" ? `Recorded tool argument (${prompt.label})` : `${prompt.label} / ${textAccess.caption(prompt)}`;
+                const displayLabel = prompt.kind === "response" ? "Recorded reply (context; finality unverified)"
+                    : prompt.kind === "origin" ? textAccess.caption(prompt) : prompt.kind === "tool" ? `Recorded tool argument (${prompt.label})` : `${prompt.label} / ${textAccess.caption(prompt)}`;
                 const item = el("details", "prompt-comparison");
                 item.append(el("summary", "", `${displayLabel} / ${prompt.omitted ? "omitted" : prompt.representation} / ${prompt.changes.length} removal(s)`));
                 const pair = el("div", "prompt-pair");
@@ -3495,7 +3551,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 original.append(el("p", "muted", `Source status: ${prompt.status}. ${prompt.status === "full" ? "Exact retained text." : "Incomplete or unavailable; not reconstructed."}`));
                 copy.append(el("h4", "", "In your report"));
                 const rendered = el("pre");
-                if (prompt.text === null) copy.append(el("p", "", prompt.omitted ? "No prompt text included." : "Source text unavailable; not reconstructed."));
+                if (prompt.text === null) copy.append(el("p", "", prompt.omitted ? prompt.kind === "response" ? "No reply text included." : "No prompt text included." : "Source text unavailable; not reconstructed."));
                 else {
                     for (const segment of prompt.segments) {
                         if (segment.category) {
@@ -3504,7 +3560,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                             rendered.append(ux.tooltip(mark, segment.mandatory ? "Mandatory credential removal. Cannot be restored to an export." : `This span replaces a ${segment.category.replaceAll("_", " ")} match in the report copy. Your local original is unchanged.`));
                         } else rendered.append(document.createTextNode(segment.text));
                     }
-                    copy.append(ux.attachCopy(rendered, { label: "Report copy", copyLabel: mode === "masked" ? "Copy masked prompt" : "Copy original-mode prompt", getText: () => rendered.textContent, prose: true }));
+                    copy.append(ux.attachCopy(rendered, { label: "Report copy", copyLabel: prompt.kind === "response" ? "Copy report reply" : mode === "masked" ? "Copy masked prompt" : "Copy original-mode prompt", getText: () => rendered.textContent, prose: true }));
                 }
                 for (const category of [...new Set(prompt.changes.map((c) => c.category))]) copy.append(el("p", "muted", `${category.replaceAll("_", " ")}: ${prompt.changes.filter((c) => c.category === category).length} removal(s).`));
                 if (prompt.changes.some((c) => c.mandatory)) copy.append(el("p", "notice", "Mandatory credential removal. This copy is not byte-identical to the original."));
@@ -3516,7 +3572,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     edit.append(el("summary", "", "Edit or omit this report copy"));
                     const omit = el("input"), omitLabel = el("label", "attestation");
                     omit.type = "checkbox"; omit.checked = prompt.omitted;
-                    omitLabel.append(omit, el("span", "", "Omit this prompt from the report"));
+                    omitLabel.append(omit, el("span", "", prompt.scenarioRef ? "Omit this copy from the report" : "Omit this prompt from the report"));
                     const textarea = el("textarea");
                     const override = draft.options().overrides.find(value => value.key === prompt.key);
                     omit.checked = override?.omit ?? prompt.omitted;
@@ -3533,13 +3589,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     edit.append(omitLabel, el("p", "", "Edit the exported copy only. Detected credentials and, in Masked mode, personal patterns are removed again when rebuilt."), textarea);
                     item.append(edit);
                 }
-                return bindDetails(viewKey(item, detailOwner), detailOwner, undefined, prompt === preview.promptReview[0]);
+                return bindDetails(viewKey(item, detailOwner), detailOwner, undefined, prompt === reviewCopies[0]);
             } });
             comparisons.append(copies);
             body.append(comparisons);
         }
         const report = el("div", "report-document");
         function showFiles(value) {
+            if (value.snapshot?.recordedContext && !draft.contextCurrent(contextToken)) return;
+            if (value.snapshot?.recordedContext) renderedContextBundles.add(value);
             report.replaceChildren();
             if (value.previewHtml) {
                 const frame = el("iframe", "report-frame");
@@ -3564,6 +3622,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         scan.append(facts([["Original prompts", preview.privacy.originatingPrompts], ["Follow-ups", preview.privacy.followUpPrompts], ["Argument objects", preview.privacy.toolArgumentObjects], ["Strings scanned", preview.privacy.stringsScanned], ["All selected fields scanned", "Yes"]]));
         scan.append(el("p", "", preview.privacy.transformation));
         for (const limitation of preview.privacy.limitations || []) scan.append(el("p", "", limitation));
+        if (preview.privacy.context) {
+            scan.append(el("p", "", `Context: ${preview.privacy.context.coverage.sourceBytes} source UTF-8 text bytes; ${preview.privacy.context.coverage.projectedBytes} projected bytes. All contextual copies scanned.`));
+            for (const [category, occurrences] of Object.entries(preview.privacy.context.categories)) if (occurrences) {
+                scan.append(el("p", "", `Additional context ${category.replaceAll("_", " ")}: ${occurrences} source occurrence(s).`));
+            }
+        }
         body.append(scan);
         const attestation = el("label", "attestation"), checkbox = el("input");
         checkbox.type = "checkbox";
@@ -3629,7 +3693,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const controls = el("div", "dialog-actions");
         controls.append(ux.explainDisabled(review, "Check the disclosure box after reviewing the report copies and selected formats."), ux.explainDisabled(confirm, "Complete disclosure review before confirming the local file write."));
         body.append(controls, feedback, el("p", "muted", "No network sharing. This preview expires after 10 minutes. Changed selections or evidence require a new scan."));
-        reportJourney.previewReady(preview, { confirm, feedback });
+        reportJourney.previewReady({ ...preview, promptReview: reviewCopies }, { confirm, feedback });
     }
     function invalidateDialog(message) {
         $("reportReviewBody")?.querySelector(".rebuild-preview")?.remove();
@@ -3643,6 +3707,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function recoverRead() {
+        draft.clearContext({ writing: exportWriting });
+        scrubContextPreview();
         if (exportWriting) return;
         invalidatePreview();
         invalidateDialog("The panel reconnected. Close and prepare a new report preview before continuing.");
@@ -3650,6 +3716,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         load();
     }
     function handleVisibilityChange() {
+        draft.clearContext({ writing: exportWriting });
+        scrubContextPreview();
         if (exportWriting) return;
         invalidatePreview();
         invalidateDialog("The panel changed visibility. Close and prepare a new report preview before continuing.");
@@ -3844,9 +3912,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     ux.explainDisabled($("exportBtn"), () => isStale || isLoading ? "Wait for a current activity snapshot." : !draft.options().formats.length ? "Select at least one export format." : "Select interactions in Analyze or choose Current view or All collected activity. Review labels do not control export eligibility.");
     document.querySelectorAll("[name=promptMode]").forEach((control) => control.addEventListener("change", () => {
-        draft.change({ promptMode: control.value, overrides: [] });
+        draft.change({ promptMode: control.value, overrides: [], ...(control.value === "none" ? { recordedContext: false } : {}) });
         invalidatePreview(); updateSelection();
     }));
+    $("reportRecordedContext").addEventListener("change", () => {
+        if (exportWriting) return;
+        draft.change({ recordedContext: $("reportRecordedContext").checked, overrides: [] });
+        invalidatePreview(); updateSelection();
+    });
     $("formatOptions").querySelectorAll("input[type=checkbox]").forEach((control) => control.addEventListener("change", () => {
         const formats = [...$("formatOptions").querySelectorAll("input:checked")].map((node) => node.value);
         draft.change({ formats });

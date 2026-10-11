@@ -199,14 +199,116 @@ feedback/permission invalidations are conservative. When model results exist, th
 snapshot does not expose selected evaluation dependencies, so a revision change
 requires a new review without deleting copy edits. Backend validation is authoritative.
 
-**Next report-context seam:** keep these analytical request IDs and counts unchanged.
-This unit retains existing originating/follow-up/tool-argument text behavior; it
-does not add adjacent interactions or replies. The later bounded-context proposal
-must apply author/privacy rules before presenting copies, keep contextual text
-separate from analytic membership, and enter the existing scan/edit/omit/rebuild
-and actual-disclosure gates. Setup's `reportPopulationNote` describes analytical
-membership; `scopeDetails` retains separate units/exclusions. Neither is a
-context-inclusion approval. Do not infer new report content from a reader visit.
+### Bounded recorded context
+
+**Include bounded recorded context** is a separate, initially unchecked Setup
+choice. The API option is `recordedContext: true`; omission defaults to false.
+No prompts forces the effective option off, opens no retained reply files, and
+adds no context text or context-review originals. This is a report-copy choice,
+not a capture or permission change. A reader visit is never export permission.
+
+`collectReportContext` reuses `createRequestContext.select` and `compare` against
+the already-retained collection, independently of browsing filters. Each selected
+anchor gets at most one supported preceding and following group, using the
+reader's exact same-chat event links and chronology. There is no recursive walk,
+task clustering, generated account, or inferred retry/finality. Missing links,
+ambiguous chronology, source exclusions, author exclusions and unavailable replies
+remain explicit gaps. A neighboring request can describe changed intent; its old
+verdict is not transferred to the selected result.
+
+Author choices apply to **originating interaction groups**, before opening reply
+payloads or presenting originals/copies. A copied follow-up that matches another
+retained group's originating event uses that group's author eligibility, not the
+copy's possibly different author label. An excluded neighbor cannot leak through
+the selected record's existing follow-up appendix, even with context off.
+An ungrouped follow-up also requires the unverified-author choice, in addition to
+any supported sender category: a known sender does not establish a missing group.
+Unsupported/conflicting authorship follows the existing unverified-author choice;
+synthetic, diagnostic and unsupported-source context follows existing report
+exclusions. Replies within an eligible user-originated group remain eligible:
+assistant delivery is not an agent-originated prompt.
+
+Replies come only from the existing authorized assessment read model and
+`readRetainedResponse`, shared with the reader. Capture membership, current consent,
+source configuration, payload hash, envelope and byte length are checked. Missing
+files and no-longer-authorized replies yield text-free unavailable entries;
+malformed data, integrity failures and other I/O failures block preparation.
+There are no history, Work IQ, Graph, scoring, provider or new capture operations.
+Source/current-state checks surround asynchronous reads; final Save retains the
+existing board lock. A change discovered during rendering, review or Save rejects
+the prepared context rather than quietly replacing approved text with a new gap.
+
+All text uses `projectReportCopy`: the same masking patterns, mandatory credential
+removal, manual terms, edit and omit rules as selected prompts. Partial sources
+remain partial; unavailable text cannot be restored through an edit. Identical
+recorded messages share one review/edit key across anchors and selected prompt
+occurrences. Conflicting retained copies fail explicitly rather than selecting a
+convenient version. Rebuild invalidates disclosure approval; review and final local
+Save are still separate actions.
+
+**Analytical boundary:** `createReportScope.resolve`, `reportPopulationNote`,
+`selectionScope`, `records[]` membership, call IDs, evaluation memberships, counts,
+timing samples and original verdict scopes do not expand. Context is never pushed
+into those analytical populations to reuse a renderer. Selected prompt-copy keys
+can be shared for the same recorded event; this does not merge interaction groups.
+
+**Frozen consumer contract (native-report owner):** schema-v3 report snapshots may
+add `recordedContext` with its own `schemaVersion: 1`. The manifest freezes the same
+object plus `recordedContextHash`; the hash participates in normal integrity and
+privacy checks. Absence retains the legacy contract. Existing saved bytes,
+manifests and format readers are not migrated or regenerated.
+
+| Frozen field | Meaning |
+|---|---|
+| `boundary`, `limitation` | Versioned fixed statements of the reader's bounded, incomplete context. |
+| `anchors[]` | Selected `scenarioRef`; `groups[]` with original `scenarioRef`, per-anchor `relation` and `entryKeys`; overall chronologically ordered `entryKeys`; `gaps`; `authorExcludedGroups`. One globally shared message may have different relations to different anchors. |
+| `entries[]` | Unique `key`, original `scenarioRef`, nullable scoped `eventRef`/opaque `observationRef`, `kind` (`prompt`, `follow-up`, `response`), `timeStatus`, source `status`, `representation`, projected `text` or null, `omitted`, masking `changes`, safe `label`, and `finality`. Prompts also carry qualified `authorship`/`originKind`; replies always have unverified finality and no invented prompt author. |
+| `coverage` | Unique included groups/entries; included, omitted, unavailable and partial entries; author exclusions counted per anchor; `sourceBytes` and `projectedBytes` in UTF-8. These are context-copy counts, not analytical denominators. |
+
+Scenario references use existing report pseudonyms. Event references are keyed
+over chat plus recorded event ID; a missing event ID stays null. Existing validated
+HMAC observation references identify retained replies. No payload filenames,
+`textRef`, raw source IDs/paths, deletion keys or private dependency digests are
+exported. Source timestamps are used for ordering but remain withheld; unknown
+time is labeled and ordered after known times without claiming a measured position.
+
+The optional preview `contextReview` contains only additional distinct copies.
+Selected copies remain in `promptReview`; the normal Review UI combines the two
+without duplicate edit keys. The closed validator checks references, per-anchor
+relationships/order structure, source/finality vocabulary and coverage. HTML and
+Markdown append a minimal **Recorded context** block; PDF uses the same escaped
+HTML, and JSON stores the frozen structure. These adapters consume frozen facts
+only, without live lookups. A future native layout can reposition these blocks
+without changing their contents or analytical meaning.
+
+There is no new 500-anchor or 1500-group restriction on normal report scope.
+Context has the reader's per-anchor one-hop bound and the existing 3000-copy /
+4 MiB budget applied to the **combined selected and contextual** copies, deduplicated
+by stable edit key. Both original source text and final projected text are bounded
+in UTF-8, including non-ASCII text and overrides. Context coverage counts its own
+unique text bytes (including selected copies referenced there); do not add those
+numbers to selected coverage as if disjoint. Existing raw-source and metadata
+scanner limits still apply. Oversize reports fail explicitly, never silently trim.
+
+Private context dependencies cover retained groups, message/link identities,
+per-anchor membership/order, reply content/availability, consent, source and
+deletion state. They are re-resolved after preparation and at review/Save.
+Browser drafts use the same selector and conservatively require fresh review
+on a new stored revision when context is enabled, because payload fingerprints
+are not exposed. The rendered context keeps its own accepted revision/basis even
+after edit/rebuild clears the active preview. Older status responses cannot clear
+a newer valid context, and delayed preview/file work cannot repopulate invalidated
+copies. Known source/consent/deletion changes scrub contextual originals and the
+preview iframe, including during a pending local-save response. Only privacy-status
+reading continues during such a context-bearing write; its receipt, lock and
+no-replay behavior are unchanged.
+
+Source-bound reply-copy overrides are removed when their context becomes
+unverified. Ordinary prompt edits and unrelated options survive. Authorized
+edit/rebuild remains available without rereading sources; it cannot restore
+missing or revoked reply text. Independently saved artifacts/readers remain
+unchanged. Hidden selected requests remain selected; pending/failed reads still
+block approval and Save.
 
 New readable reports and comparisons explain the checks in **How to read these
 results** or **Reading notes**. HTML/PDF, Markdown and the comparison reader reuse
