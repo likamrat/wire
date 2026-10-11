@@ -57,6 +57,15 @@ links; `services=...` uses associations, with omitted/false
 not change separately selected report authors, hidden selected requests, existing
 full-interaction report scope or frozen report files.
 
+Private analytical search now uses the same all-page canonical call membership
+on Home, Activity and current-view report setup. **Current view** resolves the
+matching request IDs once, then includes their complete eligible interactions,
+not only chart-matching calls. Setup shows the matching-call count separately
+from full report counts. **Selected** keeps hidden selections; **All collected
+activity** is not narrowed by browsing search. Report author/privacy rules,
+preview approval and frozen artifacts are unchanged. This is not the later
+period-comparison report's frozen matching-call cohort contract.
+
 Returned entries use their explicit normalized endpoint, or the existing
 single-target fallback for a non-discovery call. They never inherit all parent
 batch targets or use response-array position as target evidence. An entry without

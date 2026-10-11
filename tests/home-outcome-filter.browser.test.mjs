@@ -558,10 +558,10 @@ test("one styled Recorded result dropdown replaces pills and detached clearing",
 
 test("the shared dropdown precedes every Home chart and keeps pre-outcome counts with an All reset", async t => {
     const { page, reads } = await setup(t);
-    const baseline = reads.at(-1).snapshot.analytics.totals;
+    const baseline = reads.at(-1).snapshot.analytics;
     await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
     const selected = reads.at(-1).snapshot.analytics;
-    assert.deepEqual(selected.resultFacet, { scope: "before-outcome", totals: baseline });
+    assert.deepEqual(selected.resultFacet, { scope: "before-outcome", totals: baseline.totals, rows: baseline.rows });
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
     assert.equal(await page.locator("#outcomeFilter-control").evaluate(node => node === document.activeElement), true);
     assert.equal(await facetCount(page, "failure"), 1);

@@ -439,7 +439,7 @@ The Service control sets this explicit context state on a user selection, names
 the combined scope, and exposes a removable context chip. Removing it yields
 strict matching without changing another field; the scope offers an explicit
 add-context action. Known matches and context-only counts come from the declared
-ID sets, refined by the existing Activity private-search membership when present.
+ID sets, refined by the shared private analytical-search membership when present.
 Context action rows are named as context, never as Files. Existing category chart
 links still select categories; involvement is not substituted into their charts.
 
@@ -467,6 +467,42 @@ Pending/failed reads retain established accepted-snapshot behavior.
 scoped-chat navigation without copying private search, request or paging state.
 The destination may explicitly override its named field. Report selections,
 separately chosen report authors and frozen report bytes are not changed.
+The client adds the private analytical query to scoped-chat history state
+explicitly; it is not a URL field or part of this filter adapter.
+
+### Local analytical slice
+
+`createAnalysisSlice(localSearch, projection)` in `web/client.mjs` returns
+`slice(acceptedSnapshot, appliedOptions, privateQuery)`. Its `rows`, `rowIds`,
+`scenarioIds`, `scenarios` and `analytics` describe one all-page membership.
+Rows keep the server's canonical IDs and owner `scenarioId`; aliases do not
+become extra displayed request groups. `refineRows` applies the same phrase
+membership to explicitly broader, pre-outcome context. The accepted snapshot is
+not mutated, and clearing search restores its original analytics.
+
+`createActivityProjection(time, serviceCategories, outcomes)` in
+`lib/activity-projection.mjs` is import-free and serialized by `lib/render.mjs`.
+Server and browser share its totals, nearest-rank timings, grouping, Other,
+timeline, coverage, journeys and service-involvement math. Canonical extraction,
+source qualification, authorship and filter validation remain in the server;
+private search only narrows accepted rows using existing local phrase matching.
+
+Home count/time/category/path and percentage charts, Activity summaries and
+rows, source-context counts, involvement known/context IDs, current report
+membership and interaction-overview selection consume this slice. Charts count
+matching calls; Insights intentionally measure complete selected interactions,
+with an explicit scope note. Nonmatching actions remain available in full detail.
+`resultFacet.rows` carries the existing pre-outcome membership so option counts
+can follow private search without changing their pre-outcome meaning.
+`apiCoverage.calls` retains canonical parent IDs and returned/status-result IDs
+for the separately labeled pre-outcome/path parent coverage; search refines that
+membership too. Neither context set is silently added to matching-call charts.
+
+The private query stays in memory and `history.state`, never snapshot requests,
+URLs or logs. A removable **Private search applied** chip makes it visible on
+Home without introducing another search field. Page and overview generations,
+snapshot revision checks and source-basis guards still reject late results.
+Future global object search must not call this analytical slice implicitly.
 
 The projection is read-only enrichment, not evidence of new calls or a source
 omission. Report consumers must freeze its definition and membership before using
@@ -1320,8 +1356,8 @@ pending/error/empty-state actions keep their existing state guards. Charts retai
 their independent full-width layout. Detailed group provenance remains in existing evidence help; source
 inventory and matching-evidence denominators remain distinct.
 Home's count summary and percentage denominators use the same applied rows as
-its count chart. A private Activity search stays available when returning to
-Activity but does not narrow Home's charts or summary invisibly.
+its count chart. Private Activity search narrows the same membership on Home,
+with a visible removable **Private search applied** chip, and is retained on Back.
 
 The existing **About this evidence** disclosure starts closed and explains
 recorded results and request grouping. **Collection status → Technical details**
@@ -1438,9 +1474,8 @@ shown when the mapping records it; a folder project is not relabeled a repositor
 
 **Choose a Copilot chat** is the prominent Home next step after the period results and
 opens the matching list, retaining the applied period and refinements.
-Choosing **Open analysis** retains the indicated dates, service, layer and
-collection; incompatible project, result, endpoint and private-request filters
-are cleared. A result link instead retains its exact originating slice,
+Choosing **Open analysis** retains the analytical filters and private query
+while narrowing to the selected chat. A result link retains its originating slice,
 including private search, and narrows to that one source-chat ID. Both are
 native links with independent disclosure and information controls. Back to
 chats restores the list route/search/page in browser history state; private

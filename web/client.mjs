@@ -32,7 +32,45 @@ export function createFilterState(results, authorship) {
     return { canonical, query, scope };
 }
 
-export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState) {
+// Refine only an accepted canonical snapshot. Private search never becomes a server filter.
+export function createAnalysisSlice(localSearch, projection) {
+    return function slice(snapshot, options, search = "") {
+        const base = snapshot.analytics, records = new Map(snapshot.scenarios.map(scenario => [scenario.scenarioId, scenario]));
+        const sources = new Map((snapshot.sessions || []).map(source => [source.sessionId, source]));
+        const hasQuery = Boolean(search.trim());
+        const matches = hasQuery ? new Set([...records.values()].filter(scenario => {
+            const source = sources.get(scenario.sourceSessionId);
+            return localSearch.phrase(search, [scenario.userPrompt?.text, scenario.title, source?.project, source?.name,
+                scenario.project, scenario.sourceSessionName, scenario.sourceSessionId]);
+        }).map(scenario => scenario.scenarioId)) : null;
+        const refineRows = rows => hasQuery ? rows.filter(row => matches.has(row.scenarioId)) : rows;
+        const rows = refineRows(base.rows), scenarioIds = [...new Set(rows.map(row => row.scenarioId).filter(id => records.has(id)))];
+        let analytics = base;
+        if (hasQuery) {
+            const facetRows = refineRows(base.resultFacet.rows);
+            analytics = {
+                ...base,
+                ...projection.project(rows, { ...options, timeContext: base.timeContext, dateRange: base.dateRange }, snapshot.scenarios),
+                resultFacet: { ...base.resultFacet, rows: facetRows, totals: projection.summarize(facetRows) },
+                apiCoverage: base.layer === "reported-api"
+                    ? projection.apiCoverage(refineRows(base.apiCoverage.calls), rows) : base.apiCoverage,
+                httpCoverage: base.layer === "http" ? {
+                    observedResponseCount: rows.filter(row => row.observedGraphHttp).length,
+                    noResponseRecordCount: rows.filter(row => !row.observedGraphHttp).length,
+                } : base.httpCoverage,
+                warnings: base.warnings.flatMap(warning => {
+                    const count = warning.code === "undated-activity" ? rows.filter(row => !row.startedAt).length
+                        : warning.code === "recorded-sites-not-wire-counts" ? rows.length : null;
+                    return count === null ? [warning] : count ? [{ ...warning, count }] : [];
+                }),
+            };
+        }
+        return { analytics, rows, rowIds: rows.map(row => row.id), scenarioIds,
+            scenarios: scenarioIds.map(id => records.get(id)), refineRows };
+    };
+}
+
+export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState, createAnalysisSlice, createActivityProjection) {
     const $ = (id) => document.getElementById(id);
     const time = createTimeContext();
     const authorship = createPromptAuthorship();
@@ -52,6 +90,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const reportScopes = createReportScope(authorship);
     const results = createRecordedResults();
     const filterState = createFilterState(results, authorship);
+    const analysisSlice = createAnalysisSlice(localSearch, createActivityProjection(time, categories, Object.keys(results.labels("tool"))));
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, icons: dimensionalIcons,
         createLink: (kind, row) => kind === "outcomes" && applied.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
             : kind === "services" && row.id !== "group:other" ? link("", "activity", { service: row.id, page: undefined }) : null });
@@ -109,7 +148,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const nextReviewLabel = { captured: "Start review", reviewing: "Mark ready" };
     const scopeLabels = { history: "Current activity", legacy: "Preserved earlier snapshot", all: "Both collections" };
     const selected = new Set();
-    let state, analytics, applied, appliedRoute, generation = 0, navigationGeneration = 0, activePreview = null;
+    let state, analytics, slice, applied, appliedRoute, generation = 0, navigationGeneration = 0, activePreview = null;
     let selectControls;
     let isStale = false, isLoading = false, exportWriting = false, returnFocus = null, route = readRoute();
     let dateDraft = null;
@@ -737,10 +776,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return node;
     }
     function sessionsRoute() {
-        return route.returnToSessions || { ...filterState.scope(route, sessionJourney.open(route, undefined)), session: undefined };
+        return route.returnToSessions || { ...filterState.scope(route, sessionJourney.open(route, undefined)), search, session: undefined };
     }
     function sessionRoute(sessionId, result) {
-        return { ...filterState.scope(route, sessionJourney.open(route, sessionId, result)), returnToSessions: route.returnToSessions || { ...route, session: undefined, request: undefined } };
+        return { ...filterState.scope(route, sessionJourney.open(route, sessionId, result)), search, returnToSessions: route.returnToSessions || { ...route, session: undefined, request: undefined } };
     }
     function sessionSource(sessionId = route.session || state?.scenarios.find(s => s.scenarioId === route.request)?.sourceSessionId) {
         const source = state?.sessions?.find(s => s.sessionId === sessionId);
@@ -774,13 +813,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function selectionRows() { return analytics?.rows || []; }
     function idsFor(row) { return Array.isArray(row?.scenarioIds) && row.scenarioIds.length ? row.scenarioIds : [row?.scenarioId]; }
-    function matchesSearch(scenario) {
-        const source = scenario ? sessionSource(scenario.sourceSessionId) : null;
-        return localSearch.phrase(search, [scenario?.userPrompt?.text, scenario?.title, source?.project, source?.name, scenario?.project, scenario?.sourceSessionName, scenario?.sourceSessionId]);
-    }
     function rowsFor(scenarioId) {
-        return matchesSearch(state.scenarios.find(scenario => scenario.scenarioId === scenarioId))
-            ? selectionRows().filter(row => row.scenarioId === scenarioId) : [];
+        return selectionRows().filter(row => row.scenarioId === scenarioId);
     }
     function fullRowsFor(scenarioId, layer = applied.layer) {
         const rows = state.requestActivity?.[layer];
@@ -923,11 +957,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             item.append(el("p", "service-context-label", "Includes missing-service context, not a known match to the selected service."));
         }
     }
-    function scenariosInSlice() {
-        // Each canonical row belongs to one displayed request, not every legacy alias.
-        const ids = new Set(selectionRows().map(row => row.scenarioId));
-        return state.scenarios.filter((scenario) => ids.has(scenario.scenarioId));
-    }
     function query() {
         return { layer: route.layer || "tool", groupBy: route.chart === "endpoint" ? "endpoint" : "workload", bucket: route.bucket || "week", filters: filterState.query(route), limit: 8, timeContext: viewerTime };
     }
@@ -949,6 +978,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const rows = results.summarize(data.rows);
         if (!rows || ["count", ...resultKeys].some(key => rows[key] !== data.totals[key])) throw new Error("Recorded action totals do not match this snapshot.");
+        const beforeOutcome = results.summarize(facet.rows);
+        const beforeOutcomeIds = new Set(Array.isArray(facet.rows) ? facet.rows.map(row => row.id) : []);
+        if (!beforeOutcome || ["count", ...resultKeys].some(key => beforeOutcome[key] !== facet.totals[key])
+            || data.rows.some(row => !beforeOutcomeIds.has(row.id))) {
+            throw new Error("Available result membership does not match this snapshot.");
+        }
+        if (data.layer === "reported-api" && !Array.isArray(data.apiCoverage?.calls)) {
+            throw new Error("API-result parent coverage is unavailable for this snapshot.");
+        }
         if (query().filters.services?.length) {
             const involvement = data.serviceInvolvement, selection = involvement?.selection;
             const ids = Array.isArray(selection?.knownMatchIds) && Array.isArray(selection?.contextOnlyIds) && [...selection.knownMatchIds, ...selection.contextOnlyIds];
@@ -1383,12 +1421,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function renderViewingContext() {
-        const host = $("viewingContext"), scenarios = currentViewScenarios();
+        const host = $("viewingContext");
         const collectionLink = $("activityCollectionLink");
         if (host.contains(collectionLink)) $("collectionNotice").after(collectionLink);
         host.hidden = route.view !== "request";
-        const ids = new Set(scenarios.map(s => s.scenarioId));
-        const rows = search ? selectionRows().filter(row => ids.has(row.scenarioId)) : selectionRows();
+        const rows = selectionRows();
         const evidenceHost = $("serviceEvidenceSummary");
         const evidenceGroups = categories.evidenceGroups(rows, applied.layer);
         evidenceHost.hidden = !["home", "activity"].includes(route.view) || route.service !== "Unknown" || !evidenceGroups.length;
@@ -1457,6 +1494,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderFilterChips() {
         const host = $("filterChips");
         host.replaceChildren();
+        if (search) {
+            const chip = button("Private search applied", () => go(route.view === "request" ? "activity" : route.view, { search: undefined, page: undefined }), "filter-chip");
+            chip.setAttribute("aria-label", "Remove private search");
+            chip.append(ux.icon("close"));
+            host.append(chip);
+        }
         const labels = { tool: "Tool", services: "Service", service: "Category", result: "Outcome", authors: "Author", project: "Copilot project",
             endpoint: "API path", session: "Copilot chat", layer: "Activity", scope: "Collection", bucket: "Time scale" };
         const selectedLabel = id => $(id).selectedOptions[0]?.textContent;
@@ -1488,10 +1531,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("serviceFocus").hidden = !focused || !["home", "activity", "request"].includes(route.view);
         const name = (applied.filters.services || []).map(serviceLabel).join(", ");
         const noun = applied.layer === "tool" ? "calls" : results.unit(applied.layer, 2);
-        const searchedScenarios = route.view === "activity" && search ? new Set(currentViewScenarios().map(scenario => scenario.scenarioId)) : null;
-        const searchedIds = searchedScenarios ? new Set(selectionRows().filter(row => searchedScenarios.has(row.scenarioId)).map(row => row.id)) : null;
-        const visibleCount = ids => ids.filter(id => !searchedIds || searchedIds.has(id)).length;
-        setText($("serviceFocusScope"), focused ? `${name}${focus.includeMissingService ? ` + ${noun} with missing service details` : " only"}. ${count(visibleCount(focus.knownMatchIds))} known matches${focus.includeMissingService ? `; ${count(visibleCount(focus.contextOnlyIds))} context-only` : ""}.${isStale ? " Previous results; refresh before using this scope." : ""}` : "");
+        setText($("serviceFocusScope"), focused ? `${name}${focus.includeMissingService ? ` + ${noun} with missing service details` : " only"}. ${count(focus.knownMatchIds.length)} known matches${focus.includeMissingService ? `; ${count(focus.contextOnlyIds.length)} context-only` : ""}.${isStale ? " Previous results; refresh before using this scope." : ""}` : "");
         $("addServiceContext").hidden = !focused || focus.includeMissingService;
         $("addServiceContext").disabled = isStale || isLoading;
         setText($("addServiceContext"), `Include ${noun} with missing service details`);
@@ -1506,8 +1546,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderPeriodFeedback() {
         $("periodFeedback").hidden = !["home", "activity"].includes(route.view);
         if ($("periodFeedback").hidden) return;
-        const ids = new Set(currentViewScenarios().map(scenario => scenario.scenarioId));
-        const rows = selectionRows().filter(row => route.view === "home" || !search || ids.has(row.scenarioId));
+        const rows = selectionRows();
         const model = periodFlow({ rows, filters: applied.filters, coverage: state.collection?.config?.approved ? state.collection.checkedWindow : state.coverage, timeContext: applied.timeContext, session: Boolean(route.session), stale: isStale, layer: applied.layer, unit: results.unit(applied.layer, rows.length) });
         const home = route.view === "home";
         $("periodFeedback").classList.toggle("home-period-summary", home);
@@ -1574,7 +1613,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("meaningMatched").textContent = `${count(analytics.totals.count)} ${results.unit(layer, analytics.totals.count)}`;
         $("meaningSources").textContent = layer === "http" ? `${count(analytics.coverage.sessionCount)} recorder sources` : chatCopy.count(analytics.coverage.sessionCount);
         $("takeaway").textContent = "";
-        if (layer === "reported-api" && analytics.apiCoverage) $("takeaway").textContent = `${count(analytics.apiCoverage.callsWithNumericStatus)} of ${count(analytics.apiCoverage.eligibleToolCalls)} Work IQ tool calls retained an API status; ${count(analytics.apiCoverage.callsWithoutNumericStatus)} did not.`;
+        if (layer === "reported-api" && analytics.apiCoverage) $("takeaway").textContent = `${count(analytics.apiCoverage.callsWithNumericStatus)} of ${count(analytics.apiCoverage.eligibleToolCalls)} Work IQ tool calls retained an API status; ${count(analytics.apiCoverage.callsWithoutNumericStatus)} did not. Parent-call coverage is before API-result outcome/path filters; private search applies.`;
         if (layer === "direct-request") $("takeaway").textContent = "Request sites found in recorded commands. A request is not proof of a returned response.";
         if (layer === "code-reference") $("takeaway").textContent = "Code references only. They do not establish a request or response.";
         if (layer === "http") $("takeaway").textContent = "Recorder diagnostics, including public metadata tests. Not counted as workplace use.";
@@ -1640,7 +1679,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (open) renderCountTable();
             else $("countTable").replaceChildren();
         }, true);
-        percentages.update(analytics, applied);
+        percentages.update(analytics, { ...applied, search: Boolean(search) });
         if (analytics.totals.count) $("chartFooter").prepend(el("span", "chart-size-note", "Visual sizes adjusted for readability; labels show actual counts and shares."));
     }
     function renderTime() {
@@ -1766,17 +1805,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return context;
     }
     function currentViewScenarios() {
-        return scenariosInSlice().filter(matchesSearch);
+        return slice?.scenarios.slice() || [];
     }
     function renderCurrentViewInsights() {
         const host = route.view === "home" ? $("homeInsights") : route.view === "activity" ? $("activityInsights") : null;
         if (!host) return;
-        const scenarios = route.view === "home" ? scenariosInSlice() : currentViewScenarios();
+        const scenarios = currentViewScenarios();
         const ids = new Set(scenarios.map(item => item.scenarioId));
         const rows = selectionRows().filter(row => ids.has(row.scenarioId));
         const scopeNote = `${chatCopy.groups(ids.size, applied.layer === "http")} across all pages · ${count(rows.length)} ${results.unit(applied.layer, rows.length)} matched. Insights include each group's full retained interaction.`;
         if (route.view === "home") setText($("homeInsightScope"), `${chatCopy.groups(ids.size, applied.layer === "http")} across all pages; full retained interactions, not only matched ${results.unit(applied.layer, 2)}.`);
-        assessmentUI.overview(host, [...ids], { scopeNote: route.view === "activity" && route.session ? scopeNote : "" });
+        assessmentUI.overview(host, [...ids], { scopeNote: route.view === "activity" ? scopeNote : "" });
     }
     function revealSessionResult() {
         if (route.view !== "activity" || !route.session || !inspectSelectedResults()) return false;
@@ -1801,7 +1840,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         host.hidden = route.view !== "activity" || !route.session;
         if (host.hidden) return;
         const context = state.sessionAnalysis;
-        const rows = context?.rows?.filter(row => matchesSearch(state.scenarios.find(s => s.scenarioId === row.scenarioId)));
+        const rows = context?.rows && slice.refineRows(context.rows);
         const summary = results.summarize(rows);
         host.append(resultLine(applied.layer, summary, {
             scope: "Source results before the result filter", sessionId: source.sessionId,
@@ -1928,7 +1967,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 label: chatCopy.relationship(requests.length, matching?.count, results.unit(applied.layer, matching?.count), applied.layer === "http"),
                 sessionId: route.session && route.result ? undefined : source?.sessionId,
             });
-            const sourceRows = state.sessionAnalysis?.rows?.filter(row => matchesSearch(state.scenarios.find(s => s.scenarioId === row.scenarioId)));
+            const sourceRows = state.sessionAnalysis?.rows && slice.refineRows(state.sessionAnalysis.rows);
             const sameSourceScope = sourceRows && sourceRows.length === matchingRows.length && sourceRows.every(row => matchingRows.some(match => match.id === row.id));
             if (inspecting) {
                 summary.append(selectedCount);
@@ -2715,6 +2754,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function render() {
         if (!state || !analytics) return;
+        slice = analysisSlice(state, applied, search);
+        analytics = slice.analytics;
         renderTimeContext();
         renderControls(); renderNavigation(); renderFilterChips(); renderViewingContext(); renderSessionAnalysis(); renderPeriodFeedback();
         detailOwner = route.view;
@@ -3529,7 +3570,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         invalidatePreview();
         if (isLoading) return;
         appliedRoute = { ...route };
-        renderNavigation(); renderActivity(); renderFilterChips(); renderViewingContext(); renderSessionAnalysis(); renderPeriodFeedback(); renderCurrentViewInsights(); updateSelection();
+        render();
     });
     $("clearActivitySearch").addEventListener("click", () => {
         $("activitySearch").value = ""; $("activitySearch").dispatchEvent(new Event("input")); $("activitySearch").focus();

@@ -1,0 +1,108 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createAnalysisSlice } from "../web/client.mjs";
+import { createActivityProjection } from "../lib/activity-projection.mjs";
+import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
+import { createTimeContext } from "../lib/time.mjs";
+import { createServiceCategories } from "../lib/service-categories.mjs";
+import { createLocalSearch } from "../web/local-search.mjs";
+import { createRecordedResults } from "../web/recorded-results.mjs";
+import { createReportScope } from "../web/report-scope.mjs";
+import { exportCatalogFor } from "./helpers.mjs";
+import { scopeRecords, scopeOptions, privateQuery } from "./analysis-scope-fixture.mjs";
+
+const projection = createActivityProjection(createTimeContext(), createServiceCategories(), Object.keys(createRecordedResults().labels("tool")));
+const refine = createAnalysisSlice(createLocalSearch(), projection);
+const sorted = values => [...values].sort();
+const rowId = (i, j = 0) => `call:${JSON.stringify([`parity-chat-${i}`, `parity-call-${i}-${j}`])}`;
+function snapshot(options = scopeOptions) {
+    const scenarios = scopeRecords();
+    return { revision: 17, scenarios, analytics: { ...buildActivityAnalytics(scenarios, options), revision: 17 },
+        requestActivity: buildRequestActivity(scenarios), exportCatalog: exportCatalogFor(scenarios) };
+}
+function exact(slice, ids, scenarioIds) {
+    assert.deepEqual(sorted(slice.rowIds), sorted(ids));
+    assert.equal(new Set(slice.rowIds).size, slice.rowIds.length);
+    assert.deepEqual(sorted(slice.scenarioIds), sorted(scenarioIds));
+    const model = slice.analytics;
+    assert.equal(model.totals.count, ids.length);
+    for (const groups of [model.groups, model.workloadGroups, model.timeSeries.points, model.journeys,
+        [...model.visibleGroups, ...(model.otherGroup ? [model.otherGroup] : [])]]) {
+        assert.deepEqual(sorted(groups.flatMap(group => group.drilldownIds)), sorted(ids));
+    }
+    for (const group of model.serviceInvolvement.groups) {
+        assert.deepEqual(sorted(group.drilldownIds), sorted(model.rows.filter(row => row.serviceAssociation.services.includes(group.label)).map(row => row.id)));
+    }
+}
+
+test("one private slice supplies exact deduped IDs to all aggregations and full-interaction report selection", () => {
+    const input = snapshot(), before = structuredClone(input), slice = refine(input, scopeOptions, privateQuery);
+    const ids = [rowId(0), rowId(0, 1), rowId(0, 2), ...Array.from({ length: 8 }, (_, i) => rowId(i + 1))];
+    const scenarios = Array.from({ length: 9 }, (_, i) => `parity-request-${i}`);
+    exact(slice, ids, scenarios);
+    assert.equal(slice.analytics.revision, 17);
+    assert.deepEqual(slice.analytics.resultFacet.totals, projection.summarize(slice.rows));
+    assert.deepEqual(createReportScope().resolve(input.exportCatalog, "current", slice.scenarioIds, []).requests.map(row => row.scenarioId).sort(), scenarios);
+    assert.deepEqual(input, before);
+    assert.equal(refine(input, scopeOptions, "").analytics, input.analytics, "clearing query restores the unchanged accepted projection");
+});
+
+test("search AND Author/Outcome/date/service context preserves before-outcome membership and full detail", () => {
+    const options = { ...scopeOptions, filters: { scope: "history", services: ["Files"], includeMissingService: true,
+        promptAuthors: ["user"], outcomes: ["failure"], from: "2026-09-30", to: "2026-09-30" } };
+    const input = snapshot(options), slice = refine(input, options, privateQuery);
+    exact(slice, [rowId(0), rowId(0, 1), rowId(6)], ["parity-request-0", "parity-request-6"]);
+    assert.deepEqual(slice.analytics.serviceInvolvement.selection.knownMatchIds.sort(), [rowId(0), rowId(6)]);
+    assert.deepEqual(slice.analytics.serviceInvolvement.selection.contextOnlyIds, [rowId(0, 1)]);
+    assert.deepEqual(slice.analytics.resultFacet.rows.map(row => row.id).sort(), [rowId(0), rowId(0, 1), rowId(2), rowId(4), rowId(6)]);
+    assert.equal(slice.analytics.resultFacet.totals.count, 5);
+    const noFailedRows = refine(input, options, `${privateQuery} request 2`);
+    exact(noFailedRows, [], []);
+    assert.deepEqual(noFailedRows.analytics.resultFacet.rows.map(row => row.id), [rowId(2)]);
+    assert.equal(noFailedRows.analytics.resultFacet.totals.success, 1, "before-outcome options do not collapse to matched interactions");
+    assert.deepEqual(slice.analytics.serviceInvolvement.groups.find(group => group.label === "Mail").drilldownIds, [rowId(0)]);
+    assert.deepEqual(slice.rows.find(row => row.id === rowId(0, 1)).serviceAssociation.services, []);
+    assert.deepEqual(input.requestActivity.tool.filter(row => row.scenarioId === "parity-request-0").map(row => row.id), [rowId(0), rowId(0, 1), rowId(0, 2)]);
+    const report = createReportScope().resolve(input.exportCatalog, "current", slice.scenarioIds, []);
+    assert.equal(report.requests.find(row => row.scenarioId === "parity-request-0").counts.workIqActions, 3);
+    const strictOptions = { ...options, filters: { ...options.filters, includeMissingService: false } };
+    exact(refine(snapshot(strictOptions), strictOptions, privateQuery), [rowId(0), rowId(6)], ["parity-request-0", "parity-request-6"]);
+});
+
+test("changed evidence layers refine returned-result IDs and their explicitly broader pre-outcome parent coverage", () => {
+    const options = { ...scopeOptions, layer: "reported-api", filters: { services: ["Files"], includeMissingService: true, outcomes: ["failure"] } };
+    const input = snapshot(options), slice = refine(input, options, `${privateQuery} request 0`);
+    const expected = input.analytics.rows.filter(row => row.scenarioId === "parity-request-0");
+    exact(slice, expected.map(row => row.id), ["parity-request-0"]);
+    assert.equal(expected.length, 2);
+    assert.deepEqual(slice.analytics.apiCoverage.calls.map(call => call.id).sort(), [rowId(0), rowId(0, 1)]);
+    assert.equal(slice.analytics.apiCoverage.eligibleToolCalls, 2);
+    assert.equal(slice.analytics.apiCoverage.returnedResultUnits, 3);
+    assert.equal(slice.analytics.apiCoverage.selectedResultUnits, 2);
+    assert.equal(slice.analytics.apiCoverage.callsWithNumericStatus, 2);
+});
+
+test("no-match is empty, metadata search uses existing fields, and aliases do not become an extra cohort", () => {
+    const input = snapshot();
+    exact(refine(input, scopeOptions, "NO_PARITY_MATCH"), [], []);
+    const one = refine(input, scopeOptions, "Invented parity chat 0");
+    exact(one, [rowId(0), rowId(0, 1), rowId(0, 2)], ["parity-request-0"]);
+    assert.equal(one.analytics.coverage.scenarioCount, 1);
+    assert.deepEqual(refine(input, scopeOptions, "NO_PARITY_MATCH").analytics.serviceInvolvement.groups, []);
+});
+
+test("serialized factories have no import closures and preserve unsearched projection math", () => {
+    const standaloneProjection = Function(`return (${createActivityProjection.toString()})`)()(
+        createTimeContext(), createServiceCategories(), Object.keys(createRecordedResults().labels("tool")));
+    const standalone = Function(`return (${createAnalysisSlice.toString()})`)()(createLocalSearch(), standaloneProjection);
+    const input = snapshot();
+    const actual = standalone(input, scopeOptions, privateQuery), expected = refine(input, scopeOptions, privateQuery);
+    assert.deepEqual(actual.analytics, expected.analytics);
+    assert.deepEqual(actual.rowIds, expected.rowIds);
+    assert.deepEqual(actual.scenarioIds, expected.scenarioIds);
+    assert.deepEqual(actual.refineRows(input.analytics.resultFacet.rows), expected.refineRows(input.analytics.resultFacet.rows));
+    assert.deepEqual(standaloneProjection.project(input.analytics.rows, { ...scopeOptions,
+        timeContext: input.analytics.timeContext, dateRange: input.analytics.dateRange }, input.scenarios),
+    Object.fromEntries(Object.keys(standaloneProjection.project([], { ...scopeOptions,
+        timeContext: input.analytics.timeContext, dateRange: input.analytics.dateRange }, [])).map(key => [key, input.analytics[key]])));
+});
