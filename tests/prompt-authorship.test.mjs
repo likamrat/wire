@@ -14,6 +14,7 @@ import { discoverSources } from "../lib/source-discovery.mjs";
 import { randomUUID } from "node:crypto";
 import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
 import { hash } from "../lib/collector-io.mjs";
+import { ContractError, validateInteraction } from "../lib/assessment-contract.mjs";
 
 function extract(data) {
     return extractScenarios([
@@ -113,6 +114,53 @@ test("explicit system context explains unverified author without guessing from h
     assert.deepEqual(prompt.authorship, { actor: "unknown", basis: "system-source" });
     assert.match(promptAuthorship.reason(prompt), /system-supplied context/);
     assert.match(promptAuthorship.reason({ authorship: { actor: "unknown", basis: "invalid-source" } }), /host message format/);
+});
+
+test("normalized interaction reading preserves precise parsed author gaps without changing membership", () => {
+    let membership, fingerprint;
+    for (const [data, basis] of [
+        [{ source: "system" }, "system-source"],
+        [{}, "missing-source"],
+        [{ source: "unsupported-invented-source" }, "unsupported-source"],
+        [{ source: "user", isAutopilotContinuation: true }, "conflicting-source"],
+        [{ isAutopilotContinuation: "true" }, "invalid-source"],
+    ]) {
+        const record = extract({ ...data, content: "<cross_session_message>Invented copied tag, not author evidence.</cross_session_message>" });
+        const state = { revision: 1, pseudonymKey: "a".repeat(64), evidence: [record], exports: [] };
+        const before = structuredClone(state), model = buildAssessmentModel(state);
+        const detail = [...model.details.values()][0];
+        assert.deepEqual(promptAuthorship.read(detail.interaction.message), { actor: "unknown", basis });
+        assert.equal(promptAuthorship.reason(detail.interaction.message), promptAuthorship.reason(record.userPrompt));
+        assert.equal(detail.interaction.message.origin, "recorded-unverified");
+        assert.equal(detail.interaction.message.association, "nearest-preceding");
+        assert.equal(model.catalog.length, 1);
+        assert.equal(model.catalog[0].status, "retained");
+        membership ??= detail.interaction.members;
+        fingerprint ??= evaluationRecordFingerprint(record);
+        assert.deepEqual(detail.interaction.members, membership);
+        assert.equal(evaluationRecordFingerprint(record), fingerprint);
+        assert.deepEqual(state, before);
+    }
+});
+
+test("normalized author transport is strict while legacy messages remain unchanged", () => {
+    const record = extract({ source: "system", content: "Invented system context." });
+    const interaction = [...buildAssessmentModel({ revision: 1, pseudonymKey: "a".repeat(64),
+        evidence: [record], exports: [] }).details.values()][0].interaction;
+    for (const authorship of [
+        undefined, null, {}, { actor: "unknown", basis: "source-user" },
+        { actor: "unknown", basis: "invented-basis" },
+        { actor: "unknown", basis: "system-source", sourceId: "invented-raw-sender" },
+        { actor: "user", basis: "source-user" },
+    ]) {
+        assert.throws(() => validateInteraction({ ...interaction, message: { ...interaction.message, authorship } }), ContractError);
+    }
+    const legacy = structuredClone(interaction);
+    delete legacy.message.authorship;
+    const bytes = JSON.stringify(legacy);
+    assert.equal(validateInteraction(legacy), legacy);
+    assert.equal(JSON.stringify(legacy), bytes);
+    assert.deepEqual(promptAuthorship.read(legacy.message), { actor: "unknown", basis: "legacy-missing" });
 });
 
 async function makeOldCheckpoint(app) {
@@ -350,8 +398,12 @@ test("real collector retains author evidence, qualifies kickoffs and survives re
         assert.equal(record.toolCalls[0].toolCallId, item.callId);
     }
     const model = buildAssessmentModel(state);
-    for (const detail of model.details.values()) {
+    for (const item of model.catalog) {
+        const detail = model.details.get(item.interactionRef);
+        const prompt = state.evidence.find(record => record.scenarioId === item.scenarioId).userPrompt;
         assert.ok(["user", "agent", "recorded-unverified"].includes(detail.interaction.message.origin));
+        assert.deepEqual(detail.interaction.message.authorship, prompt.authorship);
+        assert.equal(promptAuthorship.reason(detail.interaction.message), promptAuthorship.reason(prompt));
         assert.equal(detail.interaction.message.association, "nearest-preceding");
     }
     await app.restart();

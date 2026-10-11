@@ -144,6 +144,16 @@ or `isAutopilotContinuation: true` identifies automatic agent continuation. Cont
 System/skill injection is not automatically a User or Agent prompt. `parentAgentTaskId`, `agentMode`,
 message role, writing style and typed `<cross_session_message>` tags are not authorship evidence on their own.
 
+The normalized assessment reader carries the same `{ actor, basis }` in
+`interaction.message.authorship`; its coarser `origin` field is not a replacement for that evidence.
+Consumers use the shared `promptAuthorship.read/reason` helper on the message, just as on a retained
+prompt. Missing sender fields, unsupported source, conflicting evidence, invalid metadata and
+explicit system context therefore keep their distinct explanations rather than becoming an
+unexplained unverified author. The standalone transport validator checks actor/basis pairs and
+their agreement with `origin`. Legacy messages without this optional field still validate unchanged;
+no old report bytes or author labels are rewritten. This read-only projection does not change
+classification, collection/qualification bounds, analytical membership or assessment fingerprints.
+
 Ordinary app input often omits `source` in the original event. WIRE supports that recording path
 only when the original `transformedContent` contains the exactly anchored displayed `content`, with the
 supported host-added envelope outside it: a `current_datetime` within one second of the event,
