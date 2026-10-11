@@ -719,8 +719,10 @@ Chromium browser. Install it with `npx playwright install chromium` after
 signed-in browser profile is used. If the browser is unavailable, PDF preview
 fails explicitly; deselect PDF and prepare a new review or install the browser.
 HTML, JSON and Markdown do not require Chromium. Browser regression tests use
-the matching Playwright test dependency; PDF validation uses development-only
-PDF.js to extract text and check page bounds.
+the matching Playwright test dependency. The pinned PDF.js runtime dependency
+also supports read-only text-layer extraction from verified saved PDFs for
+search, including production `--omit=dev` installs; extraction does not require
+Chromium, OCR, remote conversion, PDF scripting or external resource fetching.
 For the longer twelve-cycle idle/reconnect check:
 
 ```powershell
