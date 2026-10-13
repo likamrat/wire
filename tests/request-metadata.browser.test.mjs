@@ -276,7 +276,8 @@ test("every supported category and ambiguous request uses its approved local cue
         assert.equal(measure.cues[0].service, entry.id);
         assert.equal(measure.cues[0].icon, iconName(dimensionalIcons[entry.id]));
         assert.ok(measure.cues[0].className.includes(`dimensional-tone-${createDimensionalCharts().tone(entry.id)}`));
-        assert.equal(measure.items[0].label, index === 13 ? serviceCategories.entries.map(entry => entry.label).join(", ") : entry.label);
+        assert.equal(measure.items[0].label, record === unavailable ? "Copilot assistance"
+            : index === 13 ? serviceCategories.entries.map(entry => entry.label).join(", ") : entry.label);
         assertLayout(measure);
         const help = card.locator(".metadata-help");
         assert.match(await help.getAttribute("aria-label"), /^About .+; recorded activity categories$/);
@@ -286,7 +287,8 @@ test("every supported category and ambiguous request uses its approved local cue
         await page.keyboard.press("Tab");
         assert.equal(await help.evaluate(node => node === document.activeElement), true, "A deliberate keyboard visit reaches category help.");
         await page.getByRole("tooltip").waitFor();
-        assert.ok((await page.getByRole("tooltip").textContent()).includes(entry.description));
+        assert.ok((await page.getByRole("tooltip").textContent()).includes(record === unavailable
+            ? "Its record does not identify a service or API path." : entry.description));
         await page.keyboard.press("Escape");
         await help.focus();
         assert.equal(await page.getByRole("tooltip").isVisible(), false, "Programmatic refocus after Escape is not a new keyboard visit.");

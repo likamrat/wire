@@ -483,6 +483,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function serviceLabel(value) { return categories.describe(value).label; }
     function categoryNoun(layer = applied?.layer || route.layer || "tool") { return layer === "tool" ? "Activity category" : "Service"; }
     function allCategories() { return categoryNoun() === "Service" ? "All services" : "All categories"; }
+    function categoryPresentation(row, layer = "tool") {
+        const entry = categories.describe(row?.workload), evidence = categories.serviceEvidence(row, layer);
+        return layer === "tool" && row?.workload === "Unknown" && row.tool === "workiq-ask" && evidence?.reason === "hosted-routing"
+            ? { ...entry, label: categories.operation(row.tool).label, description: evidence.description } : entry;
+    }
     function serviceCue(tag, value) {
         const entry = categories.describe(value), node = el(tag, `semantic-cue service-cue dimensional-tone-${dimensional.tone(entry.id)}`);
         node.dataset.service = entry.id;
@@ -501,10 +506,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const heading = el("div", "action-heading");
         heading.append(el("h3", "", title));
         if (service) {
-            const entry = categories.describe(service), identity = el("span", "action-service-heading");
+            const entry = categoryPresentation({ ...row, workload: service, tool: title }, layer), identity = el("span", "action-service-heading");
             const operation = categories.operation(title), cue = serviceCue("span", service);
             const evidence = categories.serviceEvidence(row ? { ...row, tool: title } : row, layer);
-            const label = service === "Discovery" || evidence?.reason === "hosted-routing" ? operation.label : entry.label;
+            const label = service === "Discovery" ? operation.label : entry.label;
             const scope = layer === "tool" ? categories.requestedSearchScope(sourceCallFor(row)) : null;
             const help = [
                 evidence?.description ?? (service === "Discovery" ? operation.description : entry.description),
@@ -1160,6 +1165,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (!service.childNodes.length) service.textContent = "Service association unavailable in this snapshot.";
             } else {
                 const cue = serviceCue("span", row?.workload), scope = categories.requestedSearchScope(call);
+                cue.lastElementChild.textContent = categoryPresentation(row).label;
                 if (scope) cue.lastElementChild.replaceChildren(metadata.item(cue.lastElementChild.textContent,
                     { help: `${scope.label}. ${scope.description}` }));
                 service.append(cue);
@@ -2163,7 +2169,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return content;
         } });
     }
-    function servicesFor(rows) { return [...new Set(rows.map((row) => row.workload).filter(Boolean))].map(serviceLabel).join(", ") || serviceLabel("Unknown"); }
+    function servicesFor(rows) { return [...new Set(rows.map(row => categoryPresentation(row, applied.layer).label))].join(", ") || serviceLabel("Unknown"); }
     function projectContext(scenario) {
         const context = el("p", "project-context");
         if (!scenario.projectId) {
@@ -2482,7 +2488,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }).filter(Boolean))] : [];
         const meta = metadata.row([
             { label: serviceText, leading: cue, helpWithLabel: true, helpLabel: `${serviceText}; ${applied.layer === "tool" ? "recorded activity categories" : "recorded services"}`, help: [
-                categories.used(rows.map(row => row.workload)).map(entry => `${entry.label}: ${entry.description}`).join(" ") || categories.describe("Unknown").description,
+                [...new Set(rows.map(row => {
+                    const entry = categoryPresentation(row, applied.layer);
+                    return `${entry.label}: ${entry.description}`;
+                }))].join(" ") || categories.describe("Unknown").description,
                 ...requestedScopes,
             ].join(" ") },
         ]);

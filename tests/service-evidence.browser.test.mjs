@@ -47,7 +47,7 @@ test("normal entry explains invented search, preparation and service gaps withou
     for (const [category, explanation] of [
         ["Search and retrieval", /tool name alone does not identify the services searched/],
         ["Discovery", /does not run the data operation/],
-        ["Service not shown", /missing a usable service target.*cannot classify its path/],
+        ["Copilot assistance", /Its record does not identify a service or API path/],
     ]) {
         await page.getByRole("button", { name: `About ${category}; recorded activity categories`, exact: true }).click();
         assert.match(await page.getByRole("tooltip").innerText(), explanation);
@@ -82,6 +82,64 @@ test("normal entry explains invented search, preparation and service gaps withou
     assert.match(await page.getByRole("tooltip").innerText(), /Requested scope: Teams messages and email/);
     assert.match(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
     assert.equal(await readerCall.locator("dt").filter({ hasText: /^Purpose$/ }).count(), 0, "Reader scope stays in its existing category help");
+    assert.deepEqual(errors, []);
+});
+
+test("targetless assistance is named on interaction and call cards without hiding real service gaps", { timeout: 30000 }, async t => {
+    const source = serviceEvidenceFixture(), ask = source.toolCalls[0];
+    const call = (name, requestArgs, tool = "workiq-ask") => ({
+        ...ask, tool, toolCallId: `card-${name}`, startEventId: `card-start-${name}`, requestArgs,
+    });
+    const records = [
+        ["assistance", [call("assistance", { question: "Invented help request", timeZone: "UTC" })], "Copilot assistance"],
+        ["unsupported", [call("unsupported", { entityUrl: "https://untrusted.invalid/me/messages" })], "Service not shown"],
+        ["known", [call("known", { entityUrl: "/me/messages" })], "Mail"],
+        ["partial", [call("partial", { entityUrls: ["/me/messages", "/unrecognized/resource"] })], "More than one service"],
+        ["mixed", [call("mixed-assistance", { question: "Invented help request" }), call("mixed-missing", {}, "workiq-fetch")],
+            "Copilot assistance, Service not shown"],
+    ];
+    const evidence = records.map(([name, toolCalls]) => ({ ...structuredClone(source), scenarioId: `card-${name}`, toolCalls }));
+    const { context } = await privateFixture(t, evidence);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(5000);
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    const snapshot = page.waitForResponse(response => new URL(response.url()).pathname === "/api/snapshot" && response.ok());
+    await page.goto(runtime.url + "#analyze"); await ready(page);
+    const { analytics } = await (await snapshot).json();
+    assert.equal(analytics.totals.count, 6);
+    assert.deepEqual(analytics.rows.map(row => row.toolCallId).sort(), evidence.flatMap(record => record.toolCalls.map(call => call.toolCallId)).sort());
+    assert.ok(analytics.rows.every(row => row.outcome === "success"));
+    assert.equal(analytics.serviceInvolvement.definition.version, 1);
+    for (const [name, , label] of records) {
+        const card = page.locator(`[data-view-key="request:card-${name}"]`);
+        assert.equal(await card.locator(".request-meta").textContent(), label);
+    }
+    const assistance = page.locator('[data-view-key="request:card-assistance"]');
+    await assistance.getByRole("button", { name: "About Copilot assistance; recorded activity categories", exact: true }).click();
+    assert.match(await page.getByRole("tooltip").innerText(), /Its record does not identify a service or API path/);
+    await page.keyboard.press("Escape");
+    const mixed = page.locator('[data-view-key="request:card-mixed"]');
+    await mixed.getByRole("button", { name: "About Copilot assistance, Service not shown; recorded activity categories", exact: true }).click();
+    assert.match(await page.getByRole("tooltip").innerText(), /Copilot assistance:.*Service not shown:/);
+    await page.keyboard.press("Escape");
+    await page.goto(runtime.url + "#analyze?mode=calls"); await ready(page);
+    const callLabels = new Map(records.flatMap(([, calls, label]) => calls.map(call => [call.toolCallId,
+        call.toolCallId === "card-mixed-assistance" ? "Copilot assistance" : call.toolCallId === "card-mixed-missing" ? "Service not shown" : label])));
+    for (const row of analytics.rows) {
+        const card = page.locator(`[data-action-id=${JSON.stringify(row.id)}]`);
+        assert.equal(await card.locator(".action-service .service-cue").textContent(), callLabels.get(row.toolCallId));
+    }
+    const filteredSnapshot = page.waitForResponse(response => new URL(response.url()).pathname === "/api/snapshot" && response.ok());
+    await selectActivityOption(page, "serviceFilter", "Unknown"); await ready(page);
+    const filtered = (await (await filteredSnapshot).json()).analytics;
+    const expected = analytics.rows.filter(row => row.workload === "Unknown");
+    assert.deepEqual(filtered.rows.map(row => row.id), expected.map(row => row.id));
+    assert.equal(filtered.totals.count, 4);
+    assert.equal(await page.locator("#activityList .matched-action").count(), 4);
     assert.deepEqual(errors, []);
 });
 

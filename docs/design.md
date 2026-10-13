@@ -848,6 +848,12 @@ visible, and technical details remain available. Copilot assistance explains mis
 service details in that call's record without guessing from private text or changing Unknown into success.
 
 Remaining `Unknown` activity is displayed as **Service not shown**, not a service failure.
+For a targetless `workiq-ask` with the existing `hosted-routing` evidence reason,
+Interactions and Calls cards instead name the known operation **Copilot assistance**,
+as the reader does. Existing category help explains that its service or API path
+is not recorded. Mixed interactions retain both assistance and real missing-service
+labels; known, partial and unsupported targets keep their existing categories.
+This presentation leaves the canonical `Unknown` identity and filter unchanged.
 The detail reader keeps **Copilot assistance** as a known purpose and names its data service
 **Not in this record**. Other unknown records distinguish **Path not recognized**,
 **Target format not supported**, and **No target recorded**. Short on-demand explanations
