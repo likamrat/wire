@@ -243,6 +243,12 @@ These are local resource policies, not completeness truncation or an SLA.
 
 Existing collector `onCommitted`, deletion `onSeal`, recollection `onCommitted`
 and evaluation `onChanged` hooks invalidate every connected search owner.
+The collector reports whether its check changed board state, retained evidence,
+coverage or source authorization. This compares the complete before/after state
+and source identity, not just a revision or newly added call count. Quiet checks
+that only advance collection checkpoints do not invalidate an index build,
+pending query or ready results. Collection scheduling and automatic-score
+reconciliation continue unchanged; an absent change signal fails closed.
 Server mutations also fence before dispatch and **before acknowledgment** and
 block new disclosure/admission while a mutation is active. Read/preparation-only
 report preview operations do not revoke the receipt they are legitimately
@@ -263,6 +269,13 @@ store commit. The ordered stream and final open/admission gates address that
 boundary without claiming otherwise. A content-free state/source observer also
 fences changes detected outside normal owned mutation routes; artifact bytes are
 revalidated on actual search/open, not continuously polled from disk.
+
+`tests/search-collection.browser.test.mjs` exercises the normal browser entry
+against an invented automatically collected source and the production MiniLM.
+It holds a real report read across three five-second checks during index
+construction, preserves ready results across two more checks, and completes a
+query across another check. A new call during a pending query, changed source
+eligibility/window and source closure still invalidate old search membership.
 
 ## Verified openings and analytical admission
 
