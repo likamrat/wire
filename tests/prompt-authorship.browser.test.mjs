@@ -7,7 +7,7 @@ import { promptInstallation } from "./prompt-authorship-fixture.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { buildSanitizedBundle } from "../lib/export.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
-import { chooseTheme, navigateMain, openActivitySessions, selectActivityOption, revealStoredRefresh } from "./helpers.mjs";
+import { chooseTheme, navigateMain, openActivitySessions, selectActivityOption } from "./helpers.mjs";
 import { reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -17,15 +17,16 @@ const ready = async page => {
     await page.evaluate(() => document.fonts.ready);
 };
 
-test("an older retained human prompt changes from unverified to Your through original-event collection and reload", { timeout: 30000 }, async t => {
+test("a mode-free retained user prompt changes from invalid-source to Your through original-event collection and reload", { timeout: 30000 }, async t => {
     const app = await promptInstallation(t);
     await app.runtime().collector.collectNow();
     const human = app.cases.find(item => item.name === "human"), current = await loadBoardState(app.context);
     const records = structuredClone(current.evidence), record = records.find(record => record.scenarioId === human.scenarioId);
-    delete record.userPrompt.authorship;
-    delete record.userPrompt.authorshipVersion;
+    record.userPrompt.authorship = { actor: "unknown", basis: "invalid-source" };
+    record.userPrompt.authorshipVersion = 4;
     await replaceEvidence(app.context, () => ({ records, importCoverage: current.importCoverage }));
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1200, height: 950 }, reducedMotion: "reduce" });
+    page.setDefaultTimeout(8000);
     t.after(() => browser.close());
     const errors = [], external = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -36,17 +37,23 @@ test("an older retained human prompt changes from unverified to Your through ori
     await page.goto(app.runtime().url + `#request?request=${encodeURIComponent(human.scenarioId)}`); await ready(page);
     const reader = page.locator(".request-original");
     assert.equal(await reader.getByRole("heading", { name: "Copilot chat prompt", exact: true }).count(), 1);
-    assert.equal(await reader.locator(".reader-state").textContent(), "This older record has no sender details");
+    assert.equal(await reader.locator(".reader-state").textContent(), "Recorded sender details could not be verified");
     if (proof) { await mkdir(proof, { recursive: true }); await reader.screenshot({ path: path.join(proof, "retained-human-before.png") }); }
     await app.runtime().collector.collectNow();
-    await (await revealStoredRefresh(page)).click(); await ready(page);
+    await page.reload(); await ready(page);
     assert.equal(await reader.getByRole("heading", { name: "Your prompt", exact: true }).count(), 1);
     assert.doesNotMatch(await reader.innerText(), /Author unverified/);
     assert.equal(await reader.locator("pre").textContent(), human.data.content);
     if (proof) await reader.screenshot({ path: path.join(proof, "retained-human-after.png") });
     await navigateMain(page, "activity"); await ready(page);
-    await page.locator("#activitySearch").fill(human.data.content); await openActivitySessions(page);
-    assert.equal(await page.locator(`.request-row[data-view-key="request:${human.scenarioId}"] .full-text-preview-label`).textContent(), "Your prompt");
+    await openActivitySessions(page);
+    const card = page.locator(`.request-row[data-view-key="request:${human.scenarioId}"]`);
+    if (!await card.count()) {
+        await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click(); await ready(page);
+    }
+    assert.equal(await card.locator(".full-text-preview-label").textContent(), "Your prompt");
+    assert.equal(await card.locator("[data-prompt-actor=user]").count(), 1);
+    if (proof) await card.screenshot({ path: path.join(proof, "retained-human-card-after.png") });
     const after = (await loadBoardState(app.context)).evidence.find(record => record.scenarioId === human.scenarioId);
     assert.equal(after.userPrompt.sourceEventId, record.userPrompt.sourceEventId);
     assert.equal(after.userPrompt.text, record.userPrompt.text);

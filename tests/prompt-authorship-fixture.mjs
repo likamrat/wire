@@ -50,7 +50,7 @@ export async function promptInstallation(t) {
     ];
     const childEvents = [event("session.start", { version: 1, sessionId: child })];
     function requestEvents(item) {
-        const prompt = event("user.message", { messageId: randomUUID(), delivery: "idle", agentMode: "autopilot", ...item.data });
+        const prompt = event("user.message", { messageId: randomUUID(), delivery: "idle", ...item.data });
         if (item.hostEnvelope) {
             const sender = item.hostEnvelope === "agent" ? `<cross_session_message>\nfrom_session_id: ${parent}\n</cross_session_message>\n\n` : "";
             prompt.data.transformedContent = `<current_datetime>${prompt.timestamp}</current_datetime>\n\n${sender}${item.data.content}`;

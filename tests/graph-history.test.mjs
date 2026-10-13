@@ -20,6 +20,67 @@ const graphScenario = (command = "curl 'https://graph.microsoft.com/v1.0/me/mess
 const work = (id, target, extras = {}) => ({ tool: "workiq-fetch", toolCallId: id, startEventId: `e-${id}`, toolSucceeded: true, reportedOutcome: "succeeded", requestArgs: { entityUrls: [target] }, startedAt: stamp(1), apiResults: [], ...extras });
 const scenario = (calls, extras = {}) => ({ scenarioId: "s", sourceSessionId: source.sessionId, projectId: source.projectId, workloadKind: "recorded-history", toolCalls: calls, ...extras });
 
+test("Graph history preserves mode-free host authorship when merging an exact retained prompt", async t => {
+    const root = await mkdtemp(path.join(tmpdir(), "wire-author-graph-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const folder = path.join(root, source.sessionId);
+    await mkdir(folder);
+    const user = prompt();
+    Object.assign(user.data, { messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle",
+        transformedContent: `<current_datetime>${user.timestamp}</current_datetime>\n\n${user.data.content}` });
+    const events = [{ id: "startup", type: "session.start", data: { sessionId: source.sessionId, version: 1 } },
+        user, start(1, "curl 'https://graph.microsoft.com/v1.0/me/messages'"), finish(1, "HTTP/2 200")];
+    await writeFile(path.join(folder, "events.jsonl"), events.map(value => JSON.stringify(value)).join("\n"));
+    const scan = await scanRecordedGraphHistory({ sources: [source], sessionRoot: root, since: "2026-10-01", until: "2026-10-02" });
+    const record = scan.scenarios[0];
+    assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+    const previous = { ...record, userPrompt: { ...record.userPrompt,
+        authorship: { actor: "unknown", basis: "invalid-source" }, authorshipVersion: 4 } };
+    const merged = mergeGraphScenarios([previous], scan.scenarios)[0];
+    assert.deepEqual(merged.userPrompt, record.userPrompt);
+    assert.deepEqual(merged.graphActivities, record.graphActivities);
+    assert.deepEqual(mergeGraphScenarios([previous], [{ ...record, sourceSessionId: "22222222-2222-4222-8222-222222222222" }])[0].userPrompt, previous.userPrompt);
+    for (const mismatch of [{ sourceTimestamp: stamp(4) }, { text: "Invented replacement prompt" }]) {
+        const changed = { ...record, userPrompt: { ...record.userPrompt, ...mismatch } };
+        assert.deepEqual(mergeGraphScenarios([record], [changed])[0].userPrompt,
+            { ...record.userPrompt, authorship: { actor: "unknown", basis: "conflicting-source" } });
+    }
+});
+
+for (const prefix of ["complete", "malformed", "oversized", "tail", "malformed-after-first", "windowed"]) {
+    test(`agent-created Graph history preserves first-message context with a ${prefix} prefix`, async t => {
+        const root = await mkdtemp(path.join(tmpdir(), "wire-graph-creator-"));
+        t.after(() => rm(root, { recursive: true, force: true }));
+        const folder = path.join(root, source.sessionId);
+        await mkdir(folder);
+        const created = { ...source, promptCreation: { actor: "agent", creatorSessionId: "22222222-2222-4222-8222-222222222222" } };
+        const first = prompt(), followup = prompt(2), relayed = prompt(4);
+        for (const event of [first, followup, relayed]) Object.assign(event.data, {
+            messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle",
+            transformedContent: `<current_datetime>${event.timestamp}</current_datetime>\n\n${event.data.content}`,
+        });
+        relayed.data.source = "agent-invented-subscribed-sender";
+        const graph = n => start(n, "curl 'https://graph.microsoft.com/v1.0/me/messages'");
+        const startup = JSON.stringify({ id: "startup", type: "session.start", data: { sessionId: source.sessionId, version: 1 } });
+        const beginning = [first, graph(1)], ending = [followup, graph(3), relayed, graph(5)];
+        const padding = JSON.stringify({ id: "ignored", type: "session.info", data: { content: "x".repeat(4000) } });
+        const before = prefix === "malformed" ? ["invented invalid JSON"] : prefix === "oversized" ? [padding] : [];
+        const middle = prefix === "tail" ? [padding] : prefix === "malformed-after-first" ? ["invented invalid JSON"] : [];
+        const text = [startup, ...before, ...beginning.map(JSON.stringify), ...middle, ...ending.map(JSON.stringify)].join("\n") + "\n";
+        await writeFile(path.join(folder, "events.jsonl"), text);
+        const scan = await scanRecordedGraphHistory({
+            sources: [created], sessionRoot: root, since: prefix === "windowed" ? stamp(2) : "2026-10-01", until: "2026-10-02",
+            ...(prefix === "oversized" ? { maxLineBytes: 1024 } : {}),
+            ...(prefix === "tail" ? { maxFileBytes: Buffer.byteLength(ending.map(JSON.stringify).join("\n") + "\n") + 1 } : {}),
+        });
+        const prompts = new Map(scan.scenarios.map(record => [record.userPrompt.sourceEventId, record.userPrompt.authorship]));
+        if (!["tail", "windowed"].includes(prefix)) assert.deepEqual(prompts.get(first.id), { actor: "unknown", basis: "missing-source" });
+        assert.deepEqual(prompts.get(followup.id), ["complete", "malformed-after-first", "windowed"].includes(prefix)
+            ? { actor: "user", basis: "host-direct-input" } : { actor: "unknown", basis: "missing-source" });
+        assert.deepEqual(prompts.get(relayed.id), { actor: "agent", basis: "source-agent" });
+    });
+}
+
 test("Graph-only historical import retains original model metadata without changing its timing or result projections", async t => {
     const root = await mkdtemp(path.join(tmpdir(), "wire-model-graph-"));
     t.after(() => rm(root, { recursive: true, force: true }));

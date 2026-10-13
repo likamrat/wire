@@ -2698,6 +2698,35 @@ Its adjacent keyboard/touch help explains the retained basis and that this is no
 an account sign-in failure. Explicit `source: system` stays in the neutral author
 cohort and is explained as system-supplied context, not guessed to be an Agent prompt.
 Source role, writing style, raw typed tags and old `human-authored` strings alone do not determine authorship.
+The supported host envelope requires the message ID, delivery value, matching
+timestamp and exact boundary around the original content. `agentMode` is optional:
+it describes execution, not the sender. If supplied, it must still be a supported
+mode. Classifier version 5 accepts otherwise-valid envelopes without this field;
+it does not infer an author from task IDs, model names or copied tags.
+Incremental checkpoints and exact-source Graph merges preserve newer qualified
+authors against older format failures, without hiding conflicting author evidence.
+The collector's final merge preserves absent versus explicitly empty optional
+activity fields, unchanged call ordering and model metadata during author-only
+recovery. Those fields are merged only when incoming facts actually differ;
+new Graph, tool, model and timing evidence still follows its normal merge rules.
+When the same source/event disagrees on its timestamp or text, the retained
+attribution becomes `conflicting-source`; the original retained text and timestamp
+are not replaced. A version difference cannot suppress that disagreement.
+Manual Work IQ and Graph imports carry the same validated workspace creator
+mapping as incremental collection. A direct envelope on an agent-created first
+message cannot establish User authorship without stronger source evidence.
+Manual Work IQ and Graph readers share a first-prompt prefix observer. A boundary
+established before a later gap remains qualified independently of whole-window
+or model incompleteness. Truncated, malformed, non-event or oversized earlier
+history cannot manufacture that boundary; an explicitly unavailable boundary
+cannot be reconstructed from filtered events. Scanning Graph activity does not
+reopen an unavailable creator lookup.
+Existing unverified records need an exact original-event lookup within the
+approved source/window and byte bounds; their stripped checkpoints are not enough.
+The version change makes those records eligible for the existing bounded
+qualification on collection. Deploying it to a live collection therefore needs
+the corresponding author-recovery release approval. Reading alone does not
+rewrite stored evidence, saved reports or scoring fingerprints.
 The shared authorship helper owns labels, origin kinds and actor identity; the
 separate author-cue stylesheet owns their restrained color cues.
 **About this prompt & copying** contains human-readable author and

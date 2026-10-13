@@ -289,7 +289,7 @@ for (const uncertainPrefix of [false, true]) test(`source recollection preserves
     for (const file of f.files) {
         const events = (await readFile(file, "utf8")).trim().split("\n").map(JSON.parse);
         for (const event of events) if (event.type === "user.message") Object.assign(event.data, {
-            messageId: randomUUID(), delivery: "idle", agentMode: "autopilot",
+            messageId: randomUUID(), delivery: "idle",
             transformedContent: `<current_datetime>${event.timestamp}</current_datetime>\n\n${event.data.content}`,
         });
         if (file === f.files[0]) {

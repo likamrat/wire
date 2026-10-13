@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractScenarios } from "../lib/history.mjs";
-import { readFile, writeFile, rename, open, stat } from "node:fs/promises";
+import { extractScenarios, scanHistory, readEventWindow } from "../lib/history.mjs";
+import { readFile, writeFile, appendFile, rename, open, stat } from "node:fs/promises";
 import path from "node:path";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
@@ -15,6 +15,8 @@ import { randomUUID } from "node:crypto";
 import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
 import { hash } from "../lib/collector-io.mjs";
 import { ContractError, validateInteraction } from "../lib/assessment-contract.mjs";
+import { scanRecordedGraphHistory, mergeGraphScenarios } from "../lib/graph-history-io.mjs";
+import { mergedRecords } from "../lib/collector.mjs";
 
 function extract(data) {
     return extractScenarios([
@@ -42,11 +44,28 @@ test("observed direct-input host envelope identifies ordinary input without an e
     assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
 });
 
-test("only host-added provenance participates; raw imitations, malformed and conflicting envelopes fail safely", () => {
+test("supported direct host envelope without agentMode keeps the recorded User author through collection and reading", async t => {
+    const app = await promptInstallation(t);
+    const human = app.cases.find(row => row.name === "human");
+    const file = app.sourceFiles[1];
+    const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    delete events.find(event => event.id === human.promptId).data.agentMode;
+    await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const state = await loadBoardState(app.context);
+    const record = state.evidence.find(row => row.scenarioId === human.scenarioId);
+    assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+    const model = buildAssessmentModel(state);
+    const detail = model.details.get(model.catalog.find(row => row.scenarioId === human.scenarioId).interactionRef);
+    assert.equal(promptAuthorship.read(detail.interaction.message).actor, "user");
+});
+
+for (const agentMode of [undefined, "interactive", "plan", "autopilot"]) test(`only host-added provenance participates (${agentMode ?? "mode absent"}); imitations and conflicts fail safely`, () => {
     const content = "Invented content";
     const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
     const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
-    const base = { content, messageId: "00000000-0000-4000-8000-000000000001", agentMode: "autopilot", delivery: "idle" };
+    const base = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle",
+        ...(agentMode === undefined ? {} : { agentMode }) };
     assert.deepEqual(extract({ ...base, transformedContent: stamp + sender + content }).userPrompt.authorship,
         { actor: "agent", basis: "host-agent-envelope" });
     const imitation = sender + content;
@@ -64,6 +83,9 @@ test("only host-added provenance participates; raw imitations, malformed and con
     assert.equal(extract({ ...base, source: "system", transformedContent: stamp + content }).userPrompt.authorship.actor, "unknown");
     assert.equal(promptAuthorship.fromEvent({ type: "user.message", timestamp: "2026-10-06T12:00:00Z",
         data: { ...base, transformedContent: stamp + content } }, { agentCreatedFirstMessage: true }).actor, "unknown");
+    for (const invalidMode of [null, "", "unsupported", {}, true]) {
+        assert.equal(extract({ ...base, agentMode: invalidMode, transformedContent: stamp + content }).userPrompt.authorship.actor, "unknown");
+    }
 });
 
 test("supported host canvas-context suffix is neutral attachment data, not an author claim", () => {
@@ -71,7 +93,7 @@ test("supported host canvas-context suffix is neutral attachment data, not an au
     const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
     const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
     const suffix = "\n\n<canvas-context>Invented attachment. " + sender + "</canvas-context>";
-    const data = { content, messageId: "00000000-0000-4000-8000-000000000001", agentMode: "autopilot", delivery: "idle",
+    const data = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle",
         transformedContent: stamp + content + suffix };
     assert.deepEqual(extract(data).userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
     assert.equal(extract({ ...data, source: "agent-invented" }).userPrompt.authorship.actor, "agent");
@@ -92,7 +114,7 @@ test("fixed host image reminder preserves direct-input provenance without accept
     const content = "Invented request with an attached image.";
     const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
     const suffix = "\n\n<system_reminder>\nThe user mentioned images and they have been attached to this message in the order they were mentioned.\n</system_reminder>";
-    const data = { content, messageId: "00000000-0000-4000-8000-000000000001", agentMode: "autopilot", delivery: "idle",
+    const data = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle",
         transformedContent: stamp + content + suffix };
     assert.deepEqual(extract(data).userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
     for (const invalid of [suffix + suffix, suffix.replace("images", "instructions"), suffix + "\n<extra>untrusted</extra>",
@@ -253,8 +275,7 @@ test("old completed classifier lookups do not strand exact image and system reco
     const before = await loadBoardState(app.context);
     await replaceEvidence(app.context, records => ({ records: records.map(record => [human.scenarioId, system.scenarioId].includes(record.scenarioId)
         ? { ...record, userPrompt: { ...record.userPrompt, authorshipVersion: 3,
-            authorship: { actor: "unknown", basis: record.scenarioId === human.scenarioId ? "invalid-source" : "unsupported-source" } } } : record)
-            .map(record => ({ ...record, graphActivities: record.graphActivities ?? [] })),
+            authorship: { actor: "unknown", basis: record.scenarioId === human.scenarioId ? "invalid-source" : "unsupported-source" } } } : record),
         importCoverage: before.importCoverage }));
     const originalBytes = await readFile(file);
     const old = await loadBoardState(app.context);
@@ -285,6 +306,266 @@ test("old completed classifier lookups do not strand exact image and system reco
     assert.deepEqual(after.deletion, old.deletion);
     await app.runtime().collector.collectNow();
     assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0);
+});
+
+test("author-only recovery preserves the full fingerprint and absent Graph field through late replay and restart", async t => {
+    const app = await promptInstallation(t);
+    const human = app.cases.find(row => row.name === "human");
+    await app.runtime().collector.collectNow();
+    const initial = await loadBoardState(app.context);
+    assert.equal(Object.hasOwn(initial.evidence.find(row => row.scenarioId === human.scenarioId), "graphActivities"), false);
+    await replaceEvidence(app.context, records => ({ records: records.map(record => record.scenarioId === human.scenarioId
+        ? { ...record, userPrompt: { ...record.userPrompt, authorshipVersion: 4,
+            authorship: { actor: "unknown", basis: "invalid-source" } } } : record), importCoverage: initial.importCoverage }));
+    const before = (await loadBoardState(app.context)).evidence.find(row => row.scenarioId === human.scenarioId);
+    const fingerprint = evaluationRecordFingerprint(before);
+    assert.equal(Object.hasOwn(before, "graphActivities"), false);
+    await app.runtime().collector.collectNow();
+    const recovered = (await loadBoardState(app.context)).evidence.find(row => row.scenarioId === human.scenarioId);
+    assert.equal(evaluationRecordFingerprint(recovered), fingerprint);
+    assert.equal(Object.hasOwn(recovered, "graphActivities"), false);
+    assert.deepEqual(recovered, { ...before, userPrompt: { ...before.userPrompt,
+        authorship: { actor: "user", basis: "host-direct-input" }, authorshipVersion: promptAuthorship.version } });
+    await app.restart();
+    await app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(app.context)).evidence.find(row => row.scenarioId === human.scenarioId), recovered);
+    const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const duplicateCompletion = events.find(event => event.type === "tool.execution_complete" && event.data.toolCallId === human.callId);
+    await appendFile(app.sourceFiles[1], JSON.stringify(duplicateCompletion) + "\n");
+    await app.runtime().collector.collectNow();
+    const replayed = (await loadBoardState(app.context)).evidence.find(row => row.scenarioId === human.scenarioId);
+    assert.equal(evaluationRecordFingerprint(replayed), fingerprint);
+    assert.equal(Object.hasOwn(replayed, "graphActivities"), false);
+    assert.deepEqual(replayed, recovered);
+    await app.restart();
+    await app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(app.context)).evidence.find(row => row.scenarioId === human.scenarioId), recovered);
+});
+
+test("metadata-only merges preserve optional field presence, call ordering and unchanged model facts", () => {
+    const base = { scenarioId: "invented-row", sourceSessionId: "invented-source",
+        userPrompt: { text: "Invented retained message", sourceEventId: "invented-prompt", sourceTimestamp: "2026-10-06T12:00:00Z",
+            status: "full", authorship: { actor: "unknown", basis: "invalid-source" }, authorshipVersion: 4 } };
+    const model = { version: 1, sourceSessionId: base.sourceSessionId, promptEventId: base.userPrompt.sourceEventId,
+        promptMessageId: null, partial: true, ambiguous: false, responses: [] };
+    for (const optional of [{}, { toolCalls: [], graphActivities: [], followUpPrompts: [] },
+        { toolCalls: [{ toolCallId: "invented-call", order: 7 }], graphActivities: [{ activityId: "invented-graph" }],
+            followUpPrompts: [], originalModelEvidence: model, responseTiming: { schemaVersion: 1, status: "unavailable", reason: "missing-final-response" } }]) {
+        const before = { ...base, ...optional };
+        const userPrompt = { ...before.userPrompt, authorship: { actor: "user", basis: "host-direct-input" }, authorshipVersion: 5 };
+        for (const incoming of [{ ...before, userPrompt }, { ...base, userPrompt }]) {
+            const after = mergedRecords([before], [incoming])[0];
+            assert.deepEqual(after, { ...before, userPrompt });
+            assert.deepEqual(Object.keys(after).sort(), Object.keys(before).sort());
+            assert.equal(evaluationRecordFingerprint(after), evaluationRecordFingerprint(before));
+        }
+    }
+});
+
+test("author corrections still merge explicit empty Graph and genuinely new Graph, tool, model and timing facts", () => {
+    const before = { scenarioId: "invented-row", sourceSessionId: "invented-source",
+        userPrompt: { text: "Invented retained message", sourceEventId: "invented-prompt", sourceTimestamp: "2026-10-06T12:00:00Z",
+            status: "full", authorship: { actor: "unknown", basis: "invalid-source" }, authorshipVersion: 4 },
+        toolCalls: [{ toolCallId: "invented-call", order: 1 }],
+        originalModelEvidence: { version: 1, sourceSessionId: "invented-source", promptEventId: "invented-prompt",
+            promptMessageId: "invented-message", partial: true, ambiguous: false, responses: [] } };
+    const userPrompt = { ...before.userPrompt, authorship: { actor: "user", basis: "host-direct-input" }, authorshipVersion: 5 };
+    const explicitEmpty = mergedRecords([before], [{ ...before, userPrompt, graphActivities: [] }])[0];
+    assert.equal(Object.hasOwn(explicitEmpty, "graphActivities"), true);
+    assert.deepEqual(explicitEmpty.graphActivities, []);
+    assert.notEqual(evaluationRecordFingerprint(explicitEmpty), evaluationRecordFingerprint(before),
+        "Actually recorded empty Graph remains distinct from absent Graph; the fingerprint contract is unchanged");
+    const incoming = { ...before, userPrompt,
+        toolCalls: [{ toolCallId: "invented-call", order: 1, completionEventId: "invented-completion", durationMs: 100 },
+            { toolCallId: "invented-later-call", order: 2 }],
+        graphActivities: [{ activityId: "invented-graph", toolCallId: "invented-graph-call", httpStatus: 200 }],
+        originalModelEvidence: { ...before.originalModelEvidence, partial: false, responses: [
+            { eventId: "invented-answer", apiCallId: "invented-model-request", at: "2026-10-06T12:00:01Z",
+                turnId: "invented-turn", model: "invented-original-model", modelStatus: "recorded" },
+        ] },
+        responseTiming: { schemaVersion: 1, status: "measured", durationMs: 1000,
+            promptEventId: "invented-prompt", finalEventId: "invented-answer", completionEventId: "invented-turn-end" } };
+    const after = mergedRecords([before], [incoming])[0];
+    assert.deepEqual(after.userPrompt, userPrompt);
+    assert.deepEqual(after.toolCalls, incoming.toolCalls);
+    assert.deepEqual(after.graphActivities, incoming.graphActivities);
+    assert.deepEqual(after.originalModelEvidence.responses, incoming.originalModelEvidence.responses);
+    assert.deepEqual(after.responseTiming, incoming.responseTiming);
+    assert.notEqual(evaluationRecordFingerprint(after), evaluationRecordFingerprint(before));
+});
+
+test("qualified mode-free authors survive a stale checkpoint and late activity without another original-event lookup", async t => {
+    const app = await promptInstallation(t);
+    const human = app.cases.find(row => row.name === "human");
+    const file = app.sourceFiles[1];
+    const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    delete events.find(event => event.id === human.promptId).data.agentMode;
+    await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const before = await loadBoardState(app.context);
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json");
+    await replaceEvidence(app.context, records => ({ records: records.map(record => record.scenarioId === human.scenarioId
+        ? { ...record, userPrompt: { ...record.userPrompt, authorshipVersion: 4,
+            authorship: { actor: "unknown", basis: "invalid-source" } } } : record), importCoverage: before.importCoverage }));
+    await app.restart(async () => {
+        const index = JSON.parse(await readFile(indexFile, "utf8"));
+        const checkpointFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${app.child}.json`);
+        const checkpoint = JSON.parse(await readFile(checkpointFile, "utf8"));
+        const prompt = checkpoint.events.find(event => event.id === human.promptId);
+        assert.ok(prompt, "The fixture keeps the original prompt in the incremental checkpoint");
+        prompt.data.wirePromptAuthorship = { actor: "unknown", basis: "invalid-source" };
+        prompt.data.wirePromptAuthorshipVersion = 4;
+        await writeFile(checkpointFile, JSON.stringify(checkpoint));
+    });
+    await app.runtime().collector.collectNow();
+    const qualified = await loadBoardState(app.context);
+    const corrected = qualified.evidence.find(row => row.scenarioId === human.scenarioId).userPrompt;
+    assert.deepEqual(corrected.authorship, { actor: "user", basis: "host-direct-input" });
+    assert.equal(corrected.authorshipVersion, promptAuthorship.version);
+    const index = JSON.parse(await readFile(indexFile, "utf8"));
+    await app.restart();
+    await appendFile(file, JSON.stringify({ id: randomUUID(), type: "tool.execution_complete",
+        timestamp: new Date().toISOString(), data: { toolCallId: human.callId, success: true } }) + "\n");
+    await app.runtime().collector.collectNow();
+    const after = await loadBoardState(app.context);
+    assert.deepEqual(after.evidence.find(row => row.scenarioId === human.scenarioId).userPrompt, corrected);
+    const afterIndex = JSON.parse(await readFile(indexFile, "utf8"));
+    assert.deepEqual(afterIndex.sources[app.child].promptEventQualification, index.sources[app.child].promptEventQualification);
+});
+
+for (const changed of ["timestamp", "text"]) test(`source replacement with changed prompt ${changed} invalidates retained authorship through restart and late completion`, async t => {
+    const app = await promptInstallation(t);
+    const human = app.cases.find(row => row.name === "human");
+    await app.runtime().collector.collectNow();
+    const before = await loadBoardState(app.context);
+    const retained = before.evidence.find(row => row.scenarioId === human.scenarioId);
+    assert.equal(retained.userPrompt.authorship.actor, "user");
+    const file = app.sourceFiles[1];
+    const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    events[0].id = randomUUID();
+    const replacement = events.find(event => event.id === human.promptId);
+    replacement.data.source = "agent-invented-replacement";
+    if (changed === "timestamp") replacement.timestamp = new Date(Date.parse(replacement.timestamp) + 1).toISOString();
+    else replacement.data.content = "Invented replacement message, not the retained original.";
+    replacement.data.transformedContent = `<current_datetime>${replacement.timestamp}</current_datetime>\n\n${replacement.data.content}`;
+    await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const after = await loadBoardState(app.context);
+    const record = after.evidence.find(row => row.scenarioId === human.scenarioId);
+    assert.deepEqual(record.userPrompt.authorship, { actor: "unknown", basis: "conflicting-source" });
+    assert.deepEqual(record.userPrompt, { ...retained.userPrompt, authorship: record.userPrompt.authorship });
+    assert.deepEqual(record.toolCalls, retained.toolCalls);
+    assert.equal(evaluationRecordFingerprint({ ...retained, userPrompt: record.userPrompt }), evaluationRecordFingerprint(retained),
+        "Author invalidation does not change scoring identity; source replacement may independently change timing or Graph availability");
+    assert.deepEqual(after.deletion, before.deletion);
+    await app.restart();
+    await appendFile(file, JSON.stringify({ id: randomUUID(), type: "tool.execution_complete",
+        timestamp: new Date().toISOString(), data: { toolCallId: human.callId, success: true } }) + "\n");
+    await app.runtime().collector.collectNow();
+    const late = (await loadBoardState(app.context)).evidence.find(row => row.scenarioId === human.scenarioId);
+    assert.deepEqual(late.userPrompt, record.userPrompt);
+    const followup = (await loadBoardState(app.context)).evidence
+        .find(row => row.scenarioId === app.cases[0].scenarioId).followUpPrompts.find(prompt => prompt.sourceEventId === human.promptId);
+    assert.deepEqual(followup.authorship, { actor: "unknown", basis: "conflicting-source" });
+    assert.equal(followup.text, retained.userPrompt.text);
+    assert.equal(followup.sourceTimestamp, retained.userPrompt.sourceTimestamp);
+    const settled = (await loadBoardState(app.context)).evidence;
+    await app.runtime().collector.collectNow();
+    assert.deepEqual((await loadBoardState(app.context)).evidence, settled);
+    assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0);
+});
+
+test("manual Graph scan cannot promote an agent-created first prompt whose creator qualification is unavailable", async t => {
+    const app = await promptInstallation(t);
+    const file = app.sourceFiles[1], kickoff = app.cases[0];
+    const events = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const first = events.findIndex(event => event.id === kickoff.promptId), original = events[first];
+    original.data.transformedContent = `<current_datetime>${original.timestamp}</current_datetime>\n\n${original.data.content}`;
+    events.splice(first + 1, 0,
+        { id: randomUUID(), type: "tool.execution_start", timestamp: new Date(Date.parse(original.timestamp) + 1).toISOString(),
+            data: { toolName: "powershell", toolCallId: "invented-first-graph", arguments: { command: "curl 'https://graph.microsoft.com/v1.0/me/messages'" } } },
+        { id: randomUUID(), type: "tool.execution_complete", timestamp: new Date(Date.parse(original.timestamp) + 2).toISOString(),
+            data: { toolCallId: "invented-first-graph", success: true, result: { content: "HTTP/2 200" } } });
+    await writeFile(file, events.map(event => JSON.stringify(event) + "\n").join(""));
+    await rename(app.sourceFiles[0], app.sourceFiles[0] + ".missing");
+    await app.runtime().collector.collectNow();
+    const before = await loadBoardState(app.context);
+    const retained = before.evidence.find(record => record.scenarioId === kickoff.scenarioId);
+    assert.deepEqual(retained.userPrompt.authorship, { actor: "unknown", basis: "missing-source" });
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json");
+    const index = JSON.parse(await readFile(indexFile, "utf8"));
+    assert.equal(index.sources[app.child].promptQualification.reason, "creator-history-missing");
+    const source = discoverSources(app.config).roster.find(row => row.sessionId === app.child);
+    const since = new Date(Date.now() - 86400000).toISOString(), until = new Date().toISOString();
+    const inventoryPath = path.join(app.root, "invented-inventory.json");
+    await writeFile(inventoryPath, JSON.stringify([{ id: app.child, name: "Invented mapped agent child" }]));
+    const manual = await scanHistory({ inventoryPath, appDbPath: app.config.appDbPath, sessionRoot: app.config.sessionRoot, since, until });
+    assert.deepEqual(manual.roster[0].promptCreation, source.promptCreation);
+    assert.deepEqual(manual.scenarios.find(record => record.scenarioId === kickoff.scenarioId).userPrompt.authorship, retained.userPrompt.authorship);
+    const scan = await scanRecordedGraphHistory({ sources: manual.roster, sessionRoot: app.config.sessionRoot, since, until });
+    const scanned = scan.scenarios.find(record => record.scenarioId === kickoff.scenarioId);
+    assert.deepEqual(scanned.userPrompt.authorship, retained.userPrompt.authorship);
+    const merged = mergeGraphScenarios(before.evidence, scan.scenarios);
+    assert.deepEqual(merged.find(record => record.scenarioId === kickoff.scenarioId).userPrompt, retained.userPrompt);
+    await replaceEvidence(app.context, () => ({ records: merged, importCoverage: before.importCoverage }));
+    await app.restart();
+    await app.runtime().collector.collectNow();
+    const after = await loadBoardState(app.context);
+    assert.deepEqual(after.evidence.find(record => record.scenarioId === kickoff.scenarioId).userPrompt, retained.userPrompt);
+    assert.deepEqual(JSON.parse(await readFile(indexFile, "utf8")).sources[app.child].promptQualification,
+        index.sources[app.child].promptQualification);
+    assert.equal(evaluationRecordFingerprint({ ...retained, userPrompt: after.evidence.find(record => record.scenarioId === kickoff.scenarioId).userPrompt }),
+        evaluationRecordFingerprint(retained), "Author qualification does not change scoring identity");
+    assert.deepEqual(after.deletion, before.deletion);
+    await app.runtime().collector.collectNow();
+    assert.equal((await app.runtime().collector.status()).metrics.lastBytesRead, 0, "Terminal unavailable creator lookup is not reopened");
+});
+
+for (const gap of ["after-first", "before-first", "windowed-after-first", "non-event-before-first"]) test(`manual Work IQ-only import preserves qualified prefix authorship (${gap})`, async t => {
+    const app = await promptInstallation(t);
+    const first = app.cases[0], human = app.cases.find(row => row.name === "human"), agent = app.cases.find(row => row.name === "agent");
+    const file = app.sourceFiles[1];
+    const original = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const initialPrompt = original.find(event => event.id === first.promptId);
+    initialPrompt.data.transformedContent = `<current_datetime>${initialPrompt.timestamp}</current_datetime>\n\n${initialPrompt.data.content}`;
+    const followup = original.find(event => event.id === human.promptId);
+    const later = original.filter(event => [human.promptId, agent.promptId].includes(event.id)
+        || [human.callId, agent.callId].includes(event.data?.toolCallId));
+    const early = gap.includes("before-first");
+    const broken = gap === "non-event-before-first" ? "null" : "invented malformed JSON";
+    const text = [JSON.stringify(original[0]), ...(early ? [broken] : []), JSON.stringify(initialPrompt),
+        ...(!early ? [broken] : []), ...later.map(event => JSON.stringify(event))].join("\n") + "\n";
+    await writeFile(file, text);
+    const inventoryPath = path.join(app.root, "invented-inventory.json");
+    await writeFile(inventoryPath, JSON.stringify([{ id: app.child, name: "Invented Work IQ-only child" }]));
+    const since = gap === "windowed-after-first" ? followup.timestamp : new Date(Date.now() - 86400000).toISOString();
+    const until = new Date().toISOString();
+    const imported = await scanHistory({ inventoryPath, appDbPath: app.config.appDbPath, sessionRoot: app.config.sessionRoot,
+        since, until });
+    assert.equal(imported.scenarios.length, 2);
+    assert.equal(imported.roster[0].malformedLines, gap === "non-event-before-first" ? 0 : 1);
+    const record = imported.scenarios.find(row => row.scenarioId === human.scenarioId);
+    assert.deepEqual(record.userPrompt.authorship, early
+        ? { actor: "unknown", basis: "missing-source" } : { actor: "user", basis: "host-direct-input" });
+    assert.deepEqual(imported.scenarios.find(row => row.scenarioId === agent.scenarioId).userPrompt.authorship,
+        { actor: "agent", basis: "source-agent" });
+    assert.equal(record.userPrompt.authorshipVersion, promptAuthorship.version);
+    assert.equal(record.userPrompt.text, followup.data.content);
+    assert.equal(record.graphActivities, undefined, "No Graph projection participates in this proof");
+    assert.equal(record.originalModelEvidence.truncated, true, "Correct authorship does not make incomplete model/history evidence complete");
+    if (gap === "after-first") {
+        const tail = await readEventWindow(file, Buffer.byteLength(later.map(event => JSON.stringify(event)).join("\n") + "\n") + 1);
+        assert.equal(tail.tailTruncated, true);
+        assert.equal(tail.firstPromptEventId, null);
+        const extracted = extractScenarios(tail.events, imported.roster[0], since, until, {
+            partialWindow: true, firstPromptEventId: tail.firstPromptEventId,
+        });
+        assert.deepEqual(extracted.scenarios.find(row => row.scenarioId === human.scenarioId).userPrompt.authorship,
+            { actor: "unknown", basis: "missing-source" });
+        assert.deepEqual(extracted.scenarios.find(row => row.scenarioId === agent.scenarioId).userPrompt.authorship,
+            { actor: "agent", basis: "source-agent" });
+    }
+    assert.equal(await readFile(file, "utf8"), text);
 });
 
 test("targeted qualification stops at its byte budget and resumes rather than rescanning a creator", async t => {
@@ -382,6 +663,28 @@ test("missing, conflicting and invalid metadata never fall back to wording or ro
     assert.equal(promptAuthorship.read({ provenance: "human-authored" }).actor, "unknown");
 });
 
+test("only older format gaps yield to a newer qualified author; current gaps and conflicting authors remain unknown", () => {
+    const previous = { authorship: { actor: "user", basis: "host-direct-input" }, authorshipVersion: promptAuthorship.version };
+    for (const basis of ["invalid-source", "unsupported-source"]) {
+        const old = { authorship: { actor: "unknown", basis }, authorshipVersion: 4 };
+        assert.deepEqual(promptAuthorship.merge(previous, old), previous.authorship);
+        assert.deepEqual(promptAuthorship.merge(previous, { ...old, authorshipVersion: promptAuthorship.version }), old.authorship);
+    }
+    for (const authorship of [{ actor: "agent", basis: "source-agent" }, { actor: "unknown", basis: "conflicting-source" }]) {
+        assert.deepEqual(promptAuthorship.merge(previous, { authorship, authorshipVersion: 4 }),
+            { actor: "unknown", basis: "conflicting-source" });
+    }
+    assert.deepEqual(promptAuthorship.merge(previous, { authorship: { actor: "unknown", basis: "system-source" }, authorshipVersion: 4 }),
+        { actor: "unknown", basis: "system-source" });
+    const recorded = { ...previous, sourceEventId: "invented-event", sourceTimestamp: "2026-10-06T12:00:00Z", text: "Invented retained message" };
+    for (const authorshipVersion of [4, promptAuthorship.version + 1]) {
+        for (const changed of [{ sourceTimestamp: "2026-10-06T12:00:01Z" }, { text: "Invented different message" }]) {
+            assert.deepEqual(promptAuthorship.merge(recorded, { ...recorded, ...changed, authorshipVersion,
+                authorship: { actor: "unknown", basis: "invalid-source" } }), { actor: "unknown", basis: "conflicting-source" });
+        }
+    }
+});
+
 test("real collector retains author evidence, qualifies kickoffs and survives restart without source rewrites", async t => {
     const app = await promptInstallation(t);
     const original = await Promise.all(app.sourceFiles.map(file => readFile(file)));
@@ -410,4 +713,26 @@ test("real collector retains author evidence, qualifies kickoffs and survives re
     await app.runtime().collector.collectNow();
     assert.deepEqual((await loadBoardState(app.context)).evidence, state.evidence);
     assert.deepEqual(await Promise.all(app.sourceFiles.map(file => readFile(file))), original);
+});
+
+test("same event ID and text in another source cannot change an ordinary follow-up author", async t => {
+    const app = await promptInstallation(t);
+    const human = app.cases.find(row => row.name === "human");
+    const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const original = events.find(event => event.id === human.promptId);
+    await appendFile(app.sourceFiles[0], [
+        { ...original, data: { ...original.data, source: "agent-invented-subscribed-sender" } },
+        { id: randomUUID(), type: "tool.execution_start", timestamp: new Date(Date.parse(original.timestamp) + 1).toISOString(),
+            data: { toolName: "workiq-ask", toolCallId: "invented-other-source-call", arguments: { question: "Invented question" } } },
+    ].map(event => JSON.stringify(event) + "\n").join(""));
+    await app.runtime().collector.collectNow();
+    const records = (await loadBoardState(app.context)).evidence;
+    const child = records.find(record => record.scenarioId === human.scenarioId);
+    const parent = records.find(record => record.sourceSessionId === app.parent && record.userPrompt.sourceEventId === human.promptId);
+    assert.deepEqual(child.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+    assert.deepEqual(parent.userPrompt.authorship, { actor: "agent", basis: "source-agent" });
+    const followup = records.find(record => record.scenarioId === app.cases[0].scenarioId).followUpPrompts
+        .find(prompt => prompt.sourceEventId === human.promptId);
+    assert.deepEqual(followup.authorship, child.userPrompt.authorship);
+    assert.equal(followup.authorshipVersion, child.userPrompt.authorshipVersion);
 });
