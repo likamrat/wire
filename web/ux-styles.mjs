@@ -1,18 +1,24 @@
 export const uxStyles = `
-.progress-slot {display:inline-block;width:1em;height:1em;margin-inline-end:.5em;vertical-align:-.12em;visibility:hidden}
+:where(details>summary).ux-disclosure {list-style:none}
+:where(details>summary).ux-disclosure::-webkit-details-marker {display:none}
+.ux-disclosure>.disclosure-icon {margin-inline-end:4px;vertical-align:calc((1cap - 16px)/2)}
+:where(details[open]>summary) .disclosure-icon {transform:rotate(90deg)}
+.progress-slot {display:inline-block;width:16px;height:16px;margin-inline-end:.5em;vertical-align:calc((1cap - 16px)/2);visibility:hidden}
 .progress-slot-trailing {margin-inline:.5em 0}
 .progress-slot-trailing:not(.pending-indicator) {display:none}
-.pending-indicator {box-sizing:border-box;visibility:visible;border:2px solid currentColor;border-inline-end-color:transparent;border-radius:50%;animation:evidence-pending .8s linear infinite;flex-shrink:0}
-.pending-indicator>* {visibility:hidden}
+.pending-indicator {visibility:visible;animation:evidence-pending .8s linear infinite;flex-shrink:0}
+.progress-slot>.fluent-icon {display:block}
 @keyframes evidence-pending {to {transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce) {.pending-indicator {animation:none;border-style:dotted}}
+@media(prefers-reduced-motion:reduce) {.pending-indicator {animation:none}}
 .fluent-icon {display:inline-block;flex:none;vertical-align:middle;fill:currentColor;width:var(--icon-size);height:var(--icon-size)}
 .fluent-icon[data-fluent-icon*="_16_"] {width:var(--icon-size-small);height:var(--icon-size-small)}
 .fluent-icon[data-fluent-icon*="_24_"] {width:24px;height:24px}
+.fluent-icon.progress-icon-large {width:24px;height:24px}
+.fluent-icon.disclosure-icon {vertical-align:calc((1cap - 16px)/2)}
 .icon-action,.filter-chip {display:inline-flex;align-items:center;justify-content:center;gap:var(--pill-gap)}
 .icon-action>.fluent-icon,.filter-chip>.fluent-icon {display:block;flex:none}
-:where(button,.button-link):has(>.progress-slot) {position:relative;display:inline-flex;align-items:center;justify-content:center;text-align:center}
-:where(button,.button-link)>.progress-slot {position:absolute;inset-inline-start:1px;margin:0;width:10px;height:10px;border-width:1.5px}
+:where(button,.button-link):has(>.progress-slot) {--action-progress-inset:12px;position:relative;display:inline-flex;align-items:center;justify-content:center;text-align:center;padding-inline:calc(var(--pill-inset) + var(--action-progress-inset))}
+:where(button,.button-link)>.progress-slot {position:absolute;inset-inline-start:4px;margin:0;width:16px;height:16px}
 p {max-width:72ch}
 .brand {display:inline-flex;flex-direction:column;align-items:flex-start;gap:0;min-width:0;max-width:100%;white-space:normal;font-size:var(--type-brand);line-height:1.4;font-weight:var(--weight-strong);letter-spacing:-.015em}
 .brand-home {display:block;max-width:100%}
@@ -42,7 +48,6 @@ p {max-width:72ch}
 .request-link {font-size:var(--type-body);line-height:1.6}
 .request-intro p,.report-document {font-size:var(--type-reading);line-height:var(--leading-reading)}
 .request-intro .muted {font-size:var(--type-caption)}
-#activityCount {font-size:var(--type-metric);letter-spacing:-.03em}
 code,kbd,samp,.mono,pre {font-family:var(--mono);font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0;letter-spacing:0}
 code,kbd,samp,.mono {font-size:var(--type-small);line-height:1.6}
 code {overflow-wrap:anywhere}

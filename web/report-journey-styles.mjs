@@ -105,8 +105,6 @@ export const reportJourneyStyles = `
 .saved-report-name{font-weight:var(--weight-strong)}
 .saved-report-metadata,.saved-report-disambiguation{color:var(--muted)}
 .saved-report-manage{display:flex;align-items:center;gap:8px;padding-inline-end:3px;color:var(--accent);min-height:44px}
-.saved-report-manage:after{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg)}
-[open]>.saved-report-summary .saved-report-manage:after{transform:rotate(225deg)}
 .saved-library-row>button{min-height:44px;align-self:center}
 .saved-library-row:has(>details[open])>button{align-self:start}
 .saved-report-management{padding:12px 0;overflow-wrap:anywhere}

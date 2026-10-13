@@ -34,8 +34,7 @@ export const analyzeLayoutStyles = `
 #analyzePopulation #collectionNotice {margin:0;padding:0;gap:4px 12px;background:none;border:0}
 #analyzePopulation #collectionNotice p {font-size:var(--type-small)}
 #workspace>#periodFeedback.home-period-summary {margin:0 0 16px;gap:8px 24px;justify-content:space-between;max-width:none}
-#periodFeedback #periodResult {font-size:var(--type-section)}
-#periodFeedback #activityCount {font-size:1.75rem;line-height:1.25;font-weight:var(--weight-strong)}
+#periodFeedback #periodResult {font-size:var(--type-data-value);line-height:var(--leading-data-value)}
 #periodFeedback #periodHint {margin-top:2px}
 #homeView {container:analyze-view / inline-size}
 .analyze-dashboard {min-width:0}
@@ -73,6 +72,14 @@ export const analyzeLayoutStyles = `
 #homeFindings:has(>.assessment-findings[hidden]) {display:none}
 #homeFindings .assessment-findings {margin:0;font-size:var(--type-small)}
 #homeFindings .assessment-finding-limit {font-size:var(--type-caption)}
+#homeFindings .assessment-widget-links {display:flex;flex-wrap:wrap;gap:4px 20px;align-items:center}
+#homeFindings .assessment-widget-links[hidden] {display:none}
+#homeFindings .assessment-widget-link {display:flex;flex-wrap:wrap;gap:0 8px;align-items:center;min-width:0}
+#homeFindings .assessment-widget-link>button {color:var(--accent);padding-inline:0;border-color:transparent;font-size:var(--type-small)}
+#homeFindings .assessment-widget-status {color:var(--muted);font-variant-numeric:tabular-nums}
+#homeFindings .assessment-widget-status.negative {color:var(--performance-red)}
+#homeFindings .assessment-widget-status+.assessment-widget-status::before {content:"\\00b7";margin-right:8px;color:var(--muted)}
+#homeFindings .assessment-widget-links>.assessment-finding-limit {flex-basis:100%;margin:0}
 .analyze-review-details {min-width:0;max-width:100%;margin-top:var(--space-sm)}
 .analyze-review-details>summary {width:fit-content;max-width:100%;min-height:44px;align-content:center;cursor:pointer;color:var(--accent);font-size:var(--type-control);overflow-wrap:anywhere}
 .analyze-review #homeInsights {margin:var(--space-sm) 0 0}
@@ -128,7 +135,6 @@ export const analyzeLayoutStyles = `
  #analyzePopulation .fresh-result {flex-basis:100%;padding-block:4px}
  #outcomeChart>.percentage-card,#percentageCharts .percentage-card {padding:16px}
  .analyze-chart-main .chart-panel {padding-inline:16px}
- #periodFeedback #activityCount {font-size:1.5rem}
 }
 #homeView[data-empty=true]>.analyze-dashboard,
 #homeView[data-empty=true]>.analyze-review {display:none}

@@ -134,11 +134,12 @@ test("Calls identify the tool and labeled result, with concise sorting and exact
     assert.ok(Math.abs((await link.boundingBox()).y - position.y) < 3);
     if (proofs) await writeFile(path.join(proofs, "call-presentation.json"), JSON.stringify({ geometry, sortCopy, detail,
         archivePrompt: archive.userPrompt, nativeScrollbar: await page.evaluate(() => innerWidth - document.documentElement.clientWidth) }, null, 2));
-    assert.match(geometry.text, /Who sent this was not recorded/, "Missing sender evidence is honest, not guessed from prompt prose");
+    await expect(target.locator(".full-text-preview-label")).toHaveText("Prompt");
+    await expect(target.locator(".full-text-preview-label")).toHaveAttribute("data-prompt-actor", "unknown");
     assert.doesNotMatch(sortCopy, /canonical record ID|for one record, not task latency/, "Implementation mechanics must not dominate the sort bar");
     assert.ok(geometry.tool.y > geometry.card.y, "The actual prompt leads the separately labeled call facts");
-    await expect(target.locator(".activity-card-facts>div").filter({ has: page.locator("dt", { hasText: /^Tool completion:$/ }) }))
-        .toContainText("1 Worked");
+    await expect(target.locator(".card-outcomes")).toHaveAccessibleName("Tool completion: 1 Work IQ tool call");
+    await expect(target.locator(".card-outcomes")).toHaveText("1 Worked");
     const failed = page.locator(".matched-action").filter({ has: page.locator('.request-link[href*="harbor-planning"]') });
     await expect(failed.locator(".action-error")).toHaveText("Reported HTTP 401: SignInRequired");
     await expect(failed.locator("[data-outcome=failure]")).toHaveAttribute("data-count", "1");
@@ -205,7 +206,7 @@ test("overlapping aliases retain matching versus outside context without duplica
     second.userPrompt.text = "Synthetic overlapping request";
     const { page } = await setup(t, [first, second]);
     const card = page.locator("#activityList .request-row").filter({ hasText: "Synthetic overlapping request" });
-    await expect(card).toContainText("1 of 2 Work IQ tool calls matches this view");
+    await expect(card).toContainText("1 of 2 Work IQ tool calls in this view");
     await card.locator(".request-link").click(); await ready(page);
     await expect(page.locator(".journey-item .action-context").filter({ hasText: "1 matching" })).toHaveCount(1);
     await expect(page.locator(".journey-item .action-context").filter({ hasText: "Outside current view" })).toHaveCount(1);

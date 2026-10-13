@@ -131,6 +131,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, icons: dimensionalIcons,
         createLink: (kind, row) => kind === "outcomes" && applied.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
             : kind === "services" ? link("", "activity", { withinServices: [...new Set([...(route.withinServices?.split(",") || []), row.id])].sort().join(","), page: undefined })
+                : kind === "service-purpose" ? link("", "activity", { endpoint: "operation:workiq-retrieve", page: undefined })
+                    : kind === "service-preparation" ? link("", "activity", { service: "Discovery", page: undefined })
                 : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined }) : null });
     $("analyzePopulation").append($("filters"), $("filterChips"), $("serviceFocus"), $("freshActivity"), $("collectionNotice"));
     $("freshHelpBody").append($("activityCollectionLink"));
@@ -1049,7 +1051,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return scenario?.toolCalls?.find(tool => tool.toolCallId ? tool.toolCallId === row.toolCallId
             : (row.parentCallId || row.id) === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
     }
-    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false } = {}) {
+    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false } = {}) {
         const node = el("div", "recorded-results");
         node.dataset.resultLayer = layer;
         node.setAttribute("role", "group");
@@ -1061,11 +1063,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             node.append(unavailable);
             return node;
         }
-        const single = compactSingle && summary.count === 1;
+        const compact = pillsOnly || compactSingle && summary.count === 1;
         const unit = el("strong", "result-unit");
         unit.append(metadata.item(label || results.countLabel(layer, summary.count, total), explanation ? { helpLabel: "recorded tool result", help: explanation } : {}));
-        const values = heading && !single ? el("div", "result-values") : node;
-        if (single) {
+        const values = heading && !compact ? el("div", "result-values") : node;
+        if (compact) {
             node.classList.add("result-inline");
             node.setAttribute("aria-label", `${heading || scope}: ${results.countLabel(layer, summary.count, total)}`);
         } else if (heading) {
@@ -1092,9 +1094,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!summary.count) values.append(el("span", "muted", "None in this scope"));
         return node;
     }
-    function matchingResults(scenarioId) {
+    function matchingResults(scenarioId, { compact = false } = {}) {
         const rows = rowsFor(scenarioId), full = results.summarize(fullRowsFor(scenarioId));
-        return resultLine(applied.layer, results.summarize(rows), { total: full?.count ?? null, scope: "Matching results only" });
+        const matching = results.summarize(rows);
+        const node = resultLine(applied.layer, matching, { total: full?.count ?? null, scope: "Matching results only", pillsOnly: compact });
+        if (compact && full && matching && matching.count !== full.count) {
+            node.prepend(el("span", "card-result-scope", `${count(matching.count)} of ${count(full.count)} ${results.unit(applied.layer, full.count)} in this view`));
+        }
+        return node;
     }
     function fullResults(host, scenarioId, reportRequest) {
         let shown = false;
@@ -1899,7 +1906,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("periodResult").dataset.revision = String(state.revision);
         setText($("periodHint"), isStale ? "The update failed. The last applied period is still shown; retry before using these results."
             : !state.scenarios.length && !collection?.config ? "No activity has been collected."
-                : model.requests ? `${count(model.requests)} ${applied.layer === "http" ? "record group" : "interaction"}${model.requests === 1 ? "" : "s"} · ${applied.filters.from || applied.filters.to ? `${applied.filters.from ? date(applied.filters.from, true) : "Beginning"} - ${applied.filters.to ? date(applied.filters.to, true) : "Latest retained"}` : "All retained dates"} · ${applied.layer === "http" ? `${count(model.sessions)} recorder sources` : chatCopy.count(model.sessions)}`
+                : model.requests ? `${count(model.requests)} ${applied.layer === "http" ? "record group" : "interaction"}${model.requests === 1 ? "" : "s"} · ${applied.layer === "http" ? `${count(model.sessions)} recorder sources` : chatCopy.count(model.sessions)}`
                     : model.next);
         $("periodHint").hidden = !rows.length && !isStale;
         setText($("periodCoverageText"), model.warning);
@@ -2163,9 +2170,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const scenarios = currentViewScenarios();
         const ids = new Set(scenarios.map(item => item.scenarioId));
         const rows = selectionRows().filter(row => ids.has(row.scenarioId));
-        const scopeNote = `${count(ids.size)} selected ${ids.size === 1 ? "request" : "requests"}, with all their recorded calls; ${count(rows.length)} ${results.unit(applied.layer, rows.length)} matched the filters.`;
         setText($("homeInsightScope"), `${chatCopy.groups(ids.size, applied.layer === "http")} across all pages; full retained interactions, not only matched ${results.unit(applied.layer, 2)}.`);
-        assessmentUI.overview(host, [...ids], { scopeNote, findingsHost: $("homeFindings") });
+        assessmentUI.overview(host, [...ids], { findingsHost: $("homeFindings"),
+            matchedCallCount: applied.layer === "tool" ? rows.length : null });
     }
     function revealResults() {
         $("activityTitle").focus({ preventScroll: true });
@@ -2281,8 +2288,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const unlinked = selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId)).length;
         const groups = `${count(scenarios.length)} ${applied.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
         $("activityListSummary").textContent = (calls
-            ? `From ${groups}; current filters and search apply.${applied.layer === "tool" ? " Tool completion is not answer correctness." : ""}`
-            : `${groups} with ${count(selectionRows().length)} matching ${results.unit(applied.layer, selectionRows().length)} across all pages. Filters and private search apply to the overview and both lists. Opening an interaction includes its full retained evidence.`)
+            ? `${count(selectionRows().length)} ${results.unit(applied.layer, selectionRows().length)} from ${groups}.`
+            : `${groups} with ${count(selectionRows().length)} matching ${results.unit(applied.layer, selectionRows().length)}.`)
             + (unlinked ? ` ${count(unlinked)} records have no retained interaction; they remain available in Calls.` : "");
         $("activityListSummary").hidden = selectionRows().length === 0;
         host.replaceChildren();
@@ -2342,12 +2349,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const call = sourceCallFor(row);
         const recordedLabel = applied.layer === "code-reference" ? "Reference recorded" : applied.layer === "reported-api" ? "Parent call recorded"
             : ["direct-request", "recorded-http"].includes(applied.layer) ? "Request site recorded" : "Action recorded";
-        if (scenario) card.append(textAccess.render(scenario.userPrompt, { key: "action:" + row.id, originKind: authorship.originKind(scenario),
+        if (scenario) card.append(textAccess.render(scenario.userPrompt, { key: "action:" + row.id, originKind: authorship.originKind(scenario), compactProvenance: true,
             navigationNode: link(applied.layer === "tool" ? "Open exact call in context" : "Open exact record in context",
                 "request", { request: scenario.scenarioId, call: row.id,
                     callRevision: applied.layer === "reported-api" ? String(state.revision) : undefined }, "request-link text-link"),
         }));
         else card.append(el("p", "muted", "Full request details were not retained."));
+        const composition = el("div", "card-details"), activity = el("div", "card-activity");
         const details = el("dl", "activity-card-facts");
         details.append(cardFact("Tool", cardTools([row], false)));
         let fields;
@@ -2369,22 +2377,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const measured = callInvestigation.duration(row, applied.layer);
         details.append(cardFact(applied.layer === "tool" ? "Call duration" : applied.layer === "reported-api" ? "API result duration" : "Record duration",
             el("span", "call-duration", measured === null ? "Not recorded" : `${count(measured)} ms`)),
-        cardFact(recordedLabel, time.formatMoment(row.startedAt, applied.timeContext)),
-        cardFact(results.heading(applied.layer) || "Result",
-            resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), compactSingle: true })));
+        cardFact(recordedLabel, time.formatMoment(row.startedAt, applied.timeContext)));
         if (analytics.serviceInvolvement?.selection.contextOnlyIds.includes(row.id)) details.append(cardFact("Service scope",
             el("span", "service-context-label", "Missing-service context, not a known match to the selected service.")));
+        const outcome = resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), pillsOnly: true });
+        outcome.classList.add("card-outcomes");
+        activity.append(details, outcome);
         if (["failure", "transport"].includes(row.outcome)) {
             const reason = applied.layer === "http" && row.outcome === "transport" ? "Connection failed; no HTTP response was recorded."
                 : applied.layer === "tool" ? recordedFailure(call, true)
                 : row.status ? `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}. Response body was not retained.`
                     : recordedFailure(call, true);
-            details.append(cardFact("Recorded failure", el("span", "action-error", reason)));
-        } else if (applied.layer !== "tool" || row.outcome !== "success") {
-            details.append(cardFact("Result context", `${row.status ? `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}. ` : ""}${help.resultHelp(row.outcome, applied.layer)}`));
+            activity.append(el("p", "card-result-note action-error",
+                Object.values(help.failureEvidence).includes(reason) ? "Failure reason unavailable." : reason));
+        } else if (row.status) {
+            activity.append(el("p", "card-result-note", `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}`));
         }
-        if (scenario) appendCardSource(details, scenario, { callContext: true });
-        card.append(details);
+        composition.append(activity);
+        if (scenario) {
+            const context = el("dl", "activity-card-facts card-context");
+            appendCardSource(context, scenario, { callContext: true });
+            composition.append(context);
+        }
+        card.append(composition);
         return card;
     }
     function cardKey(label) {
@@ -2411,7 +2426,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const list = el("ul", "interaction-tools");
         for (const [name, total] of tools) {
             const item = el("li");
-            item.append(el("strong", "card-tool-name", name));
+            item.append(el("span", "card-tool-name", name));
             if (showCounts) item.append(el("span", "card-tool-count", `${count(total)} ${results.columnUnit(applied.layer, total)}`));
             list.append(item);
         }
@@ -2442,7 +2457,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const rows = rowsFor(scenario.scenarioId), row = viewKey(el("article", "request-row activity-card"), "request:" + scenario.scenarioId);
         const content = el("div", "interaction-body");
         const requestLink = link("View interaction", "request", { request: scenario.scenarioId }, "request-link text-link");
-        content.append(textAccess.render(scenario.userPrompt, { key: "activity:" + scenario.scenarioId, navigationNode: requestLink, originKind: authorship.originKind(scenario) }));
+        content.append(textAccess.render(scenario.userPrompt, { key: "activity:" + scenario.scenarioId, navigationNode: requestLink, originKind: authorship.originKind(scenario), compactProvenance: true }));
         const services = [...new Set(rows.map(row => row.workload).filter(Boolean))];
         const cue = serviceCue("span", services.length > 1 ? "Multiple workloads" : services[0] || "Unknown");
         cue.lastElementChild.remove();
@@ -2451,12 +2466,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             { label: serviceText, leading: cue, helpWithLabel: true, helpLabel: `${serviceText}; ${applied.layer === "tool" ? "recorded activity categories" : "recorded services"}`, help: categories.used(rows.map(row => row.workload)).map(entry => `${entry.label}: ${entry.description}`).join(" ") || categories.describe("Unknown").description },
         ]);
         meta.classList.add("request-meta");
-        const details = el("dl", "activity-card-facts");
-        details.append(responseTimingFact(scenario), cardFact("Tools in this view", cardTools(rows)),
-            cardFact(applied.layer === "tool" ? "Activity categories" : "Services", meta));
-        appendCardSource(details, scenario);
-        details.append(cardFact("Matching results", matchingResults(scenario.scenarioId)));
-        content.append(details);
+        const composition = el("div", "card-details"), activity = el("div", "card-activity");
+        const details = el("dl", "activity-card-facts"), context = el("dl", "activity-card-facts card-context");
+        details.append(cardFact("Tools in this view", cardTools(rows)),
+            cardFact(applied.layer === "tool" ? "Activity categories" : "Services", meta), responseTimingFact(scenario));
+        appendCardSource(context, scenario);
+        const outcome = matchingResults(scenario.scenarioId, { compact: true });
+        outcome.classList.add("card-outcomes");
+        activity.append(details, outcome);
+        composition.append(activity, context);
+        content.append(composition);
         const selection = el("label", "interaction-select");
         selection.append(selectionCheckbox(scenario));
         row.append(selection, content);
@@ -3466,6 +3485,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         liveSearchUI?.invalidate("Current collection status could not be verified. Search results were cleared.");
         collectionReadError = error;
         collectionReadReason = reason;
+        collectionSettings?.unavailable(error);
         if (reason === "runtime_unavailable") {
             connectionNeedsSnapshot = true;
             isStale = Boolean(analytics);

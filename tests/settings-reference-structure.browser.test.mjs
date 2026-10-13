@@ -148,13 +148,14 @@ test("Settings uses a compact search/category rail and flat pane without changin
         assert.notEqual(measure.selectedFill, "rgba(0, 0, 0, 0)");
     }
     assert.equal(await page.locator('#dataManagementTitle').evaluate(node => node === document.activeElement), true);
-    assert.equal(await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy').count(), 2);
+    assert.equal(await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy').count(), 3);
     assert.equal(await page.locator(".settings-task-row>#deleteActivity").count(), 1);
     assert.equal(await page.locator(".settings-task-row>#recollectActivity").count(), 1);
-    for (const row of await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy').all()) {
+    for (const row of await page.locator('[data-settings-section=privacy] .settings-task-row>.settings-row-copy:has(p)').all()) {
         assert.equal(await row.locator("p").count(), 1, "Each Data management entry has one short purpose/effect, not repeated safety paragraphs");
         assert.ok((await row.locator("p").innerText()).split(/\s+/).length <= 22);
     }
+    await expect(page.locator('[data-settings-section=privacy] a.button-link[href="#reports"]')).toHaveText("Open saved reports");
     assert.equal(await page.locator("#historyWindowHelp").count(), 0);
     if (process.env.WIRE_SETTINGS_REFERENCE_PROOFS) {
         await mkdir(process.env.WIRE_SETTINGS_REFERENCE_PROOFS, { recursive: true });

@@ -102,7 +102,7 @@ test("result drilldown, full request, report scope and history retain exact visi
     assert.match(await page.locator("#viewingContext").innerText(), /2 Work IQ tool calls.*Tool failed/s);
     assert.equal(await page.locator("#activityList .request-row").count(), 2, "Alias-only cards do not duplicate canonical totals");
     assert.deepEqual(await outcomes(mixedCard(page)), { failure: 1 });
-    assert.match(await mixedCard(page).innerText(), /1 of 3 Work IQ tool calls matches this view/);
+    assert.match(await mixedCard(page).innerText(), /1 of 3 Work IQ tool calls in this view/);
     await navigateMain(page, "home"); await ready(page);
     await page.locator(".time-stack").first().click(); await ready(page);
     assert.match(await page.locator("#viewingContext").innerText(), /Tool failed.*Sep/s);
@@ -203,7 +203,7 @@ test("partially overlapping request aliases do not double-count matching timelin
     await page.goto(url + "#activity?scope=all"); await ready(page);
     assert.match(await page.locator("#viewingContext").innerText(), /2 Work IQ tool calls/);
     const card = page.locator("#activityList .request-row").filter({ hasText: "Synthetic overlapping request" });
-    assert.match(await card.innerText(), /1 of 2 Work IQ tool calls matches this view/);
+    assert.match(await card.innerText(), /1 of 2 Work IQ tool calls in this view/);
     await card.locator(".request-link").click(); await ready(page);
     assert.equal(await page.locator(".journey-item .action-context").filter({ hasText: "1 matching" }).count(), 1);
     assert.equal(await page.locator(".journey-item .action-context").filter({ hasText: "Outside current view" }).count(), 1);
@@ -213,16 +213,18 @@ test("partially overlapping request aliases do not double-count matching timelin
 test("source, project and date deep links preserve distinct API, Graph and nonexecution units", { timeout: 60000 }, async t => {
     const { context, url } = await setup(t), page = await context.newPage();
     await page.goto(url + "#activity?layer=reported-api&result=failure&project=test-project&from=2026-09-01&to=2026-09-01"); await ready(page);
-    assert.match(await mixedCard(page).innerText(), /1 of 3 tool-returned API results matches this view.*1 Error result/s);
+    assert.match(await mixedCard(page).innerText(), /1 of 3 tool-returned API results in this view.*1 Error result/s);
     await mixedCard(page).locator(".request-link").click(); await ready(page);
     assert.deepEqual(await outcomes(page.locator(".journey-result").first()), { success: 1 }, "A failed API unit never overwrites its successful parent tool result");
     await page.goto(url + "#activity?layer=code-reference"); await ready(page);
-    assert.match(await page.locator("#activityList").innerText(), /1 of 1 Graph code reference matches this view.*1 Execution not observed/s);
+    assert.match(await page.locator("#activityList").innerText(), /1 Execution not observed/);
+    assert.equal(await page.locator("#activityList .card-result-scope").count(), 0);
     assert.doesNotMatch(await page.locator("#activityList").innerText(), /Worked|Tool failed/);
     await page.locator("#activityList .request-link").click(); await ready(page);
     assert.match(await page.locator(".journey-item").filter({ hasText: "Graph code reference" }).innerText(), /Execution not observed/);
     await page.goto(url + "#activity?layer=direct-request"); await ready(page);
-    assert.match(await page.locator("#activityList").innerText(), /2 of 2 recorded Graph request sites match this view.*1 HTTP 4xx\/5xx.*1 No status recorded/s);
+    assert.match(await page.locator("#activityList").innerText(), /1 HTTP 4xx\/5xx.*1 No status recorded/s);
+    assert.equal(await page.locator("#activityList .card-result-scope").count(), 0);
     await selectActivityOption(page, "layerFilter", "recorded-http"); await ready(page);
     assert.match(await page.locator("#viewingContext").innerText(), /1 Graph request site with visible status/);
     await page.goto(url + "#activity?project=unscoped&result=unknown"); await ready(page);

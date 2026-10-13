@@ -28,11 +28,11 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     status.tabIndex = -1;
-    const details = el("details", undefined, "assessment-capture-details");
-    details.append(el("summary", "What gets saved"), scope, boundary);
+    const details = el("div", undefined, "assessment-capture-details");
+    details.append(scope, boundary);
     actions.append(confirm, cancel, revokePrior, check);
-    form.append(option, revoke, renewalImpact, actions, status);
-    section.append(applied, form, details);
+    form.append(option, details, revoke, renewalImpact, actions, status);
+    section.append(applied, form);
     root.replaceChildren(section);
     let localError = "";
     const locked = snapshot => ["pending", "unknown", "checking", "stale"].includes(snapshot.phase);
@@ -68,6 +68,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
         revokePrior.disabled = locked(snapshot);
         revoke.hidden = state !== "enabled" || snapshot.draft?.enabled !== false;
         renewalImpact.hidden = !inactiveGrant || snapshot.draft?.enabled !== true;
+        details.hidden = snapshot.draft?.enabled !== true;
         status.textContent = localError || (snapshot.phase === "view" ? "" : snapshot.message);
         status.hidden = !status.textContent;
         status.setAttribute("role", localError || ["error", "unknown", "stale"].includes(snapshot.phase) ? "alert" : "status");

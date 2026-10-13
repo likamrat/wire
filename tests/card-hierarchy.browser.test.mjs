@@ -11,6 +11,7 @@ import { promptRecord } from "../lib/prompt-authorship.mjs";
 import { recordedInteractionModels } from "../lib/interaction-model.mjs";
 import { recordedResponseTiming } from "../lib/response-timing.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { contrast, rgb } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_CARD_HIERARCHY_PROOFS;
 const baseline = process.env.WIRE_CARD_HIERARCHY_BASELINE;
@@ -61,6 +62,7 @@ function records() {
         }
         if (id === "empty") record.toolCalls = [];
         if (id === "unnamed") record.toolCalls[0].tool = null;
+        if (id === "archive") record.toolCalls[0].model = "tool-hint";
         if (["retry", "multiple", "long", "conflicting"].includes(id)) {
             const models = ["multiple", "conflicting"].includes(id) ? ["recorded-model-a", "recorded-model-b"]
                 : id === "long" ? ["model-" + "LongRecordedName".repeat(28) + "<img src=x>"] : ["recorded-model-a"];
@@ -79,8 +81,8 @@ function records() {
     });
 }
 
-async function setup(t) {
-    const cleanup = [], data = records(), { context, root } = await privateFixture({ after: fn => cleanup.push(fn) }, data);
+async function setup(t, data = records()) {
+    const cleanup = [], { context, root } = await privateFixture({ after: fn => cleanup.push(fn) }, data);
     const before = await loadBoardState(context);
     let providers = 0;
     const runtime = await serve(context, createExportController(context), {
@@ -128,6 +130,7 @@ async function shot(page, name, card) {
     await card.evaluate(node => scrollBy(0, node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().height - 12));
     await frames(page);
     await page.screenshot({ path: path.join(proofs, `${name}-viewport.png`) });
+    await card.screenshot({ path: path.join(proofs, `${name}-whole-card.png`) });
     await page.evaluate(() => scrollTo(0, 0)); await frames(page);
     await page.screenshot({ path: path.join(proofs, `${name}-page.png`), fullPage: true });
     await writeFile(path.join(proofs, `${name}.txt`), await page.locator("#activityView").ariaSnapshot());
@@ -143,7 +146,7 @@ test("prompt emphasis fits the whole card's reading rhythm in both views", async
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         for (const mode of ["interactions", "calls"]) {
             await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
-            for (const id of ["archive", "multiple", "long"]) {
+            for (const id of ["retry", "archive", "multiple", "missing", "long"]) {
                 const card = mode === "interactions" ? interaction(page, id) : callCard(page, id);
                 await card.evaluate(node => scrollBy(0, node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().height - 12));
                 await frames(page);
@@ -158,6 +161,7 @@ test("prompt emphasis fits the whole card's reading rhythm in both views", async
                         metadataSize: getComputedStyle(card.querySelector("dd")).fontSize,
                         clipped: [...range.getClientRects()].some(box => box.left < rect.left - 1 || box.right > rect.right + 1 || box.bottom > rect.bottom + 1) };
                 });
+
                 const { root } = await cdp.send("DOM.getDocument");
                 const selector = mode === "interactions" ? `[data-view-key="request:hierarchy-${id}"] .full-text-preview`
                     : `.matched-action:has(.request-link[href*="hierarchy-${id}"]) .full-text-preview`;
@@ -180,6 +184,67 @@ test("prompt emphasis fits the whole card's reading rhythm in both views", async
     if (proofs) await writeFile(path.join(proofs, "prompt-rhythm.json"), JSON.stringify(measurements, null, 2));
 });
 
+test("compact author and category help stays aligned, keyboard reachable and separate from other actions", async t => {
+    const { page } = await setup(t);
+    for (const theme of ["light", "dark"]) for (const scale of [1, 2]) {
+        await page.setViewportSize({ width: 375, height: 1000 });
+        await chooseTheme(page, theme);
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        const card = interaction(page, "archive");
+        for (const control of [card.getByRole("button", { name: "About prompt author" }), card.getByRole("button", { name: /^About Files/ })]) {
+            const shape = await control.evaluate(node => {
+                const end = node.closest(".metadata-tail-end") ?? node.querySelector(".metadata-tail-end");
+                const target = node.getBoundingClientRect(), icon = end.querySelector("svg").getBoundingClientRect();
+                const range = document.createRange(); range.selectNodeContents(end.querySelector(".metadata-tail-text"));
+                const text = range.getBoundingClientRect();
+                return { width: target.width, height: target.height, iconWidth: icon.width,
+                    centerDelta: Math.abs(icon.y + icon.height / 2 - text.y - text.height / 2),
+                    glyphGap: icon.x - text.right };
+            });
+            assert.ok(shape.width >= 24 && shape.height >= 24 && shape.width >= shape.iconWidth);
+            assert.ok(shape.centerDelta <= 2, JSON.stringify(shape));
+            assert.ok(shape.glyphGap >= 4 && shape.glyphGap <= 8, JSON.stringify(shape));
+            await control.focus(); await page.keyboard.press("Enter");
+            await expect(page.getByRole("tooltip")).toBeVisible();
+            await page.keyboard.press("Escape");
+            await expect(card.locator("input")).not.toBeChecked();
+            await expect(page.locator("#activityView")).toBeVisible();
+        }
+    }
+});
+
+test("static whole-card evidence covers filtered boundaries and sustained full reading", { skip: !proofs }, async t => {
+    const data = records();
+    data.find(row => row.scenarioId === "hierarchy-retry").userPrompt.text = longPrompt;
+    const { page } = await setup(t, data), measurements = [];
+    for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        for (const mode of ["interactions", "calls"]) {
+            await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
+            const card = mode === "interactions" ? interaction(page, "retry") : callCard(page, "retry");
+            await card.locator(".full-text-toggle").click();
+            await shot(page, `expanded-${mode}-${theme}-${width}`, card);
+            await card.locator(".full-text-toggle").click();
+            const multiple = mode === "interactions" ? interaction(page, "multiple") : callCard(page, "multiple");
+            await shot(page, `normal-${mode}-${theme}-${width}`, multiple);
+            if (mode === "calls") await shot(page, `failed-call-${theme}-${width}`,
+                page.locator(".matched-action").filter({ has: page.locator("[data-outcome=failure]") }).first());
+            measurements.push(await multiple.evaluate((node, state) => ({
+                ...state, height: node.getBoundingClientRect().height,
+                text: node.textContent, prompt: node.querySelector(".full-text-preview").textContent,
+                keys: [...node.querySelectorAll("dt")].map(key => ({ text: key.textContent, color: getComputedStyle(key).color, weight: getComputedStyle(key).fontWeight })),
+            }), { theme, width, mode }));
+        }
+        await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
+        for (const mode of ["interactions", "calls"]) {
+            await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
+            await shot(page, `filtered-${mode}-${theme}-${width}`, mode === "interactions" ? interaction(page, "multiple") : callCard(page, "multiple"));
+        }
+        await selectActivityOption(page, "toolFilter", "all"); await ready(page);
+    }
+    await writeFile(path.join(proofs, "whole-card-composition.json"), JSON.stringify(measurements, null, 2));
+});
+
 test("Interactions and Calls share emphasized prompts, stacked facts and distinct tools", async t => {
     const { page } = await setup(t), measurements = [];
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
@@ -194,6 +259,10 @@ test("Interactions and Calls share emphasized prompts, stacked facts and distinc
                 facts: [...node.querySelectorAll(".activity-card-facts > div")].map(row => ({
                     label: row.querySelector("dt")?.textContent, value: row.querySelector("dd")?.textContent,
                     labelWeight: getComputedStyle(row.querySelector("dt")).fontWeight,
+                    group: row.parentElement.className,
+                    labelColor: getComputedStyle(row.querySelector("dt")).color,
+                    valueColor: getComputedStyle(row.querySelector("dd")).color,
+                    paper: getComputedStyle(node).backgroundColor,
                     valueWeight: getComputedStyle(row.querySelector("dd")).fontWeight,
                     textWeights: [...row.querySelectorAll("dd,dd *")].filter(node => !node.closest(".card-tool-name")
                         && [...node.childNodes].some(child => child.nodeType === Node.TEXT_NODE && child.textContent.trim()))
@@ -208,12 +277,17 @@ test("Interactions and Calls share emphasized prompts, stacked facts and distinc
     for (const row of measurements) {
         assert.ok(row.prompts.every(p => p.weight === "600" && p.style === "italic"), `${row.mode}: actual prompt has restrained strong italic emphasis`);
         assert.ok(row.facts.length >= 4, `${row.mode}: categories are semantic key/value rows`);
-        assert.ok(row.facts.every(fact => fact.label && fact.value && Number(fact.labelWeight) >= 700
+        assert.ok(row.facts.every(fact => fact.label && fact.value && fact.labelWeight === "500"
             && fact.valueWeight === "400" && fact.labelCount === 1 && fact.valueCount === 1));
+        for (const fact of row.facts) {
+            assert.notEqual(fact.labelColor, fact.valueColor, "Keys are subordinate to the reading value");
+            assert.ok(contrast(fact.labelColor, fact.paper) >= 4.5, "Neutral keys retain readable contrast");
+            assert.equal(new Set(rgb(fact.labelColor)).size, 1, "Keys use an achromatic screen role");
+        }
         assert.deepEqual(row.facts.flatMap(fact => fact.textWeights).filter(text => text.weight !== "400"), [],
             `${row.mode}: actual metadata values, not just their containers, have normal weight`);
-        assert.ok(row.facts.every((fact, index) => !index || fact.top >= row.facts[index - 1].bottom),
-            `${row.mode}: one category follows another without overlap`);
+        assert.ok(row.facts.every((fact, index) => !index || fact.group !== row.facts[index - 1].group || fact.top >= row.facts[index - 1].bottom),
+            `${row.mode}: each activity/context group has stacked, nonoverlapping facts`);
     }
 });
 
@@ -300,11 +374,12 @@ test("recorded models use the same stacked card fact and exact reader context wi
     const { page, data, snapshot } = await setup(t);
     const multi = interaction(page, "multiple");
     await expect(fact(multi, "Models").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
-    await expect(fact(interaction(page, "archive"), "Model").locator("dd")).toHaveText("Not recorded");
+    await expect(fact(interaction(page, "missing"), "Model").locator("dd")).toHaveText("Not recorded");
     await expect(fact(interaction(page, "retry"), "Model").locator("dd")).toHaveText("recorded-model-a");
     await expect(fact(interaction(page, "conflicting"), "Model").locator("dd")).toHaveText("Conflicting records");
     await expect(fact(interaction(page, "archive"), "Time to recorded final response").locator("dd")).toHaveText("Not recorded");
-    await expect(multi.locator(".activity-card-facts>div").first().locator("dt")).toHaveText("Time to recorded final response:");
+    await expect(multi.locator(".card-activity .response-timing")).toBeVisible();
+    await expect(fact(interaction(page, "archive"), "Model").locator("dd")).toHaveText("Not verified (tool metadata only)");
     await expect(multi.locator(".response-timing data")).toHaveAttribute("value", "3000");
     assert.equal(snapshot().assessment.catalog.find(row => row.scenarioId === "hierarchy-multiple").responseTiming.durationMs, 3000);
     assert.deepEqual(await fact(multi, "Models").evaluate(node => ({
@@ -312,7 +387,7 @@ test("recorded models use the same stacked card fact and exact reader context wi
         valueWeight: getComputedStyle(node.querySelector("dd")).fontWeight,
         controls: node.querySelectorAll("a,button,input,details,[tabindex]").length,
         next: node.nextElementSibling?.querySelector("dt")?.textContent,
-    })), { labelWeight: "700", valueWeight: "400", controls: 0, next: "Matching results:" });
+    })), { labelWeight: "500", valueWeight: "400", controls: 0, next: undefined });
     await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
     await expect(fact(multi, "Models").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
     await expect(multi.locator(".response-timing data")).toHaveAttribute("value", "3000");
@@ -363,6 +438,7 @@ async function pointAt(page, target) {
 
 test("scoped tool lists retain individual names and counts without assigning aggregate outcomes", async t => {
     const { page, snapshot } = await setup(t);
+    page.screenshot = () => { throw new Error("Screenshots are forbidden in the native return-position proof."); };
     const canonicalIds = [0, 1, 2].map(index => `call:["harbor-multiple","multiple-${index}"]`);
     assert.deepEqual(snapshot().analytics.rows.filter(row => row.scenarioId === "hierarchy-multiple").map(row => row.id).sort(), canonicalIds);
     const multi = interaction(page, "multiple");
@@ -370,7 +446,8 @@ test("scoped tool lists retain individual names and counts without assigning agg
     await expect(multi.locator(".card-tool-count")).toHaveText(["2 calls", "1 call"]);
     await expect(multi.locator(".interaction-tools [data-outcome]")).toHaveCount(0);
     await expect(multi.locator("[data-outcome=failure]")).toHaveAttribute("data-count", "1");
-    await expect(fact(multi, "Matching results")).toContainText("3 of 3 Work IQ tool calls match this view");
+    await expect(multi.locator(".card-result-scope,.result-unit")).toHaveCount(0);
+    await expect(multi.locator(".card-outcomes")).toHaveAccessibleName("Matching results only: 3 of 3 Work IQ tool calls match this view");
     const selection = multi.locator(".interaction-select");
     const check = await pointAt(page, selection); await page.mouse.click(check.x, check.y);
     await expect(multi.locator("input")).toBeChecked();
@@ -378,20 +455,18 @@ test("scoped tool lists retain individual names and counts without assigning agg
     await expect(multi.locator(".card-tool-name")).toHaveText(["workiq-ask"]);
     await expect(multi.locator(".card-tool-count")).toHaveText(["1 call"]);
     await expect(fact(multi, "Tools in this view")).toBeVisible();
-    await expect(fact(multi, "Matching results")).toContainText("1 of 3 Work IQ tool calls matches this view");
+    await expect(multi.locator(".card-result-scope")).toHaveText("1 of 3 Work IQ tool calls in this view");
     await expect(multi.locator("[data-outcome=failure]")).toHaveCount(0);
     assert.deepEqual(snapshot().analytics.rows.map(row => row.id), [canonicalIds[2]]);
     assert.deepEqual(snapshot().requestActivity.tool.filter(row => row.scenarioId === "hierarchy-multiple").map(row => row.id).sort(), canonicalIds);
     await chooseTheme(page, "light");
-    await shot(page, "interactions-filtered-multiple-light-1440", multi);
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     const call = callCard(page, "multiple");
     await expect(call.locator(".card-tool-name")).toHaveText("workiq-ask");
     await expect(page.locator("#activityList .matched-action")).toHaveCount(1);
     await expect(call).toHaveAttribute("data-action-id", canonicalIds[2]);
     await expect(fact(call, "Activity category")).toHaveText("Activity category:Mail");
-    await expect(fact(call, "Tool completion").locator("[data-outcome=success]")).toHaveAttribute("data-count", "1");
-    await shot(page, "calls-filtered-multiple-light-1440", call);
+    await expect(call.locator(".card-outcomes [data-outcome=success]")).toHaveAttribute("data-count", "1");
     const open = call.locator(".request-link"), point = await pointAt(page, open), url = page.url();
     await page.mouse.click(point.x, point.y); await ready(page);
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-tool-call-id", "multiple-2");
@@ -419,23 +494,26 @@ test("scoped tool lists retain individual names and counts without assigning agg
     await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
     await chooseTheme(page, "dark");
     await page.setViewportSize({ width: 375, height: 1000 });
-    await shot(page, "interactions-filtered-multiple-dark-375", multi);
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     await expect(call).toHaveAttribute("data-action-id", canonicalIds[2]);
-    await shot(page, "calls-filtered-multiple-dark-375", call);
 });
 
-test("bold italic original reading, missing values and long metadata stay accessible without changing other readers", async t => {
+test("emphasized previews and calm full reading retain exact text, missing values and long metadata", async t => {
     const { page, data } = await setup(t);
     await expect(interaction(page, "empty")).toHaveCount(0);
     await expect(interaction(page, "unnamed")).toHaveCount(0);
     await expect(fact(interaction(page, "missing"), "Request time")).toContainText("Not recorded");
     await expect(fact(interaction(page, "missing"), "Copilot project")).toContainText("No project associated");
     await expect(interaction(page, "missing").locator("[data-outcome=unknown]")).toHaveAttribute("data-count", "1");
-    await expect(interaction(page, "archive")).toContainText("Who sent this was not recorded");
+    await expect(interaction(page, "archive").locator(".full-text-preview-label")).toHaveText("Prompt");
+    await expect(interaction(page, "archive").locator(".full-text-preview-label")).toHaveAttribute("data-prompt-actor", "unknown");
+    await interaction(page, "archive").getByRole("button", { name: "About prompt author" }).focus();
+    await expect(page.getByRole("tooltip")).toContainText("Author unverified");
+    await page.keyboard.press("Escape");
     const measurements = [];
-    for (const [width, scale] of [[1440, 1], [375, 1], [375, 2]]) {
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [1440, 2], [375, 1], [375, 2]]) {
         await page.setViewportSize({ width, height: 1000 });
+        await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         for (const mode of ["interactions", "calls"]) {
             await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
@@ -482,12 +560,12 @@ test("bold italic original reading, missing values and long metadata stay access
                     outside,
                     pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
             });
-            assert.equal(shape.weight, "600"); assert.equal(shape.style, "italic"); assert.equal(shape.overflow, "visible");
+            assert.equal(shape.weight, "400"); assert.equal(shape.style, "normal"); assert.equal(shape.overflow, "visible");
             assert.equal(shape.maxHeight, "none"); assert.deepEqual(shape.outside, [], JSON.stringify({ width, scale, mode, shape })); assert.ok(shape.pageOverflow <= 1);
-            measurements.push({ viewportWidth: width, rootTextScale: scale, mode, ...shape });
+            measurements.push({ theme, viewportWidth: width, rootTextScale: scale, mode, ...shape });
             await card.getByRole("button", { name: "Copy prompt", exact: true }).click();
             assert.equal(await page.evaluate(() => window.copiedHierarchyText), longPrompt);
-            await shot(page, `${mode}-long-${width}-${scale}`, card);
+            await shot(page, `${mode}-long-${theme}-${width}-${scale}`, card);
             await card.locator(".full-text-toggle").click();
             assert.deepEqual(await card.locator(".activity-card-facts dt,.activity-card-facts dd").evaluateAll(nodes =>
                 nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);

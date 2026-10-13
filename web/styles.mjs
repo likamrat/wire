@@ -549,7 +549,7 @@ ${promptAuthorStyles}
 .journey-pages .journey {margin-top:0}
 ${textAction},${textAction}:is(:hover,:active,:disabled,[aria-pressed]) {
  position:relative;isolation:isolate;min-height:max(44px,calc(1lh + 24px));
- padding:12px var(--pill-inset);border:0;background:transparent;box-shadow:none;
+ padding:12px calc(var(--pill-inset) + var(--action-progress-inset,0px));border:0;background:transparent;box-shadow:none;
 }
 ${textAction}::before {
  content:"";position:absolute;inset:4px 0;z-index:-1;pointer-events:none;
@@ -580,14 +580,24 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityView>.section-heading>.filter-field {margin-inline-start:auto}
 .analyze-result-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-block:12px}
 .analyze-result-actions .report-selection-bar {margin:0}
-#activityList>.activity-card {padding:16px 8px;border:0;border-bottom:1px solid var(--rule);border-radius:0;background:var(--paper);margin-top:8px}
+#activityList>.activity-card {container-type:inline-size;padding:16px 8px;border:0;border-bottom:1px solid var(--rule);border-radius:0;background:var(--paper);margin-top:8px}
 #activityList>.request-row {grid-template-columns:44px minmax(0,1fr)}
-#activityList>.request-row .interaction-body {display:grid;gap:8px;min-width:0}
-#activityList>.activity-card .full-text-preview,#activityList>.activity-card .full-text-body pre {font-family:var(--font);font-weight:var(--weight-strong);font-style:italic;line-height:var(--leading-reading);padding-inline:2px;overflow:visible;max-height:none}
-#activityList>.activity-card .full-text-preview {margin-block:4px 8px}
-#activityList>.activity-card .activity-card-facts,#requestContent .interaction-model-fact {display:grid;gap:6px;margin:4px 0 0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
+#activityList>.request-row .interaction-body {display:grid;gap:12px;min-width:0}
+#activityList>.activity-card .full-text-preview,#activityList>.activity-card .full-text-body pre {font-family:var(--font);line-height:var(--leading-reading);padding-inline:2px;overflow:visible;max-height:none}
+#activityList>.activity-card .full-text-preview {font-weight:var(--weight-strong);font-style:italic}
+#activityList>.activity-card .full-text-body .ux-code-block {max-inline-size:76ch;font-size:var(--type-reading)}
+#activityList>.activity-card .full-text-body pre {font-weight:var(--weight-regular);font-style:normal;padding-inline:var(--space-lg)}
+#activityList>.activity-card .full-text-preview-label {--metadata-target:max(24px,1.5rem);line-height:var(--leading-ui)}
+#activityList>.activity-card .request-meta .metadata-item {--metadata-target:max(24px,1.5rem);line-height:var(--leading-ui)}
+#activityList>.activity-card .full-text-preview {margin-block:4px 0}
+#activityList>.activity-card .card-details {display:grid;gap:12px 32px;min-width:0}
+#activityList>.matched-action .card-details {margin-top:12px}
+#activityList>.activity-card .card-activity {display:grid;align-content:start;gap:8px;min-width:0}
+#activityList>.activity-card .activity-card-facts {display:grid;align-content:start;gap:4px;margin:0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
+#requestContent .interaction-model-fact {display:grid;gap:6px;margin:4px 0 0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
 #activityList>.activity-card .activity-card-facts>div,#requestContent .interaction-model-fact>div {display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0}
-#activityList>.activity-card .activity-card-facts dt,#requestContent .interaction-model-fact dt {font:inherit;font-weight:700;overflow-wrap:anywhere;max-width:100%}
+#activityList>.activity-card .activity-card-facts dt {font:inherit;font-weight:var(--weight-medium);color:var(--muted);overflow-wrap:anywhere;max-width:100%}
+#requestContent .interaction-model-fact dt {font:inherit;font-weight:700;overflow-wrap:anywhere;max-width:100%}
 #activityList>.activity-card .activity-card-facts dd,#requestContent .interaction-model-fact dd {font:inherit;margin:0;min-width:0;max-width:100%;overflow-wrap:anywhere}
 #activityList>.activity-card .activity-card-facts dd .semantic-cue {font-weight:var(--weight-regular)}
 #activityList>.activity-card :is(.project-context,.request-meta,.recorded-results,.call-duration) {font-size:inherit;line-height:inherit;margin:0}
@@ -595,11 +605,18 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityList>.activity-card .card-chat>.text-link {display:inline-flex;align-items:center;min-height:44px;min-width:44px;max-width:100%;overflow-wrap:anywhere;font-weight:var(--weight-regular)}
 #activityList>.activity-card .interaction-tools {display:grid;gap:4px;margin:0;padding:0;list-style:none;color:var(--ink);font:inherit}
 #activityList>.activity-card .interaction-tools>li {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 12px;min-width:0}
-#activityList>.activity-card .card-tool-name {font-size:var(--type-body);font-weight:700;overflow-wrap:anywhere;min-width:0}
+#activityList>.activity-card .card-tool-name {font:inherit;overflow-wrap:anywhere;min-width:0}
 #activityList>.activity-card .card-tool-count {color:var(--muted)}
 #activityList>.activity-card .recorded-results {align-items:center;gap:4px 12px}
 #activityList>.activity-card .result-unit {font-weight:var(--weight-regular)}
 #activityList>.activity-card .recorded-result-label {text-transform:none;letter-spacing:0;font-weight:var(--weight-regular)}
+#activityList>.activity-card .card-outcomes {font-size:var(--type-small)}
+#activityList>.activity-card .card-result-scope {flex-basis:100%;color:var(--muted)}
+#activityList>.activity-card .card-result-note {margin:0;font-size:var(--type-small);line-height:var(--leading-ui);overflow-wrap:anywhere}
+#activityList>.activity-card .context-help-note {margin:4px 0 0;line-height:var(--leading-ui)}
+@container(min-width:50rem) {
+ #activityList>.activity-card .card-details {grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
 @media(min-width:700px) {
  #activityList>.activity-card .full-text {display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px}
  #activityList>.activity-card .full-text>:not(.full-text-actions,.full-text-body) {grid-column:1}

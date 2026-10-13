@@ -182,6 +182,20 @@ test("shared pending text keeps its leading edge while generated button slots an
                 assert.equal(await page.locator("#icon").evaluate(node => node.firstChild.matches(".fluent-icon")), true);
                 assert.equal(await page.locator("#icon .progress-slot").count(), 0);
                 assert.equal(await page.locator("#plain").getAttribute("aria-busy"), String(pending));
+                assert.equal(await page.locator("#icon>.fluent-icon").getAttribute("data-fluent-icon"),
+                    pending ? "spinner_ios_20_regular" : "checkmark_20_regular");
+                assert.equal(await page.locator("#plain .progress-slot>.fluent-icon").getAttribute("data-fluent-icon"), "spinner_ios_16_regular");
+                const slot = await page.locator("#plain").evaluate(node => {
+                    const marker = node.querySelector(".progress-slot").getBoundingClientRect();
+                    const range = document.createRange();
+                    range.selectNode([...node.childNodes].find(child => child.nodeType === 3 && child.textContent.trim()));
+                    const label = range.getBoundingClientRect(), box = node.getBoundingClientRect();
+                    return { marker: marker.toJSON(), label: label.toJSON(), box: box.toJSON() };
+                });
+                assert.equal(slot.marker.width, 16); assert.equal(slot.marker.height, 16);
+                assert.ok(slot.marker.right + 3 <= slot.label.x, "The official progress glyph never overlaps the button label");
+                assert.ok(Math.abs(slot.label.x + slot.label.width / 2 - slot.box.x - slot.box.width / 2) < 1,
+                    "A generated progress slot preserves the centered label");
                 const geometry = await page.locator("#plain,#icon,#link,#roleButton").evaluateAll(nodes => nodes.map(node => {
                     const rect = node.getBoundingClientRect();
                     return { width: rect.width, height: rect.height };

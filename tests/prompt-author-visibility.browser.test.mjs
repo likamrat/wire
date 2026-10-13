@@ -52,7 +52,7 @@ test("Your prompt uses a distinctive shared accent on real light/dark list and d
             assert.ok(own && agent && unknown);
             assert.equal(own.label, "Your prompt");
             assert.equal(agent.label, "Agent prompt");
-            assert.match(unknown.label, /Who sent this was not recorded/);
+            assert.equal(unknown.label, "Prompt");
             for (const cue of cues) {
                 assert.ok(contrast(cue.color, cue.background) >= 4.5, `${theme}/${state}: text contrast`);
                 assert.ok(contrast(cue.borderColor, cue.background) >= 3, `${theme}/${state}: marker contrast`);

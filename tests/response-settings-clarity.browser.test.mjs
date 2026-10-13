@@ -68,7 +68,7 @@ test("response settings explains the choice beside its checkbox without unrelate
         assert.ok(value.gap >= 7 && value.gap <= 9, "Checkbox belongs beside its words");
         assert.equal(value.visibleParagraphs, 0, "The checkbox already shows the healthy current state");
         assert.deepEqual(value.visibleButtons, [], "No idle Save/Cancel actions when there is no change");
-        assert.equal(value.technicalDetails, true);
+        assert.equal(value.technicalDetails, false, "No standing explanation disclosure for an intuitive checkbox");
     }
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1466]) for (const scale of [1, 2]) {
         await chooseTheme(page, theme);
@@ -81,6 +81,13 @@ test("response settings explains the choice beside its checkbox without unrelate
         await expect(choice).toBeChecked();
         await expect(pane.getByRole("button", { name: "Turn on response saving", exact: true })).toBeEnabled();
         await expect(pane.locator(".assessment-applied")).toHaveText("Response saving is off. This change is not saved yet.");
+        await expect(pane.getByText(/Saves recorded Copilot replies locally, excluding detected credentials/)).toBeVisible();
+        await expect(pane.getByText(/Replies may be incomplete or not final/)).toBeVisible();
+        const boundaryOrder = await pane.evaluate(root => {
+            const boundary = root.querySelector(".assessment-capture-details"), submit = root.querySelector("button[type=submit]");
+            return Boolean(boundary.compareDocumentPosition(submit) & Node.DOCUMENT_POSITION_FOLLOWING);
+        });
+        assert.equal(boundaryOrder, true, "Capture scope and limitations precede explicit confirmation");
         const layout = await pane.evaluate(root => {
             const choice = root.querySelector("label"), input = choice.querySelector("input"), text = choice.querySelector("span");
             return {
@@ -108,15 +115,6 @@ test("response settings explains the choice beside its checkbox without unrelate
         await expect(choice).not.toBeChecked();
         await expect(choice).toBeFocused();
         await expect(pane.getByRole("button")).toHaveCount(0);
-        await pane.locator("details>summary").focus();
-        await page.keyboard.press("Enter");
-        await expect(pane.getByText(/Saves recorded Copilot replies locally, excluding detected credentials/)).toBeVisible();
-        await expect(pane.getByText(/Replies may be incomplete or not final/)).toBeVisible();
-        if (proofs && width === 375 && scale === 2) {
-            await page.evaluate(() => scrollTo(0, 0));
-            await page.screenshot({ path: path.join(proofs, `${theme}-details.png`), fullPage: true });
-        }
-        await page.keyboard.press("Enter");
-        await expect(pane.locator("details")).not.toHaveAttribute("open", "");
+        await expect(pane.locator(".assessment-capture-details")).toBeHidden();
     }
 });

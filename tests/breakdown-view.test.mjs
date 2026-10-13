@@ -73,6 +73,26 @@ test("service shares may exceed 100% in sum but never exceed the declared denomi
     assert.equal(data.services.slices, undefined, "Overlapping services cannot be treated as a donut partition");
 });
 
+test("recorded-target presentation separates tool-purpose Search without changing canonical membership", () => {
+    const source = fixture("mixed-search-basis");
+    source.toolCalls = [
+        { tool: "workiq-retrieve", toolCallId: "purpose", startEventId: "purpose-start", requestArgs: {}, toolSucceeded: true },
+        { tool: "workiq-fetch", toolCallId: "recorded", startEventId: "recorded-start", requestArgs: { entityUrl: "/search/query" }, toolSucceeded: true },
+        { tool: "workiq-fetch", toolCallId: "partial", startEventId: "partial-start",
+            requestArgs: { entityUrls: ["/me/messages", "/unrecognized/resource", "/me/messages"] }, toolSucceeded: true },
+    ];
+    const analytics = buildActivityAnalytics([source]), data = charts.model(analytics).services;
+    assert.equal(data.total, 3);
+    assert.deepEqual(data.rows.map(row => [row.id, row.count]), [["Search", 2], ["Mail", 1]]);
+    assert.deepEqual(data.recordedRows.map(row => [row.id, row.count, row.aggregateCount]), [["Mail", 1, 1], ["Search", 1, 2]]);
+    const purpose = analytics.rows.filter(row => row.serviceAssociation.basis === "tool-purpose");
+    const recorded = data.recordedRows.find(row => row.id === "Search");
+    assert.deepEqual(new Set([...recorded.drilldownIds, ...purpose.map(row => row.id)]), new Set(data.rows[0].drilldownIds));
+    assert.equal(recorded.percentage, "33.3%");
+    assert.equal(data.purposeCount, 1); assert.equal(data.partialCount, 1); assert.equal(data.missingDetailCount, 1);
+    assert.deepEqual(data.rows[0].drilldownIds, analytics.serviceInvolvement.groups.find(group => group.label === "Search").drilldownIds);
+});
+
 test("unknown service definitions, missing coverage and mismatched identities fail rather than imply attribution", () => {
     const data = buildActivityAnalytics(records());
     for (const mutate of [
@@ -84,6 +104,8 @@ test("unknown service definitions, missing coverage and mismatched identities fa
         value => { value.serviceInvolvement.groups.push(value.serviceInvolvement.groups[0]); },
         value => { delete value.rows[0].serviceAssociation; },
         value => { value.rows[0].serviceAssociation.services.push("Unknown"); },
+        value => { delete value.rows[0].serviceAssociation.basis; },
+        value => { value.rows[0].serviceAssociation.basis = "none"; },
     ]) {
         const invalid = structuredClone(data); mutate(invalid);
         assert.throws(() => charts.model(invalid), { name: /TypeError|RangeError/ });

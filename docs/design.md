@@ -1,5 +1,39 @@
 # Product design
 
+## Analyze visual summaries
+
+The outcome widget leads with the recorded donut, legend, exact shares and
+matching-call links. Its compact footer opens the existing full-interaction
+review destination for failure causes or saved reviews; it does not repeat the
+review document beneath the donut. Review errors and unavailable attempts remain
+visible as separate counts, never as failed-call slices or answer verdicts.
+When matching calls are only part of the selected interactions, the footer
+qualifies that boundary once and keeps failures in the full interactions visible.
+Causes, sign-in guidance, assessment coverage, permission distinctions and
+unknown reasons remain in the existing details and interaction reader.
+
+Services uses the same label, count and bar vocabulary as Tools. **Recorded
+targets** is separate from **Service not established**, which contains
+tool-purpose Search/retrieval, discovery/preparation and missing service details.
+Every bar uses all matching calls (or the selected record layer) as its
+denominator. Services can overlap; these bars are not a 100% composition.
+Partially attributed calls remain in both their known service and missing-detail
+coverage, labelled explicitly rather than double-counted into a total.
+
+The v1 canonical association definition is unchanged. Search inferred solely
+from the recorded tool's purpose is not presented as a downstream service target.
+The existing exact-data table retains aggregate association membership and
+drilldown links. If recorded-target Search is a subset of a mixed-basis aggregate,
+its separate visual count does not pretend the aggregate link selects that
+subset. Tool-purpose and preparation links use the existing exact operation and
+category filters. Missing-detail reasons and counts stay in Chart data and
+definitions, not a second prose summary beside the bars.
+
+The headline retains distinct interaction and chat counts without repeating
+the visible Dates filter. Partial coverage and stale-result warnings remain.
+These are screen-only presentations: reader/comparison findings, report
+projections, saved output, classification and stored evidence are unchanged.
+
 ## Saved report library
 
 Reports opens directly on the saved library, expanded by default. The top-level
@@ -1159,6 +1193,26 @@ and dialogs after `document.fonts.ready`, not only a family string. Both themes
 retain readable text, placeholders, status and focus paint at narrow widths and
 200% text. Unsupported scripts intentionally use the declared system fallbacks.
 
+The Analyze count and unit form one 22px data heading: both inherit its size,
+weight and line height at every viewport width. The count is not a separate
+display metric. Ordinary values keep Asta's tabular figures, not a monospace
+substitute. Whole-screen glyph inspection covers the actual populated cards,
+reader, selectors, help, report setup and Settings, not just a typography sample.
+
+All app-authored semantic icons use the local official Fluent SVG collection.
+Disclosure chevrons and pending indicators use inline SVGs from that
+same registry, with unchanged package geometry (16px disclosure/inline progress,
+20px action progress). Native `details` behavior and accessible labels remain
+intact; generated progress slots reserve space even when idle, and reduced
+motion keeps the official progress glyph still. Summary enhancement also handles
+dynamic label changes without rewriting their text or replacing native controls.
+No image source or CSP permission is added. The saved-report Manage cue
+uses the same disclosure glyph rather than a CSS-drawn arrow. Sidebar, services,
+Refresh, reset, help, status and selection glyphs retain their existing optical
+roles. Native checkbox/radio paint, date-picker chrome, browser search clearing,
+scrollbars and OS menus remain browser-owned; the WIRE wordmark and numerical
+chart geometry are not semantic icon replacements.
+
 This is a screen-only contract. `tokens`, `typographyTokens`, `uiFontStack`,
 font exports and shared chart/report styles remain unchanged; native HTML/PDF
 and frozen artifacts keep their original styling. The inert saved reader does
@@ -2048,9 +2102,14 @@ remain visible without an invented chat drilldown. Same-name chats include
 distinguishing source references. Project kind is
 shown when the mapping records it; a folder project is not relabeled a repository.
 
+The list introduction gives one concise all-page population summary, without
+repeating filter instructions or how opening a record works. Partial-card
+boundaries, unlinked records, selection, empty and stale-state notices remain.
+
 Interactions and Calls share one card grammar. The actual prompt leads in bold
-italic Asta, for user, agent and unverified authors alike; the separate author
-label and precise sender-gap explanation do not determine its emphasis.
+italic Asta, for user, agent and unverified authors alike. Unknown authors show
+**Prompt**, retaining the truthful actor state and existing author-reason help;
+known **Your prompt** and **Agent prompt** labels are unchanged.
 The emphasis uses the existing strong 600 weight rather than a heavier 700,
 with the body-size preview and reading line-height unchanged. This keeps the
 request distinct without turning a wrapped prompt into a display heading.
@@ -2058,20 +2117,26 @@ Both views use the same paper surface, inset padding, lower divider and
 vertical actor cue. Only Interactions has a report-selection checkbox; Calls
 does not reserve an empty selection column or force equal card heights.
 **View interaction** or **Open exact call in context** remains alongside on
-desktop and wraps at narrow widths. Existing bounded previews, full original
-reading and exact copy remain; neither the stored text nor the separate request
+desktop and wraps at narrow widths. Expanded original text uses normal-weight,
+nonitalic proportional type in a bounded reading measure; the preview keeps
+its focal emphasis. Full original reading and exact copy remain; neither the stored text nor the separate request
 reader, Search rows or saved output is restyled or rewritten.
 
-Each card's `.activity-card-facts` definition list presents one category at a
-time, with a bold key followed by its normal-weight value. Interactions put
-response timing first, followed by tools, separate service/category facts,
-chat, project, recorded time and original model. These are
-content-sized label/value rows, not a wide two-column table or flowing prose.
+Cards group tool/activity facts, timing and outcomes separately from source
+context (chat, project, recorded time and original model). The two groups sit
+alongside when the card has room and stack in reading order at narrow widths
+or enlarged root text. Each `.activity-card-facts` list uses content-sized
+key/value rows, not a wide label/value table or flowing prose. Keys use the
+neutral screen `--muted` color and medium 500 weight; ordinary values, including
+tool names, use normal 400 weight. Four-pixel inter-row gaps keep related facts
+together, with distinct spacing between groups.
 Keys have one trailing colon, including facts shared with reader metadata;
 values, standalone headings, actor labels and result pills are not punctuated.
 Normal-weight values include the actual nested category cue, chat link and
-outcome text, not only the definition container. Tool names retain their
-separate bold identity role.
+outcome text, not only the definition container. Code/API paths retain their
+distinct technical presentation. Existing author and category help has a
+24-pixel minimum target within cards; selection, navigation and chat links
+retain their 44-pixel targets.
 The chat value keeps its native filter route and explicit **Filter to chat**
 accessible name. Missing metadata and distinguishing chat references remain
 visible. `requestTiming.entry` supplies structured timing labels/values while
@@ -2081,10 +2146,13 @@ its existing summary wording remains unchanged for other consumers.
 call counts (or the current evidence layer's units). Repeated calls share a named
 entry and count; different tools never become one comma/slash label. This list
 uses the same canonical filtered rows as the card's matching results, not all
-calls from the complete interaction. Its aggregate outcome pills stay in their
-own **Matching results** row; they are not attributed to individual tools.
-The matching/full denominator remains explicit, including when filtering hides
-another tool. No empty-evidence interaction is invented to fill the list.
+calls from the complete interaction. Aggregate outcome pills follow this
+activity group, never an individual tool. Routine matching-result prose and
+equal matching/full counts are omitted. A concise **1 of 3 Work IQ tool calls
+in this view** boundary appears only for an actual partial population; the
+accessible result-group name retains its scope and unit. Calls keep any actual
+failure reason or reported HTTP status without repeating the outcome label.
+No empty-evidence interaction is invented to fill the list.
 
 The card styles are restricted to `#activityList` and consume shared screen
 roles. Full-text surfaces wrap with visible overflow for italic glyphs and

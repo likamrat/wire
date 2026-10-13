@@ -674,7 +674,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
 }
 
 // DOM-only; this renderer cannot fetch, assess, save feedback, or enable capture.
-export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming, showTiming = true, findingsHost, bindDetails, disclosureKey, wording = createAssessmentWording() } = {}) {
+export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming, showTiming = true, findingsHost, matchedCallCount = null, bindDetails, disclosureKey, wording = createAssessmentWording() } = {}) {
     if (typeof onDetails !== "function") throw new TypeError("A details path is required for definitions and unavailable reasons.");
     if (model.evidence?.version !== 1) throw new TypeError("A current quality evidence projection is required.");
     if (model.findings?.version !== 1) throw new TypeError("A current saved-findings projection is required.");
@@ -829,8 +829,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         (model.findings.rationale ? "Verdict reasons not retained. " : "")
         + (compactFindings ? "" : model.findings.singleInteraction ? "Original request group only." : "Full interactions, not just matching calls.")));
     findings.hidden = compactFindings && findings.children.length === (compactLayout ? 1 : 2) && !calls.childElementCount;
-    if (compactLayout && !findings.hidden) findings.append(el("p", "assessment-finding-limit", "Includes all calls in matching interactions."));
-    if (findingsHost) findingsHost.replaceChildren(findings);
+    if (findingsHost && !compactLayout) findingsHost.replaceChildren(findings);
     else section.append(findings);
     const saved = el("details", "assessment-saved-details");
     saved.append(el("summary", "", "Saved assessment details and counts"));
@@ -1000,7 +999,53 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         });
         section.append(timing);
     }
-    if (compactLayout) section.append(heading, saved, help);
+    if (compactLayout) {
+        // Keep full-interaction evidence in the existing reviews destination, not below the call donut.
+        section.append(heading, findings, saved, help);
+        if (model.findings.recovery) calls.append(el("li", "assessment-finding-recovery", model.findings.recovery));
+        const footer = el("section", "assessment-findings assessment-widget-links");
+        footer.setAttribute("aria-label", "Recorded details and saved reviews");
+        const destination = (label, target, statuses = []) => {
+            const row = el("div", "assessment-widget-link");
+            const action = el("button", "quiet", label);
+            action.type = "button";
+            action.addEventListener("click", () => {
+                const disclosure = root.closest("details");
+                if (disclosure) disclosure.open = true;
+                findings.hidden = false;
+                target.tabIndex = -1;
+                target.focus({ preventScroll: true });
+                target.scrollIntoView({ block: "nearest" });
+            });
+            row.append(action);
+            for (const item of statuses) row.append(el("span",
+                `assessment-widget-status${item.state === "failed" ? " negative" : ""}`, item.label));
+            footer.append(row);
+        };
+        const execution = model.findings.operational.find(item => item.kind === "execution");
+        const incomplete = model.findings.operational.some(item => item.kind === "unavailable");
+        const fullCalls = execution?.counts.calls;
+        const widerScope = fullCalls !== undefined && (matchedCallCount === null || fullCalls !== matchedCallCount);
+        if (calls.childElementCount || execution?.counts.failed) destination(incomplete ? "Call context incomplete"
+            : execution?.counts.failed ? "Failure details" : "Call details", calls,
+            widerScope && execution?.boundary === "reported-outcomes" && execution.counts.failed
+                ? [{ state: "failed", label: `${number(execution.counts.failed)} failed ${execution.counts.failed === 1 ? "call" : "calls"}` }] : []);
+        const attemptRows = model.findings.answers.filter(item => item.kind === "attempt");
+        const statusLabels = { failed: "review errors", uncertain: "uncertain", unavailable: "unavailable",
+            pending: "pending", revoked: "approval withdrawn", "not-run": "not run", "not-current": "outdated" };
+        const statuses = attemptRows.map(item => ({ state: item.state,
+            label: `${number(item.count)} ${item.state === "failed" && item.count === 1 ? "review error" : statusLabels[item.state]}` }));
+        if (lanes.size || attemptRows.length || attempts.status !== "available" || model.readingWarning) {
+            destination(attempts.status !== "available" || model.readingWarning ? "Review coverage incomplete" : "Saved reviews",
+                findings.querySelector(".assessment-finding-group") || findings, statuses);
+        }
+        if (footer.childElementCount && widerScope) {
+            footer.append(el("p", "assessment-finding-limit",
+                matchedCallCount === null ? "Details cover full interactions." : `Details include all ${number(fullCalls)} calls in matching interactions.`));
+        }
+        footer.hidden = !footer.childElementCount;
+        findingsHost.replaceChildren(footer);
+    }
     else section.append(help);
     root.replaceChildren(section);
     return section;

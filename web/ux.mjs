@@ -3,6 +3,7 @@ export function createEvidenceUX(icons) {
     const descriptions = new WeakMap();
     const tooltipOptions = new WeakMap();
     const disabledReasons = new WeakMap();
+    const pendingIcons = new WeakMap();
     const bubble = document.createElement("div");
     bubble.id = "evidence-tooltip";
     bubble.className = "ux-tooltip";
@@ -257,7 +258,13 @@ export function createEvidenceUX(icons) {
     listen(window, "popstate", hideTooltip);
     listen(document, "visibilitychange", () => { if (document.visibilityState === "hidden") hideTooltip(); });
     const observer = new MutationObserver((changes) => {
-        for (const change of changes) if (change.type === "attributes") syncDisabled(change.target);
+        for (const change of changes) {
+            if (change.type === "attributes") syncDisabled(change.target);
+            else {
+                enhanceDisclosures(change.target);
+                for (const node of change.addedNodes) if (node instanceof Element) enhanceDisclosures(node);
+            }
+        }
         if (active && (!active.isConnected || !active.checkVisibility())) hideTooltip();
         if (opening && (!opening.isConnected || !opening.checkVisibility())) hideTooltip();
         if (hovered && !hovered.isConnected) hovered = null;
@@ -265,6 +272,24 @@ export function createEvidenceUX(icons) {
         if (pinned && !pinned.isConnected) pinned = null;
     });
     observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["disabled", "hidden"] });
+    enhanceDisclosures(document.body);
+
+    function enhanceDisclosures(root) {
+        const owner = root.closest("details>summary");
+        const summaries = [...root.querySelectorAll("details>summary")];
+        if (owner) summaries.unshift(owner);
+        for (const summary of summaries) {
+            const host = summary.classList.contains("saved-report-summary") ? summary.querySelector(".saved-report-manage") : summary;
+            if (!host) continue;
+            if (!host.querySelector(":scope>.disclosure-icon")) {
+                const glyph = icon("disclosure");
+                glyph.classList.add("disclosure-icon");
+                if (host === summary) host.prepend(glyph);
+                else host.append(glyph);
+            }
+            summary.classList.add("ux-disclosure");
+        }
+    }
 
     function tooltip(node, text, options = {}) {
         descriptions.set(node, text);
@@ -452,6 +477,7 @@ export function createEvidenceUX(icons) {
             if (!marker) {
                 marker = document.createElement("span");
                 marker.className = "progress-slot";
+                marker.append(icon("pending-small"));
                 if (control || node.matches("a,input,select,textarea,summary,[role=button],[role=link]")) node.prepend(marker);
                 else {
                     marker.classList.add("progress-slot-trailing");
@@ -460,6 +486,24 @@ export function createEvidenceUX(icons) {
             }
             marker.dataset.progressIcon = "";
             marker.setAttribute("aria-hidden", "true");
+        }
+        if (value && marker.matches("svg") && !pendingIcons.has(marker)) {
+            const original = marker, size = Number(original.getAttribute("width"));
+            marker = icon(size === 16 ? "pending-small" : "pending");
+            for (const name of original.classList) marker.classList.add(name);
+            if (size === 24) {
+                // Keep a 20px optical glyph centered in the action's existing 24px slot.
+                marker.classList.add("progress-icon-large");
+                marker.setAttribute("viewBox", "-2 -2 24 24");
+            }
+            marker.dataset.progressIcon = "";
+            original.replaceWith(marker);
+            pendingIcons.set(marker, original);
+        } else if (!value && pendingIcons.has(marker)) {
+            const original = pendingIcons.get(marker);
+            pendingIcons.delete(marker);
+            marker.replaceWith(original);
+            marker = original;
         }
         marker.classList.toggle("pending-indicator", value);
     }

@@ -13,9 +13,11 @@ export function mountAutomaticScoresRow(root, { onReview }) {
     section.setAttribute("aria-labelledby", title.id);
     status.setAttribute("role", "status");
     review.type = "button";
-    review.className = "quiet";
     review.addEventListener("click", event => onReview(event.currentTarget));
-    section.append(title, status, review);
+    const actions = doc.createElement("div");
+    actions.className = "settings-automatic-actions";
+    actions.append(review);
+    section.append(title, status, actions);
     root.replaceChildren(section);
     const labels = {
         off: "Off", waiting: "Waiting", assessing: "Assessing approved chats",

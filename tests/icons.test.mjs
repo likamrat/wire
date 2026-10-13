@@ -55,6 +55,18 @@ test("missing Fluent assets and unsupported sizes fail instead of rendering a bl
     assert.throws(() => fluentIcon("home", 20, "outline"), TypeError);
 });
 
+test("disclosure and progress cues use official SVGs, not CSS-drawn replacements or external images", () => {
+    assert.equal(uxIconSources.disclosure, "chevron_right_16_regular");
+    assert.equal(uxIconSources.pending, "spinner_ios_20_regular");
+    assert.equal(uxIconSources["pending-small"], "spinner_ios_16_regular");
+    const ux = readFileSync(new URL("../web/ux-styles.mjs", import.meta.url), "utf8");
+    const reports = readFileSync(new URL("../web/report-journey-styles.mjs", import.meta.url), "utf8");
+    assert.match(ux, /\.ux-disclosure>\.disclosure-icon/);
+    assert.doesNotMatch(ux, /border-inline-end-color:transparent|border-style:dotted/);
+    assert.doesNotMatch(reports, /border-right:1\.5px|rotate\(225deg\)/);
+    assert.doesNotMatch(ux + reports, /data:image\/svg\+xml/);
+});
+
 test("the shell bundles icons locally without an icon font or remote runtime resource", () => {
     const html = renderHtmlShell("a".repeat(64), "synthetic-icons");
     assert.ok(html.includes("copy_20_regular"));

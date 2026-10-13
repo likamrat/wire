@@ -42,8 +42,8 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
         "evaluation-failed": "The evaluator could not finish.", "evaluation-error": "Scoring needs attention.", stopping: "Stopping and clearing scores.",
     };
     const row = mountRow(root, { onReview: from => open(from) });
-    const stop = button("Stop automatic scores", from => reviewStop(from.currentTarget), "quiet danger");
-    root.querySelector("section").append(stop);
+    const stop = button("Stop automatic scores", from => reviewStop(from.currentTarget), "danger");
+    root.querySelector(".settings-automatic-actions").append(stop);
     const stamp = data => JSON.stringify([data.source, data.method, data.approvalRevision]);
     function renderRow() {
         const pending = client.snapshot();

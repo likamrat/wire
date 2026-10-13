@@ -244,6 +244,72 @@ test("legacy scopes, Calls paging, retained stale results and narrow keyboard en
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
 });
 
+test("list population summaries stay concise without changing paging, filtered boundaries or native entry", async t => {
+    const app = await setup(t), { page } = app;
+    page.screenshot = () => { throw new Error("No captures in the list entry and Back proof."); };
+    const summary = page.locator("#activityListSummary");
+    await expect(summary).toHaveText("10 interactions with 12 matching Work IQ tool calls.");
+    await expect(page.locator("#activityPager")).toContainText("1-8 of 10 interactions");
+    const first = await rowIds(page);
+    await page.locator('#activityList [data-view-key="request:parity-request-1"] input').check();
+    await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click(); await ready(page);
+    assert.deepEqual(sorted([...first, ...await rowIds(page)]), Array.from({ length: 10 }, (_, i) => `parity-request-${i}`));
+    await expect(summary).toHaveText("10 interactions with 12 matching Work IQ tool calls.");
+    await restoreLegacySearch(page, privateQuery);
+    await expect(summary).toHaveText("9 interactions with 11 matching Work IQ tool calls.");
+    await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
+    await expect(summary).toHaveText("3 interactions with 4 matching Work IQ tool calls.");
+    assert.deepEqual(sorted(await rowIds(page)), ["parity-request-0", "parity-request-3", "parity-request-6"]);
+    await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
+    await expect(summary).toHaveText("1 interaction with 1 matching Work IQ tool call.");
+    await expect(page.locator(".card-result-scope")).toHaveText("1 of 3 Work IQ tool calls in this view");
+    await expect(page.locator("#activitySelectionCompact")).toContainText("1 in report");
+    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
+    await expect(summary).toHaveText("1 Work IQ tool call from 1 interaction.");
+    assert.deepEqual(await rowIds(page, true), ['call:["parity-chat-0","parity-call-0-1"]']);
+    const open = page.locator(".matched-action .request-link");
+    await open.focus(); await frames(page);
+    const position = await open.boundingBox(), origin = page.url();
+    await page.keyboard.press("Enter"); await ready(page);
+    await expect(page.locator("#selectedCall")).toHaveAttribute("data-tool-call-id", "parity-call-0-1");
+    await expect(page.locator("#requestContent")).toContainText("Outside current view");
+    await page.locator("#contextBack").click(); await ready(page); await frames(page);
+    assert.equal(page.url(), origin); await expect(open).toBeFocused();
+    assert.ok(Math.abs((await open.boundingBox()).y - position.y) < 3);
+    const revision = app.snapshot().revision;
+    await page.route("**/api/snapshot", async route => {
+        const response = await route.fetch(), body = await response.json();
+        body.revision = revision - 1; body.analytics.revision = body.revision;
+        await route.fulfill({ response, json: body });
+    });
+    await (await revealStoredRefresh(page)).click(); await ready(page);
+    await expect(page.locator("#freshContextMessage")).toContainText("older snapshot was rejected");
+    await expect(page.locator("#periodResult")).toHaveText("Previous results: 1 Work IQ tool call");
+    await expect(summary).toHaveText("1 Work IQ tool call from 1 interaction.");
+    await page.unroute("**/api/snapshot");
+    await (await revealStoredRefresh(page)).click(); await ready(page);
+    await restoreLegacySearch(page, "NO_ANALYZE_MATCH");
+    await expect(summary).toBeHidden();
+    await expect(page.locator("#activityList")).toContainText("No matching Work IQ tool calls");
+    await expect(page.locator("#activitySelectionCompact")).toContainText("1 in report");
+    await restoreLegacySearch(page, "");
+    await selectActivityOption(page, "toolFilter", "all"); await ready(page);
+    await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);
+    await expect(summary).toHaveText("12 Work IQ tool calls from 10 interactions.");
+    assert.equal(app.snapshot().analytics.rows.length, 12);
+});
+
+test("static list context preserves the first card without default reading instructions", { skip: !proofs }, async t => {
+    const { page } = await setup(t);
+    await page.setViewportSize({ width: 390, height: 1000 }); await chooseTheme(page, "light");
+    for (const mode of ["interactions", "calls"]) {
+        await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
+        await page.locator("#activityView").evaluate(node => scrollBy(0, node.getBoundingClientRect().top
+            - document.querySelector(".app-header").getBoundingClientRect().height - 12));
+        await capture(page, `list-context-${mode}-light-390`, "#activityView");
+    }
+});
+
 test("empty source still exposes Analyze recovery and existing Reports and Settings", { timeout: 15000 }, async t => {
     const { page } = await setup(t, []);
     await expect(page.locator("#activityList")).toContainText("No collected activity yet");

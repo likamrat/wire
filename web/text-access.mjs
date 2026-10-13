@@ -19,7 +19,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }
         return end < compact.length ? compact.slice(0, end).trimEnd() + "..." : compact;
     }
-    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind, initialOpen, contentFirst = false }) {
+    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
@@ -69,7 +69,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             const provenance = document.createElement("div");
             provenance.className = "full-text-provenance";
             const unverified = subject === "request" && authorship?.read(source).actor === "unknown";
-            const hint = unverified ? authorNote(heading.textContent + " / " + authorGap) : document.createElement("span");
+            const hint = unverified ? authorNote(compactProvenance ? "Prompt" : heading.textContent + " / " + authorGap) : document.createElement("span");
             hint.classList.add("full-text-preview-label");
             if (!unverified) hint.textContent = heading.textContent;
             hint.dataset.promptActor = authorship?.read(source).actor ?? "unknown";

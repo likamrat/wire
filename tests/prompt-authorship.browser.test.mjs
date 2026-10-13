@@ -77,8 +77,7 @@ test("collector -> real server -> Activity, reader and new report preserve truth
     for (const item of app.cases) {
         await page.locator("#activitySearch").fill(item.data.content.slice(0, 40)); await ready(page); await openActivitySessions(page);
         const row = page.locator(`.request-row[data-view-key="request:${item.scenarioId}"]`);
-        if (item.actor === "unknown") assert.match(await row.locator(".full-text-preview-label").textContent(),
-            /Copilot chat prompt \/ (Who sent this was not recorded|This older record has no sender details|Recorded sender details disagree|The recorded sender format is not supported|Recorded as system-supplied context|Recorded sender details could not be verified)/, item.name);
+        if (item.actor === "unknown") assert.equal(await row.locator(".full-text-preview-label").textContent(), "Prompt", item.name);
         else assert.equal(await row.locator(".full-text-preview-label").textContent(), item.actor === "user" ? "Your prompt" : "Agent prompt", item.name);
     }
     await page.locator("#activitySearch").fill(""); await ready(page);

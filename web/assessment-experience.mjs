@@ -271,7 +271,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         return JSON.stringify(snapshot?.catalog.filter(row => selected.has(row.interactionRef))
             .map(row => [row.scenarioId, row.reviewStatusRevision ?? null]));
     }
-    async function overview(host, scenarioIds, { scopeNote = "", findingsHost } = {}) {
+    async function overview(host, scenarioIds, { scopeNote = "", findingsHost, matchedCallCount = null } = {}) {
         hosts.add(host);
         if (findingsHost) hosts.add(findingsHost);
         const request = {}, started = generation;
@@ -285,7 +285,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         const reviewRevision = reviewRevisionFor(membership.refs);
         const isCurrent = () => started === generation && host.isConnected && overviewRequests.get(host) === request
             && reviewRevision === reviewRevisionFor(membership.refs);
-        const signature = JSON.stringify([started, expected, membership.refs, membership.unavailable, scopeNote, reviewRevision]);
+        const signature = JSON.stringify([started, expected, membership.refs, membership.unavailable, scopeNote, reviewRevision, matchedCallCount]);
         if (acceptedOverviews.get(host) === signature && host.contains(document.activeElement)) return;
         acceptedOverviews.delete(host);
         if (findingsHost) {
@@ -320,7 +320,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 } else {
                     const model = presentation.summarize(data.metrics, { membershipStatus: membership.unavailable ? "partial" : "complete-retained",
                         assessmentAttempts: data.assessmentAttempts, reviewStatuses: data.reviewStatuses ?? null });
-                    renderSummary(host, model, { findingsHost, bindDetails, showTiming: false, disclosureKey: "assessment:overview:" + JSON.stringify(membership.refs),
+                    renderSummary(host, model, { findingsHost, matchedCallCount, bindDetails, showTiming: false, disclosureKey: "assessment:overview:" + JSON.stringify(membership.refs),
                         helpButton: measureHelp, detailsLabel: "Measure definitions", onDetails: trigger => showDetails(model, null, trigger) });
                     automaticEntry(host);
                 }
@@ -337,7 +337,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             });
         } catch (error) {
             if (isCurrent()) {
-                unavailable(host, error.message, () => overview(host, scenarioIds, { scopeNote, findingsHost }));
+                unavailable(host, error.message, () => overview(host, scenarioIds, { scopeNote, findingsHost, matchedCallCount }));
                 if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
             }
         }

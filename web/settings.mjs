@@ -14,6 +14,7 @@ export const settingsMarkup = `
   </aside>
   <div class="settings-content">
   <p id="settingsMessage" class="notice" role="status" tabindex="-1" hidden></p>
+  <p id="settingsConnectionError" class="notice error" role="alert" hidden></p>
   <button id="reloadSettings" type="button" hidden>Read current connection</button>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
@@ -23,20 +24,19 @@ export const settingsMarkup = `
     </section>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Delete collected activity</h3>
-    <p id="deleteActivityHelp">Permanently remove all collected activity or a date range after preview. Copilot sources and saved reports stay unchanged.</p>
+    <p id="deleteActivityHelp">Preview permanent local deletion.</p>
     </div>
     <button id="deleteActivity" type="button" class="danger" aria-describedby="deleteActivityHelp">Delete collected activity</button>
     </div>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Recollect activity</h3>
-    <p id="recollectActivityHelp">Restore available activity from approved Copilot chats only after preview and confirmation. Missing source history cannot be recovered.</p>
+    <p id="recollectActivityHelp">Missing history stays unavailable.</p>
     </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Recollect from approved sources</button></div>
-    <a href="#reports" data-settings-link>Open saved reports</a>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3></div><a class="button-link" href="#reports" data-settings-link>Open saved reports</a></div>
   </section>
   <section class="settings-section" data-settings-section="ai" aria-labelledby="aiReviewsTitle" hidden>
     <h2 id="aiReviewsTitle" tabindex="-1">AI reviews</h2>
     <div id="automaticScoreSetup"></div>
-    <p class="settings-help">Sending evidence to GitHub Copilot requires separate approval and an AI-credit budget. Charges can exceed the soft limit.</p>
   </section>
   <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
     <h2 id="displayTitle" tabindex="-1">Display</h2>
@@ -57,7 +57,7 @@ export const settingsMarkup = `
       <div class="settings-group-heading"><h3 id="connectionSourceTitle">Source</h3><span id="connectionStatus" class="connection-status">Checking connection</span></div>
       <div id="approvedConnection" hidden>
         <p><strong>Local Copilot chats</strong> <span id="connectionApproval" class="approved-label">Approved</span></p>
-        <div class="settings-actions"><a id="viewApprovedSource" class="button-link quiet" href="#settings?section=connection&setting=source-paths" data-settings-link>View source</a><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button></div>
+        <div class="settings-actions"><a id="viewApprovedSource" class="button-link" href="#settings?section=connection&setting=source-paths" data-settings-link>View source</a><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button></div>
       </div>
       <div id="unapprovedConnection" hidden>
         <p>Collect local Copilot activity, including original prompts. Review the source paths before connecting.</p>
@@ -229,7 +229,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
     const $ = id => document.getElementById(id);
     const fields = ["sourceDatabase", "sourceSessions", "collectionWindow", "collectionCadence"];
     const explanations = new Map();
-    let latest, baseline, initialized = false, editing = false, busy = false, stale = false, uncertain = false, pendingAction = "", checking = false, visibleSection, visibleSetting;
+    let latest, baseline, initialized = false, editing = false, busy = false, stale = false, uncertain = false, readError = "", pendingAction = "", checking = false, visibleSection, visibleSetting;
     function version(status) { return status?.configVersion ?? JSON.stringify(status?.config ?? null); }
     function values() {
         return { appDbPath: $("sourceDatabase").value.trim(), sessionRoot: $("sourceSessions").value.trim(),
@@ -267,8 +267,12 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         $("sourceEditAction").hidden = editing;
         $("sourceEditor").hidden = !editing;
         $("returnToSourceReview").hidden = !editing;
-        setText("connectionStatus", !latest ? "Checking connection" : !approved ? "Not connected" : latest.error ? "Connection issue"
-            : !latest.config.enabled ? "Paused" : latest.connected ? "Collection on" : "Checking connection");
+        const connectionState = !latest ? "Checking connection" : !approved ? "Not connected" : latest.error ? "Connection issue"
+            : !latest.config.enabled ? "Paused" : latest.connected ? "Collection on" : "Checking connection";
+        setText("connectionStatus", readError ? latest ? `Last known: ${connectionState}` : "Status unavailable" : connectionState);
+        setText("connectionApproval", readError ? "Previously approved" : "Approved");
+        setText("settingsConnectionError", readError ? `Connection status could not be read. ${latest ? "Showing last-known settings. " : ""}${readError}` : "");
+        $("settingsConnectionError").hidden = !readError || visibleSection !== "connection";
         setText("approvedDatabase", latest?.config?.appDbPath || "");
         setText("approvedSessions", latest?.config?.sessionRoot || "");
         setText("sourceEditorTitle", approved ? "Change source paths" : "Review this source");
@@ -284,20 +288,20 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         setText("connectCollection", approved ? "Approve and switch source" : "Approve source and start collection");
         setText("pauseCollection", latest?.config?.enabled ? "Pause collection" : "Resume collection");
         for (const id of fields) $(id).disabled = working;
-        for (const id of ["collectNow", "pauseCollection", "editSource"]) $(id).disabled = !approved || working || uncertain || stale || changed || editing;
-        $("reviewSource").disabled = !latest || working || uncertain;
-        $("connectCollection").disabled = !editing || working || uncertain || stale || !values().appDbPath || !values().sessionRoot || (approved && !sourceChanged);
-        $("saveCollection").disabled = !approved || !changed || editing || working || uncertain || stale;
+        for (const id of ["collectNow", "pauseCollection", "editSource"]) $(id).disabled = !approved || working || uncertain || readError || stale || changed || editing;
+        $("reviewSource").disabled = !latest || working || uncertain || Boolean(readError);
+        $("connectCollection").disabled = !editing || working || uncertain || readError || stale || !values().appDbPath || !values().sessionRoot || (approved && !sourceChanged);
+        $("saveCollection").disabled = !approved || !changed || editing || working || uncertain || readError || stale;
         $("preferenceActions").hidden = !approved || editing;
         $("cancelPreferences").disabled = (!changed && !stale) || working;
         $("cancelSource").disabled = working;
-        $("reloadSettings").hidden = !uncertain;
+        $("reloadSettings").hidden = !uncertain && (!readError || visibleSection !== "connection");
         $("reloadSettings").disabled = working;
         const progress = checking || pendingAction === "/api/collection/now" ? "A local check is in progress; wait for it to finish."
             : pendingAction === "/api/collection/status" ? "Wait while the current connection is read."
             : "Wait while the collection settings are saved.";
         const blocked = working ? progress
-            : uncertain ? "Read the current connection before trying another change."
+            : uncertain || readError ? "Read the current connection before trying another change."
             : stale ? "Cancel your edits to load the connection changed in another panel."
             : editing ? "Approve or cancel the source edits before using this action."
             : changed ? "Save or cancel your preference changes first."
@@ -324,10 +328,10 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
                 if (id === "reviewSource" && !latest) reason = "Wait for the current connection to load.";
                 else if (id === "cancelSource") reason = progress;
                 else if (id === "cancelPreferences") reason = busy ? progress : "There are no preference changes to cancel.";
-                else if (!busy && !uncertain && !stale && id === "connectCollection") reason = !values().appDbPath || !values().sessionRoot
+                else if (!busy && !uncertain && !readError && !stale && id === "connectCollection") reason = !values().appDbPath || !values().sessionRoot
                     ? "Enter both local source paths before approving."
                     : "Change a source path before approving a replacement.";
-                else if (!busy && !uncertain && !stale && id === "saveCollection" && !changed) reason = "Change a preference before saving.";
+                else if (!busy && !uncertain && !readError && !stale && id === "saveCollection" && !changed) reason = "Change a preference before saving.";
             }
             if (id !== "collectNow") {
                 ux.tooltip(control, control.disabled ? reason : consequence);
@@ -346,6 +350,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         onDraftChange(changed || editing);
     }
     function receive(status) {
+        readError = "";
         latest = status;
         if (!initialized || (!dirty() && !editing && !busy && !uncertain)) reset();
         else if (version(status) !== version(baseline)) stale = true;
@@ -366,7 +371,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         ux.restoreFocus(target?.disabled ? target.closest(".ux-disabled-help") : target);
     }
     async function act(endpoint, input, success) {
-        if (busy || uncertain || stale) return;
+        if (busy || uncertain || readError || stale) return;
         const origin = visibleSection;
         busy = true; pendingAction = endpoint; message(""); invalidate(); paint();
         try {
@@ -420,7 +425,10 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
             const status = await read();
             uncertain = false; receive(status);
             message(stale ? "Current connection read. Your earlier edits have not been reapplied. Cancel changes to review the current settings." : "Current connection read. Review your changes before trying again.", false, origin);
-        } catch (error) { message("The connection could not be read. " + error.message, true); }
+        } catch (error) {
+            if (readError && !uncertain) readError = error.message;
+            else message("The connection could not be read. " + error.message, true);
+        }
         finally { busy = false; pendingAction = ""; paint(); }
     });
     window.addEventListener("beforeunload", event => {
@@ -428,7 +436,8 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         event.preventDefault(); event.returnValue = "";
     });
     return { receive, hasDraft: () => dirty() || editing, isBusy: () => busy, explain: id => explanations.get(id) || "",
-        canRefresh: () => !busy && !uncertain && !stale && !dirty() && !editing,
+        canRefresh: () => !busy && !uncertain && !readError && !stale && !dirty() && !editing,
+        unavailable(error) { readError = error; paint(); },
         setSection(section, setting) {
             if (visibleSection === section && visibleSetting === setting) return;
             const sectionChanged = visibleSection !== section;

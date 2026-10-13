@@ -76,7 +76,7 @@ async function setup(t, { savedFeedback = false, nativeScrollbars = false, recor
         } finally { for (const fn of cleanup) await fn(); }
     });
     await page.goto(runtime.url); await ready(page);
-    await expect(page.locator("#homeFindings")).toContainText("Work IQ sign-in was required");
+    await expect(page.locator("#homeFindings")).toContainText("Failure details");
     return page;
 }
 async function capture(page, name) {
@@ -157,19 +157,21 @@ test("the concise footer still reports a failed sibling outside matching-call co
     await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("4");
     await expect(page.locator('#outcomeChart [data-category="failure"]')).toHaveAttribute("data-count", "0");
-    await expect(page.locator("#homeFindings")).toContainText("Work IQ sign-in was required for the recorded call (1 call).");
-    await expect(page.locator("#homeFindings")).toContainText("Includes all calls in matching interactions.");
+    await expect(page.locator("#homeFindings")).toContainText("1 failed call");
+    await expect(page.locator("#homeFindings")).toContainText("Details include all 5 calls in matching interactions.");
+    await page.locator("#homeFindings").getByRole("button", { name: "Failure details" }).click();
+    await expect(page.locator("#homeInsights .assessment-findings")).toContainText("Work IQ sign-in was required for the recorded call (1 call).");
     await expect(page.locator("#homeFindings")).not.toContainText("/mcp auth");
 });
 
-test("outcome footer keeps the recorded cause and full-interaction scope without recovery boilerplate", async t => {
+test("outcome footer links recorded causes without repeating them or routine full-interaction scope", async t => {
     const page = await setup(t), findings = page.locator("#homeFindings");
-    await expect(findings).toContainText("Work IQ sign-in was required for the recorded call (1 call).");
+    await expect(findings).toContainText("Failure details");
     await expect(findings).not.toContainText("Notes on full interactions");
     await expect(findings).not.toContainText("/mcp auth");
     await expect(findings).not.toContainText("No retry");
-    await expect(findings).toContainText("Includes all calls in matching interactions.");
-    await expect(findings.locator("summary,button")).toHaveCount(0);
+    await expect(findings.locator("p,li,summary")).toHaveCount(0);
+    await expect(findings.locator("button")).toHaveCount(1);
     await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
     await expect(findings).toBeHidden();
     await expect(page.locator("#activityCount")).toHaveText("4");
@@ -300,7 +302,7 @@ for (const savedFeedback of [false, true]) test(`native chart mode cycles retain
         await page.reload(); await ready(page);
         await expect(page.locator("#homeFindings")).not.toHaveAttribute("aria-busy", "true");
         await page.evaluate(() => document.fonts.ready);
-        if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Answer: 1 correct");
+        if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Saved reviews");
         else await expect(page.locator("#homeFindings")).not.toContainText("Your feedback");
         await page.mouse.move(width - 30, 700);
         await page.mouse.wheel(0, (await geometry()).y - 445);
@@ -329,7 +331,7 @@ for (const savedFeedback of [false, true]) test(`native chart mode cycles retain
             assert.ok(Math.abs(current.y - initial.y) < 2, `${mode} preserves the mode controls' viewport anchor`);
             await expect(control).toHaveAttribute("aria-pressed", "true");
             await expect(page.locator("#activityCount")).toHaveText("5");
-            if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Answer: 1 correct");
+            if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Saved reviews");
         }
         assert.deepEqual(await page.evaluate(() => window.chartModeClicks), ["workload", "endpoint", "time", "workload", "endpoint", "time"].map(mode => ({ mode, trusted: true })));
         await page.goBack(); await ready(page); await page.waitForTimeout(500);
@@ -356,7 +358,7 @@ for (const savedFeedback of [false, true]) test(`native chart mode cycles retain
             assert.equal(await timing.evaluate(node => node.parentElement.open), open);
             assert.ok(Math.abs((await timing.boundingBox()).y - timingTop) < 2, "Timing disclosure stays stationary");
             assert.ok(Math.abs(await page.evaluate(() => scrollY) - timingScroll) < 2, "Timing disclosure preserves native scroll");
-            if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Answer: 1 correct");
+            if (savedFeedback) await expect(page.locator("#homeFindings")).toContainText("Saved reviews");
         }
     }
 });
@@ -397,7 +399,7 @@ test("Analyze uses one chart information destination and keeps exact data live t
     await expect(page.locator("#meaning")).toHaveAttribute("open", "");
     await expect(page.locator("#countTable tfoot td").first()).toHaveText("1");
     await expect(page.locator("#percentageData .percentage-table tfoot td:first-of-type")).toHaveText(["1", "1", "1"]);
-    await expect(page.locator("#homeFindings")).toContainText("Work IQ sign-in was required");
+    await expect(page.locator("#homeFindings")).toContainText("Failure details");
     await page.locator("#percentageData .percentage-table tbody a").first().click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("1");
     await expect(page.locator("#activityList .request-row")).toHaveCount(1);

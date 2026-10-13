@@ -96,7 +96,7 @@ async function geometry(page) {
             project: box(row.querySelector(".project-context")), timestamp: box(timestamp),
             meta: box(row.querySelector(".request-meta")), tools: box(row.querySelector(".interaction-tools")),
             results: box(row.querySelector(".recorded-results")),
-            factFonts: [".interaction-tools", ".request-meta", ".result-unit"].map(selector => getComputedStyle(row.querySelector(selector)).fontSize),
+            factFonts: [".interaction-tools", ".request-meta", ".card-outcomes"].map(selector => getComputedStyle(row.querySelector(selector)).fontSize),
             provenanceFonts: [row.querySelector(".project-context"), timestamp].map(node => getComputedStyle(node).fontSize),
             promptFont: getComputedStyle(row.querySelector(".full-text-preview")).fontSize };
     }));
@@ -115,12 +115,13 @@ test("interaction rows group prompt/open and call facts without losing evidence,
         await expect(card(page, id)).toContainText("workiq-fetch");
         await expect(card(page, id).locator("dt")).toContainText(["Message recorded"]);
     }
-    await expect(card(page, "missing")).toContainText("Recorded sender details could not be verified");
+    await expect(card(page, "missing").locator(".full-text-preview-label")).toHaveText("Prompt");
+    await expect(card(page, "missing").locator(".full-text-preview-label")).toHaveAttribute("data-prompt-actor", "unknown");
     await expect(card(page, "missing")).toContainText("Service not shown");
     assert.deepEqual((await card(page, "multiple").locator(".card-tool-name").allTextContents()).sort(), ["workiq-ask", "workiq-fetch"]);
     await expect(card(page, "multiple").locator('[data-outcome="success"]')).toHaveAttribute("data-count", "1");
     await expect(card(page, "multiple").locator('[data-outcome="failure"]')).toHaveAttribute("data-count", "1");
-    await expect(card(page, "multiple").locator(".result-unit")).toContainText("2 of 2");
+    await expect(card(page, "multiple").locator(".result-unit,.card-result-scope")).toHaveCount(0);
     const long = card(page, "long");
     await card(page, "missing").evaluate(node => node.scrollIntoView({ block: "start" }));
     await capture(page, "long-and-multiple");
@@ -163,7 +164,7 @@ test("interaction rows group prompt/open and call facts without losing evidence,
     const short = before[0];
     assert.ok(short.open.y < short.text.y + 8, "Open belongs beside the prompt, not on an extra row below it");
     assert.ok(short.tools.y < short.meta.y, "Tools have their own list before separate category metadata");
-    assert.ok(short.results.y >= short.timestamp.bottom, "Matching outcomes follow the prompt, tools and recorded context");
+    assert.ok(short.results.y >= short.meta.bottom, "Matching outcomes stay with their tool/activity summary");
     assert.equal(new Set(short.factFonts).size, 1, "Tool, service and call count use one text size");
     assert.equal(new Set(short.provenanceFonts).size, 1, "Project and recorded time share one metadata size");
     assert.ok(short.timestamp.y >= short.project.bottom, "Project and time have distinct stacked key/value rows");
