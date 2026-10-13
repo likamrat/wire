@@ -30,7 +30,13 @@ export function createFilterState(results, authorship) {
             "withinServices", "scope", "authors", "result", "project", "endpoint"].filter(key => route[key] !== undefined).map(key => [key, route[key]]));
         return { ...retained, ...next };
     }
-    return { canonical, query, scope };
+    function bucket(route) {
+        if (route.bucket) return route.bucket;
+        if (["day", "week", "month", "7", "30"].includes(route.range)) return "day";
+        const span = Date.parse(route.to) - Date.parse(route.from);
+        return span < 31 * 86400000 ? "day" : span >= 366 * 86400000 ? "month" : "week";
+    }
+    return { canonical, query, scope, bucket };
 }
 
 // Refine only an accepted canonical snapshot. Private search never becomes a server filter.
@@ -133,6 +139,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : kind === "services" ? link("", "activity", { withinServices: [...new Set([...(route.withinServices?.split(",") || []), row.id])].sort().join(","), page: undefined })
                 : kind === "service-purpose" ? link("", "activity", { endpoint: "operation:workiq-retrieve", page: undefined })
                     : kind === "service-preparation" ? link("", "activity", { service: "Discovery", page: undefined })
+                        : kind === "service-operation" ? link("", "activity", { tool: "workiq-ask", endpoint: row.endpointId, page: undefined })
                 : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined }) : null });
     $("analyzePopulation").append($("filters"), $("filterChips"), $("serviceFocus"), $("freshActivity"), $("collectionNotice"));
     $("freshHelpBody").append($("activityCollectionLink"));
@@ -498,9 +505,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const operation = categories.operation(title), cue = serviceCue("span", service);
             const evidence = categories.serviceEvidence(row ? { ...row, tool: title } : row, layer);
             const label = service === "Discovery" || evidence?.reason === "hosted-routing" ? operation.label : entry.label;
+            const scope = layer === "tool" ? categories.requestedSearchScope(sourceCallFor(row)) : null;
+            const help = [
+                evidence?.description ?? (service === "Discovery" ? operation.description : entry.description),
+                scope ? `${scope.label}. ${scope.description}` : null,
+            ].filter(Boolean).join(" ");
             cue.lastElementChild.textContent = label;
             if (evidence) cue.querySelector("svg")?.remove();
-            identity.append(cue, ux.helpButton(label, evidence?.description ?? (service === "Discovery" ? operation.description : entry.description)));
+            identity.append(cue, ux.helpButton(label, help));
             heading.append(identity);
         }
         return heading;
@@ -516,7 +528,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.append(label, ux.helpButton(labelText, text));
         field.append(heading, control);
     }
-    fieldHelp("dateFilter", "Dates", "Controls the date range for all Analyze widgets and their records. All dates uses retained evidence in this collection. Last 7/30 days include today. Custom dates include both boundary days in the display time zone. Changing dates does not collect history.");
+    fieldHelp("dateFilter", "Dates", "One period for every Analyze widget, headline and matching record. Today, This week and This month use calendar periods in the display time zone; weeks start Monday. All dates uses retained evidence. Custom dates include both boundary days. Changing dates does not collect history.");
     fieldHelp("toolFilter", "Tool", "The recorded tool name, not the prompt's author. Tools and all other filters narrow the same evidence rows.");
     fieldHelp("serviceAssociationFilter", "Service", "Match any recorded service target, including multi-service calls. Choosing a service also includes separately named missing-service context; remove its chip for strict matches. Category keeps the existing exclusive breakdowns.");
     fieldHelp("serviceFilter", "Category", () => {
@@ -589,9 +601,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             reportComparisonUI?.invalidate("Display time context changed. Prepare and review a new comparison copy.", false, { force: true });
         }
         viewerTime = nextTime;
-        if (["7", "30"].includes(route.range)) {
-            const to = time.day(new Date().toISOString(), viewerTime.timeZone);
-            route = { ...route, from: time.addDays(to, 1 - Number(route.range)), to };
+        const preset = time.preset(route.range, viewerTime.timeZone);
+        if (preset) {
+            route = { ...route, ...preset };
             rememberRoute(route, true);
         }
         if (draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : dateSelection())) {
@@ -607,7 +619,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         notice.hidden = !notice.textContent;
         selectControls?.sync();
     }
-    function timeChanged() { return JSON.stringify(displayTimeSettings.resolve()) !== JSON.stringify(viewerTime); }
+    function timeChanged() {
+        const next = displayTimeSettings.resolve(), preset = time.preset(route.range, next.timeZone);
+        return JSON.stringify(next) !== JSON.stringify(viewerTime)
+            || Boolean(preset && (preset.from !== route.from || preset.to !== route.to));
+    }
     function ensureCurrentTime() {
         if (exportWriting) return false;
         if (!timeChanged()) return true;
@@ -1142,7 +1158,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     if (includePurpose) service.append(el("p", "context-help-note", gap.description));
                 }
                 if (!service.childNodes.length) service.textContent = "Service association unavailable in this snapshot.";
-            } else service.append(serviceCue("span", row?.workload));
+            } else {
+                const cue = serviceCue("span", row?.workload), scope = categories.requestedSearchScope(call);
+                if (scope) cue.lastElementChild.replaceChildren(metadata.item(cue.lastElementChild.textContent,
+                    { help: `${scope.label}. ${scope.description}` }));
+                service.append(cue);
+            }
             list.append(el("dt", "", returned ? "Service" : "Activity category"), service);
         }
         if (operation && includePurpose) {
@@ -1235,7 +1256,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function query() {
-        return { layer: route.layer || "tool", groupBy: route.chart === "endpoint" ? "endpoint" : "workload", bucket: route.bucket || "week", filters: filterState.query(route), limit: 8, timeContext: viewerTime };
+        return { layer: route.layer || "tool", groupBy: route.chart === "endpoint" ? "endpoint" : "workload", bucket: filterState.bucket(route), filters: filterState.query(route), limit: 8, timeContext: viewerTime };
     }
     function validateAnalytics(data, records) {
         if (!data || !Array.isArray(data.groups) || !Array.isArray(data.rows) || !data.coverage || !results.valid(data.totals)) throw new Error("Activity summaries are unavailable. No replacement counts were inferred.");
@@ -1488,7 +1509,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             toolFilter: route.tool || "all", serviceAssociationFilter: route.services || "all", chatFilter: route.session || "all",
             serviceFilter: route.service || "all",
             projectFilter: route.project || "all", scopeFilter: route.scope || "history",
-            bucketFilter: route.bucket || "week",
             fromFilter: dateDraft?.from ?? dateInput(route.from), toFilter: dateDraft?.to ?? dateInput(route.to),
         };
         for (const [id, value] of Object.entries(values)) {
@@ -1988,13 +2008,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         document.querySelectorAll("[data-chart]").forEach((node) => node.setAttribute("aria-pressed", String(node.dataset.chart === chartType)));
         $("chartTitle").textContent = chartType === "time" ? "Activity over time" : chartType === "workload" ? layer === "tool" ? "Activity categories" : "Service categories" : layer === "tool" ? "Paths and operations" : "API paths requested";
-        const chartUnit = results.columnUnit(layer, 2);
-        $("chartGrouping").textContent = chartType === "time"
-            ? `Dated ${chartUnit} grouped by ${applied.bucket}.`
-            : chartType === "workload"
-                ? `One ${layer === "tool" ? "activity" : "service"} category per ${results.columnUnit(layer, 1)}.`
-                : `${chartUnit[0].toUpperCase() + chartUnit.slice(1)} grouped by recorded ${layer === "tool" ? "path or operation" : "API path"}.`;
-        $("bucketControl").hidden = chartType !== "time";
         const notes = $("chartReadingNotes");
         const reading = el("dl");
         for (const [label, text] of [
@@ -2003,7 +2016,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : "Bars use a linear count scale from zero. Counts, shares and result sections are not enlarged. Full labels and exact-data links remain usable even for tiny values."],
             ["Chart colors", chartType === "workload" ? `Color identifies the ${layer === "tool" ? "activity category" : "service"}, not its result.` : "Colors match the recorded results."],
             ["Dates and grouping", chartType === "time"
-                ? `${help.fields.bucketFilter} Weeks start Monday; daylight-saving changes follow the display time zone in Settings. Last 7/30 days include today and the preceding local days. Zero means no matching records, not proof that no activity occurred. Scroll horizontally for more dates when needed, or use the exact data below.`
+                ? `${help.fields.timeGrouping} Weeks start Monday; daylight-saving changes follow the display time zone in Settings. Zero means no matching records, not proof that no activity occurred. Scroll horizontally for more dates when needed, or use the exact data below.`
                 : chartType === "workload" && layer === "tool" ? help.charts.activityCategory : help.charts[chartType]],
             ["Evidence limits", `${explanations[layer]} Review labels and relevance assessments do not change recorded results.${layer === "tool" ? " Tool completion is not an observed Graph HTTP response." : ""}`],
         ]) reading.append(el("dt", "", label), el("dd", "", text));
@@ -2349,7 +2362,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const call = sourceCallFor(row);
         const recordedLabel = applied.layer === "code-reference" ? "Reference recorded" : applied.layer === "reported-api" ? "Parent call recorded"
             : ["direct-request", "recorded-http"].includes(applied.layer) ? "Request site recorded" : "Action recorded";
-        if (scenario) card.append(textAccess.render(scenario.userPrompt, { key: "action:" + row.id, originKind: authorship.originKind(scenario), compactProvenance: true,
+        if (scenario) card.append(textAccess.render(scenario.userPrompt, { key: "action:" + row.id, originKind: authorship.originKind(scenario), compactProvenance: true, inlinePreview: true,
             navigationNode: link(applied.layer === "tool" ? "Open exact call in context" : "Open exact record in context",
                 "request", { request: scenario.scenarioId, call: row.id,
                     callRevision: applied.layer === "reported-api" ? String(state.revision) : undefined }, "request-link text-link"),
@@ -2427,7 +2440,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const [name, total] of tools) {
             const item = el("li");
             item.append(el("span", "card-tool-name", name));
-            if (showCounts) item.append(el("span", "card-tool-count", `${count(total)} ${results.columnUnit(applied.layer, total)}`));
+            if (showCounts && (tools.size > 1 || total > 1)) item.append(document.createTextNode(" "),
+                el("span", "card-tool-count", `(${count(total)} ${results.columnUnit(applied.layer, total)})`));
             list.append(item);
         }
         if (!tools.size) list.append(el("li", "", "No tool evidence in this view"));
@@ -2457,18 +2471,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const rows = rowsFor(scenario.scenarioId), row = viewKey(el("article", "request-row activity-card"), "request:" + scenario.scenarioId);
         const content = el("div", "interaction-body");
         const requestLink = link("View interaction", "request", { request: scenario.scenarioId }, "request-link text-link");
-        content.append(textAccess.render(scenario.userPrompt, { key: "activity:" + scenario.scenarioId, navigationNode: requestLink, originKind: authorship.originKind(scenario), compactProvenance: true }));
+        content.append(textAccess.render(scenario.userPrompt, { key: "activity:" + scenario.scenarioId, navigationNode: requestLink, originKind: authorship.originKind(scenario), compactProvenance: true, inlinePreview: true }));
         const services = [...new Set(rows.map(row => row.workload).filter(Boolean))];
         const cue = serviceCue("span", services.length > 1 ? "Multiple workloads" : services[0] || "Unknown");
         cue.lastElementChild.remove();
         const serviceText = servicesFor(rows);
+        const requestedScopes = applied.layer === "tool" ? [...new Set(rows.map(row => {
+            const scope = categories.requestedSearchScope(sourceCallFor(row));
+            return scope ? `${scope.label}. ${scope.description}` : null;
+        }).filter(Boolean))] : [];
         const meta = metadata.row([
-            { label: serviceText, leading: cue, helpWithLabel: true, helpLabel: `${serviceText}; ${applied.layer === "tool" ? "recorded activity categories" : "recorded services"}`, help: categories.used(rows.map(row => row.workload)).map(entry => `${entry.label}: ${entry.description}`).join(" ") || categories.describe("Unknown").description },
+            { label: serviceText, leading: cue, helpWithLabel: true, helpLabel: `${serviceText}; ${applied.layer === "tool" ? "recorded activity categories" : "recorded services"}`, help: [
+                categories.used(rows.map(row => row.workload)).map(entry => `${entry.label}: ${entry.description}`).join(" ") || categories.describe("Unknown").description,
+                ...requestedScopes,
+            ].join(" ") },
         ]);
         meta.classList.add("request-meta");
         const composition = el("div", "card-details"), activity = el("div", "card-activity");
         const details = el("dl", "activity-card-facts"), context = el("dl", "activity-card-facts card-context");
-        details.append(cardFact("Tools in this view", cardTools(rows)),
+        const tools = cardTools(rows);
+        details.append(cardFact(tools.children.length > 1 ? "Tools" : "Tool", tools),
             cardFact(applied.layer === "tool" ? "Activity categories" : "Services", meta), responseTimingFact(scenario));
         appendCardSource(context, scenario);
         const outcome = matchingResults(scenario.scenarioId, { compact: true });
@@ -2557,9 +2579,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (entry.kind === "prompt" && entry.relation === "selected") {
                 item.id = "selectedContext";
                 if (target.status !== "available") item.setAttribute("aria-current", "true");
-                label.classList.add("context-selected-label");
-                label.textContent = "Selected";
-                item.querySelector(".full-text-header")?.append(label);
+                label.remove();
             }
             if (target.status === "available" && entry.actionId === target.actionId && entry.scenarioId === route.request) {
                 item.dataset.selectedAction = "true";
@@ -2605,6 +2625,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (originKind !== "copilot-chat" && project.classList.contains("unscoped")) project.textContent = "Project not recorded";
         sourceMeta.append(project, el("p", "request-time", requestTiming.summary(scenario, applied.timeContext)));
         intro.append(sourceIdentity, sourceMeta);
+        if (!sameScope) intro.append(el("p", "reader-scope", full
+            ? `${count(rows.length)} of ${count(full.length)} ${results.unit(applied.layer, full.length)} match the current view. The full recorded interaction follows.`
+            : "Matching context unavailable. The retained interaction follows."));
         const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
         requestText.append(textAccess.render(scenario.userPrompt, {
             key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true,
@@ -2613,10 +2636,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }));
         const responseTime = el("dl", "reader-response-timing");
         responseTime.append(responseTimingFact(scenario));
-        requestText.append(responseTime);
         const modelFact = el("dl", "activity-card-facts interaction-model-fact");
         modelFact.append(originalModelFact(scenario));
-        requestText.append(modelFact);
+        const readerFacts = el("div", "reader-facts");
+        readerFacts.append(modelFact, responseTime);
+        requestText.append(readerFacts);
         const insightHost = el("div", "interaction-insights"), responseHost = el("section", "interaction-response");
         const findingsHost = el("div", "interaction-findings");
         findingsHost.dataset.presentation = "reader";
@@ -2658,11 +2682,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const actions = el("section", "request-actions");
         actions.setAttribute("aria-labelledby", "requestReportTitle");
         const reportContext = el("div");
-        const reportTitle = el("h2", "", "Report selection");
+        const reportTitle = el("p", "muted");
         reportTitle.id = "requestReportTitle";
         const included = reportSelection().requests.some(request => request.aliases.includes(scenario.scenarioId));
-        reportContext.append(reportTitle, el("p", "muted", selected.has(scenario.scenarioId) ? "This request is selected."
-            : included ? "This request is included through the current report scope." : "This request is not selected."));
+        reportTitle.textContent = selected.has(scenario.scenarioId) ? "Selected for report."
+            : included ? "Included through the current report scope." : "Not selected for report.";
+        reportContext.append(reportTitle);
         const pick = button(selected.has(scenario.scenarioId) ? "Remove from report" : "Add to report", () => {
             selected.has(scenario.scenarioId) ? selected.delete(scenario.scenarioId) : selected.add(scenario.scenarioId);
             reportScope = "selected";
@@ -2689,6 +2714,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
+            const expert = el("div", "technical-detail");
             item.dataset.toolCallId = tool.toolCallId || "";
             const heading = el("div", "call-heading");
             heading.append(actionHeading(tool.tool || "Recorded assistant action", row?.workload, row));
@@ -2698,24 +2724,38 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             item.append(heading);
             const sourceCall = sourceCallFor(row) || tool;
             const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false });
+            const secondaryFields = el("dl", "action-fields");
+            for (const term of [...fields.querySelectorAll(":scope > dt")]) {
+                const value = term.nextElementSibling;
+                if (!value.querySelector("code")) secondaryFields.append(term, value);
+            }
             if (fields.childElementCount) item.append(fields);
+            if (secondaryFields.childElementCount) expert.append(secondaryFields);
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
             if (apiRows?.length) {
                 const apiSummary = resultLine("reported-api", results.summarize(apiRows));
                 apiSummary.classList.add("call-api-summary");
                 item.append(apiSummary);
             }
-            else if (row?.workload !== "Discovery") item.append(el("p", "result-missing-api", apiRows ? "API metadata: None recorded." : "API metadata: Unavailable."));
-            if (!sameScope) actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
+            else if (row?.workload !== "Discovery") expert.append(el("p", "result-missing-api", apiRows ? "API metadata: None recorded." : "API metadata: Unavailable."));
+            if (!sameScope) {
+                actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
+                const scope = item.querySelector(".action-context");
+                if (scope.textContent === "Outside current view") expert.append(scope);
+                else if (applied.layer === "tool" && row && rows.some(match => match.id === row.id)) scope.textContent = "Matches current view";
+            }
             const failure = recordedFailure(tool, ["failure", "transport"].includes(row?.outcome));
-            if (failure) item.append(el("p", "action-error", failure),
-                el("p", "context-help-note", "Historical call evidence only; it does not establish current sign-in or permission state."));
+            if (failure) {
+                const missingCause = Object.values(help.failureEvidence).includes(failure);
+                item.append(el("p", "action-error", missingCause ? "Failure cause unavailable." : failure));
+                if (missingCause) expert.append(el("p", "context-help-note", failure));
+                expert.append(el("p", "context-help-note", "Historical call evidence only; it does not establish current sign-in or permission state."));
+            }
             if (row) {
                 const returned = returnedDetails(sourceCall, row, apiRows,
                     applied.layer === "reported-api" && target.actionId === row.id ? target.row.id : undefined);
                 if (returned) item.append(returned);
             }
-            const expert = el("div", "technical-detail");
             expert.append(facts([["Started", timestamp(tool.startedAt)], ["Ended", timestamp(tool.completedAt ?? tool.endedAt)], ["Duration", tool.durationMs == null ? null : tool.durationMs + " ms"],
                 ["Raw start timestamp", tool.startedAt], ["Raw end timestamp", tool.completedAt ?? tool.endedAt],
                 ["Tool outcome", tool.reportedOutcome], ["Execution success", tool.toolSucceeded], ["HTTP observed", tool.observedGraphHttp ? "Yes" : "No"], ["Tool call ID", tool.toolCallId], ["Parent invocation", tool.parentToolCallId], ["Parallel group", tool.parallelGroup]], {
@@ -2787,7 +2827,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const entry of entries.slice(entryStart)) Object.assign(entry, {
             at: entry.startedAt, scenarioId: scenario.scenarioId, relation: group.relation, kind: "action",
         });
-        if (entryStart === entries.length) recorded.append(el("p", "", "No individual action details were retained."));
+        if (entryStart === entries.length) requestText.append(el("p", "reader-empty", "No individual action details were retained."));
         summaryContents.append(recorded);
         if (isSelected) body.append(actions);
         for (const item of analytics.journeys || []) {
@@ -4239,18 +4279,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.restoreFocus($("promptAuthorFilter-control"));
         navigate(routeFor(route.view, { authors: undefined, page: undefined, request: undefined }), false, { keepFocus: true });
     });
-    $("bucketFilter").addEventListener("change", () => navigate(routeFor("home", { bucket: $("bucketFilter").value }), false, { keepFocus: true }));
     $("dateFilter").addEventListener("change", () => {
         dateDraft = null;
         dateError("");
         const range = $("dateFilter").value;
         $("dateFields").hidden = range !== "custom";
-        if (range === "custom") { go(route.view, { range, page: undefined }); return; }
-        if (range === "capture") go(route.view, { range: undefined, from: undefined, to: undefined, page: undefined });
-        else {
-            const to = time.day(new Date().toISOString(), viewerTime.timeZone);
-            go(route.view, { range, from: time.addDays(to, 1 - Number(range)), to, page: undefined });
-        }
+        const dates = range === "capture" ? { range: undefined, from: undefined, to: undefined }
+            : { range, ...time.preset(range, viewerTime.timeZone) };
+        navigate(routeFor(route.view, { ...dates, bucket: undefined, page: undefined }), false, { keepFocus: true });
     });
     $("filters").addEventListener("submit", (event) => {
         event.preventDefault();
@@ -4262,7 +4298,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         dateError("");
         dateDraft = null;
         if (isLoading && route.from === from && route.to === to) return;
-        navigate(routeFor(route.view, { range: "custom", from, to, page: undefined }), false, { keepFocus: true });
+        navigate(routeFor(route.view, { range: "custom", from, to, bucket: undefined, page: undefined }), false, { keepFocus: true });
     });
     function dateError(message) {
         setText($("dateError"), message);

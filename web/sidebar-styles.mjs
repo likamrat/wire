@@ -1,14 +1,17 @@
 export const sidebarStyles = `
 .app-header {border-bottom-color:color-mix(in srgb,var(--rule) 75%,var(--muted))}
 .app-header .header-inner {display:grid;grid-template-columns:var(--app-sidebar-width,196px) minmax(0,1fr);min-height:76px;max-width:none;gap:0;padding:0}
-.app-header .brand {align-self:stretch;justify-content:center;padding:6px 12px;border-right:1px solid color-mix(in srgb,var(--rule) 75%,var(--muted));overflow:hidden}
-.app-header .brand-home {position:relative;flex:none;width:148px;height:46px;max-width:none}
+.app-header .brand {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:46px auto;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid color-mix(in srgb,var(--rule) 75%,var(--muted));overflow:hidden}
+.app-header .brand-home {position:relative;grid-area:1/1;justify-self:start;flex:none;width:148px;height:46px;max-width:none}
 .app-header .brand-logo {width:148px;height:46px;max-width:none}
-.app-header .brand-caption {flex:none;width:148px;font-size:.6875rem;white-space:normal}
+.app-header .brand-caption {grid-area:2/1;flex:none;width:148px;font-size:.6875rem;white-space:normal}
 .brand .brand-compact {display:none}
-:root[data-navigation=collapsed] .app-header #shellBrand .brand-logo,:root[data-navigation=collapsed] .app-header .brand-caption {visibility:hidden}
-:root[data-navigation=collapsed] .app-header .brand-home {width:44px}
-:root[data-navigation=collapsed] .app-header .brand-compact {display:block;position:absolute;inset:7px 6px}
+.app-header .brand-compact {display:block;position:absolute;left:6px;top:7px;width:32px;height:32px;opacity:0}
+.app-header :is(.brand-logo,.brand-compact) {transform-origin:0 0;pointer-events:none}
+:root[data-navigation=collapsed] .app-header #shellBrand .brand-logo,:root[data-navigation=collapsed] .app-header .brand-caption {opacity:0}
+:root[data-navigation=collapsed] .app-header .brand-caption {visibility:hidden}
+:root[data-navigation=collapsed] .app-header .brand-home {grid-row:1/3;align-self:center;justify-self:center;width:44px}
+:root[data-navigation=collapsed] .app-header .brand-compact {opacity:1}
 .workspace-toolbar {min-width:0}
 .workspace-toolbar-inner {display:grid;grid-template-columns:minmax(0,1fr) clamp(240px,34vw,460px) minmax(0,1fr);align-items:center;gap:12px;padding:8px 24px}
 .app-header .wire-search-entry {grid-column:2;min-width:0;width:100%;max-width:none}

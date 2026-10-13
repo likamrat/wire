@@ -1,5 +1,42 @@
 # Product design
 
+## Interaction reading
+
+The interaction reader leads with source context and the exact retained prompt,
+then recorded calls and responses in their existing chronology. Prompt, response
+and call headings use one Asta Sans type role; model and final-response timing use
+aligned neutral keys and ordinary values. Call duration remains separate from
+final-response time. Unavailable timing or model identity is not guessed.
+
+Source-author qualifiers, partial text, missing responses, failed calls and read
+errors remain visible. Copy names its subject, copies only that exact retained
+body and warns that clipboard text is unmasked and accessible to other apps.
+Read/Hide, deliberate copy, clipboard failure feedback, Back and selected-call
+anchors retain their existing behavior. A retained response has one heading and
+keeps its unverified final-answer status; a missing response is never an answer
+verdict. A request with no retained individual actions says so beside the prompt.
+
+Repeated About-prompt/response disclosures and the Selected prompt badge are
+removed from this reader. Filter scope is stated once; out-of-view and missing
+API metadata remain in each call's existing technical details instead of
+repeating empty fields down the page. Recorded paths, returned-result summaries
+and actual failures stay in the reading flow. Technical details retain exact
+arguments, attribution and source limits; no new accordion layer is introduced.
+Report membership keeps its explicit action and state without a separate title.
+
+Failures without a retained cause say **Failure cause unavailable.** in the
+reading flow. Existing technical details keep the exact source/collection
+qualification and the limit on inferring current sign-in or permissions.
+Recorded sign-in requirements, access-denial wording, error codes and timeouts
+still appear as distinct failure statements, not as generic missing causes or
+instructions to sign in now. Unknown completion remains separate from failure.
+
+These are reader-only presentation changes. Card preview options, evidence
+classification, model provenance, assessment logic, source collection and frozen
+reports are unchanged. Regression proof uses invented records, including linked
+corrections, multiple replies, failed/missing calls, unavailable text, exact
+copy, read/revocation errors and light/dark narrow layouts at enlarged text.
+
 ## Analyze visual summaries
 
 The outcome widget leads with the recorded donut, legend, exact shares and
@@ -12,9 +49,11 @@ qualifies that boundary once and keeps failures in the full interactions visible
 Causes, sign-in guidance, assessment coverage, permission distinctions and
 unknown reasons remain in the existing details and interaction reader.
 
-Services uses the same label, count and bar vocabulary as Tools. **Recorded
-targets** is separate from **Service not established**, which contains
-tool-purpose Search/retrieval, discovery/preparation and missing service details.
+**Services and operations** uses the same label, count and bar vocabulary as
+Tools, with one inclusive heading and an uninterrupted list. It has no category
+dividers, top-right explanation or repeated "Tool purpose" sublabel. Exact
+denominators and attribution definitions remain in accessible record links and
+the existing exact-data view. Preparation is not labelled missing service evidence.
 Every bar uses all matching calls (or the selected record layer) as its
 denominator. Services can overlap; these bars are not a 100% composition.
 Partially attributed calls remain in both their known service and missing-detail
@@ -26,8 +65,19 @@ The existing exact-data table retains aggregate association membership and
 drilldown links. If recorded-target Search is a subset of a mixed-basis aggregate,
 its separate visual count does not pretend the aggregate link selects that
 subset. Tool-purpose and preparation links use the existing exact operation and
-category filters. Missing-detail reasons and counts stay in Chart data and
-definitions, not a second prose summary beside the bars.
+category filters. Missing-detail reasons appear as concise label/count pairs
+below the missing-detail bar, with overlap stated when reasons are non-additive.
+When every remaining gap has the same reason, that reason labels the bar directly
+instead of repeating it underneath. Longer definitions stay in the existing
+Chart data and definitions.
+Targetless `workiq-ask` calls with the hosted-routing evidence reason appear as
+**Copilot assistance** in this screen list. The operation is known even though
+its downstream service is not. This cohort uses exact canonical row IDs; its
+existing tool-and-operation drilldown is enabled only when that refinement
+matches those IDs exactly. Known-target, partially known, unsupported-target and
+non-tool records do not enter this cohort. Remaining missing-target rows and
+reason counts are recomputed from the residual IDs, preserving known-service
+overlap. Canonical v1 missing-service coverage and saved report facts are unchanged.
 
 The headline retains distinct interaction and chat counts without repeating
 the visible Dates filter. Partial coverage and stale-result warnings remain.
@@ -182,13 +232,33 @@ Home, Activity and scoped chats share the primary **Dates, Tool, Service, Outcom
 Author** controls. **More filters** contains the separate exclusive **Category**
 control plus **Project, Chat, Activity, Collection**; its summary indicates active
 secondary fields. Applied values remain visible as individually removable chips,
-including dates, evidence layer and chat. Dates is the single range authority for
-all Analyze widgets and records. Time scale stays local to the time widget:
-Daily/Weekly/Monthly groups columns but is not an applied-filter chip and does
-not enable Reset Analyze by itself. Reset retains the chosen grouping. The
-existing bucket route and validated calendar bins remain presentation state,
-separate from the date-range filters and report membership. Opening a scoped chat retains analytical
+including dates, evidence layer and chat. **Dates** is the single visible time
+authority for every Analyze widget, the tool-call/interaction/chat headline,
+matching rows and downstream Current view consumers. **Today**, **This week**
+and **This month** use the display time zone's full calendar periods; weeks run
+Monday through Sunday. All dates, existing Last 7/30 days and inclusive Custom
+dates remain in this same control. A date choice changes canonical membership,
+not merely the time chart's columns. No widget carries a second range picker or
+repeats the selected period.
+
+Time columns aggregate automatically: day bins for calendar presets and bounded
+ranges up to 31 days, week bins for longer ranges up to a year, and month bins
+for longer bounded ranges. Unbounded history keeps week bins. Existing explicit
+`bucket` URLs remain supported as presentation-only compatibility; choosing a
+visible date range clears that override. All bins stay clipped to the exact
+analytical bounds; bin size never changes counts or denominators. Opening a scoped chat retains analytical
 filters; Back restores the prior route, reading position and focus.
+
+The shared civil-date helper resolves presets on load and when a focused panel
+crosses a local period boundary. Custom bounds stay fixed. DST days may have
+23 or 25 hours; the ending civil date includes its last instant and excludes
+the next midnight. Comparison Period A/B retain their independent ranges, and
+selected report groups are not removed merely because a date filter hides them.
+Previously saved reports are never recomputed.
+`tests/unified-time-scope.browser.test.mjs` exercises the normal-root dropdown
+with exact invented multiday membership, deduplication, every widget's counts,
+headline/rows, Back/reset, intersections, empty/custom/all dates, current report
+preview, independent comparison dates and both DST transitions.
 
 Fields wrap within the available width at narrow sizes and 200% text; selected
 values are neither ellipsized nor hidden in a horizontal scroller. Clear actions
@@ -770,6 +840,22 @@ This is derived from normalized retained targets through the existing classifier
 not from prompt text, attachments, citations or arbitrary URLs. A targetless
 retrieval remains Search by tool purpose; schema lookup remains preparation.
 Tool, outcome, identity and available target metadata are unchanged.
+
+The service descriptions distinguish three cases without treating them as
+unidentified services: retrieval names a tool purpose, discovery prepares an
+operation rather than running it, and missing details mean a target is absent
+or WIRE cannot classify it. A tool name alone does not identify the services
+searched. Use the row's existing gap reason to explain missing details; do not
+claim hidden routing or a source-parser omission without supporting evidence.
+
+For retrieval calls, `requestedSearchScope` qualifies existing service help from
+retained `requestArgs.capabilities[].name` only. It recognizes the supported
+capability-name allow-list, deduplicates names, and never displays nested scope
+values or unknown names. Missing or empty capabilities do not invent a scope;
+unrecognized entries receive an explicit qualification. Requested scope says
+what was requested, not which sources returned results or which downstream
+operations ran. It does not add service associations, change Search filters,
+or enter frozen report facts.
 
 `buildActivityAnalytics().serviceInvolvement` supplies the frozen
 `wire-service-involvement` v1 definition, `denominator`, overlapping service
@@ -1603,33 +1689,11 @@ presentation changes add no collection action, permission or freshness claim.
 native edge/touch/keyboard navigation, disabled state and 375/820/1200/2560px
 layouts in both themes at 100/200% text, including a narrow panel in a wide host.
 
-The chart period picker is a quiet text-and-chevron control, not a pill.
-Its transparent 44px hit area keeps keyboard/touch behavior; the title and
-period control stay aligned without redundant Calendar dates or info controls. At narrow
-chart-container widths the intact title precedes the control; Time scale remains
-visible and accessible beside the selected period. The bounded group may wrap when
-enlarged text cannot fit, rather than hiding the caption or shrinking text.
-The enhanced select wrapper participates in the caption's baseline alignment;
-the shared standalone wrapper's start alignment must not offset this inline group.
-The styling lives in
-`web/toolbar-styles.mjs`, with browser checks in `tests/toolbar.browser.test.mjs`.
-The visible Time scale label has an 8px external gap (`--space-sm`) before the
-dropdown, without increasing the control's padding or size. The time chart
-heading names the successfully applied scale, for example **Activity over time
-(Monthly)**, and labels its focusable chart region. Pending or failed reads do
-not relabel old data; selecting a scale retains focus on the picker.
-Weekly, Daily and Monthly remain fully visible both selected and in the menu.
-Compact chart selects use the widest actual option's intrinsic width in the
-trigger's own font, not a fixed em width inherited from the smaller caption.
-An aria-hidden, noninteractive grid sizer keeps width stable across selections
-and follows font/text-size changes. Ordinary dropdown sizing remains unchanged;
-the existing chart-header reflow moves the whole time-scale control at narrow
-widths rather than ellipsizing, abbreviating or shrinking the selected label.
-The focused production-root case in `tests/time-scale-labels.browser.test.mjs`
-checks the actual Asta caption/value geometry, open/closed menu anchoring and
-Weekly/Daily/Monthly changes at wide and narrow/200% text sizes. It preserves
-custom-date filters, exact bucket counts and scale state through chart-mode
-switches using an invented paused source with provider work denied.
+The chart no longer has a separate period or Time scale picker. The shared
+Dates field above the widgets retains the existing enhanced dropdown's keyboard,
+touch, focus, wrapping and menu-anchoring behavior. Its calendar choices stay
+readable at narrow widths and 200% text. Pending and failed reads retain the
+previous accepted cohort rather than relabelling its values as new results.
 
 ## Quantitative chart contract
 
@@ -1638,10 +1702,15 @@ switches using an invented paused source with provider work denied.
 Over time, By category and By path or operation regroup one filtered population.
 They share one composition: outcomes beside the chart, then the unchanged Tools
 and Services summaries side by side. Narrow layouts stack in the same order.
-Each wide-screen row stretches its widgets to its tallest content-sized member;
-the two rows do not share a fixed height. The outcome body uses the available
-space with its recorded-reason footer at the bottom. Narrow stacks remain
-content-sized, and long path lists retain their existing bounded scroll area.
+The top row aligns outcomes with the activity plot. Tools and Services align at
+the top but keep their natural heights, so a short list never grows a large empty
+interior beside a dense one. No widget has a fixed height. The outcome summary has a bounded
+column with the ring above its three principal legend rows, yielding the wider
+column to activity. Its recorded-reason footer stays at the bottom. Tool and
+service labels, proportional tracks and exact shares align in one row where
+space permits; shared grid tracks keep equal shares physically equal. Narrow
+layouts place bars below labels, without reducing text or touch targets. Narrow
+stacks remain content-sized, and long path lists retain their existing bounded scroll area.
 The outcome footer keeps recorded causes/counts, unavailable/error distinctions,
 and one explicit full-interaction scope sentence. It does not repeat a Notes
 heading, sign-in command or retry disclaimer. Historical sign-in remains a
@@ -1649,17 +1718,17 @@ statement about the recorded call, never the user's current access. Reader and
 comparison presentations retain their separate wording.
 Only the chosen chart's content changes; long desktop category/path lists retain
 native scrolling and Show all. The time plot keeps the same quantitative extent
-across Daily/Weekly/Monthly, so regrouping does not move the following widgets.
+across internal day/week/month bins.
 
-The chart's short meaning line names the grouping without repeating the population
-and scope above. Time uses the applied day/week/month bins and names any undated
+The chart has one heading, without a repeated grouping subtitle. Time uses the
+applied day/week/month bins and names any undated
 exclusion below the chart. Categories
 count each record once; the separate Services summary can overlap. Paths and
 operations retain canonical groups, including multi-target calls counted once.
 Non-tool groupings are labelled Service categories, not Services involved, because
 they are the exclusive category projection rather than service involvement.
-Time scale belongs to the time heading only; switching away preserves its value.
-No binning, normalization, outcome arithmetic or report membership changes.
+Chart-mode changes preserve the shared date range. Only the shared Dates control
+changes that range; category/path choices are still presentations of one cohort.
 Reset Analyze stays in the existing More filters utility line, disabled at the
 default view rather than appearing in a new row when only the chart mode changes.
 The utility controls wrap when needed; an open More filters uses the full width.
@@ -1667,8 +1736,7 @@ Reset keeps its existing filter, query, mode and page behavior and preserves rep
 selections and consent boundaries.
 
 The shared chart reading key belongs to the containing panel, not the plot body.
-Time scale can legitimately move the plot below its heading at narrow widths.
-Treating that inner plot as the shared reading anchor made snapshot restoration
+Treating the inner plot as the shared reading anchor made snapshot restoration
 move the mode controls on each return to Over time when populated feedback above
 them changed which keyed element was in view. The panel identity keeps existing
 restoration behavior stable without freezing chart heights or suppressing native
@@ -2129,22 +2197,31 @@ or enlarged root text. Each `.activity-card-facts` list uses content-sized
 key/value rows, not a wide label/value table or flowing prose. Keys use the
 neutral screen `--muted` color and medium 500 weight; ordinary values, including
 tool names, use normal 400 weight. Four-pixel inter-row gaps keep related facts
-together, with distinct spacing between groups.
+together, with distinct spacing between groups. Actual nested values (category
+text, tool counts, chat links and source qualifiers) all use screen `--ink`:
+dark in light mode and light in dark mode. Semantic service icons and result
+pills retain their distinct colors.
 Keys have one trailing colon, including facts shared with reader metadata;
 values, standalone headings, actor labels and result pills are not punctuated.
 Normal-weight values include the actual nested category cue, chat link and
 outcome text, not only the definition container. Code/API paths retain their
 distinct technical presentation. Existing author and category help has a
-24-pixel minimum target within cards; selection, navigation and chat links
-retain their 44-pixel targets.
+24-pixel minimum target within cards. Chat filter links also use a 24-pixel
+minimum inline target rather than reserving a 44-pixel row and pushing the
+following source facts down. Selection and primary navigation retain 44-pixel
+targets. Calls use one inter-group gap, not an extra top margin on the facts.
 The chat value keeps its native filter route and explicit **Filter to chat**
 accessible name. Missing metadata and distinguishing chat references remain
 visible. `requestTiming.entry` supplies structured timing labels/values while
 its existing summary wording remains unchanged for other consumers.
 
-**Tools in this view** lists actual tool names individually, with their matching
-call counts (or the current evidence layer's units). Repeated calls share a named
-entry and count; different tools never become one comma/slash label. This list
+**Tool/Tools** lists actual tool names individually. A single tool called once
+does not repeat **1 call** beside the one-result pill. Repeated calls show a
+parenthesized count next to their tool, such as **workiq-fetch (2 calls)**.
+When several tools are present, each keeps its own parenthesized count, including
+one-call tools, so aggregate result pills cannot be mistaken for per-tool results.
+Counts retain the current evidence layer's units. Different tools never become
+one comma/slash label, and no extra count key or disclosure is introduced. This list
 uses the same canonical filtered rows as the card's matching results, not all
 calls from the complete interaction. Aggregate outcome pills follow this
 activity group, never an individual tool. Routine matching-result prose and
@@ -2161,6 +2238,17 @@ unchanged. `card-hierarchy.browser.test.mjs` covers both views with native
 scrollbars, light/dark wide/narrow examples, computed prompt emphasis, semantic
 key/value associations, tool populations, exact copy and native navigation.
 Additional doubled-root-text checks exercise reflow, not native browser zoom.
+
+Long card prompts end with an underlined **Read more** text control directly
+in the prompt's reading flow; **Read less** collapses the exact retained text.
+It wraps naturally with the prompt instead of competing with **View interaction**
+as a second outlined action. The separate routine preview-status row is omitted.
+Partial-source notices, unknown author help, unavailable text, missing metadata,
+filtered-result boundaries and failure/permission details remain visible.
+The inline control has a 24-pixel minimum target and native keyboard focus.
+Exact copy, text selection, snapshot refresh and Back retain their existing
+behavior. This is a default-off text-access option used only by the two card
+renderers; report lists and the complete interaction reader are unchanged.
 
 **Results** is the prominent Analyze shortcut to the direct list.
 Choosing a source-context link retains the analytical filters and private query
@@ -2751,15 +2839,14 @@ Activity, matching actions and report lists show **Prompt** as an ordinary
 body-size paragraph, bounded to 68ch and at most 170 graphemes. Excerpts end at a
 word boundary when available; unbroken URLs and Unicode retain whole graphemes.
 There is no second CSS ellipsis or paragraph-sized link. The adjacent native
-**View interaction** link navigates; **Read full prompt** expands in place.
-A shortened preview explicitly says **Preview / full retained prompt available**;
-this is presentation shortening, not missing source text. A partial source instead
-uses **Read retained prompt**, identifies a retained fragment, and keeps its missing-text
-notice visible in both compact and complete readers. Both actions use
-the shared compact outlined action face, including a visible resting keyline
-in light and navy, while keeping native 44px targets and keyboard focus. Their
-matching control line-height keeps the two actions aligned; neither paints
-the outer target or regains an underline.
+**View interaction** link navigates. In activity cards, the in-context
+**Read more / Read less** treatment above expands in place; other preview
+surfaces retain **Read full prompt** and the **Preview / full retained prompt
+available** qualifier. This is presentation shortening, not missing source text.
+Their partial sources use **Read retained prompt** and identify a retained
+fragment. Missing-text notices stay visible in both card and complete readers.
+Outside activity cards, both actions keep the shared compact outlined face,
+44px targets and keyboard focus, with matching control line-height.
 Unavailable sources say **Prompt not available**; partial sources remain explicit. Recorded messages can come
 from a coordinator or an unverified origin, not necessarily a human question.
 No reading requires clipboard/export. Copy uses exact source text,
@@ -3173,13 +3260,19 @@ modal drawer; closing restores focus without changing the desktop preference.
 Reduced motion skips the glide. Navigation changes do not remount the page,
 discard filters/report drafts or add a route-history entry.
 
-Header branding has a stable 148px layout width independent of the animated
-rail. The wordmark keeps its 148x46 geometry; the caption wraps only within that
-fixed width, including enlarged text. Collapsing hides their paint but retains
-the block's height, with the compact mark placed inside the same link. This
-prevents the caption from temporarily wrapping to several lines as the rail
-reopens and pushing the whole page down. The header remains content-sized, not
-a fixed-height crop. Its measured height still sets the rail and scroll offsets.
+Header branding reserves the wordmark's 148x46 layout and a 148px caption row,
+including enlarged text. The collapsed 44x46 link spans both retained rows, so
+the approved compact W is centered in the whole header cell, not above an
+invisible caption. The two unchanged SVGs share artwork coordinates during the
+existing 320ms eased rail glide: uniform transforms register their W paths while
+their paint fades together. There is no separate logo clock, stretched artwork,
+manual glyph offset or whole-page animation. Reversal starts from the current
+painted geometry; reduced motion and breakpoint changes cancel the same owned
+animations. The fixed caption width prevents temporary wrapping and page bounce.
+The header remains content-sized, not a fixed-height crop. Its measured height
+still sets the rail and scroll offsets. `restored-sidebar.browser.test.mjs` checks
+actual screenshot paint bounds, shared intermediate W coordinates, reversals,
+keyboard focus, touch, enlarged text and interrupted motion in both themes.
 The time plot fills its host through normal block layout, with a measured minimum
 width for its dates/count labels. It does not write the host's rounded width back
 from a ResizeObserver: that caused transient native horizontal scrollbars during
@@ -3276,7 +3369,7 @@ clearing primary/secondary filters, chart choice, chat/request/path
 scope, outer pagination and private search. It creates a
 history entry, so Back restores the prior slice and Forward returns to default Analyze.
 Private search travels in browser history state, never a copied route URL.
-Time-widget grouping, theme, report prompt/format choices, report selection, review state, consent
+Legacy bucket URL overrides, theme, report prompt/format choices, report selection, review state, consent
 and recorded/exported data are not reset. The resulting view conveys a successful
 reset without a routine success banner; pending work, errors and uncertain
 recovery remain explicit. Inner disclosure and pager memory stays intact.
@@ -3341,7 +3434,8 @@ valid list or panel-only lifetime. Display changes never configure collection.
 Home period labels, bucket axes/tooltips, Activity and request times, and report
 preparation all agree. Named-zone historical rules control daily, Monday-weekly
 and monthly buckets. Date inputs represent civil dates; an inclusive ending day
-ends at the next local midnight exclusively. Last 7/30 days include today and
+ends at the next local midnight exclusively. Today/This week/This month select
+the complete local calendar period. Last 7/30 days include today and
 the preceding local days. Drilldown clips to the existing slice, never expanding
 a partially visible week/month. Entered From/To values remain calendar dates
 in the selected zone. Applied snapshot and Settings context update atomically; a pending

@@ -97,7 +97,7 @@ async function state(page) {
     return page.evaluate(() => ({
         hash: location.hash, search: document.querySelector("#activitySearch").value,
         theme: document.documentElement.dataset.evidenceTheme,
-        values: Object.fromEntries(["dateFilter", "serviceFilter", "projectFilter", "layerFilter", "scopeFilter", "bucketFilter"].map(id => [id, document.getElementById(id).value])),
+        values: Object.fromEntries(["dateFilter", "serviceFilter", "projectFilter", "layerFilter", "scopeFilter"].map(id => [id, document.getElementById(id).value])),
         selected: document.querySelector("#previewSelectionSummary").textContent,
         reportPhase: document.querySelector("#reportsView").dataset.reportPhase,
         reportStep: document.querySelector("#reportsView").dataset.reportStep,
@@ -189,7 +189,7 @@ test("reset mapping covers secondary scope, private search and chart settings wi
     const after = await state(page);
     t.diagnostic(JSON.stringify({ before, after, requests: requests.slice(count) }));
     assert.equal(after.hash, "#home"); assert.equal(after.search, "");
-    assert.deepEqual(after.values, { dateFilter: "capture", serviceFilter: "all", projectFilter: "all", layerFilter: "tool", scopeFilter: "history", bucketFilter: "week" });
+    assert.deepEqual(after.values, { dateFilter: "capture", serviceFilter: "all", projectFilter: "all", layerFilter: "tool", scopeFilter: "history" });
     assert.equal(after.selected, before.selected); assert.equal(after.theme, before.theme);
     assert.ok(!requests.slice(count).some(row => row.endpoint === "/api/collection/now"));
     await page.goBack(); await ready(page);

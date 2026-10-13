@@ -91,8 +91,8 @@ test("historical failure context exposes provenance and compact preview with com
     }
     if (proofs) await writeFile(path.join(proofs, "reading-metrics.json"), JSON.stringify(metrics, null, 2));
     const content = page.locator(".matched-action .full-text").first();
-    assert.equal(await content.locator(".full-text-preview-state").textContent(), "Preview / full retained prompt available");
-    assert.equal(await content.getByRole("button", { name: "Read full prompt", exact: true }).count(), 1);
+    assert.equal(await content.locator(".full-text-preview-state").count(), 0);
+    assert.equal(await content.getByRole("button", { name: "Read more", exact: true }).count(), 1);
     const help = content.getByRole("button", { name: "About prompt author", exact: true });
     await help.focus(); await page.keyboard.press("Enter");
     assert.match(await page.getByRole("tooltip").innerText(), /system-supplied context/);
@@ -105,7 +105,7 @@ test("historical failure context exposes provenance and compact preview with com
     await replaceEvidence(context, () => ({ records: [record, fixture("unrelated-new")], importCoverage: { roster: [], counts: {} } }));
     await page.evaluate(() => window.dispatchEvent(new Event("online"))); await response; await ready(page);
     assert.equal(await content.locator("pre").textContent(), text, "Read state survives unrelated snapshot");
-    await content.getByRole("link", { name: "View interaction", exact: true }).click(); await ready(page);
+    await content.getByRole("link", { name: "Open exact call in context", exact: true }).click(); await ready(page);
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), text);
     assert.match(await page.locator("#requestContent .action-error").first().innerText(), /MCP request timeout/);
     assert.doesNotMatch(await page.locator("#requestContent .action-error").first().innerText(), /No HTTP status or downstream cause/);
@@ -113,7 +113,7 @@ test("historical failure context exposes provenance and compact preview with com
     assert.equal(await content.locator("pre").textContent(), text, "Back preserves inline expansion");
     await page.goto(runtime.url + "#activity?range=capture"); await ready(page); await openActivitySessions(page);
     const row = page.locator(".request-row").filter({ hasText: "Invented cost question" });
-    assert.equal(await row.getByRole("button", { name: "Read full prompt", exact: true }).count(), 1);
+    assert.equal(await row.getByRole("button", { name: "Read more", exact: true }).count(), 1);
     await row.locator(".full-text-toggle").click();
     const changed = structuredClone(record);
     changed.userPrompt = { ...changed.userPrompt, text: "Replaced invented prompt body", status: "full" };

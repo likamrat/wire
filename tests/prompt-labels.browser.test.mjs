@@ -114,15 +114,15 @@ test("wired Activity and detail readers use Prompt without inventing author iden
     const { page, sources } = await setup(t);
     await page.goto("https://wire.invalid/#activity"); await ready(page); await openActivitySessions(page);
     assert.deepEqual(await page.locator(".request-row .full-text-preview-label").allTextContents(), sources.map(() => "Copilot chat prompt / This older record has no sender details"));
-    assert.equal(await page.getByRole("button", { name: "Read prompt", exact: true }).count(), 1);
+    assert.equal(await page.getByRole("button", { name: "Read more", exact: true }).count(), 1);
     const row = page.locator(".request-row").filter({ hasText: "ARTIFICIAL PROMPT ONLY" });
     await row.locator("input").check();
-    await row.getByRole("button", { name: "Read prompt", exact: true }).click();
+    await row.getByRole("button", { name: "Read more", exact: true }).click();
     assert.equal(await row.locator(".ux-code-label").textContent(), "Copilot chat prompt / local only");
     await row.getByRole("link", { name: "View interaction", exact: true }).click(); await ready(page);
     await page.goBack(); await ready(page);
     assert.equal(await row.locator("input").isChecked(), true);
-    assert.equal(await row.getByRole("button", { name: "Hide prompt", exact: true }).getAttribute("aria-expanded"), "true");
+    assert.equal(await row.getByRole("button", { name: "Read less", exact: true }).getAttribute("aria-expanded"), "true");
     await navigateMain(page, "reports"); await ready(page);
     await page.locator("#reportRequests > summary").click();
     assert.deepEqual(await page.locator("#reportList .full-text-preview-label").allTextContents(), ["Copilot chat prompt / This older record has no sender details"]);

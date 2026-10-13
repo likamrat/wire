@@ -37,8 +37,6 @@ export const percentageChartStyles = `
 .percentage-legend-row:has(a) .percentage-bar-track {cursor:pointer}
 .percentage-note,.percentage-service-scope,.percentage-coverage {color:var(--muted);font-size:var(--type-small);line-height:1.5;max-width:none}
 .percentage-service-scope {margin:0 0 8px}
-.percentage-group-title {font-size:var(--type-small);font-weight:var(--weight-medium);color:var(--muted);margin:12px 0 4px}
-.percentage-service-activity {border-top:1px solid var(--rule);margin-top:16px;padding-top:4px}
 .percentage-basis {display:block;font-size:var(--type-caption);color:var(--muted);font-weight:var(--weight-regular)}
 .percentage-coverage {margin-top:16px}
 .percentage-coverage p {margin:8px 0;max-width:none}

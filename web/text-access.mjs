@@ -19,11 +19,12 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }
         return end < compact.length ? compact.slice(0, end).trimEnd() + "..." : compact;
     }
-    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false }) {
+    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
         const complete = mode === "complete", partial = ["partial", "truncated"].includes(source?.status);
+        const inline = inlinePreview && !complete;
         const initiallyOpen = initialOpen ?? (complete && (subject === "response" || retained(source)?.length <= 1200));
         label ??= "Read " + (complete ? "" : partial ? "retained " : "full ") + noun;
         copyLabel ??= "Copy " + noun;
@@ -45,9 +46,9 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         header.className = "full-text-header";
         const readerActions = document.createElement("div");
         readerActions.className = "full-text-reader-actions";
-        const heading = document.createElement(subject === "response" ? "h3" : "h2");
+        const heading = document.createElement(subject === "response" && !contentFirst ? "h3" : "h2");
         heading.id = "text-heading-" + encodeURIComponent(key);
-        heading.textContent = subject === "response" ? "Retained response text" : promptLabel;
+        heading.textContent = subject === "response" ? contentFirst ? "Recorded response" : "Retained response text" : promptLabel;
         if (subject === "request") heading.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
         if (complete) {
             header.append(heading);
@@ -63,7 +64,12 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         reading.id = "text-excerpt-" + encodeURIComponent(key);
         reading.classList.add(complete ? "full-text-unavailable" : "full-text-preview");
         reading.textContent = complete && text !== null ? `${noun === "prompt" ? "Prompt" : "Response"} text is hidden.` : preview;
-        root.append(reading);
+        const passage = inline ? document.createElement("div") : root;
+        if (inline) {
+            passage.className = "full-text-passage";
+            root.append(passage);
+        }
+        passage.append(reading);
         let previewState;
         if (!complete) {
             const provenance = document.createElement("div");
@@ -75,7 +81,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             hint.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
             provenance.append(hint);
             root.prepend(provenance);
-            if (text !== null && text !== preview) {
+            if (!inline && text !== null && text !== preview) {
                 previewState = document.createElement("p");
                 previewState.className = "full-text-preview-state";
                 previewState.textContent = partial ? "Preview / retained fragment" : `Preview / full retained ${noun} available`;
@@ -91,12 +97,12 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                 const explanation = document.createElement("p");
                 explanation.className = "full-text-availability";
                 explanation.textContent = "Only part of the original was recorded. Missing text is not reconstructed.";
-                root.append(explanation);
+                if (!contentFirst) root.append(explanation);
             } else root.append(note);
         }
         if (complete) (contentFirst ? root : header).append(readerActions);
         let details;
-        if (complete) {
+        if (complete && !contentFirst) {
             details = document.createElement("details");
             details.className = "reader-details";
             const summary = document.createElement("summary");
@@ -129,6 +135,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         const bodyId = "text-body-" + encodeURIComponent(key), stateKey = "text:" + key;
         control.setAttribute("aria-controls", bodyId);
         if (complete) readerActions.append(control);
+        else if (inline) passage.append(document.createTextNode(" "), control);
         else {
             actions.append(control);
             if (!actions.parentNode) root.append(actions);
@@ -136,7 +143,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         function paint() {
             const open = presentation.isOpen(stateKey, initiallyOpen);
             control.setAttribute("aria-expanded", String(open));
-            const actionLabel = open ? "Hide " + noun : label;
+            const actionLabel = inline ? open ? "Read less" : "Read more" : open ? "Hide " + noun : label;
             control.textContent = actionLabel;
             if (complete) control.setAttribute("aria-label", actionLabel);
             reading.hidden = open;
@@ -172,14 +179,17 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                     const scope = document.createElement("span");
                     scope.id = noticeId;
                     scope.className = "reader-copy-scope";
-                    scope.textContent = "Copies original text, unmasked.";
+                    scope.textContent = contentFirst
+                        ? "Copies original text, unmasked, to your clipboard. Other apps and clipboard history may access it."
+                        : "Copies original text, unmasked.";
                     copy.setAttribute("aria-describedby", noticeId);
                     readerActions.append(copy, scope);
                     body.append(pre);
                 } else {
                     body.append(ux.codeBlock(text, { label: subject === "response" ? "Exact retained text / local only" : promptLabel + " / local only", copyLabel, prose: true, ...(notice ? { tooltip: notice } : {}) }));
                 }
-                root.insertBefore(body, complete && contentFirst ? readerActions : details ?? null);
+                if (inline) passage.insertBefore(body, control);
+                else root.insertBefore(body, complete && contentFirst ? readerActions : details ?? null);
             }
         }
         control.addEventListener("click", event => {

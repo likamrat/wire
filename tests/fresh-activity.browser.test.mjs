@@ -10,7 +10,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealStoredRefresh } from "./helpers.mjs";
+import { chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealStoredRefresh, setLegacyTimeBucket } from "./helpers.mjs";
 import { reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { time } from "../lib/time.mjs";
@@ -198,7 +198,7 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
         }
     }
     for (const bucket of ["day", "week", "month"]) {
-        await selectActivityOption(page, "bucketFilter", bucket); await ready(page);
+        await setLegacyTimeBucket(page, bucket); await ready(page);
         await verify(`aggregation-${bucket}`, ["start", "end", "next-day", "fresh-in-range"]);
         assert.equal(accepted.query.filters.from, date);
         assert.equal(accepted.query.filters.to, next);
@@ -441,7 +441,7 @@ test("first Home through approved fresh collection, selected dates, exact reques
     assert.equal(await page.locator("#freshStatus").innerText(), "No new recorded activity.");
     assert.equal(await page.locator("#freshActivity").getAttribute("data-phase"), "partial");
     await stage("06-no-new-records", "The persistent result and history-gap link explain the bounded check");
-    await selectActivityOption(page, "bucketFilter", "day"); await ready(page);
+    await setLegacyTimeBucket(page, "day"); await ready(page);
     await page.locator("#chart .time-column").filter({ has: page.locator(".dimensional-column[data-total='2']") }).click();
     await ready(page);
     assert.equal(await page.locator("#activityView").isVisible(), true);

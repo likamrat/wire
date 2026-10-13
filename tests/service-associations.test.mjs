@@ -123,6 +123,33 @@ test("preparation and hosted assistance keep actual purpose, outcome and target 
     assert.equal(retrieval.serviceAssociation.basis, "tool-purpose");
 });
 
+test("requested capability scope cannot change canonical service membership or frozen facts", () => {
+    const record = serviceEvidenceFixture();
+    record.toolCalls = [{ ...record.toolCalls[0], tool: "workiq-retrieve", requestArgs: {
+        query: "Invented query", capabilities: [{ name: "TeamsMessages" }, { name: "Email" }], strategy: "grounding",
+    } }];
+    const original = structuredClone(record);
+    const analytics = buildActivityAnalytics([record]);
+    const bytes = JSON.stringify(analytics);
+    const facts = () => buildReportFacts([record], { revision: 0, pseudonymKey: "d".repeat(64) },
+        { preparedAt: "2026-10-01T12:30:00.000Z" }).facts;
+    const frozenBytes = JSON.stringify(facts());
+    assert.equal(serviceCategories.requestedSearchScope(record.toolCalls[0]).label, "Requested scope: Teams messages and email");
+    assert.equal(JSON.stringify(buildActivityAnalytics([record])), bytes);
+    assert.equal(JSON.stringify(facts()), frozenBytes);
+    assert.equal(analytics.serviceInvolvement.definition.version, 1);
+    assert.deepEqual(analytics.rows[0].serviceAssociation.services, ["Search"]);
+    assert.equal(analytics.rows[0].serviceAssociation.basis, "tool-purpose");
+    assert.equal(buildActivityAnalytics([record], { filters: { services: ["Search"] } }).totals.count, 1);
+    for (const service of ["Teams", "Mail"]) assert.equal(buildActivityAnalytics([record], { filters: { services: [service] } }).totals.count, 0);
+    assert.deepEqual(record, original);
+    const conflicting = structuredClone(record);
+    conflicting.toolCalls[0].requestedApiPath = "/me/drive/root";
+    assert.deepEqual(serviceCategories.requestedSearchScope(conflicting.toolCalls[0]), serviceCategories.requestedSearchScope(record.toolCalls[0]));
+    assert.deepEqual(buildActivityAnalytics([conflicting]).rows[0].serviceAssociation.services, ["Files"],
+        "Requested capability scope neither replaces nor adds to a different recorded target");
+});
+
 test("returned results match only their own supported target, never parent multi-target positions or schema arguments", () => {
     const record = serviceEvidenceFixture();
     record.toolCalls = [record.toolCalls[1], record.toolCalls[5]];

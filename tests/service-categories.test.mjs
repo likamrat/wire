@@ -24,10 +24,13 @@ test("descriptions follow actual workload mappings without claiming outcomes or 
     ]) assert.equal(classifyWorkload(path), category);
     assert.equal(classifyWorkload(null, "workiq-retrieve"), "Search");
     assert.equal(classifyWorkload(null, null, ["/me/events", "/unclassified"]), "Multiple workloads");
-    assert.match(serviceCategories.describe("Search").description, /multiple sources, not necessarily a direct Graph request/);
+    assert.match(serviceCategories.describe("Search").description, /tool name alone does not identify the services searched/);
+    assert.match(serviceCategories.describe("Discovery").description, /does not run the data operation/);
     assert.match(serviceCategories.describe("Multiple workloads").description, /could not be identified/);
     assert.match(serviceCategories.describe("Platform metadata").description, /does not describe each batch operation/);
     assert.match(serviceCategories.describe("Unknown").description, /does not mean the call failed/);
+    assert.match(serviceCategories.describe("Unknown").description, /missing a usable service target.*cannot classify its path/);
+    assert.doesNotMatch(serviceCategories.describe("Unknown").description, /routing may be hidden/);
     assert.doesNotMatch(serviceCategories.describe("Unknown").description, /API failure|succeeded|task.*correct/i);
 });
 
@@ -40,4 +43,35 @@ test("unknown fallback is safe and Other describes only a real supplied count", 
     assert.throws(() => serviceCategories.describe("Other", 0), /positive category count/);
     assert.deepEqual(serviceCategories.used(["Calendar", "Calendar", "Search", "unmapped"]).map((entry) => entry.id), ["Calendar", "Search", "Unknown"]);
     assert.deepEqual(serviceCategories.used([]), []);
+});
+
+test("requested retrieval scope uses only supported capability names and never implies returned sources", () => {
+    const call = capabilities => ({ tool: "workiq-retrieve", requestArgs: { capabilities } });
+    const names = ["TeamsMessages", "Email", "People", "Meetings", "OneDriveAndSharePoint", "Dataverse", "GraphConnectors"];
+    const labels = ["Teams messages", "email", "people", "meetings", "OneDrive and SharePoint", "Dataverse", "connected sources"];
+    for (const [index, name] of names.entries()) {
+        const scope = serviceCategories.requestedSearchScope(call([{ name }]));
+        assert.equal(scope.label, `Requested scope: ${labels[index]}`);
+        assert.equal(scope.description, "This does not show which sources returned results.");
+    }
+    const input = call([{ name: "TeamsMessages", urls: [{ url: "PRIVATE-URL" }] }, { name: "Email" }, { name: "TeamsMessages" }]);
+    const before = structuredClone(input);
+    const scope = serviceCategories.requestedSearchScope(input);
+    assert.equal(scope.label, "Requested scope: Teams messages and email");
+    assert.deepEqual(input, before);
+    assert.doesNotMatch(JSON.stringify(scope), /PRIVATE-URL/);
+    for (const capabilities of [undefined, null, []]) assert.equal(serviceCategories.requestedSearchScope(call(capabilities)), null);
+    assert.equal(serviceCategories.requestedSearchScope({ ...input, tool: "workiq-ask" }), null);
+    for (const capabilities of ["PRIVATE", {}, [null], ["Email"], [{ name: "PRIVATE" }], [{ name: "email" }], [[]]]) {
+        const unsupported = serviceCategories.requestedSearchScope(call(capabilities));
+        assert.equal(unsupported.label, "Requested scope not identified");
+        assert.match(unsupported.description, /does not match supported capability names/);
+        assert.doesNotMatch(JSON.stringify(unsupported), /PRIVATE/);
+    }
+    const partial = serviceCategories.requestedSearchScope(call([{ name: "Email" }, { name: "PRIVATE" }]));
+    assert.equal(partial.label, "Requested scope: email");
+    assert.match(partial.description, /Some requested scope entries could not be identified/);
+    assert.match(partial.description, /does not show which sources returned results/);
+    const browser = Function(`return (${createServiceCategories.toString()})()`)();
+    assert.deepEqual(browser.requestedSearchScope(input), scope);
 });

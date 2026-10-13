@@ -29,12 +29,15 @@ test("content-first complete readers opt in without changing default or list DOM
         const content = access.render(source, { key: "story", mode: "complete", initialOpen: true, contentFirst: true });
         const preview = access.render(source, { key: "list" });
         const unchangedPreview = access.render(source, { key: "list", contentFirst: true });
+        const explicitPreview = access.render(source, { key: "list", inlinePreview: false });
+        const completeWithInline = access.render(source, { key: "default", mode: "complete", initialOpen: true, inlinePreview: true });
         ordinary.id = "ordinary";
         content.id = "story";
         document.querySelector("main").append(ordinary, content);
         return {
             defaultSame: ordinary.innerHTML === explicitDefault.innerHTML,
             previewSame: preview.outerHTML === unchangedPreview.outerHTML,
+            inlineOptInOnly: preview.outerHTML === explicitPreview.outerHTML && ordinary.innerHTML === completeWithInline.innerHTML,
             defaultControlsInHeader: ordinary.querySelector(".full-text-reader-actions").parentElement.className,
             defaultOrder: [...ordinary.children].map(node => node.className),
             contentOrder: [...content.children].map(node => node.className),
@@ -42,9 +45,10 @@ test("content-first complete readers opt in without changing default or list DOM
     });
     assert.equal(shape.defaultSame, true);
     assert.equal(shape.previewSame, true);
+    assert.equal(shape.inlineOptInOnly, true);
     assert.equal(shape.defaultControlsInHeader, "full-text-header");
     assert.deepEqual(shape.defaultOrder, ["full-text-header", "full-text-unavailable", "full-text-body", "reader-details"]);
-    assert.deepEqual(shape.contentOrder, ["full-text-header", "full-text-unavailable", "full-text-body", "full-text-reader-actions", "reader-details"]);
+    assert.deepEqual(shape.contentOrder, ["full-text-header", "full-text-unavailable", "full-text-body", "full-text-reader-actions"]);
     const story = page.locator("#story");
     await story.locator("pre").focus();
     await page.keyboard.press("Tab");

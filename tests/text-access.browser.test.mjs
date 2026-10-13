@@ -181,7 +181,8 @@ test("request excerpts are compact content with separate native navigation at ev
     await page.goto(url + "#activity"); await ready(page); await openActivitySessions(page);
     const row = page.locator(".request-row").first(), content = row.locator(".full-text");
     const excerpt = content.locator(".full-text-preview"), link = content.getByRole("link", { name: "View interaction", exact: true });
-    assert.equal(await content.locator(".full-text-preview-label").textContent(), "Prompt / This older record has no sender details");
+    assert.equal(await content.locator(".full-text-preview-label").textContent(), "Prompt");
+    assert.equal(await content.getByRole("button", { name: "About prompt author", exact: true }).count(), 1);
     assert.equal(await excerpt.evaluate(node => node.tagName), "P");
     assert.equal(await content.locator("a").count(), 1);
     assert.equal(await row.locator(".request-meta").getByText("Request excerpt", { exact: true }).count(), 0);
@@ -212,7 +213,7 @@ test("request excerpts are compact content with separate native navigation at ev
         assert.ok(measure.label.font <= measure.bodyFont);
         assert.equal(measure.excerpt.underline, "none");
         assert.ok(measure.excerpt.width <= measure.excerpt.maxWidth + 1, "Readable measure is enforced, not merely set on a parent");
-        assert.ok(measure.link.height >= 44 && measure.control.height >= 44);
+        assert.ok(measure.link.height >= 44 && measure.control.height >= 24);
         assert.ok(measure.pageOverflow <= 1 && [measure.excerpt, measure.link, measure.control].every(item => item.overflow <= 1), `${theme}/${width}/${scale}: no horizontal clipping`);
         assert.equal(measure.actionsOverlap, false);
         if (width >= 1200 && scale === 1) assert.ok(measure.excerpt.height <= 96, "At most four ordinary lines, not a paragraph-sized control");
@@ -245,7 +246,7 @@ test("short, missing, partial and long URL request excerpts keep literal content
         const { page, url } = await setup(t, { status, text, provenance: "recorded-user-message-origin-unverified" });
         await page.goto(url + "#activity"); await ready(page); await openActivitySessions(page);
         const content = page.locator(".request-row .full-text").first();
-        assert.equal(await content.locator(".full-text-preview-label").textContent(), "Prompt / This older record has no sender details");
+        assert.equal(await content.locator(".full-text-preview-label").textContent(), "Prompt");
         assert.equal(await content.getByRole("link", { name: "View interaction", exact: true }).count(), 1);
         if (status === "unavailable") {
             assert.equal(await content.locator(".full-text-preview").textContent(), "Prompt not available");

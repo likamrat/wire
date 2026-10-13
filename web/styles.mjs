@@ -583,6 +583,7 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityList>.activity-card {container-type:inline-size;padding:16px 8px;border:0;border-bottom:1px solid var(--rule);border-radius:0;background:var(--paper);margin-top:8px}
 #activityList>.request-row {grid-template-columns:44px minmax(0,1fr)}
 #activityList>.request-row .interaction-body {display:grid;gap:12px;min-width:0}
+#activityList>.matched-action {gap:12px}
 #activityList>.activity-card .full-text-preview,#activityList>.activity-card .full-text-body pre {font-family:var(--font);line-height:var(--leading-reading);padding-inline:2px;overflow:visible;max-height:none}
 #activityList>.activity-card .full-text-preview {font-weight:var(--weight-strong);font-style:italic}
 #activityList>.activity-card .full-text-body .ux-code-block {max-inline-size:76ch;font-size:var(--type-reading)}
@@ -590,8 +591,15 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityList>.activity-card .full-text-preview-label {--metadata-target:max(24px,1.5rem);line-height:var(--leading-ui)}
 #activityList>.activity-card .request-meta .metadata-item {--metadata-target:max(24px,1.5rem);line-height:var(--leading-ui)}
 #activityList>.activity-card .full-text-preview {margin-block:4px 0}
+#activityList>.activity-card .full-text-passage {max-width:68ch;min-width:0;margin-top:4px;font-size:var(--type-body);line-height:var(--leading-reading);overflow-wrap:anywhere}
+#activityList>.activity-card .full-text-passage>.full-text-preview {display:inline;margin:0;color:var(--ink);font-size:inherit;max-width:68ch}
+#activityList>.activity-card .full-text-passage>.full-text-preview[hidden] {display:none}
+#activityList>.activity-card .full-text-passage>.full-text-toggle {display:inline-block;vertical-align:baseline;min-height:24px;margin:0;padding:0 4px;border:0;border-radius:2px;background:transparent;color:var(--ink);font:inherit;font-style:normal;font-weight:var(--weight-regular);text-decoration:underline;text-underline-offset:3px}
+#activityList>.activity-card .full-text-passage>.full-text-toggle::before {content:none}
+#activityList>.activity-card .full-text-passage>.full-text-toggle:hover {background:var(--hover)}
+#activityList>.activity-card .full-text-passage>.full-text-toggle:active {background:var(--pill-pressed)}
+#activityList>.activity-card .full-text-availability {margin:4px 0 0}
 #activityList>.activity-card .card-details {display:grid;gap:12px 32px;min-width:0}
-#activityList>.matched-action .card-details {margin-top:12px}
 #activityList>.activity-card .card-activity {display:grid;align-content:start;gap:8px;min-width:0}
 #activityList>.activity-card .activity-card-facts {display:grid;align-content:start;gap:4px;margin:0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
 #requestContent .interaction-model-fact {display:grid;gap:6px;margin:4px 0 0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
@@ -599,14 +607,16 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityList>.activity-card .activity-card-facts dt {font:inherit;font-weight:var(--weight-medium);color:var(--muted);overflow-wrap:anywhere;max-width:100%}
 #requestContent .interaction-model-fact dt {font:inherit;font-weight:700;overflow-wrap:anywhere;max-width:100%}
 #activityList>.activity-card .activity-card-facts dd,#requestContent .interaction-model-fact dd {font:inherit;margin:0;min-width:0;max-width:100%;overflow-wrap:anywhere}
+#activityList>.activity-card .activity-card-facts dd {color:var(--ink)}
+#activityList>.activity-card .activity-card-facts :is(.request-meta,.semantic-cue>span,.card-chat>.text-link,.source-reference,.service-context-label) {color:var(--ink)}
 #activityList>.activity-card .activity-card-facts dd .semantic-cue {font-weight:var(--weight-regular)}
 #activityList>.activity-card :is(.project-context,.request-meta,.recorded-results,.call-duration) {font-size:inherit;line-height:inherit;margin:0}
 #activityList>.activity-card .card-chat {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;min-width:0}
-#activityList>.activity-card .card-chat>.text-link {display:inline-flex;align-items:center;min-height:44px;min-width:44px;max-width:100%;overflow-wrap:anywhere;font-weight:var(--weight-regular)}
+#activityList>.activity-card .card-chat>.text-link {display:inline-flex;align-items:baseline;min-height:24px;min-width:24px;max-width:100%;overflow-wrap:anywhere;font-weight:var(--weight-regular)}
 #activityList>.activity-card .interaction-tools {display:grid;gap:4px;margin:0;padding:0;list-style:none;color:var(--ink);font:inherit}
-#activityList>.activity-card .interaction-tools>li {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 12px;min-width:0}
+#activityList>.activity-card .interaction-tools>li {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;min-width:0}
 #activityList>.activity-card .card-tool-name {font:inherit;overflow-wrap:anywhere;min-width:0}
-#activityList>.activity-card .card-tool-count {color:var(--muted)}
+#activityList>.activity-card .card-tool-count {color:var(--ink)}
 #activityList>.activity-card .recorded-results {align-items:center;gap:4px 12px}
 #activityList>.activity-card .result-unit {font-weight:var(--weight-regular)}
 #activityList>.activity-card .recorded-result-label {text-transform:none;letter-spacing:0;font-weight:var(--weight-regular)}
@@ -620,7 +630,7 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 @media(min-width:700px) {
  #activityList>.activity-card .full-text {display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px}
  #activityList>.activity-card .full-text>:not(.full-text-actions,.full-text-body) {grid-column:1}
- #activityList>.activity-card .full-text>.full-text-actions {grid-column:2;grid-row:1/span 3;align-self:start;justify-content:flex-end;margin:0}
+ #activityList>.activity-card .full-text>.full-text-actions {grid-column:2;grid-row:1/span 2;align-self:start;justify-content:flex-end;margin:0}
  #activityList>.activity-card .full-text>.full-text-body {grid-column:1/-1}
 }
 .interaction-select {display:grid;place-items:center;min-width:44px;min-height:44px;cursor:pointer;border-radius:var(--radius-small)}

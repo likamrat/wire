@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
-import { chooseTheme, selectActivityOption, openSearchFilters } from "./helpers.mjs";
+import { chooseTheme, selectActivityOption, openSearchFilters, setLegacyTimeBucket } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { chooseReportScope } from "./report-journey-helpers.mjs";
 
@@ -605,7 +605,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     const allIds = await ids();
     assert.deepEqual(allIds, records.map(row => row.scenarioId).sort());
     await page.locator("#activityList .request-row input").first().check();
-    await selectActivityOption(page, "bucketFilter", "day");
+    await setLegacyTimeBucket(page, "day");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     assert.deepEqual(await ids(), allIds);
     await expect(page.locator("#filterChips")).toBeEmpty();
@@ -628,7 +628,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     assert.equal(await page.locator("#wireAnalysisSearchNotice").evaluate(node => node.parentElement.id), "main");
     await input.press("Escape");
     for (const bucket of ["week", "month", "day"]) {
-        await selectActivityOption(page, "bucketFilter", bucket);
+        await setLegacyTimeBucket(page, bucket);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await expect(page.locator("#homeView")).toBeVisible();
         await expect(page.locator("#activityCount")).toHaveText("2");
@@ -655,7 +655,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
     await page.goBack();
     await expect(page.locator("#activityCount")).toHaveText("2");
-    await expect(page.locator("#bucketFilter")).toHaveValue("day");
+    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     await input.focus();
     await selectActivityOption(page, "wireSearchScope", "everywhere");
     await expect(page.locator("#activityCount")).toHaveText("6");
@@ -683,7 +683,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
         await expect(result).toHaveAttribute("data-search-id", id);
         await expect(input).toHaveValue(query);
         await expect(page.locator("#wireSearchType")).toHaveValue("setting");
-        await expect(page.locator("#bucketFilter")).toHaveValue("day");
+        assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     }
     await input.press("Escape");
     await expect(page.locator("#filterChips")).toBeEmpty();

@@ -113,7 +113,7 @@ test("filter menus contain exact choices, not explanatory paragraphs or hover po
     const page = await context.newPage();
     await page.goto(origin); await ready(page);
     const before = page.url(), reads = requests.length;
-    for (const id of ["dateFilter", "serviceFilter", "outcomeFilter", "projectFilter", "layerFilter", "bucketFilter", "scopeFilter"]) {
+    for (const id of ["dateFilter", "serviceFilter", "outcomeFilter", "projectFilter", "layerFilter", "scopeFilter"]) {
         if (["serviceFilter", "projectFilter", "layerFilter", "scopeFilter"].includes(id)) await openMoreFilters(page);
         const trigger = triggerFor(page, id), selected = await page.locator("#" + id).inputValue();
         await trigger.click();

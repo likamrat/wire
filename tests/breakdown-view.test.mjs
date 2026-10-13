@@ -93,6 +93,48 @@ test("recorded-target presentation separates tool-purpose Search without changin
     assert.deepEqual(data.rows[0].drilldownIds, analytics.serviceInvolvement.groups.find(group => group.label === "Search").drilldownIds);
 });
 
+test("screen assistance uses exact targetless ask IDs and leaves other missing service evidence unchanged", () => {
+    const source = fixture("assistance-screen");
+    const call = (index, tool, paths) => ({
+        tool, toolCallId: `assistance-${index}`, startEventId: `assistance-start-${index}`,
+        requestArgs: paths ? { entityUrls: paths } : {}, toolSucceeded: true,
+        apiResults: [{ index: 0, statusCode: 200, evidenceLevel: "intermediary-reported" }],
+    });
+    source.toolCalls = [
+        ...Array.from({ length: 20 }, (_, index) => call(index, "workiq-ask")),
+        ...Array.from({ length: 4 }, (_, index) => call(index + 20, "workiq-fetch", ["/me/messages", "/me/drive/root", "/unrecognized/resource"])),
+        call(24, "workiq-ask", ["/me/messages"]),
+        call(25, "workiq-ask", ["/me/messages", "/unrecognized/resource"]),
+        call(26, "workiq-ask", ["https://unsupported.example.invalid/target"]),
+        call(27, "workiq-fetch"),
+    ];
+    const analytics = buildActivityAnalytics([source]), original = structuredClone(analytics), data = charts.model(analytics).services;
+    assert.equal(data.assistance.count, 20);
+    assert.equal(data.assistance.label, "Copilot assistance");
+    assert.equal(data.assistance.endpointId, "operation:workiq-ask");
+    assert.deepEqual(data.assistance.drilldownIds,
+        analytics.rows.filter(row => row.endpoint.id === "operation:workiq-ask").map(row => row.id));
+    const actual = buildActivityAnalytics([source], { filters: { endpoints: [data.assistance.endpointId] } });
+    assert.deepEqual(new Set(actual.rows.map(row => row.id)), new Set(data.assistance.drilldownIds));
+    assert.equal(data.unresolved.drilldownIds.length, 7);
+    assert.equal(data.unresolved.partialCount, 5);
+    assert.deepEqual(data.unresolved.gaps.map(row => [row.id, row.count]).sort(),
+        [["missing-target", 1], ["unrecognized-path", 5], ["unsupported-target", 1]]);
+    assert.equal(data.missingDetailCount, 27, "The frozen v1 meaning is unchanged");
+    assert.equal(data.total, 28);
+    assert.deepEqual(analytics, original);
+    assert.equal(charts.model(buildActivityAnalytics([source], { layer: "reported-api" })).services.assistance.count, 0);
+    assert.equal(charts.model(buildActivityAnalytics([], {})).services.assistance.count, 0);
+    const mixedEndpoint = structuredClone(analytics);
+    mixedEndpoint.rows.find(row => data.assistance.drilldownIds.includes(row.id)).serviceAssociation.gaps = [{
+        reason: "missing-target", label: "No target recorded", description: "No service target is available in this recorded evidence.",
+    }];
+    const guarded = charts.model(mixedEndpoint).services;
+    assert.equal(guarded.assistance.count, 19);
+    assert.equal(guarded.assistance.endpointId, null, "A broader endpoint must not masquerade as an exact assistance link");
+    assert.equal(guarded.unresolved.count, 8);
+});
+
 test("unknown service definitions, missing coverage and mismatched identities fail rather than imply attribution", () => {
     const data = buildActivityAnalytics(records());
     for (const mutate of [

@@ -81,7 +81,7 @@ function records() {
     });
 }
 
-async function setup(t, data = records()) {
+async function setup(t, data = records(), { hasTouch = false } = {}) {
     const cleanup = [], { context, root } = await privateFixture({ after: fn => cleanup.push(fn) }, data);
     const before = await loadBoardState(context);
     let providers = 0;
@@ -91,7 +91,7 @@ async function setup(t, data = records()) {
             readSource: async () => { providers++; throw Error("No source reads in card hierarchy proof."); } },
     });
     const browser = await chromium.launch({ ignoreDefaultArgs: ["--hide-scrollbars"] });
-    const contextBrowser = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce", locale: "en-US", timezoneId: "UTC" });
+    const contextBrowser = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce", locale: "en-US", timezoneId: "UTC", hasTouch });
     const page = await contextBrowser.newPage(), denied = [], errors = [];
     let snapshot;
     page.on("pageerror", error => errors.push(error.message));
@@ -137,6 +137,134 @@ async function shot(page, name, card) {
 }
 const interaction = (page, id) => page.locator(`.request-row[data-view-key="request:hierarchy-${id}"]`);
 const callCard = (page, id) => page.locator(".matched-action").filter({ has: page.locator(`.request-link[href*="hierarchy-${id}"]`) }).first();
+
+test("card facts have uniform key and value ink without blank chat rows or detached prompt actions", async t => {
+    const data = records();
+    const long = data.find(row => row.scenarioId === "hierarchy-long");
+    long.sourceSessionName = "Harbor launch: final handover";
+    long.project = "Harbor launch";
+    long.originalModelEvidence.responses[0].model = "recorded-model-a";
+    const repeated = data.find(row => row.scenarioId === "hierarchy-archive");
+    repeated.toolCalls.push({ ...repeated.toolCalls[0], toolCallId: "archive-repeat", startEventId: "start-archive-repeat" });
+    const { page } = await setup(t, data), measurements = [];
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [820, 1], [375, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        for (const mode of ["interactions", "calls"]) {
+            await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
+            const card = mode === "interactions" ? interaction(page, "long") : callCard(page, "long");
+            const compact = mode === "interactions" ? interaction(page, "retry") : callCard(page, "retry");
+            if (mode === "interactions") {
+                await expect(compact.locator(".card-tool-count")).toHaveCount(0);
+                await expect(interaction(page, "archive").locator(".card-tool-count")).toHaveText("(2 calls)");
+                await expect(interaction(page, "multiple").locator(".card-tool-count")).toHaveText(["(2 calls)", "(1 call)"]);
+            }
+            measurements.push(await compact.evaluate((node, state) => {
+                const css = getComputedStyle(node), facts = node.querySelector(".card-context");
+                const chat = facts.firstElementChild, project = chat.nextElementSibling;
+                const textBox = element => {
+                    const range = document.createRange(); range.selectNodeContents(element);
+                    return range.getBoundingClientRect();
+                };
+                return { ...state, height: node.getBoundingClientRect().height,
+                    key: css.getPropertyValue("--muted").trim(), ink: css.getPropertyValue("--ink").trim(), paper: css.backgroundColor,
+                    keys: [...node.querySelectorAll(".activity-card-facts dt")].map(item => getComputedStyle(item).color),
+                    values: [...node.querySelectorAll(".activity-card-facts dd,.card-tool-count,.card-chat>a,.request-meta,.semantic-cue>span")]
+                        .map(item => ({ text: item.textContent, color: getComputedStyle(item).color })),
+                    chatLineHeight: parseFloat(getComputedStyle(chat.querySelector("dd")).lineHeight),
+                    chatHeight: chat.getBoundingClientRect().height,
+                    chatGap: textBox(project.querySelector("dd")).top - textBox(chat.querySelector("a")).bottom,
+                    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+            }, { theme, width, scale, mode }));
+            measurements.at(-1).prompt = await card.evaluate(node => {
+                const control = node.querySelector(".full-text-toggle");
+                return { label: control.textContent, inPassage: !!control.closest(".full-text-passage"),
+                    statusRows: node.querySelectorAll(".full-text-preview-state").length,
+                    outlined: getComputedStyle(control, "::before").content !== "none" };
+            });
+            if (proofs && width !== 820 && scale === 1) {
+                await mkdir(proofs, { recursive: true });
+                await compact.screenshot({ path: path.join(proofs, `compact-short-${mode}-${theme}-${width}.png`) });
+                await card.screenshot({ path: path.join(proofs, `compact-long-${mode}-${theme}-${width}.png`) });
+                if (mode === "interactions") await interaction(page, "archive").screenshot({ path: path.join(proofs, `compact-repeat-${theme}-${width}.png`) });
+            }
+        }
+    }
+    if (proofs) await writeFile(path.join(proofs, "compact-card-measurements.json"), JSON.stringify(measurements, null, 2));
+    for (const row of measurements) {
+        assert.ok(row.keys.every(color => contrast(color, row.key) === 1 && contrast(color, row.paper) >= 4.5),
+            "All metadata keys share one readable neutral role");
+        assert.ok(row.values.every(value => contrast(value.color, row.ink) === 1),
+            `${row.mode}/${row.theme}: nested values use theme ink, not key/semantic color: ${JSON.stringify(row.values)}`);
+        assert.ok(row.overflow <= 1);
+        if (row.width === 1440 && row.scale === 1) {
+            assert.ok(row.chatHeight <= Math.max(24, row.chatLineHeight) + 1, "Chat link must not reserve a blank 44px fact row");
+            assert.ok(row.chatGap <= 10, "Chat and project values follow the same compact row rhythm");
+        }
+        assert.deepEqual(row.prompt, { label: "Read more", inPassage: true, statusRows: 0, outlined: false },
+            "A truncated prompt has an in-context text action, not a second outlined navigation action or preview status row");
+    }
+});
+
+test("in-context prompt reading preserves exact copy, touch, focus, selection, Back and source gaps", async t => {
+    const data = records();
+    data.find(row => row.scenarioId === "hierarchy-archive").userPrompt = {
+        ...data.find(row => row.scenarioId === "hierarchy-archive").userPrompt, status: "partial", text: longPrompt,
+    };
+    data.find(row => row.scenarioId === "hierarchy-missing").userPrompt = { status: "unavailable", text: "DO_NOT_RENDER_UNAVAILABLE_TEXT" };
+    data.find(row => row.scenarioId === "hierarchy-multiple").toolCalls[1].failureEvidence = {
+        version: 1, reason: "error-code-recorded", code: "E_ACCESSDENIED", messageStatus: "text-excluded", messageSignal: "access-denial",
+    };
+    const { page } = await setup(t, data, { hasTouch: true });
+    const card = interaction(page, "long"), toggle = card.locator(".full-text-toggle");
+    await expect(interaction(page, "retry").locator(".full-text-toggle")).toHaveCount(0);
+    await expect(interaction(page, "missing")).toContainText("Prompt not available");
+    await expect(interaction(page, "missing")).not.toContainText("DO_NOT_RENDER_UNAVAILABLE_TEXT");
+    await expect(interaction(page, "missing").locator(".full-text-toggle,.ux-copy")).toHaveCount(0);
+    await card.locator("input").check();
+    const route = page.url();
+    await toggle.focus(); await page.keyboard.press("Enter");
+    await expect(toggle).toHaveText("Read less"); await expect(toggle).toBeFocused();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    assert.equal(await card.locator("pre").textContent(), longPrompt);
+    assert.equal(page.url(), route);
+    await expect(card.locator("input")).toBeChecked();
+    await card.getByRole("button", { name: "Copy prompt", exact: true }).tap();
+    assert.equal(await page.evaluate(() => window.copiedHierarchyText), longPrompt);
+    const selected = await card.locator("pre").evaluate(node => {
+        const range = document.createRange(); range.setStart(node.firstChild, 5); range.setEnd(node.firstChild, 44);
+        const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+        return selection.toString();
+    });
+    const refresh = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await refresh; await ready(page);
+    assert.equal(await page.evaluate(() => getSelection().toString()), selected, "Exact-text selection survives refresh");
+    await card.locator(".request-link").click(); await ready(page);
+    await page.locator("#contextBack").click(); await ready(page);
+    await expect(card.locator(".request-link")).toBeFocused();
+    await expect(toggle).toHaveText("Read less"); await expect(card.locator("input")).toBeChecked();
+    await toggle.focus(); await page.keyboard.press("Space");
+    await expect(toggle).toHaveText("Read more"); await expect(toggle).toBeFocused();
+    await expect(card.locator(".full-text-body")).toHaveCount(0);
+    assert.equal(await toggle.evaluate(node => getComputedStyle(node).outlineStyle !== "none"), true);
+    await toggle.tap(); await expect(toggle).toHaveText("Read less");
+    await toggle.tap(); await expect(toggle).toHaveText("Read more");
+    const partial = interaction(page, "archive");
+    for (const width of [1440, 375]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await expect(partial).toContainText("Only part of the original was recorded. Missing text is not reconstructed.");
+        await partial.locator(".full-text-toggle").tap();
+        await expect(partial.locator(".full-text-availability")).toBeVisible();
+        assert.equal(await partial.locator("pre").textContent(), longPrompt);
+        await partial.locator(".full-text-toggle").tap();
+    }
+    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
+    const failure = page.locator(".matched-action").filter({ has: page.locator("[data-outcome=failure]") });
+    await expect(failure).toContainText("Tool error mentions access denial");
+    await expect(failure).toContainText("Tool error: E_ACCESSDENIED");
+    if (proofs) await shot(page, "compact-failure-with-access-denial", failure);
+});
 
 test("prompt emphasis fits the whole card's reading rhythm in both views", async t => {
     const { page } = await setup(t), measurements = [];
@@ -437,13 +565,19 @@ async function pointAt(page, target) {
 }
 
 test("scoped tool lists retain individual names and counts without assigning aggregate outcomes", async t => {
-    const { page, snapshot } = await setup(t);
+    const data = records(), repeated = data.find(row => row.scenarioId === "hierarchy-archive");
+    repeated.toolCalls.push({ ...repeated.toolCalls[0], toolCallId: "archive-repeat", startEventId: "start-archive-repeat" });
+    const { page, snapshot } = await setup(t, data);
     page.screenshot = () => { throw new Error("Screenshots are forbidden in the native return-position proof."); };
     const canonicalIds = [0, 1, 2].map(index => `call:["harbor-multiple","multiple-${index}"]`);
     assert.deepEqual(snapshot().analytics.rows.filter(row => row.scenarioId === "hierarchy-multiple").map(row => row.id).sort(), canonicalIds);
     const multi = interaction(page, "multiple");
     await expect(multi.locator(".card-tool-name")).toHaveText(["workiq-fetch", "workiq-ask"]);
-    await expect(multi.locator(".card-tool-count")).toHaveText(["2 calls", "1 call"]);
+    await expect(fact(multi, "Tools")).toBeVisible();
+    await expect(multi.locator(".card-tool-count")).toHaveText(["(2 calls)", "(1 call)"]);
+    await expect(fact(interaction(page, "retry"), "Tool")).toHaveText("Tool:workiq-fetch");
+    await expect(interaction(page, "retry").locator(".card-tool-count")).toHaveCount(0);
+    await expect(fact(interaction(page, "archive"), "Tool")).toHaveText("Tool:workiq-fetch (2 calls)");
     await expect(multi.locator(".interaction-tools [data-outcome]")).toHaveCount(0);
     await expect(multi.locator("[data-outcome=failure]")).toHaveAttribute("data-count", "1");
     await expect(multi.locator(".card-result-scope,.result-unit")).toHaveCount(0);
@@ -453,12 +587,18 @@ test("scoped tool lists retain individual names and counts without assigning agg
     await expect(multi.locator("input")).toBeChecked();
     await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
     await expect(multi.locator(".card-tool-name")).toHaveText(["workiq-ask"]);
-    await expect(multi.locator(".card-tool-count")).toHaveText(["1 call"]);
-    await expect(fact(multi, "Tools in this view")).toBeVisible();
+    await expect(multi.locator(".card-tool-count")).toHaveCount(0);
+    await expect(fact(multi, "Tool")).toBeVisible();
     await expect(multi.locator(".card-result-scope")).toHaveText("1 of 3 Work IQ tool calls in this view");
     await expect(multi.locator("[data-outcome=failure]")).toHaveCount(0);
     assert.deepEqual(snapshot().analytics.rows.map(row => row.id), [canonicalIds[2]]);
     assert.deepEqual(snapshot().requestActivity.tool.filter(row => row.scenarioId === "hierarchy-multiple").map(row => row.id).sort(), canonicalIds);
+    await selectActivityOption(page, "toolFilter", "workiq-fetch"); await ready(page);
+    await expect(multi.locator(".card-tool-count")).toHaveText("(2 calls)");
+    await expect(multi.locator(".card-result-scope")).toHaveText("2 of 3 Work IQ tool calls in this view");
+    await expect(multi.locator("[data-outcome=success]")).toHaveAttribute("data-count", "1");
+    await expect(multi.locator("[data-outcome=failure]")).toHaveAttribute("data-count", "1");
+    await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
     await chooseTheme(page, "light");
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     const call = callCard(page, "multiple");

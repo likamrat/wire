@@ -6,6 +6,17 @@ import { createPromptAuthorship } from "../lib/prompt-authorship.mjs";
 
 const filters = createFilterState(createRecordedResults(), createPromptAuthorship());
 
+test("automatic chart bins never become a second date-range filter", () => {
+    for (const range of ["day", "week", "month", "7", "30"]) assert.equal(filters.bucket({ range }), "day");
+    assert.equal(filters.bucket({}), "week");
+    assert.equal(filters.bucket({ range: "custom", from: "2026-03-01", to: "2026-03-31" }), "day");
+    assert.equal(filters.bucket({ range: "custom", from: "2026-01-01", to: "2026-10-01" }), "week");
+    assert.equal(filters.bucket({ range: "custom", from: "2020-01-01", to: "2026-10-01" }), "month");
+    assert.equal(filters.bucket({ range: "custom", from: "2026-03-01", to: "2026-03-31", bucket: "month" }), "month");
+    assert.deepEqual(filters.query({ range: "week", from: "2026-03-02", to: "2026-03-08" }),
+        { scope: "history", includeMetadata: false, from: "2026-03-02", to: "2026-03-08" });
+});
+
 test("association routes stay distinct from legacy categories and preserve explicit strict scope", () => {
     assert.deepEqual(filters.query({ service: "Files" }), { scope: "history", includeMetadata: false, workloads: ["Files"] });
     assert.deepEqual(filters.query(filters.canonical({ services: "Mail,Files,Mail", includeMissingService: "false", tool: "workiq-fetch" })), {

@@ -106,6 +106,21 @@ export async function selectActivityOption(page, id, value) {
     await page.locator(`.select-popup .select-option[data-value=${JSON.stringify(String(value))}]`).click();
 }
 
+export async function setLegacyTimeBucket(page, bucket) {
+    await page.evaluate(async bucket => {
+        const [view, query = ""] = location.hash.split("?");
+        const params = new URLSearchParams(query);
+        params.set("bucket", bucket);
+        const hash = `${view || "#analyze"}?${params}`;
+        if (hash === location.hash) return;
+        await new Promise(resolve => {
+            addEventListener("hashchange", () => requestAnimationFrame(resolve), { once: true });
+            location.hash = hash;
+        });
+    }, bucket);
+    await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
+}
+
 export async function openSearchFilters(page) {
     await page.locator("#wireSearch").focus();
     const options = page.locator("#wireSearchOptions");

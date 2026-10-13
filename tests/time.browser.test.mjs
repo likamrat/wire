@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, moveCard } from "../lib/store.mjs";
 import { time } from "../lib/time.mjs";
-import { fixture, privateFixture, selectActivityOption, chooseTheme, openActivitySessions } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, chooseTheme, openActivitySessions, setLegacyTimeBucket } from "./helpers.mjs";
 
 const instants = ["2026-03-08T07:59:59Z", "2026-03-08T08:00:00Z", "2026-03-08T09:59:59Z", "2026-03-08T10:00:00Z", "2026-03-09T06:59:59Z", "2026-03-09T07:00:00Z"];
 function records() {
@@ -73,7 +73,7 @@ for (const [zone, day, start, end, hours] of [
     assert.equal((Date.parse(end) - Date.parse(start)) / 3600000, hours);
     assert.deepEqual(snapshot.analytics.rows.map(row => row.toolCallId).sort(), ["test-call-civil-boundary-1", "test-call-civil-boundary-2"]);
     for (const bucket of ["day", "week", "month"]) {
-        await selectActivityOption(page, "bucketFilter", bucket); await ready(page);
+        await setLegacyTimeBucket(page, bucket); await ready(page);
         assert.equal(await page.locator("#activityCount").innerText(), "2");
         assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "2");
         assert.deepEqual(snapshot.analytics.dateRange, { from: start, to: end, toExclusive: true });
@@ -134,7 +134,7 @@ test("browser zone beats UTC server; local buckets, tooltips, inputs, activity t
         await page.getByRole("button", { name: "Reset to Home", exact: true }).click(); await ready(page);
         assert.equal(await page.locator("#activityCount").innerText(), "6");
         assert.equal(requests.filter(r => r.path === "/api/snapshot").at(-1).input.timeContext.timeZone, time.zone(zone));
-        await selectActivityOption(page, "bucketFilter", "day"); await ready(page);
+        await setLegacyTimeBucket(page, "day"); await ready(page);
         const column = page.locator(".time-column").nth(zone === "America/Los_Angeles" ? 1 : 0);
         await column.focus();
         assert.match(await column.getAttribute("aria-label"), /8 Mar 2026/);

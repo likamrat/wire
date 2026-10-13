@@ -122,7 +122,7 @@ test("explicit zones govern day, week and month totals across the repeated fall-
             if (!await page.locator("#meaning").evaluate(node => node.open)) await page.locator("#meaning>summary").click();
             assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), expected.timeSeries.points.map(point => String(point.total)));
             assert.equal(await page.locator("#countTable tfoot td").first().innerText(), "4");
-            assert.equal(await page.locator("#bucketFilter").inputValue(), bucket);
+            assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), bucket);
             if (zone === "America/Los_Angeles") assert.equal(Date.parse(expected.dateRange.to) - Date.parse(expected.dateRange.from), 25 * 3600000);
         }
     }

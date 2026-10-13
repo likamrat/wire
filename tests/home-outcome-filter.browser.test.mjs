@@ -11,7 +11,7 @@ import { createRecordedResults } from "../web/recorded-results.mjs";
 import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
 import { uxIconSources } from "../web/ux-icons.mjs";
 import { contrast } from "./color-measurements.mjs";
-import { fixture, privateFixture, selectActivityOption, navigateMain, chooseTheme, openActivitySessions, revealStoredRefresh } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, navigateMain, chooseTheme, openActivitySessions, revealStoredRefresh, setLegacyTimeBucket } from "./helpers.mjs";
 
 const outcomes = ["success", "failure", "unknown", "partial", "other", "transport"];
 const proofs = process.env.WORKIQ_OUTCOME_PROOFS;
@@ -595,7 +595,7 @@ test("each outcome updates time, service, API, tool-name and exact percentages f
         }
         await page.locator("[data-chart=time]").click(); await ready(page);
         for (const bucket of ["day", "month", "week"]) {
-            await selectActivityOption(page, "bucketFilter", bucket); await ready(page);
+            await setLegacyTimeBucket(page, bucket); await ready(page);
             await reconcileView(page, reads.at(-1).snapshot);
             assert.deepEqual(reads.at(-1).input.filters.outcomes, key === "all" ? undefined : [key]);
         }

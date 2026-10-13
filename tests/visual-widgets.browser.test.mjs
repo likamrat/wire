@@ -94,6 +94,20 @@ async function capture(page, name) {
     await writeFile(path.join(proof, `${name}.txt`), await page.locator("body").ariaSnapshot());
 }
 
+test("service and operation rows have one inclusive heading without separators or explanatory badges", async t => {
+    const { page } = await setup(t), widget = page.locator('[data-breakdown=services]');
+    await expect(widget.locator("h3")).toHaveText("Services and operations");
+    await expect(widget.locator(".percentage-denominator")).toHaveClass(/visually-hidden/);
+    assert.equal(await widget.locator(".percentage-denominator").evaluate(node => getComputedStyle(node).clipPath), "inset(50%)");
+    await expect(widget.locator(".percentage-service-separator")).toHaveCount(0);
+    await expect(widget.locator('[data-service-basis=Search] .percentage-basis')).toHaveCount(0);
+    await expect(widget).not.toContainText("Tool purpose");
+    await expect(widget).not.toContainText("may overlap");
+    await expect(widget.locator("[data-category=Files] .percentage-label")).toHaveAttribute("aria-label", /37 of 247 Work IQ tool calls \(15%\)/);
+    await page.locator("#meaning > summary").click();
+    await expect(page.locator("#percentageData [data-view-key='percentage:services:exact']")).toContainText("service totals can overlap");
+});
+
 test("rich mixed population stays visual at the normal root in both themes and widths", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
     await expect(page.locator("#activityCount")).toHaveText("247");
@@ -109,9 +123,10 @@ test("rich mixed population stays visual at the normal root in both themes and w
         await expect(page.locator('[data-breakdown=services] .percentage-content>.percentage-legend [data-category=Search]')).toHaveCount(0);
         await expect(page.locator('[data-service-basis=Search]')).toHaveAttribute("data-count", "84");
         await expect(page.locator('[data-service-basis=Discovery]')).toHaveAttribute("data-count", "63");
-        await expect(page.locator('[data-service-basis=Unknown]')).toHaveAttribute("data-count", "24");
+        await expect(page.locator('[data-service-basis=Assistance]')).toHaveAttribute("data-count", "20");
+        await expect(page.locator('[data-service-basis=Unknown]')).toHaveAttribute("data-count", "4");
     }
-    for (const theme of ["light", "dark"]) for (const width of [1600, 390]) {
+    for (const theme of ["light", "dark"]) for (const width of [1600, 1280, 1024, 390]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme); await ready(page);
         const geometry = await page.evaluate(() => {
             const box = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
@@ -124,17 +139,116 @@ test("rich mixed population stays visual at the normal root in both themes and w
             [...root.querySelectorAll(".percentage-label,.percentage-value,button,h3,h4")].filter(node => node.checkVisibility())
                 .filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
         assert.deepEqual(clipped, []);
-        for (const [a, b] of [[geometry.outcomes, geometry.chart], [geometry.tools, geometry.services]]) {
-            if (width === 1600) { assert.ok(Math.abs(a.top - b.top) < 2); assert.ok(Math.abs(a.bottom - b.bottom) < 2); }
+        for (const [a, b, paired] of [[geometry.outcomes, geometry.chart, width >= 1280], [geometry.tools, geometry.services, width >= 1024]]) {
+            if (paired) {
+                assert.ok(Math.abs(a.top - b.top) < 2);
+                if (a === geometry.outcomes) assert.ok(Math.abs(a.bottom - b.bottom) < 2);
+            }
             else assert.ok(b.top >= a.bottom);
         }
+        if (!baseline) {
+            await expect(page.locator("#chartGrouping")).toHaveCount(0);
+            await expect(page.locator('[data-breakdown=services] h4,[data-breakdown=services] .percentage-service-scope')).toHaveCount(0);
+            await expect(page.locator('[data-breakdown=services] .percentage-denominator')).toHaveClass(/visually-hidden/);
+            await expect(page.locator('[data-service-basis=Search]')).not.toContainText("Tool purpose");
+            await expect(page.locator('[data-service-basis=Discovery]')).toContainText("Discovery / preparation");
+            await expect(page.locator('[data-service-basis=Unknown]')).toContainText("4 also have recorded targets");
+            await expect(page.locator('[data-breakdown=services] .percentage-gap-list')).toHaveCount(0);
+            await expect(page.locator('[data-service-basis=Unknown] .percentage-label')).toContainText("Path not recognized");
+            await expect(page.locator('[data-service-basis=Assistance]')).toContainText("Copilot assistance");
+            if (width >= 1280) assert.ok(geometry.outcomes.width < geometry.chart.width * .65, "The three-outcome summary yields room to dated activity");
+            if (width === 1600) {
+                assert.ok(geometry.services.height < 570, "Eight bars and two gap reasons fit without the former 640px widget");
+                assert.ok(geometry.outcomes.width * geometry.outcomes.height < 190000, "The outcome widget no longer spends a chart-sized area on three values");
+            }
+            const bars = await page.locator("#percentageCharts .percentage-bar-track").evaluateAll(nodes => nodes.map(track => ({
+                width: track.getBoundingClientRect().width, fill: track.firstElementChild.getBoundingClientRect().width,
+                fraction: Number(track.firstElementChild.dataset.fraction),
+                group: track.closest("[data-breakdown]").dataset.breakdown,
+            })));
+            for (const bar of bars) assert.ok(Math.abs(bar.fill - bar.width * bar.fraction) < .05, "Every bar uses the actual denominator");
+            for (const group of ["tools", "services"]) {
+                const widths = bars.filter(bar => bar.group === group).map(bar => bar.width);
+                assert.ok(Math.max(...widths) - Math.min(...widths) < 1, "Equal shares have equal physical lengths within each widget");
+            }
+        }
         await capture(page, `${baseline ? "before" : "after"}-rich-${theme}-${width}`);
+        if (proof) await writeFile(path.join(proof, `geometry-${theme}-${width}.json`), JSON.stringify(geometry, null, 2));
         if (!baseline && width === 390) {
             await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
             assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
             await expect(page.locator("#homeFindings")).toContainText("4 review errors");
-            await expect(page.locator('[data-service-basis=Unknown]')).toHaveAttribute("data-count", "24");
+            await expect(page.locator('[data-service-basis=Unknown]')).toHaveAttribute("data-count", "4");
+            await capture(page, `after-rich-${theme}-${width}-200`);
             await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+        }
+    }
+});
+
+test("sparse and dense service widgets retain every target, gap and linear share", { skip: baseline, timeout: 60000 }, async t => {
+    const sparse = fixture("widget-sparse");
+    sparse.toolCalls = [{ ...sparse.toolCalls[0], tool: "workiq-ask", requestArgs: { question: "Find invented notes" }, requestedApiPath: null }];
+    const dense = fixture("widget-dense");
+    const paths = ["/me/messages", "/me/calendarView", "/me/drive/root", "/me/chats", "/me/people",
+        "/planner/plans", "/me/onenote/notebooks", "/groups", "/search/query"];
+    dense.toolCalls = [
+        { ...dense.toolCalls[0], requestArgs: { entityUrls: [...paths, "/unrecognized/resource", "https://unsupported.example.invalid/target"] }, requestedApiPath: null },
+        { tool: "workiq-get_schema", toolCallId: "dense-prep", startEventId: "dense-prep-start",
+            requestArgs: { path: "/me/messages" }, toolSucceeded: true },
+        { tool: "workiq-retrieve", toolCallId: "dense-purpose", startEventId: "dense-purpose-start",
+            requestArgs: { query: "Invented notes" }, toolSucceeded: true },
+    ];
+    for (const [name, record] of [["sparse", sparse], ["dense", dense]]) {
+        const { page, state } = await setup(t, qualityDisplayFixture({ records: [record] }).state);
+        const expected = buildActivityAnalytics(state.evidence), widget = page.locator('[data-breakdown=services]');
+        for (const [theme, width, textSize] of [["light", 1600, ""], ["dark", 1280, ""], ["light", 390, ""], ["dark", 390, "200%"]]) {
+            await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+            await page.evaluate(size => { document.documentElement.style.fontSize = size; }, textSize); await ready(page);
+            await expect(widget.locator("h3")).toHaveCount(1);
+            await expect(widget.locator("h4,.percentage-service-scope,details")).toHaveCount(0);
+            await expect(widget.locator(".percentage-gap-list dd")).toHaveCount(name === "sparse" ? 0 : 2);
+            if (name === "sparse") {
+                await expect(widget.locator("[data-category]")).toHaveCount(0);
+                await expect(widget.locator("[data-service-basis=Assistance]")).toHaveAttribute("data-count", "1");
+                await expect(widget.locator("[data-service-basis=Unknown]")).toHaveCount(0);
+                await expect(widget.locator(".percentage-empty")).toHaveCount(0);
+            } else {
+                await expect(widget.locator("[data-service-basis=Unknown]")).toHaveAttribute("data-count", "1");
+                await expect(widget.locator("[data-category]")).toHaveCount(9);
+                await expect(widget).toContainText("Reasons overlap");
+                await expect(widget.locator("[data-service-basis=Unknown]")).toContainText("1 also have recorded targets");
+                const rows = await widget.locator("[data-category]").evaluateAll(nodes => nodes.map(node => ({
+                    id: node.dataset.category, count: Number(node.dataset.count),
+                    fraction: Number(node.querySelector(".percentage-bar").dataset.fraction),
+                })));
+                for (const row of rows) {
+                    const ids = expected.rows.filter(item => item.serviceAssociation.basis === "recorded-target"
+                        && item.serviceAssociation.services.includes(row.id));
+                    assert.equal(row.count, ids.length);
+                    assert.equal(row.fraction, 1 / 3);
+                }
+                assert.ok(rows.reduce((sum, row) => sum + row.fraction, 0) > 1, "Overlapping targets are not normalized to 100%");
+            }
+            const clipped = await widget.evaluate(root => [...root.querySelectorAll(".percentage-label,.percentage-value,dt,dd")]
+                .filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
+            assert.deepEqual(clipped, []);
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+            if (name === "dense" && width === 1600) {
+                const tools = await page.locator('[data-breakdown=tools]').boundingBox(), services = await widget.boundingBox();
+                assert.ok(tools.height < services.height * .6, "A short Tools list must not stretch to a dense Services list");
+                assert.ok(Math.abs(tools.y - services.y) < 2, "Content-sized widgets still align side by side");
+            }
+            await capture(page, `after-${name}-${theme}-${width}${textSize ? "-200" : ""}`);
+        }
+        await page.setViewportSize({ width: 1600, height: 1000 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+        if (name === "dense") {
+            await widget.locator("[data-category=Mail] .percentage-label").focus();
+            await page.keyboard.press("Enter"); await ready(page);
+            await expect(page.locator("#activityCount")).toHaveText("1");
+            await expect(page.locator("[data-service-basis=Unknown]")).toHaveAttribute("data-count", "1");
+            await page.goBack(); await ready(page);
+            await expect(page.locator("#activityCount")).toHaveText("3");
         }
     }
 });
@@ -169,11 +283,12 @@ test("compact links preserve full causes, reviews, unknown reasons and permissio
 test("service bars drill into exact deduped calls and preserve reader Back, selection and report inputs", { skip: baseline }, async t => {
     const { page, url, state, reads } = await setup(t);
     const analytics = buildActivityAnalytics(state.evidence), expected = key => analytics.rows.filter(row =>
-        key === "Search" ? row.serviceAssociation.basis === "tool-purpose"
+        key === "Assistance" ? row.tool === "workiq-ask" && row.serviceAssociation.gaps.some(gap => gap.reason === "hosted-routing")
+            : key === "Search" ? row.serviceAssociation.basis === "tool-purpose"
             : key === "Discovery" ? row.serviceAssociation.status === "not-applicable" : row.serviceAssociation.services.includes(key));
     await page.locator("#activityList input[type=checkbox]").first().check();
     const selection = await page.locator("#activitySelectionSummary").innerText();
-    for (const service of ["Files", "Search", "Discovery"]) {
+    for (const service of ["Files", "Search", "Discovery", "Assistance"]) {
         const selector = service === "Files" ? '[data-breakdown=services] [data-category=Files] .percentage-label'
             : `[data-service-basis=${service}] .percentage-label`;
         await page.locator(selector).click(); await ready(page);
@@ -248,7 +363,7 @@ test("mixed Search evidence keeps separate visual counts and the existing exact 
     await expect(page.locator("#activityCount")).toHaveText("2");
     await page.locator('[data-service-basis=Search] .percentage-bar-track').click(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("1");
-    await expect(page.locator('[data-breakdown=services] .percentage-content>.percentage-legend .percentage-legend-row')).toHaveCount(0);
+    await expect(page.locator('[data-breakdown=services] .percentage-content>.percentage-legend [data-category]')).toHaveCount(0);
 });
 
 test("legacy coverage and a truly empty collection remain explicit", { skip: baseline }, async t => {
@@ -266,46 +381,9 @@ test("legacy coverage and a truly empty collection remain explicit", { skip: bas
     await capture(app.page, "after-empty-collection");
 });
 
-test("native time grouping retains anchors with zero captures during all motion sampling", { skip: baseline, timeout: 60000 }, async t => {
-    const { page } = await setup(t), observations = [];
-    for (const [theme, width] of [["light", 1440], ["dark", 390]]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme); await ready(page);
-        await page.locator("#bucketFilter-control").scrollIntoViewIfNeeded();
-        await page.waitForTimeout(250);
-        for (const bucket of ["day", "month", "week"]) {
-            await page.evaluate(() => {
-                window.widgetMotionActive = true; window.widgetFrames = [];
-                const sample = () => {
-                    const box = selector => document.querySelector(selector).getBoundingClientRect();
-                    window.widgetFrames.push({ scroll: scrollY, control: box("#bucketFilter-control").y,
-                        heading: box(".chart-heading").y, chart: box(".analyze-chart-main").y,
-                        height: box(".analyze-chart-main").height, tools: box("[data-breakdown=tools]").y,
-                        plot: getComputedStyle(document.querySelector(".flat-time-plot")).getPropertyValue("--time-height").trim() });
-                    if (window.widgetMotionActive) requestAnimationFrame(sample);
-                };
-                sample();
-            });
-            const click = async locator => {
-                const box = await locator.boundingBox();
-                assert.ok(box.y >= 0 && box.y + box.height <= 1000, "No locator autoscroll in motion proof");
-                await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-            };
-            await click(page.locator("#bucketFilter-control"));
-            await click(page.locator(`.select-popup [data-value=${bucket}]`));
-            await ready(page); await page.waitForTimeout(200);
-            const frames = await page.evaluate(() => { window.widgetMotionActive = false; return window.widgetFrames; });
-            for (const key of ["scroll", "control", "heading", "chart", "height", "tools"]) {
-                assert.ok(Math.max(...frames.map(frame => frame[key])) - Math.min(...frames.map(frame => frame[key])) < 2,
-                    `${theme}/${width}/${bucket}: ${key} stays fixed`);
-            }
-            assert.ok(frames.every(frame => frame.plot === "200px"), "Time marks retain the approved 200px scale");
-            await expect(page.locator("#activityCount")).toHaveText("247");
-            await expect(page.locator("#filterChips")).toBeEmpty();
-            observations.push({ theme, width, bucket, frames });
-        }
-    }
-    if (proof) {
-        await mkdir(proof, { recursive: true });
-        await writeFile(path.join(proof, "motion.json"), JSON.stringify({ capturesDuringMotion: 0, observations }, null, 2));
-    }
+test("visual widgets share the population date control rather than carrying separate range pickers", { skip: baseline }, async t => {
+    const { page } = await setup(t);
+    await expect(page.locator("#dateFilter-control")).toBeVisible();
+    await expect(page.locator(".analyze-dashboard [role=combobox]")).toHaveCount(0);
+    await expect(page.locator("#activityCount")).toHaveText("247");
 });

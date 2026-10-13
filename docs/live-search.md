@@ -146,7 +146,7 @@ enlargement is not native browser zoom. The control gate also covers all 45
 results over three pages, native deep typing at 1440/768/375 px, and actual focus
 departure restoring the reading inset (Escape alone keeps Search focused).
 It verifies exact Settings destinations and analytical membership independently
-of local time grouping, global Dates and report selection using no-model fixtures.
+of legacy bucket routes, the unified Dates scope and report selection using no-model fixtures.
 Set `WIRE_SEARCH_NATIVE_HEADFUL=1` to run its native-scrollbar matrix headed;
 on Windows that case uses the installed Edge channel. Group/paging/Back sentinels reuse
 the Related browser cases; the semantic and authority algorithms are unchanged.
@@ -242,11 +242,42 @@ helper or enter an unbounded wait queue.
 
 Search panels expire after two minutes without query/open/status activity.
 Existing capability TTL also remains enforced proactively. Heartbeats run every
-second; the browser clears on disconnect, hidden/page-leave, failed state/status
-read or five seconds without a stream event. Reconnection gets a new panel and
+second; the browser clears disclosed results on disconnect, hidden/page-leave,
+failed state/status read or five seconds without a stream event while visible.
+Temporarily hiding or covering the browser window no longer aborts preparation
+or discards the owned index. The same stream, two-owner ceiling,
+backpressure, idle and capability-expiry bounds remain in force. As before,
+idle expiry waits for active work; capability expiry and page leave close active
+helpers. Hidden results
+and opened documents are not admitted, and hidden scope updates cannot submit
+another nonempty query. Both result lists, opened content and analytical
+membership are cleared immediately; the query remains only in panel memory.
+
+Returning revalidates the newest intent once against current source state with
+a fresh request sequence, reusing a still-current prepared index. It does not
+reopen the dropdown or change focus/caret. The visible connection watchdog is
+rearmed even if no further stream event arrives. Source changes still invalidate
+the index; Clear, cancellation, closure, expiry, page leave and real connection
+failures prevent automatic revival. Only a healthy temporarily hidden connection
+resumes; a failed connection still needs explicit retry. Reconnection gets a new panel and
 requires fresh admission. Queries are limited to 64 KiB; a stalled stream is
 closed above 8 MiB buffered output (48 MiB for an explicit saved-file read).
 These are local resource policies, not completeness truncation or an SLA.
+
+The focused lifecycle gate is
+`node --test tests\search-visibility.browser.test.mjs`. It uses the ordinary root
+page in an owned headless Edge, invented saved content and the real transport.
+A held corpus file read reproduces four typed intents ending in `latest` before
+hiding during preparation. The baseline closes its panel (428); the correction
+retains the same index, drops hidden disclosure and revalidates only the newest
+intent on return. The fixture dispatches visibility events at the real listener,
+not physical interaction with a user's browser. It also checks changed analytical
+populations, consent revocation, visible silence and cancellation/expiry cleanup.
+Set `WIRE_SEARCH_MODEL_TEST_DIRECTORY` to an already-provisioned pinned MiniLM
+directory to additionally require a ready model, one retained helper and helper
+exit; the default missing-model fixture proves the lifecycle in lexical-only mode.
+These checks demonstrate the hide-during-preparation mechanism, not the full
+chronology or recovery of a particular pre-existing user tab.
 
 ## Fences, not a claim of atomic network erasure
 

@@ -124,7 +124,7 @@ test("Reset to Home is one visible affordance for chart-only deviation and resto
     assert.equal(await reset.count(), 1, "Chart/timescale deviations must expose the same obvious reset");
     await reset.click(); await ready(page);
     assert.equal(new URL(page.url()).hash, "#home");
-    assert.equal(await page.locator("#bucketFilter").inputValue(), "week");
+    assert.equal(await page.locator("#dateFilter").inputValue(), "capture");
     assert.equal(await page.locator('[data-chart="time"]').getAttribute("aria-pressed"), "true");
     assert.equal(await reset.isVisible(), false);
     await page.goBack(); await ready(page);

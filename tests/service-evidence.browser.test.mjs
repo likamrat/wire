@@ -22,6 +22,69 @@ async function ready(page) {
 }
 const dataService = item => item.locator("dt").filter({ hasText: /^Data service$/ }).evaluate(node => node.nextElementSibling.textContent);
 
+test("normal entry explains invented search, preparation and service gaps without changing filtered calls", { timeout: 30000 }, async t => {
+    const source = serviceEvidenceFixture();
+    const records = [
+        ["assistance", source.toolCalls[0]],
+        ["retrieval", { ...source.toolCalls[0], tool: "workiq-retrieve", requestArgs: {
+            query: "Invented search", capabilities: [{ name: "TeamsMessages" }, { name: "Email" }], strategy: "grounding",
+        } }],
+        ["profile", { ...source.toolCalls[1], requestArgs: { entityUrls: ["/me?$select=creationType"] } }],
+        ["preparation", source.toolCalls[5]],
+    ].map(([name, call]) => ({ ...structuredClone(source), scenarioId: `meaning-${name}`, toolCalls: [{
+        ...call, toolCallId: `meaning-${name}`, startEventId: `meaning-start-${name}`,
+    }] }));
+    const { context } = await privateFixture(t, records);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(5000);
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(runtime.url + "#analyze"); await ready(page);
+    assert.equal(await page.locator("#activityList .request-row").count(), 4);
+    for (const [category, explanation] of [
+        ["Search and retrieval", /tool name alone does not identify the services searched/],
+        ["Discovery", /does not run the data operation/],
+        ["Service not shown", /missing a usable service target.*cannot classify its path/],
+    ]) {
+        await page.getByRole("button", { name: `About ${category}; recorded activity categories`, exact: true }).click();
+        assert.match(await page.getByRole("tooltip").innerText(), explanation);
+        if (category === "Search and retrieval") {
+            assert.match(await page.getByRole("tooltip").innerText(), /Requested scope: Teams messages and email/);
+            assert.match(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
+        } else assert.doesNotMatch(await page.getByRole("tooltip").innerText(), /Requested scope/);
+        await page.keyboard.press("Escape");
+    }
+    for (const [category, tool, name] of [["People", "workiq-fetch", "profile"], ["Search", "workiq-retrieve", "retrieval"],
+        ["Unknown", "workiq-ask", "assistance"], ["Discovery", "workiq-get_schema", "preparation"]]) {
+        const snapshot = page.waitForResponse(response => new URL(response.url()).pathname === "/api/snapshot" && response.ok());
+        await selectActivityOption(page, "serviceFilter", category); await ready(page);
+        const { analytics } = await (await snapshot).json();
+        assert.equal(analytics.totals.count, 1);
+        assert.deepEqual(analytics.rows.map(row => [row.toolCallId, row.tool, row.outcome]), [[`meaning-${name}`, tool, "success"]]);
+        assert.equal(await page.locator("#activityList .request-row").count(), 1);
+        assert.equal(await page.locator("#activityList .card-tool-name").innerText(), tool);
+    }
+    await page.goto(runtime.url + "#analyze?mode=calls&service=Search"); await ready(page);
+    assert.equal(await page.locator("#activityList .matched-action").count(), 1);
+    const retrieval = page.locator("#activityList .matched-action");
+    await retrieval.getByRole("button", { name: "About Search and retrieval", exact: true }).click();
+    assert.match(await page.getByRole("tooltip").innerText(), /Requested scope: Teams messages and email/);
+    assert.match(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
+    assert.equal(await retrieval.locator("dt").filter({ hasText: /^Purpose:/ }).count(), 0, "Scope qualifies existing help, not a new card row");
+    await page.keyboard.press("Escape");
+    await retrieval.getByRole("link", { name: "Open exact call in context", exact: true }).click(); await ready(page);
+    const readerCall = page.locator('[data-tool-call-id="meaning-retrieval"]');
+    assert.equal(await readerCall.locator(".action-service-heading .service-cue").innerText(), "Search and retrieval");
+    await readerCall.getByRole("button", { name: "About Search and retrieval", exact: true }).click();
+    assert.match(await page.getByRole("tooltip").innerText(), /Requested scope: Teams messages and email/);
+    assert.match(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
+    assert.equal(await readerCall.locator("dt").filter({ hasText: /^Purpose$/ }).count(), 0, "Reader scope stays in its existing category help");
+    assert.deepEqual(errors, []);
+});
+
 test("a single-group legend explains the missing evidence without repeating the total", { timeout: 15000 }, async t => {
     const record = serviceEvidenceFixture(), call = record.toolCalls[0];
     record.toolCalls = Array.from({ length: 5 }, (_, index) => ({ ...call, toolCallId: `copy-call-${index}`, startEventId: `copy-start-${index}` }));

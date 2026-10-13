@@ -125,6 +125,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
     let stream, timer, heartbeat, sequence = 0, openId = 0, restore, analysisKey = null, dialog;
     let pages = { matches: 0, related: 0 }, drawnKeys = { matches: null, related: null };
     let connected = false, connecting = false, disposed = false;
+    let hidden = document.hidden, resumeVisibleQuery = false;
     const purpose = () => scope.value === "analysis" ? "analysis" : "navigation";
     const types = () => scope.value === "analysis" ? ["interaction", "context", "reply", "action"] : category.value ? [category.value] : [];
     const ownedReceipt = receipt => state.snapshot()[receipt?.purpose === "related-navigation" ? "related" : "matches"]?.receipt;
@@ -175,7 +176,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
             "The available content changed. Return to Search and open this item again."));
     }
     function fail(message = "Search disconnected. Results were cleared; reconnect to read current items.") {
-        connected = connecting = false;
+        connected = connecting = resumeVisibleQuery = false;
         clearTimeout(timer);
         stream?.abort(); stream = null;
         clearTimeout(heartbeat);
@@ -197,6 +198,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         (focused || input).focus({ preventScroll: true }); restore = null;
     }
     function paint() {
+        if (document.hidden) return;
         const current = state.snapshot(), status = current.status;
         const partial = status?.corpus?.state === "partial"
             && (current.purpose !== "analysis" || !contract.completeCoverage(status.corpus, current.matches.receipt?.queryTypes));
@@ -295,18 +297,23 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
     }
     function receive(event) {
         const before = state.snapshot();
+        if (document.hidden && ["results", "opened"].includes(event.event)) return;
         if (event.event === "connected") {
             connected = true; connecting = false;
-            state.receive(event); schedule(false);
+            state.receive(event);
+            if (!document.hidden) schedule(false);
         } else state.receive(event);
         if (event.panelId !== state.snapshot().panelId) return;
         clearTimeout(heartbeat);
-        heartbeat = setTimeout(() => fail("Search disconnected. Results were cleared. Reconnect to continue."), 5000);
+        if (!document.hidden) heartbeat = setTimeout(() => fail("Search disconnected. Results were cleared. Reconnect to continue."), 5000);
         if (event.event === "heartbeat") return;
         if (event.event === "fence" && event.epoch > before.epoch) {
+            if (["cancelled", "closed", "idle", "disconnected"].includes(event.reason)) resumeVisibleQuery = false;
             eraseDocument();
             onAnalysis({ state: "stale", query: scope.value === "analysis" ? input.value : null, revoked: true });
         }
+        if (document.hidden && event.event === "status" && event.epoch === state.snapshot().epoch
+            && ["unavailable", "closed"].includes(event.state)) { fail(); return; }
         if (event.event === "results" && state.snapshot().matches === event.matches && scope.value === "analysis"
             && contract.analysisReceipt(event.matches.receipt)) {
             onAnalysis({ state: "ready", query: input.value, hits: event.matches.hits, receipt: event.matches.receipt,
@@ -318,18 +325,21 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         paint();
     }
     function connect() {
-        if (connected || connecting || disposed) return;
+        if (connected || connecting || disposed || document.hidden) return;
         connecting = true;
         stream = new AbortController();
         const owned = stream;
         clearTimeout(heartbeat);
         heartbeat = setTimeout(() => fail("The local search connection did not become ready. No results were retained."), 10000);
-        api.searchEvents(receive, { signal: owned.signal }).catch(error => {
+        api.searchEvents(event => {
+            if (stream === owned && !owned.signal.aborted) receive(event);
+        }, { signal: owned.signal }).catch(error => {
             if (!owned.signal.aborted && stream === owned) fail(failureMessage(error));
         });
     }
     function schedule(resetPage = true) {
         clearTimeout(timer);
+        if (!input.value.trim()) resumeVisibleQuery = false;
         openId++;
         const requestId = ++sequence;
         state.query(requestId, purpose(), types());
@@ -337,6 +347,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         analysisKey = getAnalysis()?.key ?? null;
         onAnalysis({ state: "pending", query: scope.value === "analysis" ? input.value : null, scopeKey: analysisKey });
         paint();
+        if (document.hidden && input.value.trim()) return;
         if (!connected) { connect(); return; }
         timer = setTimeout(async () => {
             try {
@@ -457,7 +468,24 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
     }
     window.addEventListener("pagehide", () => { disposed = true; returns.clear(); input.value = ""; fail(); });
     window.addEventListener("pageshow", () => { disposed = false; });
-    document.addEventListener("visibilitychange", () => { if (document.hidden) fail("Search paused while this panel was hidden. Reconnect for current results."); });
+    document.addEventListener("visibilitychange", () => {
+        if (disposed || hidden === document.hidden) return;
+        hidden = document.hidden;
+        if (hidden) {
+            resumeVisibleQuery = Boolean(input.value.trim()) && (connected || connecting);
+            clearTimeout(timer); clearTimeout(heartbeat); openId++;
+            // Retain bounded owned preparation, not disclosure or admission.
+            // The visible return must submit a fresh sequence against current sources.
+            if (resumeVisibleQuery) state.query(++sequence, purpose(), types());
+            eraseLists(); eraseDocument(); hide();
+            onAnalysis({ state: resumeVisibleQuery ? "pending" : "unavailable",
+                query: scope.value === "analysis" ? input.value : null, scopeKey: analysisKey });
+        } else if (resumeVisibleQuery) {
+            resumeVisibleQuery = false;
+            heartbeat = setTimeout(() => fail("Search disconnected. Results were cleared. Reconnect to continue."), connecting ? 10000 : 5000);
+            if (connected) schedule(false);
+        } else if (connected) paint();
+    });
     paint();
     return {
         invalidate: fail,

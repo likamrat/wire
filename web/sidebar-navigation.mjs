@@ -62,9 +62,21 @@ export function mountSidebarNavigation(ux, preference) {
     headerSize.observe(rail);
     let restoreFocus = true, collapsed = false, navigationFocus = null;
     let animations = [], motionOrigin = null, drawerExit = null;
+    function captureBrand() {
+        const link = brand.querySelector(".brand-home"), bounds = link.getBoundingClientRect();
+        return {
+            link, bounds,
+            inset: bounds.x - brand.getBoundingClientRect().x - parseFloat(getComputedStyle(brand).paddingLeft),
+            caption: brand.querySelector(".brand-caption"), captionOpacity: getComputedStyle(brand.querySelector(".brand-caption")).opacity,
+            layers: [...link.querySelectorAll("svg")].filter(node => getComputedStyle(node).display !== "none").map(node => ({
+                node, bounds: node.getBoundingClientRect(), matrix: node.getScreenCTM(), opacity: getComputedStyle(node).opacity,
+            })),
+        };
+    }
     function captureGeometry() {
         return {
             width: rail.getBoundingClientRect().width,
+            brand: captureBrand(),
             labels: [...content.querySelectorAll(".navigation-label,.navigation-group-label")].map(node => {
                 const style = getComputedStyle(node), bounds = node.getBoundingClientRect();
                 return { node, width: bounds.width, height: bounds.height, opacity: style.opacity,
@@ -91,6 +103,35 @@ export function mountSidebarNavigation(ux, preference) {
         };
         rail.dataset.navigationMoving = "";
         const width = animate(rail, [{ width: from.width + "px", minWidth: "0px" }, { width: to.width + "px", minWidth: "0px" }]);
+        const originBrand = from.brand, targetBrand = to.brand;
+        animate(targetBrand.link, [
+            { width: originBrand.bounds.width + "px", marginLeft: originBrand.inset + "px",
+                transform: `translateY(${originBrand.bounds.y - targetBrand.bounds.y}px)`, justifySelf: "start" },
+            { width: targetBrand.bounds.width + "px", marginLeft: targetBrand.inset + "px", transform: "translateY(0px)", justifySelf: "start" },
+        ]);
+        const visibleOrigin = originBrand.layers.find(layer => Number(layer.opacity) > 0);
+        const visibleTarget = targetBrand.layers.find(layer => Number(layer.opacity) > 0);
+        for (const target of targetBrand.layers) {
+            const origin = originBrand.layers.find(layer => layer.node === target.node);
+            // Register both approved SVGs in their shared artwork coordinates so their W
+            // follows one path through the fade, including a reversal partway through it.
+            const transform = (source, linkBounds) => {
+                const scale = source.matrix.a / target.matrix.a;
+                const x = source.matrix.e - linkBounds.x - (target.bounds.x - targetBrand.bounds.x)
+                    - scale * (target.matrix.e - target.bounds.x);
+                const y = source.matrix.f - linkBounds.y - (target.bounds.y - targetBrand.bounds.y)
+                    - scale * (target.matrix.f - target.bounds.y);
+                return `translate(${x}px,${y}px) scale(${scale})`;
+            };
+            animate(target.node, [
+                { opacity: origin.opacity, transform: transform(Number(origin.opacity) > 0 ? origin : visibleOrigin, originBrand.bounds) },
+                { opacity: target.opacity, transform: transform(visibleTarget, targetBrand.bounds) },
+            ]);
+        }
+        animate(targetBrand.caption, [
+            { opacity: originBrand.captionOpacity, visibility: "visible" },
+            { opacity: targetBrand.captionOpacity, visibility: "visible" },
+        ]);
         for (const [index, target] of to.labels.entries()) {
             const origin = from.labels[index];
             const first = { width: origin.width + "px" }, last = { width: target.width + "px" };

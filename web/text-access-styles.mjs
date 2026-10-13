@@ -109,11 +109,39 @@ export const textAccessStyles = `
 .request-summary-content>.request-recorded {margin-top:16px;padding-top:16px}
 .request-context-summaries .interaction-insights {margin-block:16px}
 .request-link-details {margin-top:16px;padding-top:16px;border-top:1px solid var(--rule);font-size:var(--type-caption)}
+#requestContent {max-inline-size:90rem}
+#requestContent .request-intro {gap:4px 20px;margin-bottom:20px}
+#requestContent .request-source {margin:0}
+#requestContent .request-source strong {font-size:var(--type-body)}
+#requestContent :is(.request-source-label,.request-context-meta .project-context,.request-context-meta .request-time,.reader-scope) {font-size:var(--type-body);line-height:var(--leading-ui)}
+#requestContent .reader-scope {flex-basis:100%;margin-top:8px;color:var(--muted)}
+#requestContent .request-context-timeline {margin-block:0 20px}
+#requestContent .request-context-timeline>.journey-item {padding-block:12px 20px}
+#requestContent .request-context-timeline :is(.full-text-header h2,.full-text-header h3,.interaction-response>h2,.call-heading h3) {font-family:var(--font);font-size:var(--type-reading);line-height:var(--leading-reading);font-weight:var(--weight-strong);margin:0}
+#requestContent .request-context-timeline .context-entry-label {font-size:var(--type-body);line-height:var(--leading-ui);margin-bottom:4px}
+#requestContent .request-context-timeline :is(.call-duration,.action-context,.action-fields,.reader-response-note,.reader-empty) {font-size:var(--type-body);line-height:var(--leading-reading)}
+#requestContent .request-context-timeline .call-heading {gap:4px 16px}
+#requestContent .request-context-timeline .full-text-reader-actions {gap:0 12px;margin-top:4px}
+#requestContent .request-context-timeline .reader-copy-scope {flex-basis:auto;font-size:var(--type-body);max-inline-size:60ch}
+#requestContent .request-context-timeline .reader-state {font-size:var(--type-body);line-height:var(--leading-ui)}
+#requestContent .request-context-timeline .interaction-response {margin-top:20px}
+#requestContent .request-context-timeline [data-context-kind=response]>.interaction-response {margin-top:0}
+#requestContent .reader-response-note {margin-block:4px 12px;color:var(--muted)}
+#requestContent .reader-facts {display:grid;gap:4px;margin-block:16px 0;max-inline-size:72ch;font-size:var(--type-body);line-height:var(--leading-ui)}
+#requestContent .reader-facts>dl {margin:0;padding:0}
+#requestContent .reader-facts>dl>div {display:grid;grid-template-columns:minmax(0,16rem) minmax(0,1fr);gap:4px 12px}
+#requestContent .reader-facts>dl dt {font-weight:var(--weight-medium);color:var(--muted)}
+#requestContent .reader-facts>dl dd {margin:0;font-weight:var(--weight-regular);color:var(--ink);overflow-wrap:anywhere}
+#requestContent .request-actions {gap:8px 16px;margin-block:12px;padding-block:8px}
+#requestContent .request-actions p {margin:0}
 @media(max-width:600px) {
  .request-original,.interaction-response {padding:16px}
  .full-text-reader-actions {flex-basis:100%;margin-inline-start:0;justify-content:flex-start}
  .reader-copy-scope,.full-text-reader-actions .ux-copy-status:not(.error) {text-align:start}
  .request-support .facts,.journey-item>details .facts {grid-template-columns:minmax(0,1fr);gap:4px}
  .request-support .facts dd,.journey-item>details .facts dd {margin-bottom:12px}
+ #requestContent .reader-facts>dl>div {grid-template-columns:minmax(0,1fr);gap:0}
+ #requestContent .reader-facts {gap:8px}
+ #requestContent .request-context-timeline>.journey-item {margin-inline-start:0;padding-inline-start:12px}
 }
 `;

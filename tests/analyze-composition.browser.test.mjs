@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, restoreLegacySearch, setLegacyTimeBucket } from "./helpers.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
 import { graphMatrixRecord } from "./report-evidence-matrix-fixtures.mjs";
 
@@ -140,12 +140,12 @@ test("chart modes regroup the same records without relocating the overview or it
             }
             assert.ok(Math.abs(current.summaries.width - initial.summaries.width) < 2, "Unchanged summaries keep the same columns");
             if (mode === "time") {
-                await expect(page.locator("#bucketControl")).toBeVisible();
-                await expect(page.locator("#chartGrouping")).toContainText("grouped by week");
+                await expect(page.locator("#bucketControl")).toHaveCount(0);
+                await expect(page.locator("#chartTitle")).toHaveText("Activity over time");
                 assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes => nodes.reduce((sum, node) => sum + Number(node.dataset.total), 0)), 15);
             } else {
-                await expect(page.locator("#bucketControl")).toBeHidden();
-                await expect(page.locator("#chartGrouping")).toContainText(mode === "workload" ? "One activity category per call" : "recorded path or operation");
+                await expect(page.locator("#bucketControl")).toHaveCount(0);
+                await expect(page.locator("#chartTitle")).toHaveText(mode === "workload" ? "Activity categories" : "Paths and operations");
                 assert.equal(await page.locator(".flat-comparison-action").evaluateAll(nodes => nodes.reduce((sum, node) => sum + Number(node.dataset.total), 0)), 15);
             }
             assert.ok(current.summaries.y >= current.chart.bottom, "Tool and service summaries consistently follow the chosen chart");
@@ -207,7 +207,7 @@ test("pending and failed mode reads never relabel the previous chart", { timeout
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
     await expect(page.locator("#chartTitle")).toHaveText("Activity over time");
     await expect(page.locator('[data-chart="time"]')).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("#chartGrouping")).toHaveText("Dated calls grouped by week.");
+    await expect(page.locator("#chartGrouping")).toHaveCount(0);
     await capture(page, "mode-pending-retains-time");
     release(); await ready(page);
     await expect(page.locator("#message")).toContainText("Invented chart grouping read failure");
@@ -218,11 +218,11 @@ test("pending and failed mode reads never relabel the previous chart", { timeout
     await page.unroute("**/api/snapshot");
     await page.locator('[data-chart="endpoint"]').click(); await ready(page);
     await expect(page.locator("#chartTitle")).toHaveText("Paths and operations");
-    await expect(page.locator("#chartGrouping")).toHaveText("Calls grouped by recorded path or operation.");
+    await expect(page.locator("#chartGrouping")).toHaveCount(0);
     await expect(page.locator("#periodResult")).not.toContainText("Previous results");
 });
 
-test("Dates governs every widget while time grouping stays out of filters and Reset", { timeout: 30000 }, async t => {
+test("legacy bucket routes retain their grouping without becoming another date authority", { timeout: 30000 }, async t => {
     const { page } = await setup(t, records());
     let snapshot, input;
     await page.route("**/api/snapshot", async route => {
@@ -261,8 +261,7 @@ test("Dates governs every widget while time grouping stays out of filters and Re
         await page.locator("#meaning > summary").click();
     };
     for (const bucket of ["day", "week", "month", "day"]) {
-        await selectActivityOption(page, "bucketFilter", bucket); await ready(page);
-        await expect(page.locator("#bucketFilter-control")).toBeFocused();
+        await setLegacyTimeBucket(page, bucket); await ready(page);
         assert.deepEqual(ids(), allIds);
         assert.deepEqual(input.filters, { scope: "history", includeMetadata: false });
         assert.deepEqual(await widgetState(), allWidgets, "Grouping changes only the time widget");
@@ -281,7 +280,7 @@ test("Dates governs every widget while time grouping stays out of filters and Re
     await expect(page.locator("#filterChips button")).toHaveAttribute("aria-label", /^Remove date filter:/);
     await assertWidgetCounts();
     for (const bucket of ["week", "day"]) {
-        await selectActivityOption(page, "bucketFilter", bucket); await ready(page);
+        await setLegacyTimeBucket(page, bucket); await ready(page);
         assert.deepEqual(ids(), scopedIds);
         assert.deepEqual(await widgetState(), scopedWidgets);
         assert.equal(input.filters.from, "2026-10-07"); assert.equal(input.filters.to, "2026-10-07");
@@ -290,7 +289,7 @@ test("Dates governs every widget while time grouping stays out of filters and Re
     }
     for (const mode of ["workload", "endpoint", "time"]) {
         await page.locator(`[data-chart="${mode}"]`).click(); await ready(page);
-        await expect(page.locator("#bucketFilter")).toHaveValue("day");
+        assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
         await expect(page.locator("#filterChips button")).toHaveCount(1);
         assert.deepEqual(ids(), scopedIds);
     }
@@ -298,11 +297,11 @@ test("Dates governs every widget while time grouping stays out of filters and Re
     await page.locator('[name="reportScope"][value="current"]').check();
     await expect(page.locator("#scopeCount-current")).toHaveText(scopedWidgets.currentReportScope);
     await page.goBack(); await ready(page);
-    await expect(page.locator("#bucketFilter")).toHaveValue("day");
+    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     assert.deepEqual(ids(), scopedIds);
     const beforeReset = page.url();
     await page.locator("#resetView").click(); await ready(page);
-    await expect(page.locator("#bucketFilter")).toHaveValue("day");
+    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     await expect(page.locator("#dateFilter")).toHaveValue("capture");
     await expect(page.locator("#resetView")).toBeDisabled();
     await expect(page.locator("#filterChips")).toBeEmpty();
@@ -311,12 +310,12 @@ test("Dates governs every widget while time grouping stays out of filters and Re
     await page.goBack(); await ready(page); await settle(page);
     assert.equal(page.url(), beforeReset);
     assert.deepEqual(ids(), scopedIds);
-    await expect(page.locator("#bucketFilter")).toHaveValue("day");
+    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     await expect(page.locator("#filterChips button")).toHaveCount(1);
     await expect(page.locator("#resetView")).toBeEnabled();
     await page.goForward(); await ready(page); await settle(page);
     assert.deepEqual(ids(), allIds);
-    await expect(page.locator("#bucketFilter")).toHaveValue("day");
+    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     await expect(page.locator("#resetView")).toBeDisabled();
     const column = page.locator(".time-column").first();
     await column.focus();
@@ -330,13 +329,13 @@ test("Dates governs every widget while time grouping stays out of filters and Re
     await page.goBack(); await ready(page); await settle(page);
     assert.deepEqual(ids(), allIds);
     await expect(page.locator("#filterChips")).toBeEmpty();
-    await expect(page.locator("#bucketFilter")).toHaveValue("day");
+    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     assert.equal(await page.evaluate(() => document.activeElement.dataset.viewKey), before.key);
     assert.ok(Math.abs(await page.evaluate(() => scrollY) - before.scroll) < 2);
     await page.keyboard.press("Enter"); await ready(page);
     await page.locator("#filterChips button").click(); await ready(page);
     await expect(page.locator("#dateFilter-control")).toBeFocused();
-    await expect(page.locator("#bucketFilter")).toHaveValue("day");
+    assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     await expect(page.locator("#filterChips")).toBeEmpty();
     await expect(page.locator("#resetView")).toBeDisabled();
     assert.deepEqual(ids(), allIds, "Clearing the global date chip retains local grouping and restores membership");
@@ -369,7 +368,7 @@ test("Analyze composes exact sparse outcomes with time and keeps filter and reco
         const data = await slice.evaluate(node => ({ start: +node.dataset.start, end: +node.dataset.end, count: +node.dataset.count }));
         assert.ok(Math.abs(data.end - data.start - data.count / 15) < 1e-14);
     }
-    await selectActivityOption(page, "bucketFilter", "day");
+    await setLegacyTimeBucket(page, "day");
     await capture(page, "after-two-days-light");
     await expect(page.locator(".time-column")).toHaveCount(2);
     await page.locator("#analyzeReviewDetails > summary").click();
@@ -439,7 +438,7 @@ test("Analyze dense and empty populations keep their own counts and readable bou
     if (process.env.WIRE_LAYOUT_BASELINE) return;
     const { page } = await setup(t, records(true));
     await expect(page.locator("#activityCount")).toHaveText("37");
-    await selectActivityOption(page, "bucketFilter", "day");
+    await setLegacyTimeBucket(page, "day");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await capture(page, `after-dense-${theme}`);

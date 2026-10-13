@@ -199,7 +199,7 @@ test("component family hover matrix uses mounted routes and their effective pain
         await inspect(".view-switch button[aria-pressed=true]", "selected chart tab");
         await inspect(".view-switch button[aria-pressed=false]", "unselected chart tab");
         await inspect("[data-select-id=dateFilter]", "period select trigger");
-        await inspect("[data-select-id=bucketFilter]", "time scale quiet trigger");
+        await inspect("[data-select-id=dateFilter]", "unified date trigger");
         await inspect("#outcomeFilter-control", "result filter");
         for (const tone of ["success", "failure", "unknown"]) {
             await selectActivityOption(page, "outcomeFilter", tone); await ready();

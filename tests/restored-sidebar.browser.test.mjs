@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { privateFixture, fixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
+import { privateFixture, fixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, setLegacyTimeBucket } from "./helpers.mjs";
 import { scopeRecords } from "./analysis-scope-fixture.mjs";
 import { reportContents } from "./report-journey-helpers.mjs";
 
@@ -90,6 +90,141 @@ test("production shell restores the three destinations in the left sidebar, not 
         await workspaceSearch(page);
         await capture(page, `desktop-${theme}-collapsed`);
         await collapse(page).click(); await settled(page);
+    }
+});
+
+test("collapsed brand centers the painted W in the header cell, not just its transparent image box", async t => {
+    const { page } = await setup(t, { deviceScaleFactor: 1.5 }, scopeRecords(), {
+        channel: process.platform === "win32" ? "msedge" : undefined, ignoreDefaultArgs: ["--hide-scrollbars"],
+    });
+    const measurements = [];
+    for (const theme of ["light", "dark"]) for (const width of [1440, 768]) for (const textScale of [1, 2]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await chooseTheme(page, theme);
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, textScale);
+        if (await collapse(page).getAttribute("aria-expanded") === "true") await collapse(page).click();
+        await settled(page);
+        const cellCenter = await page.locator("#shellBrand").evaluate(node => {
+            const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
+            return {
+                x: (rect.width + parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth)) / 2 * devicePixelRatio,
+                y: (rect.height + parseFloat(style.borderTopWidth) - parseFloat(style.borderBottomWidth)) / 2 * devicePixelRatio,
+            };
+        });
+        const image = await page.locator("#shellBrand").screenshot();
+        const paint = await page.evaluate(async source => {
+            const image = await createImageBitmap(new Blob([Uint8Array.from(atob(source), char => char.charCodeAt(0))], { type: "image/png" }));
+            const canvas = document.createElement("canvas");
+            canvas.width = image.width; canvas.height = image.height;
+            const context = canvas.getContext("2d");
+            context.drawImage(image, 0, 0);
+            const { data } = context.getImageData(0, 0, image.width, image.height);
+            let left = image.width, right = 0, top = image.height, bottom = 0, mass = 0, xMass = 0, yMass = 0;
+            for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) {
+                const i = (y * image.width + x) * 4;
+                const red = data[i] - Math.max(data[i + 1], data[i + 2]);
+                if (red < 40) continue;
+                left = Math.min(left, x); right = Math.max(right, x + 1);
+                top = Math.min(top, y); bottom = Math.max(bottom, y + 1);
+                mass += red; xMass += (x + .5) * red; yMass += (y + .5) * red;
+            }
+            return { width: image.width, height: image.height, left, right, top, bottom,
+                center: { x: (left + right) / 2, y: (top + bottom) / 2 },
+                centroid: { x: xMass / mass, y: yMass / mass }, mass };
+        }, image.toString("base64"));
+        measurements.push({ theme, width, textScale, deviceScaleFactor: 1.5, cellCenter, paint });
+        if (proofs) {
+            await writeFile(path.join(proofs, `brand-${theme}-${width}-${textScale}x-collapsed.png`), image);
+            await writeFile(path.join(proofs, "brand-painted-centering.json"), JSON.stringify(measurements, null, 2));
+        }
+        t.diagnostic(JSON.stringify(measurements.at(-1)));
+        assert.ok(paint.mass > 0, "The actual screenshot contains the approved red W");
+        // Exclude the divider; a one-raster-pixel allowance covers paint antialiasing.
+        assert.ok(Math.abs(paint.center.x - cellCenter.x) <= 1, "W paint is horizontally centered");
+        assert.ok(Math.abs(paint.center.y - cellCenter.y) <= 1, "W paint is vertically centered");
+    }
+});
+
+test("brand paint follows the eased sidebar through collapse, expansion and reversal", async t => {
+    const { page } = await setup(t);
+    const trace = await page.evaluate(async () => {
+        const samples = [], rail = document.querySelector("#sidebar"), toggle = document.querySelector("#navigationCollapse");
+        const wordmark = document.querySelector(".brand-logo[data-brand-theme=light]");
+        const compact = document.querySelector(".brand-compact");
+        const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+        let phase = "initial", running = true;
+        function sample() {
+            const paint = node => {
+                const style = getComputedStyle(node);
+                const matrix = node.getScreenCTM();
+                return { opacity: style.visibility === "hidden" || style.display === "none" ? 0 : Number(style.opacity),
+                    rect: node.getBoundingClientRect().toJSON(), transform: style.transform,
+                    matrix: matrix ? { a: matrix.a, d: matrix.d, e: matrix.e, f: matrix.f } : null };
+            };
+            samples.push({ phase, at: performance.now(), width: rail.getBoundingClientRect().width,
+                wordmark: paint(wordmark), compact: paint(compact) });
+            if (running) requestAnimationFrame(sample);
+        }
+        async function settle() {
+            for (let i = 0; i < 120; i++) {
+                await frame();
+                if (i > 1 && !rail.hasAttribute("data-navigation-moving")) return;
+            }
+            throw new Error("Brand motion did not settle");
+        }
+        sample();
+        for (const next of ["collapse", "expand"]) {
+            phase = next; toggle.click(); await settle();
+        }
+        phase = "reverse-collapse"; toggle.click();
+        for (let i = 0; i < 4; i++) await frame();
+        phase = "reverse-expand"; toggle.click(); await settle();
+        running = false; await frame();
+        return samples;
+    });
+    if (proofs) await writeFile(path.join(proofs, "brand-motion.json"), JSON.stringify(trace, null, 2));
+    for (const phase of ["collapse", "expand", "reverse-collapse", "reverse-expand"]) {
+        const samples = trace.filter(frame => frame.phase === phase);
+        assert.ok(new Set(samples.map(frame => Math.round(frame.width))).size > 1, `${phase}: real lateral motion`);
+        assert.ok(samples.some(frame => frame.compact.opacity > 0 && frame.compact.opacity < 1),
+            `${phase}: the W paint must ease with the rail rather than switch at the click`);
+        assert.ok(samples.some(frame => frame.wordmark.opacity > 0 && frame.wordmark.opacity < 1),
+            `${phase}: the wordmark must ease with the rail rather than switch at the click`);
+        for (const frame of samples.filter(frame => frame.wordmark.opacity > 0 && frame.compact.opacity > 0)) {
+            for (const key of ["a", "d", "e", "f"]) {
+                assert.ok(Math.abs(frame.wordmark.matrix[key] - frame.compact.matrix[key]) < .001,
+                    `${phase}: both W paths share the same rendered artwork coordinates (${key})`);
+            }
+        }
+        if (["collapse", "expand"].includes(phase)) {
+            const first = Math.max(...trace.map(frame => frame.width)), last = Math.min(...trace.map(frame => frame.width));
+            for (const frame of samples) {
+                const progress = (first - frame.width) / (first - last);
+                assert.ok(Math.abs(frame.compact.opacity - progress) < .001,
+                    `${phase}: logo and rail use the same eased progress, not independent timing`);
+            }
+        }
+    }
+    if (proofs) for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        for (const phase of ["collapse", "expand"]) {
+            await collapse(page).click();
+            await page.evaluate(() => {
+                window.brandProofAnimations = ["#sidebar", "#shellBrand"].flatMap(selector =>
+                    document.querySelector(selector).getAnimations({ subtree: true }));
+                for (const animation of window.brandProofAnimations) animation.pause();
+            });
+            for (const time of [0, 80, 160, 240, 319]) {
+                await page.evaluate(async time => {
+                    for (const animation of window.brandProofAnimations) animation.currentTime = time;
+                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                }, time);
+                await page.screenshot({ path: path.join(proofs, `brand-${theme}-${phase}-${time}ms.png`),
+                    clip: { x: 0, y: 0, width: 220, height: 144 } });
+            }
+            await page.evaluate(() => { for (const animation of window.brandProofAnimations) animation.play(); });
+            await settled(page);
+        }
     }
 });
 
@@ -321,7 +456,7 @@ test("service refinement owns its chart-data page and Back restores the parent p
         return record;
     });
     const { page } = await setup(t, {}, records);
-    await selectActivityOption(page, "bucketFilter", "day"); await ready(page);
+    await setLegacyTimeBucket(page, "day"); await ready(page);
     await page.locator("#meaning > summary").click();
     const pager = page.locator("#countTable .list-pager");
     await expect(pager).toContainText("1-24 of 26");
@@ -355,9 +490,10 @@ test(`normal-root repeated sidebar motion is vertically stable at ${width}px in 
         const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
         let phase = "initial", running = true;
         function sample() {
+            const artwork = document.querySelector(`.brand-logo[data-brand-theme=${document.documentElement.dataset.evidenceTheme}]`);
             samples.push({ phase, at: performance.now(), header: rect(".app-header"), main: rect("#main"),
                 brand: rect("#shellBrand"), logo: rect(".brand-home"),
-                artwork: rect(`.brand-logo[data-brand-theme=${document.documentElement.dataset.evidenceTheme}]`),
+                artwork: { ...artwork.getBoundingClientRect().toJSON(), layoutWidth: artwork.clientWidth, layoutHeight: artwork.clientHeight },
                 sidebar: rect("#sidebar"), search: rect(".wire-search-entry"), scrollY });
             if (running) requestAnimationFrame(sample);
         }
@@ -393,8 +529,10 @@ test(`normal-root repeated sidebar motion is vertically stable at ${width}px in 
     t.diagnostic(JSON.stringify({ samples: trace.length, header, main }));
     assert.ok(header.max - header.min < 1, `Header bounces during sidebar motion: ${JSON.stringify(header)}`);
     assert.ok(main.max - main.min < 1, `Main bounces during sidebar motion: ${JSON.stringify(main)}`);
-    assert.ok(trace.every(frame => frame.artwork.width === 148 && frame.artwork.height === 46),
-        "The wordmark retains its full geometry while the rail reveals or clips it laterally");
+    assert.ok(trace.every(frame => frame.artwork.layoutWidth === 148 && frame.artwork.layoutHeight === 46),
+        "The wordmark retains its layout geometry while its paint transforms without reflow");
+    assert.ok(trace.every(frame => Math.abs(frame.artwork.width / frame.artwork.height - 148 / 46) < .001),
+        "Logo motion scales uniformly, never distorting the approved artwork");
     assert.ok(trace.every(frame => Math.abs(frame.search.x + frame.search.width / 2 - frame.main.x - frame.main.width / 2) < 1),
         "Search stays centered on the moving content, not on the whole viewport");
     for (const phase of ["collapse-0", "expand-0", "rapid-collapse", "rapid-expand", "rapid-collapse-again"]) {
@@ -458,6 +596,7 @@ test("enlarged text and reduced motion keep a stable header without squeezing th
         const before = await geometry();
         await collapse(page).click();
         assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
+        assert.equal(await page.locator("#shellBrand").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
         assert.deepEqual(await geometry(), before);
         await collapse(page).click();
         assert.deepEqual(await geometry(), before);
@@ -466,6 +605,48 @@ test("enlarged text and reduced motion keep a stable header without squeezing th
         }));
         assert.ok(caption.visible && caption.content <= caption.width, "Enlarged caption wraps inside its reserved width without truncation");
         await capture(page, `enlarged-text-${theme}`);
+    }
+});
+
+test("brand focus, touch, reduced motion and breakpoint interruption retain settled artwork", async t => {
+    const { page } = await setup(t, { hasTouch: true });
+    const brand = page.locator("#shellBrand"), link = brand.locator(".brand-home");
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        await collapse(page).tap(); await settled(page);
+        await link.focus(); await page.keyboard.press("Shift");
+        const focus = await link.evaluate(node => {
+            const style = getComputedStyle(node), rect = node.getBoundingClientRect(), cell = node.parentElement.getBoundingClientRect();
+            return { visible: node.matches(":focus-visible"), outline: style.outlineStyle, outlineWidth: parseFloat(style.outlineWidth),
+                width: rect.width, height: rect.height, contained: rect.x >= cell.x && rect.right <= cell.right && rect.y >= cell.y && rect.bottom <= cell.bottom,
+                edges: [[rect.x + 1, rect.y + 1], [rect.right - 1, rect.bottom - 1]].every(([x, y]) =>
+                    document.elementFromPoint(x, y)?.closest("a") === node) };
+        });
+        assert.ok(focus.visible && focus.outline !== "none" && focus.outlineWidth >= 2 && focus.contained && focus.edges);
+        assert.equal(focus.width, 44); assert.equal(focus.height, 46);
+        if (proofs) await page.screenshot({ path: path.join(proofs, `brand-${theme}-keyboard-focus.png`), clip: { x: 0, y: 0, width: 220, height: 144 } });
+        await page.keyboard.press("Enter"); await ready(page);
+        await expect(page.locator('nav [data-nav="analyze"]')).toHaveAttribute("aria-current", "page");
+        await collapse(page).tap();
+        await page.waitForTimeout(60);
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await settled(page);
+        assert.equal(await brand.evaluate(node => node.getAnimations({ subtree: true }).length), 0);
+        await expect(brand.locator(".brand-compact")).toHaveCSS("opacity", "0");
+        await expect(brand.locator(`.brand-logo[data-brand-theme=${theme}]`)).toHaveCSS("transform", "none");
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await collapse(page).tap();
+        await page.waitForTimeout(60);
+        await page.setViewportSize({ width: 375, height: 900 });
+        await page.locator("#navigationToggle").tap();
+        await expect(page.locator("#navigationDrawer #shellBrand")).toBeVisible();
+        assert.equal(await brand.evaluate(node => node.getAnimations({ subtree: true }).length), 0);
+        await expect(brand.locator(".brand-compact")).toBeHidden();
+        await expect(brand.locator(`.brand-logo[data-brand-theme=${theme}]`)).toHaveCSS("opacity", "1");
+        await page.keyboard.press("Escape");
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        await expect(collapse(page)).toHaveAttribute("aria-expanded", "false");
+        await collapse(page).tap(); await settled(page);
     }
 });
 

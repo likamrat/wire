@@ -372,7 +372,7 @@ test("touch choices omit legacy explanatory paragraphs and preserve native form 
 test("all app-authored dropdown options retain their value and dispatch each actual change once", { timeout: 60000 }, async () => setup(async ({ context, origin }) => {
     const page = await context.newPage();
     await page.goto(origin); await ready(page);
-    for (const id of ["dateFilter", "serviceFilter", "outcomeFilter", "projectFilter", "layerFilter", "bucketFilter", "scopeFilter"]) {
+    for (const id of ["dateFilter", "serviceFilter", "outcomeFilter", "projectFilter", "layerFilter", "scopeFilter"]) {
         if (id === "scopeFilter") await page.locator("#coverage > summary").click();
         const options = await page.locator("#" + id + " option").evaluateAll((nodes) => nodes.map((node) => ({ value: node.value, label: node.label })));
         for (const option of options) {

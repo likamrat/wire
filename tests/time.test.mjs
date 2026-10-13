@@ -9,6 +9,29 @@ const time = createTimeContext();
 const context = (timeZone) => ({ timeZone, locale: "en-US" });
 
 describe("civil date/time contract", () => {
+    test("date presets share inclusive display-zone boundaries, including DST", () => {
+        const now = "2026-03-09T06:00:00Z", zone = "America/Los_Angeles";
+        assert.deepEqual(time.preset("7", zone, now), { from: "2026-03-02", to: "2026-03-08" });
+        assert.deepEqual(time.preset("30", zone, now), { from: "2026-02-07", to: "2026-03-08" });
+        assert.equal(time.preset("custom", zone, now), null);
+        assert.equal(time.preset("capture", zone, now), null);
+    });
+
+    test("Today, This week and This month select local calendar periods, not elapsed durations", () => {
+        const zone = "America/Los_Angeles", now = "2026-03-09T06:00:00Z";
+        assert.deepEqual(time.preset("day", zone, now), { from: "2026-03-08", to: "2026-03-08" });
+        assert.deepEqual(time.preset("week", zone, now), { from: "2026-03-02", to: "2026-03-08" });
+        assert.deepEqual(time.preset("month", zone, now), { from: "2026-03-01", to: "2026-03-31" });
+        assert.deepEqual(time.preset("week", "UTC", now), { from: "2026-03-09", to: "2026-03-15" });
+        assert.deepEqual(time.preset("week", zone, "2026-01-01T12:00:00Z"), { from: "2025-12-29", to: "2026-01-04" });
+        assert.deepEqual(time.preset("month", zone, "2024-02-29T12:00:00Z"), { from: "2024-02-01", to: "2024-02-29" });
+        for (const range of ["day", "week", "month"]) {
+            const selection = { range, ...time.preset(range, zone, now) };
+            assert.deepEqual(time.selection(selection), selection);
+            assert.throws(() => time.selection({ range }), /boundaries/);
+        }
+    });
+
     test("named-zone local days use DST boundaries, not fixed 24-hour offsets", () => {
         assert.deepEqual(time.range({ from: "2026-03-08", to: "2026-03-08" }, "America/Los_Angeles"), {
             from: "2026-03-08T08:00:00.000Z", to: "2026-03-09T07:00:00.000Z", toExclusive: true,

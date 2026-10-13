@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, restoreLegacySearch, setLegacyTimeBucket } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 import { rgb, contrast, measureChartPaint } from "./color-measurements.mjs";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
@@ -133,7 +133,7 @@ test("a populated sparse Analyze timeline keeps a steady plot in the complete ti
             await writeFile(path.join(proofs, "sparse-journey.json"), JSON.stringify(measurements, null, 2));
         }
     }
-    await selectActivityOption(page, "bucketFilter", "day"); await ready(page);
+    await setLegacyTimeBucket(page, "day"); await ready(page);
     await expect(page.locator(".time-column")).toHaveCount(2);
     assert.equal(await page.locator("#activityCount").innerText(), "15");
     const daily = await measure();
@@ -143,7 +143,7 @@ test("a populated sparse Analyze timeline keeps a steady plot in the complete ti
     await page.goBack(); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("15");
     await expect(page.locator(".time-column").last()).toBeFocused();
-    await selectActivityOption(page, "bucketFilter", "month"); await ready(page);
+    await setLegacyTimeBucket(page, "month"); await ready(page);
     await expect(page.locator(".time-column")).toHaveCount(1);
     assert.equal((await measure()).extent, measurements[0].extent);
     await page.setViewportSize({ width: 375, height: 1100 });
@@ -155,8 +155,8 @@ test("a populated sparse Analyze timeline keeps a steady plot in the complete ti
         assert.ok(count.width >= 44 && count.height >= 44);
         assert.ok(count.x >= 0 && count.x + count.width <= 375);
         assert.equal(await page.locator(".dimensional-count").evaluate(node => getComputedStyle(node).outlineStyle), "solid");
-        const trigger = page.getByRole("combobox", { name: "Time scale", exact: true });
-        await expect(trigger).toHaveText(/Monthly/);
+        const trigger = page.getByRole("combobox", { name: "Dates", exact: true });
+        await expect(trigger).toHaveText(/All dates/);
         const control = await trigger.boundingBox();
         assert.ok(control.height >= 44 && control.x >= 0 && control.x + control.width <= 375);
         if (proofs) {
@@ -265,7 +265,7 @@ test("source bins, shares, DST and partial bounds drill into the same Analyze ID
         assert.deepEqual(sorted(analytics().rows.map(row => row.id)), sorted(expected));
         assert.equal(analytics().dateRange.to, "2026-03-11T12:00:00.000Z");
         await page.goBack(); await ready(page); assert.equal(page.url(), before);
-        assert.equal(await page.locator("#bucketFilter").inputValue(), bucket);
+        assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), bucket);
     }
 });
 

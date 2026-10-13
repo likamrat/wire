@@ -100,7 +100,7 @@ test("collector -> real server -> Activity, reader and new report preserve truth
     await page.locator("#activitySearch").fill("Invented planning-only kickoff"); await ready(page); await openActivitySessions(page);
     const kickoff = app.cases[0], row = page.locator(`.request-row[data-view-key="request:${kickoff.scenarioId}"]`);
     await row.locator("input").check();
-    const listRead = row.getByRole("button", { name: "Read full prompt", exact: true });
+    const listRead = row.getByRole("button", { name: "Read more", exact: true });
     await listRead.focus(); await page.keyboard.press("Enter");
     assert.equal(await row.locator(".ux-code-label").textContent(), "Agent prompt / local only");
     assert.equal(await row.locator("pre").textContent(), kickoff.data.content);
@@ -113,8 +113,8 @@ test("collector -> real server -> Activity, reader and new report preserve truth
     assert.equal(await reader.locator(".full-text-toggle").evaluate(node => document.activeElement === node), true);
     await page.goBack(); await ready(page);
     assert.equal(await row.locator("input").isChecked(), true);
-    assert.equal(await row.getByRole("button", { name: "Hide prompt", exact: true }).getAttribute("aria-expanded"), "true");
-    await row.getByRole("button", { name: "Hide prompt", exact: true }).click();
+    assert.equal(await row.getByRole("button", { name: "Read less", exact: true }).getAttribute("aria-expanded"), "true");
+    await row.getByRole("button", { name: "Read less", exact: true }).click();
     for (const theme of ["light", "dark"]) for (const width of [1200, 375]) {
         await page.setViewportSize({ width, height: 950 }); await chooseTheme(page, theme);
         await row.scrollIntoViewIfNeeded();

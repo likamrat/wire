@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { PRODUCT_NAME, PRODUCT_DESCRIPTION, PRODUCT_TITLE, logoSvg, wordmarkSvg, darkWordmarkSvg, brandMark, brandDarkMark } from "../lib/branding.mjs";
+import { PRODUCT_NAME, PRODUCT_DESCRIPTION, PRODUCT_TITLE, logoSvg, wordmarkSvg, darkWordmarkSvg, brandMark, brandDarkMark, brandCompactMark } from "../lib/branding.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 
 test("WIRE preserves both approved middle-bar wordmarks and uses only local paint references", () => {
@@ -13,7 +13,7 @@ test("WIRE preserves both approved middle-bar wordmarks and uses only local pain
         [darkWordmarkSvg, "d012ff4eb660bd2943667b44f577404f35c6a0fbc1e72f483dde8b88ce6e5741"],
     ]) {
         assert.match(svg, /viewBox="24 62 500 158"/);
-        const drawing = svg.replace(/\s*<(title|desc)\b[^>]*>[\s\S]*?<\/\1>/g, "");
+        const drawing = svg.replaceAll("\r\n", "\n").replace(/\s*<(title|desc)\b[^>]*>[\s\S]*?<\/\1>/g, "");
         assert.equal(createHash("sha256").update(drawing).digest("hex"), hash);
         assert.match(svg, /<title id="title">WIRE - Work IQ Request Explorer<\/title>/);
         assert.match(svg, /id="letter-e"[^>]+d="M426 201 V90 H489 M426 189 H489"/);
@@ -39,14 +39,18 @@ test("inline light and dark wordmarks keep independent IDs and decorative semant
     }
     const ids = [...(brandMark + brandDarkMark).matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
     assert.equal(ids.length, new Set(ids).size, "Theme variants do not create duplicate document IDs");
+    assert.match(brandCompactMark, /class="brand-compact" aria-hidden="true" focusable="false"/);
+    assert.doesNotMatch(brandCompactMark, /<title|\bid=|aria-labelledby|role="img"/);
+    assert.equal(brandCompactMark.match(/<path[\s\S]*?\/>/)[0], logoSvg.match(/<path[\s\S]*?\/>/)[0],
+        "The inline compact W keeps the approved path and paint unchanged");
 });
 
 test("the application uses WIRE, the approved local mark and a same-origin favicon", () => {
     const html = renderHtmlShell("a".repeat(64), "synthetic-branding");
     assert.match(html, /<title>WIRE - Work IQ Request Explorer<\/title>/);
     assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="\/favicon\.svg">/);
-    assert.match(html, /<div class="brand"><a class="brand-home" href="#home" data-nav="home" aria-label="WIRE - Work IQ Request Explorer - Home">/);
-    assert.ok(html.includes(`${brandMark}${brandDarkMark}</a><span class="brand-caption">Work IQ Request Explorer</span></div>`));
+    assert.match(html, /<div id="shellBrand" class="brand"><a class="brand-home" href="#analyze" data-nav="analyze" aria-label="WIRE - Work IQ Request Explorer - Analyze">/);
+    assert.ok(html.includes(`${brandMark}${brandDarkMark}${brandCompactMark}</a><span class="brand-caption">Work IQ Request Explorer</span></div>`));
     assert.ok(html.includes(brandMark));
     assert.ok(html.includes(brandDarkMark));
     assert.doesNotMatch(html, /class="brand-name"/);

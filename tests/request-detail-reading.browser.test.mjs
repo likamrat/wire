@@ -48,6 +48,11 @@ async function setup(t, { text = "Find the synthetic planning note.", status = "
     }
     record.followUpPrompts = [];
     if (!calls) record.toolCalls = [];
+    else if (Array.isArray(calls)) record.toolCalls = calls.map((call, index) => ({
+        ...record.toolCalls[0], toolCallId: `synthetic-reading-call-${index}`, startEventId: `synthetic-reading-start-${index}`,
+        startedAt: `2026-09-30T12:0${index}:01Z`, completedAt: `2026-09-30T12:0${index}:02Z`, durationMs: 1000,
+        ...call,
+    }));
     else Object.assign(record.toolCalls[0], { startedAt: "2026-09-30T12:00:01Z", completedAt: "2026-09-30T12:00:02Z", durationMs: 1000 });
     const cleanup = [];
     const { context } = await privateFixture({ after: action => cleanup.push(action) }, [record]);
@@ -125,7 +130,7 @@ async function capture(page, name, contextSelector = ".request-intro") {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.screenshot({ path: path.join(proof, `${name}.png`), fullPage: true });
     await page.screenshot({ path: path.join(proof, `${name}-viewport.png`) });
-    const context = page.locator(contextSelector);
+    const context = page.locator(contextSelector + ":visible").first();
     if (await context.count()) {
         await context.evaluate(node => scrollTo(0, scrollY + node.getBoundingClientRect().top
             - document.querySelector(".app-header").getBoundingClientRect().height - 16));
@@ -136,6 +141,96 @@ async function capture(page, name, contextSelector = ".request-intro") {
 function contentReads(requests) {
     return requests.filter(request => ["/api/snapshot", "/api/assessment/detail", "/api/assessment/evidence"].includes(new URL(request.url).pathname)).length;
 }
+
+test("reader distillation keeps a legible story without repeated empty fields or per-text About disclosures", { timeout: 60000 }, async t => {
+    const calls = Array.from({ length: 7 }, (_, index) => ({
+        tool: index === 5 ? "workiq-fetch_blob" : "workiq-retrieve",
+        requestArgs: {}, requestedApiPath: null, apiResults: [],
+        toolSucceeded: index !== 5, reportedOutcome: index === 5 ? "failed" : "succeeded",
+    }));
+    const { page, runtime } = await setup(t, { actor: "agent", text: exact + "Read the retained planning notes. ".repeat(16), calls });
+    await page.goto(runtime.url + "#request?request=detail-reading&tool=workiq-fetch_blob"); await ready(page);
+    await page.locator(".interaction-response .reader-empty").waitFor();
+    const timeline = page.locator(".request-context-timeline");
+    await capture(page, "distilled-multicall-light");
+    assert.equal(await timeline.locator(".reader-details").count(), 0, "No repeated About prompt/response disclosures");
+    assert.equal(await timeline.locator(":scope > li[data-context-kind=action]").count(), 7);
+    const visible = await timeline.innerText();
+    assert.doesNotMatch(visible, /API path\s+Not recorded|API metadata: None recorded|Outside current view/);
+    assert.match(visible, /Failure cause unavailable/);
+    assert.doesNotMatch(visible, /Historical call evidence only/);
+    assert.match(visible, /No response text retained/);
+    assert.match(await page.locator(".reader-scope").innerText(), /1 of 7.*match/);
+    assert.equal(await timeline.locator(".context-selected-label").count(), 0, "A direct interaction entry needs no Selected prompt badge");
+    const action = timeline.locator("[data-tool-call-id=synthetic-reading-call-0]");
+    await action.locator("details > summary").click();
+    assert.match(await action.innerText(), /API metadata: None recorded/);
+    await action.locator("details > summary").click();
+    for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 1200, 1], ["dark", 375, 2], ["light", 375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        const styles = await page.locator("#requestContent").evaluate(root => {
+            const nodes = [...root.querySelectorAll(".full-text-header h2, .interaction-response > h2, .call-heading h3")];
+            return {
+                headings: nodes.map(node => ({ size: getComputedStyle(node).fontSize, font: getComputedStyle(node).fontFamily, color: getComputedStyle(node).color })),
+                overflow: document.documentElement.scrollWidth - innerWidth,
+                facts: [...root.querySelectorAll(".reader-facts > dl > div")].map(node => node.getBoundingClientRect().x),
+                keyWeights: [...root.querySelectorAll(".reader-facts dt")].map(node => getComputedStyle(node).fontWeight),
+                values: [...root.querySelectorAll(".reader-facts dd")].map(node => node.getBoundingClientRect().x),
+            };
+        });
+        assert.equal(new Set(styles.headings.map(style => style.size)).size, 1, "Prompt, response and call headings share one type role");
+        assert.ok(styles.headings.every(style => style.font.includes("Asta Sans")));
+        assert.ok(styles.overflow <= 1, `${theme}/${width}/${scale} does not overflow`);
+        assert.equal(new Set(styles.facts).size, 1, "Model and response timing keys align");
+        assert.equal(new Set(styles.keyWeights).size, 1, "Metadata keys share one weight");
+        assert.equal(new Set(styles.values).size, 1, "Metadata values align");
+        await capture(page, `distilled-multicall-${theme}-${width}-${scale}`, '[data-tool-call-id="synthetic-reading-call-5"]');
+    }
+});
+
+test("reader failure copy is concise while sign-in signals and unknown outcomes stay distinct", { timeout: 30000 }, async t => {
+    const failed = { tool: "workiq-fetch_blob", requestArgs: {}, requestedApiPath: null, apiResults: [],
+        toolSucceeded: false, reportedOutcome: "failed" };
+    const { page } = await setup(t, { actor: "user", calls: [
+        failed,
+        { ...failed, failureEvidence: { version: 1, reason: "error-code-recorded", code: "failure",
+            messageStatus: "text-excluded", messageSignal: "workiq-sign-in-required" } },
+        { ...failed, failureEvidence: { version: 1, reason: "no-structured-error",
+            messageStatus: "text-excluded", messageSignal: "access-denial" } },
+        { ...failed, toolSucceeded: undefined, reportedOutcome: undefined },
+    ] });
+    const calls = page.locator(".request-context-timeline > li[data-context-kind=action]");
+    await page.locator(".interaction-response .reader-empty").waitFor();
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 375, 2]]) {
+            await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+            await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+            for (const [index, name] of ["missing-cause", "sign-in-required", "access-denial", "unknown-outcome"].entries()) {
+                await calls.nth(index).screenshot({ path: path.join(proof, `failure-${name}-${theme}-${width}-${scale}.png`) });
+            }
+        }
+    }
+    assert.deepEqual(await calls.locator(":scope > .action-error").allTextContents(),
+        ["Failure cause unavailable.", "Work IQ sign-in was required", "Tool error mentions access denial"]);
+    assert.equal(await calls.locator(":scope > .context-help-note").count(), 0, "No repeated historical-access lecture between calls");
+    for (const [index, call] of (await calls.all()).entries()) {
+        const visible = await call.innerText();
+        assert.doesNotMatch(visible, /WIRE cannot establish|Historical call evidence only|HTTP 401|HTTP 403|Sign in now/);
+        if (index === 3) {
+            assert.doesNotMatch(visible, /Tool failed|sign-in|access denial|Failure cause/);
+            continue;
+        }
+        assert.equal(await call.getByRole("button", { name: /sign in|retry|authenticate/i }).count(), 0, "Historical signals never add a sign-in or retry action");
+        const details = call.locator(":scope > details");
+        await details.locator("summary").click();
+        assert.match(await details.innerText(), /does not establish current sign-in or permission state/);
+        if (index === 0) assert.match(await details.innerText(), /whether the source omitted it or earlier collection excluded it/);
+        else assert.match(await details.innerText(), /not a verified cause, access policy, authorization or observed HTTP response/);
+        await details.locator("summary").click();
+    }
+});
 
 test("normal request page leads with readable content and explicit, scoped reader actions", { timeout: 60000 }, async t => {
     const { page, requests } = await setup(t), failures = [];
@@ -153,8 +248,7 @@ test("normal request page leads with readable content and explicit, scoped reade
         assert.ok(await page.locator(".request-intro").evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-original")) & Node.DOCUMENT_POSITION_FOLLOWING)));
         if (!await prompt.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".interaction-insights")) & Node.DOCUMENT_POSITION_FOLLOWING))) failures.push(`${theme}/${width}: Derived insights precede actual prompt`);
         if (await prompt.getByText("This older record has no sender details", { exact: true }).count() !== 1) failures.push(`${theme}/${width}: Missing sender details are not explained once`);
-        if (await prompt.locator(".reader-details").count() !== 1) failures.push(`${theme}/${width}: Secondary explanations are not grouped`);
-        else assert.equal(await prompt.locator(".reader-details").getAttribute("open"), null, "Secondary source/privacy detail is on demand");
+        if (await prompt.locator(".reader-details").count() !== 0) failures.push(`${theme}/${width}: Redundant About disclosure remains`);
         if (!(await prompt.innerText()).includes("unmasked")) failures.push(`${theme}/${width}: Copy privacy is not concise and explicit`);
         const route = page.url(), selection = await page.locator("#activitySelectionSummary").textContent(), reads = contentReads(requests);
         await hide.focus(); await page.keyboard.press("Enter");
@@ -242,8 +336,7 @@ test("unavailable and zero-action requests stay honest; partial/full prompt copi
             assert.equal(contentReads(requests), reads);
             if (status === "partial") {
                 assert.equal(await prompt.getByText("Partial text", { exact: true }).count(), 1);
-                await prompt.locator(".reader-details > summary").click();
-                assert.match(await prompt.innerText(), /Only part of the original was recorded/);
+                assert.equal(await prompt.locator(".reader-state-partial").isVisible(), true);
             }
         }
         await capture(page, `availability-${status}-${actor}-${text ? "text" : "empty"}`);
@@ -277,7 +370,9 @@ test("normal response reader opens retained text immediately with explicit Retry
     assert.equal(await host.getByRole("button", { name: "Hide response", exact: true }).evaluate(node => node === document.activeElement), true, "Reading response restores focus to its reader action");
     assert.match(await copy.textContent(), /Copy response/);
     assert.equal(await host.locator(".full-text-content").textContent(), responseText);
-    assert.equal(await host.locator(".reader-details:visible").count(), 1, "Loaded response has one combined source/copy explanation, not stacked duplicates");
+    assert.equal(await host.locator(".reader-details:visible").count(), 0, "Response qualifications and copy privacy stay visible without another disclosure");
+    assert.equal(await host.getByRole("heading").count(), 1, "The retained response has one heading, not a second nested title");
+    assert.match(await host.innerText(), /Final-answer status unverified/);
     const reads = evidenceReads();
     await copy.click();
     await page.waitForFunction(() => window.clipboardProof.writes.length === 1);
@@ -305,8 +400,9 @@ test("an insight read error cannot leave the response section falsely busy", { t
     assert.equal(await response.getByRole("alert").count(), 1);
     assert.equal(await response.getAttribute("aria-busy"), null);
     assert.equal(await response.getByRole("heading", { name: "Response", exact: true }).count(), 1);
+    await page.locator(".request-context-summaries > summary").click();
     assert.equal(await page.locator(".interaction-insights").getByRole("heading", { name: "Insights", exact: true }).count(), 1);
-    await response.locator(".reader-details > summary").click();
+    assert.equal(await response.locator(".reader-details").count(), 0);
     assert.match(await response.innerText(), /Synthetic local insight read failed/);
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), "Find the synthetic planning note.");
     await capture(page, "whole-page-insight-error");
@@ -318,7 +414,7 @@ test("composed author helpers give truthful readable source and actor cues on th
         const { page } = await setup(t, { actor });
         const heading = page.locator(".request-original h2");
         assert.equal(await heading.textContent(), label);
-        assert.equal(await page.locator(".request-source-label").textContent(), "GitHub Copilot chat");
+        assert.equal(await page.locator(".request-source-label").textContent(), "From Copilot chat");
         for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 2 }]) {
             await page.setViewportSize({ width, height: 1000 });
             await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
@@ -356,7 +452,7 @@ test("canonical host-envelope normalization reaches Your prompt without copying 
     assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
     assert.equal(record.userPrompt.authorshipVersion, promptAuthorship.version);
     assert.equal(await page.locator(".request-original h2").textContent(), "Your prompt");
-    assert.equal(await page.locator(".request-source-label").textContent(), "GitHub Copilot chat");
+    assert.equal(await page.locator(".request-source-label").textContent(), "From Copilot chat");
     assert.equal(await page.locator(".request-original .reader-state").count(), 0, "Supported host metadata does not retain an unverified-author warning");
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), body);
     const reads = contentReads(requests);

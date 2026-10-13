@@ -275,7 +275,7 @@ for (const { view, id, value, width = 1200, theme = "light" } of [
     { view: "activity", id: "projectFilter", value: "project-a" },
     { view: "home", id: "layerFilter", value: "reported-api" },
     { view: "activity", id: "scopeFilter", value: "all" },
-    { view: "home", id: "bucketFilter", value: "day" },
+    { view: "home", id: "dateFilter", value: "day" },
     { view: "home", id: "outcomeFilter", value: ["success", "failure"] },
     { view: "activity", id: "outcomeFilter", value: ["failure"], width: 375, theme: "dark" },
 ]) test(`${view} ${id} commits in place with stable control frames at ${width}px`, { timeout: 20000 }, async t => {

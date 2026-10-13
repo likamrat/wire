@@ -9,7 +9,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { assessmentDependencies, assessmentRef, buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, setLegacyTimeBucket } from "./helpers.mjs";
 
 const proof = process.env.WIRE_DISTILL_PROOFS;
 const baseline = Boolean(process.env.WIRE_DISTILL_BASELINE);
@@ -104,7 +104,7 @@ async function widgetGeometry(page) {
     return page.evaluate(() => {
         const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
         return {
-            scroll: scrollY, header: rect(".app-header"), control: rect("#bucketFilter-control"),
+            scroll: scrollY, header: rect(".app-header"), control: rect("#dateFilter-control"),
             heading: rect(".analyze-chart-main .chart-heading"), chart: rect(".analyze-chart-main"),
             outcomes: rect(".analyze-outcome-summary"), tools: rect('[data-percentage-card="tools"]'),
             services: rect('[data-percentage-card="services"]'),
@@ -184,7 +184,7 @@ test("stable time layout keeps zero and undated meanings with native horizontal 
     undated.capturedAt = null;
     const page = await setup(t, { records: [...records, undated], nativeScrollbars: true });
     await page.setViewportSize({ width: 375, height: 1000 });
-    await selectActivityOption(page, "bucketFilter", "day"); await ready(page);
+    await setLegacyTimeBucket(page, "day"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("5");
     await expect(page.locator("#chartFooter")).toContainText("1 undated records are not plotted.");
     await expect(page.locator(".time-zero .dimensional-count")).toHaveText("0 calls");
@@ -202,7 +202,7 @@ test("stable time layout keeps zero and undated meanings with native horizontal 
     await expect(page.locator("#countTable tfoot td").first()).toHaveText("4");
 });
 
-test("real time-scale choices keep the widget and page still throughout the change", { timeout: 45000 }, async t => {
+test("the shared date field remains the control anchor when calendar membership changes", async t => {
     const records = sample().map((record, index) => {
         const date = `2026-10-${String(index + 6).padStart(2, "0")}`;
         record.capturedAt = `${date}T09:00:00.000Z`;
@@ -212,80 +212,17 @@ test("real time-scale choices keep the widget and page still throughout the chan
         }
         return record;
     });
-    const page = await setup(t, { nativeScrollbars: true, records }), observations = [], failures = [];
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
-        await page.setViewportSize({ width, height: 812 });
-        await chooseTheme(page, theme);
-        await page.reload(); await ready(page);
-        await expect(page.locator("#homeFindings")).not.toHaveAttribute("aria-busy", "true");
-        await page.evaluate(() => document.fonts.ready);
-        await page.mouse.move(width - 30, 700);
-        await page.mouse.wheel(0, (await widgetGeometry(page)).control.y - 400);
-        await page.waitForTimeout(500);
-        const initial = await widgetGeometry(page);
-        assert.ok(initial.control.y >= initial.header.bottom && initial.control.bottom <= 812);
-        await page.evaluate(() => {
-            window.scaleEvents = [];
-            document.addEventListener("click", event => {
-                const control = event.target.closest("#bucketFilter-control, .select-option");
-                if (control) window.scaleEvents.push({ trusted: event.isTrusted, value: control.dataset.value || "open" });
-            }, true);
-        });
-        for (const [bucket, label, keyboard] of [["day", "Daily", false], ["month", "Monthly", false], ["week", "Weekly", true]]) {
-            await page.evaluate(() => {
-                window.scaleFrames = [];
-                window.recordScaleFrames = true;
-                const record = () => {
-                    const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
-                    window.scaleFrames.push({ scroll: scrollY, control: rect("#bucketFilter-control"),
-                        heading: rect(".analyze-chart-main .chart-heading"), chart: rect(".analyze-chart-main"),
-                        header: rect(".app-header"), tools: rect('[data-percentage-card="tools"]') });
-                    if (window.recordScaleFrames) requestAnimationFrame(record);
-                };
-                record();
-            });
-            await clickVisible(page, page.locator("#bucketFilter-control"));
-            if (keyboard) {
-                await page.keyboard.press(label[0]); await page.keyboard.press("Enter");
-            } else await clickVisible(page, page.locator(`.select-popup [data-value="${bucket}"]`));
-            await ready(page); await page.waitForTimeout(500);
-            await expect(page.locator("#bucketFilter")).toHaveValue(bucket);
-            await expect(page.locator("#bucketFilter-control")).toBeFocused();
-            await expect(page.locator(".flat-time-column")).toHaveCount(bucket === "day" ? 5 : 1);
-            assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes => nodes.reduce((total, node) => total + Number(node.dataset.total), 0)), 5);
-            const frames = await page.evaluate(() => { window.recordScaleFrames = false; return window.scaleFrames; });
-            const current = await widgetGeometry(page);
-            const drift = {
-                scroll: Math.max(...frames.map(frame => Math.abs(frame.scroll - initial.scroll))),
-                control: Math.max(...frames.map(frame => Math.abs(frame.control.y - initial.control.y))),
-                header: Math.max(...frames.map(frame => Math.abs(frame.header.height - initial.header.height))),
-                chart: Math.max(...frames.map(frame => Math.abs(frame.chart.y - initial.chart.y))),
-                chartHeight: Math.max(...frames.map(frame => Math.abs(frame.chart.height - initial.chart.height))),
-                tools: Math.max(...frames.map(frame => Math.abs(frame.tools.y - initial.tools.y))),
-                heading: Math.max(...frames.map(frame => Math.abs(frame.heading.y - initial.heading.y))),
-            };
-            observations.push({ theme, width, bucket, keyboard, initial, current, drift, frames });
-            if (Object.values(drift).some(value => value >= 2)) failures.push({ theme, width, bucket, drift });
-            await expect(page.locator("#activityCount")).toHaveText("5");
-            await expect(page.locator("#filterChips")).toBeEmpty();
-            await expect(page.locator("#resetView")).toBeDisabled();
-            if (proof) {
-                await mkdir(proof, { recursive: true });
-                await page.screenshot({ path: path.join(proof, `scale-${width}-${theme}-${bucket}.png`) });
-            }
-        }
-        const events = await page.evaluate(() => window.scaleEvents);
-        assert.equal(events.length, 5, "Three visible trigger clicks and two pointer choices were observed");
-        assert.ok(events.every(event => event.trusted));
-        assert.match(page.url(), /bucket=week/);
-        const beforeWheel = await page.evaluate(() => scrollY);
-        await page.mouse.move(width - 30, 700); await page.mouse.wheel(0, 180);
-        await page.waitForTimeout(250);
-        assert.ok(await page.evaluate(() => scrollY) > beforeWheel + 100, "Ordinary native page scrolling is not suppressed");
+    const page = await setup(t, { nativeScrollbars: true, records });
+    await page.clock.setFixedTime(new Date("2026-10-07T12:00:00Z"));
+    await page.locator("#dateFilter-control").scrollIntoViewIfNeeded();
+    const initial = await page.locator("#dateFilter-control").boundingBox();
+    for (const [range, count] of [["day", "1"], ["week", "5"], ["month", "5"], ["capture", "5"]]) {
+        await selectActivityOption(page, "dateFilter", range); await ready(page);
+        await expect(page.locator("#dateFilter-control")).toBeFocused();
+        await expect(page.locator("#activityCount")).toHaveText(count);
+        const current = await page.locator("#dateFilter-control").boundingBox();
+        assert.ok(Math.abs(current.y - initial.y) < 2);
     }
-    if (proof) await writeFile(path.join(proof, "time-scale-transitions.json"), JSON.stringify({ observations, failures }, null, 2));
-    assert.deepEqual(failures, []);
 });
 
 for (const savedFeedback of [false, true]) test(`native chart mode cycles retain the reading anchor ${savedFeedback ? "with saved feedback" : "without saved reviews"}`, { timeout: 45000 }, async t => {
