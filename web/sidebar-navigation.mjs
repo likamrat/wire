@@ -1,11 +1,3 @@
-export function mountMainNavigation() {
-    const header = document.querySelector(".app-header");
-    const measure = () => document.documentElement.style.setProperty("--app-header-height", Math.ceil(header.getBoundingClientRect().height) + "px");
-    new ResizeObserver(measure).observe(header);
-    measure();
-}
-
-// Legacy sidebar preference retained for compatibility; the top navigation does not use it.
 export function initializeNavigationPreference() {
     const key = "workiq-evidence.navigation";
     const root = document.documentElement, listeners = new Set();
@@ -60,6 +52,7 @@ export function mountSidebarNavigation(ux, preference) {
     const content = $("navigationContent"), rail = $("sidebar");
     const collapse = $("navigationCollapse");
     const header = document.querySelector(".app-header");
+    const brand = $("shellBrand");
     function measure() {
         document.documentElement.style.setProperty("--app-header-height", Math.ceil(header.getBoundingClientRect().height) + "px");
         if (!media.matches) document.documentElement.style.setProperty("--app-sidebar-width", rail.getBoundingClientRect().width + "px");
@@ -68,7 +61,7 @@ export function mountSidebarNavigation(ux, preference) {
     headerSize.observe(header);
     headerSize.observe(rail);
     let restoreFocus = true, collapsed = false, navigationFocus = null;
-    let animations = [], motionOrigin = null;
+    let animations = [], motionOrigin = null, drawerExit = null;
     function captureGeometry() {
         return {
             width: rail.getBoundingClientRect().width,
@@ -145,8 +138,18 @@ export function mountSidebarNavigation(ux, preference) {
     });
     function close(restore = true) {
         restoreFocus = restore;
-        if (drawer.open) drawer.close();
-        trigger.setAttribute("aria-expanded", "false");
+        if (!drawer.open) return;
+        function finish() {
+            drawerExit?.cancel();
+            drawerExit = null;
+            drawer.close();
+            trigger.setAttribute("aria-expanded", "false");
+        }
+        if (!restore || reducedMotion.matches || !media.matches) { finish(); return; }
+        if (drawerExit) return;
+        drawerExit = drawer.animate([{ transform: getComputedStyle(drawer).transform }, { transform: "translateX(-100%)" }],
+            { duration: 180, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" });
+        drawerExit.addEventListener("finish", finish, { once: true });
     }
     function layout() {
         const active = document.activeElement === document.body && navigationFocus ? navigationFocus : document.activeElement;
@@ -155,8 +158,16 @@ export function mountSidebarNavigation(ux, preference) {
         finishMotion();
         if (!media.matches) close(false);
         (media.matches ? $("drawerContent") : rail).append(content);
+        if (media.matches) {
+            $("drawerBrand").append(brand);
+        } else {
+            header.querySelector(".workspace-toolbar").before(brand);
+        }
         trigger.hidden = !media.matches;
-        if (navigationFocused) ux.restoreFocus(media.matches ? trigger : content.contains(active) ? active : collapse);
+        if (navigationFocused || brand.contains(active)) {
+            const destination = content.contains(active) || brand.contains(active) ? active : collapse;
+            ux.restoreFocus(media.matches ? trigger : destination);
+        }
         else if (!media.matches && active === trigger) ux.restoreFocus(collapse);
         measure();
     }
@@ -168,6 +179,14 @@ export function mountSidebarNavigation(ux, preference) {
         content.querySelector("[aria-current=page]")?.focus();
     });
     $("closeNavigation").addEventListener("click", () => close());
+    drawer.addEventListener("cancel", event => { event.preventDefault(); close(); });
+    window.addEventListener("keydown", event => {
+        if (!drawer.open || event.key !== "Escape") return;
+        ux.hideTooltip();
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+    }, { capture: true });
     drawer.addEventListener("click", (event) => {
         if (event.target !== drawer) return;
         const bounds = drawer.getBoundingClientRect();
@@ -180,7 +199,11 @@ export function mountSidebarNavigation(ux, preference) {
         restoreFocus = true;
     });
     window.addEventListener("resize", finishMotion);
-    reducedMotion.addEventListener("change", () => { if (reducedMotion.matches) finishMotion(); });
+    reducedMotion.addEventListener("change", () => {
+        if (!reducedMotion.matches) return;
+        finishMotion();
+        if (drawerExit) drawerExit.finish();
+    });
     document.addEventListener("visibilitychange", () => { if (document.hidden) finishMotion(); });
     media.addEventListener("change", layout);
     layout();

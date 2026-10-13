@@ -17,18 +17,20 @@ import * as contract from "../lib/assessment-contract.mjs";
 import { executeAction } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
+import { searchWireContract } from "../lib/search-wire-contract.mjs";
 
 function setup(state, input) {
     const legacy = buildPeriodComparison(state, input), model = buildAssessmentModel(state);
     const membership = { scenarioIds: [], actionIds: [legacy.periods.baseline.rowIds[0], legacy.periods.later.rowIds[0]],
         parentScenarioIds: [legacy.periods.baseline.scenarioIds[0], legacy.periods.later.scenarioIds[0]] };
-    const receipt = { panelId: randomUUID(), epoch: 0, requestId: 1, generation: 1, indexId: "1".repeat(64),
-        modelId: "2".repeat(64), mode: "hybrid", revision: state.revision };
+    const receipt = { schemaVersion: 2, panelId: randomUUID(), epoch: 0, requestId: 1, generation: 1, indexId: "1".repeat(64),
+        modelId: "2".repeat(64), mode: "hybrid", revision: state.revision, purpose: "strict-match-population",
+        queryPurpose: "analysis", queryTypes: [...searchWireContract.allTypes], matchPolicyId: searchWireContract.matchPolicyId };
     const search = { status: "ready", coverage: "whole-retained-corpus", receipt, ...membership };
     const snapshot = { revision: state.revision, scenarios: state.evidence, sessions: [], analytics: legacy.periods.baseline.analytics,
         assessment: { basis: model.basis, source: model.source, catalog: model.catalog } };
     const machine = createPeriodComparisonState({ time, search: createLocalSearch(), contract,
-        projection: createActivityProjection(time, serviceCategories, OUTCOMES), categories: serviceCategories, comparePeriodCohorts });
+        projection: createActivityProjection(time, serviceCategories, OUTCOMES), categories: serviceCategories, comparePeriodCohorts, searchContract: searchWireContract });
     const request = machine.prepare(snapshot, { ...input.options, filters: { ...input.options.filters, from: "2026-03-07", to: "2026-03-07" } },
         input.periods, "", [], search);
     return { membership, receipt, search, snapshot, machine, request };

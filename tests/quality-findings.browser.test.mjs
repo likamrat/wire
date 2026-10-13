@@ -22,7 +22,7 @@ const ready = async page => {
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#homeFindings .assessment-findings")).toBeVisible();
 };
-async function setup(t, { legacy = false } = {}) {
+async function setup(t, { legacy = false, permissionFeedback = false } = {}) {
     const records = retainedContextFixture().records.slice(0, 2);
     records[0].toolCalls.push({ ...structuredClone(records[1].toolCalls[0]),
         toolCallId: "calendar-sibling", startEventId: "calendar-start", completionEventId: "calendar-end",
@@ -60,6 +60,14 @@ async function setup(t, { legacy = false } = {}) {
             assessmentRef: samples.id("assessment", 900), verdict: "pass", reason: "user-verdict" },
     });
     state.personalEvaluation.feedback.revision = 1;
+    if (permissionFeedback) {
+        state.personalEvaluation.feedback.records.push({
+            schemaVersion: 1, dependencies: assessmentDependencies(first),
+            assessment: { ...first.assessments.find(item => item.checkId === "action-authorization-compliance"),
+                origin: "user-personal", assessmentRef: samples.id("assessment", 901), verdict: "pass", reason: "user-verdict" },
+        });
+        state.personalEvaluation.feedback.revision++;
+    }
     state.personalEvaluation.overrideRevision = 1;
     validatePersonalEvaluation(state.personalEvaluation);
     model = buildAssessmentModel(state);
@@ -162,11 +170,11 @@ test("normal Analyze and changed-request context lead with supported findings an
     await expect(findings).toContainText("Work IQ sign-in was required");
     await expect(findings.locator('[data-finding-origin="model-assessed"]')).toContainText("Answer: 1 correct, 1 not correct");
     await expect(findings.locator('[data-finding-origin="user-personal"]')).toContainText("Answer: 1 correct");
-    await expect(findings).toContainText("Insufficient recorded evidence");
-    await expect(findings).toContainText("Evaluator could not complete");
+    await expect(findings).toContainText("Not enough saved evidence");
+    await expect(findings).toContainText("Review could not finish");
     assert.equal(await page.locator("#homeFindings").evaluate(node =>
         Boolean(node.compareDocumentPosition(document.getElementById("percentageCharts")) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
-    assert.equal((await findings.innerText()).match(/Insufficient recorded evidence/g).length, 1);
+    assert.equal((await findings.innerText()).match(/Not enough saved evidence/g).length, 1);
     assert.equal((await findings.innerText()).match(/Saved AI review/g).length, 1);
     assert.equal(reads.filter(read => read.route.endsWith("/evidence")).length, 0);
     assert.equal(await host.locator(".assessment-saved-details").evaluate(node => node.open), false);
@@ -281,7 +289,7 @@ test("late overview and detail reads cannot borrow a neighbor's findings; same-b
     app.acceptFixtureChange();
     assert.deepEqual(app.model.basis, before);
     await (await revealStoredRefresh(page)).click(); await ready(page);
-    await expect(findings).toContainText("Evaluator could not complete");
+    await expect(findings).toContainText("Review could not finish");
     await expect(findings.locator('[data-finding-origin="model-assessed"]')).toContainText("Answer: Correct");
     let releaseDetail;
     const originalSecond = app.model.catalog[1].interactionRef;
@@ -290,7 +298,7 @@ test("late overview and detail reads cannot borrow a neighbor's findings; same-b
     await expect.poll(() => Boolean(releaseDetail)).toBe(true);
     await page.goto(url + "#request?request=" + encodeURIComponent(app.extras[2].scenarioId));
     const current = page.locator(`.interaction-findings[data-context-group="${app.extras[2].scenarioId}"]`);
-    await expect(current).toContainText("No saved answer or action assessment is available");
+    await expect(current).toContainText("No saved review.");
     const oldDetail = page.waitForResponse(response => response.url().endsWith("/api/assessment/detail")
         && response.request().postDataJSON().interactionRef === originalSecond);
     releaseDetail(); await (await oldDetail).finished(); await frames(page); app.holdDetail(null);
@@ -364,6 +372,77 @@ test("leading overview host clears on empty scope and read failure and recovers 
     app.failOverview(false);
     await page.locator("#homeInsights").getByRole("button", { name: "Read insights again", exact: true }).click();
     await ready(page);
-    await expect(leading).toContainText("No saved answer or action assessment is available");
+    await expect(leading).toContainText("No saved review.");
     await expect(leading).not.toContainText("sign-in was required");
+});
+
+test("F13 normal UI keeps AI request matching and personal permission distinct in help and feedback", { timeout: 45000 }, async t => {
+    const { page, url, records, reads } = await setup(t, { permissionFeedback: true });
+    await page.goto(url + "#analyze"); await ready(page);
+    const overview = page.locator("#homeFindings");
+    await expect(overview.locator('[data-finding-origin="model-assessed"]')).toContainText("Tool use:");
+    await expect(overview.locator('[data-finding-origin="model-assessed"]')).toContainText("matched request");
+    await expect(overview.locator('[data-finding-origin="user-personal"]')).toContainText("Permission:");
+    assert.doesNotMatch(await overview.innerText(), /AI action|Action trust|Intent:|Authorization:/);
+    await page.goto(url + "#request?request=" + encodeURIComponent(records[0].scenarioId));
+    const findings = page.locator(`.interaction-findings[data-context-group="${records[0].scenarioId}"]`);
+    const insights = page.locator(`.interaction-insights[data-context-group="${records[0].scenarioId}"]`);
+    await expect(findings.locator('[data-finding-origin="model-assessed"]')).toContainText("Tool use: Did not match request");
+    await expect(findings.locator('[data-finding-origin="user-personal"]')).toContainText("Permission: Given");
+    const layouts = [];
+    for (const [theme, width, scale] of [["light", 1280, 1], ["light", 375, 1], ["dark", 375, 1], ["light", 375, 2], ["dark", 375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
+        const saved = insights.locator(".assessment-saved-details");
+        if (!await saved.evaluate(node => node.open)) await saved.locator(":scope > summary").click();
+        const matchHelp = saved.getByRole("button", { name: "About Tool use vs. request", exact: true });
+        await matchHelp.focus(); await page.keyboard.press("Enter");
+        await expect(page.getByRole("tooltip")).toContainText("recorded tool use fit what was asked");
+        await page.keyboard.press("Escape");
+        const permissionHelp = saved.getByRole("button", { name: "About Permission for tool use", exact: true });
+        await permissionHelp.focus(); await page.keyboard.press("Enter");
+        await expect(page.getByRole("tooltip")).toContainText("does not grant or revoke permission");
+        await page.keyboard.press("Escape");
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+        await capture(page, saved, `F13-details-${theme}-${width}-${scale}`);
+        const trigger = insights.locator("[data-insight-details]");
+        await trigger.focus(); await page.keyboard.press("Enter");
+        const dialog = page.getByRole("dialog", { name: "Insight details", exact: true });
+        const dropdown = dialog.getByRole("combobox", { name: "Personal feedback (optional)" });
+        await expect(dialog.locator("select option")).toHaveText(["Answer correctness", "Answer support", "Permission for tool use"]);
+        await dropdown.focus(); await page.keyboard.press("Enter"); await page.keyboard.press("End"); await page.keyboard.press("Enter");
+        const feedbackTrigger = dialog.getByRole("button", { name: "Give personal feedback" });
+        await feedbackTrigger.focus(); await page.keyboard.press("Enter");
+        const feedback = page.getByRole("dialog", { name: "Your feedback: permission for tool use", exact: true });
+        await expect(feedback).toContainText("Permission is not checked automatically.");
+        await expect(feedback).not.toContainText("Matched request");
+        await expect(feedback.locator("select option")).toHaveText(["Choose a verdict", "Given", "Not given", "Not sure"]);
+        await expect(feedback).toContainText("Saved feedback: Given");
+        const layout = await feedback.evaluate(node => {
+            const heading = node.querySelector("h2"), text = heading.firstChild, cancel = node.querySelector(".dialog-head button");
+            const words = [...text.textContent.matchAll(/\S+/g)].map(match => {
+                const range = document.createRange(); range.setStart(text, match.index); range.setEnd(text, match.index + match[0].length);
+                return { word: match[0], lines: range.getClientRects().length };
+            });
+            const box = node.getBoundingClientRect(), titleBox = heading.getBoundingClientRect(), cancelBox = cancel.getBoundingClientRect();
+            const body = node.querySelector(".assessment-dialog-body").getBoundingClientRect();
+            return { words, overflow: node.scrollWidth - node.clientWidth, bodyHeight: body.height, dialogHeight: box.height,
+                cancelHeight: cancelBox.height, cancelBottom: cancelBox.bottom, dialogBottom: box.bottom, titleBottom: titleBox.bottom, cancelTop: cancelBox.top };
+        });
+        assert.ok(layout.words.every(word => word.lines === 1), JSON.stringify(layout));
+        assert.ok(layout.overflow <= 1);
+        assert.ok(layout.cancelHeight >= 44 && layout.cancelBottom <= layout.dialogBottom);
+        assert.ok(layout.bodyHeight > layout.dialogHeight / 2, JSON.stringify(layout));
+        if (width === 375) assert.ok(layout.cancelTop >= layout.titleBottom);
+        layouts.push({ theme, width, scale, ...layout });
+        await capture(page, feedback, `F13-feedback-${theme}-${width}-${scale}`);
+        await feedback.getByRole("combobox", { name: "Your assessment" }).focus();
+        await expect(feedback.getByRole("combobox", { name: "Your assessment" })).toBeInViewport();
+        const cancel = feedback.getByRole("button", { name: "Cancel", exact: true });
+        await cancel.focus(); await expect(cancel).toBeInViewport();
+        await page.keyboard.press("Escape"); await expect(feedbackTrigger).toBeFocused();
+        await page.keyboard.press("Escape"); await expect(trigger).toBeFocused();
+    }
+    if (proof) await writeFile(path.join(proof, "F13-feedback-layout.json"), JSON.stringify(layouts, null, 2));
+    assert.equal(reads.filter(read => /feedback|approve|capture|collect-now|evaluate/.test(read.route)).length, 0);
 });

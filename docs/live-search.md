@@ -1,6 +1,182 @@
 # Live local search
 
-The header's **Search WIRE** field searches while typing. **Everywhere** locates
+## Matches and Related results
+
+Navigation search shows separate **Matches** and **Related results**. Related
+suggestions can open existing saved content, but cannot populate charts, period
+comparisons or report scope. The v2 client and backend share the closed contract
+below. They use admitted producer `82494360`, normally composed with fresh UI
+input `92028e95`; the restored sidebar, centered Search and one visible Back
+restoration helper are preserved. An old panel receives explicit protocol-change
+guidance, not an implicit receipt upgrade.
+
+### Closed protocol and authority
+
+`lib/search-wire-contract.mjs` exports one serializable factory and a Node
+instance configured from the admitted producer's policy IDs and corpus types.
+`lib/search-wire-contract.d.mts` describes the wire union. The factory contains
+no Node imports or external closure when serialized with explicit policy values.
+
+- `/api/search/events` now requires exactly `{schemaVersion: 2}`.
+- `/api/search/query` requires `{schemaVersion: 2, purpose, query, requestId,
+  types?}`, where purpose is exactly `navigation` or `analysis`. Missing or
+  malformed purpose is not inferred. Empty/omitted types means all ten; receipt
+  `queryTypes` is always the explicit unique, alphabetically sorted effective
+  set. Unknown and duplicate request types are rejected.
+- Every ordered stream frame carries `schemaVersion: 2`. The results event has
+  `purpose`, `requestId`, `matches: {receipt, hits, total}` and, only for hybrid
+  navigation, `related: {receipt, hits, total, coverage}`. Totals must equal the
+  complete arrays; IDs must be unique and the two sets disjoint. Related coverage
+  records evaluated items, corpus `ready | partial`, the literal retrieval mode
+  `policy-selected-candidates` and `populationComplete: false`.
+- Both receipts bind schema, panel, epoch, request, corpus generation, index,
+  model, mode, board revision, authoritative job `queryPurpose` and effective
+  `queryTypes`. Matches adds exactly `purpose: strict-match-population` and
+  `matchPolicyId`; Related adds exactly `purpose: related-navigation` and
+  `relatedPolicyId`, and is valid only for hybrid navigation. Extra fields,
+  wrong policy/type order and changed discriminants fail closed.
+
+Analysis calls the producer's **strict-only `search()`**, including the
+[optional role-bound lexical increment](search-linguistics.md) when the host
+explicitly configures its resource directory. The core-local receipt shape
+is unchanged; the runtime builds the v2
+wrapper from the admitted exports and its own job, never caller receipt fields.
+Disabled hosts retain the original policy values. Enabled hosts stamp the
+distinct `SEARCH_LEXICAL_POLICIES` pair; serialized consumers recognize that
+explicit pair without accepting mixed policies or bypassing stored-receipt
+equality and current-source checks.
+Navigation calls `discover()` once, rechecks its producer policy/type metadata
+and wraps the two sets only inside its synchronous authorized disclosure. There
+is no additional model query, ranker, corpus reader, fetch or persistent index.
+
+Each panel retains distinct `matches` and `related` maps and receipts. There is
+no union `panel.hits`. Open selects the map by the validated closed receipt and
+requires exact equality with that owned map's admitted stamp, including purpose,
+policy and types. The existing before/after current-state gate, frozen-facts
+identity and verified-file reader checks remain unchanged. A Matches receipt
+cannot open a Related-only ID.
+
+`membership()` additionally requires an original stored **analysis-purpose**
+strict receipt, current complete corpus and all four analytical types. It reads
+only the strict map. Editing a Related purpose, swapping its policy field,
+changing query purpose/types or replaying another request/panel cannot promote
+the Related item. `validatePeriodSemanticSelection` uses the same v2 strict
+guard; both the live period action and initial paired report preview already
+flow through that validator and the runtime authority. Historical frozen file
+schemas do not contain live receipts and are unchanged. A legitimately prepared
+report still needs no active receipt at later disclosure review/save.
+
+Every query replacement, clear, cancel, fence, source failure, disconnect,
+expiry and close clears **both** sets. The existing latest-only queue, two-owner
+ceiling, owned Open slot and helper-exit accounting are preserved. The stream
+publishes every policy candidate, or closes the slow consumer under the existing
+backpressure bound; it never truncates a list and labels the remainder complete.
+Lexical-only navigation publishes Matches with explicit degraded model status
+and no Related set. Corpus partial coverage is distinct from Related's always
+nonexhaustive policy selection.
+
+V1 handshakes/queries and old eight-field Open receipts return explicit 409
+protocol-change guidance; malformed v2 requests/receipts return 422. Old period
+receipt shapes fail the strict analysis validator. No old receipt is upgraded.
+No query/content enters logs, URLs, browser storage, providers or new files.
+
+### Client separation and ordinary language
+
+The factory is injected into the existing serialized state, Open, equality,
+membership and period consumers. Both lists own their receipts, pages and
+scroll/focus positions. The accepted journey owner's **one** in-memory
+`restore(key)` handles visible reader Back and browser Back for either set.
+Late results cannot reclaim focus after the user navigates or interacts elsewhere.
+Only the strict analysis-purpose list reaches `onAnalysis`. Related has no
+selection/report action and carries this explanation once:
+
+> Similar topics, possibly different work. These do not change your charts or report selection.
+
+The current strict F09 recall gap remains **open**. The optional adjunct's prior
+two-query qualification is withdrawn; keep it disabled. Its two original gains
+and `vehicle servicing` remain unsatisfied; the five existing ordinary-work
+misses also remain open.
+The 0.35 floor / 0.02 best
+band is a separately qualified navigation policy, not a lowered strict threshold,
+a complete population or verified same-work judgment. Related counts describe
+only suggestions selected by that policy, not all matching work. No additional
+inference/model/provider is introduced.
+
+Search is one stationary rounded capsule in the header. Its position, dimensions,
+placeholder and native input identity do not change on focus or typing. Results
+appear automatically beneath it, aligned to the field, without moving the page.
+An empty field opens nothing. There is no expanded Search mode, Close-search
+control, Submit step, microphone, generated answer or conversation history.
+Escape, clearing the query or leaving Search dismisses the list. The existing
+Open/Back receipts restore query, category, result focus and dropdown scroll.
+Navigation search leaves the underlying analysis and report scope unchanged.
+While Search owns focus, the page's sticky-header scroll inset is not applied
+to native caret scrolling; ordinary page navigation retains that inset.
+The associated label stays accessible without consuming visible space.
+A single unframed **Filters** disclosure
+reveals existing scope/type controls only when deliberately opened. Its collapsed
+summary names non-default active choices; it never opens itself during typing.
+Ordinary rows show an already-retained request/title and quiet category/source.
+The whole row opens its exact destination; there is no repeated Open line,
+badge frame or per-row elevation. Both result sets share one softly raised list.
+Hover and press fill only the actionable row using the shared interaction colors;
+idle rows stay unframed and keyboard focus retains its visible outline.
+Reports and meaningful action errors can
+keep a short original excerpt for recognition. Accessible action names preserve
+the human destination. Internal hashes, encoded routes and
+machine-only action lines are not displayed as human summaries; no intent or
+outcome is invented. Full authorized details remain at the opened destination.
+Routine ready counts are announced without a visible paragraph; paging still
+shows the complete per-set page/count. Transient, no-match, partial and degraded
+states stay visible when needed, distinct from Related uncertainty.
+The word-search fallback is shown only after a current lexical-only result was
+admitted. Local model provisioning guidance lives in the existing Troubleshooting
+help, reached by one link; search never executes the displayed command.
+
+The preserved applied-analysis banner is visible only within Analyze, not above
+Reports/Settings titles. The query/filter remains active; Current-view report
+scope still reports its actual availability inside the report journey.
+
+The focused minimal-presentation gate is
+`node --test --test-concurrency=1 tests\search-minimal.browser.test.mjs tests\search-control.browser.test.mjs`.
+It checks the actual `what` navigation query, one input with an accessible label,
+fixed capsule/results alignment and unchanged page geometry, deliberate Filters, native editing/clear,
+typed keyboard Open/Back, visible focus, both themes and 375 px/200% text. Text
+enlargement is not native browser zoom. The control gate also covers all 45
+results over three pages, native deep typing at 1440/768/375 px, and actual focus
+departure restoring the reading inset (Escape alone keeps Search focused).
+It verifies exact Settings destinations and analytical membership independently
+of local time grouping, global Dates and report selection using no-model fixtures.
+Set `WIRE_SEARCH_NATIVE_HEADFUL=1` to run its native-scrollbar matrix headed;
+on Windows that case uses the installed Edge channel. Group/paging/Back sentinels reuse
+the Related browser cases; the semantic and authority algorithms are unchanged.
+
+### Backend and browser proof
+
+```powershell
+node --test --test-concurrency=1 tests\related-wire.test.mjs tests\related-browser.test.mjs web\live-search-state.test.mjs
+```
+
+Invented stores and the actual pinned MiniLM exercise: closed v1/v2 rejection,
+producer/wire stamp conversion, strict-versus-Related map/owner/type/policy
+forgery, zero strict car results with navigable Related but empty valid analytical
+cohorts, live period and report-preview rejection, unchanged complete strict
+admission, every typed destination, all 63 selected candidates across four
+20-item slices without retrieval truncation, latest-query/cancel/two-panel
+fences, reply revocation with independently approved artifacts, tamper refusal,
+source unavailability, lexical-only/partial separation, Related Open-close and
+backpressure closure. Browser proof separately exercises simultaneous 21 exact
+phrase matches and 63 Related suggestions with independent two/four-page lists,
+mouse/keyboard Open, visible/browser Back, delayed restoration without focus
+theft, strict-only scope switching, source/session invalidation, partial/degraded/
+protocol states and both themes at 375 px/200% text. Existing real-model paired
+Review/Save/frozen Open proof remains a consumer-regression sentinel. These are
+invented-data implementation checks, not a universal relevance claim or a new
+model qualification.
+
+## Search journey
+
+The header's **Search** field searches while typing. **Everywhere** locates
 authorized interactions, conversation context, retained replies, recorded actions,
 tools, services, saved report/comparison contents, views and settings. It does not
 change analytical filters or report selection. **Current Analyze scope** explicitly
@@ -189,7 +365,7 @@ search/Open/Back with unchanged saved bytes. An exact-action case retains broade
 API parents, opens a later-period call and restores dates/disclosure/focus on Back,
 then proves a stale fence blocks both paired output and report creation. Partial
 search never dispatches a complete paired request. The optional comparison
-`openSearch` action focuses the single Search WIRE field without changing dates
+`openSearch` action focuses the single Search field without changing dates
 or membership; its absence retains the standalone legacy field.
 
 The joint test exposed a save-receipt reset when ordinary Analyze dates survived

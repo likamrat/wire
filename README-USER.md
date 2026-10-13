@@ -14,22 +14,43 @@ need separate approval and are not enabled by installing WIRE.
 | Collection status | Check whether collection is running, find chats with history gaps and see any available next step. |
 | Settings | **Connection & updates**, **Privacy & saved data**, **AI reviews**, **Display** and **Troubleshooting**. |
 
-The top navigation keeps Analyze, Reports and Settings available and wraps on
-narrow screens. Earlier Home and Activity links open Analyze; no chat chooser
-is required before reading interactions.
+The left sidebar keeps Analyze, Reports and Settings available. Collapse it to
+an icon rail for more workspace; your choice is saved without changing filters,
+selections or report drafts. On narrow screens, **Open navigation** slides out
+the same destinations. Escape or **Close** returns focus to that button.
+Search is centered in the workspace toolbar, separate from the sidebar branding.
+The brand and time-zone shortcut move into the drawer on narrow screens.
+Reduced-motion preferences remove the slide. Earlier Home and Activity links
+open Analyze; no chat chooser is required before reading interactions.
+
+The screen uses locally bundled Asta Sans, the font verified in the linked
+IQOS source, with system-font fallbacks for unsupported scripts. It needs no
+font download; its open font license ships with WIRE. Dark mode
+uses charcoal and gray surfaces; light mode uses white and light gray. Text,
+controls and focus indicators stay neutral, while colors distinguish recorded
+results and services. Tool failures use red, not the amber used for partial
+results and warnings. Saved report styling is unchanged.
+
+In **Settings > Connection & updates**, the approved source and collection state
+come before **History and frequency**. **View source** opens the exact approved
+database and history-folder paths; **Change source** is available there.
+Opening either view grants no permission and does not resume paused collection.
 
 ## Inspect an interaction
 
 **Refresh** checks approved local histories and reads the latest stored activity
 without rerunning Work IQ or Graph queries. Automatic collection keeps its current
 configuration; paused collection stays paused. Before source approval, Refresh
-only reads stored activity. **Review source & connect** remains a separate action.
+only reads stored activity. **Review source & connect**, inside **Source and
+collection**, remains a separate action.
 
 Accepted results, filters and report selections stay while updating. Finish an
-open report review or save/cancel Settings edits before refreshing. **Retry**
-appears for read/status recovery and never repeats a source check or save. If a
+open report review or save/cancel Settings edits before refreshing. A failed
+source-path or metadata check offers **Review source**. Reading stored activity
+does not repair that source. **Read stored activity** appears beside Refresh for
+a failed stored read or an unconfirmed check; it never repeats a source check or save. If a
 source-check response is lost, its outcome stays unconfirmed even when newer
-stored activity is available; Refresh and Retry remain read-only in this tab,
+stored activity is available; Refresh and recovery remain read-only in this tab,
 including after reload. Browser recovery-storage failures also block source
 checks explicitly. This protection does not correlate operations across tabs.
 
@@ -57,19 +78,41 @@ chats, open a reason, then open a chat for its retained activity or additional
 limits. Each chat is counted once, even when several limits apply.
 Paused or disconnected collection points to the relevant existing Settings
 control. Current collection errors stay visible; **Technical details** holds
-the full timestamps and limits. **Refresh** stays above the page; **Retry** appears
-for safe read/status recovery. The optional network
+the full timestamps and limits. **Refresh** stays above the page. **Read stored
+activity**, or **Retry** for a separate status failure, offers safe read-only recovery. The optional network
 diagnostic does not check collection and is not a required next step.
 
-The main filter row shows **Dates, Tool, Service, Outcome, Author**. **More filters** keeps **Category, Project, Chat, Activity, Collection** available. Applied choices stay visible below, even when More filters is closed, and can be removed individually. The same controls work throughout Analyze, including a scoped chat. On smaller screens or with larger text, fields and selected values wrap rather than disappearing offscreen; Tab reaches each control.
+The main filter row shows **Dates, Tool, Service, Outcome, Author**. **Dates** sets one shared date range for every Analyze widget and its underlying records. **More filters** keeps **Category, Project, Chat, Activity, Collection** available. Applied choices stay visible below, even when More filters is closed, and can be removed individually. The same controls work throughout Analyze, including a scoped chat. On smaller screens or with larger text, fields and selected values wrap rather than disappearing offscreen; Tab reaches each control.
 
-Choose **Dates > Custom dates**, enter **From/To**, then **Apply dates**. Dates are inclusive; **All dates** means all retained dates in the chosen collection, not a new scan. In **Outcome**, tick one or more statuses, then **Apply**. The view stays unchanged while you choose; **Cancel**, Escape or clicking outside discards your draft. **Clear** beside the label restores all results without clearing other filters. An empty draft cannot be applied. Choices within Author or Outcome combine with OR; different filters combine with AND. The chart's time-scale control remains available.
+The filters share one area with Refresh and collection status.
+**Source and collection** also contains history-gap details and the optional
+**Delete collected activity** action; deletion still requires its separate review
+and confirmation. Below the filters, the matching total sits beside **View records**
+and **Compare periods**. Recorded outcomes and the time/category/path view share
+one chart row, followed by **Work IQ tool calls** and **Services**. All use the same
+applied filters. **Chart data and definitions** is the single place for exact
+chart tables, scope and explanations; its tables stay current when filters change.
+When no records match, Analyze shows one empty result with the available filter
+recovery and coverage information instead of repeating empty charts and timing
+cards. Report selections and their actions stay available; Reset Analyze restores
+the ordinary summaries. No matches is not proof that no real activity occurred.
+**Over time**, **By category** and **By path or operation** regroup the same matching
+records; they do not change the filters or report selection. Outcomes stay beside
+the chosen chart, with Tools and Services side by side below it. The chart can
+grow for more dates or groups, but switching views does not rearrange those panels.
+Long desktop lists scroll within the chart; **Show all** still includes every group,
+and keyboard focus scrolls each selected group into view.
+
+Choose **Dates > Custom dates**, enter **From/To**, then **Apply dates**. Dates are inclusive; **All dates** means all retained dates in the chosen collection, not a new scan. In **Outcome**, tick one or more statuses, then **Apply**. The view stays unchanged while you choose; **Cancel**, Escape or clicking outside discards your draft. **Clear** beside the label restores all results without clearing other filters. An empty draft cannot be applied. Choices within Author or Outcome combine with OR; different filters combine with AND. The chart's time-scale control is available in **Over time** only.
 
 **Activity over time** uses flat, linear columns: twice as many matching records
 means twice the height. Daily, Weekly and Monthly follow the display time zone;
-weeks start Monday. Colors retain their recorded-result meaning. Small columns
-and result sections are not enlarged; their exact count links and **Exact counts
-and recorded results** table remain usable. Choosing a column or table date
+weeks start Monday. **Time scale** only groups the columns in this widget; it is
+not a date filter, creates no applied-filter chip, and stays unchanged when you
+use Reset Analyze. Choosing another grouping leaves other widgets and their
+records unchanged. Colors retain their recorded-result meaning. Small columns
+and result sections are not enlarged; their exact count links and the table in
+**Chart data and definitions** remain usable. Choosing a column or table date
 narrows the same Analyze slice, retaining search, Author, Outcome and service
 context; Back restores it. Partial date ranges remain bounded by your selection.
 Undated records stay in the matching total but are listed separately, never
@@ -85,11 +128,15 @@ The information buttons explain the current choices. **Category** distinguishes 
 
 Choosing **Service not shown** explains the matching tools and why their service cannot be identified. For example, **Copilot assistance** identifies an `ask` call even when its record has no downstream API path. The call's technical details show which path, method and version are missing from that record; a question or attached file does not establish which service was used. Missing details do not prove that no service was used or that the call failed.
 
-**Your prompt** is the user-input side of your connected Copilot collection. **Agent prompt** is recorded agent-originated input. Their cyan and violet labels distinguish sources, not quality. An unverified author stays neutral; **Copilot chat prompt** describes a known chat source without guessing who wrote it. Calls made by an agent stay with the originating interaction.
+**Your prompt** is the user-input side of your connected Copilot collection. **Agent prompt** is recorded agent-originated input. Their muted blue and violet labels distinguish sources, not quality. An unverified author stays neutral; **Copilot chat prompt** describes a known chat source without guessing who wrote it. Calls made by an agent stay with the originating interaction.
 
-Each status has its own icon and color. **Tool failed** is different from **Connection failed**; **No result recorded** means missing evidence, while **Other HTTP status** means a recorded informational or redirect status. **Scope and result definitions** separates current counts, short result meanings, and optional reading guidance. **Worked** means tool completion, not answer correctness.
+Each status has its own icon and color. **Tool failed** is different from **Connection failed**; **No result recorded** means missing evidence, while **Other HTTP status** means a recorded informational or redirect status. **Chart data and definitions** explains these distinctions. **Worked** means tool completion, not answer correctness.
 
-Choose **View interaction** directly from Analyze. **What was asked and what came back** opens the available retained prompts, calls and replies together, with the selected interaction marked. Long prompts and retained follow-ups need no extra expand step. At most one linked group before and after the selection is included, using a matching recorded message ID in the same chat and consistent timestamps, never a guessed task or a whole-chat dump. Nearby messages are still inferred associations, not confirmed changes of intent. Missing text and unknown times stay explicit. Supported author metadata identifies **Your prompt** or **Agent prompt**; a chat source alone does not prove who wrote it.
+Choose **View interaction** directly from Analyze. A compact source row names the Copilot chat, project and recorded time, followed by the saved prompts, calls and replies in order. The selected prompt or exact call is marked. Long prompts and retained follow-ups need no extra expand step. At most one linked group before and after the selection is included, using recorded message IDs and consistent timestamps, never a guessed task or a whole-chat dump. The nearby-message note explains that linked messages may be separate work. Missing text, unknown times and missing, conflicting or unsupported sender details stay explicit.
+
+**Timing, reviews and record details** brings secondary information together below the exchange. Each interaction keeps its own counts, saved reviews, feedback controls and technical source record; nothing is pooled or reassessed against a later request. Analyze's filter form, filter chips and reset controls are not repeated in the reader. **Back to results** restores them unchanged when you want to adjust the view.
+
+**Filter to chat: [name]** narrows Analyze to records from that recorded source; it does not open the chat. **Back to results**, beside the page heading, returns to the previous results, filters and page. Removing the chat filter keeps other applied filters. The reader uses the same return control, or **Back to search** when opened from Search. A directly opened reader without an earlier results view offers **Back to Analyze** instead of pretending to restore a previous list.
 
 For a slow, failed or specific recorded call, switch Analyze to **Calls**. **Slowest first** is the default; **Fastest first** reverses only measured durations. Equal durations use stable record-ID order, and unavailable durations stay in a separate group at the end, across pages. A duration belongs to the listed evidence unit, never the sum of concurrent calls or total task latency. API results, Graph request sites, visible statuses, code references and owned HTTP records retain their separate meanings; code references do not establish execution.
 
@@ -97,31 +144,67 @@ For a slow, failed or specific recorded call, switch Analyze to **Calls**. **Slo
 
 Returned API-entry links are tied to the stored snapshot revision because their existing identities are positions within retained tool metadata. After the stored revision changes, reopen the entry from Calls; an old link is unavailable rather than risking a different entry. Other call/record links use their stable recorded identities.
 
-**Counts and saved assessment scope** keeps each original group's results and historical verdict separate. Surrounding context does not change your Analyze filters or report selection, reinterpret an old verdict against a changed request, or start a new assessment. A recorded sign-in failure describes that old call, not your current sign-in state.
+The reader puts the text before its Copy and Hide controls. **Read prompt** shows the complete retained text. **Hide prompt** collapses only that text, keeping your place and report selection. **Copy prompt** copies that full original body, unmasked: not its preview, chat details, warnings, response or the whole page. The action reports success only after the clipboard write succeeds; denied or unavailable access shows an error and a manual-selection alternative. **About this prompt & copying** explains author uncertainty, partial text and clipboard implications. **Technical source record** keeps exact timestamps, identifiers and source codes separate from that reading help.
 
-**Read prompt** shows the complete retained text. **Hide prompt** collapses only that text, keeping your place and report selection. **Copy prompt** copies that full original body, unmasked: not its preview, chat details, warnings, response or the whole page. The action reports success only after the clipboard write succeeds; denied or unavailable access shows an error and a manual-selection alternative. **About this prompt & copying** explains author uncertainty, partial text and clipboard implications. **Technical source record** keeps exact timestamps, identifiers and source codes separate from that reading help.
+**Notes on full interactions** keeps useful recorded failure reasons and missing-evidence or review problems beside Analyze's outcomes, without repeating the outcome totals. Full-interaction totals and the absence of saved reviews remain in the existing saved-review details. The reader keeps each call's result and recorded failure reason beside that call; **What the record shows** and saved assessments stay under each original request in **Timing, reviews and record details**. Each check keeps its own counts. Sign-in, timeout and access-denial wording describes the historical call, not your current access. A failed lookup can have a correct explanatory answer. If a reason behind a saved verdict was not retained, WIRE says so rather than inventing an explanation or running another AI review.
 
-**What the record shows** appears before the Analyze charts and beside each original request in the context reader. It separates recorded call failures and retained reasons from compact saved answer and action assessments. Common origin labels and missing-evidence notices appear once; each check keeps its own counts. Sign-in, timeout and access-denial wording describes the historical call, not your current access. A failed lookup can have a correct explanatory answer. If a specific reason behind a saved verdict was not retained, WIRE says so rather than inventing an explanation or running another AI review.
+**Call duration in this view** groups matching-call timing beneath the charts,
+after filters, private search and service refinements. It measures **call start
+to recorded completion**, not the wait for a final response. Aligned label/value
+rows show exact durations and timed-call coverage. **Inspect call durations** opens
+the same matching calls so you can inspect their individual durations. When median
+and 95th percentile are equal, one value is labelled with both statistics. A
+single sample has no percentile, and missing timing is not zero. Definitions
+are in **Chart data and definitions**, not a separate dropdown for each number. Open
+**Request timing and reviews** directly below. Its control stays in place as
+the content opens and closes. A single scope sentence names the selected requests
+and distinguishes all their recorded calls from the calls matching your filters.
+Named timing rows come first, followed by saved review details and controls.
+These populations can differ even when their totals happen to match. Saved AI judgments, personal feedback and
+recorded tool completion remain distinct.
 
-Open **Saved assessment details and counts** for tool outcomes and exact saved quality counts, percentages and coverage. For example, **2 of 108 requests assessed**, **2 passed**, and **106 not assessed** describes two judgments, not a 100% quality score for 108 requests. Answer correctness, answer support, and actions matching the request remain separate checks; do not add their request counts. Personal feedback is a separate lane, and action alignment does not prove a person gave permission. Context findings and saved verdicts stay with their original request group when a later request changes direction.
+When no reviews or attempts are saved and automatic scoring is off with no
+approval, this area says **No saved reviews for these requests**. **Measure
+definitions** keeps the recorded counts, definitions and reading help available;
+automatic scoring remains in **Settings > AI reviews**. Pending, failed,
+uncertain or revoked reviews, unavailable history and existing feedback keep
+their status and controls rather than being treated as an empty state.
+
+Open **Saved assessment details and counts** for tool outcomes and exact saved review counts, percentages and coverage. For example, **2 of 108 requests assessed**, **2 passed**, and **106 not assessed** describes two judgments, not a 100% quality score for 108 requests. **Answer correctness** asks whether the answer met the request using saved evidence. **Answer support** asks whether that evidence supports the answer. **Tool use vs. request** is an AI review of whether the recorded tool use fit what was asked, not proof of permission. Each check keeps its own request count.
+
+**Permission for tool use** is separate, optional **Your feedback**: Given, Not given or Not sure. Saving that opinion does not grant or revoke permission. Its automatic local check may say permission is not checked automatically; it never borrows an AI request-match verdict. Older or unfamiliar definitions show **Saved review (type not recorded)** rather than guessing what they checked. Context findings and saved verdicts stay with their original request group when a later request changes direction.
 
 Opened saved details stay open when the same scope or request is redrawn or revisited with Back. Different scopes and original request groups keep independent disclosure state.
 
 **Reported outcomes** can show that a call succeeded or failed even when its completion event reference was not retained. **Completion-evidence checks** in saved details use that stricter evidence boundary, so a reported success may still have **No qualified outcome**. WIRE explains the gap without changing either count or inventing missing evidence; partial outcome context is labelled with its actual coverage.
 
-Unassessed reasons appear when the saved evidence supports them. An evaluator that could not complete is distinct from a failed quality verdict. Missing historical attempt information stays unknown; it does not mean no assessment was attempted or that one is queued.
+**No saved review**, **Not enough saved evidence**, and **Review could not finish** describe different states. None is a failed answer or an instruction to grade it yourself. Missing historical attempt information stays unknown; it does not mean no review was attempted or that one is queued.
 
-**Recorded timing** in Analyze describes matching tool calls, after filters, private search and service refinements. It shows human-readable **Median / P95** from the retained samples, alongside the timed and eligible call counts. The dot and line share a linear duration scale from zero to the displayed P95; they are not quality percentages. **View matching calls** opens that same population. **Exact timing and boundary** keeps unrounded milliseconds and the measurement definition accessible without hover.
+**Request timing and reviews** separates all the selected requests' call durations from recorded request-to-final-response samples. HTTP response-header and transport-error timings retain their own boundaries. A single measured item shows its duration and **One sample, not overall performance**, without a percentile claim. No samples means **Not measured**, not zero; a recorded zero remains zero. Never sum concurrent calls, average medians, or treat recorded request bounds as the duration of a person's entire task. **Measure definitions** retains exact subset percentages with their denominators, milliseconds, boundaries, model and rubric; **Details and feedback** on a single interaction also offers optional personal verdicts and **Withdraw feedback**. Use the panel's header **Close** or **Escape** to leave. Closing feedback does not cancel a submitted update; check its existing result rather than repeating it. **Worked** means tool completion, not verified correctness.
 
-**Recorded timing in full interactions** under Insights is separate: its calls and recorded request-to-final-response samples cover each selected interaction in full, not only its matching calls. HTTP response-header and transport-error timings retain their own boundaries. A single measured item is shown as **Single measured sample**, with no percentile chart or representative-performance claim. No samples means **Not measured**, not zero; a recorded zero remains zero. Never sum concurrent calls, average medians, or treat recorded request bounds as the duration of a person's entire task. **Measure definitions** retains exact subset percentages with their denominators, milliseconds, boundaries, model and rubric; **Details and feedback** on a single interaction also offers optional personal verdicts and **Withdraw feedback**. Use the panel's header **Close** or **Escape** to leave. Closing feedback does not cancel a submitted update; check its existing result rather than repeating it. **Worked** means tool completion, not verified correctness.
+In Analyze, scoped search and filters select the request groups used by counts and Insights, across every page. The top recorded-timing section uses matching calls; Insights use those groups' full retained interactions, so their timing and completion denominators can be wider. Calls, API entries and HTTP records remain separate units. No matching groups means no interaction metrics, not the all-activity summary. Legacy private search keeps its browser-history compatibility. New Search text stays in panel memory and the on-device local runtime, never in links, logs or browser storage. Earlier Home and Activity links both open Analyze.
 
-In Analyze, scoped search and filters select the request groups used by counts and Insights, across every page. The top recorded-timing section uses matching calls; Insights use those groups' full retained interactions, so their timing and completion denominators can be wider. Calls, API entries and HTTP records remain separate units. No matching groups means no interaction metrics, not the all-activity summary. Legacy private search keeps its browser-history compatibility. New Search WIRE text stays in panel memory and the on-device local runtime, never in links, logs or browser storage. Earlier Home and Activity links both open Analyze.
+Reply saving is off unless previously approved. To keep recorded replies in WIRE, open **Settings > Privacy & saved data > Recorded replies**, select **Save Copilot replies locally**, then **Turn on response saving**. **Discard change** restores your current choice. **What gets saved** explains the source and limits. Deliberately opening an interaction immediately reads only its displayed context's already-retained, currently authorized replies. Analyze and hover do not preload them; explicit Search reads only already-authorized retained replies through the same permission gates. Every reply is checked independently against current access; opening context never turns saving on or reads the original source. **Copy response** copies only that response body and **Hide response** collapses it; an explicit hidden state is respected on rerender. Missing responses remain unavailable, read errors offer an explicit retry, and partial or unverified final-answer status is not upgraded. Turning response saving off removes optional text and dependent unsaved insights; activity and saved reports remain. This does not authorize model assessment.
 
-Reply saving is off unless previously approved. To keep recorded replies in WIRE, open **Settings > Privacy & saved data > Recorded replies**, select **Save Copilot replies locally**, then **Turn on response saving**. **Discard change** restores your current choice. **What gets saved** explains the source and limits. Deliberately opening an interaction immediately reads only its displayed context's already-retained, currently authorized replies. Analyze and hover do not preload them; explicit Search WIRE reads only already-authorized retained replies through the same permission gates. Every reply is checked independently against current access; opening context never turns saving on or reads the original source. **Copy response** copies only that response body and **Hide response** collapses it; an explicit hidden state is respected on rerender. Missing responses remain unavailable, read errors offer an explicit retry, and partial or unverified final-answer status is not upgraded. Turning response saving off removes optional text and dependent unsaved insights; activity and saved reports remain. This does not authorize model assessment.
+## Search
 
-## Search WIRE
+Type in the search field, then click a result. Each plain row identifies the
+item, its category and source. **Filters** provides optional scope/type choices;
+it stays closed until you open it and shows any active choices in its summary.
+Focusing an empty field does not open another form.
 
-Type in the header's **Search WIRE** field; results appear without Submit. Meaning
+**Matches** and **Related results** are separate. Related results discuss similar
+topics, but may describe different work. They can help you open a saved item;
+they do not change your charts or report selection. Each group keeps its own page
+and focused result when you return with Back. **Current Analyze scope** uses
+matches only, never Related suggestions.
+
+If search by meaning is unavailable, the panel says when exact-word search still
+works. **Search troubleshooting** opens the existing help; typing never downloads
+or installs a model. Incomplete saved content is shown separately from Related
+suggestions.
+
+Type in the header's **Search** field; results appear without Submit. Meaning
 matching works alongside exact tool names, API methods/paths, statuses and
 prefixes. **Everywhere** finds existing interactions/context/replies, calls,
 saved report/comparison contents, tools, services, views and settings.
@@ -153,7 +236,7 @@ stored revision in the displayed time zone. This is a stored-data read, not a
 source refresh or a new assessment.
 
 Tool, Service, Outcome, Author and More filters apply to both sides.
-**Search this comparison** opens the single Search WIRE field in analytical
+**Search this comparison** opens the single Search field in analytical
 scope without changing either period. Meaning/exact matches cover the full retained
 corpus, not just the ordinary Analyze dates or visible page. A retained legacy
 phrase is an additional intersection; only its canonical narrowing IDs enter the

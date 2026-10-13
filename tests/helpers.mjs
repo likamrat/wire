@@ -20,22 +20,28 @@ export function exportCatalogFor(records) {
 }
 
 export async function navigateMain(page, view) {
+    async function revealNavigation() {
+        const trigger = page.locator("#navigationToggle");
+        if (await trigger.isVisible() && await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
+    }
     if (view === "collection-status") {
         const link = page.locator('a[href^="#collection-status"]:visible').first();
         if (await link.count()) await link.click();
         else {
+            await revealNavigation();
             await page.locator('nav [data-nav="settings"]').click();
             await page.locator('a[href^="#collection-status"]:visible').first().click();
         }
         return;
     }
+    await revealNavigation();
     await page.locator(`nav [data-nav=${["home", "activity", "overview"].includes(view) ? "analyze" : view}]`).click();
 }
 
 export async function revealStoredRefresh(page) {
     // Legacy callers now use the one Refresh journey, or its read-only recovery.
-    const retry = page.locator("#refreshBtn");
-    return await retry.isVisible() ? retry : page.locator("#checkActivity");
+    const retry = page.locator("#refreshBtn:visible, #collectionRetry:visible, [data-stored-refresh-retry]:visible").first();
+    return await retry.count() ? retry : page.locator("#checkActivity");
 }
 
 export async function restoreLegacySearch(page, search) {
@@ -56,6 +62,12 @@ export async function navigateSettings(page, category) {
     await page.locator(`[data-settings-section=${category}]`).waitFor({ state: "visible" });
 }
 
+export async function openSourceEditor(page) {
+    const inspect = page.locator("#viewApprovedSource");
+    if (await inspect.isVisible()) await inspect.click();
+    await page.locator("#editSource").click();
+}
+
 // Compatibility helper: Analyze already renders matching interactions directly.
 export async function openActivitySessions(page) {
     if (!await page.locator("#activityView").isVisible()) return;
@@ -74,6 +86,10 @@ export async function chooseTheme(page, value) {
 
 export async function selectActivityOption(page, id, value) {
     const trigger = page.locator(`[data-select-id=${JSON.stringify(id)}]`);
+    if (["wireSearchScope", "wireSearchType"].includes(id)) {
+        if (await page.locator("#" + id).inputValue() === value) return;
+        await openSearchFilters(page);
+    }
     if (!await trigger.isVisible() && await page.locator("#moreFilters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await page.locator("#moreFilters > summary").click();
     if (!await trigger.isVisible() && ["collectionWindow", "collectionCadence"].includes(id)) await navigateSettings(page, "connection");
     await trigger.click();
@@ -88,6 +104,12 @@ export async function selectActivityOption(page, id, value) {
         return;
     }
     await page.locator(`.select-popup .select-option[data-value=${JSON.stringify(String(value))}]`).click();
+}
+
+export async function openSearchFilters(page) {
+    await page.locator("#wireSearch").focus();
+    const options = page.locator("#wireSearchOptions");
+    if (await options.count() && !await options.evaluate(node => node.open)) await options.locator("summary").click();
 }
 
 // These invented records exist only in isolated tests, never in application data.

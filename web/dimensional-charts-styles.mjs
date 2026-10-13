@@ -62,7 +62,7 @@ ${dimensionalColumnStyles}
 .dimensional-time-labels {display:grid;grid-auto-flow:column;grid-auto-columns:var(--scene-pitch);min-height:48px;margin:0;padding-top:24px;color:var(--muted);font-size:var(--type-small);text-align:center}
 .dimensional-time-labels>span {padding-inline:8px;overflow-wrap:anywhere;min-width:0}
 .flat-time-plot {position:relative;min-width:100%;--time-gutter:40px}
-.flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + 4rem);gap:0;margin:0 0 0 var(--time-gutter);padding:0;border:0;border-bottom:1px solid var(--control)}
+.flat-time-plot .time-chart {position:relative;display:grid;grid-template-columns:repeat(var(--time-bins),minmax(0,1fr));height:calc(var(--time-height) + var(--time-headroom,4rem));gap:0;margin:0 0 0 var(--time-gutter);padding:0;border:0;border-bottom:1px solid var(--control)}
 .flat-time-plot .time-slot {position:relative;display:block;height:100%;min-width:0}
 .flat-time-plot .time-column {position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:84px;min-width:0;min-height:0;padding:0;border:0;border-radius:0;background:transparent;pointer-events:none}
 .flat-time-plot .time-stack {display:block;width:100%;height:100%;overflow:visible;border-radius:0;pointer-events:none}
@@ -80,6 +80,11 @@ ${dimensionalColumnStyles}
 .flat-time-axis>span:last-child {transform:translateY(50%)}
 #chart:has(.flat-time-plot)+#chartFooter {justify-content:flex-start;gap:8px 24px}
 #chart:has(.flat-time-plot)+#chartFooter>span {white-space:normal;min-width:0}
+.chart-panel:has(.flat-time-scroll[data-density=sparse]) {max-inline-size:42rem;padding:var(--space-lg)}
+.chart-panel:has(.flat-time-scroll[data-density=sparse]) .chart-heading {margin-bottom:var(--space-sm)}
+.chart-panel:has(.flat-time-scroll[data-density=sparse]) #chartFooter {margin-top:var(--space-sm)}
+.flat-time-scroll[data-density=sparse] {padding-block:0 var(--space-sm)}
+.flat-time-scroll[data-density=sparse] .dimensional-time-labels {min-height:0;padding-top:var(--space-sm)}
 @media(forced-colors:active) {.flat-time-segment {fill:CanvasText;fill-opacity:1}.flat-time-plot .time-chart {border-color:CanvasText}}
 @media(prefers-reduced-motion:reduce) {.flat-time-column,.flat-time-plot .time-column {animation:none;transition:none}}
 `;

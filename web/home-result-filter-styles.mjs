@@ -13,9 +13,9 @@ export const homeResultFilterStyles = `
 .result-filter-heading {min-height:var(--select-help-target);padding-inline:var(--select-value-inset);align-items:center}
 .result-filter-heading>label {display:block;flex:initial;padding:0;font-size:var(--type-small);font-weight:var(--weight-regular);line-height:1.5}
 .result-filter-heading>.ux-help {width:var(--select-help-target);min-width:var(--select-help-target);height:var(--select-help-target);min-height:var(--select-help-target)}
-.select-trigger .select-value.result-option-value,.result-option-value {display:flex;align-items:center;gap:8px;white-space:normal;overflow:visible}
+.select-trigger .select-value.result-option-value,.result-option-value {display:flex;align-items:flex-start;gap:8px;white-space:normal;overflow:visible}
 .result-option-label {min-width:0;overflow-wrap:anywhere}
-.result-option-value .result-legend-icon {align-self:start;margin-block:calc((1lh - 20px)/2)}
+.result-option-value .result-legend-icon {margin-block:calc((1lh - 20px)/2) 0}
 #outcomeFilter-control {padding-block:8px;border-radius:var(--radius-field)}
 .section-heading>.filter-field:has(#activitySearch) {width:min(100%,20rem)}
 .section-heading .search-input-row #activitySearch {width:100%}

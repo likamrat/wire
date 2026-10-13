@@ -21,8 +21,12 @@ export const contextualActionStyles = `
  gap:var(--pill-gap);min-width:0;max-width:100%;font-size:var(--type-body);
 }
 .contextual-actions #contextReturn {display:flex;min-width:0;max-width:100%}
+#pagePrimaryActions #contextReturn {display:flex;min-width:0;max-width:100%}
 .contextual-actions :is(button,a) {
  min-height:44px;max-width:100%;white-space:normal;overflow-wrap:anywhere;
 }
 .contextual-actions .reset-view {color:var(--accent)}
+@media(max-width:600px) {
+ .page-heading:has(#contextReturn:not([hidden])) #pagePrimaryActions {order:-1;flex-basis:100%}
+}
 `;

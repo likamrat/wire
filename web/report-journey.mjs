@@ -4,6 +4,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
     const questions = ["Set up your report", "Review your report", "Save your reviewed report"];
     const modes = { none: "No prompts", masked: "Masked prompts", original: "Original prompts" };
     let step = 1, reached = 1, phase = "draft", preview, bundle, failure = "";
+    let saveUnconfirmed = false;
     let model = { requestCount: 0, scope: "selected", scopeReady: false, scopeIssue: "", promptMode: "masked", formats: ["html"], timeLabel: "", entry: null };
     let nodes;
     const positions = new Map();
@@ -16,12 +17,13 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             scrollers: [...panel.querySelectorAll("*")].filter(node => node.scrollLeft || node.scrollTop)
                 .map(node => ({ node, left: node.scrollLeft, top: node.scrollTop })) });
     }
-    const snapshot = () => ({ step, reached, phase, hasPreview: Boolean(preview), completed: Boolean(bundle), ...structuredClone(model) });
+    const snapshot = () => ({ step, reached, phase, saveUnconfirmed, hasPreview: Boolean(preview), completed: Boolean(bundle), ...structuredClone(model) });
     const ready = () => model.scopeReady && model.requestCount > 0;
     const formatNames = () => model.formats.map(value => value === "markdown" ? "Markdown" : value.toUpperCase()).join(", ");
     const isWriting = () => phase === "writing";
     function reason(target) {
         if (isWriting()) return "Wait for the current local save to finish.";
+        if (saveUnconfirmed) return "Check save status before preparing another report. The local write may have completed.";
         if (target === 1) return "";
         if (target === 3 && phase === "saved") return "";
         if (!ready()) return model.scopeIssue || "Choose at least one readable request in Setup.";
@@ -49,6 +51,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         });
         text(nodes.progress, phase === "saved" ? "Report saved" : phase === "unavailable" ? "Saved report unavailable" : `Step ${step} of 3`);
         text(nodes.summary, bundle ? "Saved files use the reviewed snapshot." : model.requestCount ? `${({ selected: "Selected requests", current: "Current view", all: "All collected activity", period: "Two frozen comparison cohorts" })[model.scope]} / ${model.authorLabel ? model.authorLabel + " / " : ""}${modes[model.promptMode]} / ${formatNames() || "Choose a format"}` : "Nothing is included automatically.");
+        nodes.summary.hidden = step === 1;
         text(nodes.context, model.entry
             ? `GitHub Copilot chat: ${model.entry.sessionName || "Copilot chat name not recorded"} / ${model.entry.projectId ? "Copilot project: " + (model.entry.projectName || "Name unavailable") : "Copilot chat without a project"}. Complete eligible groups across all retained dates and services; new groups are not added automatically.`
             : "");
@@ -60,7 +63,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         nodes.choose.hidden = ready();
         nodes.choose.classList.toggle("primary", !ready());
         nodes.backButtons.forEach(control => {
-            control.disabled = isWriting();
+            control.disabled = isWriting() || saveUnconfirmed;
             if (control.dataset.target === "2") text(control, preview ? "Back to review" : "Back to setup");
         });
         const returnToSave = nodes.reviewActions.querySelector("#reportReturnToSave");
@@ -122,7 +125,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         return true;
     }
     function invalidate(message) {
-        if (isWriting() || phase === "saved" || phase === "unavailable") return;
+        if (isWriting() || saveUnconfirmed || phase === "saved" || phase === "unavailable") return;
         const hadPreview = Boolean(preview) || phase === "scanning";
         suspendedControls.clear();
         preview = undefined;
@@ -157,10 +160,11 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         return true;
     }
     function clear() {
-        if (isWriting()) return false;
+        if (isWriting() || saveUnconfirmed) return false;
         positions.clear();
         suspendedControls.clear();
         preview = bundle = undefined;
+        saveUnconfirmed = false;
         step = reached = 1;
         phase = "draft";
         failure = "";
@@ -189,7 +193,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         const shell = el("div", "report-journey"), nav = el("nav", "report-progress"), list = el("ol");
         shell.id = "reportCreatePanel";
         nav.setAttribute("aria-label", "Report creation steps");
-        const progress = el("p", "report-progress-label"), summary = el("p", "report-choice-summary"), context = el("p", "report-entry-context");
+        const progress = el("p", "report-progress-label visually-hidden"), summary = el("p", "report-choice-summary"), context = el("p", "report-entry-context");
         progress.setAttribute("role", "status");
         const steps = [], stepHints = [], panels = [], headings = [], backButtons = [];
         labels.forEach((label, index) => {
@@ -203,7 +207,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             item.append(control, hint);
             list.append(item);
             steps.push(control); stepHints.push(hint);
-            const panel = el("section", "report-stage"), heading = el("h3", "", questions[index]);
+            const panel = el("section", "report-stage"), heading = el("h2", "", questions[index]);
             panel.id = `reportStage${index + 1}`;
             heading.id = `reportStepTitle${index + 1}`;
             heading.tabIndex = -1;
@@ -214,8 +218,6 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         });
         nav.append(list);
         const existingStart = root.querySelector(".report-start");
-        existingStart.firstElementChild.classList.add("report-heading-context");
-        existingStart.querySelector("p").textContent = "Set up the included interactions and contents, review the actual copies, then save locally.";
         const scan = byId("exportBtn"), scanWrapper = scan.closest(".ux-disabled-help") || scan;
         const controls = root.querySelector(".report-preview-controls");
         controls.append(summary);
@@ -232,7 +234,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         const selectedChoice = choices.querySelector('[value="selected"]').closest("label");
         choices.prepend(selectedChoice);
         const scopeDetails = byId("scopeDetails");
-        scopeDetails.append(byId("scopeSummary"), byId("reportMatchingContext"));
+        scopeDetails.append(byId("scopeSummary"), byId("reportMatchingContext"), byId("reportTimeContext"));
         // Keep detailed units/exclusions available without making them the first task.
         for (const paragraph of [...scope.querySelectorAll(":scope > .scope-explanation")]) {
             scopeDetails.append(paragraph);
@@ -243,7 +245,8 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         panels[0].append(scopeLayout);
         const firstFooter = el("div", "report-stage-actions");
         firstFooter.append(gap, choose, issues, scanWrapper);
-        panels[0].append(root.querySelector(".report-options"), byId("reportTimeContext"), firstFooter, scopeDetails, byId("reportRequests"));
+        root.querySelector(".report-text-options").append(byId("additionalMasking"));
+        panels[0].append(root.querySelector(".report-options"), firstFooter, scopeDetails, byId("reportRequests"));
         // Revisiting unchanged choices returns to the same frozen review; it never records approval.
         scan.addEventListener("click", event => {
             if (!preview) return;
@@ -273,13 +276,13 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         snapshot, reason, go, invalidate, clear,
         get reviewHost() { return nodes?.reviewHost; },
         get saveHost() { return nodes?.saveHost; },
-        isReviewOpen: () => (Boolean(preview) || step >= 2 && phase !== "saved") && (!root || !root.hidden),
+        isReviewOpen: () => !saveUnconfirmed && (Boolean(preview) || step >= 2 && phase !== "saved") && (!root || !root.hidden),
         update(patch) {
             model = { ...model, ...structuredClone(patch) };
             paint();
         },
         beginScan() {
-            if (isWriting() || phase === "scanning" || !ready() || !model.formats.length) return null;
+            if (isWriting() || saveUnconfirmed || phase === "scanning" || !ready() || !model.formats.length) return null;
             rememberStep();
             preview = bundle = undefined;
             failure = "";
@@ -363,7 +366,9 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             else if (!value && phase === "writing") phase = "blocked";
             paint();
         },
-        failed(message) {
+        failed(message, { saveRejected = false } = {}) {
+            // Draft invalidation can revoke disclosure, but cannot determine a dispatched write's outcome.
+            saveUnconfirmed ||= isWriting() && !saveRejected;
             phase = "blocked";
             failure = message;
             preview = undefined;
@@ -382,6 +387,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         saved(value, { available = true } = {}) {
             if (!value?.bundleId || !value.files || !Object.keys(value.files).length) throw new Error("Saved report file links are unavailable.");
             bundle = structuredClone(value);
+            saveUnconfirmed = false;
             const savedBundle = bundle;
             preview = undefined;
             phase = "saved";

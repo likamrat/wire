@@ -187,7 +187,7 @@ test("exact numeric columns reconcile all six activity layers, chart groups, gap
         assert.equal(Number(footer[0]), groups.reduce((sum, g) => sum + g.total, 0));
         if (chart === "time") {
             assert.doesNotMatch(await page.locator("#countTable caption").innerText(), /America\/Los_Angeles/);
-            assert.match(await page.locator("#displayTimeZoneLink").getAttribute("aria-label"), /America\/Los_Angeles/);
+            assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /America\/Los_Angeles/);
         }
         assert.deepEqual(await page.locator("#serviceDefinitions dt").allTextContents(), serviceCategories.used(analytics.workloadGroups.map(g => g.label)).map(e => e.label));
         const action = page.locator("#countTable .chart-data-action").first();

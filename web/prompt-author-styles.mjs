@@ -12,7 +12,7 @@ export const promptAuthorStyles = `
 .prompt-author-filter .local-filter-row {min-width:0}
 .prompt-author-filter .select-control {flex:1;min-width:0}
 .report-author-choice {display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin-top:16px;max-width:72ch}
-.report-author-choice>.select-control {width:min(100%,320px)}
+.report-author-choice>.select-control {max-width:min(100%,32em)}
 .report-author-choice>label {font-weight:var(--weight-medium)}
 @media(max-width:600px) {.prompt-author-filter {flex:1 1 100%;width:100%}}
 `;

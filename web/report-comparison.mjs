@@ -1,10 +1,12 @@
-export function createReportComparison() {
+import { createAssessmentWording } from "./assessment-presentation.mjs";
+
+export function createReportComparison(wording = createAssessmentWording()) {
     const presentation = Object.freeze({ schemaVersion: 1, performanceBands: Object.freeze({
         id: "assessed-pass-share-v1", unit: "percent", thresholds: Object.freeze([50, 75, 90]), unavailable: "neutral",
     }) });
-    const dimensions = { accuracy: "Accuracy", speed: "Speed", cost: "Cost", "answer-trust": "Trust: answers", "action-trust": "Trust: actions" };
+    const dimensions = { accuracy: "Answer correctness", speed: "Speed", cost: "Cost", "answer-trust": "Answer support", "action-trust": "Saved review (type not recorded)" };
     const readingNotes = Object.freeze([
-        "Accuracy checks whether the answer met the request. Answer trust checks whether recorded evidence supports it. AI action trust checks whether actions match the recorded request, not whether a person gave permission.",
+        "Answer correctness and answer support are separate reviews. Tool use vs. request asks whether the recorded tool use fit what was asked. Personal permission feedback is a different judgment.",
         "AI results use the recorded evidence and can be wrong. Personal feedback is labeled separately. A successful tool call does not prove the answer was correct.",
         "Read each result with its coverage: how many requests have a result for that check. Pass percentages count passed checks out of passed plus failed checks. Missing results are left out, not counted as failures or zero.",
         "Speed measures tool calls from start to recorded completion. It also measures the time from the recorded request to its final response. Each has its own timed-call or timed-request count. The median is the middle recorded time (the lower middle for an even count). Calls that run at the same time are not added together. A final response does not prove the task succeeded.",
@@ -14,11 +16,11 @@ export function createReportComparison() {
     const outcomeTone = outcome => ({ success: "teal", failure: "pink", transport: "pink", partial: "orange", unknown: "slate", other: "slate" })[outcome];
     const reasons = {
         "unsupported-check": "No supported check for this evidence",
-        "missing-evidence": "Not enough recorded evidence",
+        "missing-evidence": "Not enough saved evidence",
         "usage-unavailable": "No attributable usage recorded",
         "pricing-unavailable": "Recorded usage has no price",
         "no-assessed-units": "No requests have a result for this check",
-        "evaluator-failure": "Assessment could not be completed",
+        "evaluator-failure": "Review could not finish",
         "metric-not-saved": "This measure was not saved",
         "baseline-metric-not-saved": "Not saved in the earlier report",
         "later-metric-not-saved": "Not saved in the later report",
@@ -28,7 +30,7 @@ export function createReportComparison() {
         "capture-disabled": "Optional response capture is off",
         "category-not-consented": "This evidence category is not enabled",
         "no-eligible-units": "No items in this selection can be used for this measure",
-        "partial-evidence": "Only part of the evidence was saved",
+        "partial-evidence": "Not enough saved evidence; only part was saved",
         "invalid-timing": "The recorded times cannot establish this duration",
         "unsupported-adapter": "This source does not provide the evidence needed",
         "stale-consent": "Evidence permission changed; this result is no longer current",
@@ -73,32 +75,60 @@ export function createReportComparison() {
         }
         return label;
     }
-    function metricPresentation(fact, dimension) {
+    function warningLabel(code, context) {
+        if (code === "total-cost-volume-differs") return "Different volume; not cost per task";
+        if (!["partial-coverage", "coverage-decreased"].includes(code)) return `Saved warning: ${code}`;
+        const sides = context && (Object.hasOwn(context, "baseline") || Object.hasOwn(context, "later"))
+            ? [context.baseline, context.later].filter(Boolean) : context?.kind ? [context] : [];
+        const first = sides[0], same = first && sides.every(side => side.kind === first.kind && side.boundary === first.boundary);
+        let missing = "Some items lack results", smaller = "Smaller share with results";
+        if (same && first.kind === "pass-rate") {
+            missing = "Some requests lack review results"; smaller = "Smaller share with review results";
+        } else if (same && first.kind === "cost") {
+            missing = "Some units lack cost data"; smaller = "Smaller share with cost data";
+        } else if (same && first.kind === "duration" && ["tool-start-to-completion", "recorded-request-to-final-answer",
+            "verified-request-to-final-answer", "http-dispatch-to-response-headers", "http-dispatch-to-transport-error"].includes(first.boundary)) {
+            missing = `Some ${coverageUnit(first)} lack timing`; smaller = "Smaller share with timing";
+        }
+        return code === "partial-coverage" ? missing : smaller;
+    }
+    function coverageUnit(fact) {
+        if (fact.kind === "pass-rate") return "requests";
+        if (fact.kind === "cost") return "units";
+        return fact.boundary === "tool-start-to-completion" ? "calls"
+            : ["recorded-request-to-final-answer", "verified-request-to-final-answer"].includes(fact.boundary) ? "requests" : "HTTP records";
+    }
+    function absentPeerLabel(fact) {
+        return fact?.kind === "pass-rate" ? "No comparable saved review on this side" : "No comparable saved measure on this side";
+    }
+    function metricPresentation(fact, dimension, { includeOrigin = true } = {}) {
         let note = "Not saved in this report";
-        const timedUnit = fact?.boundary === "tool-start-to-completion" ? "calls"
-            : ["recorded-request-to-final-answer", "verified-request-to-final-answer"].includes(fact?.boundary) ? "requests" : "HTTP records";
+        const review = ["accuracy", "answer-trust", "action-trust"].includes(dimension);
+        const term = review && fact ? wording.resolve(fact) : null;
+        const timedUnit = fact ? coverageUnit(fact) : "HTTP records";
         if (fact?.state !== "available" && fact) {
             const unsupported = {
                 accuracy: "Tool outcomes do not tell us whether the answer was correct. AI review needs separate approval",
                 "answer-trust": "Tool outcomes do not tell us whether the answer was supported. AI review needs separate approval",
-                "action-trust": "Tool outcomes do not prove a person gave permission. AI review checks whether actions match the request",
+                "action-trust": term?.explanation,
             };
             note = fact.reason === "unsupported-check" ? unsupported[dimension] ?? reasons[fact.reason]
                 : fact.reason === "unverified-association" && fact.boundary === "verified-request-to-final-answer"
                     ? "No verified request-to-final-answer timing"
                     : reasons[fact.reason] ?? `Unavailable: ${fact.reason}`;
-            if (fact.basis === "model-assessment") note = `${modelOrigin(fact)} · ${note}`;
+            if (includeOrigin && fact.basis === "model-assessment") note = `${modelOrigin(fact)} · ${note}`;
             if (fact.coverage) note += ` · ${formatNumber(fact.coverage.count, 0)} of ${formatNumber(fact.coverage.eligible, 0)} ${fact.kind === "pass-rate" ? "assessed" : fact.kind === "cost" ? "units priced" : `${timedUnit} timed`}`;
         }
         if (fact?.state === "available") {
             const covered = fact.coverage.count, eligible = fact.coverage.eligible;
             note = fact.kind === "pass-rate"
-                ? `${fact.basis === "user-assessment" ? "Personal assessment" : fact.basis === "model-assessment" ? modelOrigin(fact) : "Recorded check"} · ${formatNumber(fact.numerator, 0)} of ${formatNumber(fact.denominator, 0)} passed · ${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} assessed · ${formatNumber(eligible - covered, 0)} not assessed${fact.basis === "model-assessment" && dimension === "action-trust" ? " · actions match the request, not proof of a person's permission" : ""}`
+                ? `${includeOrigin ? `${fact.basis === "user-assessment" ? "Your feedback" : fact.basis === "model-assessment" ? modelOrigin(fact) : "Recorded check"} · ` : ""}${formatNumber(fact.numerator, 0)} of ${formatNumber(fact.denominator, 0)} passed · ${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} assessed · ${formatNumber(eligible - covered, 0)} not assessed${term?.kind === "match" ? " · request matching, not permission" : ""}`
                 : `${formatNumber(covered, 0)} of ${formatNumber(eligible, 0)} ${fact.kind === "cost" ? "units priced" : `${timedUnit} timed`}`;
         }
         if (fact?.counts?.evaluatorError) note += ` · ${formatNumber(fact.counts.evaluatorError, 0)} check errors (not failed results)`;
+        if (term && !term.known && fact.reason !== "unsupported-check") note += " · " + term.explanation;
         return {
-            value: !fact ? "Not saved" : fact.state === "available" ? formatValue(fact.value, fact.unit) : fact.reason === "not-applicable" ? "Not applicable" : fact.reason === "evaluator-failure" ? "Check unavailable"
+            value: !fact ? "Not saved" : fact.state === "available" ? formatValue(fact.value, fact.unit) : review ? wording.unavailable(fact) : fact.reason === "not-applicable" ? "Not applicable" : fact.reason === "evaluator-failure" ? "Check unavailable"
                 : fact?.kind === "pass-rate" || ["accuracy", "answer-trust", "action-trust"].includes(dimension) ? "Not assessed" : "Not measured",
             note, tone: scoreTone(fact),
         };
@@ -111,7 +141,17 @@ export function createReportComparison() {
             note: "This older comparison did not retain the metric summary. No value has been reconstructed.",
             tone: "",
         };
-        return metricPresentation(metric[side], metric.metric);
+        const detail = sideDefinitionLabel(metric, side);
+        const presented = metricPresentation(metric[side], metric.metric, { includeOrigin: !detail && !sharedOrigin(metric) });
+        if (detail) presented.note = detail + " · " + presented.note;
+        return presented;
+    }
+    function metricLabel(fact) {
+        return ["accuracy", "answer-trust", "action-trust"].includes(fact?.metric) ? wording.resolve(fact).label : dimensions[fact?.metric] ?? "Saved measure";
+    }
+    function comparisonLabel(metric) {
+        const labels = [...new Set([metric.baseline, metric.later].filter(Boolean).map(metricLabel))];
+        return labels.length > 1 ? "Different saved reviews" : labels[0] ?? dimensions[metric.metric] ?? "Saved measure";
     }
     function metricDefinitionLabel(metric) {
         const fact = metric.baseline ?? metric.later;
@@ -119,6 +159,37 @@ export function createReportComparison() {
             const side = metric.reason === "later-metric-not-saved" ? "baseline" : metric.reason === "baseline-metric-not-saved" ? "later" : null;
             return side && !Object.hasOwn(metric, side) ? "Older comparison summary" : "";
         }
+        return separateDefinitions(metric) ? sharedOrigin(metric) : factDefinitionLabel(fact);
+    }
+    function separateDefinitions(metric) {
+        if (!Object.hasOwn(metric, "baseline") || !Object.hasOwn(metric, "later")) return false;
+        if (!metric.baseline || !metric.later) return Boolean(metric.baseline || metric.later);
+        const identity = fact => JSON.stringify([fact.metric, fact.kind, fact.basis, factDefinitionLabel(fact, true),
+            fact.definitionId, fact.definitionVersion, fact.unit, fact.aggregation, fact.boundary,
+            Object.entries(fact.qualifiers ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
+        return identity(metric.baseline) !== identity(metric.later);
+    }
+    function sideDefinitionLabel(metric, side) {
+        const fact = metric[side];
+        if (!fact || !separateDefinitions(metric)) return "";
+        const differentLabels = metric.baseline && metric.later && metricLabel(metric.baseline) !== metricLabel(metric.later);
+        return [differentLabels ? metricLabel(fact) : "", factDefinitionLabel(fact,
+            Boolean(metric.baseline && metric.later), !sharedOrigin(metric))].filter(Boolean).join(" · ");
+    }
+    function factOriginLabel(fact) {
+        return fact.basis === "user-assessment" ? "Your feedback"
+            : fact.basis === "model-assessment" ? modelOrigin(fact)
+                : fact.basis === "automatic-assessment" ? fact.reason === "unsupported-check" ? "Local observation (not a model assessment)" : "Automatic local checks"
+                    : fact.basis === "mixed-assessment" ? "Mixed assessments" : "Recorded checks";
+    }
+    function sharedOrigin(metric) {
+        const identity = fact => JSON.stringify([fact.basis, ...["evaluatorProvider", "evaluatorModel", "rubricId", "rubricVersion"]
+            .map(key => fact.qualifiers?.[key])]);
+        return metric.baseline?.kind === "pass-rate" && metric.later?.kind === "pass-rate"
+            && identity(metric.baseline) === identity(metric.later)
+            && factOriginLabel(metric.baseline) === factOriginLabel(metric.later) ? factOriginLabel(metric.baseline) : "";
+    }
+    function factDefinitionLabel(fact, includeIdentity = false, includeOrigin = true) {
         if (fact.kind === "duration") return ({
             "tool-start-to-completion": "Median tool-call duration",
             "http-dispatch-to-response-headers": "Median HTTP response time",
@@ -127,16 +198,16 @@ export function createReportComparison() {
             "recorded-request-to-final-answer": "Time to recorded final response",
         })[fact.boundary] ?? fact.boundary;
         if (fact.kind === "cost") return fact.basis === "estimated" ? "Estimated attributed subtotal" : fact.basis === "observed" ? "Recorded attributed subtotal" : "Attributed cost";
-        return fact.basis === "user-assessment" ? "Your feedback"
-            : fact.basis === "model-assessment" ? `${modelOrigin(fact)}${fact.metric === "action-trust" ? " · intent alignment" : ""}`
-            : fact.basis === "automatic-assessment" ? fact.reason === "unsupported-check" ? "Local observation (not a model assessment)" : "Automatic local checks"
-                : fact.basis === "mixed-assessment" ? "Mixed assessments" : "Recorded checks";
+        const origin = factOriginLabel(fact);
+        if (fact.kind !== "pass-rate" || !includeIdentity && wording.resolve(fact).known) return origin;
+        const id = fact.qualifiers?.checkId, version = fact.qualifiers?.checkVersion;
+        return `${includeOrigin ? origin + " · " : ""}${id ? `Saved check ${id}` : "Check ID not recorded"} · ${version != null ? `check version ${version}` : "Check version not recorded"}`;
     }
     function metricGroups(metrics) {
         const available = metrics.filter(metric => metric.baseline?.state === "available" || metric.later?.state === "available");
         const unavailable = metrics.filter(metric => !available.includes(metric));
         return { available, unavailable, unavailableLabel: [...new Set(unavailable.map(metric =>
-            metric.metric === "speed" ? metricDefinitionLabel(metric) || dimensions.speed : dimensions[metric.metric]))].join(" · ") };
+            metric.metric === "speed" ? metricDefinitionLabel(metric) || dimensions.speed : comparisonLabel(metric)))].join(" · ") };
     }
     function scopeNotes(model) {
         const notes = [];
@@ -223,7 +294,7 @@ export function createReportComparison() {
             for (const metric of metrics) {
                 if (!Object.hasOwn(dimensions, metric.metric)) throw new TypeError("Comparison contains an unknown dimension.");
                 const row = el("tr");
-                const title = el("th", "", dimensions[metric.metric]);
+                const title = el("th", "", comparisonLabel(metric));
                 title.scope = "row";
                 const detail = metricDefinitionLabel(metric);
                 if (detail) title.append(el("span", "comparison-meta", detail));
@@ -235,8 +306,8 @@ export function createReportComparison() {
                 if (metric.status === "comparable" && metric.delta) {
                     const delta = metric.delta;
                     change.append(el("strong", "comparison-delta", delta.value === 0 ? "Unchanged" : `${delta.value > 0 ? "+" : "−"}${formatValue(Math.abs(delta.value), delta.unit)}`));
-                    if (metric.warnings?.includes("coverage-decreased")) change.append(el("span", "comparison-meta", "Less evidence assessed or measured"));
-                    else if (metric.warnings?.includes("total-cost-volume-differs")) change.append(el("span", "comparison-meta", "Different volume; not cost per task"));
+                    if (metric.warnings?.includes("coverage-decreased")) change.append(el("span", "comparison-meta", warningLabel("coverage-decreased", metric)));
+                    else if (metric.warnings?.includes("total-cost-volume-differs")) change.append(el("span", "comparison-meta", warningLabel("total-cost-volume-differs", metric)));
                     else if (delta.unit === "percentage-points") change.append(el("span", "comparison-meta", "Percentage points"));
                 } else {
                     change.append(el("span", "muted", metric.status === "incompatible" ? "Different definitions" : "Not comparable"));
@@ -358,6 +429,12 @@ export function createReportComparison() {
         outcomeTone,
         formatValue,
         metricPresentation,
+        metricLabel,
+        comparisonLabel,
+        sideDefinitionLabel,
+        warningLabel,
+        coverageUnit,
+        absentPeerLabel,
         comparisonSidePresentation,
         metricGroups,
         definitionLabel: metricDefinitionLabel,

@@ -4,6 +4,7 @@ import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 import { createReportComparison, reportComparisonStyles } from "../web/report-comparison.mjs";
+import { createAssessmentWording } from "../web/assessment-presentation.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { tokens } from "../web/tokens.mjs";
 import { fontFaceStyles } from "../lib/typeface.mjs";
@@ -41,7 +42,7 @@ test("comparison uses the loaded font and remains readable across root-text size
             *{box-sizing:border-box}body{margin:0;padding:24px;background:var(--page);font-family:var(--font)}
             main{max-width:1100px;margin:auto} .proof-label{font-size:var(--type-caption);color:var(--muted)}</style></head>
             <body><main><p class="proof-label">Synthetic component proof · not collected evidence</p><div id="comparison"></div></main></body></html>`);
-        await page.addScriptTag({ content: `window.component=(${createReportComparison.toString()})();window.inspectCount=0;` });
+        await page.addScriptTag({ content: `window.component=(${createReportComparison.toString()})((${createAssessmentWording.toString()})());window.inspectCount=0;` });
         await page.evaluate(value => {
             window.component.render(document.querySelector("#comparison"), value, { onInspectPattern: id => { window.inspected = id; window.inspectCount++; } });
         }, model());

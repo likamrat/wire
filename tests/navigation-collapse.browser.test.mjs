@@ -10,6 +10,7 @@ import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, s
 import { reportContents, scanReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { createReportComparison } from "../web/report-comparison.mjs";
+import { createAssessmentWording } from "../web/assessment-presentation.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 
 const proofs = process.env.WORKIQ_COLLAPSE_PROOFS;
@@ -444,15 +445,15 @@ test("synthetic comparison content and native reading dialogs fit the actual col
     });
     // Mount the existing comparison renderer in its real shell container without
     // creating, exporting or claiming any saved report in the isolated store.
-    await page.evaluate(({ source, model }) => {
+    await page.evaluate(({ source, wording, model }) => {
         const script = document.createElement("script");
         script.nonce = document.querySelector("script[nonce]").nonce;
-        script.textContent = `window.collapseComparison = (${source})();`;
+        script.textContent = `window.collapseComparison = (${source})((${wording})());`;
         document.head.append(script);
         const host = document.querySelector("#comparisonWorkspace");
         host.hidden = false;
         window.collapseComparison.render(host, model);
-    }, { source: createReportComparison.toString(), model: compareFrozenReportFacts(report("a"), report("b"), { identityRelation: "same-namespace" }) });
+    }, { source: createReportComparison.toString(), wording: createAssessmentWording.toString(), model: compareFrozenReportFacts(report("a"), report("b"), { identityRelation: "same-namespace" }) });
     const comparison = page.locator("#comparisonWorkspace .report-comparison"), original = await comparison.elementHandle();
     for (const theme of ["light", "dark"]) for (const scale of [1, 2]) {
         await chooseTheme(page, theme);

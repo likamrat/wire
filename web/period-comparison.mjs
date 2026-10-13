@@ -1,5 +1,5 @@
 // Serialized with the shell. Private text is used only to select the accepted roster.
-export function createPeriodComparisonState({ time, search, contract, projection, categories, comparePeriodCohorts }) {
+export function createPeriodComparisonState({ time, search, contract, projection, categories, comparePeriodCohorts, searchContract }) {
     if (typeof comparePeriodCohorts !== "function") throw new TypeError("The shared comparison derivation is required.");
     let generation = 0, pending = null, accepted = null;
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -9,11 +9,7 @@ export function createPeriodComparisonState({ time, search, contract, projection
     function semanticScope(value, revision) {
         const receipt = value?.receipt;
         require(value?.status === "ready" && value.coverage === "whole-retained-corpus"
-            && receipt && Object.keys(receipt).length === 8
-            && typeof receipt.panelId === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(receipt.panelId)
-            && ["epoch", "requestId", "generation", "revision"].every(key => Number.isSafeInteger(receipt[key]) && receipt[key] >= 0)
-            && ["indexId", "modelId"].every(key => typeof receipt[key] === "string" && /^[a-f0-9]{64}$/.test(receipt[key]))
-            && ["hybrid", "lexical-only"].includes(receipt.mode) && receipt.revision === revision
+            && searchContract?.analysisReceipt(receipt) && receipt.revision === revision
             && ["scenarioIds", "actionIds", "parentScenarioIds"].every(key => Array.isArray(value[key])
                 && value[key].every(id => typeof id === "string" && id.length) && new Set(value[key]).size === value[key].length));
         return { scenarioIds: [...value.scenarioIds], actionIds: [...value.actionIds], parentScenarioIds: [...value.parentScenarioIds] };
@@ -54,7 +50,7 @@ export function createPeriodComparisonState({ time, search, contract, projection
             semanticMembership: input.semanticSelection ? semanticScope(semanticSearch, snapshot.revision) : null };
         if (input.semanticSelection) {
             validateNarrowing(input.semanticSelection.withinScenarioIds, snapshot.scenarios);
-            require(same(input.semanticSelection.receipt, semanticSearch.receipt)
+            require(searchContract.sameReceipt(input.semanticSelection.receipt, semanticSearch.receipt)
                 && same(input.semanticSelection.withinScenarioIds, semanticSearch.withinScenarioIds));
         }
         accepted = null;
@@ -161,10 +157,11 @@ export function createPeriodComparisonState({ time, search, contract, projection
     return { prepare, begin, accept, leave, observe, consumer: () => accepted ? structuredClone(accepted) : null };
 }
 
-export function mountPeriodComparison({ root, toggle, api, time, search, categories, results, projection, createState,
+export function mountPeriodComparison({ root, setup = root, toggle, api, time, search, categories, results, projection, createState,
     assessmentFactories, bindDetails, getContext, navigate, onSearch, recordLink, syncFilters, createReport, openSearch }) {
     const doc = root.ownerDocument;
-    let machine, presentation, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null;
+    let machine, presentation, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null, datesEdited = false;
+    let completionIntent = null;
     const snapshotKey = context => JSON.stringify([context.snapshot?.revision, context.snapshot?.assessment?.basis, context.snapshot?.assessment?.source]);
     const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
     const el = (tag, text, cls) => {
@@ -176,19 +173,22 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
     const button = (label, action) => {
         const node = el("button", label, "quiet"); node.type = "button"; node.addEventListener("click", action); return node;
     };
-    const heading = el("div", undefined, "section-heading"), title = el("h2", "Compare retained periods");
+    const heading = el("div", undefined, "period-comparison-heading"), title = el("h2", "Compare periods");
     title.id = "periodComparisonTitle"; title.tabIndex = -1;
-    heading.append(title, button("Stop comparing", () => { navigate({ compare: undefined }); toggle.focus(); }));
+    const stop = button("Stop comparing", () => { navigate({ compare: undefined }); toggle.focus(); });
+    stop.title = "Return to Analyze with your dates and filters kept";
+    heading.append(title, stop);
     const form = el("form", undefined, "period-comparison-controls");
     form.setAttribute("aria-label", "Comparison periods");
     const inputs = {};
     for (const [side, label] of [["a", "Period A"], ["b", "Period B"]]) {
         const group = el("fieldset"); group.append(el("legend", label));
         for (const [bound, text] of [["From", "From"], ["To", "To"]]) {
-            const field = el("label", text), input = el("input");
+            const field = el("label"), input = el("input");
+            field.append(el("span", text));
             input.type = "date"; input.id = `comparison${side.toUpperCase()}${bound}`; input.required = true;
             input.setAttribute("aria-label", `${label} ${text.toLowerCase()}`);
-            input.setAttribute("aria-describedby", "comparisonDateHint");
+            input.setAttribute("aria-describedby", "comparisonDateHint periodComparisonStatus");
             inputs[side + bound] = input;
             field.append(input); group.append(field);
         }
@@ -197,7 +197,8 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
     const apply = el("button", "Compare periods", "primary"); apply.type = "submit"; apply.id = "applyPeriodComparison";
     form.append(apply);
     const dateHint = el("p", undefined, "context-help-note"); dateHint.id = "comparisonDateHint";
-    const scope = el("p", undefined, "period-comparison-scope");
+    const scopeRow = el("div", undefined, "period-comparison-scope");
+    const scope = el("p", undefined, "context-help-note");
     const searchLabel = el("label", "Search these interactions", "search-label"), searchInput = el("input");
     searchInput.type = "search"; searchInput.autocomplete = "off"; searchInput.id = "comparisonSearch";
     searchLabel.append(searchInput);
@@ -207,6 +208,10 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
         if (event.key === "Escape" && searchInput.value) { searchInput.value = ""; onSearch(""); event.preventDefault(); }
     });
     const status = el("p", undefined, "context-help-note"); status.id = "periodComparisonStatus"; status.setAttribute("role", "status");
+    status.hidden = true;
+    function setStatus(message, className = "context-help-note") {
+        status.textContent = message; status.className = className; status.hidden = !message;
+    }
     const output = el("div"); output.id = "periodComparisonResults"; output.tabIndex = -1;
     const report = button("Create comparison report", () => {
         const value = consumer();
@@ -214,25 +219,59 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
             ...(value.selection.withinScenarioIds === undefined ? {} : { withinScenarioIds: [...value.selection.withinScenarioIds] }),
         } : undefined);
     });
-    report.id = "createPeriodReport"; report.disabled = true;
-    const notice = el("p", "Prepare exactly this comparison through Setup, disclosure Review and a separate local Save. No earlier reports are needed.", "context-help-note");
-    root.append(heading, form, dateHint, searchLabel, scope, status, output, report, notice);
-    if (typeof openSearch === "function") searchLabel.after(button("Search this comparison", openSearch));
-    toggle.setAttribute("aria-controls", root.id);
+    report.id = "createPeriodReport"; report.disabled = true; report.hidden = true;
+    const resultHeading = el("div", undefined, "period-comparison-heading");
+    const resultTitle = el("h2", "What differs"); resultTitle.id = "periodComparisonResultsTitle"; resultTitle.tabIndex = -1;
+    resultHeading.append(resultTitle, report); resultHeading.hidden = true;
+    scopeRow.append(scope);
+    if (typeof openSearch === "function") scopeRow.append(button("Search this comparison", openSearch));
+    setup.append(heading, form, dateHint, status, scopeRow, searchLabel);
+    root.append(resultHeading, output);
+    function syncReport(value = null) {
+        report.disabled = !createReport || !value || !Object.values(value.periods).some(side => side.scenarioIds.length);
+        report.hidden = report.disabled;
+    }
+    function clearResults() {
+        syncReport(); resultHeading.hidden = true; output.replaceChildren(); output.removeAttribute("aria-busy");
+    }
+    for (const input of Object.values(inputs)) {
+        input.addEventListener("input", () => {
+            completionIntent = null;
+            datesEdited = true; generation++; machine?.leave(); requestKey = "";
+            clearResults(); syncOutcomeChoices();
+            for (const field of Object.values(inputs)) field.removeAttribute("aria-invalid");
+            setStatus(Object.values(periods(getContext().route)).every(period => period.from && period.to)
+                ? "Dates changed. Compare periods to see the updated results." : "");
+        });
+        input.addEventListener("invalid", () => {
+            completionIntent = null;
+            input.setAttribute("aria-invalid", "true");
+            setStatus("Choose a valid start and end date for both periods.", "error");
+        });
+    }
+    toggle.setAttribute("aria-controls", setup === root ? root.id : `${setup.id} ${root.id}`);
     toggle.addEventListener("click", () => navigate({ compare: shown ? undefined : "periods" }));
     form.addEventListener("submit", event => {
         event.preventDefault();
         const changes = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value]));
+        let invalidSide;
         try {
             for (const prefix of ["a", "b"]) {
+                invalidSide = prefix;
                 time.calendar(changes[prefix + "From"]); time.calendar(changes[prefix + "To"]);
                 time.range({ from: changes[prefix + "From"], to: changes[prefix + "To"] }, getContext().options.timeContext.timeZone);
             }
             for (const input of Object.values(inputs)) input.removeAttribute("aria-invalid");
-            requestKey = ""; navigate({ ...changes, compare: "periods" });
+            const context = getContext();
+            completionIntent = { trigger: doc.activeElement, readingIntent: context.readingIntent,
+                key: signature({ ...context, route: { ...context.route, ...changes, compare: "periods" } }) };
+            datesEdited = false; requestKey = ""; navigate({ ...changes, compare: "periods" });
         } catch (error) {
-            status.textContent = error.message; status.className = "error";
-            for (const input of Object.values(inputs)) input.setAttribute("aria-invalid", "true");
+            completionIntent = null;
+            setStatus(`Period ${invalidSide.toUpperCase()}: ${error.message}`, "error");
+            inputs[invalidSide + "From"].setAttribute("aria-invalid", "true");
+            inputs[invalidSide + "To"].setAttribute("aria-invalid", "true");
+            inputs[invalidSide + "From"].focus();
         }
     });
     const dialog = el("dialog", undefined, "assessment-dialog"), dialogHead = el("div", undefined, "dialog-head");
@@ -285,6 +324,14 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
     }
     const signed = value => value === null ? "Not comparable" : `${value > 0 ? "+" : ""}${number(value)}`;
     const share = (count, total) => `${number(count)} / ${number(total)} (${total ? number(count * 100 / total) + "%" : "Not applicable"})`;
+    function countFacts(entries) {
+        const facts = el("dl", undefined, "period-count-facts");
+        for (const [label, count] of entries) {
+            const fact = el("div");
+            fact.append(el("dt", label), el("dd", number(count))); facts.append(fact);
+        }
+        return facts;
+    }
     function syncOutcomeChoices(value = null) {
         const control = doc.getElementById("outcomeFilter"), labels = results.labels(getContext().options.layer);
         if (doc.getElementById("outcomeFilter-control")?.getAttribute("aria-expanded") === "true") return;
@@ -294,11 +341,11 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
         // Ordinary renderControls must rebuild its own date-scoped labels on exit.
         delete control.dataset.optionsSignature;
         const serviceScope = doc.getElementById("serviceFocusScope");
-        if (serviceScope) serviceScope.textContent = "Service choices apply to both periods. Known matches and missing-service context are counted separately on each side below.";
+        if (serviceScope) serviceScope.textContent = "Known service matches and missing-service context are counted separately in the results.";
         syncFilters();
     }
     function paint(value) {
-        report.disabled = !createReport;
+        syncReport(value); resultHeading.hidden = false;
         const { baseline: a, later: b } = value.periods;
         syncOutcomeChoices(value);
         const labels = results.labels(value.definitions.layer);
@@ -309,13 +356,20 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
             ...Object.entries(labels).map(([key, label]) => [label, share(totals(a)[key], a.rowIds.length), share(totals(b)[key], b.rowIds.length),
                 value.comparison.outcomes.change[key] === null ? "Not comparable" : signed(value.comparison.outcomes.change[key]) + " percentage points"]),
         ];
-        output.replaceChildren(el("p", `Period A: ${a.range.from} to ${a.range.to}. Period B: ${b.range.from} to ${b.range.to}. ${time.label(value.timeContext)}. Stored revision ${value.revision}.`, "period-comparison-basis"),
-            table(`Matching ${value.definitions.unit}; B minus A`, ["Measure", "Period A", "Period B", "Observed difference"], rows),
-            el("p", value.scope.interpretation, "context-help-note"));
-        if (value.comparison.outcomes.overlap.sharedCount) output.append(el("p",
-            `${number(value.comparison.outcomes.overlap.sharedCount)} matching records appear in both periods. Each is counted once per side; the cohorts are not independent.`, "notice"));
+        const dateRange = side => side.range.from === side.range.to ? time.formatDate(side.range.from, value.timeContext, true)
+            : `${time.formatDate(side.range.from, value.timeContext, true)} - ${time.formatDate(side.range.to, value.timeContext, true)}`;
+        const summary = el("p", `A: ${dateRange(a)}. B: ${dateRange(b)}. Differences are B minus A.`, "period-comparison-basis");
+        output.replaceChildren(summary);
+        if (!a.rowIds.length && !b.rowIds.length) {
+            output.append(el("p", "No matching retained activity in either period. Change the dates or filters to compare.", "assessment-empty"));
+            return;
+        }
+        const measures = el("div", undefined, "period-comparison-measures");
+        measures.append(table(`Matching ${value.definitions.unit}`, ["Measure", "Period A", "Period B", "Difference"], rows));
+        output.append(measures);
         const sharedInteractions = a.interactionRefs.filter(ref => b.interactionRefs.includes(ref)).length;
-        if (sharedInteractions) output.append(el("p", `${number(sharedInteractions)} full retained interactions appear on both sides, even when their matching calls differ. Do not add their quality or timing populations.`, "context-help-note"));
+        if (value.comparison.outcomes.overlap.sharedCount || sharedInteractions) output.append(el("p",
+            `Shared across periods: ${number(value.comparison.outcomes.overlap.sharedCount)} matching records; ${number(sharedInteractions)} whole interactions. Counts overlap.`, "notice"));
         if (value.comparison.matchingCallTiming) {
             const timingRows = ["median", "p95"].map(aggregation => {
                 const comparison = value.comparison.matchingCallTiming[aggregation];
@@ -325,23 +379,34 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
                     comparison.delta && (aggregation !== "p95" || Math.min(comparison.baseline.coverage.count, comparison.later.coverage.count) > 1)
                         ? signed(comparison.delta.value) + " ms" : "Not comparable"];
             });
-            output.append(table("Matching calls only: call start to recorded completion", ["Timing", "Period A", "Period B", "Observed difference"], timingRows),
-                el("p", "Nearest-rank timing uses retained raw samples only. One sample is not overall performance; missing timing is not zero. Request-to-final-response time is separate below.", "context-help-note"));
-        } else output.append(el("p", "Matching-call duration comparison is available for the Work IQ calls layer only. This evidence layer keeps its own units; full-interaction timing remains separate below.", "context-help-note"));
+            const timing = el("div");
+            timing.append(table("Matching call duration", ["Timing", "Period A", "Period B", "Difference"], timingRows),
+                el("p", "Recorded start to completion; timed calls only.", "context-help-note"));
+            measures.append(timing);
+        } else measures.append(el("p", "Call duration is unavailable for this evidence type.", "context-help-note"));
+        const detailTitle = el("h2", "Whole interactions"); detailTitle.id = "periodInteractionDetailsTitle";
+        output.append(detailTitle, el("p", "Includes calls outside the selected dates or filters.", "context-help-note"));
         const sides = el("div", undefined, "period-comparison-sides");
         for (const [key, side, label] of [["baseline", a, "Period A"], ["later", b, "Period B"]]) {
             const section = el("section", undefined, "period-comparison-side"); section.dataset.periodSide = key;
-            section.append(el("h3", `${label}: ${side.range.from} to ${side.range.to}`),
-                el("p", `${side.rowIds.length} matching records across all pages; ${side.scenarioIds.length} request groups; ${side.interactionRefs.length} verified full interactions.`),
-                el("p", side.analytics.serviceInvolvement.selection.services.length
-                    ? `${side.analytics.serviceInvolvement.selection.knownMatchIds.length} known selected-service matches; ${side.analytics.serviceInvolvement.selection.contextOnlyIds.length} missing-service context records. Service associations can overlap; each record counts once.`
-                    : `No selected-service restriction. ${side.analytics.serviceInvolvement.missingDetailCount} records lack some service detail; no service is inferred.`, "context-help-note"),
-                el("p", value.scope.findings, "context-help-note"));
-            if (side.unmappedScenarioIds.length) section.append(el("p", `${side.unmappedScenarioIds.length} request groups have no verified interaction association. Their findings are unavailable.`, "notice"));
-            if (side.analytics.apiCoverage) section.append(el("p",
-                `${side.analytics.apiCoverage.selectedResultUnits} matching returned entries; ${side.analytics.apiCoverage.eligibleToolCalls} eligible parent tool calls before entry outcome/endpoint filters. These are different populations, not extra calls.`, "context-help-note"));
+            section.append(el("h3", label), countFacts([["Interactions", side.interactionRefs.length]]));
+            const service = side.analytics.serviceInvolvement;
+            const coverage = service.selection.services.length ? [
+                ["Known service matches", service.selection.knownMatchIds.length],
+                ["Missing-service context", service.selection.contextOnlyIds.length],
+            ] : service.missingDetailCount ? [["Missing service details", service.missingDetailCount]] : [];
+            if (coverage.length) {
+                const scope = el("div", undefined, "period-matching-coverage");
+                scope.append(el("h4", "Matching records"), countFacts(coverage)); section.append(scope);
+            }
+            if (side.unmappedScenarioIds.length) section.append(el("p", `${side.unmappedScenarioIds.length} request groups could not be linked to interactions. Findings unavailable.`, "notice"));
+            if (side.analytics.apiCoverage) section.append(countFacts([
+                ["Matching returned entries", side.analytics.apiCoverage.selectedResultUnits],
+                ["Parent calls before outcome/path filters", side.analytics.apiCoverage.eligibleToolCalls],
+            ]));
             if (!side.rowIds.length) section.append(el("p", "No matching retained activity in this period. No findings or timing are inferred.", "assessment-empty"));
             const findingsHost = el("div"), insights = el("div");
+            findingsHost.dataset.presentation = "comparison";
             section.append(findingsHost, insights);
             if (side.interactionRefs.length) {
                 const model = presentation.summarize(side.assessment.metrics, {
@@ -352,38 +417,49 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
                     disclosureKey: "period:" + key + ":" + JSON.stringify(side.interactionRefs),
                     detailsLabel: "Measure definitions", onDetails: trigger => showDefinitions(model, trigger) });
             }
-            const exact = el("details", undefined, "reading-section"); exact.append(el("summary", `Exact matching records (${side.rowIds.length})`));
-            exact.append(table(`${label} exact record membership`, ["Tool or record", "Recorded start", "Outcome", "Duration"], side.analytics.rows.map(row => [
-                recordLink(row, side, value), time.formatTime(row.startedAt, value.timeContext), labels[row.outcome],
-                Number.isFinite(row.durationMs) ? number(row.durationMs) + " ms" : "Not measured",
-            ])));
-            bindDetails(exact, "period-records:" + key + ":" + JSON.stringify(side.rowIds));
-            section.append(exact); sides.append(section);
+            if (side.rowIds.length) {
+                const exact = el("details", undefined, "reading-section"); exact.append(el("summary", `Exact matching records (${side.rowIds.length})`));
+                exact.append(table(`${label} exact record membership`, ["Tool or record", "Recorded start", "Outcome", "Duration"], side.analytics.rows.map(row => [
+                    recordLink(row, side, value), time.formatTime(row.startedAt, value.timeContext), labels[row.outcome],
+                    Number.isFinite(row.durationMs) ? number(row.durationMs) + " ms" : "Not measured",
+                ])));
+                bindDetails(exact, "period-records:" + key + ":" + JSON.stringify(side.rowIds));
+                section.append(exact);
+            }
+            sides.append(section);
         }
         output.append(sides);
         const deltas = el("details", undefined, "reading-section"); deltas.append(el("summary", "Compare saved checks and full-interaction timing"));
-        const factLabel = fact => {
-            if (!fact) return "No compatible saved lane on this side";
-            const counts = `${fact.coverage.count} / ${fact.coverage.eligible} covered`;
-            if (fact.state !== "available") return `${fact.reason}; ${counts}`;
+        const formatter = assessmentFactories.createReportComparison();
+        const factLabel = (fact, peer) => {
+            if (!fact) return formatter.absentPeerLabel(peer);
+            const counts = `${fact.coverage.count} / ${fact.coverage.eligible} ${fact.kind === "pass-rate" ? "assessed" : fact.kind === "cost" ? "priced" : "timed"} ${formatter.coverageUnit(fact)}`;
+            if (fact.state !== "available") {
+                const view = formatter.metricPresentation(fact, fact.metric, { includeOrigin: false });
+                return `${view.value}; ${view.note}`;
+            }
             return (fact.kind === "pass-rate" ? `${fact.numerator} / ${fact.denominator} passed (${number(fact.numerator * 100 / fact.denominator)}%)`
                 : `${number(fact.value)} ${fact.unit}`) + `; ${counts}`;
         };
-        deltas.append(table("Each origin, evaluator and rubric remains a separate lane", ["Measure and origin", "Period A", "Period B", "Observed difference"],
+        deltas.append(table("Saved reviews and measurements by source and method", ["Measure and origin", "Period A", "Period B", "Observed difference"],
             value.comparison.metrics.map(item => {
-                const fact = item.baseline ?? item.later;
-                const label = [fact.metric, fact.qualifiers.checkId ?? fact.definitionId, fact.basis, fact.qualifiers.evaluatorModel,
-                    fact.qualifiers.rubricId && `${fact.qualifiers.rubricId} v${fact.qualifiers.rubricVersion}`, fact.boundary].filter(Boolean).join(" / ");
+                const shared = formatter.definitionLabel(item);
+                const label = formatter.comparisonLabel(item) + (shared ? " / " + shared : "");
+                const side = (name, peer) => {
+                    const detail = formatter.sideDefinitionLabel(item, name);
+                    return (detail ? detail + ". " : "") + factLabel(item[name], item[peer]);
+                };
                 const result = item.result;
-                const delta = result?.delta ? signed(result.delta.value) + " " + result.delta.unit : result?.status === "incompatible"
+                const delta = result?.delta ? signed(result.delta.value) + " " + (result.delta.unit === "percentage-points" ? "percentage points" : result.delta.unit) : result?.status === "incompatible"
                     ? "Incompatible definitions" : "Not comparable";
-                return [label, factLabel(item.baseline), factLabel(item.later), delta + (result?.warnings.length ? "; " + result.warnings.join(", ") : "")];
+                return [label, side("baseline", "later"), side("later", "baseline"),
+                    delta + (result?.warnings.length ? "; " + result.warnings.map(code => formatter.warningLabel(code, item)).join("; ") : "")];
             })));
         bindDetails(deltas, "period-deltas:" + JSON.stringify([a.interactionRefs, b.interactionRefs]));
-        output.append(deltas, el("p", value.scope.dates, "context-help-note"));
+        output.append(deltas, el("p", "Retained history only. Undated records excluded.", "context-help-note"));
     }
     async function update() {
-        report.disabled = true;
+        syncReport();
         const outcomeTrigger = doc.getElementById("outcomeFilter-control");
         if (outcomeTrigger && !outcomeObserver) {
             outcomeObserver = new MutationObserver(() => {
@@ -392,53 +468,58 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
             outcomeObserver.observe(outcomeTrigger, { attributes: true, attributeFilter: ["aria-expanded"] });
         }
         const context = getContext(), active = context.route.view === "analyze" && context.route.compare === "periods";
-        shown = active; root.hidden = !active; toggle.hidden = context.route.view !== "analyze";
+        const entering = active && !shown;
+        shown = active; root.hidden = !active; setup.hidden = !active; toggle.hidden = context.route.view !== "analyze";
         toggle.setAttribute("aria-expanded", String(active));
         toggle.textContent = active ? "Close period comparison" : "Compare periods";
         doc.body.classList.toggle("period-comparing", active);
         if (!active) {
-            generation++; machine?.leave(); requestKey = ""; contextKey = "";
+            completionIntent = null;
+            generation++; machine?.leave(); requestKey = ""; contextKey = ""; datesEdited = false; lastRoute = "";
             if (dialog.open) dialog.close();
             return;
         }
         const routeKey = JSON.stringify(periods(context.route));
         if (routeKey !== lastRoute) {
-            for (const [key, input] of Object.entries(inputs)) input.value = context.route[key] ?? "";
-            lastRoute = routeKey;
+            for (const [key, input] of Object.entries(inputs)) {
+                input.value = context.route[key] ?? ""; input.removeAttribute("aria-invalid");
+            }
+            lastRoute = routeKey; datesEdited = false;
         }
+        if (entering && doc.activeElement === toggle) inputs.aFrom.focus();
         if (searchInput.value !== context.search) searchInput.value = context.search;
-        dateHint.textContent = `Both dates included in ${time.label(context.options.timeContext)}. Ordinary Analyze dates are kept for when you stop comparing.`;
-        const names = { scope: "Collection", includeMetadata: "Platform metadata", services: "Service", includeMissingService: "Missing-service context",
-            sourceSessionIds: "Chat", projectIds: "Project", tools: "Tool", workloads: "Category", outcomes: "Outcome", promptAuthors: "Author", endpoints: "Endpoint", activityTypes: "Activity type" };
-        const choices = { scope: { history: "Current", legacy: "Earlier snapshot", all: "Both" },
-            promptAuthors: { user: "Your prompts", agent: "Agent prompts", unknown: "Unverified author" },
-            outcomes: results.labels(context.options.layer) };
-        const display = (value, key) => choices[key]?.[value] ?? (typeof value === "boolean" ? value ? "included" : "excluded" : value ?? "Unscoped");
-        const filters = Object.entries(context.options.filters).filter(([key]) => !["from", "to"].includes(key));
-        scope.textContent = "Both periods use: " + filters.map(([key, value]) => `${names[key] ?? key}: ${Array.isArray(value) ? value.map(item => display(item, key)).join(", ") : display(value, key)}`).join("; ")
-            + (!context.options.filters.promptAuthors ? "; All authors" : "") + (!context.options.filters.outcomes ? "; All outcomes" : "")
-            + (!context.options.filters.tools ? "; All tools" : "") + (!context.options.filters.services ? "; All services" : "")
-            + (!context.options.filters.sourceSessionIds ? "; All chats" : "") + (!context.options.filters.projectIds ? "; All projects" : "")
-            + (context.route.withinServices ? "; also within every named service: " + context.route.withinServices : "")
-            + (context.semanticSearch ? ". Search membership applies across the whole retained corpus: interaction hits and exact action hits, not only displayed matches."
-                + (context.semanticSearch.withinScenarioIds !== undefined ? " The existing interaction phrase filter also narrows this membership." : "")
-                : context.search.trim() ? ". Private search applied to the complete retained interaction roster." : ". No private search.");
+        dateHint.textContent = `Both dates included. ${time.label(context.options.timeContext)}.`;
+        scope.textContent = "Filters below apply to both periods."
+            + (context.semanticSearch ? " Search uses matching interactions and individual records across all pages."
+                + (context.semanticSearch.withinScenarioIds !== undefined ? " The private phrase filter narrows that selection further." : "")
+                : context.search.trim() ? " The private phrase filter also applies to both periods, across all retained interactions." : "");
         const key = signature(context);
+        if (completionIntent?.key !== key) completionIntent = null;
         syncOutcomeChoices(consumer());
         if (context.isLoading || context.isStale || context.semanticSearch && context.semanticSearch.status !== "ready" || blockedSnapshot === snapshotKey(context)) {
+            completionIntent = null;
             generation++; machine?.leave(); contextKey = key; requestKey = "";
-            output.replaceChildren(); output.removeAttribute("aria-busy");
-            status.textContent = "The Analyze snapshot is updating or stale. Read the current stored view before comparing.";
-            status.className = "notice"; return;
+            clearResults();
+            setStatus(context.semanticSearch && context.semanticSearch.status !== "ready"
+                ? context.semanticSearch.status === "pending" ? "Search is finding matches. Wait for it to finish before comparing."
+                    : "Search cannot provide a complete current selection. Check Search status before comparing."
+                : "The retained view is updating or stale. Read the current stored view before comparing.", "notice"); return;
         }
-        if (key === contextKey && requestKey) { report.disabled = !createReport || !consumer(); return; }
+        if (datesEdited) {
+            completionIntent = null;
+            if (!Object.values(inputs).some(input => input.hasAttribute("aria-invalid"))) setStatus(
+                Object.values(periods(context.route)).every(period => period.from && period.to)
+                    ? "Dates changed. Compare periods to see the updated results." : "");
+            return;
+        }
+        if (key === contextKey && requestKey) { syncReport(consumer()); return; }
         contextKey = key; requestKey = "";
-        const started = ++generation; machine?.leave(); output.replaceChildren();
+        const submitted = completionIntent;
+        const started = ++generation; machine?.leave(); clearResults();
         if (!Object.values(periods(context.route)).every(period => period.from && period.to)) {
-            status.textContent = "Choose a start and end date for both periods. No comparison has been run.";
-            status.className = "context-help-note"; return;
+            setStatus(""); return;
         }
-        status.textContent = "Reading both periods from one stored revision..."; status.className = "context-help-note";
+        setStatus("Reading both periods...");
         output.setAttribute("aria-busy", "true");
         try {
             await ready();
@@ -451,10 +532,18 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
             if (started !== generation || signature(current) !== key || current.isLoading || current.isStale) return;
             if (!machine.accept(token, value)) return;
             paint(value);
-            status.textContent = "Comparing retained activity only. No source check, capture or assessment was requested.";
+            setStatus("Comparison ready.", "visually-hidden");
+            const orient = submitted && completionIntent === submitted && submitted.readingIntent === current.readingIntent
+                && doc.activeElement === submitted.trigger;
+            completionIntent = null;
+            if (orient) {
+                resultTitle.focus({ preventScroll: true });
+                resultTitle.scrollIntoView({ block: "start" });
+            }
         } catch (error) {
             if (started !== generation || signature(getContext()) !== key) return;
-            machine?.leave(); output.replaceChildren(); status.textContent = error.message; status.className = "error";
+            completionIntent = null;
+            machine?.leave(); clearResults(); setStatus(error.message, "error");
             syncOutcomeChoices();
             output.append(button("Retry comparison read", () => { requestKey = ""; update(); }));
         } finally {
@@ -463,7 +552,7 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
     }
     function consumer() {
         const context = getContext();
-        return shown && !context.isLoading && !context.isStale && blockedSnapshot !== snapshotKey(context)
+        return shown && !datesEdited && !context.isLoading && !context.isStale && blockedSnapshot !== snapshotKey(context)
             && signature(context) === requestKey ? machine?.consumer() ?? null : null;
     }
     function observe(value) {
@@ -471,11 +560,11 @@ export function mountPeriodComparison({ root, toggle, api, time, search, categor
         if (!value?.basis || JSON.stringify(value.basis) === JSON.stringify(context.snapshot?.assessment?.basis)
             && !(value.pendingCleanup && value.kind !== "artifact-deletion")) return;
         machine?.observe(value); machine?.leave(); generation++; requestKey = ""; blockedSnapshot = snapshotKey(context);
-        report.disabled = true;
+        completionIntent = null;
+        syncReport();
         if (dialog.open) dialog.close();
-        output.replaceChildren(); output.removeAttribute("aria-busy");
-        status.className = "notice";
-        status.textContent = "Retained evidence or its permission changed. Read the current stored Analyze view before comparing again.";
+        clearResults();
+        setStatus("Retained evidence or its permission changed. Read the current stored Analyze view before comparing again.", "notice");
     }
     const workspace = doc.getElementById("workspace");
     if (workspace) new MutationObserver(() => { if (shown) update(); }).observe(workspace, { attributes: true, attributeFilter: ["aria-busy"] });
@@ -488,23 +577,59 @@ export const periodComparisonStyles = `
 .period-comparing #pageAction,.period-comparing #createSessionReport,.period-comparing #reportSelectionBar,
 .period-comparing #resultsLink,.period-comparing #filters .filter-field:has(#dateFilter),
 .period-comparing #dateFields,.period-comparing #filterChips [aria-label^="Remove date filter:"]{display:none!important}
-.period-comparison{margin-block:var(--space-xl);min-width:0}
-.period-comparison-controls{display:flex;gap:var(--space-lg);align-items:end;flex-wrap:wrap;margin-block:var(--space-lg)}
-.period-comparison-controls fieldset{display:flex;flex:1 1 20rem;min-width:0;gap:var(--space-md);border:1px solid var(--rule);padding:var(--space-md)}
-.period-comparison-controls legend{font-weight:var(--weight-strong)}
-.period-comparison-controls label{flex:1;min-width:0}
+.period-comparison{margin-block:var(--space-lg);min-width:0;container:comparison-results / inline-size}
+.period-comparison:has(>#periodComparisonResults:empty){margin:0}
+#periodComparisonSetup{min-width:0;container:comparison-setup / inline-size;border-bottom:1px solid var(--rule);padding-bottom:8px;margin-bottom:8px}
+.period-comparison-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px 16px;margin-bottom:12px}
+.period-comparison-heading h2{margin:0;font-size:var(--type-section)}
+.period-comparison-heading button{min-height:44px;max-width:100%;white-space:normal}
+.period-comparison-controls{display:flex;gap:12px 24px;align-items:end;flex-wrap:wrap;margin:0;max-width:66rem}
+.period-comparison-controls fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));flex:1 1 19rem;min-width:0;gap:8px;border:0;padding:0;margin:0}
+.period-comparison-controls legend{font-weight:var(--weight-strong);padding:0;margin-bottom:4px}
+.period-comparison-controls label{display:grid;gap:4px;min-width:0;font-size:var(--type-small)}
 .period-comparison-controls input{display:block;box-sizing:border-box;min-width:0;width:100%;min-height:44px;font:inherit}
-.period-comparison .search-label{max-width:32rem}
-.period-comparison-scope,.period-comparison-basis{overflow-wrap:anywhere}
-.period-comparison-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-xl);margin-block:var(--space-xl)}
-.period-comparison-side{min-width:0}
+.period-comparison-controls>button{min-height:44px;white-space:normal;max-width:100%}
+#periodComparisonSetup .search-label{max-width:32rem}
+#periodComparisonSetup .context-help-note{max-width:none;margin:8px 0}
+#periodComparisonStatus.error,#periodComparisonStatus.notice{margin:8px 0;overflow-wrap:anywhere}
+.period-comparison-scope{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0 16px;overflow-wrap:anywhere}
+.period-comparison-scope>p{flex:1 1 22rem}
+.period-comparison-scope>button{min-height:44px;max-width:100%;white-space:normal;text-align:start}
+.period-comparison-basis{overflow-wrap:anywhere;font-size:var(--type-small);color:var(--muted);margin:0}
+.period-comparison-measures{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:start}
+.period-comparison-measures>div{min-width:0}
+.period-comparison .context-help-note{max-width:90ch}
+.period-comparison-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin-block:16px}
+.period-comparison-side{min-width:0;border-top:1px solid var(--rule);padding-top:12px}
 .period-comparison-side h3{font-size:var(--type-section)}
+.period-comparison-side>p{font-size:var(--type-small);margin:8px 0}
+.period-count-facts{display:flex;flex-wrap:wrap;gap:8px 24px;margin:8px 0;font-size:var(--type-small)}
+.period-count-facts>div{display:flex;gap:8px;align-items:baseline}
+.period-count-facts dt{color:var(--muted)}
+.period-count-facts dd{margin:0;font-weight:var(--weight-strong);font-variant-numeric:tabular-nums}
+.period-matching-coverage{margin:12px 0}
+.period-matching-coverage h4{font-size:var(--type-small);margin:0;font-weight:var(--weight-regular)}
+.period-comparison-side .assessment-findings{font-size:var(--type-small);margin:16px 0}
+.period-outcome-heading{font-size:var(--type-small);font-weight:var(--weight-strong);margin:0 0 8px}
+.period-outcome-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 12px}
+.period-outcome-counts>div{display:grid;grid-template-rows:auto 1fr;gap:4px;min-width:0}
+.period-outcome-counts dt{grid-row:2;font-size:var(--type-small)}
+.period-outcome-counts dd{grid-row:1;margin:0;font-size:var(--type-data-value);font-weight:var(--weight-strong);font-variant-numeric:tabular-nums}
+.period-cause{display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-top:1px solid var(--rule);padding-top:8px}
+.period-cause-count{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.period-comparison-side .assessment-compact-verdicts{display:grid;grid-template-columns:fit-content(50%) minmax(0,1fr) auto;gap:8px 12px}
+.period-comparison-side .assessment-compact-verdicts li{display:grid;grid-column:1/-1;grid-template-columns:subgrid;gap:4px 12px;align-items:baseline}
+.period-review-result{display:flex;flex-wrap:wrap;gap:4px 8px;min-width:0}
+.period-review-coverage{color:var(--muted);font-size:var(--type-caption)}
+.period-comparison-side .assessment-summary{margin-block:8px}
 .period-comparison-table{overflow:auto;max-width:100%;margin-block:var(--space-lg)}
-.period-comparison-table table{width:100%;border-collapse:collapse;font-size:var(--type-body)}
+.period-comparison-table table{width:100%;border-collapse:collapse;font-size:var(--type-small);font-variant-numeric:tabular-nums}
 .period-comparison-table caption{text-align:left;font-weight:var(--weight-strong);margin-block-end:var(--space-sm)}
-.period-comparison-table th,.period-comparison-table td{text-align:left;vertical-align:top;white-space:normal;overflow-wrap:anywhere;padding:var(--space-sm);border-bottom:1px solid var(--rule)}
+.period-comparison-table th,.period-comparison-table td{text-align:left;vertical-align:top;white-space:normal;overflow-wrap:anywhere;padding:8px;border-bottom:1px solid var(--rule)}
 .period-comparison-table thead{background:var(--canvas)}
 .period-comparison .assessment-dialog{max-width:min(52rem,calc(100vw - 2rem))}
-@media(max-width:900px){.period-comparison-sides{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:480px){.period-comparison-controls fieldset{flex-wrap:wrap}.period-comparison-controls label{flex-basis:100%}.period-comparison-table table{min-width:30rem}}
+@container comparison-results (max-width:58rem){.period-comparison-measures{grid-template-columns:minmax(0,1fr);gap:0}}
+@container comparison-results (max-width:42rem){.period-comparison-sides{grid-template-columns:minmax(0,1fr)}.period-comparison-table table{min-width:30rem}}
+@container comparison-results (max-width:42rem){.period-comparison-side .assessment-compact-verdicts{grid-template-columns:fit-content(50%) minmax(0,1fr)}.period-review-coverage{grid-column:2}}
+@container comparison-setup (max-width:25rem){.period-comparison-controls fieldset{grid-template-columns:minmax(0,1fr)}}
 `;

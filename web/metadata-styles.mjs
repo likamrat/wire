@@ -22,6 +22,6 @@ export const metadataStyles = `
 .request-meta .metadata-help-with-label .metadata-tail-end {gap:var(--help-gap)}
 .request-meta .metadata-help-with-label:is(:hover,:active) {color:inherit}
 .request-meta .metadata-help-with-label:is(:hover,:active) .metadata-tail-end>svg {color:var(--ink)}
-.request-meta .service-cue {flex:none;align-self:flex-start;font:inherit;margin-top:calc((1lh - max(20px,1em)) / 2)}
-.request-meta .service-cue .fluent-icon {width:max(20px,1em);height:max(20px,1em);flex-basis:max(20px,1em);margin:0}
+.request-meta .service-cue {flex:none;align-self:flex-start;font:inherit;margin-top:calc((1lh - var(--cue-icon-size)) / 2)}
+.request-meta .service-cue .fluent-icon {width:var(--cue-icon-size);height:var(--cue-icon-size);flex-basis:var(--cue-icon-size);margin:0}
 `;

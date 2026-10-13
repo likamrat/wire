@@ -75,7 +75,7 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.deepEqual(new Set(app.snapshot().analytics.rows.map(row => row.scenarioId)), new Set([app.cases.ownMail.scenarioId, app.cases.ownCalendar.scenarioId]));
     assert.match(page.url(), /authors=user/);
     await navigateMain(page, "activity"); await ready(page);
-    await page.getByRole("link", { name: "Open analysis for GitHub Copilot chat: Invented author conversation", exact: true }).click(); await ready(page);
+    await page.getByRole("link", { name: "Filter to chat: Invented author conversation", exact: true }).first().click(); await ready(page);
     assert.match(page.url(), /authors=user/);
     assert.equal(app.snapshot().analytics.totals.count, 3);
     await openActivitySessions(page);
@@ -134,7 +134,7 @@ test("report author choice narrows selected base membership without losing hidde
 test("author choice composes with dates, result, service and chat scope before Insights and pagination", { timeout: 60000 }, async t => {
     const app = await setup(t), { page } = app;
     await navigateMain(page, "activity"); await ready(page);
-    await page.getByRole("link", { name: "Open analysis for GitHub Copilot chat: Invented author conversation", exact: true }).click(); await ready(page);
+    await page.getByRole("link", { name: "Filter to chat: Invented author conversation", exact: true }).first().click(); await ready(page);
     await setAuthors(page, ["user"]);
     await selectActivityOption(page, "serviceFilter", "Mail"); await ready(page);
     await page.locator('[data-select-id="outcomeFilter"]').click();
@@ -163,7 +163,7 @@ test("author choice composes with dates, result, service and chat scope before I
     assert.deepEqual(await page.locator("#promptAuthorFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)), ["user"]);
     await page.locator("#resetView").click(); await ready(page);
     assert.equal(app.snapshot().analytics.totals.count, 8);
-    assert.equal(page.url().split("#")[1], "home");
+    assert.equal(page.url().split("#")[1], "analyze");
 });
 
 test("pending, failed and late author reads never relabel old counts as a new selection", { timeout: 60000 }, async t => {

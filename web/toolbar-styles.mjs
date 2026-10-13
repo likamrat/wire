@@ -6,8 +6,8 @@ export const toolbarStyles = `
 }
 .chart-heading h2 {margin:0;overflow-wrap:normal}
 .chart-heading #bucketControl {
- display:inline-flex;align-items:baseline;gap:var(--space-sm);min-width:0;
- font-size:var(--type-caption);line-height:20px;white-space:nowrap;
+ display:inline-flex;align-items:baseline;flex-wrap:wrap;gap:0 var(--space-sm);min-width:0;max-width:100%;
+ font-size:var(--type-caption);line-height:var(--leading-control);white-space:normal;
 }
 .chart-heading #bucketFilter {
  width:auto;min-height:44px;padding:12px 6px;border:0;border-radius:6px;
@@ -22,9 +22,6 @@ export const toolbarStyles = `
  .chart-heading {grid-template-columns:auto minmax(0,1fr);column-gap:8px;row-gap:4px}
  .chart-heading h2 {grid-column:1/-1}
  .chart-heading #bucketControl {grid-column:1}
- .chart-heading #bucketControl .bucket-label {
-  position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;
- }
  .chart-heading:has(#bucketControl[hidden]) {grid-template-columns:minmax(0,1fr)}
 }
 `;

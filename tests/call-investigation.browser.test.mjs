@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { privateFixture, selectActivityOption, chooseTheme, revealStoredRefresh } from "./helpers.mjs";
+import { privateFixture, selectActivityOption, chooseTheme, restoreLegacySearch } from "./helpers.mjs";
 import { callInvestigationRecords } from "./call-investigation-fixture.mjs";
 
 const proofs = process.env.WIRE_CALL_PROOFS;
@@ -81,7 +81,7 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     const targetGroup = records[1].scenarioId;
     const interaction = page.locator(".request-row").filter({ has: page.locator(`a.request-link[href*="${targetGroup}"]`) });
     await interaction.locator("input").check();
-    await page.locator("#activitySearch").fill("synthetic documents");
+    await restoreLegacySearch(page, "synthetic documents");
     await selectActivityOption(page, "serviceAssociationFilter", "Files");
     await selectActivityOption(page, "promptAuthorFilter", "user");
     await selectActivityOption(page, "dateFilter", "custom");
@@ -116,17 +116,31 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", target.id);
     await expect(page.locator("#selectedCall")).toBeFocused();
     await expect(page.locator("#selectedCall")).toBeInViewport();
+    const selected = await page.locator("#selectedCall").elementHandle(), selectedRoute = page.url();
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    for (let toggle = 0; toggle < 2; toggle++) {
+        await page.locator("#navigationCollapse").click();
+        await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
+        assert.equal(page.url(), selectedRoute);
+        assert.equal(await selected.evaluate(node => node === document.querySelector("#selectedCall")), true);
+        await expect(page.locator("#selectedCall")).toBeInViewport();
+    }
+    await page.emulateMedia({ reducedMotion: "reduce" });
     assert.equal(requests.filter(req => req.path === "/api/snapshot").length, beforeReads);
     await expect(page.locator(".request-context-timeline [data-context-kind=action]")).toHaveCount(20);
     await expect(page.locator(".request-context-timeline")).toContainText(records[0].userPrompt.text);
     await expect(page.locator(".request-context-timeline")).toContainText(records[1].userPrompt.text.trim());
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /UNRELATED_CALL_CONTEXT/);
     await expect(page.locator("#selectedCall")).toContainText("900 ms");
-    await expect(page.locator("#selectedCall")).toContainText("1 matching Work IQ tool call");
-    await expect(page.locator(".request-context-summaries")).toContainText("original recorded group and assessment scope");
+    await expect(page.locator("#selectedCall>.action-context")).toHaveCount(0);
+    await expect(page.locator("#selectedCall .call-heading [data-result-layer=tool]")).toHaveAttribute("aria-label", "Tool completion: 1 Work IQ tool call");
+    await expect(page.locator(".request-context-summaries .request-recorded")).toHaveCount(2);
+    assert.deepEqual(await page.locator(".request-context-summaries .request-recorded").evaluateAll(nodes =>
+        nodes.map(node => node.dataset.contextGroup)), records.slice(0, 2).map(record => record.scenarioId));
     await capture(page, "exact-call-context-light");
     await page.locator("#selectedCall").getByText("Technical details", { exact: true }).click();
-    await page.locator("#selectedCall").getByText("Exact recorded arguments / local only", { exact: true }).first().click();
+    await expect(page.locator("#selectedCall .technical-detail .ux-code-label").first()).toHaveText("Exact recorded arguments / local only");
+    await expect(page.locator("#selectedCall .technical-detail details")).toHaveCount(0);
     await page.locator("#selectedCall").getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.callClipboard), [JSON.stringify(records[1].toolCalls[9].requestArgs, null, 2)]);
     await page.locator("#contextBack").click(); await ready(page); await frames(page);
@@ -209,7 +223,7 @@ test("selected API result beyond the first details page opens its exact retained
     await page.goto(runtime.url + "#analyze?mode=calls&layer=tool"); await ready(page);
     await expect.poll(() => app.snapshot()?.analytics.layer).toBe("tool");
     const parent = app.snapshot().analytics.rows.find(row => row.id === api.parentCallId);
-    await expect(row(page, parent.id).locator(".action-fields dt").first()).toHaveText("Activity category");
+    await expect(row(page, parent.id).locator(".activity-card-facts dt")).toContainText(["Activity category"]);
     await expect(row(page, parent.id).locator(".action-service")).toHaveText("More than one service");
 });
 
@@ -222,6 +236,7 @@ test("Graph, code references and transport retain distinct units; native links a
         ["http", row => row.outcome === "transport", "Connection failed"],
     ]) {
         await page.goto(runtime.url + "#analyze?mode=calls&layer=" + layer); await ready(page);
+        await expect.poll(() => app.snapshot()?.analytics.layer).toBe(layer);
         const target = app.snapshot().analytics.rows.find(predicate);
         const open = row(page, target.id).locator(".request-link");
         if (layer === "code-reference") {
@@ -263,11 +278,88 @@ test("Graph, code references and transport retain distinct units; native links a
     const open = row(page, target).locator(".request-link");
     await open.focus(); await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator("#selectedCall")).toBeFocused();
+    await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", target);
+    await expect(page.locator('#requestContent [aria-busy="true"]')).toHaveCount(0);
+    await frames(page);
     await expect(page.locator("#selectedCall")).toBeInViewport();
+    const geometry = await page.locator("#selectedCall").evaluate(node => ({
+        actionId: node.dataset.actionId, focused: document.activeElement === node,
+        target: node.getBoundingClientRect().toJSON(),
+        label: node.querySelector(".context-selected-label").getBoundingClientRect().toJSON(),
+        header: document.querySelector(".app-header").getBoundingClientRect().toJSON(),
+        viewport: { width: innerWidth, height: innerHeight }, scrollY,
+    }));
+    assert.ok(geometry.label.top >= geometry.header.bottom && geometry.label.bottom <= geometry.viewport.height,
+        "The selected record label is readable below the sticky header after retained context settles");
+    if (proofs) await writeFile(path.join(proofs, "exact-call-narrow-dark-200-geometry.json"), JSON.stringify(geometry, null, 2));
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await capture(page, "exact-call-narrow-dark-200");
     await page.goBack(); await ready(page);
     await expect(open).toBeFocused();
+
+    for (const interrupt of ["settle", "scroll", "back"]) {
+        await page.reload(); await ready(page);
+        await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+        let release, arrived;
+        const deliveries = [];
+        const pending = new Promise(resolve => { arrived = resolve; });
+        const held = new Promise(resolve => { release = resolve; });
+        await page.route("**/api/assessment/detail", route => {
+            const delivery = (async () => {
+                const response = await route.fetch();
+                arrived();
+                await held;
+                await route.fulfill({ response });
+            })();
+            deliveries.push(delivery);
+            return delivery;
+        });
+        try {
+            const origin = page.url();
+            await open.focus(); await frames(page);
+            const position = await open.boundingBox();
+            await page.keyboard.press("Enter"); await ready(page); await pending;
+            await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", target);
+            await expect(page.locator("#selectedCall")).toBeFocused();
+            await expect(page.locator("#selectedCall")).toBeInViewport();
+            if (interrupt === "settle") {
+                release();
+                await expect(page.locator('#requestContent [aria-busy="true"]')).toHaveCount(0);
+                await frames(page);
+                await expect(page.locator("#selectedCall")).toBeInViewport();
+                const label = await page.locator("#selectedCall .context-selected-label").boundingBox();
+                const header = await page.locator(".app-header").boundingBox();
+                assert.ok(label.y >= header.y + header.height && label.y + label.height <= 900,
+                    "A delayed retained-context read keeps the selected record label readable");
+                await capture(page, "exact-call-delayed-context");
+                await page.goBack(); await ready(page);
+            } else if (interrupt === "scroll") {
+                await page.keyboard.press("Control+Home");
+                await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+                const focused = await page.evaluate(() => document.activeElement.id);
+                release();
+                await expect(page.locator('#requestContent [aria-busy="true"]')).toHaveCount(0);
+                await frames(page);
+                assert.equal(await page.evaluate(() => scrollY), 0, "Late retained-context layout must not undo deliberate scrolling");
+                assert.equal(await page.evaluate(() => document.activeElement.id), focused);
+                await expect(page.locator("#selectedCall")).not.toBeInViewport();
+                await page.goBack(); await ready(page);
+            } else {
+                await page.locator("#contextBack").click(); await ready(page);
+                release();
+                await Promise.all(deliveries);
+                await frames(page);
+                assert.equal(page.url(), origin);
+                await expect(open).toBeFocused();
+                assert.ok(Math.abs((await open.boundingBox()).y - position.y) < 3,
+                    "A late reader completion must not scroll the restored Calls origin");
+            }
+        } finally {
+            release();
+            await Promise.all(deliveries);
+            await page.unroute("**/api/assessment/detail");
+        }
+    }
 });
 
 test("a removed call never navigates to another action or initiates a source read", { timeout: 20000 }, async t => {
@@ -279,7 +371,7 @@ test("a removed call never navigates to another action or initiates a source rea
     records[1].toolCalls = records[1].toolCalls.filter(call => call.toolCallId !== "investigate-09");
     await replaceEvidence(context, () => ({ records, importCoverage: { counts: { includedSessions: 2, includedProjects: 1 }, roster: [] } }));
     await app.acceptFixtureChange();
-    await (await revealStoredRefresh(page)).click(); await ready(page);
+    await page.reload(); await ready(page);
     await expect(page.locator("#unavailableCall")).toBeVisible();
     await expect(page.locator("#selectedCall")).toHaveCount(0);
     await page.goto(runtime.url + href); await ready(page);

@@ -10,7 +10,7 @@ import { assessmentDependencies, assessmentRef, assessmentSource, buildAssessmen
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { collectRecordedAnswerCandidates, commitRecordedAnswers } from "../lib/assessment-capture.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
-import { fixture, privateFixture, revealStoredRefresh } from "./helpers.mjs";
+import { fixture, privateFixture, restoreLegacySearch } from "./helpers.mjs";
 import { retainedContextFixture } from "./request-context-fixture.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -118,11 +118,35 @@ async function setup(t, { responses = true, missing = false, extraReplies = [] }
     return { page, runtime, records, context, payloadReads, requests, acceptFixtureChange: async () => { expected = await loadBoardState(context); } };
 }
 
+test("compact reader keeps read errors and a reachable retry rather than claiming no saved reviews", { timeout: 30000 }, async t => {
+    const { page, runtime, records } = await setup(t, { responses: false, missing: true });
+    let fail = true;
+    await page.route("**/api/assessment/detail", route => fail
+        ? route.fulfill({ status: 503, json: { error: "Invented saved-review read unavailable." } })
+        : route.continue());
+    await page.goto(runtime.url + "#request?request=" + encodeURIComponent(records[0].scenarioId));
+    await ready(page);
+    await page.locator(".request-context-summaries > summary").click();
+    const host = page.locator(`.interaction-insights[data-context-group="${records[0].scenarioId}"]`);
+    const findings = page.locator(`.interaction-findings[data-context-group="${records[0].scenarioId}"]`);
+    await expect(findings).toContainText("Saved findings could not be read");
+    await expect(host).not.toContainText("No saved reviews for these requests.");
+    await expect(page.locator(".request-context-timeline")).toContainText("Work IQ sign-in was required");
+    const retry = host.getByRole("button", { name: "Read insights again", exact: true });
+    await expect(retry).toBeVisible();
+    fail = false;
+    await retry.click();
+    await expect(findings).toContainText("Your feedback");
+    await expect(host.getByRole("button", { name: "Details and feedback", exact: true })).toBeVisible();
+    await expect(findings.locator("[data-finding-kind=execution]")).toHaveCount(0);
+    await expect(page.locator(".request-context-timeline")).toContainText("No response text retained.");
+});
+
 test("normal isolated source opens retained correction, retry and reply immediately; Analyze Back is exact", { timeout: 40000 }, async t => {
     const app = await setup(t), { page, runtime, records, payloadReads } = app;
     await page.goto(runtime.url + "#analyze"); await ready(page);
     assert.equal(payloadReads.length, 0, "Analyze never preloads retained response payloads");
-    await page.locator("#activitySearch").fill("synthetic");
+    await restoreLegacySearch(page, "synthetic");
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
     const row = page.locator(`.request-row[data-view-key="request:${records[0].scenarioId}"]`);
     await row.locator("input").check();
@@ -131,7 +155,19 @@ test("normal isolated source opens retained correction, retry and reply immediat
     const origin = page.url(), position = await open.boundingBox();
     await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
+    for (const id of ["filters", "filterChips", "serviceFocus", "viewingContext", "scopeResetActions", "pageIntro"]) {
+        await expect(page.locator("#" + id)).toBeHidden();
+    }
+    await expect(page.locator(".request-context-heading")).toHaveCount(0);
+    await expect(page.locator(".request-context-summaries > summary")).toHaveText("Timing, reviews and record details");
+    await expect(page.locator(".request-context-summaries .request-recorded").first()).toBeHidden();
     const timeline = page.locator(".request-context-timeline");
+    await expect(timeline.locator(".interaction-findings,.interaction-insights")).toHaveCount(0);
+    assert.ok(await timeline.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-context-summaries")) & Node.DOCUMENT_POSITION_FOLLOWING)));
+    assert.deepEqual(await timeline.locator(".full-text-complete").evaluateAll(nodes => nodes
+        .filter(node => node.querySelector(".full-text-body"))
+        .map(node => Boolean(node.querySelector(".full-text-body").compareDocumentPosition(node.querySelector(".full-text-reader-actions")) & Node.DOCUMENT_POSITION_FOLLOWING))),
+    [true, true, true], "Prompt, correction and reply text precede their own secondary controls in DOM order");
     assert.doesNotMatch(await timeline.innerText(), /UNRELATED_RECORD|Separate synthetic topic|More unrelated synthetic/);
     assert.deepEqual(await timeline.locator(".full-text-content").allTextContents(),
         [records[0].userPrompt.text, records[1].userPrompt.text, bodyText]);
@@ -148,8 +184,26 @@ test("normal isolated source opens retained correction, retry and reply immediat
         const prompt = timeline.locator(`[data-context-group="${record.scenarioId}"][data-context-kind=prompt]`);
         await expect(prompt.locator("[data-prompt-actor]").first()).toHaveAttribute("data-prompt-actor", promptAuthorship.read(record.userPrompt).actor);
     }
-    await expect(page.locator(".request-context-summaries")).toContainText("original recorded group and assessment scope");
+    await expect(page.locator(".request-context-summaries .request-recorded").first()).toHaveAttribute("data-context-group", records[0].scenarioId);
+    await expect(page.locator(".request-context-summaries .request-link-details")).toContainText("not inferred task boundaries");
     await expect(page.locator(`.interaction-insights[data-context-group="${records[0].scenarioId}"]`)).toContainText("Your feedback");
+    await page.locator(".request-context-summaries > summary").click();
+    await expect(page.locator(".request-context-summaries .request-recorded")).toHaveCount(2);
+    await expect(page.locator(".interaction-findings [data-finding-kind=execution]")).toHaveCount(0);
+    await expect(page.locator(".interaction-findings").first()).toContainText("Your feedback");
+    await expect(page.locator(".interaction-findings").first()).toContainText("Work IQ sign-in was required");
+    await expect(page.locator(".request-context-summaries .full-request-results").first()).toContainText("1 Tool failed");
+    await expect(page.locator(".request-context-summaries .full-request-results").nth(1)).toContainText("1 Worked");
+    await expect(page.locator(".request-context-summaries .assessment-timing")).toHaveCount(2);
+    await expect(page.locator(".request-context-summaries .timing-summary")).toHaveCount(0);
+    await expect(page.locator(".request-context-summaries [data-empty-reviews]")).toHaveCount(0);
+    const feedback = page.locator(".request-context-summaries").getByRole("button", { name: "Details and feedback", exact: true }).first();
+    await expect(feedback).toBeVisible();
+    await feedback.click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(feedback).toBeFocused();
+    await page.locator(".request-context-summaries > summary").click();
     assert.equal(payloadReads.length, 1, "Only the independently authorized linked answer was read");
     await expect(timeline.locator(".reader-state-partial")).toHaveText("Partial text");
     const correction = timeline.locator(`[data-context-group="${records[1].scenarioId}"][data-context-kind=prompt]`);
@@ -218,6 +272,7 @@ test("leaving before the shared reader is ready never starts an eager hidden pay
     await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
     await intercepted;
     await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
+    await page.getByText("Request timing and reviews", { exact: true }).click();
     release();
     await expect(page.locator("#homeInsights .assessment-summary")).toBeVisible();
     assert.equal(payloadReads.length, 0);
@@ -258,7 +313,7 @@ test("off capture, missing retained text and unmatched same-chat records remain 
     await expect(page.locator(".interaction-response:visible")).toHaveCount(2);
     await expect(page.locator(".interaction-response:visible").first()).toContainText("No response text retained.");
     await expect(page.locator(".request-context-timeline")).toContainText("Prompt not available");
-    await expect(page.locator(".request-context-timeline")).toContainText("inferred follow-up, not a confirmed continuation");
+    await expect(page.locator(".request-context-note")).toHaveText("Saved messages, not the whole chat. Linked messages may be separate work.");
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /EXCLUDED_UNAVAILABLE_TEXT|UNRELATED_RECORD/);
     assert.equal(payloadReads.length, 0);
 });
@@ -266,16 +321,9 @@ test("off capture, missing retained text and unmatched same-chat records remain 
 test("late eager answers cannot survive navigation or revoked access; no mutation is replayed", { timeout: 40000 }, async t => {
     const app = await setup(t), { page, runtime, records, context } = app;
     let sourceChecks = 0;
-    // Unified Refresh needs a receipt before applying a snapshot; never read the invented source paths.
     await page.route("**/api/collection/now", async route => {
         sourceChecks++;
-        const status = await runtime.collector.status();
-        await route.fulfill({ json: { ...status, check: {
-            schemaVersion: 2, id: "invented-context-refresh", revision: status.revision, beforeRevision: status.revision,
-            configVersion: status.configVersion, completedAt: "2026-10-01T12:00:00.000Z", outcome: "complete",
-            changes: { added: 0, updated: 0, items: [] }, coverage: {},
-            sourcesChecked: 0, eligibleSources: 0, pendingSources: 0, partialSources: 0, skippedSources: 0,
-        } } });
+        await route.abort();
     });
     let release, reached;
     const intercepted = new Promise(resolve => { reached = resolve; });
@@ -315,21 +363,44 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
         return snapshot.revision === revoked.revision
             && snapshot.assessment?.basis.consentRevision === revoked.personalEvaluation.consent.revision;
     });
-    await (await revealStoredRefresh(page)).click();
+    const readerUrl = page.url(), readerDocument = await page.evaluateHandle(() => document);
+    let releaseSnapshot, sawSnapshot;
+    const snapshotGate = new Promise(resolve => { releaseSnapshot = resolve; });
+    const snapshotStarted = new Promise(resolve => { sawSnapshot = resolve; });
+    t.after(() => releaseSnapshot());
+    await page.route("**/api/snapshot", async route => {
+        sawSnapshot();
+        await snapshotGate;
+        await route.continue();
+    }, { times: 1 });
+    await page.context().setOffline(true);
+    await page.context().setOffline(false);
+    await snapshotStarted;
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
+    await expect(page.locator("#requestView")).toBeVisible();
+    assert.equal(page.url(), readerUrl);
+    assert.equal(await readerDocument.evaluate(node => node === document), true, "Reconnect stays in the same reader document");
+    releaseSnapshot();
     await (await revokedSnapshot).finished();
-    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "complete");
-    await expect(page.locator("#freshActivity")).toHaveAttribute("data-revision", String(revoked.revision));
     await ready(page);
+    await expect(page.locator("#promptAuthorSummary")).toHaveAttribute("data-revision", String(revoked.revision));
     const revokedResponse = page.locator(`[data-context-kind="prompt"][data-context-group="${records[1].scenarioId}"] .interaction-response`);
     await expect(revokedResponse).toContainText("No response text retained.");
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
     const staleResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/evidence"));
-    releaseStale(); await (await staleResponse).finished(); await frames(page);
+    releaseStale();
+    const deliveredStale = await staleResponse;
+    await deliveredStale.finished();
+    assert.equal(deliveredStale.status(), 200);
+    assert.equal((await deliveredStale.json()).basis.consentRevision, 1, "The real pre-revocation response arrives after revision 2 was applied");
+    await frames(page);
+    assert.equal(page.url(), readerUrl);
+    assert.equal(await readerDocument.evaluate(node => node === document), true, "Late evidence is rejected without navigating away");
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
     await page.unroute("**/api/assessment/evidence");
     const reads = app.payloadReads.length;
     await page.reload(); await ready(page);
     await expect(revokedResponse).toContainText("No response text retained.");
     assert.equal(app.payloadReads.length, reads, "Revoked payloads aren't fetched on reopening");
-    assert.equal(sourceChecks, 1, "The fixture source check is never replayed by the late answer or reload");
+    assert.equal(sourceChecks, 0, "Reconnect, the late answer and reload never dispatch or replay a source check");
 });

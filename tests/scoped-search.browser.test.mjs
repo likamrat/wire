@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
-import { fixture, exportCatalogFor, navigateMain, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, exportCatalogFor, navigateMain, chooseTheme, selectActivityOption, openSourceEditor } from "./helpers.mjs";
 import { chooseReportScope } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -103,7 +103,7 @@ test("Settings category links, deep links, native history and reload expose exac
 
 test("Settings search navigates controls without acting; drafts, query, caret and disabled reasons survive polling", { timeout: 45000 }, async t => {
     const { page, requests } = await setup(t);
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceSessions").fill("C:\\SYNTHETIC_DIRTY\\session-state");
     await category(page, "collection");
     await selectActivityOption(page, "collectionCadence", "15");

@@ -19,7 +19,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }
         return end < compact.length ? compact.slice(0, end).trimEnd() + "..." : compact;
     }
-    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind, initialOpen }) {
+    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind, initialOpen, contentFirst = false }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
@@ -30,8 +30,16 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         const text = retained(source), preview = text === null && subject === "response" ? "Original not available" : excerpt(source);
         const authorNote = label => metadata.item(label, { helpLabel: "prompt author", help: authorship.reason(source)
             + " Author unverified describes message provenance, not an account sign-in failure." });
+        const authorGap = {
+            "missing-source": "Who sent this was not recorded",
+            "legacy-missing": "This older record has no sender details",
+            "conflicting-source": "Recorded sender details disagree",
+            "unsupported-source": "The recorded sender format is not supported",
+            "system-source": "Recorded as system-supplied context",
+            "invalid-source": "Recorded sender details could not be verified",
+        }[authorship?.read(source).basis] || "Recorded sender details could not be verified";
         const root = document.createElement("div");
-        root.className = "full-text" + (complete ? " full-text-complete" : "");
+        root.className = "full-text" + (complete ? " full-text-complete" : "") + (complete && contentFirst ? " full-text-content-first" : "");
         root.dataset.viewKey = "text:" + key;
         const header = document.createElement("div");
         header.className = "full-text-header";
@@ -46,7 +54,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             root.append(header);
         }
         if (complete && subject === "request" && (authorship?.read(source).actor ?? "unknown") === "unknown") {
-            const author = authorship ? authorNote("Author unverified") : document.createElement("span");
+            const author = authorship ? authorNote(authorGap) : document.createElement("span");
             author.classList.add("reader-state");
             if (!authorship) author.textContent = "Author unverified";
             header.append(author);
@@ -61,7 +69,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             const provenance = document.createElement("div");
             provenance.className = "full-text-provenance";
             const unverified = subject === "request" && authorship?.read(source).actor === "unknown";
-            const hint = unverified ? authorNote(heading.textContent + " / author unverified") : document.createElement("span");
+            const hint = unverified ? authorNote(heading.textContent + " / " + authorGap) : document.createElement("span");
             hint.classList.add("full-text-preview-label");
             if (!unverified) hint.textContent = heading.textContent;
             hint.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
@@ -86,7 +94,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                 root.append(explanation);
             } else root.append(note);
         }
-        if (complete) header.append(readerActions);
+        if (complete) (contentFirst ? root : header).append(readerActions);
         let details;
         if (complete) {
             details = document.createElement("details");
@@ -134,8 +142,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             reading.hidden = open;
             if (previewState) previewState.hidden = open;
             root.querySelector(".full-text-body")?.remove();
-            header.querySelector(".ux-copy")?.remove();
-            header.querySelector(".ux-copy-status")?.remove();
+            readerActions.querySelector(".ux-copy")?.remove();
+            readerActions.querySelector(".ux-copy-status")?.remove();
             readerActions.querySelector(".reader-copy-scope")?.remove();
             if (open) {
                 const body = document.createElement("div");
@@ -171,7 +179,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                 } else {
                     body.append(ux.codeBlock(text, { label: subject === "response" ? "Exact retained text / local only" : promptLabel + " / local only", copyLabel, prose: true, ...(notice ? { tooltip: notice } : {}) }));
                 }
-                root.insertBefore(body, details ?? null);
+                root.insertBefore(body, complete && contentFirst ? readerActions : details ?? null);
             }
         }
         control.addEventListener("click", event => {

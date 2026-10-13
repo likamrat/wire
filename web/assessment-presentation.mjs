@@ -54,14 +54,68 @@ export function createTimingPresentation(summarize = createActivityProjection(nu
     return { duration, fromSummary, fromMetric };
 }
 
+// Human meaning requires the saved check, version and origin, not its dimension alone.
+export function createAssessmentWording() {
+    const terms = {
+        answer: { label: "Answer correctness", compactLabel: "Answer", pass: "Correct", fail: "Not correct",
+            explanation: "Did the answer meet the request, using the saved evidence?" },
+        support: { label: "Answer support", compactLabel: "Support", pass: "Supported", fail: "Not supported",
+            explanation: "Does the saved evidence support the answer? A citation alone is not proof." },
+        match: { label: "Tool use vs. request", compactLabel: "Tool use", pass: "Matched request", fail: "Did not match request",
+            explanation: "Did the recorded tool use fit what was asked? This AI review does not establish permission." },
+        permission: { label: "Permission for tool use", compactLabel: "Permission", pass: "Given", fail: "Not given",
+            explanation: "Did a person give permission for this tool use? Your feedback does not grant or revoke permission." },
+        unknown: { label: "Saved review (type not recorded)", compactLabel: "Saved review", pass: "Passed", fail: "Failed",
+            explanation: "The saved definition does not identify whether this reviewed request matching or permission." },
+    };
+    const checks = {
+        "semantic-answer-correctness": ["answer", "accuracy", ["automatic-local", "user-personal"]],
+        "answer-support-validity": ["support", "answer-trust", ["automatic-local", "user-personal"]],
+        "action-authorization-compliance": ["permission", "action-trust", ["automatic-local", "user-personal"]],
+        "request-requirements-corroborated": ["answer", "accuracy", ["model-assessed"]],
+        "recorded-answer-support": ["support", "answer-trust", ["model-assessed"]],
+        "action-intent-alignment": ["match", "action-trust", ["model-assessed"]],
+    };
+    const origins = { "model-assessment": "model-assessed", "user-assessment": "user-personal", "automatic-assessment": "automatic-local" };
+    function resolve(fact = {}) {
+        const identity = fact.provenance ?? fact;
+        const dimension = fact.dimension ?? fact.metric;
+        const checkId = identity.checkId ?? fact.qualifiers?.checkId;
+        const checkVersion = identity.checkVersion ?? fact.qualifiers?.checkVersion;
+        const origin = identity.origin ?? origins[fact.basis];
+        const check = Object.hasOwn(checks, checkId ?? "") ? checks[checkId] : null;
+        const kind = checkVersion === 1 && check?.[1] === dimension && check[2].includes(origin) ? check[0] : "unknown";
+        const local = origin === "automatic-local";
+        return {
+            ...terms[kind], kind, known: kind !== "unknown", origin,
+            originLabel: origin === "user-personal" ? "Your feedback" : origin === "model-assessed" ? "Saved AI review"
+                : local ? "Local check" : fact.basis === "mixed-assessment" ? "Mixed saved reviews" : "Saved review",
+            ...(kind === "unknown" && dimension !== "action-trust" ? {
+                explanation: "The saved definition does not identify what this review checked.",
+            } : {}),
+            ...(kind === "permission" && local ? { pass: "Passed", fail: "Failed",
+                explanation: "Tool outcomes do not establish a person's permission." } : {}),
+        };
+    }
+    function unavailable(fact = {}) {
+        if (fact.reason === "not-applicable") return "Not applicable";
+        if (fact.status === "evaluator-error" || fact.reason === "evaluator-failure") return "Review could not finish";
+        if (["missing-evidence", "partial-evidence"].includes(fact.reason)) return "Not enough saved evidence";
+        const term = resolve(fact);
+        if (term.known && term.origin === "automatic-local" && fact.reason === "unsupported-check") return "Not checked automatically";
+        if (term.origin === "user-personal" && fact.reason === "user-verdict") return "Not sure";
+        return "No saved review";
+    }
+    return { resolve, unavailable };
+}
+
 // The backend supplies validated facts and retained samples; this factory only presents them.
-export function createAssessmentPresentation({ validateMetric, metricSlotKey, validateReviewStatus, validateAssessmentAttempts, timing = createTimingPresentation() }) {
+export function createAssessmentPresentation({ validateMetric, metricSlotKey, validateReviewStatus, validateAssessmentAttempts, timing = createTimingPresentation(), wording = createAssessmentWording() }) {
     const bandVersion = "assessed-pass-share-v1";
-    const dimensionLabels = { accuracy: "Accuracy", speed: "Speed", "answer-trust": "Answer trust", "action-trust": "Action trust" };
+    const dimensionLabels = { accuracy: "Answer correctness", speed: "Speed", "answer-trust": "Answer support", "action-trust": "Saved review (type not recorded)" };
     const checkLabels = {
         "semantic-answer-correctness": "Answer correctness",
         "answer-support-validity": "Answer support",
-        "action-authorization-compliance": "Action authorization",
         "recorded-tool-success": "Recorded tool completion",
         "returned-status-2xx": "Tool-returned HTTP status",
         "graph-output-status-2xx": "Output-visible HTTP status",
@@ -74,11 +128,6 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         "http-error-duration": "Median time to transport error",
         "interaction-latency": "Whole-interaction latency",
         "recorded-response-duration": "Time to recorded final response",
-    };
-    const personalLabels = {
-        "semantic-answer-correctness": { pass: "Correct", fail: "Not correct" },
-        "answer-support-validity": { pass: "Supported", fail: "Not supported" },
-        "action-authorization-compliance": { pass: "Authorized", fail: "Not authorized" },
     };
     const boundaryLabels = {
         "tool-start-to-completion": "Call start to recorded completion",
@@ -127,6 +176,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         return value < 0.5 ? "red" : value < 0.75 ? "orange" : value < 0.9 ? "gold" : "teal";
     }
     function unavailable(metric) {
+        if (["accuracy", "answer-trust", "action-trust"].includes(metric.dimension)) return wording.unavailable(metric);
         if (metric.reason === "not-applicable") return "Not applicable";
         if (metric.status === "evaluator-error") return "Check unavailable";
         if (metric.status === "unpriced") return "Unpriced";
@@ -136,12 +186,8 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         const { covered, eligible } = metric.coverage;
         const quality = ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension);
         if (quality) {
-            const label = metric.dimension === "accuracy" ? "Answer correctness"
-                : metric.dimension === "answer-trust" ? "Answer support"
-                    : metric.origin === "user-personal" ? "Action authorization" : "Actions match request";
-            const missing = metric.reason === "not-applicable" ? "Not applicable"
-                : metric.status === "evaluator-error" ? "Check could not run"
-                    : metric.origin === "model-assessed" && ["missing-evidence", "partial-evidence"].includes(metric.reason) ? "Not enough evidence" : "No result";
+            const label = wording.resolve(metric).label;
+            const missing = wording.unavailable(metric);
             return {
                 label, coverage: `Results for ${number(covered)} of ${number(eligible)} ${eligible === 1 ? "request" : "requests"}`,
                 value: personalVerdict ?? (metric.value === null ? missing : `${number(metric.numerator)} passed \u00b7 ${number(metric.denominator - metric.numerator)} failed`),
@@ -191,7 +237,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 count: metric.counts.unassessed,
             }] : []);
             const labels = {
-                "missing-evidence": "Insufficient recorded evidence", "partial-evidence": "Insufficient recorded evidence",
+                "missing-evidence": "Not enough saved evidence", "partial-evidence": "Not enough saved evidence",
                 "not-applicable": "Check not applicable", "unsupported-check": "Local rules do not assess quality",
                 "no-assessed-units": "No verdict recorded for this assessment",
                 "user-verdict": "Personal feedback without a pass or fail verdict",
@@ -210,9 +256,10 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 limitation: (count < eligible ? "Results describe only the assessed requests, not the overall quality of this selection."
                     : "These are recorded assessments, not independent proof of correctness.")
                     + (metric.origin === "model-assessed" ? " AI judgments can be wrong." : "")
-                    + (metric.dimension === "action-trust" ? metric.origin === "user-personal"
+                    + (wording.resolve(metric).kind === "permission" ? metric.origin === "user-personal"
                         ? " Personal authorization feedback is not an independent permission audit."
-                        : " Matching the request does not prove a person gave permission." : ""),
+                        : " Tool outcomes do not establish permission." : wording.resolve(metric).kind === "match"
+                            ? " Matching the request does not prove a person gave permission." : ""),
             };
         }
         if (metric.dimension === "speed") {
@@ -291,12 +338,14 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
     }
     function present(metric, singleInteraction = false) {
         const ratio = metric.unit === "ratio", cost = metric.unit === "USD";
-        const label = ratio ? dimensionLabels[metric.dimension] ?? checkLabels[metric.checkId] : cost
+        const quality = qualityDimensions.includes(metric.dimension);
+        const term = quality ? wording.resolve(metric) : null;
+        const label = ratio ? term?.label ?? checkLabels[metric.checkId] : cost
             ? metric.status === "estimated" ? "Estimated cost" : metric.status === "measured" ? "Recorded cost" : "Cost"
             : speedLabels[metric.definitionId];
         const origin = metric.origin === "user-personal" ? "Your feedback" : metric.origin === "model-assessed" ? "Model assessment" : "Automatic local observation";
         const personalVerdict = singleInteraction && metric.origin === "user-personal" && metric.denominator === 1 && metric.coverage.eligible === 1
-            ? personalLabels[metric.checkId]?.[metric.numerator === 1 ? "pass" : "fail"] ?? null : null;
+            && term?.known ? term[metric.numerator === 1 ? "pass" : "fail"] : null;
         const value = personalVerdict ?? (metric.value === null ? unavailable(metric) : ratio
             ? metric.value > 0 && metric.value * 100 < 0.01 ? "<0.01%" : `${percentages.format(metric.value * 100)}%`
             : cost ? metric.value > 0 && metric.value < 0.000001 ? "<$0.000001" : dollars.format(metric.value)
@@ -309,17 +358,17 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 : `${number(metric.numerator)} / ${number(metric.denominator)} passed; ${number(metric.coverage.covered)} / ${number(metric.coverage.eligible)} assessed`
             : `${number(metric.coverage.covered)} / ${number(metric.coverage.eligible)} ${cost ? "priced" : "timed"}`;
         const unsupported = {
-            accuracy: "No AI answer review is available here. See Automatic scores; your feedback is optional.",
-            "answer-trust": "No AI answer-support review is available here. See Automatic scores.",
-            "action-trust": "No AI action review is available here. AI checks whether actions match the request, not whether a person gave permission.",
+            accuracy: "Tool outcomes do not tell us whether the answer was correct.",
+            "answer-trust": "Tool outcomes do not tell us whether the answer was supported.",
             speed: "No verified request-to-final-answer timing.",
         };
         const qualification = cost && metric.value !== null
             ? `${metric.status === "estimated" ? "Estimated" : "Recorded"} ${metric.coverage.covered < metric.coverage.eligible ? "subtotal" : "total"} (USD). ${boundaryLabels[metric.boundary]}.`
-            : metric.value === null ? metric.reason === "unsupported-check" ? unsupported[metric.dimension] ?? reasonLabels[metric.reason]
-                : reasonLabels[metric.reason] : metric.origin === "model-assessed"
-                    ? metric.dimension === "action-trust" ? "AI checked whether the actions match the recorded request. This does not prove a person gave permission."
-                        : "AI checked the recorded evidence. Its result can be wrong."
+            : metric.value === null ? metric.reason === "unsupported-check"
+                ? term?.kind === "permission" || term && !term.known ? term.explanation : unsupported[metric.dimension] ?? reasonLabels[metric.reason]
+                : reasonLabels[metric.reason]
+                : term && (!term.known || term.kind === "permission" || term.kind === "match") ? term.explanation : metric.origin === "model-assessed"
+                    ? "AI checked the recorded evidence. Its result can be wrong."
                     : boundaryLabels[metric.boundary];
         const details = [
             `${label}. ${origin}.`,
@@ -341,6 +390,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         }[metric.definitionId];
         return {
             metricRef: metric.metricRef, dimension: metric.dimension, label, value, coverage, qualification, origin, personalVerdict,
+            ...(term ? { wording: term } : {}),
             evidence: evidenceRow(metric),
             reading: reading(metric, personalVerdict),
             ...(timingSummary ? { summary: {
@@ -357,11 +407,11 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
     }
     function missing(dimension) {
         return {
-            dimension, label: dimensionLabels[dimension], value: ["speed", "cost"].includes(dimension) ? "Not measured" : "Unassessed",
+            dimension, label: dimensionLabels[dimension], value: ["speed", "cost"].includes(dimension) ? "Not measured" : "No saved review",
             coverage: "Coverage unavailable", qualification: "No metric was supplied for this scope.", origin: "",
             reading: {
-                label: dimension === "accuracy" ? "Answer correctness" : dimension === "answer-trust" ? "Answer support" : dimension === "action-trust" ? "Actions match request" : dimensionLabels[dimension],
-                coverage: "Coverage unavailable", value: dimension === "speed" ? "Not measured" : "No result",
+                label: dimensionLabels[dimension],
+                coverage: "Coverage unavailable", value: dimension === "speed" ? "Not measured" : "No saved review",
             },
             band: "neutral", bandVersion, status: "unavailable", details: [`${dimensionLabels[dimension]}: no metric or coverage was supplied for this scope.`], basis: null,
         };
@@ -395,10 +445,10 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 ? "AI assessment found insufficient recorded evidence; no quality verdict was produced."
                 : "AI assessment produced no supported quality verdict.";
         else quality = ({
-            none: "No AI quality assessment is recorded for this attempt.",
-            pending: "An AI quality assessment is pending for this attempt.",
-            failed: "AI quality assessment could not complete. This is an evaluator failure, not a failed answer or action verdict.",
-            uncertain: "The AI assessment's outcome is uncertain; no quality verdict is available.",
+            none: "No saved AI review for this request.",
+            pending: "An AI review is pending for this request.",
+            failed: "Review could not finish. This is a review error, not a failed answer or tool-use verdict.",
+            uncertain: "The AI review outcome is uncertain; no verdict is available.",
             unavailable: "No AI verdict was produced: the assessment's recorded evidence or approval was unavailable.",
             complete: "A prior AI quality result is no longer applicable to this attempt.",
             revoked: "AI assessment approval was withdrawn for this attempt.",
@@ -464,6 +514,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
             operational.push({
                 kind: "execution", tone: "neutral",
                 boundary: completeStatus ? "reported-outcomes" : "completion-evidence",
+                counts: { calls: execution.eligible, succeeded, failed, other },
                 ...(failed ? { prefix, parts, suffix: "." } : {}),
                 text: prefix + (failed ? parts.map(part => part.text).join("; ") + "."
                     : succeeded === execution.eligible && succeeded ? `${units(succeeded, "recorded calls")} succeeded.`
@@ -495,41 +546,35 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                     + `: ${number(reported.succeeded)} succeeded, ${number(reported.failed)} failed, ${number(reported.other)} other. Remaining reported outcomes and reasons are unavailable.`,
         });
         const causeLabels = {
-            "workiq-sign-in-required": "Work IQ sign-in was required for the recorded call",
-            "request-timeout": "The tool reported an MCP request timeout",
-            "access-denial": "The recorded error mentions access denial",
-            "message-screened": "Error text was screened out; the cause is unavailable",
-            "message-too-large": "Error text exceeded the inspection limit; the cause is unavailable",
-            "message-not-supplied": "The source supplied no typed error message",
-            "message-excluded": "Error text was excluded; no specific cause signal was retained",
-            "unsupported-error-format": "The recorded error format is not supported",
-            "source-error-not-supplied": "The source supplied no supported structured error details",
-            unqualified: "The cause was not retained; source omission and earlier collection cannot be distinguished",
+            "workiq-sign-in-required": ["Work IQ sign-in required", "Work IQ sign-in was required for the recorded call"],
+            "request-timeout": ["Tool request timed out", "The tool reported an MCP request timeout"],
+            "access-denial": ["Recorded access denial", "The recorded error mentions access denial"],
+            "message-screened": ["Error text screened out", "Error text was screened out; the cause is unavailable"],
+            "message-too-large": ["Error text exceeded inspection limit", "Error text exceeded the inspection limit; the cause is unavailable"],
+            "message-not-supplied": ["Error message not supplied", "The source supplied no typed error message"],
+            "message-excluded": ["Error text excluded", "Error text was excluded; no specific cause signal was retained"],
+            "unsupported-error-format": ["Unsupported error format", "The recorded error format is not supported"],
+            "source-error-not-supplied": ["Error details not supplied", "The source supplied no supported structured error details"],
+            unqualified: ["Cause not retained", "The cause was not retained; source omission and earlier collection cannot be distinguished"],
         };
         for (const [cause, count] of causes) operational.push({
             kind: "cause", cause, count, tone: "neutral",
-            text: `${causeLabels[cause]}${singleInteraction && count === 1 ? "" : ` (${units(count, "calls")})`}.`,
+            label: causeLabels[cause][0],
+            text: `${causeLabels[cause][1]}${singleInteraction && count === 1 ? "" : ` (${units(count, "calls")})`}.`,
         });
-        const words = {
-            accuracy: ["answer correct", "answer not correct"],
-            "answer-trust": ["answer supported", "answer not supported"],
-            "action-trust": ["actions matching the request", "actions not matching the request"],
-        };
         for (const dimension of qualityDimensions) {
             const group = evidence.quality[dimension];
             for (const row of group.rows) {
-                const personal = row.provenance.origin === "user-personal";
-                const origin = personal ? "Your feedback" : "AI assessment";
+                const term = wording.resolve(row), origin = term.originLabel;
                 const single = singleInteraction && row.eligible === 1;
-                const [positive, negative] = personal && dimension === "action-trust" ? ["actions authorized", "actions not authorized"] : words[dimension];
                 const parts = [];
-                if (row.counts.pass) parts.push({ tone: "positive", text: `${positive}${single ? "" : ` in ${units(row.counts.pass, "requests")}`}` });
-                if (row.counts.fail) parts.push({ tone: "negative", text: `${negative}${single ? "" : ` in ${units(row.counts.fail, "requests")}`}` });
+                if (row.counts.pass) parts.push({ tone: "positive", text: `${term.pass}${single ? "" : ` (${units(row.counts.pass, "requests")})`}` });
+                if (row.counts.fail) parts.push({ tone: "negative", text: `${term.fail}${single ? "" : ` (${units(row.counts.fail, "requests")})`}` });
                 const reasons = row.unassessedReasons.filter(item => item.reason !== "no-assessed-units");
-                if (row.counts.evaluatorError) reasons.push({ count: row.counts.evaluatorError, label: "Evaluator error, not a failed answer or action verdict" });
+                if (row.counts.evaluatorError) reasons.push({ count: row.counts.evaluatorError, label: "Review could not finish, not a failed verdict" });
                 const missing = reasons.map(item => `${item.label}${single ? "" : ` (${units(item.count, "requests")})`}`).join("; ");
                 if (parts.length || missing) {
-                    const prefix = parts.length ? `${origin}: ` : `${origin} / ${row.label}: `;
+                    const prefix = `${origin} / ${term.known ? term.compactLabel : term.label}: `;
                     const suffix = parts.length && missing ? `. ${missing}.` : ".";
                     answers.push({
                         kind: parts.length ? "verdict" : "unassessed", dimension, metricRef: row.metricRef, provenance: row.provenance, tone: "neutral",
@@ -542,14 +587,14 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         const hasVerdicts = answers.some(item => item.kind === "verdict");
         if (!answers.length) answers.push({
             kind: "missing", tone: "neutral",
-            text: eligible.size ? "No saved answer or action assessment is available. Tool completion alone does not establish answer quality."
-                : "No answer or action assessment coverage was supplied for this scope.",
+            text: eligible.size ? "No saved review. Tool completion alone does not establish answer quality."
+                : "Review coverage was not supplied for this scope.",
         });
         const attempts = evidence.assessmentAttempts;
         const attemptRows = reviewStatus ? [{ state: reviewStatus.assessment.latestAttempt, count: 1 }] : attempts.rows;
         const attemptLabels = {
-            failed: "The evaluator could not complete; this is not a failed answer or action verdict",
-            uncertain: "The evaluator outcome is uncertain",
+            failed: "Review could not finish; this is not a failed verdict",
+            uncertain: "The review outcome is uncertain",
             unavailable: "Assessment evidence or approval was unavailable",
             pending: "An assessment attempt is pending",
             revoked: "Assessment approval was withdrawn",
@@ -568,7 +613,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 : "Full selected interaction groups, not only matching calls.",
             rationale: hasVerdicts ? "Specific reasons behind these saved verdicts were not retained." : "",
             qualification: (answers.some(item => item.provenance?.origin === "model-assessed") ? "AI judgments can be wrong. " : "")
-                + (hasVerdicts && answers.some(item => item.dimension === "action-trust")
+                + (hasVerdicts && answers.some(item => wording.resolve(item).kind === "match")
                     ? "Matching the request is not proof of human permission." : ""),
         };
     }
@@ -606,9 +651,11 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         if (membershipStatus !== "complete-retained") takeaway = "Only some recorded actions can be linked to this request. These results cover that saved evidence.";
         else if (personalAccuracy?.counts.fail) takeaway = "Your feedback identifies an incorrect result; recorded tool outcomes remain separate.";
         else if (failedTools?.counts.fail) takeaway = `${number(failedTools.counts.fail)} of ${number(failedTools.denominator)} calls with a recorded success or failure failed. That does not tell us whether the answer was correct.`;
-        else if (!accuracyMeasured && !trustMeasured) takeaway = timed
-            ? "Timing is available. There are no results yet for answer correctness, answer support or actions matching the request."
-            : "There are no results for answer correctness, answer support or actions matching the request. A missing result is not a failure.";
+        else if (!accuracyMeasured && !trustMeasured) takeaway = metrics.some(metric =>
+            qualityDimensions.includes(metric.dimension) && ["model-assessed", "user-personal"].includes(metric.origin))
+            ? "Saved reviews have no pass or fail verdicts. Each check keeps its recorded reason."
+            : timed ? "Timing is available. No saved review of the answer or tool use."
+                : "No saved review of the answer or tool use. A missing result is not a failure.";
         else if (personalAccuracy) takeaway = "Your accuracy feedback is shown separately from automatic local observations.";
         else if (metrics.some(metric => metric.origin === "model-assessed")) takeaway = "AI checks use the recorded evidence. Read each result with the number of requests it covers; there is no overall grade.";
         else takeaway = "Recorded facts and your feedback are shown separately. There is no overall grade.";
@@ -623,15 +670,17 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "", reviewStatus: review,
             evidence, findings: findingsFor(evidence, metrics, { singleInteraction, reviewStatus, reviewStatuses }) };
     }
-    return { format, summarize, band, bandVersion };
+    return { format, summarize, band, bandVersion, wording };
 }
 
 // DOM-only; this renderer cannot fetch, assess, save feedback, or enable capture.
-export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming, findingsHost, bindDetails, disclosureKey } = {}) {
+export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming, findingsHost, bindDetails, disclosureKey, wording = createAssessmentWording() } = {}) {
     if (typeof onDetails !== "function") throw new TypeError("A details path is required for definitions and unavailable reasons.");
     if (model.evidence?.version !== 1) throw new TypeError("A current quality evidence projection is required.");
     if (model.findings?.version !== 1) throw new TypeError("A current saved-findings projection is required.");
     const doc = root.ownerDocument;
+    const comparisonFindings = findingsHost?.dataset.presentation === "comparison";
+    let definitions;
     const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
     function el(tag, cls, text) {
         const node = doc.createElement(tag);
@@ -641,24 +690,60 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     }
     const section = el("section", "assessment-summary");
     section.setAttribute("aria-label", "Interaction insights");
+    const compactLayout = findingsHost?.dataset.presentation === "compact";
+    const compactFindings = compactLayout || findingsHost?.dataset.presentation === "reader";
     const heading = el("div", "assessment-heading");
-    heading.append(el("h2", "", "Insights"));
+    heading.append(el("h2", "", compactLayout ? "Saved reviews" : "Insights"));
+    if (compactLayout) {
+        const attempts = model.evidence.assessmentAttempts;
+        section.dataset.emptyReviews = String(!model.readingWarning
+            && attempts.status === "available" && attempts.coverage.eligible > 0
+            && attempts.counts.none === attempts.coverage.eligible
+            && !model.findings.operational.some(item => item.kind === "unavailable")
+            && !model.evidence.execution.some(row => row.counts?.evaluatorError)
+            && Object.values(model.evidence.quality).every(group => group.eligible > 0
+                && group.rows.length === 0 && group.localObservations.length > 0
+                && group.localObservations.every(row => row.status === "unassessed" && row.counts.evaluatorError === 0
+                    && row.unassessedReasons.length > 0 && row.unassessedReasons.every(reason => reason.reason === "unsupported-check"))));
+        const empty = el("p", "assessment-empty-review", "No saved reviews for these requests.");
+        empty.hidden = true;
+        heading.prepend(empty);
+    }
     if (onDetails) {
         const details = el("button", "quiet", detailsLabel);
         details.type = "button";
         details.dataset.insightDetails = "";
         details.setAttribute("aria-haspopup", "dialog");
         details.addEventListener("click", () => onDetails(details));
+        definitions = details;
         heading.append(details);
     }
-    section.append(heading);
+    if (!compactLayout) section.append(heading);
     const findings = el("section", "assessment-findings");
+    const secondaryFindings = el("div", "assessment-secondary-findings");
+    const secondaryCalls = el("ul", "assessment-finding-list");
     findings.setAttribute("aria-label", "What the record shows");
-    findings.append(el("h3", "", "What the record shows"));
+    if (!comparisonFindings) findings.append(el("h3", "", compactFindings ? "Notes on full interactions" : "What the record shows"));
     const calls = el("ul", "assessment-finding-list");
     for (const item of model.findings.operational) {
         const entry = el("li", item.tone);
-        if (item.parts) {
+        if (comparisonFindings && item.kind === "execution") {
+            const reported = item.boundary === "reported-outcomes";
+            entry.append(el("h4", "period-outcome-heading", `${reported ? "Reported calls" : "Completion-evidence checks"} (${number(item.counts.calls)})`));
+            const facts = el("dl", "period-outcome-counts");
+            facts.setAttribute("aria-label", reported ? "Reported call outcomes" : "Completion-evidence check outcomes");
+            for (const [label, count, tone] of [
+                ["Succeeded", item.counts.succeeded, "positive"], ["Failed", item.counts.failed, "negative"],
+                [reported ? "Other or missing outcome" : "Unverified", item.counts.other, ""],
+            ]) {
+                const fact = el("div", count ? tone : "");
+                fact.append(el("dt", "", label), el("dd", "", number(count))); facts.append(fact);
+            }
+            entry.append(facts);
+        } else if (comparisonFindings && item.kind === "cause") {
+            entry.classList.add("period-cause");
+            entry.append(el("span", "", item.label), el("span", "period-cause-count", `${number(item.count)} ${item.count === 1 ? "call" : "calls"}`));
+        } else if (item.parts) {
             entry.append(doc.createTextNode(item.prefix));
             item.parts.forEach((part, index) => {
                 if (index) entry.append(doc.createTextNode("; "));
@@ -668,10 +753,12 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         } else entry.textContent = item.text;
         entry.dataset.findingKind = item.kind;
         if (item.cause) entry.dataset.findingCause = item.cause;
-        calls.append(entry);
+        if (compactFindings && item.kind === "execution") secondaryCalls.append(entry);
+        else calls.append(entry);
     }
     findings.append(calls);
-    if (model.findings.recovery) findings.append(el("p", "assessment-finding-recovery",
+    if (secondaryCalls.childElementCount) secondaryFindings.append(secondaryCalls);
+    if (model.findings.recovery && !comparisonFindings) findings.append(el("p", "assessment-finding-recovery",
         "If still needed: /mcp auth workiq in Copilot. No retry here."));
     const lanes = new Map();
     for (const group of Object.values(model.evidence.quality)) for (const row of group.rows) {
@@ -692,19 +779,20 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         const list = el("ul", "assessment-compact-verdicts");
         const reasons = new Set();
         for (const row of lane.rows) {
-            const labels = row.dimension === "accuracy" ? ["Answer", "Correct", "Not correct"]
-                : row.dimension === "answer-trust" ? ["Support", "Supported", "Not supported"]
-                    : personal ? ["Authorization", "Authorized", "Not authorized"] : ["Intent", "Matched", "Not matched"];
+            const term = wording.resolve(row), labels = [term.known ? term.compactLabel : term.label, term.pass, term.fail];
             if (row.assessed) {
                 const item = el("li"), parts = [];
                 item.dataset.findingKind = "verdict";
                 item.dataset.findingDimension = row.dimension;
                 item.dataset.metricRef = row.metricRef;
-                item.append(el("strong", "", labels[0] + ": "));
+                item.append(el("strong", "", labels[0] + (comparisonFindings ? "" : ": ")));
                 for (const [count, label, tone] of [[row.counts.pass, labels[1], "positive"], [row.counts.fail, labels[2], "negative"]]) {
                     if (count) parts.push(el("span", tone, row.eligible === 1 ? label : `${number(count)} ${label.toLowerCase()}`));
                 }
-                parts.forEach((part, index) => { if (index) item.append(doc.createTextNode(", ")); item.append(part); });
+                const verdict = comparisonFindings ? el("span", "period-review-result") : item;
+                parts.forEach((part, index) => { if (index) verdict.append(doc.createTextNode(comparisonFindings ? " " : ", ")); verdict.append(part); });
+                if (comparisonFindings) item.append(verdict);
+                if (comparisonFindings) item.append(el("span", "period-review-coverage", `${number(row.assessed)} / ${number(row.eligible)} reviewed`));
                 list.append(item);
             }
             // This lists observed reason types, not a pooled request count or a shared population.
@@ -712,35 +800,50 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
             if (row.counts.evaluatorError) reasons.add("Evaluator error (not a failed verdict)");
         }
         if (list.childElementCount) group.append(list);
-        if (reasons.size) group.append(el("p", "assessment-finding-status", "Unassessed checks: " + [...reasons].join("; ") + "."));
+        if (reasons.size) group.append(el("p", "assessment-finding-status",
+            (comparisonFindings ? "" : "Unassessed checks: ") + [...reasons].join("; ") + (comparisonFindings ? "" : ".")));
         else if (!list.childElementCount) group.append(el("p", "assessment-finding-status", "No saved verdicts."));
         findings.append(group);
     }
-    if (!lanes.size) findings.append(el("p", "assessment-finding-status",
+    if (!lanes.size) (compactFindings ? secondaryFindings : findings).append(el("p", "assessment-finding-status",
         Object.values(model.evidence.quality).some(group => group.eligible > 0)
-            ? "No saved answer or action assessment is available." : "Assessment coverage unavailable."));
+            ? "No saved review." : "Review coverage unavailable."));
     const attemptLabels = {
-        failed: "Evaluator could not complete; not a failed quality verdict",
-        uncertain: "Evaluator outcome uncertain", unavailable: "Assessment evidence or approval unavailable",
+        failed: "Review could not finish; not a failed verdict",
+        uncertain: "Review outcome uncertain", unavailable: "Assessment evidence or approval unavailable",
         pending: "Assessment pending", revoked: "Assessment approval withdrawn",
         "not-run": "Not reached by the recorded assessment run", "not-current": "Earlier assessment attempt is not current",
     };
     for (const item of model.findings.answers.filter(item => item.kind === "attempt")) {
-        findings.append(el("p", "assessment-finding-status",
+        if (comparisonFindings) {
+            const status = el("p", "assessment-finding-status period-cause");
+            status.append(el("span", "", attemptLabels[item.state]),
+                el("span", "period-cause-count", `${number(item.count)} ${item.count === 1 ? "request" : "requests"}`));
+            findings.append(status);
+        } else findings.append(el("p", "assessment-finding-status",
             `${attemptLabels[item.state]}${model.findings.singleInteraction ? "" : ` (${number(item.count)} ${item.count === 1 ? "request" : "requests"})`}.`));
     }
-    findings.append(el("p", "assessment-finding-limit",
+    if (comparisonFindings) {
+        if (model.findings.rationale) findings.append(el("p", "assessment-finding-limit", "Review reasons not saved."));
+    } else if (!compactFindings || model.findings.rationale) findings.append(el("p", "assessment-finding-limit",
         (model.findings.rationale ? "Verdict reasons not retained. " : "")
-        + (model.findings.singleInteraction ? "Original request group only." : "Full interactions, not just matching calls.")));
+        + (compactFindings ? "" : model.findings.singleInteraction ? "Original request group only." : "Full interactions, not just matching calls.")));
+    findings.hidden = compactFindings && findings.children.length === 2 && !calls.childElementCount;
     if (findingsHost) findingsHost.replaceChildren(findings);
     else section.append(findings);
     const saved = el("details", "assessment-saved-details");
     saved.append(el("summary", "", "Saved assessment details and counts"));
+    if (comparisonFindings) {
+        heading.remove();
+        if (definitions) saved.append(definitions);
+    }
+    if (compactFindings) saved.append(secondaryFindings);
     if (bindDetails) {
         if (!disclosureKey) throw new TypeError("A stable assessment disclosure key is required.");
         bindDetails(saved, disclosureKey);
     }
-    saved.append(el("p", "assessment-finding-limit", [model.findings.rationale, model.findings.qualification, model.findings.scope].filter(Boolean).join(" ")));
+    const reviewLimits = [model.findings.rationale, model.findings.qualification, compactFindings ? "" : model.findings.scope].filter(Boolean);
+    if (reviewLimits.length) saved.append(el("p", "assessment-finding-limit", reviewLimits.join(" ")));
     const execution = el("section", "assessment-execution");
     execution.append(el("h3", "", "Saved execution checks"));
     for (const row of model.evidence.execution) {
@@ -789,7 +892,10 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         }
         status.append(facts); reviewStatus = status;
     }
-    if (model.readingWarning) findings.append(el("p", "assessment-unavailable", model.readingWarning));
+    if (model.readingWarning) {
+        findings.hidden = false;
+        findings.append(el("p", "assessment-unavailable", model.readingWarning));
+    }
     const help = el("details", "assessment-reading-help");
     help.append(el("summary", "", "How to read these results"),
         el("p", "", "AI reviews the recorded evidence and can be wrong. Your feedback and tool outcomes are separate. Matching the request does not prove a person gave permission."),
@@ -808,7 +914,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     for (const key of ["accuracy", "answer-trust", "action-trust"]) {
         const group = model.evidence.quality[key], host = el("section", "assessment-dimension");
         host.dataset.qualityDimension = key;
-        const rows = group.rows.length ? group.rows : [group];
+        const rows = group.rows.length ? group.rows : group.localObservations.length ? group.localObservations : [group];
         for (const row of rows) {
             const raw = model.groups[key].find(item => item.metricRef === row.metricRef);
             const fact = el("div", "assessment-fact assessment-check");
@@ -817,7 +923,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
             fact.dataset.bandVersion = model.bandVersion;
             const label = el("div", "assessment-check-title"), title = el("div", "assessment-dimension-heading");
             title.append(el("h4", "assessment-fact-label", row.label ?? model.groups[key][0].reading.label));
-            if (helpButton) title.append(helpButton(key === "accuracy" ? "accuracy" : "trust"));
+            if (helpButton) title.append(helpButton(key, wording.resolve(row)));
             label.append(title);
             if (row.provenance) label.append(el("p", "assessment-origin", row.provenance.label));
             if (row.provenance?.evaluator && group.rows.filter(other => other.provenance.origin === "model-assessed").length > 1) {
@@ -831,7 +937,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
                 meter.setAttribute("aria-label", row.coverageLabel);
                 coverage.append(meter);
             }
-            const result = cell("Recorded verdicts", raw?.personalVerdict ?? row.resultLabel ?? row.headline, "assessment-value");
+            const result = cell("Recorded verdicts", raw?.personalVerdict ?? (raw && row.assessed === 0 ? raw.value : row.resultLabel ?? row.headline), "assessment-value");
             if (row.passShare) result.append(el("p", "assessment-pass-share", row.passShare.label));
             if (row.counts && !raw?.personalVerdict && row.assessed > 0) {
                 const value = result.querySelector(".assessment-value");
@@ -880,19 +986,21 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         }
         saved.append(status);
     } else saved.append(reviewStatus);
-    section.append(saved);
+    if (!compactLayout) section.append(saved);
     const timing = el("div");
     renderTiming(timing, model.evidence.timing.filter(row =>
         row.provenance.definitionId !== "interaction-latency" || row.measurement.value !== null), {
-        title: detailsLabel === "Measure definitions" ? "Recorded timing in full interactions" : "Recorded timing",
+        title: compactLayout ? "Timing for selected requests" : detailsLabel === "Measure definitions" ? "Recorded timing in full interactions" : "Recorded timing",
+        compact: compactLayout,
         helpButton: helpButton ? () => helpButton("speed") : null,
     });
-    section.append(timing, help);
+    if (compactLayout) section.append(timing, heading, saved, help);
+    else section.append(timing, help);
     root.replaceChildren(section);
     return section;
 }
 
-export function renderRecordedTiming(root, rows, { title = "Recorded timing", helpButton, action } = {}) {
+export function renderRecordedTiming(root, rows, { title = "Recorded timing", action, compact = false } = {}) {
     const doc = root.ownerDocument;
     function el(tag, cls, text) {
         const node = doc.createElement(tag);
@@ -900,57 +1008,68 @@ export function renderRecordedTiming(root, rows, { title = "Recorded timing", he
         if (text !== undefined) node.textContent = text;
         return node;
     }
-    const section = el("section", "assessment-timing");
+    function exactDuration(milliseconds) {
+        if (milliseconds === null) return "Not measured";
+        if (milliseconds < 1000 || !Number.isSafeInteger(milliseconds)) return `${milliseconds} ms`;
+        const minutes = Math.floor(milliseconds / 60000), seconds = milliseconds % 60000 / 1000;
+        return minutes ? `${minutes} min${seconds ? ` ${seconds} s` : ""}` : `${seconds} s`;
+    }
+    const section = el("section", compact ? "assessment-timing timing-summary" : "assessment-timing");
     section.setAttribute("aria-label", title);
-    const heading = el("div", "assessment-heading");
+    const compactSummary = compact && rows.length === 1;
+    const heading = el("div", compact ? "timing-heading" : "assessment-heading");
     heading.append(el("h3", "", title));
-    if (helpButton) heading.append(helpButton());
-    if (action) heading.append(action);
-    section.append(heading);
+    if (!compactSummary) {
+        if (action && !compact) heading.append(action);
+        if (!compact) section.append(heading);
+    }
     for (const row of rows) {
         const fact = el("div", "assessment-fact recorded-timing-row");
         fact.dataset.dimension = "speed";
         fact.dataset.timingBoundary = row.measurement.boundary;
         fact.dataset.timingState = row.display.state;
-        const identity = el("div");
-        identity.append(el("h4", "assessment-fact-label", row.label), el("p", "timing-boundary", row.boundaryLabel));
-        const values = el("div", "timing-values");
-        for (const [label, value] of row.timed > 1 ? [["Median", row.display.median], ["P95", row.display.p95]]
-            : [[row.timed ? "Single measured sample" : "No measured samples", row.display.median]]) {
+        fact.setAttribute("aria-label", `${row.label}: ${row.boundaryLabel}`);
+        if (compactSummary) {
+            heading.classList.add("timing-identity");
+            heading.append(el("p", "timing-boundary", row.boundaryLabel));
+            fact.append(heading);
+        }
+        if (rows.length > 1) {
+            fact.append(el(compact ? "h3" : "h4", "assessment-fact-label timing-identity", row.label));
+            if (compact) fact.append(el("p", "timing-boundary", row.boundaryLabel));
+        }
+        const values = el(compact ? "dl" : "div", compact ? "timing-values timing-facts" : "timing-values");
+        const statistics = row.timed > 1
+            ? row.distribution.p50Ms === row.distribution.p95Ms
+                ? [["Median and 95th percentile", row.distribution.p50Ms, "median p95"]]
+                : [["Median", row.distribution.p50Ms, "median"], ["95th percentile", row.distribution.p95Ms, "p95"]]
+            : [[compact ? row.timed === 1 ? "Single sample" : "Duration" : "", row.measurement.value, "single"]];
+        for (const [label, milliseconds, statistic] of statistics) {
             const item = el("div");
-            item.append(el("span", "assessment-cell-label", label), el("p", "assessment-value", value));
+            const value = el("data", "assessment-value", exactDuration(milliseconds));
+            value.dataset.statistic = statistic;
+            if (milliseconds !== null) value.value = String(milliseconds);
+            if (label) item.append(el(compact ? "dt" : "span", "assessment-cell-label", label));
+            if (compact) {
+                const detail = el("dd");
+                detail.append(value); item.append(detail);
+            } else item.append(value);
             values.append(item);
         }
         const coverage = el("div", "timing-population");
-        coverage.append(el("p", "assessment-coverage", row.coverageLabel));
-        if (row.notTimed || !row.eligible) coverage.append(el("p", "assessment-unavailable-reason", row.missingLabel));
-        coverage.append(el("p", "assessment-unavailable-reason", row.limitation));
-        fact.append(identity, values, coverage);
-        if (row.timed > 1 && row.distribution.p95Ms > 0) {
-            const scale = el("div", "timing-scale");
-            scale.setAttribute("role", "img");
-            scale.setAttribute("aria-label", `Linear duration scale from 0 to ${row.display.p95}. Dot: median ${row.display.median}. Line: P95 ${row.display.p95}.`);
-            const track = el("div", "timing-track"), median = el("span", "timing-median"), p95 = el("span", "timing-p95");
-            median.style.left = `${row.distribution.p50Ms / row.distribution.p95Ms * 100}%`;
-            track.append(median, p95);
-            scale.append(track, el("span", "timing-scale-key", "0 s \u00b7 Dot = median \u00b7 Line = P95"));
-            fact.append(scale);
-        }
-        const details = el("details", "timing-exact");
-        details.append(el("summary", "", "Exact timing and boundary"));
-        const facts = el("dl", "timing-exact-facts");
-        for (const [label, value] of [
-            ["Boundary", row.boundaryLabel], ["Boundary ID", row.measurement.boundary],
-            [row.timed === 1 ? "Single sample" : "Median", row.measurement.value === null ? "Not measured" : `${row.measurement.value} ms`],
-            ["P95", row.timed > 1 ? `${row.distribution.p95Ms} ms` : "Not shown without multiple samples"],
-            ["Population", `${row.coverageLabel}; ${row.notTimed} without recorded timing`],
-            ["Method", "Nearest rank over retained samples for this boundary. No summed concurrent calls or averaged medians."],
-        ]) {
-            const item = el("div");
-            item.append(el("dt", "", label), el("dd", "", value));
-            facts.append(item);
-        }
-        details.append(facts); fact.append(details); section.append(fact);
+        if (compact) coverage.append(el("dt", "", "Coverage"));
+        coverage.append(el(compact ? "dd" : "p", "assessment-coverage", row.coverageLabel));
+        const notes = compact ? el("div", "timing-notes") : coverage;
+        if (row.notTimed) notes.append(el("p", "assessment-unavailable-reason", "Missing timing is not zero."));
+        else if (!row.eligible) notes.append(el("p", "assessment-unavailable-reason", row.missingLabel));
+        if (row.timed === 1) notes.append(el("p", "assessment-unavailable-reason", row.limitation));
+        if (compact) {
+            values.append(coverage);
+            fact.append(values);
+            if (notes.childElementCount) fact.append(notes);
+            if (compactSummary && action) fact.append(action);
+        } else fact.append(values, coverage);
+        section.append(fact);
     }
     if (!rows.length) section.append(el("p", "assessment-unavailable", "Not measured. No supported timing samples for this scope."));
     root.replaceChildren(section);
@@ -1024,30 +1143,20 @@ export const assessmentPresentationStyles = `
 .assessment-cell {min-width:0}
 .assessment-cell-label {display:block;font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin-bottom:var(--space-xs)}
 .assessment-timing {margin-block:var(--space-xl);padding-top:var(--space-lg);border-top:1px solid var(--rule)}
-.assessment-timing .assessment-value {font-size:var(--type-data-value)}
+.assessment-timing .assessment-value {display:block;font-size:var(--type-data-value)}
 .assessment-timing .assessment-heading>a {display:inline-flex;align-items:center;min-height:44px}
-.recorded-timing-row {display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-md) var(--space-xl);padding-block:var(--space-lg);min-width:0;overflow-wrap:anywhere}
+.recorded-timing-row {display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-sm) var(--space-xl);padding-block:var(--space-md);min-width:0;overflow-wrap:anywhere}
 .recorded-timing-row+.recorded-timing-row {border-top:1px solid var(--rule)}
-.timing-boundary,.timing-scale-key {font-size:var(--type-caption);color:var(--muted);line-height:1.5;margin:var(--space-xs) 0 0}
 .timing-values {display:flex;flex-wrap:wrap;gap:var(--space-md) var(--space-xl)}
 .timing-values>div {min-width:0}
-.timing-scale {grid-column:1/-1;max-width:36rem;min-width:0}
-.timing-track {position:relative;height:2px;margin:var(--space-sm) 6px var(--space-md);background:var(--muted)}
-.timing-median {position:absolute;top:50%;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--ink)}
-.timing-p95 {position:absolute;right:0;top:50%;transform:translate(50%,-50%);height:16px;width:3px;background:var(--ink)}
-.timing-exact {grid-column:1/-1;min-width:0;font-size:var(--type-small)}
-.timing-exact summary {min-height:44px;align-content:center;cursor:pointer;width:fit-content}
-.timing-exact summary:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
-.timing-exact-facts {margin:var(--space-sm) 0;display:grid;gap:var(--space-sm);line-height:1.5}
-.timing-exact-facts>div {display:flex;flex-wrap:wrap;gap:var(--space-xs) var(--space-lg)}
-.timing-exact-facts dt {font-weight:var(--weight-strong)}
-.timing-exact-facts dd {margin:0;min-width:0}
 #recordedTiming {container:recorded-timing / inline-size}
 @container recorded-timing (min-width:42rem) {
- .recorded-timing-row {grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.3fr)}
+ .assessment-timing .recorded-timing-row {grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ .assessment-timing .recorded-timing-row:has(.timing-identity) {grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @container assessment-summary (min-width:42rem) {
- .recorded-timing-row {grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.3fr)}
+ .assessment-timing .recorded-timing-row {grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ .assessment-timing .recorded-timing-row:has(.timing-identity) {grid-template-columns:repeat(3,minmax(0,1fr))}
  .assessment-fact {grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1.4fr)}
  .assessment-check {grid-template-columns:minmax(0,1.1fr) minmax(0,1.1fr) minmax(0,.8fr) minmax(0,1.3fr)}
  .assessment-check-title {align-self:center}
@@ -1075,6 +1184,11 @@ export const assessmentPresentationStyles = `
 .assessment-dialog>.dialog-head {flex:none;gap:var(--space-sm);padding:var(--space-lg) var(--space-xl);min-width:0}
 .assessment-dialog>.dialog-head h2 {min-width:0;overflow-wrap:anywhere}
 .assessment-dialog>.dialog-head button {flex:none;min-height:44px}
+.assessment-feedback-dialog {container:assessment-feedback / inline-size}
+@container assessment-feedback (max-width:30rem) {
+ .assessment-feedback-dialog>.dialog-head {flex-wrap:wrap}
+ .assessment-feedback-dialog>.dialog-head h2 {flex-basis:100%;overflow-wrap:normal}
+}
 .assessment-dialog-body {min-height:0;overflow:auto;overscroll-behavior:contain;padding:var(--space-lg) var(--space-xl)}
 html:has(.assessment-dialog:modal) {overflow:hidden;scrollbar-gutter:stable}
 .assessment-dialog h2 {font-size:var(--type-section)}

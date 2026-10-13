@@ -49,6 +49,51 @@ async function mount(page, groups, time = true, layer = "tool") {
     await settle(page);
 }
 
+test("sparse, dense and empty time views reset sizing while enlarged labels and focused counts survive host resize", async t => {
+    const page = await setup(t);
+    for (const length of [1, 3, 7, 0, 1]) {
+        const groups = Array.from({ length }, (_, index) => group(index === 1 ? 0 : index ? 15 : 1500, index));
+        await mount(page, groups);
+        assert.equal(await page.locator(".flat-time-scroll").getAttribute("data-density"), length < 4 ? "sparse" : "dense");
+        assert.equal(await page.evaluate(() => window.observers.size), 1);
+        assert.equal(await page.locator(".dimensional-time-labels > span").count(), length);
+        assert.equal(await page.locator(".flat-time-column").count(), groups.filter(row => row.total).length);
+        if (!length) continue;
+        const extent = Number(await page.locator(".flat-time-column").first().getAttribute("data-plot-height"));
+        assert.equal(extent, Math.min(200, 40 * (length + 1)), "Extent follows displayed bins, not the magnitude of 1,500 calls");
+        await page.locator(".time-column").last().focus();
+        for (const [width, text] of [[1200, 100], [280, 200]]) {
+            await page.evaluate(({ width, text }) => {
+                document.querySelector("#host").style.width = width + "px";
+                document.documentElement.style.fontSize = text + "%";
+            }, { width, text });
+            await settle(page);
+            const measured = await page.locator(".flat-time-scroll").evaluate(scroll => {
+                const clip = scroll.getBoundingClientRect(), plot = scroll.querySelector(".flat-time-plot").getBoundingClientRect();
+                const focused = document.activeElement, count = focused.querySelector(".dimensional-count");
+                const box = count.getBoundingClientRect();
+                return {
+                    focus: focused.classList.contains("time-column"), x: box.x, right: box.right, width: box.width, height: box.height,
+                    left: clip.left, clipRight: clip.right, top: box.top, plotTop: plot.top,
+                    marks: [...scroll.querySelectorAll(".flat-time-column")].map(node => ({
+                        total: Number(node.dataset.total), maximum: Number(node.dataset.maximum), extent: Number(node.dataset.plotHeight),
+                        height: Number(node.getAttribute("height")),
+                    })),
+                };
+            });
+            assert.ok(measured.focus && measured.width >= 44 && measured.height >= 44);
+            assert.ok(measured.x >= measured.left && measured.right <= measured.clipRight);
+            assert.ok(measured.top >= measured.plotTop, "Measured headroom cannot clip enlarged count targets");
+            for (const mark of measured.marks) {
+                assert.equal(mark.extent, extent);
+                assert.equal(mark.height, mark.total / mark.maximum * extent);
+            }
+        }
+    }
+    await page.evaluate(() => window.charts.disposeView(document.querySelector(".dimensional-scroll")));
+    assert.equal(await page.evaluate(() => window.observers.size), 0);
+});
+
 test("all evidence units and extreme counts reflow in flat comparisons and measured time lanes", async t => {
     const page = await setup(t), counts = [0, 1, 2, Number.MAX_SAFE_INTEGER];
     const results = createRecordedResults();

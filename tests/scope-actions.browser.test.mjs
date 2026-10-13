@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption, openSourceEditor } from "./helpers.mjs";
 import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -379,7 +379,7 @@ test("primary filters and hidden selections survive stored refresh, then reset f
 test("Settings drafts disable manual reads and source checks until existing cancellation", async t => {
     const { page, requests } = await setup(t);
     await navigateMain(page, "settings"); await ready(page);
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill("C:\\Invented\\different.db");
     const before = requests.length;
     await expect(page.locator("#refreshBtn")).toBeDisabled();

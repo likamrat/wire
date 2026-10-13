@@ -9,6 +9,7 @@ import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, restoreLegacySearch } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 import { rgb, contrast, measureChartPaint } from "./color-measurements.mjs";
+import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 
 const proofs = process.env.WIRE_TIME_PROOFS;
 const ready = async page => {
@@ -84,6 +85,91 @@ async function capture(page, name) {
     await page.locator(".chart-panel").screenshot({ path: path.join(proofs, name + ".png") });
     await writeFile(path.join(proofs, name + ".txt"), await page.locator(".chart-panel").ariaSnapshot());
 }
+
+test("a populated sparse Analyze timeline stays compact in the complete timing and results journey", async t => {
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T18:00:00Z") });
+    const app = await authorFilterFixture(t, { serviceCases: true });
+    const browser = await chromium.launch(), page = await browser.newPage({
+        viewport: { width: 1440, height: 1000 }, timezoneId: "UTC", reducedMotion: "reduce",
+    });
+    app.closeClient(() => browser.close());
+    const errors = [], denied = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", route => {
+        const request = route.request(), url = new URL(request.url());
+        if (url.origin !== new URL(app.runtime.url).origin || request.method() !== "GET" && ![
+            "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+            "/api/evaluation/automatic/summary",
+        ].includes(url.pathname)) { denied.push(url.pathname); return route.abort(); }
+        return route.continue();
+    });
+    await page.goto(app.runtime.url); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("15");
+    await expect(page.locator(".time-column")).toHaveCount(1);
+    await expect(page.locator(".time-column")).toHaveAttribute("aria-label", /15 Work IQ tool calls.*11 worked.*4 tool failed/);
+    const measure = () => page.locator(".chart-panel").evaluate(panel => {
+        const box = node => {
+            const rect = node.getBoundingClientRect();
+            return { x: rect.x, y: rect.y + scrollY, width: rect.width, height: rect.height, bottom: rect.bottom + scrollY };
+        };
+        return {
+            panel: box(panel), heading: box(panel.querySelector(".chart-heading")), plot: box(panel.querySelector(".flat-time-plot")),
+            count: box(panel.querySelector(".dimensional-count")), date: box(panel.querySelector(".dimensional-time-labels")),
+            footer: box(panel.querySelector("#chartFooter")), timing: box(document.querySelector("#recordedTiming")),
+            results: box(document.querySelector("#activityView")), extent: Number(panel.querySelector(".flat-time-column").dataset.plotHeight),
+            spacing: parseFloat(getComputedStyle(panel).getPropertyValue("--space-lg")),
+        };
+    });
+    const measurements = [];
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme); await ready(page);
+        measurements.push({ theme, ...await measure() });
+        if (proofs) {
+            await mkdir(proofs, { recursive: true });
+            await page.evaluate(() => scrollTo(0, 0));
+            await page.screenshot({ path: path.join(proofs, `sparse-${theme}-full.png`), fullPage: true });
+            await page.locator(".chart-panel").evaluate(node => window.scrollTo(0, node.offsetTop - document.querySelector(".app-header").offsetHeight - 16));
+            await page.screenshot({ path: path.join(proofs, `sparse-${theme}-context.png`) });
+            await writeFile(path.join(proofs, "sparse-journey.json"), JSON.stringify(measurements, null, 2));
+        }
+    }
+    await selectActivityOption(page, "bucketFilter", "day"); await ready(page);
+    await expect(page.locator(".time-column")).toHaveCount(2);
+    assert.equal(await page.locator("#activityCount").innerText(), "15");
+    const daily = await measure();
+    if (proofs) await page.locator(".chart-panel").screenshot({ path: path.join(proofs, "sparse-two-day-panel.png") });
+    await page.locator(".time-column").last().focus(); await page.keyboard.press("Enter"); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("4");
+    await page.goBack(); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("15");
+    await expect(page.locator(".time-column").last()).toBeFocused();
+    await selectActivityOption(page, "bucketFilter", "month"); await ready(page);
+    await expect(page.locator(".time-column")).toHaveCount(1);
+    assert.equal((await measure()).extent, measurements[0].extent);
+    await page.setViewportSize({ width: 375, height: 1100 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme); await ready(page);
+        await page.keyboard.press("Tab"); await page.locator(".time-column").focus();
+        const count = await page.locator(".dimensional-count").boundingBox();
+        assert.ok(count.width >= 44 && count.height >= 44);
+        assert.ok(count.x >= 0 && count.x + count.width <= 375);
+        assert.equal(await page.locator(".dimensional-count").evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+        const trigger = page.getByRole("combobox", { name: "Time scale", exact: true });
+        await expect(trigger).toHaveText(/Monthly/);
+        const control = await trigger.boundingBox();
+        assert.ok(control.height >= 44 && control.x >= 0 && control.x + control.width <= 375);
+        if (proofs) {
+            await page.locator(".chart-panel").screenshot({ path: path.join(proofs, `sparse-${theme}-375-text2-panel.png`) });
+            await page.screenshot({ path: path.join(proofs, `sparse-${theme}-375-text2-context.png`) });
+        }
+    }
+    assert.deepEqual(errors, []); assert.deepEqual(denied, []);
+    assert.ok(measurements[0].panel.width < measurements[0].timing.width, "A single bin must not stretch its panel across the entire overview");
+    assert.ok(measurements[0].extent < daily.extent, "A single bin needs less plotting space than two bins");
+    assert.ok(measurements[0].count.y - measurements[0].heading.bottom <= measurements[0].spacing, "Count and mark belong directly under the heading");
+    assert.ok(measurements[0].footer.y - measurements[0].date.bottom <= measurements[0].spacing, "Reading notes follow the date, without a second empty lane");
+});
 
 test("time view keeps readable exact labels, focus and 44px equivalents in both themes and narrow 200% text", async t => {
     const { page } = await setup(t);
@@ -217,9 +303,10 @@ test("tiny and extreme source counts remain linear and actionable; empty and und
     const { page } = await setup(t, source);
     await expect(page.locator("#activityCount")).toHaveText("201");
     const tiny = page.locator(".flat-time-column").first();
-    assert.ok(Math.abs((await tiny.boundingBox()).height - .8) < .01, "1 / 200 is .8px of the compact 160px plot, not a minimum bar");
+    const extent = Number(await tiny.getAttribute("data-plot-height"));
+    assert.ok(Math.abs((await tiny.boundingBox()).height - extent / 200) < .01, "1 / 200 uses the compact extent, not a minimum bar");
     const failure = page.locator('.flat-time-column [data-segment="failure"]').last();
-    assert.ok(Math.abs((await failure.boundingBox()).height - .8) < .01, "The tiny outcome is not inflated either");
+    assert.ok(Math.abs((await failure.boundingBox()).height - extent / 200) < .01, "The tiny outcome is not inflated either");
     const count = page.locator(".time-column .dimensional-count").first();
     const target = await count.boundingBox(); assert.ok(target.width >= 44 && target.height >= 44);
     await capture(page, "extreme-light");
@@ -254,7 +341,7 @@ test("actual tiny result marks expose exact count/share tooltips and quiet keybo
             await expect(page.getByRole("tooltip")).toContainText(`${count} of 121 Work IQ tool calls`);
             if (key === "unknown") await expect(page.getByRole("tooltip")).toContainText("(0.8%)");
             assert.equal(await mark.getAttribute("data-count"), String(count));
-            assert.equal(Number(await mark.getAttribute("height")), count / 121 * 160);
+            assert.equal(Number(await mark.getAttribute("height")), count / 121 * Number(await column.locator(".flat-time-column").getAttribute("data-plot-height")));
             await page.keyboard.press("Escape"); await expect(page.getByRole("tooltip")).toBeHidden();
         }
         await column.focus();

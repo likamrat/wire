@@ -115,21 +115,39 @@ capabilities, or whether a recorded request succeeded.
 | Measure | What the value means |
 | --- | --- |
 | Recorded tool success | Successful recorded tool calls divided by all unique included calls. Failed, partial and unknown outcomes remain separate. This is not answer accuracy. |
-| Accuracy | Passed assessments divided by passed plus failed assessments, with assessed coverage alongside. Personal verdicts are labeled separately from automatic checks. |
+| Answer correctness | Passed reviews divided by passed plus failed reviews, with reviewed request coverage alongside. Personal feedback and AI reviews remain separate. |
 | Speed | The named recorded timing boundary, such as median tool-call duration or time to HTTP response headers. Different boundaries are not blended. |
-| Trust: answers | Evidence-supported answer checks or explicitly labeled personal verdicts. Citation presence alone does not establish support. |
-| Trust: actions | Model-assessed alignment with recorded intent, or separate personal authorization verdicts. Intent alignment, tool success and accepted HTTP requests are not proof of human authorization. |
+| Answer support | Evidence-supported answer reviews or explicitly labelled personal feedback. Citation presence alone does not establish support. |
+| Tool use vs. request | A saved AI review of whether recorded tool use fit what was asked. It is not proof of permission, successful retrieval or task completion. |
+| Permission for tool use | Personal feedback about permission, not the model's request-match review and not a permission grant. |
+| Saved review (type not recorded) | Saved values whose check/version/origin cannot establish the review's meaning. Exact original identifiers remain available; their meaning is not guessed. |
 
 Local observations alone do not judge semantic answer quality. Separately approved
-model assessments can provide Accuracy, answer Trust and action Trust from recorded
+model reviews can assess answer correctness, answer support and tool use vs. request from recorded
 evidence, with model/rubric origin and exact interaction coverage. No result is
-**Not assessed**, not zero or tool-success rate. Insufficient evidence and evaluator
+**No saved review**, not zero or tool-success rate. Insufficient evidence and reviewer
 errors remain distinct. Optional personal feedback is not a required grading workflow.
 
-New reports use metric projection v2: Accuracy, Speed and Trust, with no original
+New reports retain metric projection v2 and its exact internal dimensions, with no original
 Cost metric, placeholder, or definition. Historical four-dimension report facts
 remain readable without alteration. Evaluator spending safeguards remain in
 Automatic scores; omitting original Cost never means zero spending or improvement.
+
+Current comparison headings and new HTML, PDF and Markdown use the shared
+check/version/origin-aware wording resolver. Request matching and personal
+permission are never merged because they share an internal dimension. Mixed
+or unfamiliar old definitions retain their values, origin and coverage with an
+explicit meaning gap. Reading or generating a new report does not rewrite any
+previously saved file, JSON fact, model rubric or verdict.
+Period comparison detail names the actual assessed or timed population and
+distinguishes incomplete coverage from a reduction in coverage. An absent
+comparison peer is a missing comparable review or measure, not a zero result.
+Unknown saved warning IDs and unknown review definition IDs remain identifiable
+in secondary detail.
+If earlier and later review definitions differ, the retained check ID/version
+is shown beside its own value. Matching model metadata can be shared, but an
+earlier check version never labels the later result. Identical definitions
+remain shared once; compatibility and deltas still come from unchanged facts.
 
 Pass-share colors use versioned presentation bands: below 50%, 50% to below 75%, 75% to below 90%, and 90% to 100%. Exact counts and coverage are retained. Displayed percentages do not round across a color boundary. These bands are not a combined quality grade, statistical confidence, or a score for a person or team.
 
@@ -179,6 +197,56 @@ Markdown share those facts and denominators. Source-neutral reports call the app
 
 Saved reports are immutable. A new assessment or a new visual design does not rewrite an existing HTML, PDF, JSON or Markdown file.
 
+### Reading new reports critically
+
+Human HTML, PDF and Markdown translate unavailable metric states through the
+existing reason-specific formatter. For example, an unsupported local check
+explains that tool outcomes cannot establish answer correctness; unverified
+final-answer timing and insufficient saved evidence keep different explanations.
+JSON retains the original reason codes and all frozen facts.
+
+Each metric row names its recorded origin/model/rubric once, with passed/assessed
+or timed/eligible counts beside the value. Different comparison origins stay
+on their corresponding sides or in separate one-sided lanes; they are not
+combined to shorten the report. Findings still carry their own provenance.
+The default app/comparison formatter is unchanged; report tables explicitly
+omit a repeated origin only when it is already present in the same row.
+
+Period reports distinguish matching-call counts/timing from full-interaction
+assessment coverage near the numbers. A higher pass percentage with fewer
+assessed requests is a descriptive difference between subsets, not proof of
+improvement. Existing precision, valid deltas, zero values and missing states
+remain unchanged. There are no new sample-size thresholds or causal claims.
+
+Normal report examples remain bounded. A link or reference to
+`product-report.json` appears only when JSON was selected. Without it, the
+report points to operation detail as an **aggregate summary**, not as the
+missing full records. Prompt/context copies, exact matching-record tables,
+source references and the coverage manifest remain the available evidence paths.
+Repeated timing definitions live in the timing section, not again in quality
+detail; this does not remove recorded limitations or create missing explanations.
+
+Period scope is also described from the frozen selection in ordinary language.
+Current retained, earlier-snapshot-only, and both-collection membership stay
+distinct. Named service choices are OR alternatives; missing/unusable-detail
+context is not a confirmed service match. A further “within every named service”
+selection is an AND refinement applied afterward. With no service filter,
+unknown-service records remain in the population rather than being described
+as an extra expansion. Explicitly selecting **Service not shown** instead makes
+that category's rows selected matches, even without optional missing-detail
+context; it does not confirm a downstream service. The optional context choice
+can add other gap-bearing records, and the within-every-service refinement still
+applies afterward. The report retains raw keys and opaque references under
+**Technical frozen filter details**, without resolving current source data.
+
+Print grouping keeps short warnings and reading notes intact, chart headings
+with their marks, and table introductions/headers with the first data row.
+Tables can continue with repeated headers; long source copies can flow across
+pages instead of reserving a blank area for a whole copy. No data-specific page
+breaks, smaller fonts, page-count target, or warning deletion is used. Readability
+proof renders every page of the bounded report set plus an oversized table/copy
+control; page bounds alone are not evidence of coherent pagination.
+
 ### New native reports
 
 New HTML, PDF and Markdown lead with **What the record shows**: recorded call
@@ -205,6 +273,14 @@ Counts/shares and exact tables are readable
 without hover. A prepared report ignores narrower browsing filters: its complete
 selected interactions own every denominator. Returned API units, Graph sites,
 owned HTTP records and tool calls remain distinct.
+
+New native breakdowns separate bars from their outcome pills, separate wrapped
+pills, and keep a larger gap between adjacent rows. Spacing uses the existing
+small/large tokens with text-scaled floors: half a rem for bar/pill and pill/pill
+gaps, one rem between rows. At standard and 200% text this preserves visible
+grouping without fixed spacing compressing enlarged text. These CSS rules also
+apply to new period-report bar rows and to PDF generated from the same HTML;
+they do not change counts, bar proportions, Markdown/JSON facts or saved files.
 
 `evaluationFacts.reviewStatuses` is an optional, closed content-free projection
 of the existing selected review statuses. Each unique interaction reference must
@@ -296,6 +372,22 @@ changes can keep verified approval; same-count identity swaps cannot. Global
 feedback/permission invalidations are conservative. When model results exist, the
 snapshot does not expose selected evaluation dependencies, so a revision change
 requires a new review without deleting copy edits. Backend validation is authoritative.
+
+An export whose response is lost stays **Save not confirmed**. Its outcome is
+separate from draft/context validity: later revisions still invalidate disclosure
+and scrub contextual replies, but cannot turn a dispatched write into an unsaved
+draft. **Check save status** reads current saved history for the original allocated
+bundle ID for ordinary and period reports alike. It never scans, approves or
+exports again. An unavailable/missing receipt stays unconfirmed; a verified
+registered receipt opens the saved result and its frozen files. New preparation
+and selection clearing stay blocked until that outcome is resolved. Late recovery
+cannot replace a superseded journey.
+
+Only the transport's proven `request_rejected` disposition from the export request
+itself establishes that no write was dispatched. That case allows Setup/clear and
+a fresh scan/disclosure after current-state validation; it does not wait for a
+nonexistent saved receipt. Arbitrary errors, HTTP 409s, lost responses and failures
+after the export response (including saved-history reads) retain outcome recovery.
 
 ### Bounded recorded context
 
@@ -429,7 +521,11 @@ safety restrictions never modify saved bytes, including historical Cost content.
 
 **Create comparison report** in Analyze takes the currently accepted paired view
 directly to **Setup -> Review -> Save locally**. It does not prepare or invent two
-source reports. Setup names both inclusive local date ranges, the timezone and
+source reports. The action appears beside **What differs**, only after a current
+comparison with matching records is accepted. Changing either date, waiting for
+Search, or losing current evidence removes the action until the comparison is
+ready again; one empty side is allowed, but two empty sides cannot create a report.
+Setup names both inclusive local date ranges, the timezone and
 each exact matching-record count. Scope and author membership are fixed for this
 draft: use **Change comparison in Analyze** to change them. Ordinary report
 scope/author choices are unchanged.
@@ -680,6 +776,14 @@ shows their separate reasons, origins and exact coverage. A one-sided measured
 value is never folded away as missing. New HTML/PDF/Markdown comparisons follow
 the same value-first order and shared scope/overlap/matched-pattern coverage notes.
 The PDF and ordinary browser print both include unopened missing-measure details.
+New comparison print styles keep a short reading-note paragraph intact when it
+fits and keep a disclosure summary, table caption and column headings with the
+first data row. Oversized metric tables still continue naturally with repeated
+column headings; there is no whole-table keep rule, data-specific page break,
+text removal or font/page-size reduction. These rules are scoped to the saved
+comparison document, independently of native normal/period report pagination.
+Proof inventories follow the parsed PDF page count, not stale images from an
+earlier run, and cover every actual page of the unchanged seven-pair comparison.
 The app comparison supports its current light/dark theme. Newly generated frozen
 HTML explicitly uses light (not an implicit dark-mode feature); PDFs use that same
 light source. Manually changing a frozen HTML theme attribute is not an app route

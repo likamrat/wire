@@ -16,21 +16,21 @@ test("ordered real model search coalesces PDF typing, opens verified bytes and f
     assert.equal(rejected.response.status, 429); rejected.close();
     const began = performance.now();
     assert.equal((await a.api("/api/search/query", { query: "A doctor cared for somebody who was hurt.", requestId: 1 })).code, 200);
-    const first = await a.wait(event => event.event === "results" && event.receipt.requestId === 1);
-    assert.equal(first.receipt.mode, "hybrid");
-    assert.equal(first.hits.find(hit => hit.type === "interaction").target.href, "#request?request=search-0");
-    const buildIndex = first.receipt.indexId;
+    const first = await a.wait(event => event.event === "results" && event.requestId === 1);
+    assert.equal(first.matches.receipt.mode, "hybrid");
+    assert.equal(first.matches.hits.find(hit => hit.type === "interaction").target.href, "#request?request=search-0");
+    const buildIndex = first.matches.receipt.indexId;
     await a.api("/api/search/query", { query: "Saved", requestId: 2 });
     await a.wait(event => event.event === "status" && event.state === "searching" && event.requestId === 2);
     for (const [index, query] of ["Saved r", "Saved rep", "Saved report"].entries()) {
         await a.api("/api/search/query", { query, requestId: index + 3, types: ["report"] });
     }
-    const typed = await a.wait(event => event.event === "results" && event.receipt.requestId === 5);
-    assert.equal(typed.receipt.indexId, buildIndex, "Normal typing must not rebuild the PDF corpus");
-    assert.equal(a.events.some(event => event.event === "results" && [3, 4].includes(event.receipt.requestId)), false,
+    const typed = await a.wait(event => event.event === "results" && event.requestId === 5);
+    assert.equal(typed.matches.receipt.indexId, buildIndex, "Normal typing must not rebuild the PDF corpus");
+    assert.equal(a.events.some(event => event.event === "results" && [3, 4].includes(event.requestId)), false,
         "Intermediate queued queries are never disclosed");
-    assert.equal(typed.hits[0].target.format, "pdf");
-    const opened = await a.api("/api/search/open", { id: typed.hits[0].id, receipt: typed.receipt, openId: 1 });
+    assert.equal(typed.matches.hits[0].target.format, "pdf");
+    const opened = await a.api("/api/search/open", { id: typed.matches.hits[0].id, receipt: typed.matches.receipt, openId: 1 });
     assert.equal(opened.code, 200);
     const document = await a.wait(event => event.event === "opened");
     assert.equal(document.document.kind, "pdf");
@@ -42,11 +42,11 @@ test("ordered real model search coalesces PDF typing, opens verified bytes and f
     await b.api("/api/move", { scenarioId: "search-0", toState: "reviewing" });
     assert.ok(a.events.filter(event => event.event === "fence").length > fencesA);
     assert.ok(b.events.filter(event => event.event === "fence").length > fencesB);
-    assert.equal((await a.api("/api/search/open", { id: typed.hits[0].id, receipt: typed.receipt, openId: 2 })).code, 409);
+    assert.equal((await a.api("/api/search/open", { id: typed.matches.hits[0].id, receipt: typed.matches.receipt, openId: 2 })).code, 409);
     await a.api("/api/search/query", { query: "Saved report", requestId: 6, types: ["report"] });
-    const fresh = await a.wait(event => event.event === "results" && event.receipt.requestId === 6);
+    const fresh = await a.wait(event => event.event === "results" && event.requestId === 6);
     await appendFile(bundles[0].files["product-report.pdf"], "tampered");
-    assert.equal((await a.api("/api/search/open", { id: fresh.hits[0].id, receipt: fresh.receipt, openId: 3 })).code, 409);
+    assert.equal((await a.api("/api/search/open", { id: fresh.matches.hits[0].id, receipt: fresh.matches.receipt, openId: 3 })).code, 409);
     const metrics = (await a.api("/api/search/status")).body;
     t.diagnostic(JSON.stringify({ wallMs: performance.now() - began, metrics: metrics.metrics, model: metrics.model,
         items: metrics.items, chunks: metrics.chunks }));
@@ -77,10 +77,10 @@ test("missing assets are explicitly lexical-only; expiry closes streams without 
     t.after(() => panel.close());
     await panel.api("/api/search/query", { query: "physician", requestId: 1 });
     const found = await panel.wait(event => event.event === "results");
-    assert.equal(found.receipt.mode, "lexical-only");
+    assert.equal(found.matches.receipt.mode, "lexical-only");
     assert.equal(found.status.model.code, "model-missing");
     await panel.wait(event => event.event === "fence" && event.reason === "idle");
-    assert.equal((await panel.api("/api/search/open", { id: found.hits[0].id, receipt: found.receipt, openId: 1 })).code, 428);
+    assert.equal((await panel.api("/api/search/open", { id: found.matches.hits[0].id, receipt: found.matches.receipt, openId: 1 })).code, 428);
     assert.doesNotMatch(JSON.stringify(found.status), new RegExp(root.replaceAll("\\", "\\\\") + "|physician"));
 });
 
@@ -94,10 +94,10 @@ test("capability TTL and reconnect create a new owner; old receipts cannot reope
     assert.equal((await old.api("/api/search/status")).code, 403);
     const fresh = await streamPanel(runtime);
     t.after(() => fresh.close());
-    assert.equal((await fresh.api("/api/search/open", { id: result.hits[0].id, receipt: result.receipt, openId: 1 })).code, 409);
+    assert.equal((await fresh.api("/api/search/open", { id: result.matches.hits[0].id, receipt: result.matches.receipt, openId: 1 })).code, 409);
     await fresh.api("/api/search/query", { query: "physician", requestId: 1 });
     const next = await fresh.wait(event => event.event === "results");
-    assert.notEqual(next.receipt.panelId, result.receipt.panelId);
+    assert.notEqual(next.matches.receipt.panelId, result.matches.receipt.panelId);
 });
 
 test("membership admission is exact-owner, whole-corpus and source-bound without an asynchronous gate", { timeout: 30000 }, async t => {
@@ -105,38 +105,38 @@ test("membership admission is exact-owner, whole-corpus and source-bound without
     const events = [];
     const response = Object.assign(new EventEmitter(), { destroyed: false, writableLength: 0,
         writeHead() {}, flushHeaders() {}, write(line) { events.push(JSON.parse(line)); }, end() { this.emit("close"); } });
-    runtime.search.attach("owned-proof", response);
+    runtime.search.attach("owned-proof", response, { schemaVersion: 2 });
     const query = async (query, requestId, types) => {
-        runtime.search.query("owned-proof", { query, requestId, types });
+        runtime.search.query("owned-proof", { schemaVersion: 2, purpose: "analysis", query, requestId, types });
         const deadline = AbortSignal.timeout(20000);
-        while (!events.some(event => event.event === "results" && event.receipt.requestId === requestId)) {
+        while (!events.some(event => event.event === "results" && event.requestId === requestId)) {
             deadline.throwIfAborted();
             await new Promise(resolve => setTimeout(resolve, 10));
         }
-        return events.find(event => event.event === "results" && event.receipt.requestId === requestId);
+        return events.find(event => event.event === "results" && event.requestId === requestId);
     };
     const result = await query("physician", 1, []);
     await exclusiveBoard(context, state => {
-        const selected = runtime.search.membership("owned-proof", result.receipt, state, "tool");
+        const selected = runtime.search.membership("owned-proof", result.matches.receipt, state, "tool");
         assert.deepEqual(selected.scenarioIds, ["search-0"]);
         assert.equal(selected.actionIds.length, 0);
-        assert.throws(() => runtime.search.membership("unowned", result.receipt, state, "tool"), /disconnected/);
-        assert.throws(() => runtime.search.membership("owned-proof", { ...result.receipt, epoch: result.receipt.epoch + 1 }, state, "tool"), /stale/);
+        assert.throws(() => runtime.search.membership("unowned", result.matches.receipt, state, "tool"), /disconnected/);
+        assert.throws(() => runtime.search.membership("owned-proof", { ...result.matches.receipt, epoch: result.matches.receipt.epoch + 1 }, state, "tool"), /stale/);
     }, { readOnly: true });
     const narrowed = await query("physician", 2, ["interaction"]);
-    assert.throws(() => runtime.search.membership("owned-proof", narrowed.receipt, {}, "invented"), /layer/);
-    await exclusiveBoard(context, state => assert.throws(() => runtime.search.membership("owned-proof", narrowed.receipt, state, "tool"), /unavailable/), { readOnly: true });
+    assert.throws(() => runtime.search.membership("owned-proof", result.matches.receipt, {}, "invented"), /layer/);
+    await exclusiveBoard(context, state => assert.throws(() => runtime.search.membership("owned-proof", narrowed.matches.receipt, state, "tool"), /search-membership-purpose/), { readOnly: true });
     const empty = await query("NO_MATCH_WHOLE_CORPUS", 3, []);
-    await exclusiveBoard(context, state => assert.deepEqual(runtime.search.membership("owned-proof", empty.receipt, state, "tool"),
+    await exclusiveBoard(context, state => assert.deepEqual(runtime.search.membership("owned-proof", empty.matches.receipt, state, "tool"),
         { scenarioIds: [], actionIds: [], parentScenarioIds: [] }), { readOnly: true });
     await runtime.collector.close();
-    assert.throws(() => runtime.search.membership("owned-proof", empty.receipt, { revision: empty.receipt.revision }, "tool"), /stale/);
-    while (!events.some(event => event.event === "fence" && event.epoch > empty.receipt.epoch)) {
+    assert.throws(() => runtime.search.membership("owned-proof", empty.matches.receipt, { revision: empty.matches.receipt.revision }, "tool"), /stale/);
+    while (!events.some(event => event.event === "fence" && event.epoch > empty.matches.receipt.epoch)) {
         await new Promise(resolve => setTimeout(resolve, 10));
     }
     const noSource = await query("lab results", 4, []);
     assert.ok(noSource.status.corpus.issues.some(issue => issue.code === "source-unavailable"));
-    assert.equal(noSource.hits.some(hit => hit.type === "reply"), false);
+    assert.equal(noSource.matches.hits.some(hit => hit.type === "reply"), false);
     assert.equal((await loadBoardState(context)).personalEvaluation.consent.state, "enabled", "Persisted consent is not current source authorization");
     response.writableLength = 9 * 1024 * 1024;
     assert.doesNotThrow(() => runtime.search.invalidate(), "Slow-consumer closure must not reenter the corpus invalidation callback");
@@ -152,7 +152,7 @@ test("corrupt model bytes expose lexical-only status without implicit repair or 
     t.after(() => panel.close());
     await panel.api("/api/search/query", { query: "physician", requestId: 1 });
     const found = await panel.wait(event => event.event === "results");
-    assert.equal(found.receipt.mode, "lexical-only");
+    assert.equal(found.matches.receipt.mode, "lexical-only");
     assert.equal(found.status.model.code, "model-corrupt");
 });
 
@@ -168,7 +168,7 @@ test("route opening detects changed retained content even if an external write r
     state.evidenceFile = createHash("sha256").update(changed).digest("hex") + ".json";
     await writeFile(path.join(context.dataDir, "private-evidence", state.evidenceFile), changed);
     await writeFile(path.join(context.dataDir, `${BOARD_ID}.state.json`), JSON.stringify(state));
-    assert.equal((await panel.api("/api/search/open", { id: found.hits[0].id, receipt: found.receipt, openId: 1 })).code, 409);
+    assert.equal((await panel.api("/api/search/open", { id: found.matches.hits[0].id, receipt: found.matches.receipt, openId: 1 })).code, 409);
     assert.equal(panel.events.some(event => event.event === "opened"), false);
 });
 
@@ -180,12 +180,12 @@ test("opening has one owned read slot and close waits for that gate without a la
             const event = JSON.parse(line); events.push(event);
             if (event.event === "results") ready.resolve(event);
         }, end() { this.emit("close"); } });
-    runtime.search.attach("open-proof", response);
-    runtime.search.query("open-proof", { query: "physician", requestId: 1, types: ["interaction"] });
+    runtime.search.attach("open-proof", response, { schemaVersion: 2 });
+    runtime.search.query("open-proof", { schemaVersion: 2, purpose: "navigation", query: "physician", requestId: 1, types: ["interaction"] });
     const found = await ready.promise, entered = Promise.withResolvers(), release = Promise.withResolvers();
     const lock = exclusiveBoard(context, async () => { entered.resolve(); await release.promise; }, { readOnly: true });
     await entered.promise;
-    const input = { id: found.hits[0].id, receipt: found.receipt, openId: 1 };
+    const input = { id: found.matches.hits[0].id, receipt: found.matches.receipt, openId: 1 };
     const opening = runtime.search.open("open-proof", input);
     const rejected = assert.rejects(opening, /stale-search-target/);
     await assert.rejects(runtime.search.open("open-proof", { ...input, openId: 2 }), error => error.code === "search-open-busy");
@@ -210,7 +210,7 @@ test("search transport rejects foreign origin, unauthenticated reads and caller-
     t.after(() => panel.close());
     await panel.api("/api/search/query", { query: "physician", requestId: 1 });
     const found = await panel.wait(event => event.event === "results");
-    const opened = await panel.api("/api/search/open", { id: found.hits[0].id, receipt: found.receipt,
+    const opened = await panel.api("/api/search/open", { id: found.matches.hits[0].id, receipt: found.matches.receipt,
         openId: 1, path: "unregistered.html" });
     assert.equal(opened.code, 422);
     assert.equal(panel.events.some(event => event.event === "opened"), false);
@@ -227,11 +227,11 @@ test("frozen-reader: foreign comparison receipt and close during its file gate c
                 const event = JSON.parse(line); events.push(event);
                 if (event.event === "results") ready.resolve(event);
             }, end() { this.emit("close"); } });
-        app.runtime.search.attach(owner, response);
-        app.runtime.search.query(owner, { query: "Saved comparison", requestId: 1, types: ["comparison"] });
+        app.runtime.search.attach(owner, response, { schemaVersion: 2 });
+        app.runtime.search.query(owner, { schemaVersion: 2, purpose: "navigation", query: "Saved comparison", requestId: 1, types: ["comparison"] });
         owners.set(owner, { found: await ready.promise, events });
     }
-    const { found, events } = owners.get("file-owner-a"), input = { id: found.hits[0].id, receipt: found.receipt, openId: 1 };
+    const { found, events } = owners.get("file-owner-a"), input = { id: found.matches.hits[0].id, receipt: found.matches.receipt, openId: 1 };
     await assert.rejects(app.runtime.search.open("file-owner-b", input), /stale-search-target/);
     const entered = Promise.withResolvers(), release = Promise.withResolvers();
     const lock = exclusiveBoard(app.context, async () => { entered.resolve(); await release.promise; }, { readOnly: true });

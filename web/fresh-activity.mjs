@@ -1,13 +1,23 @@
 // Serialized with the client. Source completion needs its receipt AND an applied snapshot.
 export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" } = {}) {
     let sequence = 0, phase = "idle", check = null, message = "", context = "", coverage = "", details = "";
+    let sourceFailure = null, readFailed = false;
+    const sourceMessage = reason => reason === "source_paths_invalid" ? "Source paths need attention."
+        : reason === "source_metadata_unavailable" ? "Local history could not be read."
+        : reason === "source_mapping_unsupported" ? "Local history format is not supported."
+        : "Local history check failed.";
+    const sourceContext = () => sourceFailure.reason === "source_paths_invalid"
+        ? "The saved paths must be absolute and name data.db and session-state."
+        : sourceFailure.error;
     if (sourceUnknown) {
         phase = "unconfirmed";
         message = "Earlier source check unconfirmed.";
-        context = "Refresh and Retry read stored activity and status only; the earlier check is not repeated.";
+        context = "Only stored activity can be refreshed; the earlier check will not be repeated.";
     }
     return {
-        snapshot: () => ({ token: sequence, phase, check, message, context, coverage, details, sourceUnknown, sourceWarning, sourceBlocked: Boolean(sourceWarning) }),
+        snapshot: () => ({ token: sequence, phase, check, message, context, coverage, details, sourceUnknown, sourceWarning,
+            sourceBlocked: Boolean(sourceWarning), sourceFailure, readFailed,
+            recovery: readFailed || sourceUnknown || sourceWarning ? "stored" : sourceFailure ? "source" : null }),
         busy: () => ["checking", "applying", "waiting"].includes(phase),
         blockSource(reason) {
             sourceWarning = reason;
@@ -17,13 +27,23 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
                 context = "Previous view kept.";
             }
         },
-        fail(token, error, { rejected = false } = {}) {
+        fail(token, error, { rejected = false, reason = "", configVersion, revision, lastCheckId } = {}) {
             if (token !== sequence || !["checking", "applying"].includes(phase)) return false;
             const checking = phase === "checking";
-            if (checking) sourceUnknown = !rejected;
+            if (checking) {
+                const knownSourceFailure = ["source_paths_invalid", "source_metadata_unavailable", "source_mapping_unsupported"].includes(reason);
+                sourceUnknown = !rejected && !knownSourceFailure;
+                sourceFailure = sourceUnknown ? null : { reason, error, configVersion, revision, lastCheckId };
+            }
+            readFailed = !checking;
             phase = "error";
-            message = check ? "Check finished; view not updated." : checking ? "Local check not confirmed." : "Stored view not updated.";
-            context = `Previous view kept. ${error}` + (sourceUnknown ? " Source check outcome unknown; Retry does not repeat it." : "");
+            message = check ? "Check finished; view not updated." : checking
+                ? sourceFailure ? sourceMessage(reason) : "Local check not confirmed." : "Stored view not updated.";
+            const cause = reason === "runtime_unavailable" ? "WIRE could not be reached."
+                : reason === "invalid_response" ? "WIRE returned an unreadable response." : error;
+            context = sourceFailure && checking ? `Previous view kept. ${sourceContext()}`
+                : sourceUnknown && checking ? `Previous view kept. ${cause} Source check outcome unknown; it will not be repeated.`
+                : `Previous view kept. ${cause}` + (sourceUnknown ? " Source check outcome unknown; it will not be repeated." : "");
             coverage = ""; details = "";
             return true;
         },
@@ -46,6 +66,8 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
             if (["checking", "applying", "waiting"].includes(phase) || checkSource && (sourceUnknown || sourceWarning)) return null;
             sequence++;
             phase = checkSource ? "checking" : "applying"; check = null;
+            if (checkSource) sourceFailure = null;
+            readFailed = false;
             message = checkSource ? "Checking local Copilot history..." : "Reading stored activity...";
             context = ""; coverage = ""; details = "";
             return sequence;
@@ -65,17 +87,27 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
             return true;
         },
         applied(revision, configVersion, rows) {
+            if (sourceFailure?.configVersion !== undefined && configVersion !== undefined && configVersion !== sourceFailure.configVersion) {
+                sourceFailure = null;
+                if (!readFailed && !check && ["error", "complete"].includes(phase)) phase = "applying";
+            }
             if (phase === "applying" && !check) {
                 phase = sourceUnknown ? "unconfirmed" : "complete";
-                message = sourceUnknown ? "Stored data refreshed; source check unconfirmed." : "Stored activity refreshed.";
+                readFailed = false;
+                message = sourceUnknown ? "Stored data refreshed; source check unconfirmed."
+                    : sourceFailure ? sourceMessage(sourceFailure.reason) : "Stored activity refreshed.";
                 context = sourceUnknown
-                    ? "The source check outcome is unknown. Retry reads stored data and current status only; it never repeats the check."
+                    ? "The source check outcome is unknown; it will not be repeated."
+                    : sourceFailure ? `Stored activity refreshed; local history was not checked again. ${sourceContext()}`
                     : "No source history was checked.";
                 return true;
             }
             if (phase === "error" && !check) {
-                message = "Stored data refreshed; check still unconfirmed.";
-                context = "Only stored evidence was read. " + context.replace(/^(Previous view kept|Only stored evidence was read)\. /, "");
+                if (sourceFailure && !readFailed) {
+                    message = sourceMessage(sourceFailure.reason);
+                    context = `Stored activity refreshed; local history was not checked again. ${sourceContext()}`;
+                }
+                return false;
             }
             if (!["applying", "waiting", "complete", "partial"].includes(phase) || !check || revision < check.revision) return false;
             if (configVersion !== check.configVersion) {
@@ -120,6 +152,7 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
                 if (check.partialSources) details += " An unfinished entry can be read after Copilot finishes saving it.";
                 if (check.skippedSources) details += " Chats beyond the discovery limit were not checked; repeating the check does not remove that limit.";
             } else phase = "complete";
+            readFailed = false;
             details = details.trim();
             return true;
         },

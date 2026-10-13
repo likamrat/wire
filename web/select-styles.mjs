@@ -1,7 +1,7 @@
 export const selectStyles = `
 :root {--layer-select:6;--select-radius:var(--radius);--select-value-inset:max(12px,.5rem);--select-field-gap:4px;--select-help-target:var(--help-target)}
 .select-source {display:none!important}
-.select-control {display:inline-flex;min-width:0;max-width:100%;vertical-align:middle}
+.select-control {display:inline-flex;width:fit-content;min-width:0;max-width:100%;align-self:start;vertical-align:middle}
 :is(.select-field:not(.bucket-control),.filter-field:has(>.select-control)) {
  display:flex;flex-direction:column;gap:var(--select-field-gap);min-width:0;
 }
@@ -20,7 +20,7 @@ export const selectStyles = `
 .collection-tools .select-field>label {flex:initial;max-width:none}
 .select-trigger {
  position:relative;isolation:isolate;display:inline-grid;grid-template-columns:minmax(0,1fr) 16px;
- align-items:center;column-gap:var(--pill-gap);width:100%;min-width:0;min-height:max(44px,calc(1lh + 16px));padding:0 var(--select-value-inset);
+ align-items:center;column-gap:var(--pill-gap);width:100%;min-width:44px;min-height:max(44px,calc(1lh + 16px));padding:8px var(--select-value-inset);
  border:0;border-radius:var(--radius-field);background:transparent;color:var(--pill-ink);
  font-size:var(--type-control);font-weight:var(--pill-weight);line-height:var(--leading-control);text-align:left;
  box-shadow:none;touch-action:manipulation;
@@ -36,16 +36,17 @@ export const selectStyles = `
 .select-trigger:focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 .select-trigger:disabled {color:var(--muted)}
 .select-trigger:disabled::before {background:var(--canvas);border-color:var(--rule)}
-.select-trigger .select-value {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.select-trigger .select-value {display:block;white-space:normal;overflow-wrap:anywhere;min-width:0}
 .select-trigger .select-chevron {display:block;width:16px;height:16px;flex:none;fill:currentColor}
 .select-trigger[aria-expanded=true] .select-chevron {transform:rotate(180deg)}
 .filters .filter-field {flex:0 1 auto;min-width:min(100%,9rem);max-width:100%}
 .filters .filter-field:has(#dateFilter) {width:9.5rem}
 .filters .filter-field:has(#serviceFilter),.filters .filter-field:has(#outcomeFilter) {width:9.75rem}
 .filters .filter-field:has(#projectFilter),.filters .filter-field:has(#layerFilter) {width:13.25rem}
-.filters .select-control {width:100%}
+.filters .select-control {width:fit-content}
 .filters {align-items:end;gap:8px 12px}
 .chart-heading .select-control {width:max-content;flex:none}
+.chart-heading #bucketControl>.select-control {align-self:baseline}
 .chart-heading .select-trigger {padding:0 6px;column-gap:4px;font-weight:var(--weight-medium);border-radius:8px}
 .chart-heading .select-value,.select-option-sizer {grid-area:1/1}
 .chart-heading .select-value {overflow:visible;text-overflow:clip}
@@ -55,10 +56,10 @@ export const selectStyles = `
 .chart-heading .select-trigger::before {border:0;background:transparent}
 .chart-heading .select-trigger:hover:not(:disabled)::before {background:var(--hover)}
 .chart-heading .select-trigger[aria-expanded=true]::before {background:var(--accent-soft)}
-.collection-tools .select-control {width:100%}
+.collection-tools .select-control {width:fit-content}
 .select-popup {
  position:fixed;inset:auto;margin:0;z-index:var(--layer-select);box-sizing:border-box;
- width:240px;max-width:min(360px,calc(100vw - 16px));max-height:320px;overflow:auto;overscroll-behavior:contain;
+ width:max-content;max-width:min(36em,var(--select-available-width,calc(100vw - 16px)));max-height:20rem;overflow:auto;overscroll-behavior:contain;
  padding:6px;border:1px solid var(--rule);border-radius:var(--select-radius);
  background:var(--paper);color:var(--ink);box-shadow:var(--shadow);
  font:var(--type-control)/var(--leading-control) var(--font);scrollbar-width:thin;scrollbar-color:var(--control) transparent;
@@ -72,15 +73,15 @@ export const selectStyles = `
 .select-option[aria-selected=true] {background:var(--accent-soft);color:var(--accent);font-weight:var(--weight-medium)}
 .select-option[data-active=true] {background:var(--hover);outline:1px solid var(--control);outline-offset:-1px}
 .select-option[aria-selected=true][data-active=true] {background:var(--accent-soft)}
-.select-check {display:block;width:20px;height:20px;visibility:hidden;fill:currentColor}
+.select-check {display:block;width:16px;height:16px;justify-self:center;visibility:hidden;fill:currentColor}
 .select-option-label {min-width:0;white-space:normal;overflow-wrap:anywhere}
 .select-option-detail {grid-column:1/-1;display:block;margin-top:3px;color:var(--muted);font-size:var(--type-caption);font-weight:var(--weight-regular);line-height:1.45;overflow-wrap:anywhere}
 .select-option[aria-selected=true] .select-check {visibility:visible}
 .select-option[aria-disabled=true] {color:var(--muted);cursor:not-allowed}
 .select-group {padding:6px 10px;color:var(--muted);font-size:var(--type-caption);font-weight:var(--weight-medium)}
-.select-popup-multiple {max-width:min(400px,calc(100vw - 16px))}
-.select-popup-multiple .select-check {visibility:visible;border:1px solid var(--control);border-radius:4px;padding:2px;fill:transparent}
-.select-popup-multiple .select-option[aria-selected=true] .select-check {fill:currentColor;border-color:currentColor}
+.select-popup-multiple {max-width:min(32em,var(--select-available-width,calc(100vw - 16px)));max-height:calc(100dvh - 16px)}
+.select-popup-multiple .select-check {width:20px;height:20px;visibility:visible;border:0;border-radius:4px;padding:2px;outline:1px solid var(--control);outline-offset:-1px;fill:transparent}
+.select-popup-multiple .select-option[aria-selected=true] .select-check {fill:currentColor;outline-color:currentColor}
 .select-all {width:100%;justify-content:flex-start;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--rule);border-radius:0;margin-bottom:4px}
 .select-draft-hint {font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:8px 10px}
 .select-footer {display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px;border-top:1px solid var(--rule)}

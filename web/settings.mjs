@@ -5,8 +5,7 @@ export const settingsMarkup = `
   <aside class="settings-rail" aria-label="Settings navigation">
   <div class="scoped-search settings-search">
     <label for="settingsSearch" class="visually-hidden">Search settings</label>
-    <div class="search-input-row"><input id="settingsSearch" type="search" placeholder="Search settings" autocomplete="off" spellcheck="false" aria-describedby="settingsSearchHelp"><button id="clearSettingsSearch" type="button" class="quiet" hidden>Clear</button></div>
-    <p id="settingsSearchHelp" class="settings-help visually-hidden">Try time zone, source or history. Search stays in this browser.</p>
+    <div class="search-input-row"><input id="settingsSearch" type="search" placeholder="Search settings" autocomplete="off" spellcheck="false"><button id="clearSettingsSearch" type="button" class="quiet" hidden>Clear</button></div>
     <p id="settingsSearchCount" class="search-count" role="status" hidden></p>
     <ul id="settingsSearchResults" class="settings-search-results" hidden></ul>
   </div>
@@ -32,75 +31,75 @@ export const settingsMarkup = `
     <h3>Recollect activity</h3>
     <p id="recollectActivityHelp">Restore available activity from approved Copilot chats only after preview and confirmation. Missing source history cannot be recovered.</p>
     </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Recollect from approved sources</button></div>
-    <p class="settings-help">Saved reports keep their reviewed content. <a href="#reports" data-settings-link>Open saved reports</a> to manage them separately.</p>
+    <a href="#reports" data-settings-link>Open saved reports</a>
   </section>
   <section class="settings-section" data-settings-section="ai" aria-labelledby="aiReviewsTitle" hidden>
     <h2 id="aiReviewsTitle" tabindex="-1">AI reviews</h2>
     <div id="automaticScoreSetup"></div>
-    <p class="settings-help">Review which chats and evidence may be sent to GitHub Copilot, with a shared assessment allowance and AI-credit budget. Charges are post-paid; an in-flight assessment may exceed the soft limit.</p>
-    <p class="settings-help">Source approval and reply saving do not authorize model review. Opening these settings does not run an assessment.</p>
+    <p class="settings-help">Sending evidence to GitHub Copilot requires separate approval and an AI-credit budget. Charges can exceed the soft limit.</p>
   </section>
   <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
     <h2 id="displayTitle" tabindex="-1">Display</h2>
     <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
-      <h3>Theme</h3><p id="settingsThemeState" role="status"></p>
-      <p id="settingsThemeHelp" class="settings-help">Saved for this browser and app address. The header switch uses the same preference.</p>
-    </div><button id="settingsThemePreference" type="button" aria-describedby="settingsThemeState settingsThemeHelp themeStorageNotice">Change theme</button></div>
+      <h3>Theme</h3>
+    </div><button id="settingsThemePreference" type="button" aria-describedby="themeStorageNotice">Change theme</button></div>
     <div class="settings-field display-time-field">
-      <label for="displayTimeZone">Time zone</label>
-      <select id="displayTimeZone" aria-describedby="displayTimeImpact displayTimeEffective displayTimeHelp timeZoneNotice"></select>
-      <p id="displayTimeImpact" class="settings-help">Dates, filters and new previews use this zone. Saved reports and source timestamps stay unchanged.</p>
+      <h3><label for="displayTimeZone">Time zone</label></h3>
+      <select id="displayTimeZone" aria-describedby="displayTimeEffective displayTimeHelp timeZoneNotice"></select>
       <p id="displayTimeHelp" class="settings-help" hidden></p>
-      <p id="displayTimeEffective" class="settings-help"></p>
-      <details class="settings-advanced" id="displayScope"><summary>About this time zone</summary><p id="displayTimeDevice" class="settings-help" hidden></p><p class="settings-help">Type a city name in the list to jump to it. Device default removes your override and follows the browser. From and To keep their calendar dates in the chosen zone.</p><p class="settings-help">Saved for this browser profile and app address, not other browsers or devices. This does not change your operating system or collection settings.</p></details>
+      <p id="displayTimeEffective" class="settings-help" role="status" hidden></p>
     </div>
   </section>
   <div id="collectionForm">
     <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
-      <div class="settings-section-heading"><h2 id="connectionTitle" tabindex="-1">Connection &amp; updates</h2><span id="connectionStatus" class="connection-status">Checking connection</span></div>
+      <h2 id="connectionTitle" tabindex="-1">Connection &amp; updates</h2>
+      <section id="connectionSource" class="settings-group" aria-labelledby="connectionSourceTitle">
+      <div class="settings-group-heading"><h3 id="connectionSourceTitle">Source</h3><span id="connectionStatus" class="connection-status">Checking connection</span></div>
       <div id="approvedConnection" hidden>
         <p><strong>Local Copilot chats</strong> <span id="connectionApproval" class="approved-label">Approved</span></p>
-        <p id="connectionSummary" class="settings-help"></p>
-        <div class="settings-actions"><span id="sourceEditAction"><button id="editSource" type="button">Change source</button></span><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button></div>
+        <div class="settings-actions"><a id="viewApprovedSource" class="button-link quiet" href="#settings?section=connection&setting=source-paths" data-settings-link>View source</a><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button></div>
       </div>
       <div id="unapprovedConnection" hidden>
         <p>Collect local Copilot activity, including original prompts. Review the source paths before connecting.</p>
         <button id="reviewSource" type="button" class="primary">Review source &amp; connect</button>
       </div>
       <div id="approvedSourceDetails" class="source-paths-read" hidden>
-        <h3 id="approvedSourceTitle" tabindex="-1">Approved source paths</h3>
+        <h4 id="approvedSourceTitle" tabindex="-1">Approved source paths</h4>
         <dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="approvedDatabase"></dd><dt>Chat history folder</dt><dd id="approvedSessions"></dd></dl>
+        <div class="settings-actions"><span id="sourceEditAction"><button id="editSource" type="button">Change source</button></span></div>
       </div>
       <div id="sourceEditor" class="source-editor" hidden>
-        <h3 id="sourceEditorTitle">Review this source</h3>
+        <h4 id="sourceEditorTitle">Review this source</h4>
         <p id="sourceChangeImpact" class="settings-help"></p>
         <p id="sourceSuggestion" class="settings-help" hidden></p>
-        <div class="settings-field"><label for="sourceDatabase">Copilot metadata database</label><input id="sourceDatabase" type="text" autocomplete="off" spellcheck="false" aria-describedby="sourceDatabaseHelp sourceScope settingsMessage"><p id="sourceDatabaseHelp" class="settings-help">Identifies Copilot chats (data.db).</p></div>
-        <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="sourceSessionsHelp sourceScope settingsMessage"><p id="sourceSessionsHelp" class="settings-help">Contains recorded events (session-state).</p></div>
-        <p id="sourceScope" class="settings-help">Only these named local sources are read. No repository scans, model calls, cloud sign-in or OS startup task.</p>
+        <div class="settings-field"><label for="sourceDatabase">Copilot metadata database</label><input id="sourceDatabase" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
+        <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         <p id="approvalScope"></p>
         <a href="#settings?section=connection&setting=history-window" data-settings-link class="text-link">Review history and frequency</a>
         <div class="settings-actions"><button id="connectCollection" type="button" class="primary">Approve source and start collection</button><button id="cancelSource" type="button" class="quiet">Cancel</button></div>
       </div>
-      <p class="settings-help permission-boundary">Review reports separately before saving or sharing.</p>
+      </section>
+      <section id="connectionPreferences" class="settings-group" aria-labelledby="preferencesTitle">
       <h3 id="preferencesTitle" class="settings-subheading" tabindex="-1">History and frequency</h3>
       <div class="settings-preferences">
-        <div class="settings-field"><label for="collectionWindow">Initial history window</label><select id="collectionWindow" aria-describedby="historyWindowHelp"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select><p id="historyWindowHelp" class="settings-help">How much saved chat history to read. Collected activity is kept.</p></div>
-        <div class="settings-field"><label for="collectionCadence">Check frequency</label><select id="collectionCadence" aria-describedby="eventCadenceHelp"><option value="5" selected>Every 5 seconds</option><option value="15">Every 15 seconds</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option></select><p id="eventCadenceHelp" class="settings-help">Longer intervals reduce disk checks.</p></div>
+        <div class="settings-field"><label for="collectionWindow">Initial history window</label><select id="collectionWindow"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select></div>
+        <div class="settings-field"><label for="collectionCadence">Check frequency</label><select id="collectionCadence"><option value="5" selected>Every 5 seconds</option><option value="15">Every 15 seconds</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option></select></div>
       </div>
       <div id="preferenceActions" class="settings-actions"><button id="saveCollection" type="button" class="primary" disabled>Save preferences</button><button id="cancelPreferences" type="button" class="quiet" disabled>Cancel changes</button></div>
       <p id="settingsDraftStatus" class="settings-help" role="status"></p>
       <a id="returnToSourceReview" href="#settings?section=connection&setting=source" data-settings-link class="text-link" hidden>Return to source review</a>
-      <details class="settings-advanced" id="collectionPreferenceDetails"><summary>Collection details</summary><p class="settings-help">Large histories may take several checks, within the file read limit. New and archived chats are discovered every 30 seconds. Closing this panel does not pause collection.</p><p class="settings-help">Changing these preferences keeps collected activity, saved reports, your approved source and its active or paused state.</p></details>
+      </section>
     </section>
   </div>
   <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
     <h2 id="troubleshootingTitle" tabindex="-1">Troubleshooting</h2>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>History gaps</h3><p>Read coverage, affected chats and the last saved check. History gaps are separate from failed tool calls.</p></div><a class="button-link" href="#collection-status?setting=issues" data-settings-link>Review chat history</a></div>
-    <div class="collection-status-actions"><a href="#collection-status?setting=collection-details" data-settings-link>Collection technical details</a><a href="#collection-status?setting=network-diagnostic" data-settings-link>Optional network diagnostic</a></div>
-    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>Service details</summary><p>WIRE uses recorded targets, not prompts or citations, to identify services. Missing or unsupported targets stay explicit; discovery and assistance do not prove a service ran.</p><p><a href="#analyze?mode=calls" data-settings-link>Open Calls in Analyze</a> and choose a call for its recorded target and service explanation.</p></details>
-    <details id="authorProvenanceHelp" class="settings-advanced"><summary>Prompt authors</summary><p>Sender metadata identifies the prompt author, not the tool executor. Missing, incompatible or conflicting metadata stays explained; message wording is not proof of authorship.</p><p><a href="#analyze?mode=interactions" data-settings-link>Open interactions in Analyze</a> to inspect the recorded author and available context.</p></details>
-    <details id="settingsSearchDetails" class="settings-advanced"><summary>Settings search</summary><p>Search setting names and purposes, such as source, reply saving or budget. This local lookup does not search private paths, prompts or report contents. Choosing a match only opens its destination; it does not apply a change.</p></details>
+    <section class="settings-group" aria-labelledby="historyHelpTitle">
+      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">History gaps</h3></div><a class="button-link" href="#collection-status?setting=issues" data-settings-link>Review chat history</a></div>
+      <div class="collection-status-actions"><a href="#collection-status?setting=collection-details" data-settings-link>Collection technical details</a><a href="#collection-status?setting=network-diagnostic" data-settings-link>Optional network diagnostic</a></div>
+    </section>
+    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>Service details</summary><p>Services come from recorded targets, not prompts or citations. Discovery does not prove a service ran.</p><a href="#analyze?mode=calls" data-settings-link>Open Calls in Analyze</a></details>
+    <details id="authorProvenanceHelp" class="settings-advanced"><summary>Prompt authors</summary><p>The prompt author comes from sender metadata, not message wording or who executed a tool.</p><a href="#analyze?mode=interactions" data-settings-link>Open interactions in Analyze</a></details>
+    <details id="settingsSearchDetails" class="settings-advanced"><summary>Search troubleshooting</summary><p>For missing search model files, run <code>npm run search:model:provision</code> from the WIRE source folder. Corrupt files require repair first. Word search remains available.</p></details>
   </section>
   </div>
   </div>
@@ -168,8 +167,7 @@ export function mountDisplayTimeSettings({ time, onChange }) {
         if (signature !== choicesKey) {
             const select = $("displayTimeZone"), automatic = document.createElement("option");
             automatic.value = "";
-            automatic.textContent = "Device default";
-            automatic.dataset.detail = time.label(device);
+            automatic.textContent = `Device default (${time.label(device)})`;
             select.replaceChildren(automatic);
             try {
                 const choices = time.zoneChoices(device, preference);
@@ -195,12 +193,11 @@ export function mountDisplayTimeSettings({ time, onChange }) {
         }
         $("displayTimeZone").value = preference ?? "";
         $("displayTimeZone").disabled = busy;
-        const source = context.timeZone !== resolve().timeZone ? "Current view" : preference === null ? "Device zone" : "Override";
-        $("displayTimeEffective").textContent = `${source}: ${time.label(context)}.`
-            + (stale ? " The selected zone has not loaded; retry the view update." : state.pending ? " Updating the view before changing its time context." : "");
-        $("displayTimeDevice").textContent = `Device/browser zone: ${time.label(device)}.`
-            + (preference !== null && preference !== device.timeZone ? " Your override uses a different zone." : "");
-        $("displayTimeDevice").hidden = preference === null;
+        const changingZone = context.timeZone !== resolve().timeZone;
+        $("displayTimeEffective").textContent = changingZone && stale
+            ? `The selected zone has not loaded. Still using ${time.label(context)}; retry the view update.`
+            : changingZone && state.pending ? `Updating time zone. Still using ${time.label(context)}.` : "";
+        $("displayTimeEffective").hidden = !$("displayTimeEffective").textContent;
     }
     $("displayTimeZone").addEventListener("change", () => {
         if (busy) return;
@@ -232,7 +229,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
     const $ = id => document.getElementById(id);
     const fields = ["sourceDatabase", "sourceSessions", "collectionWindow", "collectionCadence"];
     const explanations = new Map();
-    let latest, baseline, initialized = false, editing = false, busy = false, stale = false, uncertain = false, pendingAction = "", checking = false, visibleSection;
+    let latest, baseline, initialized = false, editing = false, busy = false, stale = false, uncertain = false, pendingAction = "", checking = false, visibleSection, visibleSetting;
     function version(status) { return status?.configVersion ?? JSON.stringify(status?.config ?? null); }
     function values() {
         return { appDbPath: $("sourceDatabase").value.trim(), sessionRoot: $("sourceSessions").value.trim(),
@@ -261,15 +258,17 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
     }
     function paint() {
         const approved = latest?.config?.approved === true, changed = dirty(), working = busy || checking;
+        const inspectingSource = visibleSection === "connection" && ["source", "source-paths"].includes(visibleSetting);
         const sourceChanged = JSON.stringify([values().appDbPath, values().sessionRoot]) !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot]);
         $("approvedConnection").hidden = !approved;
         $("unapprovedConnection").hidden = approved || editing;
-        $("approvedSourceDetails").hidden = !approved || editing;
+        $("approvedSourceDetails").hidden = !approved || editing || !inspectingSource;
+        $("viewApprovedSource").hidden = editing || inspectingSource;
         $("sourceEditAction").hidden = editing;
         $("sourceEditor").hidden = !editing;
         $("returnToSourceReview").hidden = !editing;
-        setText("connectionStatus", !latest ? "Checking connection" : !approved ? "Not connected" : latest.error ? "Connection issue" : latest.connected ? "Connected" : "Checking connection");
-        setText("connectionSummary", latest?.config?.enabled ? "Collects while WIRE is running." : "Collection is paused.");
+        setText("connectionStatus", !latest ? "Checking connection" : !approved ? "Not connected" : latest.error ? "Connection issue"
+            : !latest.config.enabled ? "Paused" : latest.connected ? "Collection on" : "Checking connection");
         setText("approvedDatabase", latest?.config?.appDbPath || "");
         setText("approvedSessions", latest?.config?.sessionRoot || "");
         setText("sourceEditorTitle", approved ? "Change source paths" : "Review this source");
@@ -360,9 +359,10 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
             : !changed ? "" : sourceEdits ? "Source edits discarded. Your approved source is unchanged."
                 : "Preference edits discarded. Saved collection settings are unchanged.");
         paint();
-        const target = document.querySelector('[data-settings-section="connection"]:not([hidden])')
+        let target = document.querySelector('[data-settings-section="connection"]:not([hidden])')
             ? $(latest?.config?.approved ? "editSource" : "reviewSource")
             : document.querySelector("[data-settings-section]:not([hidden]) h2");
+        if (target === $("editSource") && !target.checkVisibility()) target = $("viewApprovedSource");
         ux.restoreFocus(target?.disabled ? target.closest(".ux-disabled-help") : target);
     }
     async function act(endpoint, input, success) {
@@ -429,10 +429,13 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
     });
     return { receive, hasDraft: () => dirty() || editing, isBusy: () => busy, explain: id => explanations.get(id) || "",
         canRefresh: () => !busy && !uncertain && !stale && !dirty() && !editing,
-        setSection(section) {
-            if (visibleSection === section) return;
+        setSection(section, setting) {
+            if (visibleSection === section && visibleSetting === setting) return;
+            const sectionChanged = visibleSection !== section;
             visibleSection = section;
-            if (!busy && !uncertain && !$("settingsMessage").classList.contains("error")) message("");
+            visibleSetting = setting;
+            if (sectionChanged && !busy && !uncertain && !$("settingsMessage").classList.contains("error")) message("");
+            paint();
         },
         setChecking(value) { if (checking !== value) { checking = value; paint(); } } };
 }

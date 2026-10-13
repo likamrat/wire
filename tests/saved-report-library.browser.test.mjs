@@ -164,6 +164,7 @@ test("a thousand-report library has bounded rows, direct page navigation, metada
     await page.locator("#bundleList").getByRole("button", { name: "Delete report", exact: true }).click();
     await page.locator(".delete-object-confirm:not([disabled])").waitFor();
     await page.locator(".deletion-dialog").getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.locator("#savedLibraryManagement > summary").click();
     const previewResponse = page.waitForResponse(response => response.url().endsWith("/api/artifact-deletion/preview"), { timeout: 60000 });
     await page.locator("#deleteAllReports").click();
     const bulkPreview = await previewResponse;
@@ -252,6 +253,7 @@ test("a lost bulk response survives panel reload, checks only its receipt and le
     await page.locator('[name=promptMode][value=original]').check();
     const draftBefore = await page.locator("#reportsView").getAttribute("data-report-step");
     await openReportLibrary(page);
+    await page.locator("#savedLibraryManagement > summary").click();
     await page.route("**/api/artifact-deletion/confirm", async route => {
         const result = await route.fetch();
         assert.equal(result.status(), 200);

@@ -76,7 +76,6 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
         if (await page.locator('[data-settings-section="privacy"]').isVisible()) await page.reload();
         else await page.goto(target);
         await ready(page);
-        await page.locator("#assessmentSetup .assessment-applied").waitFor();
         await page.locator("#assessmentSetup input[type=checkbox]:not(:disabled)").waitFor();
         return page.locator("#assessmentSetup");
     }
@@ -85,7 +84,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     const enableResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
     await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     assert.equal((await enableResponse).status(), 200);
-    await page.waitForFunction(() => document.querySelector("#assessmentSetup")?.textContent.includes("Response saving is on."));
+    await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
     const originalGrant = (await loadBoardState(context)).personalEvaluation.consent;
     await appendFile(a.file, jsonl([event("assistant.message", { content: "ARTIFICIAL_OLD_SOURCE_RESPONSE" })]));
     await runtime.collector.collectNow();
@@ -104,7 +103,8 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     const frozen = await Promise.all(Object.values(saved.files).map(async file => [file, hash(await readFile(file))]));
     async function unchangedGrant(label) {
         pane = await settings();
-        assert.match(await pane.locator(".assessment-applied").textContent(), /Response saving is on/, label);
+        assert.equal(await pane.locator("input[type=checkbox]").isChecked(), true, label);
+        assert.equal(await pane.locator(".assessment-applied").isVisible(), false, label);
         assert.equal(await pane.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false, label);
         assert.equal(await pane.getByRole("button", { name: "Remove previously saved responses", exact: true }).isVisible(), false, label);
         assert.deepEqual((await loadBoardState(context)).personalEvaluation.consent, originalGrant, label);
@@ -148,7 +148,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     const renewed = await renewalResponse;
     assert.equal(renewed.status(), 200, await renewed.text());
-    await page.waitForFunction(() => document.querySelector("#assessmentSetup")?.textContent.includes("Response saving is on."));
+    await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
     state = await loadBoardState(context);
     assert.equal(state.personalEvaluation.consent.sourceConfigRef, changedSource.sourceConfigRef);
     assert.equal(state.personalEvaluation.captures.length, 0, "Renewal cleans older optional epochs.");

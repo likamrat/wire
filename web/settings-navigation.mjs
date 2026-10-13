@@ -34,7 +34,7 @@ export function createSettingsNavigation(search) {
         { id: "network-diagnostic", view: "collection-status", title: "Optional network diagnostic", context: "Read the saved HTTP recorder status. A new public Graph request needs separate confirmation.", synonyms: "http recorder graph test diagnostic", target: "recorderDiagnostics" },
         { id: "service-provenance", section: "troubleshooting", title: "Service details", context: "Understand missing or unsupported service targets without guessing which service ran.", synonyms: "mapping attribution provenance unknown files tools calls", target: "serviceProvenanceHelp" },
         { id: "author-provenance", section: "troubleshooting", title: "Prompt authors", context: "Understand missing or conflicting sender evidence. The prompt author and tool executor are different.", synonyms: "user agent author unverified attribution provenance sender", target: "authorProvenanceHelp" },
-        { id: "settings-search", section: "troubleshooting", title: "Settings search", context: "Search fixed setting names and purposes, not private paths or recorded content. Results only navigate.", synonyms: "search help no matches local query", target: "settingsSearchDetails" },
+        { id: "settings-search", section: "troubleshooting", title: "Search troubleshooting", context: "Repair missing or corrupt files for search by meaning. Word search remains available.", synonyms: "search help no matches local query model files", target: "settingsSearchDetails" },
     ];
     function resolve(route) {
         let section = route.section || "connection", setting = route.setting, warning = "";

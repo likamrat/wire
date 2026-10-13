@@ -7,12 +7,18 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { defaultConsent, validateRequest } from "../lib/assessment-contract.mjs";
-import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption, openSourceEditor, restoreLegacySearch } from "./helpers.mjs";
 import { createSettingsNavigation } from "../web/settings-navigation.mjs";
 import { createLocalSearch } from "../web/local-search.mjs";
 
-async function setup(t, { approved = true } = {}) {
+async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
     const records = [fixture("settings-reference")], reads = [], blocked = [], errors = [];
+    if (nonmatchingRecord) {
+        const other = fixture("settings-unmatched");
+        other.userPrompt.text = "Inspect invented lighthouse records";
+        other.followUpPrompts = [];
+        records.push(other);
+    }
     const basis = { sourceRevision: 1, membershipRevision: 1, consentRevision: 0, overrideRevision: 0, deletionEpoch: 0 };
     const assessment = {
         schemaVersion: 1, basis, catalog: [], overview: { interactionRefs: [], metrics: [] }, consent: defaultConsent(),
@@ -149,16 +155,14 @@ test("Settings uses a compact search/category rail and flat pane without changin
         assert.equal(await row.locator("p").count(), 1, "Each Data management entry has one short purpose/effect, not repeated safety paragraphs");
         assert.ok((await row.locator("p").innerText()).split(/\s+/).length <= 22);
     }
-    for (const selector of ["#historyWindowHelp", "#eventCadenceHelp"]) {
-        assert.ok((await page.locator(selector).textContent()).split(/\s+/).length <= 15, "Technical collection limits belong in the existing detail hierarchy");
-    }
+    assert.equal(await page.locator("#historyWindowHelp").count(), 0);
     if (process.env.WIRE_SETTINGS_REFERENCE_PROOFS) {
         await mkdir(process.env.WIRE_SETTINGS_REFERENCE_PROOFS, { recursive: true });
         for (const theme of ["light", "dark"]) for (const width of [375, 1200]) {
             await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
             for (const value of ["connection", "privacy", "ai", "display", "troubleshooting"]) {
                 await category(page, value);
-                if (value === "privacy") await page.locator("#assessmentSetup .assessment-applied").waitFor();
+                if (value === "privacy") await page.locator("#assessmentSetup input[type=checkbox]").waitFor();
                 await page.evaluate(() => document.fonts.ready);
                 await page.evaluate(() => scrollTo(0, 0));
                 await page.mouse.move(0, 0);
@@ -251,7 +255,7 @@ test("every registered setting and old route opens its exact live destination wi
 test("category navigation preserves source and reply drafts, local search, cancellation and independent approvals", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await category(page, "connection");
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill("C:\\invented-unsaved\\data.db");
     await page.locator("#sourceSessions").fill("C:\\invented-unsaved\\session-state");
     await selectActivityOption(page, "collectionWindow", "7");
@@ -278,7 +282,7 @@ test("category navigation preserves source and reply drafts, local search, cance
     await expect(page.locator("#approvalScope")).toContainText("7 days; event check: 15 seconds");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\artificial\\data.db");
-    await expect(page.locator("#editSource")).toBeFocused();
+    await expect(page.locator("#viewApprovedSource")).toBeFocused();
     await selectActivityOption(page, "collectionCadence", "30");
     await category(page, "display");
     await category(page, "connection");
@@ -353,7 +357,7 @@ test("source preferences, pause and replacement keep their own explicit save gat
     await page.locator("#pauseCollection").click();
     await expect(page.locator("#pauseCollection")).toHaveText("Pause collection");
     assert.equal(writes[1].path, "enabled");
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill("C:\\invented-new\\data.db");
     await page.locator("#sourceSessions").fill("C:\\invented-new\\session-state");
     await page.locator("#sourceSessions").press("Enter");
@@ -467,17 +471,17 @@ test("five groups retain keyboard focus and readable geometry at 375 and 200 per
     const next = previous === "light" ? "dark" : "light";
     await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", next);
     await expect(page.locator("#themePreference")).toHaveAttribute("aria-checked", String(next === "dark"));
-    await expect(page.locator("#settingsThemeState")).toHaveText(next === "dark" ? "Dark" : "Light");
+    await expect(page.locator("#settingsThemePreference")).toHaveText(next === "dark" ? "Switch to light theme" : "Switch to dark theme");
     if (proofs) await writeFile(path.join(proofs, "geometry.json"), JSON.stringify(evidence, null, 2));
 });
 
-test("Display and header share theme state and storage errors; time-zone link still focuses the exact control", async t => {
+test("Display and header share theme state and storage errors; Time zone remains in Display", async t => {
     const { page } = await setup(t);
     await category(page, "display");
     await chooseTheme(page, "light");
-    await expect(page.locator("#settingsThemeState")).toHaveText("Light");
+    await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to dark theme");
     await page.locator("#themePreference").click();
-    await expect(page.locator("#settingsThemeState")).toHaveText("Dark");
+    await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to light theme");
     await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to light theme");
     await page.evaluate(() => {
         const set = Storage.prototype.setItem;
@@ -488,20 +492,23 @@ test("Display and header share theme state and storage errors; time-zone link st
     });
     await page.locator("#settingsThemePreference").click();
     await expect(page.locator("#themeStorageNotice")).toBeVisible();
-    await expect(page.locator("#settingsThemeState")).toHaveText("Light");
+    await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to dark theme");
     await expect(page.locator("#themePreference")).toHaveAttribute("aria-checked", "false");
     await category(page, "connection");
-    await page.locator("#displayTimeZoneLink").click();
+    await category(page, "display");
+    await expect(page.getByRole("combobox", { name: "Time zone", exact: true })).toBeVisible();
+    await page.locator("#displayTimeZone-control").focus();
     await expect(page.locator("#displayTimeZone-control")).toBeFocused();
     await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "display");
 });
 
 test("Troubleshooting opens the named Analyze mode from its opposite without losing scope, private query or selection", async t => {
-    const { page } = await setup(t);
+    const { page } = await setup(t, { nonmatchingRecord: true });
     await page.evaluate(() => { location.hash = "#analyze?project=test-project&layer=tool"; });
     await expect(page.locator('[data-analyze-mode="interactions"]')).toHaveAttribute("aria-current", "true");
+    await expect(page.locator('#activityList .request-row input[type="checkbox"]')).toHaveCount(2);
     const query = "SYNTHETIC_PRIVATE_PROMPT";
-    await page.locator("#activitySearch").fill(query);
+    await restoreLegacySearch(page, query);
     const selected = page.locator('#activityList .request-row input[type="checkbox"]');
     await expect(selected).toHaveCount(1);
     await selected.check();
@@ -521,6 +528,11 @@ test("Troubleshooting opens the named Analyze mode from its opposite without los
         assert.equal(params.get("layer"), "tool");
         assert.equal(page.url().includes(query), false, "The private query stays out of the URL");
         await expect(page.locator("#activitySearch")).toHaveValue(query);
-        if (mode === "interactions") await expect(selected).toBeChecked();
+        if (mode === "interactions") {
+            await expect(selected).toHaveCount(1);
+            await expect(selected).toBeChecked();
+        }
+        await expect(page.locator("#activityCount")).toHaveText("1");
+        await expect(page.locator('#activityList a[href*="request=settings-unmatched"]')).toHaveCount(0);
     }
 });

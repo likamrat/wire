@@ -12,6 +12,113 @@ import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { contrast } from "./color-measurements.mjs";
 
+test("narrow report steps keep whole words and keyboard actions across Setup Review Save and recovery", { timeout: 30000 }, async t => {
+    const { context } = await privateFixture(t, [fixture("header-reflow")]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch({ headless: true });
+    t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage({ viewport: { width: 375, height: 1000 }, reducedMotion: "reduce" });
+    page.setDefaultTimeout(7000);
+    const proofs = process.env.WIRE_REPORT_HEADER_PROOFS, measurements = [], requests = [], errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("request", request => { if (request.method() === "POST") requests.push(new URL(request.url()).pathname); });
+    if (proofs) await mkdir(proofs, { recursive: true });
+    async function capture(name, current, disabled) {
+        for (const theme of ["light", "dark"]) for (const scale of [100, 200]) {
+            await chooseTheme(page, theme);
+            await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
+            await page.evaluate(() => document.fonts.ready);
+            const measured = await page.locator(".report-progress").evaluate(nav => {
+                const controls = [...nav.querySelectorAll("button")].map(control => {
+                    const label = control.querySelector("span:not(.report-step-number)"), text = label.firstChild;
+                    const box = control.getBoundingClientRect(), style = getComputedStyle(control);
+                    const words = [...text.textContent.matchAll(/\S+/g)].map(match => {
+                        const range = document.createRange();
+                        range.setStart(text, match.index); range.setEnd(text, match.index + match[0].length);
+                        return { word: match[0], rects: [...range.getClientRects()].map(rect => ({
+                            top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom,
+                        })) };
+                    });
+                    return { label: label.textContent, disabled: control.disabled, current: control.getAttribute("aria-current"),
+                        hint: document.getElementById(control.getAttribute("aria-describedby")).textContent,
+                        panel: control.getAttribute("aria-controls"), fontSize: parseFloat(style.fontSize),
+                        height: box.height, left: box.left, right: box.right, top: box.top, bottom: box.bottom,
+                        clipped: control.scrollWidth > control.clientWidth + 1, words };
+                });
+                return { controls, gap: parseFloat(getComputedStyle(nav.querySelector("ol")).rowGap),
+                    height: nav.getBoundingClientRect().height, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+            });
+            assert.deepEqual(measured.controls.map(control => control.label), ["Setup", "Review", "Save locally"]);
+            assert.deepEqual(measured.controls.map(control => control.disabled), disabled, `${name}: prerequisites unchanged`);
+            assert.equal(measured.controls.findIndex(control => control.current === "step"), current - 1);
+            assert.equal(measured.overflow, false);
+            for (const [index, control] of measured.controls.entries()) {
+                assert.ok(control.height >= 44 && !control.clipped);
+                assert.equal(control.panel, `reportStage${index + 1}`);
+                assert.ok(control.hint.length > 0, "Current/disabled reasons remain accessible");
+                for (const word of control.words) {
+                    assert.equal(word.rects.length, 1, `${name}/${theme}/${scale}: ${word.word} must not split across lines`);
+                    assert.ok(word.rects[0].left >= control.left && word.rects[0].right <= control.right + 1);
+                }
+            }
+            assert.ok(measured.height <= measured.controls.reduce((sum, control) => sum + control.height, 0) + 2 * measured.gap,
+                "Header height is bounded by its three controls and existing row gaps");
+            if (scale === 200) assert.ok(measured.controls[0].fontSize >= measurements.at(-1).controls[0].fontSize * 1.99,
+                "Enlarged text is not reduced to make the labels fit");
+            const focusable = page.locator(".report-step:not(:disabled)").first();
+            if (await focusable.count()) {
+                await focusable.focus();
+                assert.equal(await focusable.evaluate(node => node === document.activeElement), true);
+            }
+            measurements.push({ name, theme, scale, ...measured });
+            if (proofs) {
+                if (name === "review") {
+                    await page.frameLocator(".report-frame").locator("h1").waitFor();
+                    await page.locator(".report-frame").scrollIntoViewIfNeeded();
+                    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+                }
+                await page.evaluate(() => { document.activeElement?.blur(); scrollTo(0, 0); });
+                await page.screenshot({ path: path.join(proofs, `${name}-${theme}-375-${scale}.png`), fullPage: true });
+            }
+        }
+        await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    }
+    await page.goto(runtime.url + "#reports?task=create");
+    await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await chooseReportScope(page, "all");
+    await capture("setup", 1, [false, true, true]);
+    await scanReport(page);
+    await capture("review", 2, [false, false, true]);
+    await page.getByRole("button", { name: "1. Setup", exact: true }).focus(); await page.keyboard.press("Enter");
+    assert.equal(await page.locator("#reportStage1").isVisible(), true);
+    await page.getByRole("button", { name: "2. Review", exact: true }).focus(); await page.keyboard.press("Enter");
+    assert.equal(await page.locator("#reportStage2").isVisible(), true);
+    await page.locator(".attestation input[data-review-control]").check();
+    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    await capture("save", 3, [false, false, false]);
+    await page.getByRole("button", { name: "2. Review", exact: true }).focus(); await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "3. Save locally", exact: true }).focus(); await page.keyboard.press("Enter");
+    assert.equal(await page.locator("#reportStage3").isVisible(), true);
+    await page.route("**/api/export", async route => { await route.fetch(); await route.abort("failed"); }, { times: 1 });
+    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
+    await capture("unknown", 3, [true, true, true]);
+    await page.getByRole("button", { name: "Check save status", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=saved]").waitFor();
+    await capture("saved", 3, [false, true, false]);
+    await page.setViewportSize({ width: 1200, height: 1000 });
+    const desktopRows = await page.locator(".report-step").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().top));
+    assert.ok(desktopRows.every(top => Math.abs(top - desktopRows[0]) < 1), "Desktop keeps its existing three-column header");
+    assert.equal(requests.filter(path => path === "/api/preview").length, 1);
+    assert.equal(requests.filter(path => path === "/api/privacy-review").length, 1);
+    assert.equal(requests.filter(path => path === "/api/export").length, 1);
+    assert.equal((await loadBoardState(context)).exports.length, 1);
+    assert.deepEqual(errors, []);
+    if (proofs) await writeFile(path.join(proofs, "measurements.json"), JSON.stringify(measurements, null, 2));
+    t.diagnostic(`${measurements.length} header states with whole-word and native control checks`);
+});
+
 test("report hierarchy belongs to the current task, with local actions and consistent disclosures", { timeout: 60000 }, async t => {
     const { context } = await privateFixture(t, [fixture("hierarchy")]);
     const runtime = await startServer(context, createExportController(context), { port: 0 });
@@ -241,7 +348,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     assert.match(await page.locator("#reportJourneyError").textContent(), /may have completed/);
     assert.equal(requests.filter(endpoint => endpoint === "/api/export").length, 2);
     await (await revealStoredRefresh(page)).click(); await ready();
-    assert.match(await page.locator("#savedReportCount").textContent(), /^2 reports/);
+    assert.equal(await page.locator("#bundles > summary").textContent(), "Saved reports (2)");
     assert.equal(requests.filter(endpoint => endpoint === "/api/export").length, 2, "Recovery reads history, never replays the mutation.");
     await capture("history-recovery");
     assert.deepEqual(await Promise.all(Object.values(saved.files).map(async file => digest(await readFile(file)))), frozenHashes);

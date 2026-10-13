@@ -4,14 +4,18 @@ export function createRequestTiming(time, authorship) {
         try { time.instant(value); return true; }
         catch (error) { if (!(error instanceof RangeError)) throw error; return false; }
     }
-    function summary(scenario, context) {
+    function entry(scenario, context) {
         const message = scenario.userPrompt?.sourceTimestamp;
-        if (valid(message)) return "Message recorded: " + time.formatMoment(message, context);
+        if (valid(message)) return { label: "Message recorded", value: time.formatMoment(message, context) };
         const starts = [...scenario.toolCalls || [], ...scenario.graphActivities || [], ...scenario.httpRecords || []]
             .map(record => record.startedAt).filter(valid);
-        if (!starts.length) return "Request time not recorded";
+        if (!starts.length) return { label: "Request time", value: "Not recorded" };
         const earliest = starts.reduce((first, value) => Date.parse(value) < Date.parse(first) ? value : first);
-        return "First timed action: " + time.formatMoment(earliest, context);
+        return { label: "First timed action", value: time.formatMoment(earliest, context) };
+    }
+    function summary(scenario, context) {
+        const result = entry(scenario, context);
+        return result.label === "Request time" ? "Request time not recorded" : `${result.label}: ${result.value}`;
     }
     function origin(source) {
         if (authorship) return authorship.label(source) + ". " + authorship.reason(source);
@@ -25,5 +29,5 @@ export function createRequestTiming(time, authorship) {
         if (source.status === "partial" || source.status === "truncated") return "Partial text; missing text is not reconstructed";
         return source.status === "full" ? "Complete recorded text" : "Text completeness not verified";
     }
-    return { summary, origin, coverage };
+    return { entry, summary, origin, coverage };
 }

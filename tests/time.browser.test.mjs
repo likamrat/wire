@@ -112,7 +112,7 @@ test("browser zone beats UTC server; local buckets, tooltips, inputs, activity t
             await page.locator("#activityList .request-link").first().click();
             await ready(page);
             const requestText = await page.locator("#requestContent").innerText();
-            assert.match(await page.locator("#displayTimeZoneLink").getAttribute("aria-label"), /America\/Los_Angeles/);
+            assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /America\/Los_Angeles/);
             assert.doesNotMatch(requestText, /Started:|GMT-7/);
             await page.locator(".journey-item").first().getByText("Technical details", { exact: true }).click();
             assert.match(await page.locator(".journey-item").first().locator("dt").filter({ hasText: /^Started$/ }).locator("+ dd").textContent(), /GMT-7/);
@@ -122,7 +122,9 @@ test("browser zone beats UTC server; local buckets, tooltips, inputs, activity t
             await page.getByRole("button", { name: "Add to report", exact: true }).click();
             await page.locator("nav [data-nav=reports]").click();
             await reportContents(page);
+            await page.locator("#scopeDetails > summary").click();
             assert.match(await page.locator("#reportTimeContext").innerText(), /America\/Los_Angeles.*en-GB/);
+            await page.locator("#scopeDetails > summary").click();
             for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
                 await page.setViewportSize({ width, height: 950 });
                 await chooseTheme(page, theme);
@@ -136,8 +138,8 @@ test("browser zone beats UTC server; local buckets, tooltips, inputs, activity t
         const column = page.locator(".time-column").nth(zone === "America/Los_Angeles" ? 1 : 0);
         await column.focus();
         assert.match(await column.getAttribute("aria-label"), /8 Mar 2026/);
-        assert.ok(!(await column.getAttribute("aria-label")).includes(time.zone(zone)), "Bucket name inherits the single header context");
-        assert.ok((await page.locator("#displayTimeZoneLink").getAttribute("aria-label")).includes(time.zone(zone)));
+        assert.ok(!(await column.getAttribute("aria-label")).includes(time.zone(zone)), "Bucket name inherits the display context");
+        assert.ok((await page.locator("#displayTimeZone option:checked").textContent()).includes(time.zone(zone)));
         await page.keyboard.press("Escape");
         assert.deepEqual(errors, []);
         assert.ok(requests.every(r => ["/api/snapshot", "/api/assessment/detail", "/api/assessment/overview"].includes(r.path)));
@@ -233,7 +235,7 @@ test("missing browser zone shows UTC fallback and sends it explicitly", async t 
     assert.equal(await page.locator("#timeZoneNotice").isVisible(), true);
     assert.match(await page.locator("#timeZoneNotice").innerText(), /Browser timezone unavailable.*UTC/);
     assert.equal(requests.find(r => r.path === "/api/snapshot").input.timeContext.timeZoneFallback, true);
-    assert.match(await page.locator("#displayTimeZoneLink").innerText(), /UTC.*fallback/);
+    assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /UTC.*fallback/);
     assert.deepEqual(errors, []);
 });
 

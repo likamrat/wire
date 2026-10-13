@@ -122,6 +122,31 @@ test("write cannot be cancelled or double-entered; uncertain response cannot bec
     assert.throws(() => journey.saved({ bundleId: "empty", files: {} }), /links are unavailable/);
 });
 
+test("unconfirmed save outcome survives draft invalidation and keeps only read-only recovery available", () => {
+    const journey = createReportJourney();
+    chosen(journey);
+    journey.beginScan(); journey.previewReady(preview); journey.reviewed(); journey.writing(true);
+    journey.failed("The local write may have completed. Check save status.");
+    journey.writing(false);
+    journey.invalidate("A context revision changed.");
+    journey.update({ scopeReady: false, scopeIssue: "Read pending" });
+    assert.equal(journey.snapshot().phase, "blocked");
+    assert.equal(journey.snapshot().saveUnconfirmed, true);
+    assert.equal(journey.snapshot().hasPreview, false, "No disclosure approval is retained");
+    assert.equal(journey.isReviewOpen(), false, "Read-only status/history recovery must not defer to a nonexistent review");
+    assert.equal(journey.go(1), false);
+    assert.equal(journey.beginScan(), null);
+    assert.equal(journey.clear(), false, "Clearing must not bypass original-outcome recovery");
+    journey.failed("History lookup failed. No save was repeated.");
+    journey.invalidate("Permission changed.");
+    assert.equal(journey.snapshot().saveUnconfirmed, true);
+    journey.saved({ bundleId: "original-receipt", files: { "product-report.html": "invented" } });
+    assert.equal(journey.snapshot().saveUnconfirmed, false);
+    assert.equal(journey.snapshot().phase, "saved");
+    journey.clear();
+    assert.equal(journey.snapshot().phase, "draft");
+});
+
 test("clear removes only this journey's scope, copies and completion; options remain panel-local", () => {
     const journey = createReportJourney();
     chosen(journey, 84);

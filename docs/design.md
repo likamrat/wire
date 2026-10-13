@@ -10,6 +10,13 @@ returns to the most recent save state. Activity's explicit create action goes
 straight to creation. `#reports?task=create` and the legacy `#report` creation
 link remain direct entries; the main Reports navigation opens the library.
 
+A verified empty library shows one empty message and emphasizes that existing
+Create / Continue entry. Search, help and bulk management stay mounted but hidden
+until records exist. A pending or failed read is not an empty library: controls
+and recovery stay visible, with deletion disabled until the view is current.
+No-match search results keep the library controls. Saving or deleting the last
+report updates this presentation without a reload or focus left in hidden controls.
+
 Switching tasks within the same Reports context preserves choices, selection,
 prepared review and disclosure approval. Browser Back restores the task and
 library search/page. Relevant source, permission, filter and evidence changes
@@ -22,15 +29,23 @@ Page / Go control reaches distant pages without serial scrolling. Other pagers
 retain their previous behavior.
 
 Search says **Search saved reports**; the metadata-only limitation stays in help.
-It has a bounded desktop width and a visible label. A compact row aligns the
+It has a bounded desktop width and a visible label. Count, search, help and results
+follow one left-aligned reading order inside the saved-library panel.
+**About saved reports** stays below search in both states: opening it adds height
+below its trigger rather than moving the trigger from the right edge to a new row.
+Three short, labelled paragraphs explain search, preparation dates and frozen
+copies, with bounded line length and no smaller text at narrow sizes.
+A compact row aligns the
 report's preparation identity, prompt mode, format availability, **Manage** and
 direct **Open**. Manage holds membership count, full identity, download, comparison
-and individual deletion controls. Repeated frozen-copy/search prose and stored
-refresh move into **About saved reports**. Missing HTML has an explicit no-HTML
+and individual deletion controls. Frozen-copy and search details stay in
+**About saved reports**. Missing HTML has an explicit no-HTML
 state rather than an inert Open action. Unknown metadata stays unknown.
 
-**Delete all saved reports** is available beside search, never interpreted as
-delete visible/search-matching rows. Its existing saved-artifact dialog previews
+**Manage saved reports** follows the results as a separate, collapsed disclosure.
+It contains **Delete all saved reports**, never interpreted as deleting only
+visible/search-matching rows. Management and help keep their anchors and keyboard
+focus when expanded. The existing saved-artifact dialog previews
 the exact report-bundle/file/copy counts and comparison preservation, focuses
 Cancel first and requires a separate count-labeled confirmation. Confirmed
 membership is fixed. New reports, saved comparisons, source activity, draft
@@ -44,10 +59,11 @@ users to manually keep a receipt or repeat a destructive request.
 Search, page, disclosures and Back retain their prior state; deletions clamp
 the surviving page. Loading and failed snapshot states disable the new bulk
 entry. The immutable saved reader and refresh/draft guards are unchanged.
-Layout consumes the current shared METROPOLIS Arial stack, compact outlines,
+Screen layout consumes the bundled IQOS Asta Sans face, compact outlines,
 capsules and light/dark tokens, with visible focus and 44px controls, wrapping at
 narrow widths and 200% text without truncating labels. Comparison marks use the
-shared restrained fades and orange failed-call identity, not a separate palette.
+shared restrained fades with the screen's red failed-call identity. Frozen
+comparison files retain their original typography and palette.
 
 Both **Report** and **Comparison** Open actions read actual verified frozen HTML
 inside the same inert reader. Closing returns focus to the library entry without
@@ -71,14 +87,36 @@ states, direct navigation and frozen reading, named and bulk cancellation,
 confirmed report-only removal, stale previews, lost responses and sealed
 restart recovery. This is not a claim of human acceptance or a live release.
 
+## Report setup
+
+Setup keeps every scope, author, prompt and format choice, but explains the selected
+scope once rather than repeating paragraphs inside each alternative. Scope labels
+and counts stay visible. The author summary appears when it adds exclusions,
+unavailable counts or the fixed membership of a period comparison; the main report
+summary still names the included groups. Only the selected prompt mode's explanation
+is shown, including its privacy consequence before review.
+
+Linked requests and replies remain an explicit, initially unchecked choice. Its
+one-group-either-side limit is visible before choosing it; relevant author, prompt,
+availability and disclosure consequences appear when selected. No prompts disables
+the choice with a visible explanation. Additional masking stays with prompt content,
+and a single local-scan/sharing warning applies to that region. Date formatting is
+available in the existing Scope and exclusions section, not another dropdown.
+The three-step navigation retains current-step status; actual Review and the
+separate local Save remain required. Saved file contents and export rules do not change.
+
 ## Analytical filter row
 
 Home, Activity and scoped chats share the primary **Dates, Tool, Service, Outcome,
 Author** controls. **More filters** contains the separate exclusive **Category**
 control plus **Project, Chat, Activity, Collection**; its summary indicates active
 secondary fields. Applied values remain visible as individually removable chips,
-including dates, evidence layer, chat and non-default chart time scale. The chart's
-time-scale dropdown stays in place. Opening a scoped chat retains analytical
+including dates, evidence layer and chat. Dates is the single range authority for
+all Analyze widgets and records. Time scale stays local to the time widget:
+Daily/Weekly/Monthly groups columns but is not an applied-filter chip and does
+not enable Reset Analyze by itself. Reset retains the chosen grouping. The
+existing bucket route and validated calendar bins remain presentation state,
+separate from the date-range filters and report membership. Opening a scoped chat retains analytical
 filters; Back restores the prior route, reading position and focus.
 
 Fields wrap within the available width at narrow sizes and 200% text; selected
@@ -98,6 +136,53 @@ and missing-service choices; a selected category retains its shared definition.
 No category rules, source evidence, report membership or saved files change.
 
 ## Direct retained-period comparison
+
+Comparison setup sits at the top of Analyze's existing filter surface. Paired
+Period A/B date fields and **Compare periods** stay together; the inclusive local
+timezone is stated once beside them. The existing filter controls and removable
+chips remain the scope authority for both periods, rather than a second inventory
+of every default. Explicit Search uses the same analytical search entry; a retained
+private phrase remains an additional narrowing, never a replacement for semantic
+membership. **Stop comparing** restores ordinary Analyze dates and filters.
+
+Accepted results start with **What differs** and the optional **Create comparison
+report** action, then exact outcomes and matching-call timing. Full-interaction
+findings follow under **Whole interactions**, with one short note about calls
+outside the selected dates or filters. Per-side coverage, service gaps, origins, overlap, measure definitions and
+exact record tables stay available. An empty side has no empty record disclosure;
+two empty sides show one recovery message instead of tables of unavailable values.
+No report action appears before a current, nonempty comparison is accepted.
+
+Editing a date clears old results, outcome counts and report eligibility until
+the dates are submitted again. Native required-date validation and per-period
+range errors stay beside the form. Loading, read failure, stale evidence and
+unready Search remain explicit, with read-only retry where appropriate; successful
+completion is announced without another visible machinery paragraph. These are
+presentation/draft-input guards, not a new comparison or date engine.
+
+An explicit **Compare periods** submission moves focus to **What differs** once
+that submission's results are accepted and reveals the results beneath the sticky
+header. The heading is not an extra Tab stop. Automatic filter, search and stored
+view updates do not move focus or scroll. The one-use completion intent uses the
+existing comparison signature/generation and the client's trusted reading-intent
+counter; later input, wheel/keyboard scrolling, navigation, changed focus or
+invalidated evidence cancels the move. No setup controls are collapsed or removed.
+
+The comparison findings opt into a count-based view of the existing assessment
+presentation. Reported outcomes use labeled counts rather than a sentence; the
+total is the full-interaction population, not the matching-record count above.
+When reported context is incomplete, the same presentation explicitly names
+**Completion-evidence checks** instead. Counts and the boundary come directly
+from the existing qualified projection, never from parsing display prose.
+Known causes are short reason/count rows; absent causes, unfinished reviews and
+missing evidence remain explicit. Review rows retain their own assessed/eligible
+coverage and separate personal/model provenance. Matching-service coverage uses
+labeled facts; generic causal disclaimers and repeated membership paragraphs are
+not carried forward. Definitions remain in the existing saved-details disclosure.
+Review labels use intrinsic, bounded column widths with shared row tracks; longer
+labels can wrap without splitting short labels unnecessarily or misaligning coverage.
+This opt-in does not activate Analyze's compact/empty-review behavior or change
+the default reader, timing layout, report output or saved facts.
 
 Analyze's `compare=periods` route adds `aFrom`, `aTo`, `bFrom`, `bTo`. Ordinary
 `range/from/to`, author/outcome drafts, call routes/sort and report selection
@@ -294,6 +379,11 @@ step navigation, selection summary and current stage stay together. The existing
 theme accent identifies the current step, visited steps and the next enabled
 action; it is not a quality score. Analytical **Reset to Home** remains available
 in its other contexts, not in Reports.
+
+The three step controls reflow into compact full-width rows when the report
+container is at most 32rem wide. Setup, Review and Save locally keep whole words,
+the existing text size, numbered/current states and native keyboard/disabled
+semantics; wider containers retain the three-column header.
 
 Setup starts empty. Scope and prompt-author membership sit side by side when
 space allows, with matching labels, then stack at narrow or enlarged-text widths.
@@ -493,6 +583,18 @@ The obsolete projected renderer and its orphan report generator are removed.
 `dimensionalColumnStyles` remains the shared palette and within-mark gradient
 closure; service identities and serializer-safe factories remain unchanged.
 No saved report bytes are regenerated or rewritten by a chart change.
+
+Percentage labels align to their content rather than stretching across the
+available grid column. Their restrained hover/pressed surface follows the actual
+link, with a 44px minimum target, wrapping text and a separate visible keyboard
+outline. The empty space between label and count is not part of the label's hit
+target. Whole chart-row links keep their intentionally full-row target; hovering
+a nested action does not make an inert request card or exact-count table row
+look clickable. The table's drilldown control keeps its own hover/focus feedback.
+`hover-card-geometry.browser.test.mjs` exercises the production root with
+invented ephemeral storage: real pointer hits, neighbor paint, service drilldown,
+modified links, focus/pressed/disabled states and narrow/doubled text. No provider
+or live collection participates.
 
 ## Inline help geometry
 
@@ -744,8 +846,8 @@ supported host provenance; inferred call association remains a separate fact. Th
 existing reader keeps its read/hide/copy controls and report selection stays
 separate from reading.
 
-Saved assessment details retain Accuracy, Speed and Trust definitions, with
-answer and action states separate. Historical Cost facts and evaluation-spending
+Saved assessment details name Answer correctness, Answer support, Tool use vs.
+request and separate Permission for tool use feedback. Historical Cost facts and evaluation-spending
 safeguards remain intact; Cost is not a current metric. Unsupported values stay neutral and unassessed/not measured;
 their full reasons, definitions and coverage live in **Measure definitions**
 beside the overview's Insights heading, and **Details and feedback** on a single
@@ -772,9 +874,9 @@ The request reader places the same bounded findings beside each original prompt;
 it does not duplicate the chronology or transfer a verdict to a later request.
 **Saved assessment details and counts** is a native keyboard-accessible disclosure
 with exact percentages, assessed coverage and pass/fail/missing counts. There is
-no dominant 100% suggesting all requests succeeded. Accuracy keeps **Answer
-correctness**; Trust separates **Answer support** and **Actions match request**.
-Personal action feedback keeps its distinct **Action authorization** meaning.
+no dominant 100% suggesting all requests succeeded. **Answer correctness** and
+**Answer support** remain separate from **Tool use vs. request**.
+Personal feedback keeps its distinct **Permission for tool use** meaning.
 Origin labels remain explicit, and single-request personal verdicts stay words.
 Shared-request copy appears only when all three model checks have identical
 eligible and covered request identities, not merely equal counts. Otherwise
@@ -790,6 +892,13 @@ Specific unretained semantic reasons are not reconstructed from counts. The
 explanation gap is stated once, while historical sign-in/timeout/access-denial
 signals retain their precise qualification and any safe sign-in guidance.
 Findings use existing semantic color roles in both themes, never a local palette.
+Human labels resolve from the saved check ID, version and origin using the shared
+`createAssessmentWording` factory. **Permission: Given** is only personal feedback,
+not a model result or new grant. Missing/future/conflicting definitions show
+**Saved review (type not recorded)**, with the original numeric facts intact.
+Specific row help uses that same meaning instead of a generic Trust tooltip.
+The permission-feedback header alone wraps on narrow hosts; text size, accessible
+title, control order, scrolling and Cancel/Escape behavior remain unchanged.
 
 Recorded timing keeps separate call, recorded request/final-response, HTTP
 response-header and transport-error boundaries. `createTimingPresentation`
@@ -798,19 +907,33 @@ samples; the existing exact `measurement` remains unchanged and `distribution`
 adds `sampleCount`, `p50Ms`, `p95Ms` and the nearest-rank method. The shell
 injects this dependency when serializing the presenter. Two or more samples
 show named Median/P95 values; one shows a single measured sample, and none
-shows Not measured. Display rounding is separate from unrounded milliseconds
-in each row's native disclosure and the existing definitions panel.
+shows Not measured. Screen values preserve exact durations, including submillisecond
+values; the existing definitions panel retains the measurement details.
 
 `renderRecordedTiming` is shared by Insights and Analyze's `#recordedTiming`.
+Analyze opts into a content-sized definition list: exact values and coverage
+align with their labels in shared columns, using the same body typography.
+The recorded start-to-completion boundary and **Inspect call durations** remain
+with those rows beneath the charts, not in a full-width painted card.
+**Request timing and reviews** has a permanent row below, with identical trigger
+geometry whether open or closed; only the body expands. No open-only flex sizing,
+padding, border or JavaScript scroll correction moves the trigger.
+The existing host, independent disclosure state, asynchronous rendering and controls
+remain. One count-aware scope sentence distinguishes all calls in selected requests
+from matching calls even when the counts coincide. The expanded Analyze summary
+shows named timing rows before saved reviews and definitions; it does not repeat
+that scope inside saved details. The existing compact-findings host opts into this
+ordering, without creating new layout state or disclosure layers.
+The shared renderer's default presentation and saved report output are unchanged.
 Analyze consumes the exact refined `analytics.totals.duration` and
-`analytics.rows.length` for the tool layer, with a same-scope Calls link;
+`analytics.rows.length` for the tool layer, with the same-scope Calls link;
 it never substitutes full-interaction counts or invents a timing boundary
 for other activity layers. Insights explicitly labels its wider full-interaction
 scope. Neither surface averages medians, sums concurrent calls, or treats a
-duration as a quality percentage. A dot and line mark median/P95 on a compact
-linear scale from zero to that row's P95 when multiple nonzero samples make
-the scale meaningful. Other percentage/count facts, models and rubrics stay
-unchanged.
+duration as a quality percentage. Equal median/P95 values appear once with both
+labels; unequal values remain individually labelled. No decorative scale or
+extra timing disclosure is added. Other percentage/count facts, models and rubrics
+stay unchanged.
 **How to read these results** explains repeated AI limitations and median timing
 once. Automatic-score processing status stays visible after the results, rather
 than preceding their scope. Partial-membership warnings remain visible.
@@ -949,7 +1072,60 @@ hierarchy (variance 3), no decorative motion (motion 2), and ordinary app densit
 
 ## Theme and shape
 
-### METROPOLIS typography and controls
+### Current screen palette and typography
+
+The user's neutral dashboard reference supersedes the earlier navy surfaces,
+cyan ordinary links and orange failed-tool treatment on screens. Dark mode uses
+`#101010` page, `#191919` paper, `#222222` inset and `#2b2b2b` hover surfaces.
+Primary text is `#f2f2f2`, secondary text `#b8b8b8`. Light mode uses `#f1f3f7`
+page, white paper, `#ebebeb` inset and `#e3e3e3` hover, with `#202020` primary
+and `#565656` secondary text. Ordinary controls, links, selection and focus use
+neutral ink and fills; semantic colors are not a page-wide interaction accent.
+Panel separators remain quieter than meaningful control boundaries.
+The light page has a subtle cool gray-blue tint; cards remain white. The
+screen-only `--surface-shadow` adds restrained depth to the stationary Search capsule,
+its live result list, and the existing Analyze outer cards, with a charcoal counterpart
+in dark mode. It does not change card geometry, the general `--shadow` token,
+other controls, or saved/printed report styling.
+
+Failures use red (`#b3261e` light / `#f28b82` dark) in text, icons, pills and
+chart paint. Amber partial results/warnings, unknown, other-status and transport
+cues remain distinct. Service palettes and their IDs do not change. Screen
+failure aliases follow the shared chart declarations in `web/styles.mjs`;
+the shared comparison renderer's historical pink transport class receives its
+separate transport paint, not failure red. Dark service fades keep 70% of their
+semantic color so even the low stop clears 3:1 against its track. Gradient
+direction, path geometry, counts, percentages and filter identities are unchanged.
+
+`screenTokens` and `screenFontStack` in `web/tokens.mjs` own screen appearance.
+Screens use Asta Sans first, followed by Segoe UI and system fallbacks.
+The existing local Latin variable face declares weights 300-800;
+regular/medium/semibold roles are 400/500/600. The font is retained in WIRE
+(`assets/fonts/asta-sans-latin-variable.woff2`, SHA-256
+`ad3079a2c2cef53a0ba3598f7c5a4ae9289982c8b8a426872395846e9fa08e25`).
+The screen reuses the existing `fontFaceStyles` loader and retained OFL-1.1
+license, which permits embedding and redistribution with its copyright/license.
+No new font download, package, installation or asset copy is needed.
+
+The root, forms, menus, readers, Settings and dialogs share the source stack and
+400/500/600 roles; browser-default bold emphasis uses the strong role. API paths
+and code keep the existing monospace stack. Platform-font inspection of the
+WIRE input found actual Segoe UI, not a Times fallback. Candidate proof instead
+requires actual custom Asta Sans glyphs in paragraphs, headings, labels, menus
+and dialogs after `document.fonts.ready`, not only a family string. Both themes
+retain readable text, placeholders, status and focus paint at narrow widths and
+200% text. Unsupported scripts intentionally use the declared system fallbacks.
+
+This is a screen-only contract. `tokens`, `typographyTokens`, `uiFontStack`,
+font exports and shared chart/report styles remain unchanged; native HTML/PDF
+and frozen artifacts keep their original styling. The inert saved reader does
+not inherit the outer screen stylesheet. The gliding sidebar, component
+geometry, report contents, permissions and state are outside this change.
+
+### Saved-output typography and earlier controls
+
+The following METROPOLIS description records the earlier screen foundation and
+the retained saved-output typography. Current screens use the contract above.
 
 The user's latest METROPOLIS Intelligent Operations Center reference takes
 priority over the earlier IQ-OS/Asta/Fluent visual treatment: typography, status
@@ -1301,7 +1477,7 @@ corners are capped at the greater of 22px or half a line height (result links us
 22px), preserving normal 36/44px capsules without letting tall capsule corners
 cut into the first and last lines. This is a multiline-text exception, not a new
 shape for sidebar rows, icon controls, static badges or inline links. Existing
-dropdown truncation still exposes the full value in its described option panel.
+dropdown selected values and options wrap at their available bounds without truncation.
 `tests/pill-padding.browser.test.mjs` measures rendered text/icon rectangles
 against both painted edges and curved corners, not just computed padding.
 
@@ -1332,9 +1508,13 @@ layouts in both themes at 100/200% text, including a narrow panel in a wide host
 
 The chart period picker is a quiet text-and-chevron control, not a pill.
 Its transparent 44px hit area keeps keyboard/touch behavior; the title and
-period control share a baseline without redundant Calendar dates or info controls. At narrow
-chart-container widths the intact title precedes one control line; Time scale remains the
-accessible label while the selected period stays visible. The styling lives in
+period control stay aligned without redundant Calendar dates or info controls. At narrow
+chart-container widths the intact title precedes the control; Time scale remains
+visible and accessible beside the selected period. The bounded group may wrap when
+enlarged text cannot fit, rather than hiding the caption or shrinking text.
+The enhanced select wrapper participates in the caption's baseline alignment;
+the shared standalone wrapper's start alignment must not offset this inline group.
+The styling lives in
 `web/toolbar-styles.mjs`, with browser checks in `tests/toolbar.browser.test.mjs`.
 The visible Time scale label has an 8px external gap (`--space-sm`) before the
 dropdown, without increasing the control's padding or size. The time chart
@@ -1348,8 +1528,44 @@ An aria-hidden, noninteractive grid sizer keeps width stable across selections
 and follows font/text-size changes. Ordinary dropdown sizing remains unchanged;
 the existing chart-header reflow moves the whole time-scale control at narrow
 widths rather than ellipsizing, abbreviating or shrinking the selected label.
+The focused production-root case in `tests/time-scale-labels.browser.test.mjs`
+checks the actual Asta caption/value geometry, open/closed menu anchoring and
+Weekly/Daily/Monthly changes at wide and narrow/200% text sizes. It preserves
+custom-date filters, exact bucket counts and scale state through chart-mode
+switches using an invented paused source with provider work denied.
 
 ## Quantitative chart contract
+
+### Stable grouping choices
+
+Over time, By category and By path or operation regroup one filtered population.
+They share one composition: outcomes beside the chart, then the unchanged Tools
+and Services summaries side by side. Narrow layouts stack in the same order.
+Only the chosen chart's content changes; sparse charts stay content-sized, and
+long desktop category/path lists retain native scrolling and Show all.
+
+The chart's short meaning line names the grouping without repeating the population
+and scope above. Time uses the applied day/week/month bins and names any undated
+exclusion below the chart. Categories
+count each record once; the separate Services summary can overlap. Paths and
+operations retain canonical groups, including multi-target calls counted once.
+Non-tool groupings are labelled Service categories, not Services involved, because
+they are the exclusive category projection rather than service involvement.
+Time scale belongs to the time heading only; switching away preserves its value.
+No binning, normalization, outcome arithmetic or report membership changes.
+Reset Analyze stays in the existing More filters utility line, disabled at the
+default view rather than appearing in a new row when only the chart mode changes.
+The utility controls wrap when needed; an open More filters uses the full width.
+Reset keeps its existing filter, query, mode and page behavior and preserves report
+selections and consent boundaries.
+
+The shared chart reading key belongs to the containing panel, not the plot body.
+Time scale can legitimately move the plot below its heading at narrow widths.
+Treating that inner plot as the shared reading anchor made snapshot restoration
+move the mode controls on each return to Over time when populated feedback above
+them changed which keyed element was in view. The panel identity keeps existing
+restoration behavior stable without freezing chart heights or suppressing native
+scroll anchoring; date/group action and scrollport keys remain unchanged.
 
 ### Flat Analyze time view
 
@@ -1364,8 +1580,18 @@ within-rectangle color fades; no gradient changes the encoded span. Subpixel cou
 imperceptible, but exact count links remain at least 44px in both dimensions,
 with a focus ring and full count/share accessible names. Exact-table date
 actions also remain at least 44px. No invisible outcome overlay expands across
-another result. Short timelines use 160px of quantitative height; others use
-200px. This changes the plot extent, not the linear ratios.
+another result. Displayed bin count, not the number of calls, determines the
+space the chart needs: one/two/three bins use 80/120/160px of quantitative height;
+four or more retain 200px. A heavily populated single week is still one bin.
+This changes the common plot extent, never the linear count ratios.
+
+One-to-three-bin panels use a bounded, text-relative width and tighter existing
+spacing tokens rather than stretching across the overview. Count headroom is
+measured in the existing resize handler, so enlarged labels and 44px actions
+stay intact. Date labels and reading notes flow without reserved empty lanes.
+Sparse/dense changes use the newly rendered bin count, and host/text resizing
+preserves focus and exact paint. The following timing and results sections
+move upward with the compact panel; their own layout is unchanged.
 
 The existing Daily/Weekly/Monthly picker, outcome shares, exact table,
 canonical IDs, activity units, query/filter scope and native date links are
@@ -1584,10 +1810,18 @@ not an always-on health card or a repeated idle instruction. **Source and collec
 contains local Copilot history, the intake window and direct
 **Source** and **Collection settings** links to the existing Settings categories.
 It keeps the background-paused state explicit and never enables it as a side
-effect. Unapproved sources route to review. **Refresh stored data** is a quiet
-secondary action inside this disclosure on Analyze, beside saved history
-in Reports, and within the relevant evidence/settings section elsewhere. It reads
-the retained snapshot without scanning source history or reloading app code.
+effect. Unapproved sources route to review. A failed source-path or metadata
+check names the failure and offers **Review source**, keeping the displayed
+records and the paused-collection fact together. Known pre-read rejection is
+not an unknown outcome. Generic 422/503 responses do not establish that a source
+check stopped before effects; only the specific pre-read path, mapping and metadata
+codes do. **Read stored activity** belongs to a failed stored
+read or an uncertain source result; it reads retained activity and status without
+repeating a source check or save. A successful stored read does not repair
+invalid source configuration or confirm a lost source receipt. Duplicate
+collection errors are consolidated only for the same source configuration,
+revision, last receipt and error; unrelated or unavailable status remains visible.
+Routine paused notices remain outside recovery and are not treated as errors.
 The global header has no duplicate refresh action.
 On unapproved Analyze, the fresh control is the sole source-review action.
 The generic connection notice adds only retained-evidence availability when
@@ -1617,7 +1851,7 @@ not silently included. Missing or bounded histories are partial, never empty suc
 
 Home has one applied summary: the selected activity count and unit, followed by
 the accepted period and source-chat count. Request-group counts, complete-interaction
-scope and counting boundaries remain in **Scope and result definitions**, not
+scope and counting boundaries remain in **Chart data and definitions**, not
 another default-visible summary. Activity retains its more detailed matching
 chat/request-group/count summary beside its private search. The Home
 summary and native chooser form one left-aligned, content-sized group: the action
@@ -1637,11 +1871,16 @@ The existing **About this evidence** disclosure starts closed and explains
 recorded results and request grouping. **Collection status → Technical details**
 distinguishes Work IQ calls, returned API metadata and separately recorded Graph
 requests. Tool names and service categories do not prove requests or HTTP status.
-The adjacent **Scope and result definitions**, activity/service category meanings
-and **About this evidence** summaries are peers: all use the same 16px reading
-role, 600 weight, 1.5 line height, 8px vertical padding and 44px minimum target.
-They scale together with root text size; the scope summary does not inherit the
-larger section-heading treatment used by the chart's exact-data disclosure.
+Analyze consolidates exact time/outcome/tool/service tables, result meanings,
+category definitions and count/timing guidance in one **Chart data and
+definitions** disclosure, without nested disclosures. Open tables follow the
+accepted filters and preserve their drilldown links. The tool breakdown is headed
+**Work IQ tool calls**, not a generic heading followed by repeated unit captions.
+Screen timing shows exact human-readable durations and coverage once, with no
+per-row technical dropdown, raw boundary identifier or redundant ruler. Equal
+median/P95 values share one labelled value; different statistics stay distinct.
+These are presentation choices only: measurements, report output and source
+authority do not change. **About this evidence** remains separate collection help.
 The three current measure groups follow the activity charts. Missing reasons,
 measured coverage and dimension help remain visible/discoverable; the glossary
 stays in Measure definitions. Moving these sections does not change pooled metrics.
@@ -1743,6 +1982,43 @@ canonical owners once, even when their rows are unmounted. Missing source IDs
 remain visible without an invented chat drilldown. Same-name chats include
 distinguishing source references. Project kind is
 shown when the mapping records it; a folder project is not relabeled a repository.
+
+Interactions and Calls share one card grammar. The actual prompt leads in bold
+italic Asta, for user, agent and unverified authors alike; the separate author
+label and precise sender-gap explanation do not determine its emphasis.
+**View interaction** or **Open exact call in context** remains alongside on
+desktop and wraps at narrow widths. Existing bounded previews, full original
+reading and exact copy remain; neither the stored text nor the separate request
+reader, Search rows or saved output is restyled or rewritten.
+
+Each card's `.activity-card-facts` definition list presents one category at a
+time, with a bold key followed by its normal-weight value. Tools come first,
+separate from service/category facts, chat, project and recorded time. These are
+content-sized label/value rows, not a wide two-column table or flowing prose.
+Normal-weight values include the actual nested category cue, chat link and
+outcome text, not only the definition container. Tool names retain their
+separate bold identity role.
+The chat value keeps its native filter route and explicit **Filter to chat**
+accessible name. Missing metadata and distinguishing chat references remain
+visible. `requestTiming.entry` supplies structured timing labels/values while
+its existing summary wording remains unchanged for other consumers.
+
+**Tools in this view** lists actual tool names individually, with their matching
+call counts (or the current evidence layer's units). Repeated calls share a named
+entry and count; different tools never become one comma/slash label. This list
+uses the same canonical filtered rows as the card's matching results, not all
+calls from the complete interaction. Its aggregate outcome pills stay in their
+own **Matching results** row; they are not attributed to individual tools.
+The matching/full denominator remains explicit, including when filtering hides
+another tool. No empty-evidence interaction is invented to fill the list.
+
+The card styles are restricted to `#activityList` and consume shared screen
+roles. Full-text surfaces wrap with visible overflow for italic glyphs and
+descenders. Checkbox, link, help and reader handlers and stable keys are
+unchanged. `card-hierarchy.browser.test.mjs` covers both views with native
+scrollbars, light/dark wide/narrow examples, computed prompt emphasis, semantic
+key/value associations, tool populations, exact copy and native navigation.
+Additional doubled-root-text checks exercise reflow, not native browser zoom.
 
 **Results** is the prominent Analyze shortcut to the direct list.
 Choosing a source-context link retains the analytical filters and private query
@@ -1911,9 +2187,17 @@ exactly one dedicated content pane. Native links use `aria-current="page"`, not
 incomplete tab roles. On a Settings container at or below 52rem (also reached
 through text enlargement), the same links live in a native Category disclosure,
 closed after choosing a category. No second fixed sidebar or nested pane scroller
-is introduced. The pane has a 58rem maximum; field labels and explanations wrap.
+is introduced. The pane has a 52rem maximum; field labels and explanations wrap.
 Native form nodes stay mounted to preserve drafts, but inactive categories use
 `hidden` and expose neither controls nor prose to keyboard/screen-reader users.
+
+Connection has three peer sections: **Source**, **Recorded activity**, and
+**History and frequency**. Source owns approval, inspection, pause/resume and
+the explicit source editor. Recorded activity owns Refresh and its help/result.
+History fields, Save/Cancel, draft status and collection details stay together.
+Controls use a nearby leading column with natural value widths, stacking at the
+text edge in narrow panes. Display, Privacy and AI actions use the same alignment;
+no additional cards, accordions or reserved empty status rows are introduced.
 
 `section=connection|privacy|ai|display|troubleshooting` is the canonical category
 route; `setting` contains only a fixed destination ID. Legacy `section=history`
@@ -1922,7 +2206,7 @@ canonicalize to `#collection-status?setting=issues`, focusing Chat history.
 `section=diagnostics` opens Collection status; `setting=advanced` and
 `setting=collection-details` open/focus its Technical details.
 Unknown categories show an explicit notice and canonical Connection fallback.
-The existing timezone header link still opens Display. Category links focus
+Time zone remains in Settings > Display, including its existing deep link. Category links focus
 the new heading; search links focus/highlight the relevant visible control,
 disabled explanation, source-review entry or disclosed heading, never invoke it.
 Back/Forward restores category and safe reading focus; reload restores the route.
@@ -1951,7 +2235,7 @@ to the same existing browser preference.
 | `assessment-evidence` / Recorded replies | Privacy & saved data | `assessmentSetupTitle`; existing checkbox, Turn on/Turn off and delete, Discard, previous-source removal and Check update result stay within `assessmentSetup`. |
 | `delete-activity`, `recollect-activity` | Privacy & saved data | `deleteActivity`, `recollectActivity`; existing scope/preview/confirmation/cancel/recovery flows unchanged. Saved-report management remains in Reports. |
 | `automatic-scores` | AI reviews | `automaticScoreReview`, described by `automaticScoreState`; only an explicit click opens existing chat/disclosure/allowance/AI-credit approval or receipt recovery. Stop and remove remains a separate confirmation. |
-| `time-zone`; header theme switch | Display | `displayTimeZone` and `settingsThemePreference`; the header `themePreference` remains available. Effective time zone, device details and storage errors are preserved. |
+| `time-zone`; header theme switch | Display | `displayTimeZone` and `settingsThemePreference`; the header `themePreference` remains available. Device identity stays in the existing option; pending/failed effective-zone mismatches and storage errors remain visible. |
 | `issues`, `collection-details`, status link | Collection status, linked from Troubleshooting | `collectionIssuesTitle`, `collectionSetup` summary, `pageTitle`; affected-chat search, counts, provenance and diagnostic limits unchanged. |
 | Optional HTTP recorder | Collection status, linked from Troubleshooting | New registry ID `network-diagnostic` targets `recorderDiagnostics` summary; opening only reads stored status. `recordBtn` still requires its existing separate confirmation. |
 | Provenance and search help | Troubleshooting | `service-provenance` -> `serviceProvenanceHelp`, `author-provenance` -> `authorProvenanceHelp`, `settings-search` -> `settingsSearchDetails`; summaries disclose guidance and link to existing Analyze destinations, not guessed records. |
@@ -2347,6 +2631,39 @@ part of this reader. Focused proof is in `tests/request-context.test.mjs`,
 
 ### Exact recorded-call investigation
 
+Calls use the same prompt-first and stacked key/value grammar as Interactions.
+Each row names its individual tool, category/service and exact target, then
+duration, recorded-action time, result and original chat/project/message context.
+The single counted outcome pill is attached to its labeled result row; its
+full evidence unit remains in the accessible group label. Activity category is
+not relabeled Service: returned-entry service evidence retains its different
+meaning. Known failures and genuine missing duration/service/author evidence
+remain visible. Aggregate results and exact selected-call reader layouts are
+unchanged by this card-only treatment.
+
+**Duration** names the existing Slowest first / Fastest first control.
+The primary sort row mentions unavailable durations only when present; the
+pager supplies the canonical record unit and total. The list names its source
+interaction population and explains once that tool completion is not answer
+correctness. Tie-breaking is an ordering contract below, not a paragraph
+beside the dropdown. No new disclosure hides those controls.
+
+The selected tool uses the same compact tool/result/duration hierarchy, with
+its targets immediately below and its separate tool-returned API count/results
+on one line. Matching counts are shown when the filtered and full group differ;
+nonmatching context stays explicitly **Outside current view**. The selected
+anchor and timeline remain exact. **Technical details** is one drawer: exact
+arguments and their copy control are directly inside it, not behind another
+arguments disclosure. The original prompt reader and authorized replies keep
+their existing access, copy, Hide and consent behavior.
+
+The invented Archive example deliberately has no sender source. It goes through
+`promptRecord` as `missing-source`, while explicit user/agent sources retain their
+supported attribution. Calls keep the concise existing sender-gap text by the
+prompt, without a prominent provenance rail or guessed identity. This explains
+that fixture, not all unverified records: conflicting, unsupported, system and
+legacy gaps retain their distinct meanings.
+
 Analyze's existing `#analyze?mode=calls` list uses canonical `slice.rows`, across
 all pages. `callSort=slowest` (default) or `callSort=fastest` affects presentation
 only, not filters, report membership or assessment populations. The pure
@@ -2402,6 +2719,9 @@ and Hide state. Focused evidence is in `tests/call-investigation.test.mjs` and
 `tests/call-investigation.browser.test.mjs`, using invented normal-source records,
 plus the existing context and Analyze tests. These fixtures establish application
 behavior, not production coverage or real-world latency.
+`tests/call-presentation.browser.test.mjs` adds the normal-root invented Harbor
+journey with native scrollbars, adjacent-result geometry, light/dark and narrow
+200% text, one-level technical reading, exact prompt/argument copy and Back.
 
 Text-access audit boundaries:
 
@@ -2412,7 +2732,7 @@ Text-access audit boundaries:
 | Request details, result paths/errors | One unabridged source reader, wrapping paths/errors and explicit unavailable fields; no string-sliced primary context. |
 | Raw arguments and report comparison text | Exact copy source; preformatted technical code may scroll, prose wraps. Report membership stays paged and its named reading region remains scrollable. |
 | Settings source read/edit | Exact selectable read values wrap fully; native single-line editors preserve horizontal caret access. |
-| Display/custom selects | Compact selected labels may ellipsize only with full-value keyboard/focus/hover help and complete popup options; no truncated option data. |
+| Display/custom selects | Content-sized compact choices; long selected labels and complete options wrap without ellipsis or font reduction. |
 | Collection status/help | Long names/reasons wrap; raw diagnostics and supporting facts expand. Tool failures remain distinct from source-history gaps. |
 
 `request-investigation.browser.test.mjs` verifies the actual Needs attention ->
@@ -2637,14 +2957,31 @@ original source prose and immutable saved report bytes are unchanged.
 
 ## Interaction contract
 
-All seven single-select controls use one local combobox/listbox implementation.
+Single-select and explicit multi-select controls use one local combobox/listbox implementation.
 The original select values remain authoritative, and one committed choice emits
 one change. A 44px hit area surrounds the 36px painted control; the actual
-top-layer popup has 12px corners and scrolls within 320px. Arrow keys, typeahead,
+top-layer popup has 12px corners. Single-choice lists scroll within 20rem or the
+available viewport space; multi-select lists also allow room for draft actions.
+Arrow keys, typeahead,
 Home/End, Enter/Space, Escape and Tab preserve ordinary choice semantics. Outside
 click dismisses without activating the covered page. Associated labels stay
 outside buttons, options cannot commit after replacement, and viewport changes
 reposition or dismiss the popup. Long selected labels expose their full text.
+
+Standalone finite choices, including Settings history/frequency, use intrinsic selected
+content plus ordinary control padding and a chevron, not the surrounding form-column
+width. The labeled Analyze form grid retains its aligned title/help/Clear tracks,
+and the desktop time-zone field retains space for longer identities.
+Menus size independently from these deliberately wider triggers:
+full labels, checks and multi-select actions contribute to natural width, bounded by
+font-relative reading widths and the visual viewport. This is neither one narrow
+width for every family nor a longest-option sizing rule for every trigger. End-aligned
+Settings controls keep menus on the same edge; other menus lead-align and flip/clamp
+at viewport edges. Text wraps, targets remain at least 44px, and repositioning retains
+the active row in scrolled lists. All/Clear/Apply/Cancel semantics are unchanged.
+The focused dropdown cases in `tests/connection-summary.browser.test.mjs` exercise
+the actual production root with an invented paused source, timers off and provider
+work denied, including both themes, long lists, bundled Asta Sans metrics and 200% text.
 
 `lib/control-help.mjs` owns decision guidance and reuses service definitions
 rather than duplicating them. Option descriptions are visible before selection,
@@ -2656,13 +2993,60 @@ downloads of already frozen reports. Clipboard and follow-up limitations remain
 visible beside the relevant private text; they are not disclosure approvals.
 
 **Analyze, Reports and Settings** are the three main destinations, exposed as
-native top-navigation links. Collection status remains reachable through source,
+native left-sidebar links. Collection status remains reachable through source,
 coverage and Settings links; it is not removed or merged into configuration.
-The wordmark targets Analyze. The same visible links wrap on narrow screens
-and at 200% text, retaining 44px targets, full labels, tonal current state and
-keyboard focus. `mountMainNavigation` measures only the header for scroll
-offsets. The old collapse preference is neither read nor changed; no drawer,
-sidebar width or navigation-storage dependency participates in the new shell.
+The wordmark targets Analyze. `mountSidebarNavigation` preserves the stored
+expanded/collapsed choice and glides the rail and content together. At the
+699px breakpoint the same navigation nodes move into the keyboard-accessible
+modal drawer; closing restores focus without changing the desktop preference.
+Reduced motion skips the glide. Navigation changes do not remount the page,
+discard filters/report drafts or add a route-history entry.
+
+Header branding has a stable 148px layout width independent of the animated
+rail. The wordmark keeps its 148x46 geometry; the caption wraps only within that
+fixed width, including enlarged text. Collapsing hides their paint but retains
+the block's height, with the compact mark placed inside the same link. This
+prevents the caption from temporarily wrapping to several lines as the rail
+reopens and pushing the whole page down. The header remains content-sized, not
+a fixed-height crop. Its measured height still sets the rail and scroll offsets.
+The time plot fills its host through normal block layout, with a measured minimum
+width for its dates/count labels. It does not write the host's rounded width back
+from a ResizeObserver: that caused transient native horizontal scrollbars during
+sidebar resizing and accumulated scroll drift in a scrolled Results view. Dense
+plots still scroll horizontally; no page scroll restoration or anchoring override
+is used, so wheel and keyboard reading intent stay with the browser.
+
+Sidebar glyphs use the installed official Fluent 24px regular assets: a trend
+chart for Analyze, a simple document for Reports, a gear for Settings and
+directional panel controls for collapse/expand. They retain their outline in
+selected, hover and keyboard-focus states; existing current-page accents,
+labels and 44px targets remain. Shared colors/fonts and the WIRE artwork are
+unchanged by this navigation treatment.
+
+Application-screen service and Settings-category icons now use the same official
+Fluent regular family at their native 24px optical size. Ordinary actions,
+header controls and status legends stay 20px; compact result badges, help and
+selection checks use true 16px assets rather than scaled-down 20px paths.
+Reset Analyze uses the native 24px `arrow_reset` return-to-start glyph, distinct
+from Refresh's 20px clockwise arrow. Its existing position, label, disabled and
+keyboard behavior stay unchanged; no date/filter or Refresh semantics change.
+Service identity and outcome keys/labels are unchanged. Unknown uses a question
+mark, Discovery a book/search glyph, and partial, failed and transport outcomes
+retain their distinct symbols and existing semantic colors.
+
+Wrapped semantic labels and Settings categories align glyphs with the first
+text line. Services retain the original combined icon-column/gap footprint for
+their label, count and bar positions, with unchanged content-sized hit targets.
+Outcome menus keep a consistent 20px status column on the left; the independent
+selection check paints at 16px inside its existing 20px outline on the right.
+All/Clear, zero-count options, Apply/Cancel and accessible selection states are
+not status meanings and do not change.
+
+`ux-icons.mjs` and `dimensional-icons.mjs` are serialized only into the app shell.
+Report-workspace controls consume them, but saved document contents and the
+native/PDF report generators do not import these registries or their alignment
+styles. Report-shared typography, palettes, chart paint and branding remain
+separate and unchanged by the screen icon roles.
 
 `createSessionJourney().canonical` normalizes `home`, `overview`, `activity`
 and `calls` into `analyze`. `mode=calls` selects the existing flat action
@@ -2674,6 +3058,12 @@ restoration remain the single router. Search stays in history.state only.
 Requests retain the originating mode/page so Back and the reader's return link
 restore the actual list, not a chat chooser. Selection and draft choices remain
 panel state and are not silently narrowed when a selected row leaves the view.
+The presentation slice key includes canonical local `withinServices` refinements,
+separately from the server query and private search. Service-chart drilldowns
+therefore keep their interaction ordering and chart-data page apart from the
+parent slice: Back restores the original order and page rather than putting the
+last narrowed results first. Equivalent service orders share their canonical key;
+an absent refinement uses the empty service list.
 
 `renderHome` / `#homeView` remain internal names for the unchanged chart group,
 not a second destination. `renderActivity` / `#activityView` now consume
@@ -2705,20 +3095,17 @@ for Setup, Review and Save locally. Contextual **Add to report**, **Review selec
 chat-specific report creation remain. Navigation preserves deliberate empty
 selection, current draft, filters, privacy gates and saved/downloaded artifacts.
 
-**Reset Analyze** sits directly below the analytical controls, including
-chat-filtered Analyze. Its content-width action group aligns with the
-leading edge of the filter row, not the far edge of a full-width empty row.
-When custom dates are open, it follows their From/To/Apply controls. It remains
-outside the primary filter row so narrow and enlarged-text
-views can reach it without scrolling to the last filter. Request details retain
-the same single action beside their current scope; Reports, Settings and
-Collection status do not show it. It appears whenever the analytical route
-differs from Analyze defaults. It returns to Interactions, all retained dates and the weekly Work IQ chart,
-clearing primary/secondary filters, chart choice, time scale, chat/request/path
+**Reset Analyze** stays in the compact More filters utility line, including
+chat-filtered Analyze. The controls wrap when needed rather than reserving an
+empty action row. Request details, Reports, Settings and Collection status do
+not show it. The existing utility action is disabled when
+the browsing scope is at its defaults; a nondefault column grouping alone does
+not enable it. It returns to Interactions, all retained dates and Work IQ calls,
+clearing primary/secondary filters, chart choice, chat/request/path
 scope, outer pagination and private search. It creates a
 history entry, so Back restores the prior slice and Forward returns to default Analyze.
 Private search travels in browser history state, never a copied route URL.
-Theme, report prompt/format choices, report selection, review state, consent
+Time-widget grouping, theme, report prompt/format choices, report selection, review state, consent
 and recorded/exported data are not reset. The resulting view conveys a successful
 reset without a routine success banner; pending work, errors and uncertain
 recovery remain explicit. Inner disclosure and pager memory stays intact.
@@ -2746,31 +3133,34 @@ Scrolling a column into view does not cancel its pending hover tooltip; only an
 already open tooltip is repositioned or dismissed when its anchor disappears.
 
 Time defaults to the viewer's detected IANA zone, formatted with their locale.
-One quiet, top-right header link names the applied display zone in human-readable
-form, with the exact IANA identity and per-instant offset explanation available
-on focus/hover. It opens the Time zone category using normal link semantics.
+Settings > Display names the selected IANA zone in its existing control.
+Pending or failed zone changes also name the still-applied zone.
+The header and narrow navigation drawer do not repeat it: the theme switch
+remains beside centered Search, without a time-zone badge, tooltip or empty slot.
 Home, Activity, chart tooltips and exact tables inherit this single global context;
 offset-bearing exact timestamps and independently portable reports keep their own.
-The header wraps rather than truncates at narrow widths and enlarged text; its
-measured height keeps the sidebar and scroll targets below it.
+The header's measured height keeps the sidebar and scroll targets below it.
 
 Settings offers a browser-local Time zone override using the existing
 typeahead select. Device default removes it. Named choices are canonicalized by
 the shared time helper, never inferred from an abbreviation or today's offset.
 Display groups the existing browser-local theme and time-zone preferences;
-the time-zone control keeps its own label and exact header-link destination.
+the time-zone control keeps its own label and existing deep-link destination.
 Its **Time zone** label names the select accessibly. Existing `section=display` links
 remain compatible. Time zone and Collection selects size to their value, bounded by the pane and
 36rem; long values retain the shared full-value focus/hover tooltip and readable
 popup choices. Font size and 44px minimum targets are unchanged; the pill grows
-vertically with enlarged text. One short impact sentence
-and one effective-zone statement replace repeated instructions and zone values.
-**About this time zone** sits inside the setting row without a separate section
-divider. It holds typeahead/reset guidance, browser scope and the exact device
-zone when an override is selected; warnings and unapplied-state
-messages remain visible. Collection fields form one vertical sequence, with
-each label, control and helper before the next setting. Category navigation
+vertically with enlarged text. Healthy Theme and Time zone rows contain labels
+and controls, without state narration, routine explanations or another disclosure.
+The existing Device default option includes the device zone. Pending and failed
+zone mismatches, invalid choices and storage failures keep conditional feedback
+beside the control. Collection fields form one vertical sequence, with
+each label and control before the next setting. Category navigation
 remains beside one active pane; path inputs retain their separate full-width layout.
+Other Settings categories omit duplicate healthy state and routine mechanics,
+while preserving source approval, unsaved or unknown changes, reply removal,
+paid-review consequences and recovery. Existing consequential details and actions
+remain in their original categories; removed prose is not moved into new help.
 Only explicit changes write `workiq-evidence.time-zone` in local storage; open
 panels at this origin synchronize, but other profiles/devices do not. Invalid
 saved choices visibly fall back to Device default without rewriting storage.
@@ -2783,7 +3173,7 @@ and monthly buckets. Date inputs represent civil dates; an inclusive ending day
 ends at the next local midnight exclusively. Last 7/30 days include today and
 the preceding local days. Drilldown clips to the existing slice, never expanding
 a partially visible week/month. Entered From/To values remain calendar dates
-in the selected zone. Applied snapshot and header update atomically; a pending
+in the selected zone. Applied snapshot and Settings context update atomically; a pending
 or failed read cannot relabel old buckets. Focus/load/live-tick revalidation detects
 device-zone or locale changes and invalidates an outstanding report review. A saved
 report freezes its zone, locale and date selection in every format; later viewers

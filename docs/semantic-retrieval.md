@@ -2,6 +2,8 @@
 
 `lib/search-retrieval.mjs` is a private, in-memory retrieval facade over the [authorized corpus](search-corpus.md). `lib/search-retrieval.d.mts` is its consumer contract. It implements actual pretrained embeddings plus independent lexical precision. It does **not** attach itself to the running collector, expose HTTP routes, change the browser's existing analytical search, render results, or open targets.
 
+Its additive `discover()` method can also produce separately stamped **Related results** for navigation. The producer contract below is implemented; runtime/UI consumers must separately wire purpose-checked receipts before exposing it. Existing `search()` remains strict-only and unchanged.
+
 The separate [live-search integration](live-search.md) now owns those runtime/UI
 responsibilities, using this facade unchanged. It coalesces normal typing behind
 verified delivery instead of repeatedly aborting a PDF generation.
@@ -72,6 +74,13 @@ All returned text is inert. Preserve each entry's source, coverage, original/mas
 
 ## Retrieval behavior and limitations
 
+The rules below describe the unchanged MiniLM baseline. The separately
+provisioned [role-bound lexical adjunct](search-linguistics.md) is disabled by
+default and **not currently qualified for activation**. Corrections for negative
+scope and source-modifier loss invalidate its earlier two-query qualification.
+Strict F09 and the ordinary-work misses remain open. The adjunct introduces no
+new neural model or persistent search cache.
+
 Only admitted **title, content and readable source label** enter lexical matching or embedding. IDs, hashes, targets, private paths, linked-interaction IDs and operational metadata do not. This version does not add coverage fields to embedding text.
 
 The real WordPiece tokenizer partitions source strings into overlapping original slices, retaining all admitted coverage and the final tail. Each chunk has at most **256 tokens including CLS/SEP**, following the sentence model's intended length rather than its 512-position architecture ceiling. A 2,048-character packing window bounds tokenization work per candidate; it partitions, never truncates, a document. Overlap is at most 24 content tokens where whitespace permits. Surrogate pairs are not split. Excerpts are original admitted slices, never reconstructed with token decoding.
@@ -83,6 +92,50 @@ Lexical tiers prioritize a complete title, exact phrase, all exact words, then a
 Semantic-only hits require cosine >= **0.50**. This policy is versioned, does not pad to a result count, and emits only `match: "exact" | "prefix" | "semantic"` rather than similarity/answer-quality percentages. Three real-model positive fixtures scored **0.630, 0.544, 0.543**; twelve negative comparisons, including a neighboring hospital/payroll topic, had maximum **0.180**. The full corpus path separately asserts unrelated-query rejection. These bounded controls support this cutoff but are not a universal relevance calibration.
 
 This encoder is **English-oriented**. Unicode lexical retrieval and complete Unicode chunk coverage do not imply multilingual semantic quality. WordPiece may map unsupported text or words longer than its 100-character word limit to unknown tokens; no hidden text or language meaning is recovered. There is no generated answer, learned usage ranking, persistent index or query log.
+
+## Separate Related results producer
+
+`discover(input, disclose)` accepts the same `{ query, requestId, types }` as `search()` and shares its index, monotonic request sequence, cancellation and invalidation lifetime. It uses one query embedding and one union `corpus.deliver` ticket. The synchronous authorized callback receives:
+
+```js
+{
+    matches: { hits, receipt },
+    related: {
+        state: "available",
+        hits: relatedHits,
+        receipt: relatedReceipt,
+        coverage: { evaluatedItems, corpusState, populationComplete: false }
+    }
+}
+```
+
+`matches.hits` preserves baseline strict IDs, match labels and exact excerpts. When configured, the optional linguistic path adds only separately supported records before disclosure. Its discovery-only receipt extends the existing stamp with `purpose: "strict-match-population"`, `matchPolicyId` and `types`. The **existing `search()` receipt retains its shape**. Both discovery stamps use canonical effective types: empty/omitted means all ten types in `SEARCH_TYPES` order; repeated types are deduplicated and invalid types reject.
+
+Related hits carry only original corpus fields plus `match: "related"` and `purpose: "navigate-only"`. The Related receipt additionally binds `purpose: "related-navigation"` and `relatedPolicyId`. No scores or generated explanations are disclosed. Disabled search retains `SEARCH_MATCH_POLICY_ID` and the original `SEARCH_RELATED.id`, **`1544a5093a15a386fa06361c344aabda392a5df77ad97cb1159ec87959637148`**. Explicitly enabled search instead uses the distinct pair in `SEARCH_LEXICAL_POLICIES`, binding the optional rule/resources and Related exclusion. Related metadata does not enter the strict index identity. Enabling the linguistic rule adds its own identity; disabling it preserves the baseline core index identity and receipt policy values.
+
+The frozen Related rule uses the same current admitted title/content/source projection and model. After type and exact-anchor gates, candidates must be absent from the strict set (including configured linguistic additions), have cosine at least **0.35**, and lie within **0.02** of the strongest eligible item score, including strict hits. All qualifying candidates are returned with stable typed-item deduplication and deterministic ties; there is no top-N/page cap or extra model run.
+
+The discovery promise returns `SearchDiscoveryStatus`. Its inherited `count` counts **strict matches only**; `related.count` counts Related candidates. Related-only results do not return `no-match`. Empty queries disclose both empty lists without inference. Lexical-only/model-unavailable mode can still disclose strict lexical matches, but Related is explicitly `{ state: "unavailable", reason: "model-unavailable", hits: [], receipt: null, coverage }`. Early/stale/superseded/closed calls disclose nothing and return Related unavailable with reason `not-current`. Invalidation drops the shared index/queued work; consumers must clear both disclosed sets on the existing invalidation callback and on each new query.
+
+### Navigation meaning, not analytical membership
+
+Consumer copy should say **“Related results”**, for example: **“Similar topics, but they may describe different work. These suggestions do not change your charts or report selection.”** Show the actual source, type, original excerpt, coverage limits and destination. A printer cable record can be a Related suggestion for printer toner, but that is not evidence that toner was changed.
+
+Related must never enter charts, comparison cohorts, report scope, selection or the strict membership map automatically. Opening an item is a read/navigation action; an independent explicit record selection is not proof of a complete query population. Runtime integration must use closed purpose-discriminated wire receipts, separate stored strict/Related hit maps, full owner/epoch/request/revision equality, and strict-only analytical admission. Editing a client purpose string cannot promote a Related ID into the server's strict map. The producer does not implement this wire authority or change the existing membership helper; the consumer owner must prove it separately.
+
+`coverage.evaluatedItems` counts type/anchor-eligible items examined by discovery, not matching records. `populationComplete` is always false: the policy selects navigational candidates, not every semantically related item. Even with a ready corpus, a stronger new item or a different source label can move a weaker candidate outside the score band. Pages may say all N **candidates** across P pages, never a complete matching population. Partial corpus coverage remains separately visible.
+
+The bounded qualification exposes all three original car queries through Related, but they remain absent from the strict set. Outside calibration, clear-target access improved from strict 4/15 to combined 13/15; permission removal and plant recovery remained below the discovery floor. Thirty-two unrelated-query checks and 120 retained noise records added no unrelated Related objects within the predeclared topic bounds. A separate identical-content fixture proves 63 distinct candidates survive across four display pages. This is not a universal relevance guarantee.
+
+**Strict analytical F09 remains open.** Related does not repair the original semantic-filter recall or justify existing strict false positives. A current receipt establishes authority/revision validity, not semantic truth or completeness.
+
+Focused producer proof:
+
+```powershell
+node --test --test-concurrency=1 tests\search-discovery.test.mjs tests\search-retrieval.test.mjs
+```
+
+The tests compare shared scoring against the frozen pre-discovery strict algorithm, exercise the real model and unchanged index identity, canonical stamps, one query inference/one delivery, held-out/topic/noise bounds, 63-ID coverage, exact-anchor precedence, shared search/discover supersession, model absence/corruption, source revocation, frozen artifact tampering/deletion and no persistent query writes. Runtime receipt-forgery, owner and UI purpose tests remain the consumer integration responsibility.
 
 ## Focused proof and measured limits
 

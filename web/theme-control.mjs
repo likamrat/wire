@@ -31,7 +31,6 @@ export function mountThemeControl(theme, ux) {
         trigger.setAttribute("aria-checked", String(state.theme === "dark"));
         ux.tooltip(trigger, label);
         settingsTrigger.textContent = label;
-        document.getElementById("settingsThemeState").textContent = state.theme === "dark" ? "Dark" : "Light";
         document.getElementById("themeStorageNotice").hidden = !state.storageUnavailable;
     });
 }

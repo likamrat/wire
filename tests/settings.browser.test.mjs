@@ -9,7 +9,7 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { navigateMain, navigateSettings, selectActivityOption, chooseTheme, openActivitySessions } from "./helpers.mjs";
+import { navigateMain, navigateSettings, selectActivityOption, chooseTheme, openActivitySessions, openSourceEditor } from "./helpers.mjs";
 import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -72,13 +72,16 @@ test("deliberate setup, existing approval, paused preference save and cancelled/
     assert.equal(await page.locator("#collectionStatus").textContent(), "Not connected");
     assert.equal(await page.locator("#collectionForm").isVisible(), false);
     assert.equal(await page.locator("#collectionNotice").isVisible(), false);
-    assert.equal(await page.locator("#checkActivity").innerText(), "Review source & connect");
+    assert.equal(await page.locator("#checkActivity").innerText(), "Refresh");
+    await page.locator("#freshHelp > summary").click();
+    assert.equal(await page.locator("#freshSourceSetup").isVisible(), true);
+    await page.locator("#freshHelp > summary").click();
     assert.equal((await runtime.collector.status()).config, null);
     await page.locator('nav [data-nav=settings]').focus(); await page.keyboard.press("Enter");
     assert.equal(await page.locator("#pageTitle").innerText(), "Settings");
     assert.equal(await page.locator("#connectionTitle").evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator('nav [data-nav=settings]').getAttribute("aria-current"), "page");
-    assert.equal(await page.locator('nav [data-nav=settings] [data-fluent-icon=settings_20_regular]').count(), 1);
+    assert.equal(await page.locator('nav [data-nav=settings] [data-fluent-icon=settings_24_regular]').count(), 1);
     assert.equal(await page.locator("#sourceEditor").isVisible(), false);
     await page.locator("#reviewSource").click();
     await page.locator("#sourceDatabase").fill(a.appDbPath);
@@ -97,7 +100,7 @@ test("deliberate setup, existing approval, paused preference save and cancelled/
     assert.equal(status.config.enabled, true);
     assert.equal(status.config.windowDays, 7);
     assert.equal(status.config.pollSeconds, 15);
-    assert.equal(await page.locator("#connectionStatus").innerText(), "Connected");
+    assert.equal(await page.locator("#connectionStatus").innerText(), "Collection on");
     assert.equal(await page.locator("#sourceEditor").isVisible(), false);
     assert.equal(await page.locator("#connectCollection").isVisible(), false);
     assert.equal(await page.locator("#approveCollection").count(), 0);
@@ -114,14 +117,14 @@ test("deliberate setup, existing approval, paused preference save and cancelled/
     assert.equal(status.config.appDbPath, a.appDbPath);
     assert.equal(posts.filter(row => row.path === "/api/collection/configure").at(-1).data.approved, true, "Full writes keep the backend's explicit approval contract");
     await navigateSettings(page, "connection");
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);
     assert.match(await page.locator("#sourceChangeImpact").innerText(), /stays paused/);
     await page.locator("#cancelSource").click();
     assert.equal((await runtime.collector.status()).config.appDbPath, a.appDbPath);
     assert.equal(posts.filter(row => row.path === "/api/collection/configure").length, 2);
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);
     assert.equal(await page.locator("#connectCollection").innerText(), "Approve and switch source");
@@ -141,7 +144,7 @@ test("deliberate setup, existing approval, paused preference save and cancelled/
 test("drafts retain exact inputs, focus and scroll through polling, routes and Back/Forward", { timeout: 60000 }, async t => {
     const { page, runtime, a, b, posts } = await setup(t, true);
     await page.goto(runtime.url + "#settings"); await ready(page);
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);
     await page.locator("#sourceSessions").focus();
@@ -158,30 +161,33 @@ test("drafts retain exact inputs, focus and scroll through polling, routes and B
     assert.equal(await page.locator("#sourceSessions").inputValue(), b.sessionRoot);
     assert.equal(await page.locator("#sourceEditor").isVisible(), true);
     await page.goForward(); await ready(page);
-    assert.equal(await page.locator("#pageTitle").innerText(), "Work IQ in your Copilot chats");
+    assert.equal(await page.locator("#pageTitle").innerText(), "Analyze");
     await page.locator("#settingsDraftNotice a").click();
     await page.locator("#cancelSource").click();
     assert.equal(await page.locator("#sourceSessions").inputValue(), a.sessionRoot);
     assert.equal((await runtime.collector.status()).config.sessionRoot, a.sessionRoot);
     assert.equal(posts.filter(row => /collection\/(configure|enabled|now)/.test(row.path)).length, 0);
     await page.goto(runtime.url + "#settings?issues=1");
-    await page.getByText("No current history issues reported", { exact: true }).waitFor();
+    await page.getByText("No history gaps reported", { exact: true }).waitFor();
     assert.equal(await page.locator("#collectionIssuesTitle").evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#sourceEditor").isVisible(), false);
     await page.setViewportSize({ width: 375, height: 900 });
     await page.locator("#navigationToggle").tap();
     assert.equal(await page.locator("#navigationDrawer").getAttribute("open"), "");
     assert.equal(await page.locator('nav [data-nav=settings]').isVisible(), true);
-    await page.locator('nav [data-nav=activity]').tap();
+    await page.locator('nav [data-nav=analyze]').tap();
+    await ready(page);
     assert.equal(await page.locator("#navigationDrawer").getAttribute("open"), null);
-    assert.equal(await page.locator("#pageTitle").evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator("#pageTitle").innerText(), "Analyze");
+    assert.equal(await page.locator("#navigationToggle").evaluate(node => node === document.activeElement), true,
+        "Returning to the existing Analyze reading position restores the drawer trigger rather than a new Activity heading");
 });
 
 test("invalid writes, concurrent settings and uncertain responses remain explicit without replay", { timeout: 90000 }, async t => {
     const { page, runtime, a, b, config, posts } = await setup(t, true);
     await page.goto(runtime.url + "#settings"); await ready(page);
     const original = (await runtime.collector.status()).config;
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill("relative-data.db");
     await page.locator("#connectCollection").click();
     await page.locator("#reloadSettings").waitFor();
@@ -207,7 +213,7 @@ test("invalid writes, concurrent settings and uncertain responses remain explici
     assert.equal(await page.locator("#collectionCadence").inputValue(), "30");
     await page.route("**/api/collection/configure", async route => { await route.fetch(); await route.abort("failed"); });
     await navigateSettings(page, "connection");
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);
     const count = posts.filter(row => row.path === "/api/collection/configure").length;
@@ -237,7 +243,7 @@ test("Settings cannot grant report review or revive an invalidated frozen previe
     assert.equal(await page.locator(".attestation input[data-review-control]").isDisabled(), true);
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
     assert.equal(await page.locator("#reportStage3").isVisible(), false);
-    assert.match(await page.locator("#reportJourneyError").innerText(), /no longer current/);
+    assert.match(await page.locator("#reportJourneyError").innerText(), /Collection settings changed.*Prepare a fresh report preview; source approval is not disclosure review/);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     assert.ok(!posts.some(row => ["/api/privacy-review", "/api/export"].includes(row.path)));
     assert.ok(posts.some(row => row.path === "/api/cancel-preview"));
@@ -252,7 +258,7 @@ test("minimal settings and Home stay readable in light/dark at 375/820/1200 and 
         await page.setViewportSize({ width, height: 960 }); await chooseTheme(page, theme);
         await page.waitForFunction(() => innerWidth < 700
             ? document.querySelector("#navigationToggle").checkVisibility()
-            : document.querySelector('nav [data-nav=home]').checkVisibility());
+            : document.querySelector('nav [data-nav=analyze]').checkVisibility());
         await navigateMain(page, "home");
         assert.equal(await page.locator("#collectionForm").isVisible(), false);
         assert.equal(await page.locator("#collectNow").isVisible(), false);
@@ -267,7 +273,7 @@ test("minimal settings and Home stay readable in light/dark at 375/820/1200 and 
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         for (const size of await page.locator("#settingsView button").evaluateAll(nodes => nodes.filter(n => n.checkVisibility()).map(n => n.getBoundingClientRect().height))) assert.ok(size >= 44);
         await screenshot(page, `settings-${theme}-${width}.png`);
-        await page.locator("#editSource").click();
+        await openSourceEditor(page);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         await screenshot(page, `source-review-${theme}-${width}.png`);
         await page.locator("#cancelSource").click();
@@ -275,7 +281,7 @@ test("minimal settings and Home stay readable in light/dark at 375/820/1200 and 
     await page.setViewportSize({ width: 375, height: 960 });
     await page.addStyleTag({ content: "html{font-size:200%}" });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.equal(posts.filter(row => /collection\/(configure|enabled|now)/.test(row.path)).length, 0);
 });
@@ -328,7 +334,7 @@ test("source presentation has one path pair with equal field geometry through fo
         }));
         assert.ok(readValues.every(row => row.fullValuePainted && row.noHorizontalClipping && row.whitespacePreserved), `Full read paths are painted without hidden horizontal overflow: ${theme}/${width}/${size}`);
         await capture(`source-read-${theme}-${width}-${size}.png`);
-        await page.locator("#editSource").click();
+        await openSourceEditor(page);
         const databaseFocus = await measure();
         await capture(`source-focus-database-${theme}-${width}-${size}.png`);
         await page.locator("#sourceSessions").focus();
@@ -373,7 +379,7 @@ test("source read/edit targets retain drafts across search, categories, time zon
     for (const id of ["approvedDatabase", "approvedSessions"]) {
         assert.equal(await page.locator("#" + id).evaluate(node => getComputedStyle(node).borderWidth), "0px");
     }
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     assert.equal(await page.getByRole("textbox", { name: "Copilot metadata database", exact: true }).evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#editSource").isVisible(), false);
     assert.equal(await page.locator("#approvedDatabase").isVisible(), false);
@@ -421,7 +427,7 @@ test("source read/edit targets retain drafts across search, categories, time zon
     assert.equal(await page.locator("#approvedDatabase").textContent(), a.appDbPath);
     assert.equal(await page.locator("#sourceDatabase").inputValue(), a.appDbPath);
     assert.equal(await page.locator("#sourceEditor").isVisible(), false);
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceSessions").focus();
     assert.equal(await page.locator("#sourceDatabase").evaluate(node => getComputedStyle(node).outlineStyle), "none", "Cancelled search highlights must not imitate a second focus ring");
     await page.locator("#cancelSource").click();
@@ -475,13 +481,13 @@ test("pending and rejected source replacements keep approved bytes, paused state
     const invalid = [
         { database: "relative-data.db", sessions: a.sessionRoot, error: /absolute data.db path/ },
         { database: a.appDbPath, sessions: path.join(path.dirname(b.sessionRoot), "missing", "session-state"), error: /directory could not be opened/ },
-        { database: path.join(path.dirname(b.appDbPath), "missing", "data.db"), sessions: b.sessionRoot, error: /metadata is disconnected/ },
+        { database: path.join(path.dirname(b.appDbPath), "missing", "data.db"), sessions: b.sessionRoot, error: /metadata could not be read/ },
         { database: b.appDbPath, sessions: b.sessionRoot, error: /Unsupported sessions mapping.*999/ },
     ];
     let release;
     t.after(() => release?.());
     for (const [index, entry] of invalid.entries()) {
-        await page.locator("#editSource").click();
+        await openSourceEditor(page);
         await page.locator("#sourceDatabase").fill(entry.database);
         await page.locator("#sourceSessions").fill(entry.sessions);
         const geometry = () => page.locator("#sourceEditor input").evaluateAll(nodes => nodes.map(node => {
@@ -525,7 +531,7 @@ test("pending and rejected source replacements keep approved bytes, paused state
     }
     assert.deepEqual(await loadBoardState(context), before);
     b.db.exec("PRAGMA user_version=156; ALTER TABLE sessions RENAME COLUMN removed_location TO execution_location");
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);
     await runtime.collector.configure({ appDbPath: a.appDbPath, sessionRoot: a.sessionRoot,
@@ -537,7 +543,7 @@ test("pending and rejected source replacements keep approved bytes, paused state
     assert.equal(await page.locator("#approvedSourceDetails").isVisible(), false);
     await page.locator("#cancelSource").click();
     assert.equal(await page.locator("#collectionCadence").inputValue(), "30");
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);
     await page.locator("#connectCollection").click(); await saved(page, "Source approved.");

@@ -1,3 +1,5 @@
+import { createAssessmentWording } from "./assessment-presentation.mjs";
+
 // Emits explicit packets; transport and lifecycle stay with the main client.
 export function mountConsentSetup(root, { control, sourceLabel, currentSource = null, onSubmit, onCheck, onCancel }) {
     const doc = root.ownerDocument;
@@ -11,9 +13,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     const applied = el("p", "", "assessment-applied"), scope = el("p", sourceLabel, "assessment-source");
     applied.id = `${root.id || "optionalEvidence"}-state`;
     applied.setAttribute("role", "status");
-    const boundary = el("p", "Only assistant replies already recorded in your approved local Copilot source are saved. They may be partial, not a verified final answer. This setting does not run new queries, fetch citations or send text for model assessment.");
-    const limit = el("p", "Up to 64 KiB per item, 20 items and 256 KiB per interaction. Credential-screened; incomplete text stays labeled.");
-    const unsupported = el("p", "Usage and explicit authorization evidence are not supported by this source.");
+    const boundary = el("p", "Saves recorded Copilot replies locally, excluding detected credentials. Replies may be incomplete or not final. Nothing is sent for AI review.");
     const form = el("form"), option = el("label", undefined, "settings-choice-row"), input = el("input");
     input.type = "checkbox";
     input.setAttribute("aria-describedby", applied.id);
@@ -29,7 +29,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     status.setAttribute("aria-live", "polite");
     status.tabIndex = -1;
     const details = el("details", undefined, "assessment-capture-details");
-    details.append(el("summary", "What gets saved"), scope, boundary, limit, unsupported);
+    details.append(el("summary", "What gets saved"), scope, boundary);
     actions.append(confirm, cancel, revokePrior, check);
     form.append(option, revoke, renewalImpact, actions, status);
     section.append(applied, form, details);
@@ -47,10 +47,12 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
         applied.textContent = inactiveGrant ? currentSource?.available === false
             ? "Response saving is inactive because its source is unavailable."
             : "Response saving is inactive because the approved source changed."
-            : state === "enabled" ? "Response saving is on."
-            : ["revoked", "off"].includes(state) ? "Response saving is off."
+            : state === "revoked" ? "Response saving was turned off; saved replies were removed."
+            : state === "enabled" ? idle ? "" : "Response saving is on."
+            : state === "off" ? idle ? "" : "Response saving is off."
                 : "The response-saving state is no longer current. Reload these settings.";
         if (snapshot.draft !== null && !locked(snapshot)) applied.textContent += " This change is not saved yet.";
+        applied.hidden = !applied.textContent;
         input.checked = snapshot.draft?.enabled ?? active;
         input.disabled = locked(snapshot) || currentSource?.available === false;
         confirm.disabled = locked(snapshot) || snapshot.draft === null;
@@ -111,27 +113,28 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     return { render, focus: () => input.focus() };
 }
 
-export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel, onSubmit, onCheck, onClose }) {
+export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel, onSubmit, onCheck, onClose, wording = createAssessmentWording() }) {
     const doc = dialog.ownerDocument;
-    const labels = {
-        "semantic-answer-correctness": { title: "Answer correctness", pass: "Correct", fail: "Not correct" },
-        "answer-support-validity": { title: "Answer support", pass: "Supported", fail: "Not supported" },
-        "action-authorization-compliance": { title: "Action authorization", pass: "Authorized", fail: "Not authorized" },
+    dialog.classList.add("assessment-feedback-dialog");
+    const dimensions = {
+        "semantic-answer-correctness": "accuracy",
+        "answer-support-validity": "answer-trust",
+        "action-authorization-compliance": "action-trust",
     };
-    const wording = labels[checkId];
-    if (!wording) throw new TypeError("Feedback is only available for the supported personal verdicts.");
+    const term = wording.resolve({ dimension: dimensions[checkId], checkId, checkVersion: 1, origin: "user-personal" });
+    if (!term.known) throw new TypeError("Feedback is only available for the supported personal verdicts.");
     function el(tag, text) {
         const node = doc.createElement(tag);
         if (text !== undefined) node.textContent = text;
         return node;
     }
-    const title = el("h2", "Your feedback: " + wording.title.toLowerCase());
+    const title = el("h2", "Your feedback: " + term.label.toLowerCase());
     title.id = `feedback-title-${checkId}`;
     dialog.setAttribute("aria-labelledby", title.id);
-    const note = el("p", "Optional personal feedback. This does not change the recorded request, response or tool outcomes.");
-    const automatic = el("p", "Automatic check: " + automaticLabel), saved = el("p");
+    const note = el("p", term.explanation + " Optional personal feedback; recorded evidence stays unchanged.");
+    const automatic = el("p", automaticLabel), saved = el("p");
     const form = el("form"), label = el("label", "Your assessment"), select = el("select");
-    for (const [value, text] of [["", "Choose a verdict"], ["pass", wording.pass], ["fail", wording.fail], ["unassessed", "Not sure"]]) {
+    for (const [value, text] of [["", "Choose a verdict"], ["pass", term.pass], ["fail", term.fail], ["unassessed", "Not sure"]]) {
         const option = el("option", text);
         option.value = value;
         select.append(option);
@@ -166,7 +169,7 @@ export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel
         check.disabled = snapshot.phase === "checking";
         saved.textContent = snapshot.phase === "stale" ? "Feedback must be reloaded for the current evidence."
             : prior ? prior.withdrawn ? "Your previous feedback was withdrawn."
-            : `Saved feedback: ${prior.verdict === "pass" ? wording.pass : prior.verdict === "fail" ? wording.fail : "Not sure"} (revision ${prior.revision}).`
+            : `Saved feedback: ${prior.verdict === "pass" ? term.pass : prior.verdict === "fail" ? term.fail : "Not sure"} (revision ${prior.revision}).`
             : "No active personal feedback.";
         status.textContent = localError || snapshot.message + (["pending", "checking", "unknown"].includes(snapshot.phase)
             ? " Closing this panel does not cancel the update. Its result can be checked without sending it again." : "");

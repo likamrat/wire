@@ -48,7 +48,7 @@ async function geometry(page, selector) {
                 const range = document.createRange(); range.selectNodeContents(node);
                 return [...range.getClientRects()].every(rect => rect.bottom <= pane.getBoundingClientRect().bottom + 1);
             }),
-            fields: [...pane.querySelectorAll(".settings-field")].map(field => {
+            fields: [...pane.querySelectorAll(".settings-field")].filter(field => field.checkVisibility() && field.querySelector(".select-trigger")).map(field => {
                 const control = field.querySelector(".select-trigger"), label = field.querySelector("label");
                 const style = getComputedStyle(control), paint = getComputedStyle(control, "::before");
                 const fieldStyle = getComputedStyle(field), fieldBox = box(field);
@@ -57,6 +57,8 @@ async function geometry(page, selector) {
                 return {
                     id: control.id, field: box(field), control: box(control), label: label ? box(label) : null,
                     split: fieldStyle.gridTemplateColumns.split(" ").length === 2,
+                    columns: fieldStyle.gridTemplateColumns.split(" ").map(parseFloat), gap: parseFloat(fieldStyle.columnGap),
+                    peerGap: parseFloat(getComputedStyle(field.parentElement).rowGap),
                     contentTop: fieldBox.y + parseFloat(fieldStyle.paddingTop) + parseFloat(fieldStyle.borderTopWidth),
                     contentBottom: helpDisclosure
                         ? box(helpDisclosure).y - parseFloat(getComputedStyle(helpDisclosure).marginTop) - parseFloat(fieldStyle.rowGap)
@@ -84,25 +86,27 @@ function assertGeometry(data, scale) {
         assert.ok(field.control.height >= field.lineHeight + 16, "Enlarged type keeps vertical space inside the painted pill");
         assert.equal(field.fontSize, 14 * scale, "Use the shared Fluent control role without shrinking it to fit");
         assert.ok(field.value.height >= field.lineHeight - 1);
-        assert.ok(field.control.width <= Math.min(field.field.width, (field.split ? 288 : 576) * scale) + 1,
-            "Wide actions use the reference column; compact long values may use the available field width");
+        assert.ok(field.control.width <= (field.split ? field.columns[1] : field.field.width) + 1,
+            "Controls stay inside their own column and long values may use its available width");
         if (field.split) {
-            assert.ok(Math.abs(field.control.right - field.field.right) <= 1, "Wide setting controls share the row's right edge");
-            assert.ok(Math.abs(field.control.y + field.control.height / 2 - (field.contentTop + field.contentBottom) / 2) <= 1, "The control is centered against its complete label/help group");
+            assert.ok(Math.abs(field.control.x - field.field.x - field.columns[0] - field.gap) <= 1,
+                "Wide controls align at the leading control column, close to their labels");
+            assert.ok(field.control.x - field.field.x <= 320 * scale, "Controls cannot float at a wide pane's far edge");
+            assert.ok(Math.abs(field.control.y - field.contentTop) <= 1, "Control aligns with its label rather than the height of its help");
         } else assert.ok(Math.abs(field.control.x - field.field.x) <= 1, "Compact setting controls stack at the text edge");
         assert.ok(Math.abs(field.chevron.x - field.value.right - 8) <= 1, "Value and chevron keep the shared 8px icon gap");
         assert.ok(field.chevron.right <= field.control.right - 11);
         assert.equal(field.border, "1px");
         assert.ok(contrast(field.ink, field.fill) >= 4.5, "Selected value retains a readable tonal pair");
         if (field.label) {
-            if (field.split) assert.ok(field.label.right + 23 <= field.control.x, "Wide label and action have a deliberate column gap");
+            if (field.split) assert.ok(field.label.right + field.gap - 1 <= field.control.x, "Wide label and action have a deliberate column gap");
             else assert.ok(field.label.bottom + 7 <= field.control.y);
         }
         for (const help of field.help) {
             assert.equal(help.clipped, false);
             if (field.split) {
-                assert.ok(help.right + 23 <= field.control.x);
-                assert.ok(Math.abs(help.x - field.field.x) <= 1);
+                assert.ok(help.y >= field.control.bottom);
+                assert.ok(Math.abs(help.x - field.control.x) <= 1, "Conditional feedback stays with the selected control");
             } else {
                 assert.ok(help.y >= field.control.bottom + 7);
                 assert.ok(Math.abs(help.x - field.control.x) <= 1);
@@ -111,13 +115,14 @@ function assertGeometry(data, scale) {
     }
     for (let i = 1; i < data.fields.length; i++) {
         const previous = data.fields[i - 1], current = data.fields[i];
-        assert.ok(Math.abs(current.field.y - previous.field.bottom) <= 1, "Stacked setting rows meet at one divider, not detached cards");
-        assert.equal(current.rowDivider, 1);
+        assert.ok(Math.abs(current.field.y - previous.field.bottom - current.peerGap) <= 1,
+            "Preference rows share the enclosing group with one consistent gap, not detached cards");
+        assert.equal(current.rowDivider, 0);
         const previousContent = [previous.control, previous.label, ...previous.help].filter(Boolean);
         const currentContent = [current.control, current.label, ...current.help].filter(Boolean);
-        assert.ok(Math.min(...currentContent.map(item => item.y)) - Math.max(...previousContent.map(item => item.bottom)) >= 47,
-            "Both sides of the divider retain their 24px row inset");
-        assert.ok(Math.abs(current.control.right - previous.control.right) <= 1 || Math.abs(current.control.x - previous.control.x) <= 1, "Peer controls share the wide right or compact left edge");
+        assert.ok(Math.min(...currentContent.map(item => item.y)) - Math.max(...previousContent.map(item => item.bottom)) >= current.peerGap - 1,
+            "Each field remains separate from the preceding label, value and help");
+        assert.ok(Math.abs(current.control.x - previous.control.x) <= 1, "Peer controls share their leading edge");
     }
 }
 async function assertPopup(page, label) {
@@ -144,76 +149,32 @@ test("reply saving gives a short connection prerequisite without an implicit opt
     await expect(page.locator("#assessmentSetup input,#assessmentSetup button")).toHaveCount(0);
 });
 
-test("Display has a named category and time-zone help inside its setting rather than a separate section", { timeout: 30000 }, async t => {
+test("healthy Display exposes familiar controls without explanatory prose or extra disclosures", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
-    const values = [];
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.evaluate(() => document.fonts.ready);
-        await page.mouse.move(0, 0);
-        if (proofs) await page.screenshot({ path: path.join(proofs, `time-zone-${theme}-closed.png`) });
-        await page.locator("#displayScope>summary").click();
-        const value = await page.evaluate(() => {
-            const category = document.querySelector("#settingsCategoryNav [data-category=display]");
-            const scope = document.getElementById("displayScope"), field = document.querySelector(".display-time-field");
-            return {
-                category: category.textContent, title: document.getElementById("displayTitle").textContent,
-                icon: category.querySelector("[data-fluent-icon]").dataset.fluentIcon,
-                helpInsideField: field.contains(scope), helpTitle: scope.querySelector("summary").textContent,
-                helpBorder: getComputedStyle(scope).borderTopWidth,
-            };
-        });
-        if (proofs) await page.screenshot({ path: path.join(proofs, `time-zone-${theme}-expanded.png`) });
-        values.push(value);
-        await page.locator("#displayScope>summary").click();
-    }
-    if (proofs) await writeFile(path.join(proofs, "time-zone-hierarchy.json"), JSON.stringify(values, null, 2));
-    for (const value of values) {
-        assert.equal(value.category, "Display");
-        assert.equal(value.title, "Display");
-        assert.equal(value.icon, "weather_sunny_20_regular");
-        assert.equal(value.helpInsideField, true);
-        assert.equal(value.helpTitle, "About this time zone");
-        assert.equal(value.helpBorder, "0px", "Help belongs to this field, not a new settings section");
-    }
+    const pane = page.locator("[data-settings-section=display]");
+    await expect(pane.getByRole("heading", { name: "Display", exact: true })).toBeVisible();
+    await expect(pane.getByRole("heading", { name: "Theme", exact: true })).toBeVisible();
+    await expect(pane.getByRole("heading", { name: "Time zone", exact: true })).toBeVisible();
+    await expect(pane.locator("details,.ux-help")).toHaveCount(0);
+    await expect(page.locator("#settingsThemeState,#settingsThemeHelp,#displayTimeImpact,#displayTimeDevice,#displayScope")).toHaveCount(0);
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1466]) for (const scale of [1, 2]) {
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1100 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const control = page.locator("#displayTimeZone-control"), summary = page.locator("#displayScope>summary");
-        const before = await control.evaluate(node => {
-            const box = node.getBoundingClientRect();
-            return { top: box.top + scrollY, width: box.width, height: box.height };
-        });
-        await summary.focus();
+        await page.evaluate(() => document.fonts.ready);
+        await expect(pane.locator("p:visible")).toHaveCount(0);
+        const control = page.locator("#displayTimeZone-control");
+        await expect(control).toContainText("Device default (America/Los_Angeles)");
+        await control.focus();
         await page.keyboard.press("Enter");
-        await expect(page.locator("#displayScope")).toHaveAttribute("open", "");
-        const measured = await page.locator(".display-time-field").evaluate(field => {
-            const help = field.querySelector("#displayScope"), summary = help.querySelector("summary");
-            const box = field.getBoundingClientRect(), helpBox = help.getBoundingClientRect();
-            const control = field.querySelector(".select-trigger").getBoundingClientRect();
-            return {
-                contained: helpBox.left >= box.left && helpBox.right <= box.right && helpBox.bottom <= box.bottom,
-                overflow: document.documentElement.scrollWidth > innerWidth,
-                clipped: [...help.querySelectorAll("p,summary")].filter(node => node.checkVisibility())
-                    .some(node => node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight),
-                outline: getComputedStyle(summary).outlineStyle, height: summary.getBoundingClientRect().height,
-                control: { top: control.top + scrollY, width: control.width, height: control.height },
-            };
-        });
-        assert.equal(measured.contained, true);
-        assert.equal(measured.overflow, false);
-        assert.equal(measured.clipped, false);
-        assert.equal(measured.outline, "solid");
-        assert.ok(measured.height >= 44);
-        assert.deepEqual(measured.control, before, `${theme}/${width}/${scale}: opening help does not move or resize the time-zone choice`);
+        await expect(page.getByRole("option", { name: "Device default (America/Los_Angeles)", exact: true })).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(control).toBeFocused();
+        assertGeometry(await geometry(page, "[data-settings-section=display]"), scale);
         if (proofs && width === 375) {
             await page.evaluate(() => scrollTo(0, 0));
-            await page.screenshot({ path: path.join(proofs, `time-zone-${theme}-${width}-${scale}-expanded.png`), fullPage: true });
+            await page.screenshot({ path: path.join(proofs, `display-${theme}-${width}-${scale}.png`), fullPage: true });
         }
-        await page.keyboard.press("Enter");
-        await expect(page.locator("#displayScope")).not.toHaveAttribute("open", "");
     }
 });
 
@@ -226,9 +187,9 @@ test("Time zone has one named heading, proportionate controls and vertically ord
     assert.equal(await page.locator("[data-settings-section=display] label").count(), 1);
     const reference = await geometry(page, "[data-settings-section=display]");
     assertGeometry(reference, 1);
-    assert.ok(reference.fields[0].control.width <= 288, "The reference-style setting action column is bounded, not the former 576px");
-    assert.ok(reference.fields[0].help[0].height / reference.fields[0].help[0].lineHeight <= 2, "Impact fits two untruncated lines at the desktop reference");
-    await expect(page.locator("#displayTimeEffective")).toHaveText("Device zone: America/Los_Angeles.");
+    assert.ok(reference.fields[0].control.width <= reference.fields[0].columns[1], "Device identity stays within the existing control column");
+    assert.equal(reference.fields[0].help.length, 0, "Healthy selection needs no explanatory paragraphs");
+    await expect(page.locator("#displayTimeEffective")).toBeHidden();
     await expect(page.locator("#displayTimeHelp")).toBeHidden();
     const longest = await page.locator("#displayTimeZone").evaluate(select => {
         const canvas = document.createElement("canvas"), context = canvas.getContext("2d");
@@ -249,7 +210,6 @@ test("Time zone has one named heading, proportionate controls and vertically ord
         await selectActivityOption(page, "displayTimeZone", ""); await ready(page);
         const normal = await geometry(page, "[data-settings-section=display]");
         assertGeometry(normal, scale);
-        assert.ok(normal.fields[0].control.width <= 288 * scale);
         for (const zone of longest) {
             await selectActivityOption(page, "displayTimeZone", zone.value); await ready(page);
             const long = await geometry(page, "[data-settings-section=display]");
@@ -299,13 +259,10 @@ test("simplified Display preserves typeahead, exact override context, pending/fa
         await chooseTheme(page, theme);
         await trigger.focus();
         await page.keyboard.press("ArrowDown");
-        await expect(page.getByRole("option", { name: "Device default", exact: true })).toHaveAccessibleDescription("America/Los_Angeles");
+        await expect(page.getByRole("option", { name: "Device default (America/Los_Angeles)", exact: true })).toBeVisible();
         await page.keyboard.type("UTC"); await page.keyboard.press("Enter"); await ready(page);
-        await expect(page.locator("#displayTimeEffective")).toHaveText("Override: UTC.");
-        await expect(page.locator("#displayTimeZoneLink")).toHaveText("UTC");
-        await page.locator("#displayScope>summary").click();
-        await expect(page.locator("#displayTimeDevice")).toHaveText("Device/browser zone: America/Los_Angeles. Your override uses a different zone.");
-        await page.locator("#displayScope>summary").click();
+        await expect(page.locator("#displayTimeZone")).toHaveValue("UTC");
+        await expect(page.locator("#displayTimeEffective")).toBeHidden();
         await trigger.focus(); await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
         const focused = await geometry(page, "[data-settings-section=display]");
         assert.equal(focused.fields[0].outline, "2px");
@@ -321,14 +278,14 @@ test("simplified Display preserves typeahead, exact override context, pending/fa
         await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"Synthetic unavailable snapshot"}' });
     });
     await selectActivityOption(page, "displayTimeZone", "UTC");
-    await expect(page.locator("#displayTimeEffective")).toHaveText("Current view: America/Los_Angeles. Updating the view before changing its time context.");
-    await expect(page.locator("#displayTimeZoneLink")).toHaveText("Los Angeles time");
+    await expect(page.locator("#displayTimeEffective")).toHaveText("Updating time zone. Still using America/Los_Angeles.");
     release(); await ready(page);
-    await expect(page.locator("#displayTimeEffective")).toHaveText("Current view: America/Los_Angeles. The selected zone has not loaded; retry the view update.");
-    await expect(page.locator("#displayScope")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#displayTimeEffective")).toHaveText("The selected zone has not loaded. Still using America/Los_Angeles; retry the view update.");
+    await expect(page.locator("#displayTimeEffective")).toBeVisible();
     await page.unroute("**/api/snapshot");
     await (await revealStoredRefresh(page)).click(); await ready(page);
-    await expect(page.locator("#displayTimeEffective")).toHaveText("Override: UTC.");
+    await expect(page.locator("#displayTimeZone")).toHaveValue("UTC");
+    await expect(page.locator("#displayTimeEffective")).toBeHidden();
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.locator("#displayTimeZone").evaluate(select => {
@@ -356,7 +313,7 @@ test("fallback, unavailable options and storage errors stay visible outside Disp
         };
     });
     await expect(page.locator("#timeZoneNotice")).toContainText("invalid or unavailable");
-    await expect(page.locator("#displayTimeEffective")).toHaveText("Device zone: America/Los_Angeles.");
+    await expect(page.locator("#displayTimeZone-control")).toContainText("Device default (America/Los_Angeles)");
     await expect(page.locator("#displayTimeHelp")).toContainText("full time zone list");
     await selectActivityOption(page, "displayTimeZone", "UTC"); await ready(page);
     await expect(page.locator("#timeZoneNotice")).toContainText("this panel only until reload");
@@ -365,7 +322,7 @@ test("fallback, unavailable options and storage errors stay visible outside Disp
         await page.setViewportSize({ width, height: 1100 });
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await expect(page.locator("#displayScope")).not.toHaveAttribute("open", "");
+        await expect(page.locator("#displayScope")).toHaveCount(0);
         for (const id of ["timeZoneNotice", "displayTimeHelp"]) {
             const notice = page.locator("#" + id);
             await expect(notice).toBeVisible();

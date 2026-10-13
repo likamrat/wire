@@ -2,23 +2,60 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
 
+async function placement(page) {
+    return page.evaluate(() => {
+        const action = document.querySelector("#checkActivity"), help = document.querySelector("#freshHelp > summary");
+        const result = document.querySelector("#freshResult");
+        const box = node => {
+            const rect = node.getBoundingClientRect();
+            return { x: rect.x, y: rect.y, bottom: rect.bottom, right: rect.right, height: rect.height };
+        };
+        return {
+            action: box(action), help: box(help), result: box(result), scrollY,
+            resultVisible: result.checkVisibility(),
+            ordered: Boolean(action.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING)
+                && Boolean(help.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
+        };
+    });
+}
+function assertAdjacent(value) {
+    assert.ok(value.ordered, "DOM and keyboard order must be Refresh, source help, then result");
+    assert.ok(value.help.x >= value.action.right && value.help.x - value.action.right <= 28
+        && Math.abs(value.help.y - value.action.y) <= 4,
+    `Source and collection must sit beside its check action, not at the far page edge: ${JSON.stringify(value)}`);
+    if (value.resultVisible) assert.ok(value.result.y >= Math.max(value.action.bottom, value.help.bottom),
+        "Visible status belongs below both controls, not between them");
+}
+
 test("freshness groups source help with the action and explains check-wide gaps", { timeout: 90000 }, async t => {
     const { context } = await privateFixture(t);
     const before = await loadBoardState(context);
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
-    const browser = await chromium.launch();
+    const denied = [];
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false },
+        evaluation: {
+            evaluatorFactory: async () => { denied.push("provider"); throw new Error("Freshness proof cannot run a model."); },
+            readSource: async () => { denied.push("source"); throw new Error("Freshness proof cannot read evaluation sources."); },
+        },
+    });
+    const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined,
+        ignoreDefaultArgs: ["--hide-scrollbars"] });
     t.after(async () => { await browser.close(); await runtime.close(); });
     const page = await browser.newPage({ viewport: { width: 1644, height: 1050 }, reducedMotion: "reduce", timezoneId: "America/Los_Angeles" });
     const errors = [], mutations = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => {
         if (request.method() === "POST" && !["/api/snapshot", "/api/collection/status", "/api/session", "/api/session/release", "/api/collection/now", "/api/evaluation/automatic/summary"].includes(new URL(request.url()).pathname)) mutations.push(new URL(request.url()).pathname);
+    });
+    await page.route("**/*", route => {
+        if (new URL(route.request().url()).origin === new URL(runtime.url).origin) return route.continue();
+        denied.push("external request");
+        return route.abort("blockedbyclient");
     });
     const coverage = { eligible: 7, readable: 3, unavailable: 4, limited: 1, pending: 1, affected: 5,
         groups: { missing: 4, context: 1 }, excluded: { archived: 2 } };
@@ -46,16 +83,38 @@ test("freshness groups source help with the action and explains check-wide gaps"
     await page.route("**/api/collection/now", async route => {
         checks++;
         if (gate) await gate;
-        await route.fulfill(failCheck ? { status: 422, json: { error: "Synthetic collection error; previous view kept." } } : { json: { ...status(), check: nextCheck } });
+        await route.fulfill(failCheck ? { status: 422, json: { code: "source_mapping_unsupported", error: "Synthetic collection error; previous view kept." } } : { json: { ...status(), check: nextCheck } });
     });
     await page.goto(runtime.url);
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-    await page.locator("#checkActivity").click();
+    await page.evaluate(() => document.fonts.ready);
+    const idle = await placement(page);
+    assertAdjacent(idle);
+    assert.equal(idle.resultVisible, false, "Idle collection does not reserve an empty result row");
+    assert.equal(idle.result.height, 0);
+    await page.locator("#checkActivity").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#freshHelp > summary")).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator("#checkActivity")).toBeFocused();
+    await page.mouse.click(idle.action.x + 15, idle.action.y + idle.action.height / 2);
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "partial");
     await page.evaluate(() => document.fonts.ready);
     const failures = [];
-    const action = await page.locator("#checkActivity").boundingBox(), help = await page.locator("#freshHelp>summary").boundingBox();
-    if (!(help.x >= action.x + action.width && help.x - action.x - action.width <= 28 && Math.abs(help.y - action.y) <= 4)) failures.push("Source and collection must sit beside its check action, not at the far page edge");
+    const completed = await placement(page);
+    assertAdjacent(completed);
+    assert.equal(completed.resultVisible, true);
+    assert.deepEqual(completed.action, idle.action);
+    assert.deepEqual(completed.help, idle.help);
+    assert.equal(completed.scrollY, idle.scrollY);
+    const liveStatus = page.locator("#freshResult [role=status]");
+    assert.equal(await liveStatus.getAttribute("aria-live"), "polite");
+    assert.equal(await liveStatus.getAttribute("aria-atomic"), "true");
+    if (process.env.WIRE_FRESH_PROOF_DIR) {
+        await mkdir(process.env.WIRE_FRESH_PROOF_DIR, { recursive: true });
+        await writeFile(path.join(process.env.WIRE_FRESH_PROOF_DIR, "adjacency.json"), JSON.stringify({ idle, completed }, null, 2));
+        await page.screenshot({ path: path.join(process.env.WIRE_FRESH_PROOF_DIR, "adjacency-green.png") });
+    }
     const warning = await page.locator("#freshIssues").innerText();
     if (!/4 unavailable/.test(warning) || !/1 with limits/.test(warning) || !/1 still reading/.test(warning)) failures.push("The visible warning must name known unavailable, limited and pending chat counts");
     await page.locator("#freshHelp>summary").click();
@@ -111,6 +170,9 @@ test("freshness groups source help with the action and explains check-wide gaps"
             release(); gate = undefined;
             await page.waitForFunction(() => ["complete", "partial", "error"].includes(document.querySelector("#freshActivity").dataset.phase) && !document.querySelector("#checkActivity").disabled);
             const completedBoxes = await boxes();
+            const currentPlacement = await placement(page);
+            assert.ok(currentPlacement.ordered, "Status changes preserve control order");
+            if (width === 1644 && scale === 1) assertAdjacent(currentPlacement);
             for (const id of ["checkActivity", "freshHelp", "freshStatus"]) {
                 assert.ok(Math.abs(completedBoxes[id].x - anchor[id].x) <= 1 && Math.abs(completedBoxes[id].y - anchor[id].y) <= 1, `${theme}/${width}/${scale}/${state}/${id}: stable result anchor`);
             }
@@ -121,7 +183,7 @@ test("freshness groups source help with the action and explains check-wide gaps"
             if (state === "partial") {
                 await page.locator("#freshHelp>summary").focus(); await page.keyboard.press("Enter");
                 assert.equal(await page.locator("#freshHelp>summary").evaluate(node => getComputedStyle(node).outlineStyle !== "none"), true);
-                assert.match(await page.locator("#freshHelp").innerText(), /cannot establish whether missing activity belongs in this view/);
+                assert.match(await page.locator("#freshHelp").innerText(), /all eligible chats, not this view's filters/);
                 assert.equal(await page.locator("#refreshBtn").isVisible(), false, "A partial check is not a second refresh/read choice");
                 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
                 const clipped = await page.locator("#freshHelp p,#freshHelp dt,#freshHelp dd").evaluateAll(nodes => nodes.filter(node => {
@@ -140,8 +202,11 @@ test("freshness groups source help with the action and explains check-wide gaps"
             await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(process.env.WIRE_FRESH_PROOF_DIR, `${theme}-${width}-${scale}-error.png`), fullPage: true });
         }
-        await page.locator("#refreshBtn").click();
+        assert.equal(await page.locator("#refreshBtn").isVisible(), false, "Known source rejection offers source review, not an unnecessary stored-read action");
+        const checksBeforeRead = checks;
+        await page.locator("#checkActivity").click();
         await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
+        assert.equal(checks, checksBeforeRead, "Refresh in an error state retains its existing stored-only guard");
     }
     if (process.env.WIRE_FRESH_PROOF_DIR) await writeFile(path.join(process.env.WIRE_FRESH_PROOF_DIR, "state-layout.json"), JSON.stringify(measurements, null, 2));
     assert.equal(detailedReads, 0, "No personal issue inventory fetched by repeated checks, help, themes or text resizing");
@@ -154,6 +219,7 @@ test("freshness groups source help with the action and explains check-wide gaps"
     assert.equal(checks, 73);
     assert.deepEqual(errors, []);
     assert.deepEqual(mutations, []);
+    assert.deepEqual(denied, []);
     const after = await loadBoardState(context);
     assert.deepEqual(after.evidence, before.evidence);
     assert.deepEqual(after.cards, before.cards);

@@ -4,14 +4,28 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
     let consentView, consentControl, consentSignature = "", activeFeedback, feedbackView, activeDetail, focusInteractionRef = null;
     const detailCache = new Map(), overviewCache = new Map(), pending = new Map(), readers = new Map(), hosts = new Set();
     const overviewRequests = new WeakMap(), acceptedOverviews = new WeakMap();
-    let scoringMessage = "Automatic-score status is being read. No missing score is treated as zero.";
+    let scoring = { message: "Automatic-score status is being read. No missing score is treated as zero." };
     function scoringStatus(status) {
         const stateLabels = { off: "Off", waiting: "Waiting", assessing: "Assessing", ready: "Ready", paused: "Paused" };
-        scoringMessage = status ? `Automatic scores: ${stateLabels[status.state] ?? "Status unavailable"}. ${status.reason || (status.state === "off"
+        const message = status ? `Automatic scores: ${stateLabels[status.state] ?? "Status unavailable"}. ${status.reason || (status.state === "off"
             ? "Review Automatic scores to approve model assessment. Saving replies alone does not enable scoring."
             : "The values below cover only this view's included interactions.")}`
             : "Automatic-score status unavailable. Open Automatic scores to read current status; no assessment was requested.";
-        for (const host of hosts) host.querySelectorAll(".assessment-scoring-status").forEach(node => { node.textContent = scoringMessage; });
+        scoring = { ...status, message };
+        for (const host of hosts) {
+            host.querySelectorAll(".assessment-scoring-status").forEach(node => { node.textContent = message; });
+            updateEmptyReviews(host);
+        }
+    }
+    function updateEmptyReviews(host) {
+        const section = host.querySelector('.assessment-summary[data-empty-reviews="true"]');
+        if (!section) return;
+        const controls = [...section.querySelectorAll(":scope > .assessment-heading > h2, [data-automatic-scores], .assessment-saved-details, .assessment-reading-help, .assessment-scoring-status")];
+        const idle = scoring.state === "off" && scoring.reasonCode === "not-approved" && !scoring.reason
+            && !recovery && !recoveryInvalid && !pendingRequest && !recovering;
+        if (idle && controls.some(node => node.contains(document.activeElement))) return;
+        controls.forEach(node => { node.hidden = idle; });
+        section.querySelector(".assessment-empty-review").hidden = !idle;
     }
     const routes = {
         get_interaction: "/api/assessment/detail", get_assessment_overview: "/api/assessment/overview",
@@ -33,7 +47,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         node.addEventListener("click", action);
         return node;
     }
-    const measureHelp = key => ux.helpButton(glossary[key].label, glossary[key].definition);
+    const measureHelp = (key, term) => ux.helpButton(term?.label ?? glossary[key].label, term?.explanation ?? glossary[key].definition);
     function automaticEntry(host) {
         if (!onAutomaticSetup) return;
         const heading = host.querySelector(".assessment-heading");
@@ -45,9 +59,10 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         if (existing) actions.append(existing);
         heading.append(actions);
         if (host.querySelector("[data-review-status]")) return;
-        const status = el("p", scoringMessage, "assessment-scoring-status");
+        const status = el("p", scoring.message, "assessment-scoring-status");
         status.setAttribute("role", "status");
         host.querySelector(".assessment-summary").append(status);
+        updateEmptyReviews(host);
     }
     const recoveryHost = el("div", undefined, "notice assessment-recovery");
     recoveryHost.hidden = true;
@@ -310,7 +325,11 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     automaticEntry(host);
                 }
                 findingsHost?.removeAttribute("aria-busy");
-                if (scopeNote && scenarioIds.length) host.append(el("p", scopeNote, "assessment-scope"));
+                if (scopeNote && scenarioIds.length) {
+                    const scope = el("p", scopeNote, "assessment-scope");
+                    if (findingsHost?.dataset.presentation === "compact") host.prepend(scope);
+                    else host.append(scope);
+                }
                 if (membership.unavailable) host.append(el("p", `${membership.unavailable} request groups have no verified interaction association. They are not silently included.`, "assessment-unavailable"));
                 acceptedOverviews.set(host, signature);
             }, isCurrent, error => {
@@ -396,7 +415,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         host.replaceChildren(el("h2", "Response"), state);
         responseDetails(host, reason);
     }
-    function showResponse(host, view, { eager = false, placeResponse } = {}) {
+    function showResponse(host, view, { eager = false, placeResponse, contentFirst = false } = {}) {
         host.style.minHeight = "";
         host.removeAttribute("aria-busy");
         host.replaceChildren(el("h2", eager ? "Recorded assistant response" : "Response"));
@@ -416,7 +435,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 hosts.add(entry);
                 if (placeResponse) placeResponse(entry, answer);
                 else host.append(entry);
-                showResponse(entry, { ...view, observations: [answer] }, { eager: true });
+                showResponse(entry, { ...view, observations: [answer] }, { eager: true, contentFirst });
             }
             return;
         }
@@ -449,7 +468,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     || !["full-record", "bounded-fragment"].includes(data.completeness) || data.finality !== "unverified") throw new Error("The response does not match this evidence context.");
                 if (event) textAccess.setOpen(key, true);
                 reader.replaceChildren(textAccess.render({ text: data.text, status: data.completeness === "bounded-fragment" ? "partial" : "available" }, {
-                    key, mode: "complete", subject: "response",
+                    key, mode: "complete", subject: "response", contentFirst,
                     notice: "Copy includes the complete retained response body only, not the prompt or page metadata. It is original, unmasked text and is not included in reports. Other apps and clipboard history may access your system clipboard. This is recorded response text, not a verified final answer. Reading uses only already-retained local evidence.",
                 }));
                 load.hidden = true;
@@ -497,17 +516,24 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         if (view) {
             body.append(el("p", "Personal feedback is optional and separate from automatic checks. It does not change recorded evidence."));
             const label = el("label", "Personal feedback (optional)"), select = el("select");
-            for (const [value, text] of [["semantic-answer-correctness", "Accuracy"], ["answer-support-validity", "Answer trust"], ["action-authorization-compliance", "Action trust"]]) {
-                const option = el("option", text); option.value = value; select.append(option);
+            for (const [value, dimension] of [["semantic-answer-correctness", "accuracy"], ["answer-support-validity", "answer-trust"], ["action-authorization-compliance", "action-trust"]]) {
+                const term = presentation.wording.resolve({ dimension, checkId: value, checkVersion: 1, origin: "user-personal" });
+                const option = el("option", term.label); option.value = value; select.append(option);
             }
             label.append(select);
             body.append(label, button("Give personal feedback", event => {
                 if (!activeDetail || !sameBasis(activeDetail.basis, snapshot?.basis)) return;
                 const checkId = select.value;
                 const personal = view.assessments.filter(item => item.origin === "user-personal" && item.checkId === checkId).sort((a, b) => b.revision - a.revision)[0] ?? null;
+                const local = view.metrics.find(item => item.origin === "automatic-local" && item.checkId === checkId);
+                const localTerm = local ? presentation.wording.resolve(local) : null;
+                const automaticLabel = localTerm?.kind === "permission" && local.reason === "unsupported-check" && local.value === null
+                    ? "Permission is not checked automatically."
+                    : "Automatic local check: " + (local ? presentation.format(local).value : "No saved local check");
                 activeFeedback = controls.feedback({ interactionRef: view.interaction.interactionRef, basis: view.basis, checkId, latestPersonal: personal });
                 feedbackView = mountFeedback(feedbackDialog, {
-                    control: activeFeedback, checkId, automaticLabel: "Unassessed",
+                    control: activeFeedback, checkId, wording: presentation.wording,
+                    automaticLabel,
                     onSubmit: packet => mutate(activeFeedback, feedbackView, packet),
                     onCheck: packet => checkMutation(activeFeedback, feedbackView, packet),
                     onClose: () => {
@@ -520,6 +546,11 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 feedbackView.open(event.currentTarget);
             }));
         } else body.append(el("p", "What these results mean and which requests they cover. Open a single request to add optional personal feedback."));
+        const summary = trigger.closest(".assessment-summary");
+        if (summary?.querySelector(".assessment-empty-review")?.hidden === false) {
+            for (const outcomes of summary.querySelectorAll(".assessment-secondary-findings > .assessment-finding-list")) body.append(outcomes.cloneNode(true));
+            for (const paragraph of summary.querySelectorAll(".assessment-reading-help > p")) body.append(paragraph.cloneNode(true));
+        }
         const terms = el("details", undefined, "reading-section"), definitions = el("dl", undefined, "measure-glossary");
         definitions.dataset.measureGlossary = "";
         terms.append(el("summary", "Glossary"), definitions);

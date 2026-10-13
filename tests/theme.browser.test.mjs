@@ -266,8 +266,9 @@ test("sliding switch shows both initial positions, toggles once per pointer/key 
             await page.waitForTimeout(220);
             assert.equal(await page.getByRole("tooltip").isVisible(), false, "Activation cancels pending/visible tooltip, including its timer");
         }
-        await page.locator("#displayTimeZoneLink").focus();
+        await control.focus();
         await page.keyboard.press("Tab");
+        await page.keyboard.press("Shift+Tab");
         assert.equal(await control.evaluate((node) => getComputedStyle(node).outlineStyle), "solid");
         assert.equal(await page.getByRole("tooltip").innerText(), `Switch to ${initial === "dark" ? "light" : "dark"} theme`);
         assert.equal(await control.getAttribute("aria-describedby"), "evidence-tooltip");

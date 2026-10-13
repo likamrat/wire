@@ -25,12 +25,12 @@ test("count-led quality copy preserves exact percentages and distinguishes zero,
     assert.equal(zero.value, "0%");
     assert.equal(zero.reading.value, "0 passed \u00b7 1 failed");
     const missing = modelQuality("accuracy", { unassessed: 69 });
-    assert.equal(presentation.format(missing).reading.value, "No result");
+    assert.equal(presentation.format(missing).reading.value, "No saved review");
     missing.reason = "missing-evidence";
-    assert.equal(presentation.format(missing).reading.value, "Not enough evidence");
+    assert.equal(presentation.format(missing).reading.value, "Not enough saved evidence");
     missing.status = "evaluator-error"; missing.reason = "evaluator-failure";
     missing.counts = { pass: 0, fail: 0, unassessed: 0, evaluatorError: 69 };
-    assert.equal(presentation.format(missing).reading.value, "Check could not run");
+    assert.equal(presentation.format(missing).reading.value, "Review could not finish");
     assert.equal(presentation.summarize([]).groups.accuracy[0].reading.coverage, "Coverage unavailable");
 });
 test("shared-request wording requires exact covered and eligible memberships, not matching totals", () => {
@@ -57,21 +57,21 @@ test("seconds are display-only and preserve zero, tiny positive times and exact 
 test("current adapter summary omits Cost and retains distinct answer/action trust", () => {
     const model = presentation.summarize(currentView().metrics);
     assert.deepEqual(Object.keys(model.groups), ["accuracy", "speed", "answer-trust", "action-trust"]);
-    assert.equal(row(model, "accuracy").value, "Unassessed");
-    assert.equal(row(model, "answer-trust").label, "Answer trust");
-    assert.equal(row(model, "action-trust").label, "Action trust");
-    assert.equal(row(model, "answer-trust").value, "Unassessed");
-    assert.equal(row(model, "action-trust").value, "Unassessed");
+    assert.equal(row(model, "accuracy").value, "Not checked automatically");
+    assert.equal(row(model, "answer-trust").label, "Answer support");
+    assert.equal(row(model, "action-trust").label, "Permission for tool use");
+    assert.equal(row(model, "answer-trust").value, "Not checked automatically");
+    assert.equal(row(model, "action-trust").value, "Not checked automatically");
     assert.equal(model.groups.cost, undefined);
     assert.match(model.takeaway, /Timing is available/);
-    assert.match(model.takeaway, /no results.*answer correctness, answer support or actions matching the request/);
+    assert.match(model.takeaway, /No saved review of the answer or tool use/);
 });
 test("recorded tool success never becomes accuracy, trust or a colored quality score", () => {
     const model = presentation.summarize([samples.makeRatio(8, 2)]);
     assert.equal(model.diagnostics[0].label, "Recorded tool completion");
     assert.equal(model.diagnostics[0].value, "80%");
     assert.equal(model.diagnostics[0].band, "neutral");
-    assert.equal(row(model, "accuracy").value, "Unassessed");
+    assert.equal(row(model, "accuracy").value, "No saved review");
     assert.equal(row(model, "answer-trust").band, "neutral");
     assert.equal(row(model, "action-trust").band, "neutral");
     assert.match(model.takeaway, /^2 of 10 calls.*failed/);
@@ -82,7 +82,7 @@ test("automatic and personal accuracy remain distinct origin lanes with exact pa
     const model = presentation.summarize([quality("accuracy"), quality("accuracy", { pass: 3, fail: 1, unassessed: 4, personal: true, offset: 20 })]);
     const rows = model.groups.accuracy;
     assert.equal(rows.length, 2);
-    assert.equal(rows[0].value, "Unassessed");
+    assert.equal(rows[0].value, "Not checked automatically");
     assert.equal(rows[1].value, "75%");
     assert.equal(rows[1].origin, "Your feedback");
     assert.equal(rows[1].coverage, "3 / 4 passed; 4 / 8 assessed");
@@ -102,7 +102,7 @@ test("single-interaction presentation uses personal verdict words without changi
     for (const [dimension, pass, fail] of [
         ["accuracy", "Correct", "Not correct"],
         ["answer-trust", "Supported", "Not supported"],
-        ["action-trust", "Authorized", "Not authorized"],
+        ["action-trust", "Given", "Not given"],
     ]) {
         for (const positive of [true, false]) {
             const metric = quality(dimension, { pass: positive ? 1 : 0, fail: positive ? 0 : 1, unassessed: 0, personal: true });
@@ -121,7 +121,7 @@ test("partial personal coverage and Not-sure semantics never become a binary sin
     assert.equal(row(presentation.summarize([partial], { singleInteraction: true }), "accuracy").value, "100%");
     const unassessed = quality("accuracy", { unassessed: 1, personal: true });
     const displayed = row(presentation.summarize([unassessed], { singleInteraction: true }), "accuracy");
-    assert.equal(displayed.value, "Unassessed");
+    assert.equal(displayed.value, "No saved review");
     assert.equal(displayed.personalVerdict, null);
     assert.equal(displayed.coverage, "0 / 1 assessed; no pass/fail results");
 });

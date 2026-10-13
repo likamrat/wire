@@ -38,7 +38,7 @@ export const periodFlowStyles = `
 #dateError {color:var(--danger)}
 .filter-tools {display:flex;width:fit-content;max-width:100%}
 .filter-tools>.reset-view {margin-top:4px}
-.stored-refresh {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-block:12px}
+.stored-refresh {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-block:4px 0}
 .stored-refresh>p {flex:1 1 20rem;min-width:0;margin:0;font-size:.875rem}
 .stored-refresh>button {max-width:100%;white-space:normal;text-align:start}
 #freshHelp .stored-refresh>p {margin:0}
@@ -77,6 +77,9 @@ export const periodFlowStyles = `
 .fresh-context p {margin:0;font-size:.875rem}
 .fresh-links {display:flex;flex-wrap:wrap;gap:var(--pill-gap);max-width:100%}
 .fresh-links a,#freshIssues,#freshSourceSetup {display:inline-flex;align-items:center;min-height:44px}
+#freshAwayLink {display:inline-flex;align-items:center;min-height:44px}
+#freshAwayNotice[data-deferred-review=true]:not([hidden]) ~ #newDataNotice,
+#workspace:has(#freshActivity[data-deferred-review=true]:not([hidden])) > #newDataNotice {display:none}
 #checkActivity {min-height:var(--pill-height);white-space:normal;text-align:center;justify-self:start}
 #freshHelp {border:0;background:transparent;padding:0;margin:0}
 #freshHelp>summary {display:list-item;width:fit-content;min-height:44px;padding:10px 4px;color:var(--accent);font-size:.875rem;overflow-wrap:anywhere}

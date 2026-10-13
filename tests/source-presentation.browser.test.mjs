@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, exportCatalogFor, navigateMain, navigateSettings, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, navigateMain, navigateSettings, chooseTheme, openSourceEditor } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_SOURCE_PRESENTATION_PROOFS;
@@ -202,7 +202,7 @@ test("readonly source roles, exact long paths and control geometry remain cohere
                 assert.notEqual(row.textOverflow, "ellipsis"); assert.ok(row.lines > 1);
             }
         }
-        await page.locator("#editSource").click();
+        await openSourceEditor(page);
         await expect(page.locator("#approvedSourceDetails")).toBeHidden();
         await expect(page.locator("#sourceDatabase")).toBeFocused();
         await page.keyboard.press("Tab");
@@ -237,7 +237,7 @@ test("named category destinations, source drafts and real controls retain keyboa
     const { page, url } = await setup(t);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
-        await page.locator("#displayTimeZoneLink").click();
+        await navigateMain(page, "settings"); await ready(page); await navigateSettings(page, "display");
         await expect(page.locator("#displayTitle")).toBeFocused();
         assert.equal((await heading(page, "displayTitle")).outline, "none");
         for (const [section, id] of [["display", "displayTitle"], ["collection", "preferencesTitle"], ["connection", "connectionTitle"]]) {

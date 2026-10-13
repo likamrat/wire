@@ -161,9 +161,10 @@ test("original and immediate follow-ups never copy placeholders or hide recorded
     const request = page.locator(".request-original");
     assert.match(await request.innerText(), /Prompt not available/);
     assert.equal(await request.locator(".ux-copy").count(), 0);
+    assert.equal(await page.locator(".request-context-note:visible").count(), 1);
+    assert.match(await page.locator(".request-context-note").innerText(), /Linked messages may be separate work/);
     for (const i of [1, 2, 3]) {
         const followup = page.locator('[data-context-kind="follow-up"]').nth(i - 1);
-        assert.match(await followup.innerText(), /inferred follow-up, not a confirmed continuation/);
         if (i === 1) {
             assert.match(await followup.innerText(), /Only part of the original was recorded/);
             assert.equal(await followup.locator("pre").textContent(), "SYNTHETIC retained fragment");
@@ -180,7 +181,7 @@ test("request excerpts are compact content with separate native navigation at ev
     await page.goto(url + "#activity"); await ready(page); await openActivitySessions(page);
     const row = page.locator(".request-row").first(), content = row.locator(".full-text");
     const excerpt = content.locator(".full-text-preview"), link = content.getByRole("link", { name: "View interaction", exact: true });
-    assert.equal(await content.locator(".full-text-preview-label").textContent(), "Prompt / author unverified");
+    assert.equal(await content.locator(".full-text-preview-label").textContent(), "Prompt / This older record has no sender details");
     assert.equal(await excerpt.evaluate(node => node.tagName), "P");
     assert.equal(await content.locator("a").count(), 1);
     assert.equal(await row.locator(".request-meta").getByText("Request excerpt", { exact: true }).count(), 0);
@@ -244,7 +245,7 @@ test("short, missing, partial and long URL request excerpts keep literal content
         const { page, url } = await setup(t, { status, text, provenance: "recorded-user-message-origin-unverified" });
         await page.goto(url + "#activity"); await ready(page); await openActivitySessions(page);
         const content = page.locator(".request-row .full-text").first();
-        assert.equal(await content.locator(".full-text-preview-label").textContent(), "Prompt / author unverified");
+        assert.equal(await content.locator(".full-text-preview-label").textContent(), "Prompt / This older record has no sender details");
         assert.equal(await content.getByRole("link", { name: "View interaction", exact: true }).count(), 1);
         if (status === "unavailable") {
             assert.equal(await content.locator(".full-text-preview").textContent(), "Prompt not available");

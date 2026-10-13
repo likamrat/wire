@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createControlHelp } from "../lib/control-help.mjs";
+import { createAssessmentWording } from "../web/assessment-presentation.mjs";
 import { createServiceCategories, serviceCategories } from "../lib/service-categories.mjs";
 import { OUTCOMES } from "../lib/analytics.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
@@ -11,21 +12,20 @@ const help = createControlHelp(serviceCategories);
 
 test("measure help leads with the human meaning and keeps calculation limits in the glossary", () => {
     const { accuracy, speed, trust, coverage, unassessed } = help.glossary;
-    assert.match(accuracy.definition, /answer met the request.*recorded evidence/);
-    assert.match(accuracy.definition, /tool can work.*wrong answer/);
+    assert.match(accuracy.definition, /answer meet the request.*saved evidence/);
     assert.doesNotMatch(accuracy.definition, /divided|denominator|rubric/);
     assert.match(accuracy.detail, /passed plus failed/);
     assert.match(accuracy.detail, /without a result.*left out.*included in coverage/);
-    assert.match(trust.definition, /supports the answer.*actions match the request/);
-    assert.match(trust.definition, /does not prove a person gave permission/);
+    assert.match(trust.definition, /Answer support and tool use vs. request.*separate/);
+    assert.match(help.glossary["action-trust"].definition, /does not establish permission/);
     assert.match(speed.detail, /call starts.*recorded completion/);
     assert.match(speed.detail, /recorded request.*recorded final response/);
     assert.match(speed.detail, /lower middle.*even count/);
     assert.match(speed.detail, /Concurrent call times are not added/);
     assert.match(coverage.definition, /does not rate the rest of your history/);
-    assert.match(unassessed.detail, /review failed, not the answer/);
-    assert.match(unassessed.detail, /does not mean a review is waiting/);
-    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})());`)();
+    assert.match(unassessed.detail, /error, not a failed answer/);
+    assert.match(unassessed.detail, /does not mean one is queued/);
+    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})(), (${createAssessmentWording.toString()})());`)();
     assert.deepEqual(restored.glossary, help.glossary, "The normal shell uses the same short and detailed copy.");
 });
 
@@ -38,7 +38,7 @@ test("category filter help explains available choices without inventing service 
     assert.match(tool, /Service not shown: insufficient service evidence, not failure/);
     assert.doesNotMatch(help.categoryGuide(["Mail", "Calendar"]), /Discovery|Search and retrieval|Service not shown/);
     assert.doesNotMatch(help.categoryGuide(["Discovery", "Mail"], "reported-api"), /Discovery/);
-    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})());`)();
+    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})(), (${createAssessmentWording.toString()})());`)();
     assert.equal(restored.categoryGuide(["Discovery", "Mail"]), help.categoryGuide(["Discovery", "Mail"]));
 });
 
@@ -103,7 +103,7 @@ test("report and action guidance preserves source, privacy and selection boundar
 });
 
 test("help serializes without module closures and keeps inputs and glossary unchanged", () => {
-    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})());`)();
+    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})(), (${createAssessmentWording.toString()})());`)();
     const option = Object.freeze({ id: "layerFilter", value: "tool", label: "Work IQ tool calls" });
     assert.equal(restored.describeOption(option), help.layers.tool);
     assert.equal(restored.describeOption({ id: "serviceFilter", value: "Search" }), serviceCategories.describe("Search").description);

@@ -10,13 +10,21 @@ import { createRecordedResults } from "../web/recorded-results.mjs";
 import { createReportScope } from "../web/report-scope.mjs";
 import { exportCatalogFor } from "./helpers.mjs";
 import { scopeRecords, scopeOptions, privateQuery } from "./analysis-scope-fixture.mjs";
-import { createSearchMembership } from "../web/search-membership.mjs";
+import { createSearchMembership as mapSearchMembership } from "../web/search-membership.mjs";
+import { searchWireContract } from "../lib/search-wire-contract.mjs";
+
+const createSearchMembership = (snapshot, options, within, hits, receipt) => mapSearchMembership(snapshot, options, within, hits, {
+    schemaVersion: 2, panelId: "11111111-1111-4111-8111-111111111111", epoch: 0, requestId: 1, generation: 1,
+    indexId: "1".repeat(64), modelId: "2".repeat(64), mode: "hybrid", purpose: "strict-match-population",
+    queryPurpose: "analysis", queryTypes: [...searchWireContract.allTypes], matchPolicyId: searchWireContract.matchPolicyId,
+    ...receipt,
+}, searchWireContract);
 
 const projection = createActivityProjection(createTimeContext(), createServiceCategories(), Object.keys(createRecordedResults().labels("tool")));
 const refine = createAnalysisSlice(createLocalSearch(), projection);
 const sorted = values => [...values].sort();
 const rowId = (i, j = 0) => `call:${JSON.stringify([`parity-chat-${i}`, `parity-call-${i}-${j}`])}`;
-const hit = (type, request, layer, call) => ({ type, target: { kind: "route",
+const hit = (type, request, layer, call) => ({ type, match: "exact", target: { kind: "route",
     href: "#request?" + new URLSearchParams({ request, ...(layer ? { layer, call } : {}) }) } });
 function snapshot(options = scopeOptions) {
     const scenarios = scopeRecords();
@@ -43,10 +51,10 @@ test("verified empty, stale and full-page semantic membership never falls back t
         const input = snapshot(), receipt = { revision: 17 };
         const empty = createSearchMembership(input, scopeOptions, [], [], receipt);
         exact(refine(input, scopeOptions, privateQuery, [], empty), [], []);
-        assert.throws(() => createSearchMembership(input, scopeOptions, [], [], { revision: 16 }), /revision/);
+        assert.throws(() => createSearchMembership(input, scopeOptions, [], [], { revision: 16 }), /current strict analysis receipt/);
         assert.throws(() => refine(input, { ...scopeOptions, bucket: "month" }, "", [], empty), /scope/);
         const hits = input.scenarios.map(row => hit("interaction", row.scenarioId));
-        hits.push(hit("report", "not-a-scenario"), { type: "view", target: { kind: "route", href: "#analyze" } });
+        hits.push(hit("report", "not-a-scenario"), { type: "view", match: "exact", target: { kind: "route", href: "#analyze" } });
         const all = createSearchMembership(input, scopeOptions, [], hits, receipt);
         exact(refine(input, scopeOptions, "", [], all), input.analytics.rows.map(row => row.id),
             [...new Set(input.analytics.rows.map(row => row.scenarioId))]);

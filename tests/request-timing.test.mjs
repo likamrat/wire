@@ -14,6 +14,7 @@ test("request time names the recorded message, never the call start or a request
     };
     const before = structuredClone(source);
     assert.equal(timing.summary(source, context), "Message recorded: Sep 29, 2026, 12:22 PM");
+    assert.deepEqual(timing.entry(source, context), { label: "Message recorded", value: "Sep 29, 2026, 12:22 PM" });
     source.userPrompt.sourceTimestamp = "2026-10-01T19:00:00Z";
     assert.equal(timing.summary(source, context), "Message recorded: Oct 1, 2026, 12:00 PM", "A late source timestamp is not replaced by a guessed start");
     source.userPrompt.sourceTimestamp = before.userPrompt.sourceTimestamp;
@@ -29,6 +30,7 @@ test("missing or invalid message time selects only an actual earliest timed acti
         };
         const before = structuredClone(source);
         assert.equal(timing.summary(source, context), "First timed action: Sep 29, 2026, 12:22 PM");
+        assert.deepEqual(timing.entry(source, context), { label: "First timed action", value: "Sep 29, 2026, 12:22 PM" });
         assert.deepEqual(source, before);
     }
 });
@@ -37,6 +39,7 @@ test("group capture, duration and completion never fabricate an unavailable mess
     for (const source of [{}, { capturedAt: "2026-09-29T19:22:44Z" },
         { toolCalls: [{ startedAt: "invalid", completedAt: "2026-09-30T19:22:45Z", durationMs: 1000 }] }]) {
         assert.equal(timing.summary(source, context), "Request time not recorded");
+        assert.deepEqual(timing.entry(source, context), { label: "Request time", value: "Not recorded" });
     }
     assert.equal(time.formatMoment("invalid", context), "Time not recorded");
     assert.equal(time.formatMoment(null, context), "Time not recorded");

@@ -64,7 +64,7 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
     dialog.classList.add("assessment-dialog", "automatic-score-dialog");
     dialog.setAttribute("aria-labelledby", title.id);
     const destination = el("p", `GitHub Copilot - ${scope.method.model}`);
-    const purpose = el("p", "Model-assessed Accuracy and answer support. Action scores assess intent, not authorization.");
+    const purpose = el("p", "AI reviews the answer, its support, and whether tool use matched the request; not permission.");
     const summary = el("p", scope.interactionRefs
         ? `Only the ${scope.interactionRefs.length} fixed retained requests under review, within the ${scope.source.windowDays}-day window. New requests are not included.`
         : `Existing and new completed requests in the chats you approve, within the ${scope.source.windowDays}-day collection window.`);
@@ -105,7 +105,7 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
     chatLimit.hidden = true;
     const disclosure = el("details", undefined, "reading-section");
     disclosure.append(el("summary", "What is sent and retained"),
-        el("p", "Recorded prompts, final replies, returned tool evidence and action arguments are sent to the model shown above. Credentials are excluded. No request is replayed and no new source is added."),
+        el("p", "The model shown above receives recorded prompts, final replies, returned tool evidence and inputs sent to tools. Credentials are excluded. No request is replayed and no new source is added."),
         el("p", "Temporary evaluation text is removed after processing. Model assessments and evaluator billing are retained locally. The allowance covers evaluator spending only."),
         el("p", "This approval is separate from saving Copilot replies locally. Collection is never resumed by scoring."),
         el("p", `Scoring method: ${scope.method.rubricId}, version ${scope.method.rubricVersion}.`));

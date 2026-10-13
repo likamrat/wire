@@ -3,13 +3,12 @@ export const reportJourneyStyles = `
 .report-task-nav>a{min-height:44px;align-content:center;white-space:normal}
 .report-task-nav>a[aria-current=page]{--pill-fill:var(--accent-soft);--pill-border:var(--accent);color:var(--accent);font-weight:var(--weight-strong)}
 #reportCreatePanel[hidden],#savedReportsPanel[hidden]{display:none!important}
-#reportsView #savedReportsPanel #bundles{margin-top:0}
+#reportsView #savedReportsPanel #bundles{margin-top:0;padding:12px 16px;border:1px solid var(--rule);border-radius:var(--radius-small);background:var(--paper)}
 .assessment-dialog.saved-report-dialog{width:min(72rem,calc(100% - 24px))}
 .assessment-dialog.saved-report-dialog>.dialog-head{flex-wrap:wrap}
 .assessment-dialog.saved-report-dialog>.dialog-head h2{flex:1 1 auto;min-width:min-content;overflow-wrap:normal}
 .saved-report-dialog .report-frame{height:65vh;min-height:320px}
 #reportsView .report-start{display:block;padding:16px 0;margin:0;border-bottom:1px solid var(--rule)}
-.report-heading-context{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 #reportsView .report-start #reportPreviewContext{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;align-items:center;gap:4px 16px;margin:0;text-align:left}
 #reportsView #reportPreviewContext>#pageHeadingActions{grid-column:2;grid-row:1 / 3}
 #reportsView #reportPreviewContext>.report-choice-summary{grid-column:1;font-size:var(--type-body);margin:0}
@@ -19,7 +18,7 @@ export const reportJourneyStyles = `
 .report-progress li{min-width:0}
 .report-step{display:flex;gap:var(--pill-gap);align-items:center;justify-content:flex-start;width:100%;min-height:48px;border:0;background:transparent;padding:8px var(--pill-inset);text-align:left;white-space:normal}
 .report-step:disabled{background:transparent}
-.report-step>span:not(.report-step-number){min-width:0;overflow-wrap:anywhere}
+.report-step>span:not(.report-step-number){min-width:0;overflow-wrap:normal}
 .report-step-number{display:grid;place-items:center;flex:none;width:1.75rem;height:1.75rem;border-radius:50%;font-variant-numeric:tabular-nums;background:var(--canvas);color:var(--muted)}
 .report-step[data-visited=true]{color:var(--accent)}
 .report-step[data-visited=true] .report-step-number{background:var(--accent-soft);color:var(--accent)}
@@ -28,7 +27,7 @@ export const reportJourneyStyles = `
 .report-step-hint-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .report-step:not(:disabled):hover{background:var(--hover)}
 .report-stage{margin-top:20px;min-width:0}
-.report-stage>h3{font-size:var(--type-dialog);line-height:var(--leading-dialog);margin:0 0 20px;text-wrap:balance;scroll-margin-top:calc(var(--app-header-height,80px) + 16px)}
+.report-stage>h2{font-size:var(--type-dialog);line-height:var(--leading-dialog);margin:0 0 20px;text-wrap:balance;scroll-margin-top:calc(var(--app-header-height,80px) + 16px)}
 .report-entry-context,.report-scope-gap{max-width:72ch;line-height:var(--leading-reading)}
 .report-choice-summary{margin:4px 0 0;color:var(--muted);font-size:1rem}
 .report-entry-context{margin:12px 0 0;color:var(--muted);font-size:var(--type-body)}
@@ -43,11 +42,15 @@ export const reportJourneyStyles = `
 .report-journey .report-author-choice{margin:0;gap:8px}
 .report-journey .report-author-choice>.scope-summary{margin:0;font-weight:var(--weight-medium)}
 .report-journey .report-author-choice>.context-help-note{margin:0}
-.report-stage .scope-choices{display:grid;gap:8px}
-.report-stage .scope-choice{max-width:none;margin:0;padding:12px}
-.report-stage .scope-choice-help{margin-top:6px;line-height:var(--leading-ui)}
+.report-stage .scope-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));gap:8px;align-items:start}
+.report-stage .scope-choice{max-width:none;min-height:44px;margin:0;padding:8px;border:0}
+.report-stage .scope-choice-help{max-width:65ch;margin:8px 0 0;font-size:var(--type-body);line-height:var(--leading-reading)}
+.report-stage #promptOptions{grid-auto-rows:auto}
+.report-stage .prompt-choice{min-height:44px}
+.report-stage #promptOptions .prompt-choice:has(input:not(:checked))>span>span{display:none}
 .report-stage .report-options{margin:24px 0 16px;padding-top:20px;border-top:1px solid var(--rule);gap:24px}
 .report-stage .report-options>fieldset{min-width:0}
+.report-stage .report-options>.report-privacy-note{grid-column:1 / -1;margin:0;max-width:65ch}
 .report-journey #reportTimeContext{font-size:var(--type-body);line-height:var(--leading-ui)}
 #reportsView :is(.detail-disclosure,.supporting){margin-top:12px;margin-bottom:0}
 #reportsView :is(.detail-disclosure,.supporting)>summary,#reportsView:not([hidden])~#coverage>summary{font:var(--weight-medium) var(--type-body)/var(--leading-ui) var(--font);min-height:44px;padding:12px 0;overflow-wrap:anywhere}
@@ -78,16 +81,17 @@ export const reportJourneyStyles = `
 .report-save-success{font-weight:600;color:var(--success);margin-bottom:12px}
 .report-saved-id,.report-saved-location{overflow-wrap:anywhere;color:var(--muted)}
 #bundleList .saved-report>summary{min-height:44px}
-.saved-library-context{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 20px}
+.saved-library-context{margin:0 0 12px}
 .saved-library-context>p{margin:0;color:var(--muted)}
-#savedLibraryHelp{position:relative;margin-inline-start:auto}
-#savedLibraryHelp>summary{min-height:44px;padding:12px 0;color:var(--muted);cursor:pointer}
-#savedLibraryHelp[open]{flex-basis:100%;margin-inline-start:0}
-#savedLibraryHelpBody{max-width:72ch}
-.saved-library-tools{display:flex;flex-wrap:wrap;align-items:end;gap:8px 24px;margin:8px 0}
-.saved-library-tools>.scoped-search{flex:1 1 20rem;max-width:30rem;min-width:0;margin:0}
+#savedLibraryHelp,#savedLibraryManagement{margin:0;min-width:0}
+#savedLibraryHelp>summary,#savedLibraryManagement>summary{min-height:44px;padding:12px 0;font:var(--weight-medium) var(--type-body)/var(--leading-ui) var(--font);color:var(--muted);cursor:pointer;overflow-wrap:anywhere}
+#savedLibraryHelpBody,.saved-library-management-body{max-width:65ch;padding-bottom:12px;font-size:var(--type-body);line-height:var(--leading-reading);overflow-wrap:anywhere}
+#savedLibraryHelpBody>p,.saved-library-management-body>p{margin:0 0 8px}
+#savedLibraryManagement{border-top:1px solid var(--rule)}
+.saved-library-management-body>button{max-width:100%;white-space:normal}
+.saved-library-tools{margin:8px 0 0}
+.saved-library-tools>.scoped-search{max-width:30rem;min-width:0;margin:0}
 .saved-library-tools>.scoped-search label{display:block;margin:0 0 4px}
-.saved-library-tools>button{margin-inline-start:auto;max-width:100%;white-space:normal}
 #savedReportSearchCount:empty{display:none}
 #bundleList .list-pager{margin:12px 0;gap:8px;align-items:center}
 .library-page-jump{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 0 auto}
@@ -116,8 +120,7 @@ export const reportJourneyStyles = `
  .saved-report-manage{grid-column:2;grid-row:1 / 3}
 }
 @media(max-width:500px){
- .saved-library-tools>.scoped-search{max-width:none;flex-basis:100%}
- .saved-library-tools>button{margin-inline-start:0}
+ .saved-library-tools>.scoped-search{max-width:none}
  #bundleList .saved-report>summary{grid-template-columns:minmax(0,1fr)}
  .saved-report-manage{grid-column:1;grid-row:auto}
  .library-page-jump{margin-inline-start:0}
@@ -131,13 +134,15 @@ export const reportJourneyStyles = `
  #reportsView #reportPreviewContext>#pageHeadingActions{grid-column:1;grid-row:auto}
  .report-options{grid-template-columns:minmax(0,1fr)}
 }
-@container report-journey (max-width:18rem){
+@container report-journey (max-width:32rem){
  .report-progress ol{grid-template-columns:minmax(0,1fr)}
+}
+@container report-journey (max-width:18rem){
  .report-save-summary>div{grid-template-columns:minmax(0,1fr);gap:4px}
 }
 @media(max-width:700px){
  .report-journey{padding:16px}
- .report-stage>h3{font-size:var(--type-dialog)}
+ .report-stage>h2{font-size:var(--type-dialog)}
  .report-journey .report-frame{min-height:420px}
  .report-journey .prompt-pair{grid-template-columns:minmax(0,1fr)}
  .report-stage-actions{align-items:stretch}

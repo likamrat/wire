@@ -38,7 +38,7 @@ test("new readable report summaries show each frozen model and rubric version ra
             assert.ok(text.includes(`rubric wire-recorded-interaction-review v${version}`),
                 "The readable summary dropped the frozen rubric ID/version.");
             assert.match(text, /1 of 1 passed.*1 of 1 assessed/);
-            assert.match(text, /actions match the request, not proof of a person(?:'|&#39;)s permission/);
+            assert.match(text, /request matching, not permission/);
         }
         assert.equal(JSON.stringify(facts), before);
     }
@@ -51,9 +51,13 @@ test("new readable formats share plain reading notes without changing frozen fac
     const comparison = compareFrozenReportFacts(report("a", a), report("b", structuredClone(a)));
     const texts = [nativeQualityHtml({ evaluationFacts: facts }), nativeQualityMarkdown({ evaluationFacts: facts }).join("\n"),
         renderComparisonHtml(comparison, snapshot(comparison)), renderComparisonMarkdown(comparison, snapshot(comparison))];
-    for (const text of texts) for (const note of formatter.readingNotes) assert.ok(text.includes(note));
+    for (const [index, text] of texts.entries()) {
+        for (const note of index < 2 ? formatter.readingNotes.slice(0, 3) : formatter.readingNotes) assert.ok(text.includes(note));
+    }
+    for (const text of texts.slice(0, 2)) assert.equal(text.includes(formatter.readingNotes[3]), false,
+        "Timing definitions belong to the native timing section, not repeated quality detail");
     assert.match(formatter.readingNotes.join(" "), /passed plus failed.*Missing results are left out/);
-    assert.match(formatter.readingNotes.join(" "), /not whether a person gave permission/);
+    assert.equal(formatter.readingNotes[0], "Answer correctness and answer support are separate reviews. Tool use vs. request asks whether the recorded tool use fit what was asked. Personal permission feedback is a different judgment.");
     assert.match(formatter.readingNotes.join(" "), /own timed-call or timed-request count/);
     assert.equal(JSON.stringify(facts), before);
 });
@@ -88,7 +92,7 @@ for (const [model, version] of [["fixture-model-a", 1], ["archived-model-b", 7]]
             assert.ok(compact.includes(`rubricwire-recorded-interaction-reviewv${version}`));
             assert.match(text, /1 of 1 passed/);
             assert.match(text, /1 of 1 assessed/);
-            assert.match(text, /actions match the request, not proof of a person(?:'|&#39;)s permission/);
+            assert.match(text, /request matching, not permission/);
         }
         const json = JSON.parse(bundle.files["product-report.json"]), manifest = JSON.parse(bundle.files["coverage-and-redaction-manifest.json"]);
         assert.deepEqual(json.evaluationFacts, manifest.evaluationFacts);
@@ -141,6 +145,8 @@ test("new comparison HTML, PDF and Markdown show each side's own frozen model/ru
 
 test("legacy missing/partial rubric metadata stays honest and local/personal wording stays separate", () => {
     const formatter = createReportComparison();
+    const missingIdentity = " · Check ID not recorded · Check version not recorded";
+    const unknownMeaning = "The saved definition does not identify what this review checked.";
     for (const [qualifiers, expected] of [
         [{}, "Model assessment"],
         [{ evaluatorModel: "legacy-model" }, "Model assessment · legacy-model"],
@@ -149,17 +155,28 @@ test("legacy missing/partial rubric metadata stays honest and local/personal wor
         [{ rubricId: "version-zero", rubricVersion: 0 }, "Model assessment · rubric version-zero v0"],
     ]) {
         const fact = normalizeMetricFact(comparisonFact(qualifiers));
-        assert.equal(formatter.definitionLabel({ baseline: fact }), expected);
-        assert.ok(formatter.metricPresentation(fact, "accuracy").note.startsWith(expected + " · 1 of 1 passed"));
+        assert.equal(formatter.definitionLabel({ baseline: fact }), expected + missingIdentity);
+        assert.equal(formatter.metricLabel(fact), "Saved review (type not recorded)");
+        assert.deepEqual(formatter.metricPresentation(fact, "accuracy"), {
+            value: "100%", tone: "performance-teal",
+            note: `${expected} · 1 of 1 passed · 1 of 1 assessed · 0 not assessed · ${unknownMeaning}`,
+        });
         const missing = normalizeMetricFact({ ...comparisonFact(qualifiers), state: "unavailable", reason: "missing-evidence",
             numerator: undefined, denominator: undefined, coverage: { count: 0, eligible: 1 },
             counts: { pass: 0, fail: 0, unassessed: 1, evaluatorError: 0 } });
-        assert.ok(formatter.metricPresentation(missing, "accuracy").note.startsWith(expected + " · Not enough recorded evidence"));
+        assert.deepEqual(formatter.metricPresentation(missing, "accuracy"), {
+            value: "Not enough saved evidence", tone: "",
+            note: `${expected} · Not enough saved evidence · 0 of 1 assessed · ${unknownMeaning}`,
+        });
+        assert.equal(Object.hasOwn(fact.qualifiers, "checkId"), false);
+        assert.equal(Object.hasOwn(fact.qualifiers, "checkVersion"), false);
+        assert.equal(Object.hasOwn(missing.qualifiers, "checkId"), false);
+        assert.equal(Object.hasOwn(missing.qualifiers, "checkVersion"), false);
     }
-    assert.equal(formatter.definitionLabel({ baseline: { ...comparisonFact({}), basis: "user-assessment" } }), "Your feedback");
-    assert.equal(formatter.definitionLabel({ baseline: { ...comparisonFact({}), basis: "automatic-assessment" } }), "Automatic local checks");
+    assert.equal(formatter.definitionLabel({ baseline: { ...comparisonFact({}), basis: "user-assessment" } }), "Your feedback" + missingIdentity);
+    assert.equal(formatter.definitionLabel({ baseline: { ...comparisonFact({}), basis: "automatic-assessment" } }), "Automatic local checks" + missingIdentity);
     assert.equal(formatter.definitionLabel({ baseline: { ...comparisonFact({}), basis: "automatic-assessment", reason: "unsupported-check" } }),
-        "Local observation (not a model assessment)");
+        "Local observation (not a model assessment)" + missingIdentity);
 });
 
 test("stored comparison rubric text is escaped as data in HTML and Markdown table cells", () => {

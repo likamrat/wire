@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, appendFile, readFile, rm } from "node:fs/pro
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
-import { discoverSources } from "../lib/source-discovery.mjs";
+import { discoverSources, validateSourcePaths } from "../lib/source-discovery.mjs";
 import { createCollector } from "../lib/collector.mjs";
 import { loadBoardState, mergeEvidenceWithState, replaceEvidence } from "../lib/store.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
@@ -16,6 +16,17 @@ import { extractScenarios } from "../lib/history.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
 
 // Invented app metadata and events, isolated from the user's installation.
+test("source path rejection is explicit for nonstrings, relative paths and wrong basenames", () => {
+    const good = { appDbPath: path.resolve("invented", "data.db"), sessionRoot: path.resolve("invented", "session-state") };
+    assert.doesNotThrow(() => validateSourcePaths(good));
+    for (const value of [null, undefined, 42, true, {}, [], "", "relative", path.resolve("invented", "wrong-name")]) {
+        for (const key of ["appDbPath", "sessionRoot"]) {
+            assert.throws(() => validateSourcePaths({ ...good, [key]: value }),
+                error => error.status === 422 && error.code === "source_paths_invalid");
+        }
+    }
+});
+
 async function installation(t, { metadata174 = false } = {}) {
     const root = await mkdtemp(path.join(os.tmpdir(), "workiq-dynamic-synthetic-"));
     const config = { appDbPath: path.join(root, "data.db"), sessionRoot: path.join(root, "session-state") };

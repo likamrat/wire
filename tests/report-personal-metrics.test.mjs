@@ -31,7 +31,7 @@ test("personal zero pass share and measured zero milliseconds remain actual zero
     const markdown = [...nativeQualityMarkdown(snapshot, model), ...nativeTimingMarkdown(model)].join("\n");
     assert.match(html, /performance-red">0%/);
     assert.match(html, /0 ms/);
-    assert.match(html, /Personal assessment/);
+    assert.match(html, /Your feedback/);
     assert.match(markdown, /\| Accuracy \/ Your feedback \| 0% \|/);
     assert.match(markdown, /0 ms/);
 });

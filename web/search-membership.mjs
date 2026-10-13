@@ -1,5 +1,9 @@
-export function createSearchMembership(snapshot, options, withinServices, hits, receipt) {
-    if (!receipt || receipt.revision !== snapshot.revision) throw new TypeError("Search membership requires the current analytical revision.");
+export function createSearchMembership(snapshot, options, withinServices, hits, receipt, contract) {
+    if (!contract?.analysisReceipt(receipt) || receipt.revision !== snapshot.revision
+        || !Array.isArray(hits) || hits.some(hit => !hit || !["exact", "prefix", "semantic"].includes(hit.match)
+            || hit.purpose === "navigate-only")) {
+        throw new TypeError("Search membership requires a current strict analysis receipt and its matched items.");
+    }
     const records = new Set(snapshot.scenarios.map(record => record.scenarioId));
     const actions = new Map((snapshot.requestActivity?.[options.layer] ?? []).map(row => [row.id, row]));
     const scenarios = new Set(), actionIds = new Set(), parents = new Set();

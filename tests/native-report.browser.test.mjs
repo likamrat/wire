@@ -19,6 +19,8 @@ import { adaptEvaluationReport } from "../lib/report-facts.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { renderComparisonHtml } from "../lib/report-presentation.mjs";
 import { contrast, hue, measureChartPaint } from "./color-measurements.mjs";
+import { periodFixture } from "./period-comparison-fixture.mjs";
+import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 
 async function inspectPdf(bytes) {
     const strict = await pdfDocumentText(bytes);
@@ -66,6 +68,168 @@ async function keepProof(name, files) {
     for (const [file, bytes] of Object.entries(files)) await writeFile(path.join(directory, file), bytes);
     return directory;
 }
+
+test("native report bars separate outcome pills and adjacent rows at normal and enlarged text", { timeout: 120000 }, async t => {
+    const records = matrixRecords("native-spacing", ["failure", ...Array(6).fill("success")],
+        { groups: 3, durations: [100, 200, 300, 400, 500, 600, 700] });
+    for (const call of records.flatMap(record => record.toolCalls)) {
+        const index = Number(call.toolCallId.split("-").at(-1));
+        if (index === 5) Object.assign(call, { tool: "workiq-ask", requestArgs: { question: "Invented lookup" }, requestedApiPath: null });
+        if (index === 6) Object.assign(call, { tool: "workiq-get_schema", requestArgs: { path: "/me/messages" }, requestedApiPath: null });
+    }
+    const { state } = qualityDisplayFixture({ records, judgments: ["pass", "fail"] });
+    const facts = buildReportFacts(records, state, { preparedAt: "2026-10-11T18:00:00.000Z" }).facts;
+    const bundle = await buildSanitizedBundle(records, state.pseudonymKey,
+        { promptMode: "original", formats: ["html", "pdf", "json", "markdown"] }, undefined, undefined, facts);
+    const frozen = JSON.stringify(bundle.snapshot);
+    const directory = await keepProof("pill-spacing", bundle.files);
+    const browser = await chromium.launch({ headless: true });
+    t.after(() => browser.close());
+    const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block" });
+    const external = [];
+    await context.route("**/*", route => { external.push(route.request().url()); return route.abort(); });
+    const page = await context.newPage();
+    const measure = () => page.evaluate(() => {
+        const root = getComputedStyle(document.documentElement), size = parseFloat(root.fontSize);
+        const rows = [...document.querySelectorAll(".native-bars li")].filter(row => row.querySelector(".native-bar-results"));
+        return {
+            expectedGap: Math.max(parseFloat(root.getPropertyValue("--space-sm")), size * .5),
+            expectedRowGap: Math.max(parseFloat(root.getPropertyValue("--space-lg")), size),
+            overflow: document.documentElement.scrollWidth > innerWidth + 1,
+            rows: rows.map((row, index) => {
+                const bar = row.querySelector(".native-bar-track").getBoundingClientRect();
+                const pills = [...row.querySelectorAll(".native-outcome")].map(node => {
+                    const rect = node.getBoundingClientRect();
+                    return { text: node.textContent, x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom, height: rect.height };
+                });
+                return {
+                    tool: row.querySelector(".native-bar-heading").textContent,
+                    paintedGap: Math.min(...pills.map(pill => pill.y)) - bar.bottom,
+                    nextRowGap: rows[index + 1] ? rows[index + 1].querySelector(".native-bar-heading").getBoundingClientRect().top
+                        - Math.max(...pills.map(pill => pill.bottom)) : null,
+                    pills,
+                    fractions: [...row.querySelectorAll(".native-bar")].map(node => ({
+                        count: Number(node.dataset.count), total: Number(node.dataset.denominator),
+                        width: node.getBoundingClientRect().width, trackWidth: bar.width,
+                    })),
+                };
+            }),
+        };
+    });
+    const layouts = [];
+    for (const theme of ["light", "dark"]) {
+        const html = bundle.previewHtml.replace('data-evidence-theme="light"', `data-evidence-theme="${theme}"`);
+        for (const enlarged of [false, true]) {
+            await page.setViewportSize({ width: enlarged ? 375 : 1280, height: 1000 });
+            await page.emulateMedia({ media: "screen" });
+            await page.setContent(html);
+            await page.evaluate(enlarged => { document.documentElement.style.fontSize = enlarged ? "200%" : "100%"; }, enlarged);
+            const layout = { theme, enlarged, ...await measure() };
+            layouts.push(layout);
+            assert.equal(layout.overflow, false);
+            assert.match(await page.locator(".native-bars").first().innerText(), /5 \/ 7 \(71.42%\)/);
+            assert.match(await page.locator(".native-bar-results").first().innerText(), /4 succeeded \(80%\)/);
+            assert.match(await page.locator(".native-bar-results").first().innerText(), /1 failed \(20%\)/);
+            for (const row of layout.rows) for (const part of row.fractions) {
+                assert.ok(Math.abs(part.width / part.trackWidth - part.count / part.total) < .002);
+            }
+            await page.locator('.report-nav a[href="#overview"]').focus();
+            await page.keyboard.press("Enter");
+            assert.ok(await page.locator("#overview").evaluate(node => Math.abs(node.getBoundingClientRect().top) < innerHeight));
+            if (directory) {
+                await page.evaluate(() => scrollTo(0, 0));
+                await page.screenshot({ path: path.join(directory, `${theme}-${enlarged ? "375-200" : "1280"}-full.png`), fullPage: true });
+                await page.locator("#breakdowns").screenshot({ path: path.join(directory, `${theme}-${enlarged ? "375-200" : "1280"}-breakdowns.png`) });
+            }
+        }
+        await page.setViewportSize({ width: 1280, height: 1000 });
+        await page.setContent(html);
+        await page.emulateMedia({ media: "print" });
+        layouts.push({ theme, print: true, ...await measure() });
+        const bytes = theme === "light" ? bundle.files["product-report.pdf"] : await renderPdf(html);
+        const extracted = await inspectPdf(bytes);
+        const compact = extracted.text.replace(/\s+/g, "");
+        for (const text of ["5/7(71.42%)", "4succeeded(80%)", "1failed(20%)", "workiq-ask", "workiq-get_schema"]) {
+            assert.ok(compact.includes(text), `Actual ${theme} PDF retains ${text}`);
+        }
+        if (directory) {
+            await writeFile(path.join(directory, `product-report-${theme}.pdf`), bytes);
+            await writeFile(path.join(directory, `pdf-${theme}-extraction.json`), JSON.stringify(extracted, null, 2));
+        }
+    }
+    assert.deepEqual(external, []);
+    assert.equal(JSON.stringify(bundle.snapshot), frozen);
+    if (directory) await writeFile(path.join(directory, "spacing.json"), JSON.stringify(layouts, null, 2));
+    for (const layout of layouts) {
+        for (const row of layout.rows) {
+            assert.ok(Math.abs(row.paintedGap - layout.expectedGap) < .05,
+                `${layout.theme} enlarged=${Boolean(layout.enlarged)} print=${Boolean(layout.print)} ${row.tool}: ${row.paintedGap}px painted gap, expected ${layout.expectedGap}px shared text-scaled spacing`);
+            if (row.nextRowGap !== null) assert.ok(Math.abs(row.nextRowGap - layout.expectedRowGap) < .05,
+                `Adjacent rows retain compact grouping: ${row.nextRowGap}px / ${layout.expectedRowGap}px`);
+        }
+        const [first, second] = layout.rows[0].pills;
+        const wrapped = second.y > first.y + 1;
+        if (layout.enlarged) assert.equal(wrapped, true, "The narrow enlarged case must exercise wrapped outcome pills");
+        const gap = wrapped ? second.y - first.bottom : second.x - first.right;
+        assert.ok(Math.abs(gap - layout.expectedGap) < .05, `Outcome pills are separated by ${gap}px`);
+    }
+});
+
+test("native spacing preserves new period report HTML and PDF without an Analyze UI dependency", { timeout: 120000 }, async t => {
+    const fixture = periodFixture();
+    fixture.records[0].toolCalls.find(call => call.toolCallId === "period-calendar").requestArgs = { entityUrls: ["/me/calendarView"] };
+    const { context } = await privateFixture(t, fixture.records);
+    const state = await loadBoardState(context), controller = createExportController(context);
+    const value = buildPeriodComparison(state, { ...fixture.input, expectedRevision: state.revision });
+    const preview = await controller.preview("native-period-spacing", undefined,
+        { formats: ["html", "pdf", "json", "markdown"], promptMode: "masked", timeContext: value.timeContext }, undefined, value);
+    assert.deepEqual(preview.snapshot.periodComparison.comparison, value.comparison);
+    const snapshot = JSON.stringify(preview.snapshot);
+    await assert.rejects(controller.confirm("native-period-spacing", preview.previewId, true, value.timeContext), /disclosure review/);
+    await controller.review("native-period-spacing", preview.previewId, true, value.timeContext);
+    const saved = (await controller.confirm("native-period-spacing", preview.previewId, true, value.timeContext)).bundle;
+    const files = Object.fromEntries(await Promise.all(Object.entries(saved.files).map(async ([name, file]) => [name, await readFile(file)])));
+    const directory = await keepProof("period-spacing", files);
+    const browser = await chromium.launch({ headless: true });
+    t.after(() => browser.close());
+    const page = await browser.newPage({ javaScriptEnabled: false });
+    const external = [];
+    await page.route("**/*", route => { external.push(route.request().url()); return route.abort(); });
+    const layouts = [];
+    for (const theme of ["light", "dark"]) {
+        const html = files["product-report.html"].toString().replace('data-evidence-theme="light"', `data-evidence-theme="${theme}"`);
+        for (const enlarged of [false, true]) {
+            await page.setViewportSize({ width: enlarged ? 375 : 1280, height: 1000 });
+            await page.setContent(html);
+            await page.evaluate(enlarged => { document.documentElement.style.fontSize = enlarged ? "200%" : "100%"; }, enlarged);
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+            assert.equal(await page.locator(".native-outcome").count(), 0, "Period rows do not acquire normal-report pills");
+            assert.ok(await page.locator(".native-bar").count() > 0);
+            layouts.push({ theme, enlarged, rows: await page.locator(".native-bars li").evaluateAll(nodes => nodes.map(node => ({
+                text: node.textContent, rowMargin: getComputedStyle(node).marginBottom,
+                barMargin: getComputedStyle(node.querySelector(".native-bar-track")).marginBottom,
+            }))) });
+            if (directory) await page.screenshot({ path: path.join(directory, `${theme}-${enlarged ? "375-200" : "1280"}-full.png`), fullPage: true });
+        }
+        const bytes = theme === "light" ? files["product-report.pdf"] : await renderPdf(html);
+        const extracted = await inspectPdf(bytes);
+        assert.match(extracted.text, /Period A/);
+        assert.match(extracted.text, /Period B/);
+        assert.match(extracted.text, /Matching tools and records/);
+        if (directory) {
+            await writeFile(path.join(directory, `product-report-${theme}.pdf`), bytes);
+            await writeFile(path.join(directory, `pdf-${theme}-extraction.json`), JSON.stringify(extracted, null, 2));
+        }
+    }
+    for (const layout of layouts) for (const row of layout.rows) {
+        assert.equal(row.rowMargin, layout.enlarged ? "32px" : "16px");
+        assert.equal(row.barMargin, layout.enlarged ? "16px" : "8px");
+    }
+    assert.deepEqual(external, []);
+    assert.equal(JSON.stringify(preview.snapshot), snapshot);
+    for (const [name, file] of Object.entries(saved.files)) assert.deepEqual(await readFile(file), files[name]);
+    if (directory) await writeFile(path.join(directory, "layout-proof.json"), JSON.stringify(layouts, null, 2));
+});
 
 test("real native report: both themes, narrow 200%, offline font, keyboard details and PDF page boundaries", { timeout: 120000 }, async t => {
     const records = qualityDisplayFixture({ requests: 3, calls: 7, timed: 6 }).state.evidence;

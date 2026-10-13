@@ -243,7 +243,7 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     const enable = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
     await setup.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     assert.equal((await enable).status(), 200);
-    await page.waitForFunction(() => document.querySelector("#assessmentSetup")?.textContent.includes("Response saving is on."));
+    await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
     assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
     await checkbox.uncheck();
     assert.equal(await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).isEnabled(), true);
@@ -278,7 +278,7 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     await page.bringToFront();
     await (await revealStoredRefresh(page)).click(); await settled(page);
     await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
-    await page.waitForFunction(() => document.querySelector("#assessmentSetup")?.textContent.includes("Response saving is on."));
+    await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
     await checkbox.uncheck();
     const revoke = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
     await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).click();

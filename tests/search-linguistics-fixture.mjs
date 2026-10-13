@@ -1,0 +1,76 @@
+export const ordinaryDocuments = [
+    "The engineer restored the deleted database from yesterday's backup.",
+    "The engineer rotated database passwords before deleting an old backup.",
+    "The operations team increased the application's memory limit after it kept crashing.",
+    "The analyst reviewed memory pricing while the application remained stable.",
+    "The accountant reconciled an overdue vendor invoice with a missing bank transfer.",
+    "The accountant prepared an estimate for next year's supplier budget.",
+    "The technician replaced a frayed network cable to reconnect the office printer.",
+    "The designer ordered ink for an office printer brochure.",
+    "The administrator revoked a departed employee's access to the shared folder.",
+    "The administrator restored an active employee's access after a password reset.",
+    "The recruiter moved an interview to Friday because the candidate was unavailable.",
+    "The recruiter wrote feedback from a completed interview.",
+];
+export const comparisonDocuments = [
+    "The developer corrected an off-by-one error that omitted the final row of the exported spreadsheet.",
+    "The developer removed duplicate spreadsheet columns to reduce the exported file size.",
+    "The facilities manager fixed a leaking pipe beneath the kitchen sink.",
+    "The facilities manager inspected the kitchen smoke alarm and replaced its battery.",
+    "The travel coordinator cancelled a hotel reservation after the conference was postponed.",
+    "The travel coordinator booked a return flight for a colleague attending the conference.",
+    "The security team renewed a web server certificate before it expired.",
+    "The security team disabled a stolen employee laptop and revoked its session tokens.",
+    "The analyst anonymized customer email addresses before sharing a survey dataset.",
+    "The analyst merged anonymous survey responses into the customer dashboard.",
+];
+export const prospectiveDocuments = [
+    "The network administrator corrected a DNS record that sent the staging website to the wrong server.",
+    "The network administrator restricted inbound traffic after discovering an exposed staging port.",
+    "The finance clerk refunded a duplicated customer charge after checking the payment receipt.",
+    "The finance clerk changed the customer's billing address before the next invoice.",
+    "The instructor added captions to the training video so that deaf learners could follow the lesson.",
+    "The instructor shortened the training video by removing repeated demonstrations.",
+    "The gardener moved a wilting plant into shade and watered its dry soil.",
+    "The gardener trimmed dead branches from a tree after a storm.",
+];
+export const workTemplates = [
+    "The developer repaired a pagination defect that omitted older records from the export.",
+    "The operator restored the database after a failed schema migration removed an index.",
+    "The technician replaced the network cable because the warehouse printer was disconnected.",
+    "The accountant reconciled the vendor invoice against three outstanding purchase orders.",
+    "The administrator removed a former contractor from the engineering access group.",
+    "The designer improved keyboard navigation through the report creation dialog.",
+    "The support engineer renewed an expired client certificate on the internal gateway.",
+    "The recruiter rescheduled a candidate interview because the interviewer was absent.",
+    "The release manager rolled back a deployment after an increase in payment errors.",
+    "The mechanic replaced a cracked hose and inspected the cooling system in the garage.",
+    "The clinician discussed laboratory results and scheduled a follow-up examination.",
+    "The analyst removed duplicate records before calculating the customer retention measure.",
+    "The security engineer investigated repeated unsuccessful sign-ins from a test account.",
+    "The facilities team repaired the ventilation fan after occupants reported excessive heat.",
+    "The product manager reviewed feedback about confusing notification preferences.",
+    "The researcher summarized the limitations of a small synthetic evaluation dataset.",
+    "The coordinator cancelled the venue reservation after the workshop date changed.",
+    "The librarian updated the catalogue after several books were returned late.",
+    "The logistics planner rerouted a shipment because the usual bridge was closed.",
+    "The developer fixed an integer overflow in the image resizing calculation.",
+    "The engineer added a rollback guard around an irreversible database operation.",
+    "The analyst compared monthly expenses with the department's approved budget.",
+    "The team tested an offline model on invented documents and preserved the raw evidence.",
+    "The editor corrected incorrect references in the accessibility documentation.",
+    "The engineer reduced contention by releasing the writer lock before file parsing.",
+    "The administrator changed a test printer's subnet after checking the approved inventory.",
+    "The travel coordinator moved the return flight after the meeting was postponed.",
+    "The developer handled a missing response body without reporting a false success.",
+    "The quality lead separated missing observations from explicitly failed checks.",
+    "The technician inspected a broken conveyor motor and ordered the correct replacement.",
+    "The analyst masked contact details before preparing a reviewed survey report.",
+    "The release manager verified immutable artifact hashes before sending the build for review.",
+];
+const projects = ["Orchid", "Aspen", "Cedar", "Maple", "Willow", "Birch", "Elm", "Pine", "Iris", "Juniper", "Laurel", "Moss"];
+const reasons = ["availability", "permission", "compatibility", "correctness", "latency", "accessibility", "privacy", "recovery"];
+export const repetitiveText = Array.from({ length: 800 }, (_, i) =>
+    `The mechanic repaired a broken automobile in the garage. Job number ${i} was recorded in the maintenance ledger.`).join("\n");
+export const variedText = Array.from({ length: 20 }, (_, cycle) => workTemplates.map((sentence, i) =>
+    `${sentence} This was a ${reasons[(i + cycle) % reasons.length]} review for the invented ${projects[(i * 3 + cycle) % projects.length]} project in cycle ${cycle}.`).join("\n")).join("\n");

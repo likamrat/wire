@@ -24,7 +24,6 @@ export const visualStyles = `
 .project-context strong {font-weight:var(--weight-medium);overflow-wrap:anywhere}
 .project-context.unscoped {color:var(--muted)}
 .request-row {border:0;gap:12px;padding:16px;margin-top:8px;align-items:start}
-.request-row:hover {background:var(--hover)}
 .request-row>.status {background:transparent;padding:0;min-width:132px;text-align:right;line-height:1.6}
 .request-intro {border:0}
 .request-intro>.project-context {margin-bottom:12px}

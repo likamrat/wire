@@ -1,4 +1,4 @@
-import { tokens } from "./tokens.mjs";
+import { screenTokens } from "./tokens.mjs";
 import { fontFaceStyles } from "../lib/typeface.mjs";
 import { uxStyles } from "./ux-styles.mjs";
 import { visualStyles } from "./visual-styles.mjs";
@@ -16,17 +16,18 @@ import { percentageChartStyles } from "./percentage-charts-styles.mjs";
 import { contextualActionStyles } from "./contextual-action-styles.mjs";
 import { homeResultFilterStyles } from "./home-result-filter-styles.mjs";
 import { promptAuthorStyles } from "./prompt-author-styles.mjs";
+import { analyzeLayoutStyles } from "./analyze-layout-styles.mjs";
 
 // These components already own their painted surface independently of their hit target.
 const textAction = ":is(button,a.button-link):not(.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.filter-chip,.report-step,.comparison-pattern-title,.time-column,.chart-row,.chart-data-action)";
 
 export const styles = `
 /* Fluent-inspired shapes, not an official Fluent component implementation. */
-${tokens}
+${screenTokens}
 ${fontFaceStyles}
 * {box-sizing:border-box}
 html,body {margin:0;min-width:0}
-html {background:var(--page);scroll-padding-top:100px}
+html {background:var(--page);font-family:var(--font);scroll-padding-top:100px}
 body {background:var(--page);color:var(--ink);font:var(--type-body)/var(--leading-ui) var(--font);font-variant-numeric:tabular-nums;color-scheme:inherit}
 button,input,select,.button-link {font:var(--type-control)/var(--leading-control) var(--font);letter-spacing:var(--tracking-ui);color:inherit}
 button,select,input:not([type=checkbox]),.button-link {min-height:var(--pill-height);border:1px solid var(--control);border-radius:var(--radius-small);padding:8px 14px;background:var(--paper);max-width:100%;min-width:0}
@@ -53,6 +54,7 @@ h1,h2,h3,p {margin:0;min-width:0;overflow-wrap:anywhere}
 h1 {font-size:var(--type-title);font-weight:var(--weight-strong);line-height:var(--leading-heading);letter-spacing:var(--tracking-heading);text-wrap:balance}
 h2 {font-size:var(--type-section);font-weight:var(--weight-strong);line-height:var(--leading-section)}
 h3 {font-size:var(--type-body);font-weight:var(--weight-strong);line-height:var(--leading-ui)}
+:is(b,strong,h4,h5,h6) {font-weight:var(--weight-strong)}
 .chart-heading h2,.percentage-card h3 {text-transform:uppercase;letter-spacing:.025em}
 p {max-width:72ch}
 .muted {color:var(--muted);font-size:var(--type-caption)}
@@ -113,7 +115,7 @@ button.danger {white-space:normal;overflow-wrap:anywhere}
 button.danger:not(:disabled) {background:var(--paper);color:var(--danger);border-color:var(--danger)}
 button.danger:hover:not(:disabled) {background:color-mix(in srgb,var(--danger) 6%,var(--paper))}
 button.danger:active:not(:disabled) {background:color-mix(in srgb,var(--danger) 10%,var(--paper));box-shadow:inset 0 0 0 1px var(--danger)}
-.text-link {font-weight:500;text-decoration:none}
+.text-link {font-weight:var(--weight-medium);text-decoration:none}
 .button-link {display:inline-flex;align-items:center;justify-content:center;gap:var(--pill-gap);min-height:var(--pill-height);white-space:normal;overflow-wrap:anywhere}
 :is(a.button-link,a.result-link,.primary-navigation a,.app-header nav a):any-link {text-decoration:none}
 [hidden] {display:none!important}
@@ -132,6 +134,8 @@ main {max-width:1200px;margin:0 auto;padding:var(--space-2xl) var(--space-xl) va
 .page-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:end;gap:8px;flex-shrink:0}
 #pageHeadingActions:not(:has(> :not([hidden]))) {display:none}
 .reset-view {color:var(--accent);white-space:nowrap}
+/* The native 24px reset glyph extends into existing padding without growing the 44px target. */
+.reset-view>.fluent-icon {margin-block:-2px}
 .breadcrumbs {display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:24px;margin-bottom:16px}
 .breadcrumbs:empty {display:none}
 .breadcrumbs a {text-decoration:none}
@@ -259,7 +263,7 @@ pre {white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font:12px
 .chart-placeholder {height:300px}
 table {width:100%;table-layout:fixed;border-collapse:collapse;color:var(--ink);font-size:12px}
 td,th {padding:10px 8px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top;overflow-wrap:anywhere}
-th {font-weight:500;color:var(--muted)}
+th {font-weight:var(--weight-medium);color:var(--muted)}
 .numeric {text-align:right;font-variant-numeric:tabular-nums}
 td a {text-decoration:none}
 dialog {padding:0;width:min(820px,calc(100% - 24px));max-height:calc(100dvh - 24px);overflow:auto;border:1px solid var(--control);border-radius:var(--radius-dialog);background:var(--canvas);color:var(--ink);box-shadow:var(--shadow);scroll-padding-top:88px}
@@ -416,7 +420,6 @@ ${toolbarStyles}
 .exact-data-table thead th {color:var(--ink);font-weight:var(--weight-strong);background:var(--canvas)}
 .exact-data-table tfoot {font-weight:var(--weight-strong)}
 .exact-data-table tfoot th {color:var(--ink);font-weight:inherit}
-.exact-data-table tbody tr:hover {background:var(--hover)}
 .exact-data-table .chart-data-action {width:100%;max-width:20rem;font-size:var(--type-small);min-height:44px;text-align:left;padding:8px 12px;white-space:normal;overflow-wrap:anywhere}
 .exact-data-table .chart-data-label {display:block;max-width:20rem;padding:8px 12px;overflow-wrap:anywhere}
 .evidence-notes {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 48px;padding-left:20px;margin:16px 0 24px;font-size:var(--type-reading);line-height:1.6}
@@ -442,7 +445,7 @@ ${selectStyles}
 .viewing-context .context-source {margin:6px 0 0;overflow-wrap:anywhere}
 .context-return {margin-top:8px}
 .recorded-results {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-top:8px;font-size:var(--type-small);line-height:var(--leading-ui);color:var(--ink)}
-.recorded-results .result-unit {font-weight:500;font-variant-numeric:tabular-nums}
+.recorded-results .result-unit {font-weight:var(--weight-medium);font-variant-numeric:tabular-nums}
 .recorded-result {display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:3px 8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--cue-color,var(--muted)) 8%,var(--paper));font-size:var(--type-caption);line-height:var(--leading-caption);font-variant-numeric:tabular-nums}
 .recorded-result:not(.result-link) {box-shadow:inset 0 0 0 1px var(--cue-color,var(--control))}
 .recorded-result-label {min-width:0;overflow-wrap:anywhere;text-transform:uppercase;font-weight:var(--weight-strong);letter-spacing:.02em}
@@ -500,15 +503,23 @@ ${selectStyles}
 .result-link:is(:hover,:focus-visible,:active) {background:transparent;text-decoration:none}
 .result-link:is(:hover,:focus-visible)::before {background:color-mix(in srgb,var(--cue-color,var(--muted)) 10%,var(--paper))}
 .result-link:active::before {background:color-mix(in srgb,var(--cue-color,var(--muted)) 10%,var(--paper));box-shadow:inset 0 0 0 1px var(--cue-color,var(--control))}
-.matched-action {padding:16px 0;border-top:1px solid var(--rule);font-size:var(--type-reading);overflow-wrap:anywhere}
+.matched-action {display:grid;gap:8px;padding:16px 0;border-top:1px solid var(--rule);font-size:var(--type-reading);overflow-wrap:anywhere}
 .matched-action h3 {margin:0}
+.matched-action>:is(p,.action-fields) {margin:0}
+.call-heading {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;min-width:0}
+.call-heading>:is(.recorded-results,.call-duration,.action-heading),.call-heading h3 {margin:0}
+.call-heading>.call-duration {min-width:0;overflow-wrap:anywhere}
+.call-heading .result-inline {display:inline-flex;flex:0 1 auto}
+.call-heading .recorded-result-label {text-transform:none;letter-spacing:0}
+.call-api-summary {align-items:center}
+.matched-action .full-text-preview-label[data-prompt-actor] {border:0;padding-inline-start:0}
+.matched-action .full-text-actions {margin-top:0}
 .matched-action .action-purpose {margin:8px 0}
 .matched-action .action-error {color:var(--danger)}
 .matched-action>.text-link,.session-analysis>.text-link {display:inline-flex;align-items:center;min-height:44px}
-.call-sort-controls {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-block:16px;min-width:0}
-.call-sort-controls>.context-help-note {flex-basis:100%;margin:0}
+.call-sort-controls {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;margin-block:8px;min-width:0}
+.call-sort-controls>.context-help-note {margin:0}
 .call-sort-controls .select-control {max-width:100%}
-.call-duration-group {margin-block:20px 8px}
 .call-duration {font-variant-numeric:tabular-nums}
 ${reportJourneyStyles}
 ${settingsStyles}
@@ -562,11 +573,6 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
  .recorded-results {gap:6px 14px}
  .recorded-results .result-unit {flex-basis:100%}
 }
-.analyze-shell>main {width:100%;margin:0;padding:28px 28px 64px}
-.app-header .primary-navigation {flex-direction:row;flex-wrap:wrap;gap:4px;min-width:0}
-.app-header .primary-navigation a {display:flex;min-height:44px;padding:8px 14px;border:0;border-radius:6px;font-size:var(--type-control);line-height:var(--leading-control);white-space:normal;overflow-wrap:anywhere}
-.app-header .primary-navigation a[aria-current=page] {color:var(--ink);background:var(--accent-soft)}
-.analyze-shell .header-inner {gap:8px 24px}
 #resultsLink {display:inline-flex;align-items:center;min-height:44px;padding:8px}
 #analyzeModes {flex-wrap:wrap;align-self:center;width:auto}
 #analyzeModes a {min-height:44px}
@@ -576,21 +582,64 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 .analyze-result-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-block:12px}
 .analyze-result-actions .report-selection-bar {margin:0}
 #activityList>.request-row {grid-template-columns:44px minmax(0,1fr);padding:16px 8px;border-bottom:1px solid var(--rule);border-radius:0}
+#activityList>.request-row .interaction-body {display:grid;gap:8px;min-width:0}
+#activityList>.activity-card .full-text-preview,#activityList>.activity-card .full-text-body pre {font-family:var(--font);font-weight:700;font-style:italic;line-height:var(--leading-reading);padding-inline:2px;overflow:visible;max-height:none}
+#activityList>.activity-card .full-text-preview {margin-block:4px 8px}
+#activityList>.activity-card .activity-card-facts {display:grid;gap:6px;margin:4px 0 0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
+#activityList>.activity-card .activity-card-facts>div {display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0}
+#activityList>.activity-card .activity-card-facts dt {font:inherit;font-weight:700;overflow-wrap:anywhere;max-width:100%}
+#activityList>.activity-card .activity-card-facts dd {font:inherit;margin:0;min-width:0;max-width:100%;overflow-wrap:anywhere}
+#activityList>.activity-card .activity-card-facts dd .semantic-cue {font-weight:var(--weight-regular)}
+#activityList>.activity-card :is(.project-context,.request-meta,.recorded-results,.call-duration) {font-size:inherit;line-height:inherit;margin:0}
+#activityList>.activity-card .card-chat {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;min-width:0}
+#activityList>.activity-card .card-chat>.text-link {display:inline-flex;align-items:center;min-height:44px;min-width:44px;max-width:100%;overflow-wrap:anywhere;font-weight:var(--weight-regular)}
+#activityList>.activity-card .interaction-tools {display:grid;gap:4px;margin:0;padding:0;list-style:none;color:var(--ink);font:inherit}
+#activityList>.activity-card .interaction-tools>li {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 12px;min-width:0}
+#activityList>.activity-card .card-tool-name {font-size:var(--type-body);font-weight:700;overflow-wrap:anywhere;min-width:0}
+#activityList>.activity-card .card-tool-count {color:var(--muted)}
+#activityList>.activity-card .recorded-results {align-items:center;gap:4px 12px}
+#activityList>.activity-card .result-unit {font-weight:var(--weight-regular)}
+#activityList>.activity-card .recorded-result-label {text-transform:none;letter-spacing:0;font-weight:var(--weight-regular)}
+@media(min-width:700px) {
+ #activityList>.activity-card .full-text {display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px}
+ #activityList>.activity-card .full-text>:not(.full-text-actions,.full-text-body) {grid-column:1}
+ #activityList>.activity-card .full-text>.full-text-actions {grid-column:2;grid-row:1/span 3;align-self:start;justify-content:flex-end;margin:0}
+ #activityList>.activity-card .full-text>.full-text-body {grid-column:1/-1}
+}
 .interaction-select {display:grid;place-items:center;min-width:44px;min-height:44px;cursor:pointer;border-radius:var(--radius-small)}
 .interaction-select:focus-within {outline:2px solid var(--focus);outline-offset:2px}
 .interaction-select input {margin:0}
-.interaction-context {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;font-size:var(--type-small)}
-.interaction-context>.text-link {display:inline-flex;align-items:center;min-height:44px;overflow-wrap:anywhere}
-.interaction-context .project-context {margin:0}
-.interaction-tools {font-size:var(--type-small);color:var(--muted);margin-top:8px}
 @media(max-width:699px) {
- .analyze-shell>main {padding:24px 16px 48px}
- .analyze-shell .header-inner {gap:4px 12px}
- .app-header .primary-navigation {flex-basis:100%}
- .app-header .primary-navigation a {flex:1 1 auto;padding:8px}
  #activityView>.section-heading {align-items:stretch}
  #analyzeModes {align-self:start}
  #activityView>.section-heading>.filter-field {margin-inline-start:0;width:100%}
  #activityView>.section-heading>.filter-field input {width:100%}
+}
+${analyzeLayoutStyles}
+/* Screen-only semantic aliases follow shared chart CSS; saved output keeps its own palette. */
+:root[data-evidence-theme],:root:not([data-evidence-theme]) {
+ --chart-pink-top:var(--screen-failure-high);--chart-pink-mid:var(--chart-failure);
+ --chart-pink-base:var(--screen-failure-low);--chart-pink-side:var(--chart-failure);
+ --chart-pink-cap:var(--chart-failure);--chart-pink-label:var(--chart-failure);
+ --prompt-author-user:var(--screen-prompt-user);
+}
+.primary-navigation a[aria-current=page] {background:var(--hover)}
+.primary-navigation a[aria-current=page]::before {background:var(--ink)}
+.settings-search-results mark,body .comparison-reading summary {font-weight:var(--weight-medium)}
+.result-tone-failure,.recorded-result.result-tone-failure:is(:hover,:active) {color:var(--chart-failure)}
+.percentage-card[data-breakdown=outcomes] [data-category=failure] .percentage-label,
+.select-option[data-value=failure] .result-option-label,
+.select-trigger:has(.result-tone-failure) .result-option-label {color:var(--chart-failure)}
+/* The shared frozen-comparison renderer historically uses pink for transport, too. */
+.comparison-outcome-transport {
+ --column-top:var(--chart-cyan-top);--column-mid:var(--chart-cyan-mid);--column-base:var(--chart-cyan-base);
+ --column-side:var(--chart-cyan-side);--column-cap:var(--chart-cyan-cap);--column-label:var(--chart-cyan-label);
+}
+@media(forced-colors:active) {
+ .primary-navigation a[aria-current=page]::before {background:Highlight}
+ .result-tone-failure,.recorded-result.result-tone-failure:is(:hover,:active),
+ .percentage-card[data-breakdown=outcomes] [data-category=failure] .percentage-label,
+ .select-option[data-value=failure] .result-option-label,
+ .select-trigger:has(.result-tone-failure) .result-option-label {color:CanvasText}
 }
 `;

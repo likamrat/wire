@@ -106,7 +106,8 @@ for (const changed of [
             retainedItemCount: 0, retainedTotalBytes: 0,
         };
         assert.deepEqual(contract.captureDecision(prior(), capture), { allowed: false, reason: "stale-source" }, "The old grant never authorizes this current source.");
-        assert.match(await pane.locator(".assessment-applied").textContent(), /Response saving is on/);
+        assert.equal(await pane.locator("input[type=checkbox]").isChecked(), true);
+        assert.equal(await pane.locator(".assessment-applied").isVisible(), false);
         assert.equal(await pane.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
     });
 }

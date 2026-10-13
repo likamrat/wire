@@ -57,6 +57,63 @@ async function measure(page) {
     }));
 }
 
+test("native scrolling keeps dense enlarged time labels, keyboard selection and observer disposal", async () => {
+    const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined, ignoreDefaultArgs: ["--hide-scrollbars"],
+        args: ["--force-device-scale-factor=1.5"] });
+    try {
+        const page = await browser.newPage({ reducedMotion: "reduce" });
+        const points = Array.from({ length: 26 }, (_, index) => {
+            const total = index === 25 ? Number.MAX_SAFE_INTEGER : index;
+            return { ...screenshotPoints[0], id: `native-${index}`, label: `Sep ${index + 1}`,
+                total, success: total, failure: 0 };
+        });
+        for (const [width, scale, theme] of [[1200, 1, "light"], [375, 2, "dark"]]) {
+            await mount(page, points, width, theme);
+            await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+            await page.evaluate(() => document.fonts.ready);
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+            const scroll = page.locator(".flat-time-scroll"), last = page.locator(".time-column").last();
+            await page.waitForFunction(() => document.querySelector(".flat-time-scroll").dataset.overflow === "true");
+            assert.ok(await scroll.evaluate(node => node.scrollWidth > node.clientWidth + 1));
+            await scroll.focus(); await page.keyboard.press("ArrowRight");
+            await page.waitForFunction(() => document.querySelector(".flat-time-scroll").scrollLeft > 0);
+            await last.focus();
+            const value = await last.locator(".dimensional-count").boundingBox(), clip = await scroll.boundingBox();
+            if (value.width <= clip.width) {
+                assert.ok(value.x >= clip.x - 1 && value.x + value.width <= clip.x + clip.width + 1, "Focus reveals a fitting count");
+            } else {
+                // A 16-digit enlarged count is wider than this viewport; both ends remain reachable.
+                await scroll.focus(); await page.keyboard.press("ArrowLeft");
+                await page.waitForFunction(() => {
+                    const node = document.querySelector(".time-slot:last-child .dimensional-count");
+                    return node.getBoundingClientRect().left >= node.closest(".dimensional-scroll").getBoundingClientRect().left;
+                });
+                await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight");
+                await page.waitForFunction(() => {
+                    const node = document.querySelector(".time-slot:last-child .dimensional-count");
+                    return node.getBoundingClientRect().right <= node.closest(".dimensional-scroll").getBoundingClientRect().right;
+                });
+                await last.focus();
+            }
+            const rows = await measure(page);
+            assert.ok(rows.every(row => row.value.width <= row.date.width), "The measured minimum reserves enough pitch for each count");
+            assert.equal(await page.locator(".dimensional-time-labels > span").count(), 26);
+            assert.equal(await page.locator(".time-zero").count(), 1);
+            await page.keyboard.press("Enter");
+            assert.deepEqual(await page.evaluate(() => window.selections), ["native-25"]);
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+            await scroll.evaluate(node => {
+                window.charts.disposeView(node);
+                node.querySelector(".flat-time-plot").style.minWidth = "1px";
+                window.charts.refreshView(node);
+            });
+            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+            assert.equal(await page.locator(".flat-time-plot").evaluate(node => node.style.minWidth), "1px",
+                "Disposed observers and refresh hooks no longer write layout");
+        }
+    } finally { await browser.close(); }
+});
+
 test("9/28/9/121/50 retains exact linear values and one count/date axis", { timeout: 30000 }, async () => {
     const browser = await chromium.launch();
     const failures = [], proof = [];
@@ -103,7 +160,7 @@ test("zero, subpixel, unit, equal, mixed, dense and single timelines keep one pr
             await mount(page, points, width, theme);
             const rows = await measure(page);
             for (const row of rows) {
-                const extent = totals.length <= 2 ? 160 : 200;
+                const extent = Math.min(200, 40 * (totals.length + 1));
                 const expected = row.total / maximum * extent;
                 if (row.total) assert.equal(row.extent, extent);
                 assert.ok(Math.abs(row.edgeHeight - expected) < .03);

@@ -7,6 +7,7 @@ import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { fixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { searchFixture } from "./live-search-fixture.mjs";
 
 const proofDir = process.env.WORKIQ_SCALE_PROOFS;
 const records = [["2026-09-01", 2], ["2026-09-02", 1], ["2026-10-05", 1]].map(([date, total], index) => {
@@ -26,6 +27,9 @@ async function setup(t) {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
             res.end(renderHtmlShell("a".repeat(64), "scale-labels")); return;
+        }
+        if (req.method === "GET" && req.url === "/favicon.svg") {
+            res.writeHead(204).end(); return;
         }
         let body = ""; for await (const chunk of req) body += chunk;
         requests.push(req.url);
@@ -73,6 +77,107 @@ async function measure(page) {
         };
     });
 }
+
+test("production time-scale caption and value share a baseline without changing buckets or filters", async t => {
+    const app = await searchFixture(t, { records, reply: false });
+    const browser = await chromium.launch(), page = await browser.newPage({
+        viewport: { width: 1600, height: 1000 }, reducedMotion: "reduce", timezoneId: "UTC",
+    });
+    const errors = [], inputs = [], measurements = [], failures = [];
+    t.after(async () => { await browser.close(); assert.deepEqual(errors, []); });
+    await page.route("**/*", route => {
+        const request = route.request(), url = new URL(request.url());
+        if (url.origin !== new URL(app.runtime.url).origin ||
+            request.method() === "POST" && !["/api/snapshot", "/api/collection/status", "/api/assessment/overview",
+                "/api/assessment/detail", "/api/evaluation/automatic/summary"].includes(url.pathname)) {
+            errors.push("Unexpected request " + url.pathname);
+            return route.abort();
+        }
+        return route.continue();
+    });
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("request", request => { if (request.url().endsWith("/api/snapshot")) inputs.push(request.postDataJSON()); });
+    await page.goto(app.runtime.url + "#analyze?bucket=week&range=custom&from=2026-09-01&to=2026-10-05"); await ready(page);
+    assert.ok(await page.evaluate(async () => (await document.fonts.load('500 16px "Asta Sans"')).length > 0));
+    if (proofDir) await mkdir(proofDir, { recursive: true });
+    const filters = inputs.at(-1).filters, count = await page.locator("#activityCount").innerText();
+    assert.equal(filters.from, "2026-09-01"); assert.equal(filters.to, "2026-10-05");
+    for (const [width, scale] of [[1600, 1], [375, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await chooseTheme(page, width === 1600 ? "dark" : "light"); await ready(page);
+        const widths = [];
+        for (const bucket of ["week", "day", "month"]) {
+            await selectActivityOption(page, "bucketFilter", bucket); await ready(page);
+            await page.locator("#bucketControl").scrollIntoViewIfNeeded();
+            const geometry = await page.locator("#bucketControl").evaluate(control => {
+                const rect = node => {
+                    const { x, y, width, height, right, bottom } = node.getBoundingClientRect();
+                    return { x, y, width, height, right, bottom };
+                };
+                const text = node => {
+                    const range = document.createRange(); range.selectNodeContents(node);
+                    return rect(range);
+                };
+                const caption = control.querySelector(".bucket-label"), value = control.querySelector(".select-value");
+                return { control: rect(control), caption: rect(caption), captionText: text(caption), value: rect(value), valueText: text(value),
+                    trigger: rect(control.querySelector(".select-trigger")), title: rect(document.getElementById("chartTitle")),
+                    heading: rect(control.closest(".chart-heading")), font: getComputedStyle(value).fontFamily,
+                    overflow: document.documentElement.scrollWidth - innerWidth };
+            });
+            widths.push(geometry.trigger.width);
+            measurements.push({ width, scale, bucket, ...geometry });
+            if (geometry.caption.width <= 1) failures.push(`${width}/${scale}/${bucket}: time-scale caption is visually hidden`);
+            if (geometry.captionText.right <= geometry.valueText.x &&
+                Math.abs(geometry.captionText.bottom - geometry.valueText.bottom) > 3 * scale) {
+                failures.push(`${width}/${scale}/${bucket}: caption text bottom ${geometry.captionText.bottom} versus value ${geometry.valueText.bottom}`);
+            }
+            assert.ok(geometry.trigger.height >= 44 && geometry.overflow <= 1);
+            assert.ok(geometry.control.x >= geometry.heading.x - 1 && geometry.control.right <= geometry.heading.right + 1);
+            assert.ok(geometry.title.bottom <= geometry.control.y + 1 || geometry.title.right <= geometry.control.x);
+            assert.equal(await page.locator("#bucketFilter").inputValue(), bucket);
+            assert.equal(inputs.at(-1).bucket, bucket);
+            assert.deepEqual(inputs.at(-1).filters, filters);
+            assert.equal(await page.locator("#activityCount").innerText(), count);
+            assert.match(geometry.font, /Asta Sans/);
+            const expected = buildActivityAnalytics(records, inputs.at(-1)).timeSeries.points;
+            assert.deepEqual(await page.locator(".dimensional-count").allTextContents(),
+                expected.map(point => `${point.total} ${point.total === 1 ? "call" : "calls"}`), "Selected scale retains exact bucket counts");
+            const trigger = page.locator("#bucketFilter-control");
+            await trigger.focus(); await trigger.press("ArrowDown");
+            const popup = await page.locator(".select-popup").boundingBox(), anchor = await trigger.boundingBox();
+            const side = await page.locator(".select-popup").getAttribute("data-side");
+            assert.ok(popup.x >= 8 && popup.x + popup.width <= width - 7);
+            assert.ok(Math.abs(side === "top" ? anchor.y - popup.y - popup.height - 6 : popup.y - anchor.y - anchor.height - 6) <= 1);
+            if (proofDir && bucket === "week") await page.screenshot({ path: path.join(proofDir, `time-scale-${width}-${scale}-open.png`) });
+            await trigger.press("Escape");
+            assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
+            assert.equal(await page.locator("#bucketFilter").inputValue(), bucket);
+            if (proofDir && bucket === "week") await page.screenshot({ path: path.join(proofDir, `time-scale-${width}-${scale}-closed.png`) });
+        }
+        assert.ok(Math.max(...widths) - Math.min(...widths) <= 1, "Changing Weekly/Daily/Monthly keeps stable intrinsic width");
+        for (const mode of ["workload", "endpoint", "time"]) {
+            await page.locator(`[data-chart="${mode}"]`).click(); await ready(page);
+            assert.equal(await page.locator("#bucketControl").isVisible(), mode === "time");
+            assert.equal(await page.locator("#bucketFilter").inputValue(), "month");
+            assert.deepEqual(inputs.at(-1).filters, filters);
+            assert.equal(await page.locator("#activityCount").innerText(), count);
+        }
+    }
+    await page.locator("#bucketControl").evaluate(node => node.style.maxWidth = "8rem");
+    const wrapped = await page.locator("#bucketControl").evaluate(node => {
+        const caption = node.querySelector(".bucket-label").getBoundingClientRect();
+        const trigger = node.querySelector(".select-trigger").getBoundingClientRect(), control = node.getBoundingClientRect();
+        return { captionBottom: caption.bottom, triggerTop: trigger.top, triggerRight: trigger.right, controlRight: control.right };
+    });
+    if (wrapped.triggerTop < wrapped.captionBottom || wrapped.triggerRight > wrapped.controlRight + 1) {
+        failures.push("A genuinely constrained enlarged-text group must wrap caption and control without overlap");
+    }
+    assert.equal(await page.locator("#bucketFilter").inputValue(), "month");
+    await page.locator("#bucketControl").evaluate(node => node.style.removeProperty("max-width"));
+    if (proofDir) await writeFile(path.join(proofDir, "production-time-scale.json"), JSON.stringify({ measurements, wrapped, failures }, null, 2));
+    assert.deepEqual(failures, []);
+});
 
 test("every supported time-scale label fits selected control and menu without width jumps or header overflow", async t => {
     const { page, responses } = await setup(t), measurements = [], failures = [];

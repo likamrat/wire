@@ -152,7 +152,7 @@ test("normal request page leads with readable content and explicit, scoped reade
         if (await hide.textContent() !== "Hide prompt") failures.push(`${theme}/${width}: Hide lacks its visible subject`);
         assert.ok(await page.locator(".request-intro").evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-original")) & Node.DOCUMENT_POSITION_FOLLOWING)));
         if (!await prompt.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".interaction-insights")) & Node.DOCUMENT_POSITION_FOLLOWING))) failures.push(`${theme}/${width}: Derived insights precede actual prompt`);
-        if (await prompt.getByText("Author unverified", { exact: true }).count() !== 1) failures.push(`${theme}/${width}: Author state is not one quiet label`);
+        if (await prompt.getByText("This older record has no sender details", { exact: true }).count() !== 1) failures.push(`${theme}/${width}: Missing sender details are not explained once`);
         if (await prompt.locator(".reader-details").count() !== 1) failures.push(`${theme}/${width}: Secondary explanations are not grouped`);
         else assert.equal(await prompt.locator(".reader-details").getAttribute("open"), null, "Secondary source/privacy detail is on demand");
         if (!(await prompt.innerText()).includes("unmasked")) failures.push(`${theme}/${width}: Copy privacy is not concise and explicit`);

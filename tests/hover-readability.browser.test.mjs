@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, fixture, chooseTheme, navigateMain, navigateSettings, openActivitySessions, selectActivityOption, revealStoredRefresh } from "./helpers.mjs";
+import { exportCatalogFor, fixture, chooseTheme, navigateMain, navigateSettings, openActivitySessions, selectActivityOption, revealStoredRefresh, openSourceEditor } from "./helpers.mjs";
 import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
@@ -282,7 +282,7 @@ test("component family hover matrix uses mounted routes and their effective pain
         await inspect("#cancelPreferences", "discard preferences");
         await page.locator("#cancelPreferences").click();
         await navigateSettings(page, "connection");
-        await page.locator("#editSource").click();
+        await openSourceEditor(page);
         await page.locator("#sourceDatabase").fill("C:\\synthetic\\different.db");
         await inspect("#sourceDatabase", "source path input");
         await inspect("#connectCollection", "primary source approval");
@@ -431,7 +431,7 @@ test("conditional issues, errors, draft links, and copy states use readable sema
         }
         await navigateMain(page, "settings");
         await navigateSettings(page, "connection");
-        await page.locator("#editSource").click();
+        await openSourceEditor(page);
         await page.locator("#sourceDatabase").fill("C:\\synthetic\\changed.db");
         await navigateMain(page, "home");
         await inspect("#settingsDraftNotice a", "draft return inline link");

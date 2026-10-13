@@ -306,8 +306,15 @@ window and limits. Empty results mean no matching retained evidence, not proof
 that no activity occurred. Older retained evidence is not removed.
 
 **Refresh** reads the currently approved local Copilot metadata and histories,
-then applies the stored view. Its single control is available across Analyze,
-Reports and Settings. **Source** opens
+then applies the stored view. Its one control and result stay with the activity
+task: in Analyze, inside Settings **Connection & updates** below the source
+summary, or within **Collection status**. Display, Privacy, AI reviews,
+Troubleshooting, request reading and Reports do not show the collection toolbar
+or its routine completion message. If an update still needs attention after
+navigation, a labeled **Recorded activity update** notice opens the existing
+Connection & updates task without starting or repeating a check. Initial,
+offline and confirmed-save failures retain their authoritative global recovery.
+**Source** opens
 the approved paths in Settings; **Collection settings** opens the existing
 history-window and cadence pane. With no approval, Refresh reads stored activity
 only; **Review source & connect** opens source review separately. Refresh never
@@ -325,7 +332,12 @@ with the same approved source configuration. It reports no-change, late-result
 updates, partial checks and changes outside the current filters/evidence layer
 without widening the view. A failed check or snapshot read retains the previous
 visualization; **Retry** reads status and the stored snapshot, applying a confirmed
-check without repeating collection. In-progress edits, frozen disclosure review
+check without repeating collection. If that check completes but its stored-view
+read fails, the current check's status and one **Retry** stay beside **Refresh**;
+the same failure is not repeated as global or collection recovery actions. The
+last accepted view remains explicitly stale until a read succeeds. Initial or
+unrelated view failures keep their global recovery, and older check receipts
+cannot take ownership of a later failure. In-progress edits, frozen disclosure review
 and save recovery retain their existing guards. Ordinary refresh uses the
 background read path so unrelated updates do not discard report drafts.
 
@@ -354,8 +366,18 @@ recovery only. `freshActivity` exposes its phase and confirmed check ID/revision
 `unconfirmed` is not success or completeness. Source setup remains
 `#settings?section=connection&setting=source`.
 
-Home and Activity group the check button with **Source and collection**, with
+Analyze groups the check button with **Source and collection**, with
 the result directly below. Status length cannot push source help to the page edge.
+Connection & updates uses **About Refresh** beside the same control without
+duplicating its already-visible source-navigation links. Moving between these
+contexts retains the existing handlers, receipt and safe Retry. A check finishing
+after navigation or a new reading action does not refocus the old control.
+While a current confirmed check waits behind the same frozen report preview,
+one visible activity-update notice carries the waiting and frozen-preview
+consequence. Opening its Connection destination transfers that explanation to
+the full Refresh region; Back restores the compact notice. Presentation
+ownership ends when the check, source configuration, preview or waiting phase
+changes. The deferred-data state and all review/polling guards are unchanged.
 **No new recorded activity** describes novelty; the separate **Chat history**
 link names known unavailable, limited, pending or unchecked chat counts and opens
 **Collection status**. The manual result and its completion time stay together
@@ -574,7 +596,7 @@ importing and failed states never become a successful empty-history message.
 
 ### Local search scopes
 
-The single header **Search WIRE** entry provides [live on-device semantic and
+The single header **Search** entry provides [live on-device semantic and
 exact/prefix retrieval](docs/live-search.md). Its global text stays in panel and
 authenticated loopback-runtime memory, not history, URLs, logs or storage.
 **Current Analyze scope** explicitly binds its full verified interaction/action
@@ -589,7 +611,7 @@ no-result counts remain explicit.
 | Surface | Search decision and scope |
 | --- | --- |
 | Settings | Fixed setting metadata and useful synonyms; navigation only, never source paths or control actions. |
-| Analyze | **Search this Analyze scope** focuses the single Search WIRE field in explicit analytical mode. Verified full-interaction or exact action matches intersect existing filters before paging. Unready membership does not display fabricated zero measures. |
+| Analyze | **Search this Analyze scope** focuses the single Search field in explicit analytical mode. Verified full-interaction or exact action matches intersect existing filters before paging. Unready membership does not display fabricated zero measures. |
 | Requests already in a report | **Find a request in this report** filters the full current membership list by retained request text and chat/project identity. Matching and included totals are separate; hidden requests remain included. It cannot add/remove requests or change a frozen preview. |
 | Previously saved reports | **Find a saved report** searches all saved IDs, prepared dates, formats, prompt modes, file names and time-zone/locale metadata. It does not open report contents, original prompts or private file paths. |
 | Collection status | **Find a chat with gaps** searches the entire currently reported issue list by chat/project name, identifier, availability status (unavailable or limited history), short or full reason label or common alias, before reason grouping and six-row paging. Unavailable takes precedence when a chat also has limits; each affected chat is counted once. While searching, counts state matching versus all affected chats. Names are fetched only on visiting Collection status. |
@@ -877,7 +899,7 @@ service associations or legacy aliases as additional calls. It opens the existin
 interaction reader; dedicated call sorting and exact-action context navigation
 are separate work, not implied by this entry.
 
-**Search this Analyze scope** uses the single live Search WIRE field and its
+**Search this Analyze scope** uses the single live Search field and its
 receipt-bound semantic/exact membership. Legacy browser-history phrase queries
 remain compatible. Charts, summaries, rows and current-view report IDs share the same
 all-page matched membership. Insights and ordinary reports still include full
@@ -893,7 +915,7 @@ Analyze scope. Legacy chat/result Activity links open Calls. Request, Reports,
 saved-library, draft, Settings and Collection status routes remain available.
 
 The focused analysis names the chat and project, the recorded count and
-results, the date/service scope and any known history gaps. The header supplies the display time zone. The
+results, the date/service scope and any known history gaps. Settings > Display identifies the time zone. The
 **Worked** and **Tool failed** pills are non-underlined links to only that
 chat's matching canonical successful or failed actions, retaining the dates,
 services, project, evidence layer and private search. Failed actions include
@@ -972,7 +994,7 @@ human-authored attribution is not proof of identity. **Prompt provenance**
 keeps the original attribution available. Missing text says **Prompt not
 available**. Tool arguments and assistant responses remain separate.
 Request-reader replies use the existing consent- and basis-checked retained-text
-endpoint after deliberately opening the request. Global Search WIRE separately
+endpoint after deliberately opening the request. Global Search separately
 admits authorized retained excerpts through those same gates, never source
 rereads, new capture or AI. Recorded response timestamps determine their
 positions without asserting finality. Missing reply text is shown with its own
@@ -997,9 +1019,10 @@ rows distinguish the matching slice from each full eligible request, without
 changing All/Current/Selected expansion or disclosure review.
 
 Dates default to the browser's detected IANA time zone and locale, not the runtime's.
-One compact header link (for example **Los Angeles time**) identifies the applied
-view; its keyboard/pointer tooltip gives the full IANA name and opens
-**Settings > Time zone** (`#settings?section=display`, retained for existing links). Date ranges, chart help and
+**Settings > Display > Time zone** identifies the applied zone by its full IANA
+name (`#settings?section=display&setting=time-zone`, retained for existing links).
+The header keeps only the theme switch beside Search, without repeating the zone.
+Date ranges, chart help and
 exact-table captions inherit this context instead of repeating the zone.
 Exact timestamps retain their per-instant offsets; report previews and saved
 artifacts retain their own explicit frozen context.
@@ -1016,8 +1039,7 @@ raw source codes/IDs and association limits together in one closed disclosure.
 **Time zone** uses the existing keyboard-typeahead list of browser-supported
 IANA zones. Its single heading labels a content-sized control; one short impact
 sentence stays visible, with browser scope and reset guidance in **About this
-time zone**, inside the same setting row. A globe-and-clock icon identifies the
-category. Collection preferences stack vertically inside their active category.
+time zone**, inside the same setting row. Collection preferences stack vertically inside their active category.
 Choosing **Device default** removes the override. The non-sensitive
 choice uses local storage (`workiq-evidence.time-zone`) for this browser profile
 and app origin, synchronizing its open panels; it is not a device-wide preference.
@@ -1028,7 +1050,7 @@ any saved valid zone rather than accepting ambiguous typed abbreviations.
 
 The choice governs date labels, calendar filters, relative periods, all buckets,
 detail and collection timestamps, and new frozen report previews. From/To remain
-calendar dates interpreted in the selected zone. Header and data change together
+calendar dates interpreted in the selected zone. Settings context and data change together
 only after a successful snapshot; failed reads keep the last applied context.
 Changing time context invalidates pending previews/reviews, not report membership
 or source history. Saved report bytes are never reinterpreted or re-exported.

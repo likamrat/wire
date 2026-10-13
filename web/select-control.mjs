@@ -54,7 +54,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         }
         ux.hideTooltip();
     }
-    function position() {
+    function position(keepActive = true) {
         frame = 0;
         if (!active) return;
         if (!visible(active) || unavailable(active)) { close(); return; }
@@ -67,24 +67,30 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         if (box.bottom <= top || box.top >= top + height || box.right <= left || box.left >= left + width) { close(); return; }
         const boundary = active.trigger.closest(".filter-scroll")?.getBoundingClientRect();
         if (boundary && (box.right <= boundary.left || box.left >= boundary.right)) { close(); return; }
-        popup.style.width = "max-content";
-        const naturalWidth = popup.getBoundingClientRect().width;
-        popup.style.width = Math.min(Math.max(box.width, naturalWidth), width - edge * 2) + "px";
+        // Measuring the CSS height limit can temporarily clamp a scrolled list.
+        const scrollTop = popup.scrollTop;
+        popup.style.setProperty("--select-available-width", Math.max(0, width - edge * 2) + "px");
+        popup.style.maxHeight = "";
         const availableBelow = top + height - box.bottom - gap - edge;
         const availableAbove = box.top - top - gap - edge;
-        const limit = active.multiple ? height - edge * 2 : 320;
+        const limit = Math.min(parseFloat(getComputedStyle(popup).maxHeight), height - edge * 2);
         const wanted = Math.min(popup.scrollHeight, limit);
         const above = availableBelow < wanted && availableAbove > availableBelow;
         const available = Math.max(0, above ? availableAbove : availableBelow);
         popup.style.maxHeight = Math.min(limit, available) + "px";
-        popup.style.left = Math.max(left + edge, Math.min(box.left, left + width - popup.getBoundingClientRect().width - edge)) + "px";
+        const popupWidth = popup.getBoundingClientRect().width;
+        const anchorLeft = getComputedStyle(active.wrapper).justifySelf === "end" ? box.right - popupWidth : box.left;
+        popup.style.left = Math.max(left + edge, Math.min(anchorLeft, left + width - popupWidth - edge)) + "px";
         const popupHeight = popup.getBoundingClientRect().height;
-        popup.style.top = (above ? box.top - popupHeight - gap : box.bottom + gap) + "px";
+        const anchorTop = above ? box.top - popupHeight - gap : box.bottom + gap;
+        popup.style.top = Math.max(top + edge, Math.min(anchorTop, top + height - popupHeight - edge)) + "px";
         popup.dataset.side = above ? "top" : "bottom";
+        popup.scrollTop = scrollTop;
+        if (keepActive && active.index >= 0) highlight(active.index);
     }
     function schedulePosition(event) {
         if (event?.target instanceof Node && (event.target === popup || popup.contains(event.target))) return;
-        if (active && !frame) frame = requestAnimationFrame(position);
+        if (active && !frame) frame = requestAnimationFrame(() => position());
     }
     function highlight(index, scroll = true) {
         if (!active || index < 0 || active.options[index]?.disabled) return;
@@ -136,7 +142,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
             label.textContent = option.label;
             decorateOption(label, { id: entry.select.id, value: option.value, label: option.label });
             row.setAttribute("aria-labelledby", label.id);
-            const check = ux.icon("check");
+            const check = ux.icon("select-check");
             check.classList.add("select-check");
             row.append(label, check);
             if (option.detail) {
@@ -176,6 +182,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
                 hint.textContent = entry.draft.size ? entry.select.dataset.draftHint || "Choose statuses, then Apply."
                     : entry.select.dataset.emptyHint || "Select at least one result.";
                 for (const row of list.querySelectorAll(".select-option")) row.setAttribute("aria-selected", String(entry.draft.has(row.dataset.value)));
+                if (!popup.hidden) position(false);
             };
             all.addEventListener("click", () => {
                 const eligible = entry.options.filter(option => !option.disabled);
@@ -431,6 +438,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
     listen(document, "focusin", (event) => { if (active && event.target !== active.trigger && !popup.contains(event.target)) close(); });
     listen(document, "scroll", schedulePosition, { capture: true });
     listen(window, "resize", schedulePosition);
+    listen(document.fonts, "loadingdone", schedulePosition);
     if (window.visualViewport) {
         listen(window.visualViewport, "resize", schedulePosition);
         listen(window.visualViewport, "scroll", schedulePosition);

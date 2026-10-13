@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAssessmentPresentation, createTimingPresentation } from "../web/assessment-presentation.mjs";
+import { createAssessmentPresentation, createAssessmentWording, createTimingPresentation } from "../web/assessment-presentation.mjs";
 import { createActivityProjection } from "../lib/activity-projection.mjs";
 import { contract, quality, samples } from "./assessment-ui-fixtures.mjs";
 import { buildAssessmentModel, buildReportFacts, assessmentDependencies, assessmentOverview } from "../lib/assessment-read-model.mjs";
@@ -46,7 +46,7 @@ test("zero, all-assessed, actual failure, insufficient evidence and evaluator er
     assert.equal(failed.resultLabel, "0 passed; 1 failed");
     const insufficient = model("accuracy", { unassessed: 18 });
     insufficient.reason = "missing-evidence";
-    assert.equal(presentation.format(insufficient).evidence.unassessedReasons[0].label, "Insufficient recorded evidence");
+    assert.equal(presentation.format(insufficient).evidence.unassessedReasons[0].label, "Not enough saved evidence");
     const error = model("accuracy", { unassessed: 18 });
     error.status = "evaluator-error"; error.reason = "evaluator-failure";
     error.counts = { pass: 0, fail: 0, unassessed: 0, evaluatorError: 18 };
@@ -272,7 +272,8 @@ test("actual read-model pooling preserves metric-specific verdicts and absent co
 test("browser-serialized factory and server use exactly the same evidence model", () => {
     const browserFactory = Function(`
         const timing = (${createTimingPresentation.toString()})((${createActivityProjection.toString()})(null, null, ["unknown"]).summarize);
-        return contract => (${createAssessmentPresentation.toString()})({ ...contract, timing });
+        const wording = (${createAssessmentWording.toString()})();
+        return contract => (${createAssessmentPresentation.toString()})({ ...contract, timing, wording });
     `)();
     const metrics = [model("accuracy", { pass: 2, unassessed: 106 }), samples.makeDuration([41100])];
     assert.deepEqual(browserFactory(contract).summarize(metrics).evidence, presentation.summarize(metrics).evidence);

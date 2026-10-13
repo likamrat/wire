@@ -57,7 +57,7 @@ async function assertTimeline(page, source, bucket, filters = { scope: "history"
     await expect(page.locator("#chartTitle")).toHaveText(title);
     await expect(page.locator("#bucketFilter")).toHaveValue(bucket);
     assert.equal(await page.locator("#chartMeta").count(), 0, "No redundant Calendar dates label");
-    assert.match(await page.locator("#displayTimeZoneLink").getAttribute("aria-label"), /America\/Los_Angeles/);
+    assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /America\/Los_Angeles/);
     const analytics = buildActivityAnalytics(source, { bucket, timeContext: context, filters });
     assert.equal(await page.locator("#activityCount").innerText(), String(analytics.totals.count));
     const points = analytics.timeSeries.points;

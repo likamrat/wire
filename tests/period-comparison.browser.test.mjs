@@ -7,13 +7,23 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { currentStatePayload } from "../lib/server.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
-import { assessmentOverview, buildAssessmentModel, invalidateAssessmentCache } from "../lib/assessment-read-model.mjs";
-import { automaticScoreOffSummary, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { assessmentOverview, assessmentDependencies, buildAssessmentModel, invalidateAssessmentCache } from "../lib/assessment-read-model.mjs";
+import { automaticScoreOffSummary, chooseTheme, selectActivityOption, restoreLegacySearch } from "./helpers.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 
 const proof = process.env.WIRE_PERIOD_PROOFS;
-async function setup(t, { polling = false } = {}) {
+async function setup(t, { polling = false, permissionFeedback = false } = {}) {
     const { state, input } = periodFixture();
+    if (permissionFeedback) {
+        const first = [...buildAssessmentModel(state).details.values()][0];
+        state.personalEvaluation.feedback.records.push({
+            schemaVersion: 1, dependencies: assessmentDependencies(first),
+            assessment: { ...first.assessments.find(item => item.checkId === "action-authorization-compliance"),
+                origin: "user-personal", assessmentRef: "assessment-" + "e".repeat(32), verdict: "fail", reason: "user-verdict" },
+        });
+        state.personalEvaluation.feedback.revision = 1;
+        state.personalEvaluation.overrideRevision = 1;
+    }
     const before = structuredClone(state), model = buildAssessmentModel(state);
     invalidateAssessmentCache();
     const requests = [], errors = [], denied = [], replies = [];
@@ -83,33 +93,148 @@ async function openComparison(app, { select = false } = {}) {
     const { page, url } = app;
     await page.goto(url + "#analyze?from=2026-03-07&to=2026-03-07&services=Files&includeMissingService=true");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#activitySearch").fill(periodQuery);
+    await restoreLegacySearch(page, periodQuery);
     if (select) await page.locator("#select-request-period-request-0").check();
     await page.locator("#comparePeriods").click();
-    await expect(page.locator("#periodComparisonStatus")).toContainText("No comparison has been run");
+    await expect(page.locator("#periodComparisonResults")).toBeEmpty();
+    await expect(page.locator("#createPeriodReport")).toBeHidden();
     for (const [label, value] of [
         ["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
         ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"],
     ]) await page.getByLabel(label, { exact: true }).fill(value);
-    await page.locator("#periodComparison").getByRole("button", { name: "Compare periods", exact: true }).click();
-    await expect(page.locator("#periodComparisonStatus")).toContainText("Comparing retained activity only");
+    await page.locator("#applyPeriodComparison").click();
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
 }
+
+test("F13 period visualization separates permission feedback from tool-use matching without changing facts", { timeout: 30000 }, async t => {
+    const app = await setup(t, { permissionFeedback: true }), { page } = app;
+    await page.goto(app.url + "#analyze?compare=periods&services=Files&includeMissingService=true&aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09");
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
+    const root = page.locator("#periodComparison");
+    const first = root.locator('[data-period-side="baseline"]');
+    await expect(first.locator('[data-finding-origin="model-assessed"]')).toContainText("Tool use");
+    await expect(first.locator('[data-finding-origin="user-personal"]')).toContainText("Permission");
+    await expect(first.locator('[data-finding-origin="user-personal"]')).toContainText("not given");
+    const details = root.getByText("Compare saved checks and full-interaction timing", { exact: true });
+    await details.focus(); await page.keyboard.press("Enter");
+    const table = root.getByRole("table", { name: "Saved reviews and measurements by source and method" });
+    await expect(table).toContainText("Tool use vs. request");
+    await expect(table).toContainText("Permission for tool use");
+    await expect(table).not.toContainText("action-intent-alignment");
+    await expect(table).not.toContainText("action-authorization-compliance");
+    await expect(table).toContainText("assessed requests");
+    await expect(table).toContainText("timed calls");
+    await expect(table).toContainText("No comparable saved review on this side");
+    await expect(table).toContainText("Some requests lack review results");
+    await expect(table).toContainText("Smaller share with review results");
+    await expect(table).toContainText("Some calls lack timing");
+    await expect(table).toContainText("Smaller share with timing");
+    await expect(table).not.toContainText("partial-coverage");
+    await expect(table).not.toContainText("coverage-decreased");
+    assert.ok(app.replies.at(-1).comparison.metrics.some(row => row.result?.warnings.includes("partial-coverage")));
+    assert.ok(app.replies.at(-1).comparison.metrics.some(row => row.result?.warnings.includes("coverage-decreased")));
+    const modelMetric = app.replies.at(-1).periods.baseline.assessment.metrics.find(row => row.checkId === "action-intent-alignment");
+    assert.equal(modelMetric.numerator, 1); assert.equal(modelMetric.denominator, 2);
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        await table.screenshot({ path: path.join(proof, "F13-period-review-labels.png") });
+        await writeFile(path.join(proof, "F13-period-facts.json"), JSON.stringify(app.replies.at(-1).comparison.metrics, null, 2));
+    }
+});
+
+test("comparison review labels use intrinsic space without splitting Permission or overflowing long labels", { timeout: 30000 }, async t => {
+    const { page, url } = await setup(t, { permissionFeedback: true });
+    await page.goto(url + "#analyze?compare=periods&services=Files&includeMissingService=true&aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09");
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
+    const lane = page.locator('[data-period-side="baseline"] [data-finding-origin="user-personal"]');
+    const label = lane.locator(".assessment-compact-verdicts strong");
+    await expect(label).toHaveText("Permission");
+    for (const [width, scale] of [[1440, 1], [375, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
+        const geometry = await label.evaluate(node => {
+            const range = document.createRange(); range.selectNodeContents(node);
+            return { lines: [...range.getClientRects()].length, text: node.textContent,
+                overflow: document.documentElement.scrollWidth - innerWidth };
+        });
+        assert.equal(geometry.lines, 1, JSON.stringify({ width, scale, ...geometry }));
+        assert.ok(geometry.overflow <= 1, JSON.stringify(geometry));
+        await expect(lane).toContainText("not given");
+        await expect(lane.locator(".period-review-coverage")).toHaveText("1 / 3 reviewed");
+        const aligned = await page.locator('[data-period-side="baseline"] .assessment-compact-verdicts').evaluateAll(lists =>
+            lists.map(list => [...list.children].map(row => ({
+                labelRight: row.querySelector("strong").getBoundingClientRect().right,
+                resultLeft: row.querySelector(".period-review-result").getBoundingClientRect().left,
+                coverageLeft: row.querySelector(".period-review-coverage").getBoundingClientRect().left,
+            }))));
+        for (const rows of aligned) for (const row of rows) {
+            assert.ok(row.labelRight <= row.resultLeft);
+            assert.ok(Math.abs(row.resultLeft - rows[0].resultLeft) <= 1);
+            assert.ok(Math.abs(row.coverageLeft - rows[0].coverageLeft) <= 1);
+        }
+    }
+    await label.evaluate(node => { node.textContent = "Saved review (type not recorded)"; });
+    const wrapped = await label.evaluate(node => {
+        const range = document.createRange(); range.selectNodeContents(node);
+        return { lines: [...range.getClientRects()].length, overflow: document.documentElement.scrollWidth - innerWidth };
+    });
+    assert.ok(wrapped.lines > 1);
+    assert.ok(wrapped.overflow <= 1);
+});
+
+test("comparison findings show labeled counts for full interactions and keep all disclosure anchors stable", { timeout: 30000 }, async t => {
+    const { page, url } = await setup(t, { permissionFeedback: true });
+    await page.goto(url + "#analyze?compare=periods&services=Files&includeMissingService=true&aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09");
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
+    const root = page.locator("#periodComparison");
+    const a = root.locator('[data-period-side="baseline"]'), b = root.locator('[data-period-side="later"]');
+    const pairs = locator => locator.evaluate(node => [...node.children].map(row => [
+        row.querySelector("dt").textContent, row.querySelector("dd").textContent,
+    ]));
+    assert.deepEqual(await pairs(a.locator(".period-count-facts").first()), [["Interactions", "3"]]);
+    assert.deepEqual(await pairs(a.locator(".period-outcome-counts")), [["Succeeded", "3"], ["Failed", "1"], ["Other or missing outcome", "1"]]);
+    assert.deepEqual(await pairs(b.locator(".period-outcome-counts")), [["Succeeded", "2"], ["Failed", "1"], ["Other or missing outcome", "1"]]);
+    await expect(a.getByRole("heading", { name: "Reported calls (5)", exact: true })).toBeVisible();
+    await expect(b.getByRole("heading", { name: "Reported calls (4)", exact: true })).toBeVisible();
+    await expect(a).toContainText("Exact matching records (4)");
+    await expect(a.locator('[data-finding-kind="cause"]')).toHaveText("Work IQ sign-in required1 call");
+    await expect(b.locator('[data-finding-kind="cause"]')).toHaveText("Cause not retained1 call");
+    await expect(root).not.toContainText("Reported outcomes:");
+    await expect(root).not.toContainText("verified full interactions");
+    await expect(root).not.toContainText("Each record counts once");
+    await expect(a.locator('[data-finding-origin="model-assessed"] .period-review-coverage').first()).toHaveText("2 / 3 reviewed");
+    await expect(b.locator(".assessment-findings")).toContainText("Review could not finish");
+    const summaries = root.locator("details > summary");
+    assert.equal(await summaries.count(), 7);
+    for (const summary of await summaries.all()) {
+        await summary.evaluate(node => node.scrollIntoView({ block: "center" }));
+        const before = await summary.evaluate(node => ({ top: node.getBoundingClientRect().top, y: scrollY }));
+        for (let i = 0; i < 4; i++) {
+            await summary.click();
+            const after = await summary.evaluate(node => ({ top: node.getBoundingClientRect().top, y: scrollY }));
+            assert.deepEqual(after, before);
+        }
+    }
+    await a.locator(".assessment-saved-details > summary").click();
+    await a.getByRole("button", { name: "Measure definitions", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Comparison measure definitions" })).toBeVisible();
+});
 
 test("normal Analyze compares both periods, keeps precise scope and supports Back, themes and narrow 200% text", { timeout: 60000 }, async t => {
     const app = await setup(t), { page } = app;
     await openComparison(app, { select: true });
     const root = page.locator("#periodComparison"), a = root.locator('[data-period-side="baseline"]'), b = root.locator('[data-period-side="later"]');
-    await expect(a).toContainText("3 matching records across all pages");
-    await expect(b).toContainText("4 matching records across all pages");
-    await expect(a).toContainText("Full retained interactions");
-    await expect(a.locator(".assessment-findings")).toContainText("Work IQ sign-in was required");
-    await expect(root).toContainText("+50 percentage-points");
+    await expect(a).toContainText("Exact matching records (3)");
+    await expect(b).toContainText("Exact matching records (4)");
+    await expect(root).toContainText("Whole interactions");
+    await expect(a.locator(".assessment-findings")).toContainText("Work IQ sign-in required");
+    await expect(root).toContainText("+50 percentage points");
     await expect(root).toContainText("0 ms; 2 / 3 calls timed");
     await expect(root).toContainText("3,000 ms; 2 / 4 calls timed");
     await expect(page.locator("#outcomeFilter-control")).toContainText("A: 3; B: 4");
     await expect(page.locator("#dateFilter-control")).not.toBeVisible();
     await expect(page.locator("#pageAction")).not.toBeVisible();
-    await expect(page.locator("#applyPeriodComparison")).toBeFocused();
+    await expect(page.locator("#periodComparisonResultsTitle")).toBeFocused();
     assert.equal(new URL(page.url()).hash.includes(periodQuery), false);
     assert.equal(app.requests.filter(item => item.route === "/api/period-comparison").at(-1).input.scenarioIds.includes("period-request-5"), true);
     assert.equal(app.replies.at(-1).periods.baseline.assessment.metrics.find(metric => metric.definitionId === "tool-duration").coverage.eligible, 4);
@@ -117,7 +242,7 @@ test("normal Analyze compares both periods, keeps precise scope and supports Bac
     for (const [theme, width, scale] of [["light", 1365, 1], ["dark", 1365, 1], ["light", 375, 2], ["dark", 375, 2]]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
-        const geometry = await root.evaluate(node => ({
+        const geometry = await page.locator("#periodComparisonSetup").evaluate(node => ({
             overflow: document.documentElement.scrollWidth - innerWidth,
             fields: [...node.querySelectorAll('input[type="date"]')].map(input => ({
                 width: input.getBoundingClientRect().width, height: input.getBoundingClientRect().height,
@@ -144,10 +269,10 @@ test("normal Analyze compares both periods, keeps precise scope and supports Bac
     await a.locator("a").first().click();
     await expect(page.locator("#requestView")).toBeVisible();
     await page.goBack();
-    await expect(root).toBeVisible(); await expect(page.locator("#periodComparisonStatus")).toContainText("Comparing retained activity only");
+    await expect(root).toBeVisible(); await expect(page.locator("#createPeriodReport")).toBeVisible();
     await expect(page.locator("#comparisonSearch")).toHaveValue(periodQuery);
     await expect(a.locator(".assessment-saved-details")).toHaveAttribute("open", "");
-    await root.getByRole("button", { name: "Stop comparing" }).click();
+    await page.getByRole("button", { name: "Stop comparing" }).click();
     await expect(page.locator("#activityView")).toBeVisible(); await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
     await expect(page.locator("#pageAction")).toBeVisible();
@@ -166,28 +291,28 @@ test("private search and Author refinements, empty periods, stale errors and lat
     await openComparison(app);
     const root = page.locator("#periodComparison");
     await selectActivityOption(page, "promptAuthorFilter", "user");
-    await expect(root.locator('[data-period-side="later"]')).toContainText("2 matching records across all pages");
-    await page.locator("#comparisonSearch").fill("no invented match");
-    await expect(root.locator('[data-period-side="baseline"]')).toContainText("No matching retained activity");
-    await expect(root.locator('[data-period-side="later"]')).toContainText("No matching retained activity");
-    await expect(root).toContainText("Not applicable");
+    await expect(root.locator('[data-period-side="later"]')).toContainText("Exact matching records (2)");
+    await restoreLegacySearch(page, "no invented match");
+    await expect(root).toContainText("No matching retained activity in either period");
+    await expect(root.locator("table")).toHaveCount(0);
+    await expect(page.locator("#createPeriodReport")).toBeHidden();
     app.fail(true);
-    await page.locator("#comparisonSearch").fill(periodQuery);
+    await restoreLegacySearch(page, periodQuery);
     await expect(page.locator("#periodComparisonStatus")).toContainText("stored revision changed");
     await expect(root.locator("[data-period-side]")).toHaveCount(0);
     app.fail(false);
     await root.getByRole("button", { name: "Retry comparison read" }).click();
-    await expect(page.locator("#periodComparisonStatus")).toContainText("Comparing retained activity only");
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
     let release;
     app.delay(input => input.scenarioIds.length === 0 ? new Promise(resolve => { release = resolve; }) : undefined);
-    await page.locator("#comparisonSearch").fill("no match again");
+    await restoreLegacySearch(page, "no match again");
     await expect.poll(() => Boolean(release)).toBe(true);
-    await page.locator("#comparisonSearch").fill(periodQuery);
-    await expect(root.locator('[data-period-side="later"]')).toContainText("2 matching records across all pages");
+    await restoreLegacySearch(page, periodQuery);
+    await expect(root.locator('[data-period-side="later"]')).toContainText("Exact matching records (2)");
     release(); app.delay(null);
-    await expect(root.locator('[data-period-side="later"]')).toContainText("2 matching records across all pages");
+    await expect(root.locator('[data-period-side="later"]')).toContainText("Exact matching records (2)");
     await expect(page.locator("#pageAction")).not.toBeVisible();
-    await root.getByRole("button", { name: "Stop comparing" }).click();
+    await page.getByRole("button", { name: "Stop comparing" }).click();
     await page.locator('[data-analyze-mode="calls"]').click();
     await expect(page.locator("#callSortControls")).toBeVisible();
 });
@@ -197,7 +322,7 @@ test("an in-flight comparison is invalidated during an unchanged stored reread a
     await openComparison(app);
     let releaseComparison, releaseSnapshot;
     app.delay(() => new Promise(resolve => { releaseComparison = resolve; }));
-    await page.locator("#comparisonSearch").fill("request 0");
+    await restoreLegacySearch(page, "request 0");
     await expect.poll(() => Boolean(releaseComparison)).toBe(true);
     app.delaySnapshot(() => new Promise(resolve => { releaseSnapshot = resolve; }));
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
@@ -206,8 +331,8 @@ test("an in-flight comparison is invalidated during an unchanged stored reread a
     await expect(page.locator("#periodComparison [data-period-side]")).toHaveCount(0);
     releaseComparison(); app.delay(null);
     releaseSnapshot(); app.delaySnapshot(null);
-    await expect(page.locator("#periodComparisonStatus")).toContainText("Comparing retained activity only");
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("2 matching records across all pages");
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
+    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (2)");
 });
 
 test("a permission-basis observation clears displayed findings while the accepted snapshot remains deferred", { timeout: 30000 }, async t => {
@@ -215,7 +340,7 @@ test("a permission-basis observation clears displayed findings while the accepte
     await openComparison(app);
     const snapshots = () => app.requests.filter(item => item.route === "/api/snapshot").length;
     const before = snapshots();
-    await page.locator("#comparisonSearch").focus();
+    await page.locator("#periodComparisonTitle").focus();
     app.observe({ basis: { ...app.basis, consentRevision: app.basis.consentRevision + 1 }, pendingCleanup: false });
     await expect(page.locator("#periodComparisonStatus")).toContainText("permission changed", { timeout: 12000 });
     await expect(page.locator("#periodComparison [data-period-side]")).toHaveCount(0);
@@ -228,19 +353,19 @@ test("comparison Outcome choices use both cohorts and a late facet read does not
     await openComparison(app);
     await selectActivityOption(page, "outcomeFilter", "unknown");
     await expect(page.locator('[data-period-side="baseline"]')).toContainText("No matching retained activity");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("1 matching records across all pages");
+    await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (1)");
     await selectActivityOption(page, "outcomeFilter", "all");
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("3 matching records across all pages");
+    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (3)");
     let release;
     app.delay(() => new Promise(resolve => { release = resolve; }));
-    await page.locator("#comparisonSearch").fill("request 0");
+    await restoreLegacySearch(page, "request 0");
     await expect.poll(() => Boolean(release)).toBe(true);
     await page.locator("#outcomeFilter-control").click();
     const choice = page.locator('.select-popup .select-option[data-value="failure"]');
     await choice.click();
     await expect(choice).toHaveAttribute("aria-selected", "false");
     release(); app.delay(null);
-    await expect(page.locator("#periodComparisonStatus")).toContainText("Comparing retained activity only");
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
     await expect(page.locator("#outcomeFilter-control")).toHaveAttribute("aria-expanded", "true");
     await expect(choice).toHaveAttribute("aria-selected", "false");
     await page.keyboard.press("Escape");
@@ -263,6 +388,6 @@ test("inconsistent derived response shows an error and clears comparison tables 
     await expect(page.locator("#outcomeFilter-control")).not.toContainText("-1");
     app.alterComparison(null);
     await page.getByRole("button", { name: "Retry comparison read", exact: true }).click();
-    await expect(page.locator("#periodComparisonStatus")).toContainText("Comparing retained activity only");
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
     await expect(page.locator("#outcomeFilter-control")).toContainText("A: 3; B: 4");
 });

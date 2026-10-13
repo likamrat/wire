@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { extractGraphActivities } from "../lib/graph-history.mjs";
-import { fixture, exportCatalogFor, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary } from "./helpers.mjs";
 
 const proofs = process.env.WORKIQ_ABOUT_PROOFS;
 const records = [fixture("about-one"), fixture("about-two")];
@@ -36,10 +36,11 @@ async function setup(t, source = records, sourceCoverage = coverage) {
     };
     const server = createServer(async (req, res) => {
         if (req.url === "/" && req.method === "GET") { res.setHeader("Content-Type", "text/html"); return res.end(renderHtmlShell("a".repeat(64), "about-fixture")); }
-        if (req.url === "/favicon.ico") return res.writeHead(204).end();
+        if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};
         res.setHeader("Content-Type", "application/json");
+        if (req.method === "POST" && req.url === "/api/evaluation/automatic/summary") return res.end(JSON.stringify(automaticScoreOffSummary()));
         if (req.url === "/api/snapshot") {
             if (holdZone && input.timeContext.timeZone === "UTC") await holdZone;
             last = buildActivityAnalytics(source, input);
@@ -200,11 +201,12 @@ test("unknown, empty and code-only evidence stay distinct, including a pending t
             window.dispatchEvent(new StorageEvent("storage", { key: "workiq-evidence.time-zone", newValue: "UTC" }));
         });
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
-        assert.equal(await page.locator("#displayTimeZoneLink").innerText(), "Los Angeles time");
+        assert.equal(await page.locator("#displayTimeZone").inputValue(), "UTC");
+        assert.match(await page.locator("#displayTimeEffective").textContent(), /Updating time zone\. Still using America\/Los_Angeles/);
         assert.match(await page.locator("#collectionEvidenceDetails").textContent(), /5:00:00 AM GMT-7/);
         assert.doesNotMatch(await page.locator("#coverage").innerText(), /GMT|UTC/);
     } finally { release(); }
     await ready(page);
-    assert.equal(await page.locator("#displayTimeZoneLink").innerText(), "UTC");
+    assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /UTC/);
     assert.match(await page.locator("#collectionEvidenceDetails").textContent(), /12:00:00 PM GMT/);
 });

@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { chooseTheme, exportCatalogFor, fixture, selectActivityOption, navigateSettings, automaticScoreOffSummary } from "./helpers.mjs";
+import { chooseTheme, exportCatalogFor, fixture, selectActivityOption, navigateSettings, automaticScoreOffSummary, openSourceEditor } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WORKIQ_SETTINGS_HELP_PROOFS;
@@ -42,7 +42,7 @@ async function setup(t, approved = true) {
             res.setHeader("Content-Type", "text/html");
             return res.end(renderHtmlShell("a".repeat(64), "settings-help"));
         }
-        if (req.url === "/favicon.ico") return res.writeHead(204).end();
+        if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};
         res.setHeader("Content-Type", "application/json");
@@ -97,7 +97,7 @@ test("benign Settings messages stay with their originating section while uncerta
     const state = await setup(t), { page } = state;
     for (const changed of [false, true]) {
         await navigateSettings(page, "connection");
-        await page.locator("#editSource").click();
+        await openSourceEditor(page);
         if (changed) await page.locator("#sourceDatabase").fill("C:\\synthetic\\unsaved-data.db");
         await page.locator("#cancelSource").click();
         if (changed) assert.match(await page.locator("#settingsMessage").textContent(), /^Source edits discarded/);
@@ -158,6 +158,7 @@ async function target(page, id) {
 async function tooltip(page, id, text, mode = "hover") {
     const category = await control(page, id).evaluate(node => node.closest("[data-settings-section]")?.dataset.settingsSection);
     if (category && !await control(page, id).isVisible()) await navigateSettings(page, category);
+    if (id === "editSource" && await page.locator("#viewApprovedSource").isVisible()) await page.locator("#viewApprovedSource").click();
     await page.keyboard.press("Escape");
     await page.evaluate(() => document.activeElement.blur());
     await page.mouse.move(0, 0);
@@ -251,12 +252,12 @@ test("collection actions explain consequences on hover and Tab without writes; E
     await page.keyboard.press("Escape");
     await page.evaluate(() => {
         document.activeElement.blur();
-        document.querySelector("#editSource").setAttribute("aria-describedby", "connectionSummary");
+        document.querySelector("#editSource").setAttribute("aria-describedby", "connectionStatus");
     });
     await control(page, "editSource").focus();
-    assert.equal(await control(page, "editSource").getAttribute("aria-describedby"), "connectionSummary evidence-tooltip");
+    assert.equal(await control(page, "editSource").getAttribute("aria-describedby"), "connectionStatus evidence-tooltip");
     await page.keyboard.press("Escape");
-    assert.equal(await control(page, "editSource").getAttribute("aria-describedby"), "connectionSummary");
+    assert.equal(await control(page, "editSource").getAttribute("aria-describedby"), "connectionStatus");
     await control(page, "editSource").evaluate(node => node.removeAttribute("aria-describedby"));
     await tooltip(page, "editSource", copy.editSource, "keyboard");
     await page.evaluate(() => { location.hash = "home"; });

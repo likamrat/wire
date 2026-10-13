@@ -161,7 +161,7 @@ test("chart headers keep compact period controls, readable timezone and consiste
             assert.equal(metrics.select.height, 44, "Styled select keeps touch-sized height");
             assert.ok(metrics.select.width >= 76 && metrics.select.width <= 96, "Selected word and chevron have restrained width");
             assert.match(await page.locator("#chartReadingNotes").textContent(), /Weeks start Monday.*display time zone/);
-            assert.match(await page.locator("#displayTimeZoneLink").getAttribute("aria-label"), /America\/Los_Angeles/);
+            assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /America\/Los_Angeles/);
             assert.ok(metrics.pageWidth <= width, "No document overflow");
             for (const [key, box] of Object.entries(metrics).filter(([, value]) => value?.width)) contained(box, metrics.heading, key);
             if (metrics.heading.width > 576) {
@@ -341,7 +341,7 @@ test("touch targets and long dynamic zones remain usable without overlapping or 
     await help.tap();
     await page.locator("#meaningReading>summary").tap();
     assert.equal(await page.locator("#chartReadingNotes").isVisible(), true);
-    assert.match(await page.locator("#displayTimeZoneLink").getAttribute("aria-label"), /America\/North_Dakota\/New_Salem/);
+    assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /America\/North_Dakota\/New_Salem/);
     assert.doesNotMatch(await page.locator("#chartReadingNotes").innerText(), /America\/North_Dakota\/New_Salem/);
     await help.tap();
     for (const size of ["16px", "20px"]) {

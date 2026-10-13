@@ -36,7 +36,7 @@ test("an older retained human prompt changes from unverified to Your through ori
     await page.goto(app.runtime().url + `#request?request=${encodeURIComponent(human.scenarioId)}`); await ready(page);
     const reader = page.locator(".request-original");
     assert.equal(await reader.getByRole("heading", { name: "Copilot chat prompt", exact: true }).count(), 1);
-    assert.equal(await reader.locator(".reader-state").textContent(), "Author unverified");
+    assert.equal(await reader.locator(".reader-state").textContent(), "This older record has no sender details");
     if (proof) { await mkdir(proof, { recursive: true }); await reader.screenshot({ path: path.join(proof, "retained-human-before.png") }); }
     await app.runtime().collector.collectNow();
     await (await revealStoredRefresh(page)).click(); await ready(page);
@@ -77,8 +77,9 @@ test("collector -> real server -> Activity, reader and new report preserve truth
     for (const item of app.cases) {
         await page.locator("#activitySearch").fill(item.data.content.slice(0, 40)); await ready(page); await openActivitySessions(page);
         const row = page.locator(`.request-row[data-view-key="request:${item.scenarioId}"]`);
-        const caption = item.actor === "user" ? "Your prompt" : item.actor === "agent" ? "Agent prompt" : "Copilot chat prompt / author unverified";
-        assert.equal(await row.locator(".full-text-preview-label").textContent(), caption, item.name);
+        if (item.actor === "unknown") assert.match(await row.locator(".full-text-preview-label").textContent(),
+            /Copilot chat prompt \/ (Who sent this was not recorded|This older record has no sender details|Recorded sender details disagree|The recorded sender format is not supported|Recorded as system-supplied context|Recorded sender details could not be verified)/, item.name);
+        else assert.equal(await row.locator(".full-text-preview-label").textContent(), item.actor === "user" ? "Your prompt" : "Agent prompt", item.name);
     }
     await page.locator("#activitySearch").fill(""); await ready(page);
     await navigateMain(page, "home"); await ready(page);
@@ -126,7 +127,7 @@ test("collector -> real server -> Activity, reader and new report preserve truth
         await page.goto(app.runtime().url + `#request?request=${encodeURIComponent(item.scenarioId)}`); await ready(page);
         const label = promptAuthorship.label({ authorship: { actor: item.actor, basis: item.basis } }, { originKind: "copilot-chat" });
         assert.equal(await reader.getByRole("heading", { name: label, exact: true }).count(), 1, item.name);
-        if (item.actor === "unknown") assert.match(await reader.innerText(), /Author unverified/);
+        if (item.actor === "unknown") assert.equal(await reader.locator(".reader-state").count(), 1);
         else assert.doesNotMatch(await reader.innerText(), /Author unverified/);
         const toggle = reader.locator(".full-text-toggle");
         if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();

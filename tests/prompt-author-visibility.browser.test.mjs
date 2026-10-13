@@ -11,7 +11,7 @@ import { contrast, hue, distance } from "./color-measurements.mjs";
 const proofs = process.env.WIRE_AUTHOR_VISIBILITY_PROOFS;
 const ready = page => page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 
-test("Your prompt uses a distinctive shared accent on real light/navy list and detail surfaces", { timeout: 45000 }, async t => {
+test("Your prompt uses a distinctive shared accent on real light/dark list and detail surfaces", { timeout: 45000 }, async t => {
     const app = await authorFilterFixture(t), selected = new Set(["ownMail", "agentMail", "unverified"].map(key => app.cases[key].scenarioId));
     await replaceEvidence(app.context, () => ({ records: app.state.evidence.filter(record => selected.has(record.scenarioId)), importCoverage: app.state.importCoverage }));
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1200, height: 1100 }, reducedMotion: "reduce" });
@@ -31,7 +31,7 @@ test("Your prompt uses a distinctive shared accent on real light/navy list and d
     for (const theme of ["light", "dark"]) for (const width of [1200, 375]) {
         await page.setViewportSize({ width, height: 1100 });
         await page.goto(app.runtime.url + "#activity"); await ready(page); await chooseTheme(page, theme); await openActivitySessions(page);
-        const group = page.locator(`.session-group[data-session-id="${app.chatId}"]`);
+        const group = page.locator("#activityList");
         const ownRow = group.locator(`.request-row[data-view-key="request:${ownId}"]`);
         const check = ownRow.locator("input[type=checkbox]");
         if (await check.isChecked()) await check.uncheck();
@@ -52,7 +52,7 @@ test("Your prompt uses a distinctive shared accent on real light/navy list and d
             assert.ok(own && agent && unknown);
             assert.equal(own.label, "Your prompt");
             assert.equal(agent.label, "Agent prompt");
-            assert.match(unknown.label, /author unverified/);
+            assert.match(unknown.label, /Who sent this was not recorded/);
             for (const cue of cues) {
                 assert.ok(contrast(cue.color, cue.background) >= 4.5, `${theme}/${state}: text contrast`);
                 assert.ok(contrast(cue.borderColor, cue.background) >= 3, `${theme}/${state}: marker contrast`);
@@ -81,7 +81,7 @@ test("Your prompt uses a distinctive shared accent on real light/navy list and d
     if (proofs) await writeFile(path.join(proofs, "palette-measurements.json"), JSON.stringify(observations, null, 2));
     for (const observation of observations.filter(item => item.surface === "list")) {
         const own = observation.cues.find(cue => cue.actor === "user"), agent = observation.cues.find(cue => cue.actor === "agent");
-        assert.ok(hue(own.color) >= 180 && hue(own.color) <= 195, "Your prompt has an intentional cyan identity, not the general muted-blue link accent");
+        assert.ok(hue(own.color) >= 195 && hue(own.color) <= 220, "Your prompt keeps a muted blue identity, distinct from neutral interaction ink");
         assert.ok(distance(own.color, agent.color) >= 12, "Your and Agent remain visibly distinct");
     }
 });

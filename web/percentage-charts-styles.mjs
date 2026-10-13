@@ -15,13 +15,17 @@ export const percentageChartStyles = `
 .percentage-ring a:focus:not(:focus-visible) {outline:none}
 .percentage-face.percentage-active {fill:var(--column-label);fill-opacity:1}
 .percentage-legend {list-style:none;margin:0;padding:0;min-width:0;display:grid;gap:8px}
-.percentage-legend-row {display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,max-content);align-items:center;column-gap:8px;color:var(--ink);min-width:0}
+/* Preserve the existing label/count/bar positions around the larger service glyph. */
+.percentage-card[data-breakdown=services] {--percentage-icon-size:24px;--percentage-icon-gap:4px}
+.percentage-legend-row {display:grid;grid-template-columns:var(--percentage-icon-size,20px) minmax(0,1fr) minmax(0,max-content);align-items:center;column-gap:var(--percentage-icon-gap,8px);color:var(--ink);min-width:0}
+.percentage-card[data-breakdown=services] .percentage-value {margin-inline-start:4px}
 .percentage-tool-list .percentage-legend-row {grid-template-columns:minmax(0,1fr) minmax(0,max-content)}
 .percentage-cue {display:flex;align-items:center;justify-content:center;color:var(--column-label)}
-.percentage-cue svg {width:20px;height:20px;fill:currentColor}
-.percentage-label {display:block;min-width:44px;max-width:100%;overflow-wrap:anywhere;font-size:var(--type-small);line-height:1.4;min-height:44px;align-content:center;border-radius:var(--radius-small)}
+.percentage-cue svg {width:var(--percentage-icon-size,20px);height:var(--percentage-icon-size,20px);fill:currentColor}
+.percentage-label {display:block;justify-self:start;min-width:44px;max-width:100%;padding-inline:6px;overflow-wrap:anywhere;font-size:var(--type-small);line-height:1.4;min-height:44px;align-content:center;border-radius:var(--radius-small)}
 .percentage-label[href] {color:var(--accent);text-decoration:none;scroll-margin-block:calc(var(--app-header-height,76px) + 16px) 16px}
-.percentage-label[href]:is(:hover,:active) {background:var(--canvas);color:var(--ink)}
+.percentage-label[href]:hover {background:var(--hover);color:var(--ink)}
+.percentage-label[href]:active {background:var(--pill-pressed);color:var(--ink)}
 .percentage-label:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
 .percentage-value {display:flex;align-items:baseline;justify-content:flex-end;flex-wrap:wrap;gap:0 .35em;font-size:var(--type-small);line-height:1.4;min-width:0;max-width:100%;overflow-wrap:anywhere;text-align:end;font-variant-numeric:tabular-nums}
 .percentage-value>* {min-width:0;max-width:100%}
@@ -59,9 +63,10 @@ export const percentageChartStyles = `
  .percentage-card[data-breakdown=outcomes] .percentage-content {grid-template-columns:minmax(0,1fr)}
 }
 @container(max-width:22rem) {
- .percentage-legend-row {grid-template-columns:20px minmax(0,1fr)}
+ .percentage-legend-row {grid-template-columns:var(--percentage-icon-size,20px) minmax(0,1fr)}
  .percentage-tool-list .percentage-legend-row {grid-template-columns:minmax(0,1fr)}
  .percentage-value {grid-column:2/-1;justify-content:flex-start;text-align:start}
+ .percentage-card[data-breakdown=services] .percentage-value {margin-inline-start:0}
  .percentage-tool-list .percentage-value {grid-column:1/-1}
  .percentage-table :is(th,td) {padding-inline:3px}
  .percentage-table thead {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}

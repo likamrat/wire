@@ -41,6 +41,9 @@ for (const succeeded of [true, false]) for (const completion of [false, true]) {
         assert.doesNotThrow(() => presentation.summarize(model.overview.metrics, model.overview));
         const shown = present(view);
         assert.equal(shown.findings.operational[0].boundary, "reported-outcomes");
+        assert.deepEqual(shown.findings.operational[0].counts, {
+            calls: 1, succeeded: Number(succeeded), failed: Number(!succeeded), other: 0,
+        });
         assert.match(shown.findings.operational[0].text, succeeded ? /Reported outcomes: 1 recorded call succeeded/ : /Reported outcomes: 1 of 1 recorded call failed/);
         const gaps = shown.findings.operational.filter(row => row.kind === "execution-gap");
         assert.equal(gaps.length, Number(!completion));
@@ -68,6 +71,7 @@ test("legacy boundary guards retain partial coverage and reject over-counted or 
     const { overview } = buildAssessmentModel(state);
     const partial = presentation.summarize(overview.metrics, { reviewStatuses: overview.reviewStatuses.slice(0, 1) });
     assert.equal(partial.findings.operational[0].boundary, "completion-evidence");
+    assert.deepEqual(partial.findings.operational[0].counts, { calls: 2, succeeded: 1, failed: 0, other: 1 });
     assert.match(text(partial.findings), /context covers 1 of 2 requests and 1 of 2 calls/);
     assert.match(text(partial.findings), /sign-in was required/);
     assert.equal(partial.findings.operational.some(row => row.kind === "execution-gap"), false, "A partial population is not compared as a complete reported total");
@@ -116,9 +120,9 @@ test("source-supported failure and positive answer findings stay separate across
     const before = JSON.stringify(state);
     const earlier = present(detail(model, records[0].scenarioId)), later = present(detail(model, records[1].scenarioId));
     assert.match(text(earlier.findings), /sign-in was required for the recorded call/);
-    assert.match(text(earlier.findings), /answer not correct/);
-    assert.match(text(later.findings), /answer correct/);
-    assert.doesNotMatch(text(later.findings), /sign-in was required|answer not correct|two documents/);
+    assert.match(text(earlier.findings), /Answer: Not correct/);
+    assert.match(text(later.findings), /Answer: Correct/);
+    assert.doesNotMatch(text(later.findings), /sign-in was required|Answer: Not correct|two documents/);
     for (const summary of [earlier, later]) {
         assert.match(summary.findings.scope, /original request group/);
         assert.match(summary.findings.rationale, /reasons.*not retained/);
@@ -132,7 +136,7 @@ test("a failed lookup can coexist with a positive saved explanatory-answer asses
     const { model } = qualityDisplayFixture({ records: [records[0]], judgments: ["pass"] });
     const result = present([...model.details.values()][0]);
     assert.match(text(result.findings.operational), /1 of 1 recorded call failed/);
-    assert.match(text(result.findings.answers), /AI assessment: answer correct/);
+    assert.match(text(result.findings.answers), /Saved AI review \/ Answer: Correct/);
     assert.equal(result.evidence.quality.accuracy.rows[0].passShare.value, 1);
     assert.doesNotMatch(text(result.findings), /request failed|answer failed|currently.*sign/);
 });
@@ -173,14 +177,14 @@ test("success without assessment, insufficient evidence and failed evaluator rem
     const { records } = retainedContextFixture();
     const success = records[1];
     for (const [judgments, expected] of [
-        [[], /No saved answer or action assessment/],
-        [["unassessed"], /Insufficient recorded evidence/],
-        [["error"], /evaluator could not complete; this is not a failed answer/],
+        [[], /No saved review/],
+        [["unassessed"], /Not enough saved evidence/],
+        [["error"], /Review could not finish; this is not a failed verdict/],
     ]) {
         const { model } = qualityDisplayFixture({ records: [success], judgments });
         const result = present([...model.details.values()][0]);
         assert.match(text(result.findings), expected);
-        assert.doesNotMatch(text(result.findings), /answer not correct|sign-in was required/);
+        assert.doesNotMatch(text(result.findings), /Answer: Not correct|sign-in was required/);
         assert.equal(result.evidence.quality.accuracy.assessed, 0);
         assert.equal(result.findings.rationale, "");
     }
@@ -193,13 +197,13 @@ test("unknown legacy reasons, inapplicable checks and evaluator-error metrics ne
     const result = presentation.summarize([metric]);
     assert.match(text(result.findings), /Reason not retained for these unassessed requests/);
     assert.match(text(result.findings), /Detailed call-status context is unavailable/);
-    assert.doesNotMatch(text(result.findings), /Insufficient recorded evidence/);
+    assert.doesNotMatch(text(result.findings), /Not enough saved evidence/);
     const unassessed = quality("accuracy", { personal: true, unassessed: 1 });
     unassessed.reason = "not-applicable";
     assert.match(text(presentation.summarize([unassessed]).findings), /Check not applicable/);
     unassessed.status = "evaluator-error"; unassessed.reason = "evaluator-failure";
     unassessed.counts = { pass: 0, fail: 0, unassessed: 0, evaluatorError: 1 };
-    assert.match(text(presentation.summarize([unassessed]).findings), /Evaluator error, not a failed/);
+    assert.match(text(presentation.summarize([unassessed]).findings), /Review could not finish, not a failed/);
 });
 
 test("opposed origins and rubrics retain independent findings and deduplicated coverage", () => {
@@ -214,8 +218,8 @@ test("opposed origins and rubrics retain independent findings and deduplicated c
     const summary = presentation.summarize(metrics);
     assert.equal(summary.evidence.quality.accuracy.assessed, 1);
     assert.equal(summary.evidence.quality.accuracy.rows.length, 3);
-    assert.match(text(summary.findings), /Your feedback: answer not correct in 1 request/);
-    assert.match(text(summary.findings), /AI assessment: answer correct in 1 request/);
+    assert.match(text(summary.findings), /Your feedback \/ Answer: Not correct \(1 request\)/);
+    assert.match(text(summary.findings), /Saved AI review \/ Answer: Correct \(1 request\)/);
     assert.deepEqual(summary.evidence.quality.accuracy.rows.map(row => row.passShare.value), [0, 1, 1]);
     assert.deepEqual(metrics, before);
 });

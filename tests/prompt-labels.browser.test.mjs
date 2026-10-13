@@ -113,7 +113,7 @@ test("actual history attribution never promotes a user role or forwarded wording
 test("wired Activity and detail readers use Prompt without inventing author identity", { timeout: 45000 }, async t => {
     const { page, sources } = await setup(t);
     await page.goto("https://wire.invalid/#activity"); await ready(page); await openActivitySessions(page);
-    assert.deepEqual(await page.locator(".request-row .full-text-preview-label").allTextContents(), sources.map(() => "Copilot chat prompt / author unverified"));
+    assert.deepEqual(await page.locator(".request-row .full-text-preview-label").allTextContents(), sources.map(() => "Copilot chat prompt / This older record has no sender details"));
     assert.equal(await page.getByRole("button", { name: "Read prompt", exact: true }).count(), 1);
     const row = page.locator(".request-row").filter({ hasText: "ARTIFICIAL PROMPT ONLY" });
     await row.locator("input").check();
@@ -125,7 +125,7 @@ test("wired Activity and detail readers use Prompt without inventing author iden
     assert.equal(await row.getByRole("button", { name: "Hide prompt", exact: true }).getAttribute("aria-expanded"), "true");
     await navigateMain(page, "reports"); await ready(page);
     await page.locator("#reportRequests > summary").click();
-    assert.deepEqual(await page.locator("#reportList .full-text-preview-label").allTextContents(), ["Copilot chat prompt / author unverified"]);
+    assert.deepEqual(await page.locator("#reportList .full-text-preview-label").allTextContents(), ["Copilot chat prompt / This older record has no sender details"]);
     assert.match(await page.locator("#reportRequestSearchHelp").textContent(), /retained prompt text/);
     for (const source of sources) {
         await page.goto(`https://wire.invalid/#request?request=${source.scenarioId}`); await ready(page);
@@ -136,7 +136,7 @@ test("wired Activity and detail readers use Prompt without inventing author iden
             assert.match(await reader.innerText(), /Prompt not available/);
             assert.equal(await reader.locator("button").count(), 0);
         } else {
-            assert.equal(await reader.getByText("Author unverified", { exact: true }).count(), 1);
+            assert.equal(await reader.getByText("This older record has no sender details", { exact: true }).count(), 1);
             const toggle = reader.locator(".full-text-toggle");
             if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
             assert.equal(await reader.locator("pre").textContent(), source.userPrompt.text);

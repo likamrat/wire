@@ -7,7 +7,7 @@ grading workflow.
 
 ## What the dimensions mean
 
-- **Accuracy:** unsupported semantic correctness is unassessed. Optional personal
+- **Answer correctness:** unsupported semantic correctness is unassessed. Optional personal
   verdicts and scoped model assessments have distinct origins; neither is
   labeled as an automatic local measurement.
 - **Speed:** recorded tool start-to-completion durations and owned HTTP
@@ -28,12 +28,16 @@ grading workflow.
   or changes capture consent. The runtime-local request has an operation ID;
   status is read through collection status. After a restart or uncertain reply,
   inspect current timing facts rather than automatically repeating the request.
-- **Trust:** answer trust and action trust are separate. A successful tool,
-  HTTP 2xx, authorization header, or captured answer does not establish correctness,
-  citation validity, or human authorization. Separately approved model action
-  assessments check recorded intent alignment, not proof of authorization.
+- **Answer support:** whether saved evidence supports the answer, not whether a
+  citation or successful tool result is present.
+- **Tool use vs. request:** the model's review of whether recorded tool use fit
+  what was asked. This does not establish human permission or task completion.
+- **Permission for tool use:** separate personal feedback about a person's
+  permission. Given, Not given and Not sure appear only under **Your feedback**;
+  saving feedback does not grant or revoke permission. Local unsupported checks
+  remain **Not checked automatically**, not a borrowed AI request-match result.
 
-Current views and newly prepared reports use Accuracy, Speed and Trust; the original
+Current views and newly prepared reports name these distinct review meanings; the original
 Cost metric is retired, not zero. Historical validators still read its original
 four-dimension facts. Saved artifacts are never rewritten. Evaluator allowance,
 observed spending and unknown billing remain in score-processing controls.
@@ -63,7 +67,7 @@ findings sit beside each original request in the context reader, not against
 the combined chronology or a neighboring request's changed intent.
 **Saved assessment details and counts** keeps exact verdicts, percentages and
 request coverage secondary rather than presenting a headline quality grade.
-Answer correctness, answer support and actions matching the request remain
+Answer correctness, answer support and tool use vs. request remain
 separate. Only identical covered and eligible request identities allow copy
 saying the three model checks cover the same requests. Equal totals alone are
 not enough. Different coverage and model/personal origins remain visible.
@@ -158,6 +162,45 @@ it does not pool counts or claim equal request populations. Per-check reason
 counts, coverage and methodological explanations remain in saved details.
 The v1 findings projection also identifies `singleInteraction` and each attempt
 finding's `count`; its underlying detailed wording remains available.
+
+`createAssessmentWording` in `web/assessment-presentation.mjs` is the single
+human-wording source for the presenter, specific help, personal feedback,
+current comparisons and new report output. It resolves the saved check ID,
+check version and origin together, including the corresponding normalized
+report qualifiers. The `action-trust` dimension alone cannot choose between
+request matching and permission. Unknown/future versions, absent identity and
+conflicting check/origin combinations display **Saved review (type not recorded)**.
+Available legacy numbers stay available; missing meaning is not missing data.
+Exact definition IDs, versions, model/rubric and coverage remain in details.
+Internal identifiers, contracts, scoring prompts and frozen facts are unchanged.
+For unknown review meanings, secondary comparison labels show any retained
+check ID and version; absent identity is explicitly not recorded. They do not
+substitute a current definition for a historical one.
+When the sides have different definitions, each saved identity appears beside
+its own value, even if both human labels say the type was not recorded. Only
+identical source/model/rubric metadata can be shared above those values; a
+shared check identity is shown only when it is the same on both sides. Missing
+peers never inherit the other side's definition.
+
+The shell injects this self-contained factory using the existing serialized
+factory pattern; server-side consumers use the same default factory. The
+comparison formatter's `metricLabel` and `comparisonLabel` consume whole facts,
+while a dimension-only label is deliberately nonspecific. Opposed meanings
+keep their own side labels rather than inheriting the earlier side's meaning.
+`includeOrigin` retains its existing opt-out behavior and all numeric formatting.
+The same formatter supplies period-table warning phrases and coverage units:
+partial coverage and reduced coverage remain different warnings, and unfamiliar
+warning IDs remain visible as saved warnings. Assessed requests, timed calls,
+timed requests and HTTP records are not interchangeable. Retained cost facts
+keep their priced-unit meaning; no cost measure is introduced into current views.
+Warnings say that recorded results, timing or cost data are missing, not that
+nobody attempted a review or measurement. Reduced coverage means a smaller
+share with results, even if the absolute sample count increased. Different
+kinds or timing boundaries use neutral results wording rather than borrowing
+one side's population.
+The permission feedback dialog reads the actual same-check local metric, never
+the model's separate request-match result. Its narrow header wraps without
+shrinking text or changing control order.
 
 `bindDetails` and a stable `disclosureKey` connect the saved-details disclosure
 to the existing panel-local presentation store. Overview keys use the exact

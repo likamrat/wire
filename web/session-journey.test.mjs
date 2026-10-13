@@ -33,3 +33,13 @@ test("session report selects canonical owners across pages, never same-name sess
     assert.equal(journey.reportIds(undefined, "a"), null);
     assert.equal(journey.reportIds({ requests: [{ scenarioId: "broken" }] }, "a"), null);
 });
+
+test("return routes allow only existing local state and one bounded source return", () => {
+    const journey = createSessionJourney();
+    const original = { view: "analyze", mode: "calls", page: 2, authors: "user", search: "legacy private phrase" };
+    const nested = { ...original, session: "chat", returnToSessions: { ...original, returnToSessions: original },
+        href: "https://elsewhere.invalid", capability: "secret", receipt: { id: "receipt" }, unknown: ["value"] };
+    assert.deepEqual(journey.returnRoute(nested, true), { ...original, session: "chat", returnToSessions: original });
+    assert.equal(journey.returnRoute({ view: "https://elsewhere.invalid" }), null);
+    assert.equal(journey.returnRoute(undefined), null);
+});

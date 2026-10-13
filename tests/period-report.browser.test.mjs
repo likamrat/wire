@@ -10,7 +10,7 @@ import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { readSavedReportFile, loadSavedReportSource, createSavedArtifactDescriptor } from "../lib/report-artifacts.mjs";
 import { extractReportFile } from "../lib/search-corpus-report-content.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
-import { privateFixture, chooseTheme } from "./helpers.mjs";
+import { privateFixture, chooseTheme, restoreLegacySearch } from "./helpers.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { assessmentSource } from "../lib/assessment-read-model.mjs";
 
@@ -55,7 +55,7 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     });
     await page.goto(server.url + "#analyze?services=Files&includeMissingService=true");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#activitySearch").fill(periodQuery);
+    await restoreLegacySearch(page, periodQuery);
     await page.locator("#comparePeriods").click();
     for (const [label, value] of [
         ["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
@@ -63,8 +63,8 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     ]) await page.getByLabel(label, { exact: true }).fill(value);
     await page.locator("#applyPeriodComparison").click();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("3 matching records");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("4 matching records");
+    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (3)");
+    await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (4)");
     const live = comparisons.at(-1);
     assert.ok(live);
     assert.equal((await loadBoardState(context)).exports.length, 0);

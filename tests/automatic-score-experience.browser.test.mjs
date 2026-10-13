@@ -139,7 +139,7 @@ test("local reply saving grants no scoring permission and its removal cannot era
     const enabled = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
     await page.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     assert.equal((await enabled).status(), 200);
-    await page.waitForFunction(() => document.querySelector("#assessmentSetup")?.textContent.includes("Response saving is on."));
+    await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
     for (const input of f.inputs) {
         const answer = input.events.find(event => event.type === "assistant.message"), timestamp = new Date().toISOString();
         const turnId = "saved-reply-" + input.record.scenarioId;

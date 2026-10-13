@@ -8,6 +8,7 @@ export const uxStyles = `
 @media(prefers-reduced-motion:reduce) {.pending-indicator {animation:none;border-style:dotted}}
 .fluent-icon {display:inline-block;flex:none;vertical-align:middle;fill:currentColor;width:var(--icon-size);height:var(--icon-size)}
 .fluent-icon[data-fluent-icon*="_16_"] {width:var(--icon-size-small);height:var(--icon-size-small)}
+.fluent-icon[data-fluent-icon*="_24_"] {width:24px;height:24px}
 .icon-action,.filter-chip {display:inline-flex;align-items:center;justify-content:center;gap:var(--pill-gap)}
 .icon-action>.fluent-icon,.filter-chip>.fluent-icon {display:block;flex:none}
 :where(button,.button-link):has(>.progress-slot) {position:relative;display:inline-flex;align-items:center;justify-content:center;text-align:center}

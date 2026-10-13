@@ -40,7 +40,7 @@ test("ordered search stream uses the capability header, no query URL and release
     globalThis.fetch = async (url, options) => {
         assert.equal(url, "/api/search/events");
         assert.equal(options.headers["X-Board-Capability"], "a".repeat(64));
-        assert.equal(options.body, "{}");
+        assert.equal(options.body, '{"schemaVersion":2}');
         assert.equal(options.credentials, "same-origin");
         return new Response(new ReadableStream({ start(controller) {
             controller.enqueue(new TextEncoder().encode(frames.map(frame => JSON.stringify(frame)).join("\n") + "\n"));

@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, openActivitySessions, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, openActivitySessions, selectActivityOption, openSourceEditor } from "./helpers.mjs";
 import { chooseReportScope, reportContents, scanReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -335,7 +335,7 @@ test("finite painted-control inventory has balanced real content insets across t
     await matrix("report-saved", [".report-downloads button"]);
     await navigateMain(page, "settings"); await ready(page);
     await matrix("settings-connection", ["#editSource", "#pauseCollection", "#collectNow"]);
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await matrix("settings-source-draft", ["#connectCollection", "#cancelSource"]);
     await page.locator("#cancelSource").click();
     await navigateSettings(page, "collection");

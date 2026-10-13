@@ -82,12 +82,14 @@ test("normal Analyze entry directly opens exact interactions and restores query,
     await expect(page.locator(".session-toggle")).toHaveCount(0);
     await expect(page.locator("#activityList .request-row")).toHaveCount(8);
     await expect(page.locator("#activityCount")).toHaveText("12");
-    await expect(page.locator("#homeInsights .assessment-scope")).toContainText("full retained interaction");
+    await expect(page.locator("#homeInsights .assessment-scope")).toContainText("all their recorded calls");
     await capture(page, "analyze-desktop-overview");
     await page.locator("#percentageCharts").scrollIntoViewIfNeeded();
     await capture(page, "analyze-desktop-chart-summaries", "#homeView");
+    await page.locator("#analyzeReviewDetails > summary").click();
     await page.locator("#homeInsights").scrollIntoViewIfNeeded();
     await capture(page, "analyze-desktop-interaction-insights", "#homeInsights");
+    await page.locator("#analyzeReviewDetails > summary").click();
     await page.locator("#resultsLink").focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#activityTitle")).toBeFocused();
     assert.match(page.url(), /#analyze$/);
@@ -216,7 +218,7 @@ test("legacy scopes, Calls paging, retained stale results and narrow keyboard en
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     await frames(page);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    for (const node of await page.locator(".primary-navigation a,#resultsLink").all()) {
+    for (const node of await page.locator("#navigationToggle,#resultsLink").all()) {
         assert.ok((await node.boundingBox()).height >= 44);
         await expect(node).toBeVisible();
     }
@@ -246,6 +248,8 @@ test("empty source still exposes Analyze recovery and existing Reports and Setti
     const { page } = await setup(t, []);
     await expect(page.locator("#activityList")).toContainText("No collected activity yet");
     await expect(page.locator("#checkActivity")).toHaveText("Refresh");
+    await expect(page.locator("#freshSourceSetup")).not.toBeVisible();
+    await page.locator("#freshHelp > summary").click();
     await expect(page.locator("#freshSourceSetup")).toBeVisible();
     await expect(page.locator("#activityCount")).toHaveText("0");
     await page.locator('[data-analyze-mode="calls"]').click();

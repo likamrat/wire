@@ -62,3 +62,43 @@ export const tokens = `
 :root[data-evidence-theme=light] {${light}}
 :root[data-evidence-theme=dark] {${dark}}
 `;
+
+// Screen surfaces are separate from the tokens embedded in saved reports and PDFs.
+const screenLight = `
+ --page:#f1f3f7;--paper:#ffffff;--canvas:#ebebeb;--hover:#e3e3e3;
+ --surface-shadow:0 2px 4px #26344d0a,0 8px 20px #26344d0a;
+ --ink:#202020;--muted:#565656;--rule:#c9c9c9;--control:#747474;
+ --accent:#303030;--accent-soft:#e9e9e9;--accent-fill:#303030;--on-accent:#ffffff;
+ --accent-hover:#dedede;--accent-pressed:#d5d5d5;--pill-pressed:#d9d9d9;
+ --danger:#b3261e;--delete-fill:#b3261e;--delete-ink:#ffffff;--performance-red:#b3261e;
+ --chart-failure:#b3261e;--screen-failure-high:#c23c32;--screen-failure-low:#9f2922;
+ --screen-prompt-user:#365f7a;
+ --focus:#303030;--scrim:#000000a6;
+`;
+const screenDark = `
+ --page:#101010;--paper:#191919;--canvas:#222222;--hover:#2b2b2b;
+ --surface-shadow:0 2px 4px #00000029,0 8px 20px #00000029;
+ --ink:#f2f2f2;--muted:#b8b8b8;--rule:#444444;--control:#888888;
+ --accent:#e0e0e0;--accent-soft:#2b2b2b;--accent-fill:#e0e0e0;--on-accent:#191919;
+ --accent-hover:#333333;--accent-pressed:#3b3b3b;--pill-pressed:#353535;
+ --danger:#f28b82;--delete-fill:#f28b82;--delete-ink:#281210;--performance-red:#f28b82;
+ --chart-failure:#f28b82;--screen-failure-high:#f28b82;--screen-failure-low:#be635c;
+ --chart-fade-strength:70%;
+ --screen-prompt-user:#95b9d2;
+ --focus:#e0e0e0;--scrim:#000000bd;
+`;
+
+export const screenFontStack = '"Asta Sans","Segoe UI","Segoe UI Web (West European)",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",sans-serif';
+
+export const screenTokens = `${tokens}
+:root {
+ --font:${screenFontStack};
+ --weight-regular:400;--weight-medium:500;--weight-strong:600;--tracking-heading:0;
+}
+:root {${screenLight}}
+@media(prefers-color-scheme:dark) {
+ :root:not([data-evidence-theme]) {${screenDark}}
+}
+:root[data-evidence-theme=light] {${screenLight}}
+:root[data-evidence-theme=dark] {${screenDark}}
+`;

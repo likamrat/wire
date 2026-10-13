@@ -49,7 +49,8 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
         const pending = client.snapshot();
         const snapshot = current?.snapshot;
         onStatus?.(pending.receipt || pending.storageBlocked ? { state: "paused", reason: pending.message || "Check the earlier approval result. No request will be repeated." }
-            : snapshot ? { state: snapshot.state, reason: reasons[snapshot.reason] } : null);
+            : snapshot ? { state: snapshot.state, reason: reasons[snapshot.reason],
+                reasonCode: stopReceipt || stopping || stopStorageWarning ? null : snapshot.reason } : null);
         if (pending.receipt || pending.storageBlocked) row.receive({
             state: "paused", reason: pending.message || "Check the earlier approval result.", busy: false,
         });

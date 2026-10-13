@@ -30,6 +30,54 @@ async function setup(t, records, controllerOptions) {
     return { context, runtime, page, errors, requests };
 }
 
+test("expired export capability is rejected before dispatch and permits a fresh reviewed report after revalidation", { timeout: 30000 }, async t => {
+    const { context, runtime, page, errors, requests } = await setup(t, [fixture("rejected-export")]);
+    await page.goto(runtime.url + "#reports?task=create"); await ready(page);
+    await chooseReportScope(page, "all");
+    const original = await scanReport(page);
+    await page.locator(".attestation input[data-review-control]").check();
+    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    await page.route("**/api/export", async route => {
+        const released = await page.request.post(runtime.url + "api/session/release", {
+            headers: { Origin: new URL(runtime.url).origin, "X-Board-Capability": route.request().headers()["x-board-capability"] },
+            data: {},
+        });
+        assert.equal(released.status(), 200);
+        await route.continue();
+    }, { times: 1 });
+    const rejectedResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
+    const renewal = page.waitForResponse(response => response.url().endsWith("/api/session"));
+    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    const rejected = await rejectedResponse;
+    assert.equal(rejected.status(), 403);
+    assert.equal((await rejected.json()).code, "session_expired");
+    await renewal;
+    await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    assert.equal(requests.filter(item => item.path === "/api/export").length, 1, "Expired export is never automatically replayed");
+    assert.equal(await page.getByRole("button", { name: "Check save status", exact: true }).count(), 0);
+    assert.match(await page.locator("#reportJourneyError").textContent(), /rejected before dispatch.*No files were written/);
+    assert.equal(await page.getByRole("button", { name: "1. Setup", exact: true }).isEnabled(), true);
+    await reportContents(page);
+    assert.equal(await page.locator("#reportClearSelection").isEnabled(), true);
+    assert.equal(await page.locator("#exportBtn").isDisabled(), true, "Session renewal does not validate old report authority");
+    await (await revealStoredRefresh(page)).click(); await ready(page);
+    const fresh = await scanReport(page);
+    assert.notEqual(fresh.previewId, original.previewId);
+    assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
+    await page.locator(".attestation input[data-review-control]").check();
+    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=saved]").waitFor();
+    assert.equal((await loadBoardState(context)).exports.length, 1);
+    assert.deepEqual(requests.filter(item => item.path === "/api/export").map(item => item.body.previewId), [original.previewId, fresh.previewId]);
+    assert.equal(requests.filter(item => item.path === "/api/privacy-review").length, 2);
+    assert.deepEqual(errors, []);
+});
+
 test("guided actual frontend: deliberate one-session scope, three stages and all genuine format downloads", { timeout: 180000 }, async t => {
     const records = [fixture("journey-a"), fixture("journey-b"), fixture("outside")];
     records[0].userPrompt.text = "JOURNEY_ORIGINAL Leila Navarro leila@example.invalid\npassword='JOURNEY_SECRET'\n<script>window.injected=true</script>";
@@ -335,7 +383,7 @@ test("preserved Selected review saves original frozen copies after an unrelated 
     assert.equal(accepted.scenarios.find(record => record.scenarioId === "preserved-unrelated").userPrompt.text, records[1].userPrompt.text);
     await navigateMain(page, "reports"); await openReportCreation(page);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
-    assert.match(await page.locator("#reportMatchingContext").textContent(), new RegExp(`Snapshot revision ${updated.revision};`));
+    assert.match(await page.locator("#reportMatchingContext").textContent(), /0 matching Work IQ tool calls in the current view/);
     assert.match(await page.locator("#reportPopulationNote").textContent(), /Includes 1 request group outside the current browsing filters/);
     assert.equal((await loadBoardState(context)).exports.length, 0);
 
@@ -374,7 +422,8 @@ test("Setup names excluded unsupported sources without scanning an empty populat
     assert.equal(await page.locator("#formatOptions").isVisible(), true);
     assert.equal(await page.locator("#exportBtn").isDisabled(), true);
     await page.locator("#scopeDetails > summary").click();
-    assert.match(await page.locator("#scopeExclusions").innerText(), /1 groups with unknown source identity/);
+    const excluded = page.locator("#scopeExclusions dl > div").filter({ hasText: "Request groups with unknown source identity" });
+    assert.equal(await excluded.locator("dd").innerText(), "1");
     assert.equal(requests.some(item => ["/api/preview", "/api/privacy-review", "/api/export"].includes(item.path)), false);
     assert.deepEqual(errors, []);
 });
@@ -558,7 +607,7 @@ test("final save survives read/lifecycle events, while an uncertain export is ne
     assert.equal((await loadBoardState(context)).exports.length, 2, "The interrupted response conceals a real synthetic save; do not repeat it");
     await (await revealStoredRefresh(page)).click(); await ready(page);
     await openReportLibrary(page);
-    assert.match(await page.locator("#savedReportCount").textContent(), /^2 reports/);
+    assert.equal(await page.locator("#bundles > summary").textContent(), "Saved reports (2)");
     assert.equal(requests.filter(request => request.path === "/api/export").length, 2);
     assert.deepEqual(errors, []);
 });

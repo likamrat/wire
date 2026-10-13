@@ -327,6 +327,7 @@ test("bulk report deletion preserves saved comparisons but invalidates their app
     await workspace.getByRole("checkbox", { name: "I reviewed this frozen comparison for disclosure.", exact: true }).check();
     await workspace.getByRole("button", { name: "Confirm disclosure", exact: true }).click();
     await page.waitForFunction(() => [...document.querySelectorAll("#comparisonWorkspace button")].some(node => node.textContent === "Save comparison" && !node.disabled));
+    await page.locator("#savedLibraryManagement > summary").click();
     await page.locator("#deleteAllReports").click();
     const dialog = page.locator('dialog[aria-labelledby="savedArtifactDeleteTitle"]');
     await dialog.getByRole("button", { name: "Delete 2 saved reports", exact: true }).waitFor();

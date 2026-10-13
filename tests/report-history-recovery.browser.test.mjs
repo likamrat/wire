@@ -398,4 +398,7 @@ test("UX-003 confirmed save with failed availability refresh stays explicit and 
     await refresh.click();
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     assert.equal(requests.filter(value => value === "/api/export").length, 1);
+    await page.getByRole("button", { name: "Check save status", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=saved]").waitFor();
+    assert.equal(requests.filter(value => value === "/api/export").length, 1);
 });

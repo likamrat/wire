@@ -2,6 +2,76 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createFreshActivity } from "./fresh-activity.mjs";
 
+test("a rejected source configuration stays a known failure after a stored-only recovery", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.fail(token, "Choose the Copilot app's absolute data.db path and CLI session-state directory. No other file tree is scanned.",
+        { rejected: true, reason: "source_paths_invalid" });
+    assert.equal(flow.snapshot().sourceUnknown, false);
+    assert.equal(flow.snapshot().message, "Source paths need attention.");
+    assert.equal(flow.snapshot().recovery, "source");
+    flow.retryApply();
+    flow.applied(9, "unchanged-source", []);
+    assert.equal(flow.snapshot().sourceUnknown, false);
+    assert.equal(flow.snapshot().message, "Source paths need attention.");
+    assert.match(flow.snapshot().context, /Stored activity refreshed/);
+    assert.doesNotMatch(flow.snapshot().context, /unknown|unconfirmed/);
+});
+
+test("only explicit pre-read reasons settle a source failure; unrelated errors remain unknown", () => {
+    for (const reason of ["source_paths_invalid", "source_mapping_unsupported", "source_metadata_unavailable", "", "INTERNAL", "EACCES", "runtime_unavailable"]) {
+        const flow = createFreshActivity(), token = flow.begin();
+        flow.fail(token, "Invented failed response", { reason });
+        assert.equal(flow.snapshot().sourceUnknown, !reason.startsWith("source_"));
+        assert.equal(flow.snapshot().recovery, reason.startsWith("source_") ? "source" : "stored");
+    }
+});
+
+test("failed stored recovery cannot erase a source rejection or manufacture an unknown check", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.fail(token, "Invalid saved paths", { reason: "source_paths_invalid", rejected: true });
+    flow.applied(9, "same", []);
+    assert.equal(flow.snapshot().message, "Source paths need attention.");
+    assert.match(flow.snapshot().context, /Stored activity refreshed/);
+    flow.retryApply();
+    flow.fail(token, "Stored snapshot unavailable");
+    assert.equal(flow.snapshot().message, "Stored view not updated.");
+    assert.equal(flow.snapshot().recovery, "stored");
+    assert.equal(flow.snapshot().sourceUnknown, false);
+    flow.retryApply(); flow.applied(9, "same", []);
+    assert.equal(flow.snapshot().message, "Source paths need attention.");
+    assert.equal(flow.snapshot().recovery, "source");
+    const next = flow.begin();
+    assert.notEqual(next, token);
+    assert.equal(flow.snapshot().sourceFailure, null, "Only a new explicit check replaces the failed source result");
+});
+
+test("reading a changed source retires only an obsolete known failure, not an unknown outcome", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.fail(token, "Old paths", { reason: "source_paths_invalid", configVersion: "old" });
+    flow.retryApply({ configVersion: "new" }); flow.applied(9, "new", []);
+    assert.equal(flow.snapshot().sourceFailure, null);
+    assert.equal(flow.snapshot().message, "Stored activity refreshed.");
+    assert.equal(flow.snapshot().context, "No source history was checked.");
+    const unknown = createFreshActivity(), pending = unknown.begin();
+    unknown.fail(pending, "Lost response", { configVersion: "old" });
+    unknown.retryApply({ configVersion: "new" }); unknown.applied(9, "new", []);
+    assert.equal(unknown.snapshot().sourceUnknown, true);
+    assert.equal(unknown.begin(), null);
+});
+
+test("an accepted changed-source snapshot retires a known failure without requiring a recovery click", () => {
+    for (const storedRecovery of [false, true]) {
+        const flow = createFreshActivity(), token = flow.begin();
+        flow.fail(token, "Old paths", { reason: "source_paths_invalid", configVersion: "old" });
+        if (storedRecovery) { flow.retryApply(); flow.applied(9, "old", []); }
+        flow.applied(10, "new", []);
+        assert.equal(flow.snapshot().sourceFailure, null);
+        assert.equal(flow.snapshot().recovery, null);
+        assert.equal(flow.snapshot().message, "Stored activity refreshed.");
+        assert.equal(flow.snapshot().context, "No source history was checked.");
+    }
+});
+
 test("restored pending source status stays read-only after a fresh stored snapshot", () => {
     const flow = createFreshActivity({ sourceUnknown: true });
     assert.equal(flow.begin(), null);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -8,7 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { time } from "../lib/time.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, privateFixture, selectActivityOption, chooseTheme, navigateMain, revealStoredRefresh } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, navigateMain, navigateSettings, revealStoredRefresh } from "./helpers.mjs";
 import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
 
 const key = "workiq-evidence.time-zone";
@@ -49,8 +49,8 @@ async function setup(t, init, sourceRecords = records) {
 }
 async function selectZone(page, zone) {
     if (!await page.locator("#displayTimeZone-control").isVisible()) {
-        await page.locator("#displayTimeZoneLink").click();
-        await ready(page);
+        await navigateMain(page, "settings"); await ready(page);
+        await navigateSettings(page, "display");
     }
     await selectActivityOption(page, "displayTimeZone", zone);
     await ready(page);
@@ -60,22 +60,23 @@ function lastSnapshot(requests) { return requests.filter(r => r.path === "/api/s
 test("display preference governs calendar data, reset, reload, navigation and new frozen report context", { timeout: 90000 }, async t => {
     const { page, requests, runtime } = await setup(t);
     assert.equal(await page.evaluate(key => localStorage.getItem(key), key), null, "No default preference write");
-    assert.equal(await page.locator("#displayTimeZoneLink").innerText(), "Los Angeles time");
-    if (!await page.locator("#tableDisclosure").evaluate(node => node.open)) await page.locator("#tableDisclosure>summary").click();
+    assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
+    await page.locator("#meaning>summary").click();
     assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), ["1", "4", "1"]);
     const homeUrl = page.url();
-    await page.locator("#displayTimeZoneLink").focus();
-    await expect(page.getByRole("tooltip")).toContainText("America/Los_Angeles");
-    await page.keyboard.press("Enter"); await ready(page);
+    await navigateMain(page, "settings"); await ready(page);
+    await navigateSettings(page, "display");
     assert.match(page.url(), /section=display/);
-    assert.equal(await page.evaluate(() => document.activeElement.id), "displayTitle");
+    await expect(page.getByRole("combobox", { name: "Time zone", exact: true })).toBeVisible();
     await selectZone(page, "UTC");
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "UTC");
     assert.equal(await page.evaluate(key => localStorage.getItem(key), key), "UTC");
     await page.goBack(); await ready(page);
+    await page.goBack(); await ready(page);
     assert.equal(page.url(), homeUrl);
-    assert.equal(await page.locator("#displayTimeZoneLink").innerText(), "UTC");
+    assert.equal(lastSnapshot(requests).timeContext.timeZone, "UTC");
     assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), ["4", "2"]);
+    await page.goForward(); await ready(page);
     await page.goForward(); await ready(page);
     assert.equal(await page.locator("#displayTimeZone").inputValue(), "UTC");
     await page.reload(); await ready(page);
@@ -102,6 +103,7 @@ test("display preference governs calendar data, reset, reload, navigation and ne
     assert.equal(requests.findLast(r => r.path === "/api/preview").input.options.timeContext.timeZone, "UTC");
     await selectZone(page, "America/Los_Angeles");
     await navigateMain(page, "reports"); await ready(page);
+    await reportContents(page);
     assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
 });
 
@@ -117,13 +119,37 @@ test("explicit zones govern day, week and month totals across the repeated fall-
             const config = lastSnapshot(requests), expected = buildActivityAnalytics(fall, config);
             assert.equal(config.timeContext.timeZone, zone);
             assert.equal(await page.locator("#activityCount").innerText(), "4");
-            if (!await page.locator("#tableDisclosure").evaluate(node => node.open)) await page.locator("#tableDisclosure>summary").click();
+            if (!await page.locator("#meaning").evaluate(node => node.open)) await page.locator("#meaning>summary").click();
             assert.deepEqual(await page.locator("#countTable tbody td:nth-child(2)").allTextContents(), expected.timeSeries.points.map(point => String(point.total)));
             assert.equal(await page.locator("#countTable tfoot td").first().innerText(), "4");
-            assert.match(await page.locator("#chartTitle").innerText(), new RegExp({ day: "Daily", week: "Weekly", month: "Monthly" }[bucket]));
+            assert.equal(await page.locator("#bucketFilter").inputValue(), bucket);
             if (zone === "America/Los_Angeles") assert.equal(Date.parse(expected.dateRange.to) - Date.parse(expected.dateRange.from), 25 * 3600000);
         }
     }
+});
+
+test("changing Display preserves saved report bytes while new previews use the selected zone", { timeout: 30000 }, async t => {
+    const { page, context, before } = await setup(t);
+    const exports = createExportController(context);
+    const selection = { kind: "all", revision: before.revision };
+    const preview = await exports.preview("invented-display-proof", undefined,
+        { promptMode: "none", formats: ["html"], timeContext: { timeZone: "America/Los_Angeles", locale: "en-US" } }, selection);
+    await exports.review("invented-display-proof", preview.previewId, true, preview.timeContext);
+    const saved = (await exports.confirm("invented-display-proof", preview.previewId, true, preview.timeContext)).bundle;
+    const filesBefore = await Promise.all(Object.values(saved.files).map(file => readFile(file)));
+    await selectZone(page, "UTC");
+    await navigateMain(page, "reports");
+    await chooseReportScope(page, "all");
+    const response = page.waitForResponse(value => value.url().endsWith("/api/preview"));
+    await page.locator("#exportBtn").click();
+    const fresh = await (await response).json();
+    await page.frameLocator("#reportReviewBody iframe").locator("h1").waitFor();
+    assert.equal(fresh.timeContext.timeZone, "UTC");
+    assert.equal(saved.timeContext.timeZone, "America/Los_Angeles");
+    assert.deepEqual(await Promise.all(Object.values(saved.files).map(file => readFile(file))), filesBefore);
+    const state = await loadBoardState(context);
+    assert.equal(state.exports.length, 1, "Previewing in another zone does not rewrite or save a report");
+    assert.deepEqual(state.evidence, before.evidence);
 });
 
 test("preference synchronizes same-profile panels without changing another browser context", { timeout: 60000 }, async t => {
@@ -135,10 +161,10 @@ test("preference synchronizes same-profile panels without changing another brows
     try {
         await third.goto(runtime.url); await ready(third);
         await selectZone(page, "UTC");
-        await expect(second.locator("#displayTimeZoneLink")).toHaveText("UTC");
-        assert.equal(await third.locator("#displayTimeZoneLink").innerText(), "Los Angeles time");
+        await expect(second.locator("#displayTimeZone")).toHaveValue("UTC");
+        assert.match(await third.locator("#displayTimeZone option:checked").textContent(), /America\/Los_Angeles/);
         await selectZone(page, "");
-        await expect(second.locator("#displayTimeZoneLink")).toHaveText("Los Angeles time");
+        await expect(second.locator("#displayTimeZone option:checked")).toContainText("America/Los_Angeles");
     } finally { await isolated.close(); await second.close(); }
 });
 
@@ -162,9 +188,9 @@ test("blocked preference storage warns and keeps the explicit choice panel-local
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
 });
 
-test("pending and failed zone reads keep header tied to the old applied snapshot and retry atomically", { timeout: 60000 }, async t => {
+test("pending and failed zone reads keep Settings tied to the old applied snapshot and retry atomically", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
-    await page.locator("#displayTimeZoneLink").click(); await ready(page);
+    await navigateMain(page, "settings"); await ready(page); await navigateSettings(page, "display");
     let release, begun;
     const started = new Promise(resolve => { begun = resolve; });
     await page.route("**/api/snapshot", async route => {
@@ -175,15 +201,14 @@ test("pending and failed zone reads keep header tied to the old applied snapshot
     });
     await selectActivityOption(page, "displayTimeZone", "UTC");
     await started;
-    assert.equal(await page.locator("#displayTimeZoneLink").innerText(), "Los Angeles time");
     assert.match(await page.locator("#displayTimeEffective").innerText(), /America\/Los_Angeles/);
     release(); await ready(page);
-    assert.equal(await page.locator("#displayTimeZoneLink").innerText(), "Los Angeles time");
+    assert.match(await page.locator("#displayTimeEffective").innerText(), /America\/Los_Angeles/);
     await expect(page.locator("#message")).toContainText("last recorded snapshot");
     await page.unroute("**/api/snapshot");
     await (await revealStoredRefresh(page)).click(); await ready(page);
-    assert.equal(await page.locator("#displayTimeZoneLink").innerText(), "UTC");
-    await expect(page.locator("#displayTimeEffective")).toContainText("UTC");
+    await expect(page.locator("#displayTimeZone")).toHaveValue("UTC");
+    await expect(page.locator("#displayTimeEffective")).toBeHidden();
 });
 
 test("automatic zone follows device changes; override persists through focus and live snapshots", { timeout: 60000 }, async t => {
@@ -207,6 +232,7 @@ test("automatic zone follows device changes; override persists through focus and
     assert.equal(lastSnapshot(requests).filters.to, time.day(new Date().toISOString(), "UTC"));
     await selectZone(page, "America/Los_Angeles");
     await page.evaluate(() => { globalThis.testZone = "Asia/Kolkata"; window.dispatchEvent(new Event("focus")); });
+    await navigateMain(page, "analyze"); await ready(page);
     await (await revealStoredRefresh(page)).click(); await ready(page);
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
     assert.equal(lastSnapshot(requests).filters.to, time.day(new Date().toISOString(), "America/Los_Angeles"));
@@ -216,7 +242,7 @@ test("automatic zone follows device changes; override persists through focus and
     await replaceEvidence(context, () => ({ records: next, importCoverage: { counts: { includedSessions: 1, includedProjects: 1 }, roster: [] } }));
     await expect(page.locator("#activityCount")).toHaveText("7", { timeout: 15000 });
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
-    assert.equal(await page.locator("#displayTimeZoneLink").innerText(), "Los Angeles time");
+    assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
 });
 
 test("invalid saved zone and unavailable list are visible; controls use existing keyboard typeahead", { timeout: 60000 }, async t => {
@@ -226,7 +252,7 @@ test("invalid saved zone and unavailable list are visible; controls use existing
     });
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
     await expect(page.locator("#timeZoneNotice")).toContainText("invalid or unavailable");
-    await page.locator("#displayTimeZoneLink").click(); await ready(page);
+    await navigateMain(page, "settings"); await ready(page); await navigateSettings(page, "display");
     await expect(page.locator("#displayTimeHelp")).toContainText("full time zone list");
     await page.locator("#displayTimeZone-control").focus();
     await page.keyboard.type("UTC");
@@ -243,39 +269,4 @@ test("invalid saved zone and unavailable list are visible; controls use existing
     await expect(page.locator("#timeZoneNotice")).toContainText("Choose a valid");
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "UTC");
     assert.equal(await page.evaluate(key => localStorage.getItem(key), key), "UTC");
-});
-
-test("single global context reflows in both themes at narrow/wide and 200 percent text", { timeout: 90000 }, async t => {
-    const { page } = await setup(t);
-    const folder = process.env.WORKIQ_TIME_PROOF_DIR;
-    if (folder) await mkdir(folder, { recursive: true });
-    const measurements = [];
-    if (!await page.locator("#tableDisclosure").evaluate(node => node.open)) await page.locator("#tableDisclosure>summary").click();
-    for (const id of ["periodHint", "periodLabel", "countTable"]) assert.doesNotMatch(await page.locator("#" + id).innerText(), /America\/Los_Angeles|Dates use/);
-    assert.equal(await page.locator("#chartMeta").count(), 0);
-    for (const theme of ["light", "dark"]) for (const width of [1466, 375]) for (const scale of [1, 2]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await chooseTheme(page, theme);
-        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        const boxes = await page.locator("header").evaluate(header => {
-            const box = n => { const { x, y, width, height, right, bottom } = n.getBoundingClientRect(); return { x, y, width, height, right, bottom }; };
-            const link = header.querySelector("#displayTimeZoneLink"), range = document.createRange();
-            range.selectNodeContents(link);
-            return {
-                header: box(header), indicator: box(link), text: [...range.getClientRects()].map(r => ({ x: r.x, right: r.right, y: r.y, bottom: r.bottom })),
-                theme: box(header.querySelector(".theme-control")),
-                overflow: document.documentElement.scrollWidth > innerWidth,
-                textSize: parseFloat(getComputedStyle(link).fontSize),
-            };
-        });
-        measurements.push({ theme, width, scale, ...boxes });
-        assert.equal(boxes.overflow, false);
-        assert.ok(boxes.textSize >= 12 * scale, "Applied time-zone indicator uses the approved Fluent caption role without shrink-to-fit.");
-        for (const line of boxes.text) assert.ok(line.x >= 0 && line.right <= width && line.y >= boxes.header.y && line.bottom <= boxes.header.bottom);
-        const separate = (a, b) => a.right <= b.x + 1 || b.right <= a.x + 1 || a.bottom <= b.y + 1 || b.bottom <= a.y + 1;
-        assert.ok(separate(boxes.indicator, boxes.theme));
-        assert.equal(await page.locator("header #refreshBtn").count(), 0);
-        if (folder) await page.locator("header").screenshot({ path: path.join(folder, `synthetic-header-${theme}-${width}-text${scale * 100}.png`) });
-    }
-    if (folder) await writeFile(path.join(folder, "synthetic-header-layout.json"), JSON.stringify(measurements, null, 2));
 });

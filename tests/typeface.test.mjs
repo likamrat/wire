@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fontDataUrl, fontFaceStyles, uiFontStack } from "../lib/typeface.mjs";
-import { typographyTokens, tokens } from "../web/tokens.mjs";
+import { typographyTokens, tokens, screenTokens, screenFontStack } from "../web/tokens.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
 
-test("the retained Asta asset stays licensed while the current UI uses the reference-aligned system stack", () => {
+test("the retained Asta asset stays licensed and the report font stack is preserved", () => {
     const font = readFileSync(new URL("../assets/fonts/asta-sans-latin-variable.woff2", import.meta.url));
     const license = readFileSync(new URL("../assets/fonts/OFL.txt", import.meta.url), "utf8");
     assert.equal(createHash("sha256").update(font).digest("hex"), "ad3079a2c2cef53a0ba3598f7c5a4ae9289982c8b8a426872395846e9fa08e25");
@@ -22,11 +22,13 @@ test("the retained Asta asset stays licensed while the current UI uses the refer
     assert.match(uiFontStack, /sans-serif$/);
 });
 
-test("the shell wires shared system typography and retained local font support without a remote dependency", () => {
+test("the shell uses the exact retained IQOS Asta asset without changing report typography or loading a remote font", () => {
     const html = renderHtmlShell("a".repeat(64), "fluent-font");
     assert.equal(html.split(fontFaceStyles).length - 1, 1);
     assert.ok(tokens.includes(typographyTokens));
-    assert.ok(html.includes(`--font:${uiFontStack}`));
+    assert.ok(html.includes(screenTokens));
+    assert.ok(html.includes(`--font:${screenFontStack}`));
+    assert.equal(screenFontStack, '"Asta Sans","Segoe UI","Segoe UI Web (West European)",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",sans-serif');
     assert.match(typographyTokens, /--mono:"Cascadia Mono"/);
     for (const role of ["caption", "small", "body", "reading", "control", "title", "section", "dialog", "data-value", "score"]) {
         assert.ok(typographyTokens.includes(`--type-${role}:`), `${role} is a shared role`);

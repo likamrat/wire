@@ -126,7 +126,8 @@ test("only the full graphical wordmark is the native Analyze target, not its sub
         }
         for (const part of [.05, .32, .57, .89]) {
             const logo = brand.locator(".brand-logo:visible");
-            await logo.click({ position: { x: 165 * part, y: 26 } });
+            const bounds = await logo.boundingBox();
+            await logo.click({ position: { x: bounds.width * part, y: bounds.height / 2 } });
             await ready(page);
             assert.equal(new URL(page.url()).hash, href, "Every letter area returns Home");
             await page.goBack();
@@ -145,7 +146,7 @@ test("only the full graphical wordmark is the native Analyze target, not its sub
         await ready(page);
         await brand.focus();
         await page.keyboard.press("Tab");
-        assert.equal(await page.locator("nav [data-nav=analyze]").evaluate(node => node === document.activeElement), true, "Top navigation follows the wordmark; subtitle is not a tab stop");
+        assert.equal(await page.locator("#wireSearch").evaluate(node => node === document.activeElement), true, "Header Search follows the wordmark; subtitle is not a tab stop");
         const popupPromise = page.context().waitForEvent("page");
         await brand.click({ modifiers: ["Control"] });
         const popup = await popupPromise;
@@ -172,7 +173,6 @@ test("authored chart, detail, Settings and dialog links have decoration-free nat
         if (width === 1200) await capture(page, `chart-${theme}-focus`, "#chart");
         await assertLinkStates(page, page.locator(".percentage-label[href]").first(), `${theme} chart category`);
         if (theme === "dark" && width === 375) await capture(page, "categories-dark-narrow-focus", "#percentageCharts");
-        await assertLinkStates(page, page.locator("#displayTimeZoneLink"), `${theme} display setting`);
         const countHref = await count.getAttribute("href");
         await count.locator(".dimensional-count").click();
         await ready(page);
@@ -255,7 +255,7 @@ test("ordinary navigation text never paints its expanded hit target on hover or 
     await ready(page);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
-        for (const selector of [".session-drill", "#activityCollectionLink a", "#displayTimeZoneLink"]) {
+        for (const selector of [".session-drill", "#activityCollectionLink a"]) {
             const link = page.locator(selector).first();
             await link.hover();
             if (selector === ".session-drill") await capture(page, `plain-link-${theme}-hover`, ".session-heading");

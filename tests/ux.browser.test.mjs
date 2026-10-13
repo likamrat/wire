@@ -306,8 +306,8 @@ test("integrated app has readable aligned type and exact-copy controls in both t
         const chartTip = await page.locator(".time-column").first().getAttribute("aria-label");
         assert.ok(chartTip.includes(`${firstPoint.total} Work IQ tool calls`));
         const chartDate = await page.evaluate((value) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }), firstPoint.date);
-        assert.ok(chartTip.startsWith(chartDate) && !chartTip.includes(timeContext.timeZone), "Tooltip uses the actual local bucket date and inherits header time context");
-        assert.ok((await page.locator("#displayTimeZoneLink").getAttribute("aria-label")).includes(timeContext.timeZone));
+        assert.ok(chartTip.startsWith(chartDate) && !chartTip.includes(timeContext.timeZone), "Tooltip uses the actual local bucket date and inherits display time context");
+        assert.ok((await page.locator("#displayTimeZone option:checked").textContent()).includes(timeContext.timeZone));
         await page.keyboard.press("Escape");
         await page.locator("#meaning > summary").focus();
         await page.keyboard.press("Enter");

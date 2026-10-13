@@ -37,7 +37,7 @@ async function setup(t, records = [record()]) {
     const errors = [], writes = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => {
-        if (request.method() !== "GET" && !(request.method() === "POST" && ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(new URL(request.url()).pathname))) writes.push(request.url());
+        if (request.method() !== "GET" && !(request.method() === "POST" && ["/api/connect", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(new URL(request.url()).pathname))) writes.push(request.url());
     });
     await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: {
         readText() { throw new Error("Clipboard access is forbidden in this proof."); },
@@ -70,7 +70,7 @@ test("one compact request time replaces default full timestamps; exact evidence 
     const { page, url } = await setup(t);
     assert.equal(await page.locator(".request-time").textContent(), "Message recorded: Sep 29, 2026, 12:22 PM");
     assert.deepEqual(await inventory(page), { fullTimestamps: 0, compactTimestamps: 1, offsets: 0, ianaLabels: 0 });
-    assert.equal(await page.locator("#displayTimeZoneLink").textContent(), "Los Angeles time");
+    assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /America\/Los_Angeles/);
     assert.equal(await provenance(page).evaluate(node => node.open), false);
     assert.equal(await technical(page).evaluate(node => node.open), false);
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /origin-unverified|synthetic-message-event|Counts use separate|Started:|Ended:/);
@@ -186,7 +186,8 @@ test("pending and failed zones never relabel request time or open exact fields b
         window.dispatchEvent(new StorageEvent("storage", { key: "workiq-evidence.time-zone", newValue: "UTC" }));
     });
     await started;
-    assert.equal(await page.locator("#displayTimeZoneLink").textContent(), "Los Angeles time");
+    assert.equal(await page.locator("#displayTimeZone").inputValue(), "UTC");
+    assert.match(await page.locator("#displayTimeEffective").textContent(), /Updating time zone\. Still using America\/Los_Angeles/);
     assert.equal(await page.locator(".request-time").textContent(), "Message recorded: Sep 29, 2026, 12:22 PM");
     assert.match(await fact(technical(page), "Started").textContent(), /GMT-7/);
     release(); await ready(page);
@@ -194,7 +195,7 @@ test("pending and failed zones never relabel request time or open exact fields b
     await expect(page.locator("#message")).toContainText("last recorded snapshot");
     await page.unroute("**/api/snapshot");
     await (await revealStoredRefresh(page)).click(); await ready(page);
-    assert.equal(await page.locator("#displayTimeZoneLink").textContent(), "UTC");
+    assert.match(await page.locator("#displayTimeZone option:checked").textContent(), /UTC/);
     assert.equal(await page.locator(".request-time").textContent(), "Message recorded: Sep 29, 2026, 7:22 PM");
     assert.match(await fact(technical(page), "Started").textContent(), /^Sep 29, 2026, 7:22:44 PM GMT(?:\+0)?$/);
     assert.equal(await technical(page).evaluate(node => node.open), true);

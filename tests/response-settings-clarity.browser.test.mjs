@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { recollectionFixture } from "./recollection-fixture.mjs";
-import { chooseTheme, navigateSettings } from "./helpers.mjs";
+import { chooseTheme, navigateSettings, openSourceEditor } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
 const proofs = process.env.WIRE_RESPONSE_SETTINGS_PROOFS;
@@ -36,7 +36,7 @@ test("response settings explains the choice beside its checkbox without unrelate
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(f.runtime.url + "#settings?section=connection");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#editSource").click();
+    await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill(f.dbPath + ".unsaved");
     await page.locator("#cancelSource").click();
     await navigateSettings(page, "privacy");
@@ -66,7 +66,7 @@ test("response settings explains the choice beside its checkbox without unrelate
         assert.equal(value.unrelatedNotice, false, "Connection draft cancellation cannot describe this separate response setting");
         assert.equal(value.label, "Save Copilot replies locally");
         assert.ok(value.gap >= 7 && value.gap <= 9, "Checkbox belongs beside its words");
-        assert.equal(value.visibleParagraphs, 1, "Only the current state needs a paragraph; the label names this local collection choice");
+        assert.equal(value.visibleParagraphs, 0, "The checkbox already shows the healthy current state");
         assert.deepEqual(value.visibleButtons, [], "No idle Save/Cancel actions when there is no change");
         assert.equal(value.technicalDetails, true);
     }
@@ -110,8 +110,8 @@ test("response settings explains the choice beside its checkbox without unrelate
         await expect(pane.getByRole("button")).toHaveCount(0);
         await pane.locator("details>summary").focus();
         await page.keyboard.press("Enter");
-        await expect(pane.getByText(/Only assistant replies already recorded/)).toBeVisible();
-        await expect(pane.getByText(/Up to 64 KiB/)).toBeVisible();
+        await expect(pane.getByText(/Saves recorded Copilot replies locally, excluding detected credentials/)).toBeVisible();
+        await expect(pane.getByText(/Replies may be incomplete or not final/)).toBeVisible();
         if (proofs && width === 375 && scale === 2) {
             await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(proofs, `${theme}-details.png`), fullPage: true });

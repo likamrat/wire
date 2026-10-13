@@ -104,7 +104,8 @@ test("Discovery reads consistently across whole charts, filters and action detai
     await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
     assert.doesNotMatch(page.url(), /service=Discovery/);
     assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').textContent(), "Category");
-    assert.equal(await page.locator("#chartTitle").textContent(), "Services involved");
+    assert.equal(await page.locator("#chartTitle").textContent(), "Service categories");
+    assert.equal(await page.locator("#chartGrouping").textContent(), "One service category per tool-returned API result.");
     assert.match(await page.locator("#meaningMatched").textContent(), /^1 tool-returned API result$/);
     assert.equal(await page.locator('#serviceFilter option[value="Discovery"]').count(), 0);
     const single = discoveryFixture();
