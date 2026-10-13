@@ -674,7 +674,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
 }
 
 // DOM-only; this renderer cannot fetch, assess, save feedback, or enable capture.
-export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming, findingsHost, bindDetails, disclosureKey, wording = createAssessmentWording() } = {}) {
+export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming, showTiming = true, findingsHost, bindDetails, disclosureKey, wording = createAssessmentWording() } = {}) {
     if (typeof onDetails !== "function") throw new TypeError("A details path is required for definitions and unavailable reasons.");
     if (model.evidence?.version !== 1) throw new TypeError("A current quality evidence projection is required.");
     if (model.findings?.version !== 1) throw new TypeError("A current saved-findings projection is required.");
@@ -723,7 +723,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     const secondaryFindings = el("div", "assessment-secondary-findings");
     const secondaryCalls = el("ul", "assessment-finding-list");
     findings.setAttribute("aria-label", "What the record shows");
-    if (!comparisonFindings) findings.append(el("h3", "", compactFindings ? "Notes on full interactions" : "What the record shows"));
+    if (!comparisonFindings && !compactLayout) findings.append(el("h3", "", compactFindings ? "Notes on full interactions" : "What the record shows"));
     const calls = el("ul", "assessment-finding-list");
     for (const item of model.findings.operational) {
         const entry = el("li", item.tone);
@@ -758,7 +758,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     }
     findings.append(calls);
     if (secondaryCalls.childElementCount) secondaryFindings.append(secondaryCalls);
-    if (model.findings.recovery && !comparisonFindings) findings.append(el("p", "assessment-finding-recovery",
+    if (model.findings.recovery && !comparisonFindings && !compactLayout) findings.append(el("p", "assessment-finding-recovery",
         "If still needed: /mcp auth workiq in Copilot. No retry here."));
     const lanes = new Map();
     for (const group of Object.values(model.evidence.quality)) for (const row of group.rows) {
@@ -828,7 +828,8 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     } else if (!compactFindings || model.findings.rationale) findings.append(el("p", "assessment-finding-limit",
         (model.findings.rationale ? "Verdict reasons not retained. " : "")
         + (compactFindings ? "" : model.findings.singleInteraction ? "Original request group only." : "Full interactions, not just matching calls.")));
-    findings.hidden = compactFindings && findings.children.length === 2 && !calls.childElementCount;
+    findings.hidden = compactFindings && findings.children.length === (compactLayout ? 1 : 2) && !calls.childElementCount;
+    if (compactLayout && !findings.hidden) findings.append(el("p", "assessment-finding-limit", "Includes all calls in matching interactions."));
     if (findingsHost) findingsHost.replaceChildren(findings);
     else section.append(findings);
     const saved = el("details", "assessment-saved-details");
@@ -900,7 +901,9 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     help.append(el("summary", "", "How to read these results"),
         el("p", "", "AI reviews the recorded evidence and can be wrong. Your feedback and tool outcomes are separate. Matching the request does not prove a person gave permission."),
         el("p", "", "An unassessed request, insufficient evidence and an evaluator error are different states. None means the answer failed or a review is queued."),
-        el("p", "", `One request can have several tool calls. Median timing uses the recorded samples, not the total time spent in calls. Open ${detailsLabel} for exact values, denominators, timing boundaries and assessment provenance.`));
+        el("p", "", showTiming
+            ? `One request can have several tool calls. Median timing uses the recorded samples, not the total time spent in calls. Open ${detailsLabel} for exact values, denominators, timing boundaries and assessment provenance.`
+            : `Open ${detailsLabel} for exact counts and review origins.`));
     const grid = el("div", "assessment-grid");
     const qualityHeading = el("div", "assessment-quality-heading");
     qualityHeading.append(el("h3", "", "Saved quality assessments"),
@@ -987,15 +990,18 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         saved.append(status);
     } else saved.append(reviewStatus);
     if (!compactLayout) section.append(saved);
-    const timing = el("div");
-    renderTiming(timing, model.evidence.timing.filter(row =>
-        row.provenance.definitionId !== "interaction-latency" || row.measurement.value !== null), {
-        title: compactLayout ? "Timing for selected requests" : detailsLabel === "Measure definitions" ? "Recorded timing in full interactions" : "Recorded timing",
-        compact: compactLayout,
-        helpButton: helpButton ? () => helpButton("speed") : null,
-    });
-    if (compactLayout) section.append(timing, heading, saved, help);
-    else section.append(timing, help);
+    if (showTiming) {
+        const timing = el("div");
+        renderTiming(timing, model.evidence.timing.filter(row =>
+            row.provenance.definitionId !== "interaction-latency" || row.measurement.value !== null), {
+            title: compactLayout ? "Timing for selected requests" : detailsLabel === "Measure definitions" ? "Recorded timing in full interactions" : "Recorded timing",
+            compact: compactLayout,
+            helpButton: helpButton ? () => helpButton("speed") : null,
+        });
+        section.append(timing);
+    }
+    if (compactLayout) section.append(heading, saved, help);
+    else section.append(help);
     root.replaceChildren(section);
     return section;
 }

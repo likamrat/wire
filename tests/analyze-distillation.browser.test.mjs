@@ -9,7 +9,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { assessmentDependencies, assessmentRef, buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
-import { privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 
 const proof = process.env.WIRE_DISTILL_PROOFS;
 const baseline = Boolean(process.env.WIRE_DISTILL_BASELINE);
@@ -35,8 +35,8 @@ function sample() {
         at(0), at(1050)).scenarios;
     });
 }
-async function setup(t, { savedFeedback = false, nativeScrollbars = false } = {}) {
-    const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, sample());
+async function setup(t, { savedFeedback = false, nativeScrollbars = false, records = sample() } = {}) {
+    const cleanup = [], { context } = await privateFixture({ after: fn => cleanup.push(fn) }, records);
     if (savedFeedback) await updateBoardState(context, state => {
         state.personalEvaluation ??= defaultPersonalEvaluation();
         const model = buildAssessmentModel(state), view = model.details.get(model.catalog[0].interactionRef);
@@ -84,17 +84,207 @@ async function capture(page, name) {
         summaries: [...root.querySelectorAll("summary")].filter(node => node.checkVisibility()).map(node => node.textContent.trim()),
         words: root.innerText.trim().split(/\s+/).length,
         toolHeadings: [...root.querySelectorAll('[data-breakdown="tools"] h3')].map(node => node.textContent.trim()),
-        timing: root.querySelector("#recordedTiming").innerText,
+        detachedTiming: root.querySelector("#recordedTiming") !== null,
     }));
     if (proof) {
         await mkdir(proof, { recursive: true });
         await page.evaluate(async () => { await document.fonts.ready; scrollTo(0, 0); });
         await page.screenshot({ path: path.join(proof, `${name}-viewport.png`) });
         await page.screenshot({ path: path.join(proof, `${name}-full.png`), fullPage: true });
+        if (name.startsWith("paired-widgets-")) {
+            const clip = await page.locator(".analyze-dashboard").boundingBox();
+            await page.screenshot({ path: path.join(proof, `${name}-widgets.png`), fullPage: true, clip });
+        }
         await writeFile(path.join(proof, `${name}.json`), JSON.stringify(inventory, null, 2));
     }
     return inventory;
 }
+
+async function widgetGeometry(page) {
+    return page.evaluate(() => {
+        const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+        return {
+            scroll: scrollY, header: rect(".app-header"), control: rect("#bucketFilter-control"),
+            heading: rect(".analyze-chart-main .chart-heading"), chart: rect(".analyze-chart-main"),
+            outcomes: rect(".analyze-outcome-summary"), tools: rect('[data-percentage-card="tools"]'),
+            services: rect('[data-percentage-card="services"]'),
+        };
+    });
+}
+
+async function clickVisible(page, locator) {
+    const box = await locator.boundingBox(), viewport = page.viewportSize();
+    assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height,
+        "Trusted pointer action must not need locator auto-scrolling");
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+test("Harbor widgets share row edges without fixed heights or clipped content", { timeout: 30000 }, async t => {
+    const page = await setup(t), measurements = [], failures = [];
+    for (const theme of ["light", "dark"]) for (const [width, textSize] of [[2000, 100], [1600, 100], [1100, 100], [375, 100], [375, 200]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await chooseTheme(page, theme);
+        await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, textSize);
+        await page.evaluate(() => document.fonts.ready);
+        const geometry = await widgetGeometry(page);
+        const clipping = await page.locator(".analyze-dashboard").evaluate(root =>
+            [...root.querySelectorAll(".percentage-label,.percentage-value,.percentage-card h3,#homeFindings li,#homeFindings p")]
+                .filter(node => node.checkVisibility()).flatMap(node => {
+                    const box = node.getBoundingClientRect(), card = node.closest(".analyze-outcome-summary,.percentage-card").getBoundingClientRect();
+                    return node.scrollWidth > node.clientWidth + 1 || box.x < card.x || box.right > card.right + 1 || box.bottom > card.bottom + 1
+                        ? [node.textContent] : [];
+                }));
+        assert.deepEqual(clipping, [], "All outcome, tool and service text stays inside its widget without clipping");
+        measurements.push({ theme, width, textSize, geometry, clipping });
+        for (const [left, right] of [["outcomes", "chart"], ["tools", "services"]]) {
+            const a = geometry[left], b = geometry[right];
+            if (Math.abs(a.y - b.y) < 2 && Math.abs(a.bottom - b.bottom) >= 2) {
+                failures.push(`${theme}/${width}: ${left} bottom ${a.bottom} differs from ${right} ${b.bottom}`);
+            }
+            if (width === 375) assert.ok(b.y >= a.bottom, "Narrow widgets stack naturally");
+        }
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await capture(page, `paired-widgets-${width}-${textSize}-${theme}`);
+    }
+    if (proof) await writeFile(path.join(proof, "paired-widgets.json"), JSON.stringify(measurements, null, 2));
+    assert.deepEqual(failures, []);
+});
+
+test("the concise footer still reports a failed sibling outside matching-call counts", async t => {
+    const records = sample();
+    records[0].toolCalls.push(...records.splice(1, 1)[0].toolCalls);
+    const page = await setup(t, { records });
+    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("4");
+    await expect(page.locator('#outcomeChart [data-category="failure"]')).toHaveAttribute("data-count", "0");
+    await expect(page.locator("#homeFindings")).toContainText("Work IQ sign-in was required for the recorded call (1 call).");
+    await expect(page.locator("#homeFindings")).toContainText("Includes all calls in matching interactions.");
+    await expect(page.locator("#homeFindings")).not.toContainText("/mcp auth");
+});
+
+test("outcome footer keeps the recorded cause and full-interaction scope without recovery boilerplate", async t => {
+    const page = await setup(t), findings = page.locator("#homeFindings");
+    await expect(findings).toContainText("Work IQ sign-in was required for the recorded call (1 call).");
+    await expect(findings).not.toContainText("Notes on full interactions");
+    await expect(findings).not.toContainText("/mcp auth");
+    await expect(findings).not.toContainText("No retry");
+    await expect(findings).toContainText("Includes all calls in matching interactions.");
+    await expect(findings.locator("summary,button")).toHaveCount(0);
+    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
+    await expect(findings).toBeHidden();
+    await expect(page.locator("#activityCount")).toHaveText("4");
+});
+
+test("stable time layout keeps zero and undated meanings with native horizontal scrolling", async t => {
+    const records = sample().slice(0, 4), undated = fixture("harbor-undated");
+    records[0].capturedAt = "2026-10-08T09:00:00.000Z";
+    records[0].toolCalls[0].startedAt = "2026-10-08T09:00:01.000Z";
+    undated.capturedAt = null;
+    const page = await setup(t, { records: [...records, undated], nativeScrollbars: true });
+    await page.setViewportSize({ width: 375, height: 1000 });
+    await selectActivityOption(page, "bucketFilter", "day"); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("5");
+    await expect(page.locator("#chartFooter")).toContainText("1 undated records are not plotted.");
+    await expect(page.locator(".time-zero .dimensional-count")).toHaveText("0 calls");
+    await expect(page.locator(".flat-time-column")).toHaveCount(2);
+    assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes => nodes.reduce((total, node) => total + Number(node.dataset.total), 0)), 4);
+    const scroll = page.locator(".flat-time-scroll");
+    await expect(scroll).toHaveAttribute("aria-description", /Scroll horizontally.*arrow keys/);
+    await scroll.focus();
+    await page.keyboard.press("ArrowRight"); await page.waitForTimeout(250);
+    assert.ok(await scroll.evaluate(node => node.scrollLeft > 0), "Native keyboard scrolling still reaches offscreen dates");
+    const summary = page.locator("#meaning > summary");
+    await summary.focus(); await page.keyboard.press("Enter");
+    await expect(page.locator("#chartReadingNotes")).toBeVisible();
+    await expect(page.locator("#chartReadingNotes")).toContainText("Zero means no matching records, not proof that no activity occurred.");
+    await expect(page.locator("#countTable tfoot td").first()).toHaveText("4");
+});
+
+test("real time-scale choices keep the widget and page still throughout the change", { timeout: 45000 }, async t => {
+    const records = sample().map((record, index) => {
+        const date = `2026-10-${String(index + 6).padStart(2, "0")}`;
+        record.capturedAt = `${date}T09:00:00.000Z`;
+        for (const call of record.toolCalls) {
+            call.startedAt = `${date}T09:00:01.000Z`;
+            call.completedAt = `${date}T09:00:01.050Z`;
+        }
+        return record;
+    });
+    const page = await setup(t, { nativeScrollbars: true, records }), observations = [], failures = [];
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
+        await page.setViewportSize({ width, height: 812 });
+        await chooseTheme(page, theme);
+        await page.reload(); await ready(page);
+        await expect(page.locator("#homeFindings")).not.toHaveAttribute("aria-busy", "true");
+        await page.evaluate(() => document.fonts.ready);
+        await page.mouse.move(width - 30, 700);
+        await page.mouse.wheel(0, (await widgetGeometry(page)).control.y - 400);
+        await page.waitForTimeout(500);
+        const initial = await widgetGeometry(page);
+        assert.ok(initial.control.y >= initial.header.bottom && initial.control.bottom <= 812);
+        await page.evaluate(() => {
+            window.scaleEvents = [];
+            document.addEventListener("click", event => {
+                const control = event.target.closest("#bucketFilter-control, .select-option");
+                if (control) window.scaleEvents.push({ trusted: event.isTrusted, value: control.dataset.value || "open" });
+            }, true);
+        });
+        for (const [bucket, label, keyboard] of [["day", "Daily", false], ["month", "Monthly", false], ["week", "Weekly", true]]) {
+            await page.evaluate(() => {
+                window.scaleFrames = [];
+                window.recordScaleFrames = true;
+                const record = () => {
+                    const rect = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+                    window.scaleFrames.push({ scroll: scrollY, control: rect("#bucketFilter-control"),
+                        heading: rect(".analyze-chart-main .chart-heading"), chart: rect(".analyze-chart-main"),
+                        header: rect(".app-header"), tools: rect('[data-percentage-card="tools"]') });
+                    if (window.recordScaleFrames) requestAnimationFrame(record);
+                };
+                record();
+            });
+            await clickVisible(page, page.locator("#bucketFilter-control"));
+            if (keyboard) {
+                await page.keyboard.press(label[0]); await page.keyboard.press("Enter");
+            } else await clickVisible(page, page.locator(`.select-popup [data-value="${bucket}"]`));
+            await ready(page); await page.waitForTimeout(500);
+            await expect(page.locator("#bucketFilter")).toHaveValue(bucket);
+            await expect(page.locator("#bucketFilter-control")).toBeFocused();
+            await expect(page.locator(".flat-time-column")).toHaveCount(bucket === "day" ? 5 : 1);
+            assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes => nodes.reduce((total, node) => total + Number(node.dataset.total), 0)), 5);
+            const frames = await page.evaluate(() => { window.recordScaleFrames = false; return window.scaleFrames; });
+            const current = await widgetGeometry(page);
+            const drift = {
+                scroll: Math.max(...frames.map(frame => Math.abs(frame.scroll - initial.scroll))),
+                control: Math.max(...frames.map(frame => Math.abs(frame.control.y - initial.control.y))),
+                header: Math.max(...frames.map(frame => Math.abs(frame.header.height - initial.header.height))),
+                chart: Math.max(...frames.map(frame => Math.abs(frame.chart.y - initial.chart.y))),
+                chartHeight: Math.max(...frames.map(frame => Math.abs(frame.chart.height - initial.chart.height))),
+                tools: Math.max(...frames.map(frame => Math.abs(frame.tools.y - initial.tools.y))),
+                heading: Math.max(...frames.map(frame => Math.abs(frame.heading.y - initial.heading.y))),
+            };
+            observations.push({ theme, width, bucket, keyboard, initial, current, drift, frames });
+            if (Object.values(drift).some(value => value >= 2)) failures.push({ theme, width, bucket, drift });
+            await expect(page.locator("#activityCount")).toHaveText("5");
+            await expect(page.locator("#filterChips")).toBeEmpty();
+            await expect(page.locator("#resetView")).toBeDisabled();
+            if (proof) {
+                await mkdir(proof, { recursive: true });
+                await page.screenshot({ path: path.join(proof, `scale-${width}-${theme}-${bucket}.png`) });
+            }
+        }
+        const events = await page.evaluate(() => window.scaleEvents);
+        assert.equal(events.length, 5, "Three visible trigger clicks and two pointer choices were observed");
+        assert.ok(events.every(event => event.trusted));
+        assert.match(page.url(), /bucket=week/);
+        const beforeWheel = await page.evaluate(() => scrollY);
+        await page.mouse.move(width - 30, 700); await page.mouse.wheel(0, 180);
+        await page.waitForTimeout(250);
+        assert.ok(await page.evaluate(() => scrollY) > beforeWheel + 100, "Ordinary native page scrolling is not suppressed");
+    }
+    if (proof) await writeFile(path.join(proof, "time-scale-transitions.json"), JSON.stringify({ observations, failures }, null, 2));
+    assert.deepEqual(failures, []);
+});
 
 for (const savedFeedback of [false, true]) test(`native chart mode cycles retain the reading anchor ${savedFeedback ? "with saved feedback" : "without saved reviews"}`, { timeout: 45000 }, async t => {
     const page = await setup(t, { savedFeedback, nativeScrollbars: true });
@@ -177,21 +367,18 @@ test("Analyze uses one chart information destination and keeps exact data live t
         await chooseTheme(page, theme);
         const inventory = await capture(page, `human-${baseline ? "before" : "after"}-${theme}`);
         if (!baseline) {
-            assert.deepEqual(inventory.summaries, ["Request timing and reviews", "Chart data and definitions"]);
+            assert.deepEqual(inventory.summaries, ["Saved reviews", "Chart data and definitions"]);
             assert.deepEqual(inventory.toolHeadings, ["Work IQ tool calls"]);
-            assert.doesNotMatch(inventory.timing, /Matching tool calls|Boundary ID|Exact timing|Dot =|Line =/);
-            assert.match(inventory.timing, /Call start to recorded completion/);
+            assert.equal(inventory.detachedTiming, false);
         }
     }
     if (baseline) return;
     await expect(page.locator("#activityCount")).toHaveText("5");
     await expect(page.locator("#homeFindings")).not.toContainText("Reported outcomes");
     await expect(page.locator("#homeFindings")).not.toContainText("No saved review");
-    await expect(page.locator("#recordedTiming data")).toHaveCount(1);
-    await expect(page.locator("#recordedTiming data")).toHaveText("50 ms");
-    await expect(page.locator("#recordedTiming data")).toHaveAttribute("value", "50");
-    await expect(page.locator("#recordedTiming .assessment-cell-label")).toHaveText("Median and 95th percentile");
-    await expect(page.locator("#recordedTiming .assessment-coverage")).toHaveText("5 of 5 calls timed");
+    await expect(page.locator("#recordedTiming")).toHaveCount(0);
+    await expect(page.locator("#activityList .response-timing")).toHaveCount(5);
+    await expect(page.locator("#activityList .response-timing dd")).toHaveText(Array(5).fill("Not recorded"));
     await page.locator("#analyzeReviewDetails > summary").click();
     await expect(page.locator("#homeInsights .assessment-saved-details")).toBeHidden();
     await expect(page.locator("#homeInsights .assessment-secondary-findings")).toContainText("1 of 5 recorded calls failed; 4 succeeded");

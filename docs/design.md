@@ -87,6 +87,43 @@ states, direct navigation and frozen reading, named and bulk cancellation,
 confirmed report-only removal, stale previews, lost responses and sealed
 restart recovery. This is not a claim of human acceptance or a live release.
 
+## Original interaction model
+
+Interactions add one **Model/Models** row after chat, project and recorded time,
+before matching results. It uses the same stacked semantic key/value structure:
+bold category key, ordinary value, with no badge, control or extra explanation.
+Calls labels this source-context fact **Interaction model**, not a property of
+the tool or returned API result. The reader shows the same fact beside each
+interaction's own prompt. Filtering calls does not narrow the interaction's model
+evidence or change the existing per-tool counts.
+
+Only explicitly linked original/root assistant response metadata supplies names.
+The source session, prompt event, logical originating message and response/request
+anchors must agree. Distinct recorded turns can show a model sequence, including
+a switch back; ambiguous order lists names without inventing a sequence.
+Missing response models and partial collection remain qualified. Conflicting
+same-response/request metadata says **Conflicting records**; historical absence
+says **Not recorded**. Tool-event model hints alone say **Not verified (tool
+metadata only)**. Recorded names and deployment labels are not expanded into
+assumed backing models.
+
+The metadata-only allowlist is independent of response-text capture, evaluator
+models and local search models. It retains bounded, credential-screened labels
+and linkage metadata, not response bodies or reasoning. Source collection,
+manual import, requested recollection, restart and deletion use the same
+evidence rules; missing historical fields do not trigger backfill or cursor
+resets. The optional usage observer remains disconnected. Existing source
+approval, revision and deletion boundaries still apply.
+Non-event JSON entries in manual history are ignored without aborting otherwise
+valid calls; they qualify model coverage as partial. Duplicate event deliveries
+remain available to the model conflict checks rather than being silently merged.
+
+The snapshot exposes a normalized screen fact, not the new private linkage
+metadata. Report projections, frozen output, assessment schemas and evaluator
+fingerprints do not gain this field. Synthetic association, collection,
+Graph-import, deletion, snapshot and browser tests establish these behaviors;
+they do not establish that every installed source records model identity.
+
 ## Report setup
 
 Setup keeps every scope, author, prompt and format choice, but explains the selected
@@ -910,31 +947,37 @@ show named Median/P95 values; one shows a single measured sample, and none
 shows Not measured. Screen values preserve exact durations, including submillisecond
 values; the existing definitions panel retains the measurement details.
 
-`renderRecordedTiming` is shared by Insights and Analyze's `#recordedTiming`.
-Analyze opts into a content-sized definition list: exact values and coverage
-align with their labels in shared columns, using the same body typography.
-The recorded start-to-completion boundary and **Inspect call durations** remain
-with those rows beneath the charts, not in a full-width painted card.
-**Request timing and reviews** has a permanent row below, with identical trigger
-geometry whether open or closed; only the body expands. No open-only flex sizing,
-padding, border or JavaScript scroll correction moves the trigger.
-The existing host, independent disclosure state, asynchronous rendering and controls
-remain. One count-aware scope sentence distinguishes all calls in selected requests
-from matching calls even when the counts coincide. The expanded Analyze summary
-shows named timing rows before saved reviews and definitions; it does not repeat
-that scope inside saved details. The existing compact-findings host opts into this
-ordering, without creating new layout state or disclosure layers.
-The shared renderer's default presentation and saved report output are unchanged.
-Analyze consumes the exact refined `analytics.totals.duration` and
-`analytics.rows.length` for the tool layer, with the same-scope Calls link;
-it never substitutes full-interaction counts or invents a timing boundary
-for other activity layers. Insights explicitly labels its wider full-interaction
-scope. Neither surface averages medians, sums concurrent calls, or treats a
-duration as a quality percentage. Equal median/P95 values appear once with both
-labels; unequal values remain individually labelled. No decorative scale or
-extra timing disclosure is added. Other percentage/count facts, models and rubrics
-stay unchanged.
-**How to read these results** explains repeated AI limitations and median timing
+Timing is contextual rather than a detached Analyze summary. Each Interactions
+prompt shows **Time to recorded final response**, using that exact interaction's
+qualified metric as the first card fact. After each retained reader prompt,
+the same timing fact precedes its Model/Models fact. Both use the shared
+single-colon key formatter. Each call retains its own
+start-to-completion duration and existing duration ordering. Missing values say
+**Not recorded**, genuine zero remains measured, and no duration receives a
+speed verdict or threshold color. No trace gaps are labelled as model thinking,
+waiting or retries.
+
+`buildAssessmentModel` projects `catalog.responseTiming` from the validated
+`recorded-response-duration` metric for a unique retained interaction. This
+versioned object carries its source revision, interaction reference, boundary,
+status and duration, not a pooled overview value. `currentStatePayload` already
+returns this catalog with its assessment basis; there is no per-row request or
+new collection. `createRequestTiming.response` checks identity, boundary and
+revision before presentation. Invalid projections show **Timing could not be
+read**, distinct from missing evidence. Filters select displayed interactions,
+not a new request interval; no full-interaction value is computed from filtered
+call durations.
+
+The detached `#recordedTiming` and its redundant Calls link are removed. The
+existing **Saved reviews** disclosure retains independent state, asynchronous
+loading, scope, feedback and recovery controls. Screen assessment composition
+sets `showTiming: false`; the shared renderer's default, underlying aggregates,
+optional exact definitions and saved report output remain unchanged.
+The reader's secondary section is **Reviews and record details**, not a timing
+destination. Neither surface averages medians, sums concurrent calls or treats
+a duration as a quality percentage. The Search timing shortcut opens existing
+Calls instead of a removed widget. No new accordion or timing chart is added.
+**How to read these results** explains AI limitations and review origins
 once. Automatic-score processing status stays visible after the results, rather
 than preceding their scope. Partial-membership warnings remain visible.
 Sibling measures use Speed's 16px / hairline / 16px separation. Shared,
@@ -1541,8 +1584,18 @@ switches using an invented paused source with provider work denied.
 Over time, By category and By path or operation regroup one filtered population.
 They share one composition: outcomes beside the chart, then the unchanged Tools
 and Services summaries side by side. Narrow layouts stack in the same order.
-Only the chosen chart's content changes; sparse charts stay content-sized, and
-long desktop category/path lists retain native scrolling and Show all.
+Each wide-screen row stretches its widgets to its tallest content-sized member;
+the two rows do not share a fixed height. The outcome body uses the available
+space with its recorded-reason footer at the bottom. Narrow stacks remain
+content-sized, and long path lists retain their existing bounded scroll area.
+The outcome footer keeps recorded causes/counts, unavailable/error distinctions,
+and one explicit full-interaction scope sentence. It does not repeat a Notes
+heading, sign-in command or retry disclaimer. Historical sign-in remains a
+statement about the recorded call, never the user's current access. Reader and
+comparison presentations retain their separate wording.
+Only the chosen chart's content changes; long desktop category/path lists retain
+native scrolling and Show all. The time plot keeps the same quantitative extent
+across Daily/Weekly/Monthly, so regrouping does not move the following widgets.
 
 The chart's short meaning line names the grouping without repeating the population
 and scope above. Time uses the applied day/week/month bins and names any undated
@@ -1580,18 +1633,20 @@ within-rectangle color fades; no gradient changes the encoded span. Subpixel cou
 imperceptible, but exact count links remain at least 44px in both dimensions,
 with a focus ring and full count/share accessible names. Exact-table date
 actions also remain at least 44px. No invisible outcome overlay expands across
-another result. Displayed bin count, not the number of calls, determines the
-space the chart needs: one/two/three bins use 80/120/160px of quantitative height;
-four or more retain 200px. A heavily populated single week is still one bin.
-This changes the common plot extent, never the linear count ratios.
+another result. The existing 200px quantitative extent is now independent of
+bin count. One heavily populated week is still one bin, with the same linear
+count ratios as five daily bins. This is the plot's extent, not a widget
+min-height; empty and unavailable views do not paint a meaningless plot.
 
-One-to-three-bin panels use a bounded, text-relative width and tighter existing
-spacing tokens rather than stretching across the overview. Count headroom is
-measured in the existing resize handler, so enlarged labels and 44px actions
-stay intact. Date labels and reading notes flow without reserved empty lanes.
-Sparse/dense changes use the newly rendered bin count, and host/text resizing
-preserves focus and exact paint. The following timing and results sections
-move upward with the compact panel; their own layout is unchanged.
+Count headroom is measured in the existing label-resize handler for every density,
+so enlarged labels and 44px actions stay intact. Date-label spacing and native
+horizontal-scrollbar space stay consistent across grouping changes. Zero-gap
+meaning and scrolling instructions live in the existing Chart data and definitions
+destination; overflowing scrollers also expose their keyboard/trackpad/touch
+description. Conditional instruction rows no longer resize the widget. Genuine
+undated exclusions and read/availability failures remain visible. There are no
+reserved content placeholders, widget-height measurement loops or scroll retries.
+Host/text resizing preserves focus and exact paint.
 
 The existing Daily/Weekly/Monthly picker, outcome shares, exact table,
 canonical IDs, activity units, query/filter scope and native date links are
@@ -1610,6 +1665,16 @@ retains dense dates, monthly baselines, hidden/container/font changes and
 observer disposal. Small-column, flat-outcome and pure geometry tests retain
 exact arithmetic and invalid-input safeguards. Historical files are never
 regenerated.
+
+`analyze-distillation.browser.test.mjs` also covers the normal-root invented
+Harbor fixture: row-edge equality and unclipped labels at wide/medium/narrow
+sizes, concise historical reasons including failed siblings outside the matching
+call slice, and trusted visible-coordinate time-control changes in both themes.
+Its multi-day variant changes one weekly bar to five daily bars while recording
+per-frame control, heading, header, plot, lower-widget and page-scroll geometry.
+The native-scrollbar case checks motion without locator auto-scroll or disabling
+sidebar animation. Root text enlargement is reflow coverage, not native browser
+zoom or assistive-technology certification.
 
 ### Flat Analyze breakdowns and native reports
 
@@ -1986,15 +2051,24 @@ shown when the mapping records it; a folder project is not relabeled a repositor
 Interactions and Calls share one card grammar. The actual prompt leads in bold
 italic Asta, for user, agent and unverified authors alike; the separate author
 label and precise sender-gap explanation do not determine its emphasis.
+The emphasis uses the existing strong 600 weight rather than a heavier 700,
+with the body-size preview and reading line-height unchanged. This keeps the
+request distinct without turning a wrapped prompt into a display heading.
+Both views use the same paper surface, inset padding, lower divider and
+vertical actor cue. Only Interactions has a report-selection checkbox; Calls
+does not reserve an empty selection column or force equal card heights.
 **View interaction** or **Open exact call in context** remains alongside on
 desktop and wraps at narrow widths. Existing bounded previews, full original
 reading and exact copy remain; neither the stored text nor the separate request
 reader, Search rows or saved output is restyled or rewritten.
 
 Each card's `.activity-card-facts` definition list presents one category at a
-time, with a bold key followed by its normal-weight value. Tools come first,
-separate from service/category facts, chat, project and recorded time. These are
+time, with a bold key followed by its normal-weight value. Interactions put
+response timing first, followed by tools, separate service/category facts,
+chat, project, recorded time and original model. These are
 content-sized label/value rows, not a wide two-column table or flowing prose.
+Keys have one trailing colon, including facts shared with reader metadata;
+values, standalone headings, actor labels and result pills are not punctuated.
 Normal-weight values include the actual nested category cue, chat link and
 outcome text, not only the definition container. Tool names retain their
 separate bold identity role.

@@ -90,7 +90,7 @@ const card = (page, id) => page.locator(`#activityList>.request-row[data-view-ke
 async function geometry(page) {
     return page.locator("#activityList>.request-row").evaluateAll(nodes => nodes.map(row => {
         const box = node => { const r = node.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, bottom: r.bottom }; };
-        const timestamp = [...row.querySelectorAll(".activity-card-facts>div")].find(node => node.querySelector("dt").textContent === "Message recorded").querySelector("dd");
+        const timestamp = [...row.querySelectorAll(".activity-card-facts>div")].find(node => node.querySelector("dt").textContent === "Message recorded:").querySelector("dd");
         return { key: row.dataset.viewKey, row: box(row), text: box(row.querySelector(".full-text")),
             open: box(row.querySelector(".request-link")), source: box(row.querySelector(".card-chat")),
             project: box(row.querySelector(".project-context")), timestamp: box(timestamp),

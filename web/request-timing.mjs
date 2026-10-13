@@ -17,6 +17,24 @@ export function createRequestTiming(time, authorship) {
         const result = entry(scenario, context);
         return result.label === "Request time" ? "Request time not recorded" : `${result.label}: ${result.value}`;
     }
+    function response(scenarioId, snapshot) {
+        const unavailable = { status: "unavailable", durationMs: null }, error = { status: "error", durationMs: null };
+        if (!Array.isArray(snapshot?.catalog)) return error;
+        const rows = snapshot.catalog.filter(row => row.scenarioId === scenarioId);
+        if (rows.length > 1) return error;
+        const row = rows[0];
+        if (!row || row.status !== "retained") return unavailable;
+        const value = row.responseTiming;
+        if (value === undefined) return unavailable;
+        if (value?.schemaVersion !== 1 || !Number.isSafeInteger(value.sourceRevision) || value.sourceRevision < 0
+            || value.sourceRevision !== snapshot.basis?.sourceRevision
+            || !row.interactionRef || value.interactionRef !== row.interactionRef
+            || row.interactionRefs?.length !== 1 || row.interactionRefs[0] !== row.interactionRef
+            || value.boundary !== "recorded-request-to-final-answer"
+            || (value.status === "measured" ? !Number.isFinite(value.durationMs) || value.durationMs < 0
+                : value.status !== "unavailable" || value.durationMs !== null)) return error;
+        return { status: value.status, durationMs: value.durationMs };
+    }
     function origin(source) {
         if (authorship) return authorship.label(source) + ". " + authorship.reason(source);
         if (source?.provenance === "coordinator-message") return "Coordinator message";
@@ -29,5 +47,5 @@ export function createRequestTiming(time, authorship) {
         if (source.status === "partial" || source.status === "truncated") return "Partial text; missing text is not reconstructed";
         return source.status === "full" ? "Complete recorded text" : "Text completeness not verified";
     }
-    return { entry, summary, origin, coverage };
+    return { entry, summary, response, origin, coverage };
 }

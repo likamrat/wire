@@ -1169,8 +1169,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function callDurationText(row, layer = "tool") {
         const duration = callInvestigation.duration(row, layer);
-        return duration === null ? "Duration unavailable"
+        return duration === null ? "Duration: Not recorded"
             : `${layer === "tool" ? "Call" : layer === "reported-api" ? "API result" : "HTTP record"} duration: ${count(duration)} ms`;
+    }
+    function responseTimingFact(scenario) {
+        const timing = requestTiming.response(scenario.scenarioId, state.assessment);
+        const value = el("span"), field = cardFact("Time to recorded final response", value);
+        field.classList.add("response-timing");
+        if (timing.status === "measured") {
+            const duration = el("data", "", timingPresentation.duration(timing.durationMs));
+            duration.value = String(timing.durationMs);
+            value.append(duration);
+        } else if (timing.status === "error") {
+            const error = el("span", "action-error", "Timing could not be read");
+            error.setAttribute("role", "alert");
+            value.append(error);
+        } else value.textContent = "Not recorded";
+        return field;
     }
     function returnedDetails(call, row, apiRows, selectedId) {
         if (!apiRows?.length) return null;
@@ -1981,7 +1996,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : "Bars use a linear count scale from zero. Counts, shares and result sections are not enlarged. Full labels and exact-data links remain usable even for tiny values."],
             ["Chart colors", chartType === "workload" ? `Color identifies the ${layer === "tool" ? "activity category" : "service"}, not its result.` : "Colors match the recorded results."],
             ["Dates and grouping", chartType === "time"
-                ? `${help.fields.bucketFilter} Weeks start Monday; daylight-saving changes follow the display time zone in Settings. Last 7/30 days include today and the preceding local days.`
+                ? `${help.fields.bucketFilter} Weeks start Monday; daylight-saving changes follow the display time zone in Settings. Last 7/30 days include today and the preceding local days. Zero means no matching records, not proof that no activity occurred. Scroll horizontally for more dates when needed, or use the exact data below.`
                 : chartType === "workload" && layer === "tool" ? help.charts.activityCategory : help.charts[chartType]],
             ["Evidence limits", `${explanations[layer]} Review labels and relevance assessments do not change recorded results.${layer === "tool" ? " Tool completion is not an observed Graph HTTP response." : ""}`],
         ]) reading.append(el("dt", "", label), el("dd", "", text));
@@ -2016,17 +2031,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else $("countTable").replaceChildren();
         });
         percentages.update(analytics, { ...applied, search: Boolean(search), withinServices: route.withinServices?.split(",") || [] });
-        renderAnalyzeTiming();
-    }
-    function renderAnalyzeTiming() {
-        const host = $("recordedTiming");
-        // Other activity layers do not identify a common start/completion boundary.
-        host.hidden = applied.layer !== "tool";
-        if (host.hidden) { host.replaceChildren(); return; }
-        const row = timingPresentation.fromSummary(analytics.totals.duration, analytics.rows.length, "tool-start-to-completion");
-        const action = analytics.rows.length ? link("Inspect call durations", "activity", { mode: "calls", page: undefined }, "button-link") : null;
-        if (action) viewKey(action, "timing:matching-calls");
-        assessmentFactories.renderTiming(host, [row], { title: "Call duration in this view", action, compact: true });
     }
     function renderTime() {
         const series = analytics.timeSeries;
@@ -2036,14 +2040,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return;
         }
         const points = series.points;
-        const guidance = el("span");
         const chart = dimensional.timeView({
             points, label: point => date(point.date),
             unit: total => results.columnUnit(applied.layer, total),
             summary: point => `${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${results.unit(applied.layer, point.total)}. ${groupSummary(point)}.`,
             createAction: point => link("", "activity", { range: "custom", from: point.from, to: point.to, page: undefined }),
             inspect: inspectColumnSection,
-            onOverflow: overflowing => { guidance.textContent = overflowing ? "Scroll for more dates, or open Chart data and definitions." : ""; },
         });
         chart.removeAttribute("aria-label");
         chart.setAttribute("aria-labelledby", "chartTitle");
@@ -2052,8 +2054,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         chart.querySelectorAll(".time-slot").forEach((slot, index) => viewKey(slot.firstElementChild, "chart:time:" + points[index].date));
         $("chart").append(chart);
         dimensional.refreshView(chart);
-        if (points.some(point => point.total === 0)) $("chartFooter").append(el("span", "chart-size-note", "Zero means no matching records, not proof that no activity occurred."));
-        $("chartFooter").append(guidance);
         if (series.undatedCount) $("chartFooter").append(el("span", "", `${count(series.undatedCount)} undated records are not plotted.`));
     }
     function drillTime(point) {
@@ -2362,12 +2362,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         for (const term of [...fields.querySelectorAll(":scope > dt")]) {
             const value = term.nextElementSibling, group = el("div");
+            term.textContent = cardKey(term.textContent);
             group.append(term, value);
             details.append(group);
         }
         const measured = callInvestigation.duration(row, applied.layer);
         details.append(cardFact(applied.layer === "tool" ? "Call duration" : applied.layer === "reported-api" ? "API result duration" : "Record duration",
-            el("span", "call-duration", measured === null ? "Duration unavailable" : `${count(measured)} ms`)),
+            el("span", "call-duration", measured === null ? "Not recorded" : `${count(measured)} ms`)),
         cardFact(recordedLabel, time.formatMoment(row.startedAt, applied.timeContext)),
         cardFact(results.heading(applied.layer) || "Result",
             resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), compactSingle: true })));
@@ -2382,15 +2383,24 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         } else if (applied.layer !== "tool" || row.outcome !== "success") {
             details.append(cardFact("Result context", `${row.status ? `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}. ` : ""}${help.resultHelp(row.outcome, applied.layer)}`));
         }
-        if (scenario) appendCardSource(details, scenario);
+        if (scenario) appendCardSource(details, scenario, { callContext: true });
         card.append(details);
         return card;
+    }
+    function cardKey(label) {
+        return label.trimEnd().replace(/:+$/, "") + ":";
     }
     function cardFact(label, value) {
         const row = el("div"), definition = el("dd");
         definition.append(value);
-        row.append(el("dt", "", label), definition);
+        row.append(el("dt", "", cardKey(label)), definition);
         return row;
+    }
+    function originalModelFact(scenario, { callContext = false } = {}) {
+        const model = scenario.originalModel;
+        const valid = model && ["Model", "Models"].includes(model.label) && typeof model.value === "string" && model.value.trim();
+        return cardFact(callContext ? "Interaction model" : valid ? model.label : "Model",
+            valid ? model.value : model ? "Not verified (invalid model metadata)" : "Not recorded");
     }
     function cardTools(rows, showCounts = true) {
         const tools = new Map();
@@ -2408,7 +2418,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!tools.size) list.append(el("li", "", "No tool evidence in this view"));
         return list;
     }
-    function appendCardSource(list, scenario) {
+    function appendCardSource(list, scenario, options = {}) {
         const source = sessionSource(scenario.sourceSessionId);
         const chat = el("span", "card-chat");
         if (source) {
@@ -2426,6 +2436,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? project.project || project.projectId : project.sessionId || project.sourceSessionId ? "No project associated" : "Not recorded")));
         const moment = requestTiming.entry(scenario, applied.timeContext);
         list.append(cardFact(moment.label, moment.value));
+        list.append(originalModelFact(scenario, options));
     }
     function requestCard(scenario) {
         const rows = rowsFor(scenario.scenarioId), row = viewKey(el("article", "request-row activity-card"), "request:" + scenario.scenarioId);
@@ -2441,7 +2452,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ]);
         meta.classList.add("request-meta");
         const details = el("dl", "activity-card-facts");
-        details.append(cardFact("Tools in this view", cardTools(rows)),
+        details.append(responseTimingFact(scenario), cardFact("Tools in this view", cardTools(rows)),
             cardFact(applied.layer === "tool" ? "Activity categories" : "Services", meta));
         appendCardSource(details, scenario);
         details.append(cardFact("Matching results", matchingResults(scenario.scenarioId)));
@@ -2506,7 +2517,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const journey = el("ol", "journey request-context-timeline");
         journey.setAttribute("aria-label", "Recorded prompts, calls and replies");
         const summaryContents = el("div", "request-summary-content");
-        const summaries = disclosure("Timing, reviews and record details", summaryContents, "request-context-summaries", detailOwner);
+        const summaries = disclosure("Reviews and record details", summaryContents, "request-context-summaries", detailOwner);
         body.append(journey, summaries);
         const entries = [], seen = new Set(), rendered = [];
         const relationLabel = relation => relation === "selected" ? "Selected interaction"
@@ -2581,6 +2592,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             originKind,
             notice: "Copy includes the complete retained prompt body only, without export masking. It does not include chat details, warnings, the response or the rest of this page. Other apps and clipboard history may access your system clipboard.",
         }));
+        const responseTime = el("dl", "reader-response-timing");
+        responseTime.append(responseTimingFact(scenario));
+        requestText.append(responseTime);
+        const modelFact = el("dl", "activity-card-facts interaction-model-fact");
+        modelFact.append(originalModelFact(scenario));
+        requestText.append(modelFact);
         const insightHost = el("div", "interaction-insights"), responseHost = el("section", "interaction-response");
         const findingsHost = el("div", "interaction-findings");
         findingsHost.dataset.presentation = "reader";

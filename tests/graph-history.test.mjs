@@ -7,6 +7,7 @@ import { inspectGraphCommand, extractGraphActivities, projectGraphActivity, vali
 import { scanRecordedGraphHistory, mergeGraphScenarios } from "../lib/graph-history-io.mjs";
 import { buildActivityAnalytics, getActivityDrilldown } from "../lib/activity-analytics.mjs";
 import { buildAnalytics as core, OUTCOMES } from "../lib/analytics.mjs";
+import { interactionModelFact } from "../lib/interaction-model.mjs";
 
 // Synthetic records only; never import this file's fixtures into real user state.
 const source = { sessionId: "11111111-1111-4111-8111-111111111111", projectId: "project-test", eligible: true, checkedAt: "2026-10-04T00:00:00Z", archiveEvidence: { archived_at: null, workspaces: [] } };
@@ -18,6 +19,30 @@ const extract = (events) => extractGraphActivities(events, source);
 const graphScenario = (command = "curl 'https://graph.microsoft.com/v1.0/me/messages'", status = "HTTP/2 200") => extract([prompt(), start(2, command), finish(2, status)]).scenarios[0];
 const work = (id, target, extras = {}) => ({ tool: "workiq-fetch", toolCallId: id, startEventId: `e-${id}`, toolSucceeded: true, reportedOutcome: "succeeded", requestArgs: { entityUrls: [target] }, startedAt: stamp(1), apiResults: [], ...extras });
 const scenario = (calls, extras = {}) => ({ scenarioId: "s", sourceSessionId: source.sessionId, projectId: source.projectId, workloadKind: "recorded-history", toolCalls: calls, ...extras });
+
+test("Graph-only historical import retains original model metadata without changing its timing or result projections", async t => {
+    const root = await mkdtemp(path.join(tmpdir(), "wire-model-graph-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const folder = path.join(root, source.sessionId);
+    await mkdir(folder);
+    const user = prompt(); user.data.messageId = "model-prompt";
+    const response = { id: "model-answer", type: "assistant.message", timestamp: stamp(3), data: {
+        model: "original-graph-model", apiCallId: "graph-model-request", originatingMessageId: "model-prompt",
+        turnId: "model-turn", phase: "final_answer", content: "PRIVATE_GRAPH_MODEL_ANSWER", toolRequests: [],
+    } };
+    const events = [{ id: "startup", type: "session.start", data: { sessionId: source.sessionId } },
+        user, start(1, "curl 'https://graph.microsoft.com/v1.0/me/messages'"), finish(1, "HTTP/2 200"),
+        response, { id: "turn-end", type: "assistant.turn_end", timestamp: stamp(4), data: { turnId: "model-turn" } }];
+    await writeFile(path.join(folder, "events.jsonl"), events.map(value => JSON.stringify(value)).join("\n"));
+    const scan = await scanRecordedGraphHistory({ sources: [source], sessionRoot: root, since: "2026-10-01", until: "2026-10-02" });
+    assert.equal(interactionModelFact(scan.scenarios[0]).value, "original-graph-model");
+    assert.equal(scan.scenarios[0].responseTiming.status, "unavailable", "model capture must not change the legacy timing projection");
+    assert.equal(scan.coverage.outputVisibleStatuses, 1);
+    assert.doesNotMatch(JSON.stringify(scan.scenarios), /PRIVATE_GRAPH_MODEL_ANSWER/);
+    const previous = { ...scan.scenarios[0] }; delete previous.originalModelEvidence;
+    assert.equal(interactionModelFact(mergeGraphScenarios([previous], scan.scenarios)[0]).value, "original-graph-model");
+});
+
 function invariant(a) {
     assert.equal(OUTCOMES.reduce((n, o) => n + a.totals[o], 0), a.totals.count);
     assert.equal(a.groups.reduce((n, g) => n + g.total, 0), a.totals.count);

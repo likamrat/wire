@@ -137,7 +137,7 @@ test("Calls identify the tool and labeled result, with concise sorting and exact
     assert.match(geometry.text, /Who sent this was not recorded/, "Missing sender evidence is honest, not guessed from prompt prose");
     assert.doesNotMatch(sortCopy, /canonical record ID|for one record, not task latency/, "Implementation mechanics must not dominate the sort bar");
     assert.ok(geometry.tool.y > geometry.card.y, "The actual prompt leads the separately labeled call facts");
-    await expect(target.locator(".activity-card-facts>div").filter({ has: page.locator("dt", { hasText: /^Tool completion$/ }) }))
+    await expect(target.locator(".activity-card-facts>div").filter({ has: page.locator("dt", { hasText: /^Tool completion:$/ }) }))
         .toContainText("1 Worked");
     const failed = page.locator(".matched-action").filter({ has: page.locator('.request-link[href*="harbor-planning"]') });
     await expect(failed.locator(".action-error")).toHaveText("Reported HTTP 401: SignInRequired");

@@ -49,6 +49,7 @@ ${dimensionalColumnStyles}
 @container(max-width:32rem) {.flat-comparison-action {grid-template-columns:minmax(0,1fr)}}
 @media(forced-colors:active) {.flat-comparison-segment {background:CanvasText}.flat-comparison-action:focus-visible {outline-color:Highlight}}
 .dimensional-scroll {overflow-x:auto;overflow-y:hidden;padding:8px 4px calc(max(16px,1rem) + 1px);scrollbar-width:thin;min-width:0;max-width:100%}
+.flat-time-scroll {overflow-x:scroll}
 .dimensional-count {position:absolute;bottom:calc(100% + 8px);left:var(--column-center,50%);transform:translateX(-50%);display:flex;align-items:center;justify-content:center;min-height:44px;padding:8px;color:var(--ink);font-size:1.125rem;line-height:1.2;font-weight:var(--weight-strong);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
 .time-column .dimensional-count {pointer-events:auto;color:var(--accent);text-decoration:none;cursor:pointer;border-radius:var(--radius-small)}
 .time-column:is(:hover,:active) .dimensional-count {background:transparent;color:var(--ink)}
@@ -80,11 +81,6 @@ ${dimensionalColumnStyles}
 .flat-time-axis>span:last-child {transform:translateY(50%)}
 #chart:has(.flat-time-plot)+#chartFooter {justify-content:flex-start;gap:8px 24px}
 #chart:has(.flat-time-plot)+#chartFooter>span {white-space:normal;min-width:0}
-.chart-panel:has(.flat-time-scroll[data-density=sparse]) {max-inline-size:42rem;padding:var(--space-lg)}
-.chart-panel:has(.flat-time-scroll[data-density=sparse]) .chart-heading {margin-bottom:var(--space-sm)}
-.chart-panel:has(.flat-time-scroll[data-density=sparse]) #chartFooter {margin-top:var(--space-sm)}
-.flat-time-scroll[data-density=sparse] {padding-block:0 var(--space-sm)}
-.flat-time-scroll[data-density=sparse] .dimensional-time-labels {min-height:0;padding-top:var(--space-sm)}
 @media(forced-colors:active) {.flat-time-segment {fill:CanvasText;fill-opacity:1}.flat-time-plot .time-chart {border-color:CanvasText}}
 @media(prefers-reduced-motion:reduce) {.flat-time-column,.flat-time-plot .time-column {animation:none;transition:none}}
 `;

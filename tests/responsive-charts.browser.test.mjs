@@ -60,7 +60,7 @@ test("sparse, dense and empty time views reset sizing while enlarged labels and 
         assert.equal(await page.locator(".flat-time-column").count(), groups.filter(row => row.total).length);
         if (!length) continue;
         const extent = Number(await page.locator(".flat-time-column").first().getAttribute("data-plot-height"));
-        assert.equal(extent, Math.min(200, 40 * (length + 1)), "Extent follows displayed bins, not the magnitude of 1,500 calls");
+        assert.equal(extent, 200, "The time plot's extent stays independent of grouping and call magnitude");
         await page.locator(".time-column").last().focus();
         for (const [width, text] of [[1200, 100], [280, 200]]) {
             await page.evaluate(({ width, text }) => {

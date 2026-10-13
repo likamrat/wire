@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
+import { interactionModelFact } from "../lib/interaction-model.mjs";
 
 // Invented app metadata and events, isolated from the user's installation.
 test("source path rejection is explicit for nonstrings, relative paths and wrong basenames", () => {
@@ -75,6 +76,48 @@ async function logFor(app, id, events = []) {
 const call = (id = "synthetic-call") => event("tool.execution_start", {
     toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch",
     toolCallId: id, arguments: { entityUrls: ["/me/messages"] },
+});
+
+test("original model metadata survives collection, context eviction and restart without capturing replies", async t => {
+    const app = await installation(t), id = app.session(), now = Date.now() - 10000;
+    const timed = (type, data, ms, eventId) => ({ ...event(type, data, eventId), timestamp: new Date(now + ms).toISOString() });
+    const prompt = timed("user.message", { content: "Invented model request", messageId: "original-message" }, 0);
+    const start = { ...call("model-call"), timestamp: new Date(now + 10).toISOString() };
+    start.data.model = "tool-hint-only";
+    const response = (model, ms, turn) => timed("assistant.message", { model, originatingMessageId: "original-message",
+        apiCallId: `api-${turn}`, turnId: turn, phase: "final_answer", toolRequests: [],
+        content: "PRIVATE_MODEL_REPLY", reasoningText: "PRIVATE_MODEL_REASONING" }, ms);
+    const first = response("recorded-model-a", 100, "first");
+    const file = await logFor(app, id, [prompt, start, first, timed("assistant.turn_end", { turnId: "first" }, 101)]);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    let state = await loadBoardState(app.context);
+    const scenarioId = state.evidence[0].scenarioId;
+    assert.equal(interactionModelFact(state.evidence[0]).value, "recorded-model-a");
+    const filler = Array.from({ length: 2050 }, (_, index) =>
+        timed("user.message", { content: "Unrelated invented prompt", messageId: `other-${index}` }, index + 200));
+    const updatedStart = { ...start, data: { ...start.data, arguments: { entityUrls: ["/me/events"] } } };
+    await appendFile(file, [updatedStart, ...filler].map(value => JSON.stringify(value) + "\n").join(""));
+    await collector.collectNow();
+    assert.deepEqual((await loadBoardState(app.context)).evidence[0].toolCalls[0].requestArgs.entityUrls, ["/me/events"],
+        "model conflict tracking must not change last-delivered tool metadata semantics");
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    const last = response("recorded-model-b", 3000, "second");
+    await appendFile(file, [last, timed("assistant.turn_end", { turnId: "second" }, 3001)].map(value => JSON.stringify(value) + "\n").join(""));
+    const originalBytes = await readFile(file);
+    await collector.collectNow();
+    state = await loadBoardState(app.context);
+    const retained = state.evidence.find(value => value.scenarioId === scenarioId);
+    assert.equal(interactionModelFact(retained).value, "recorded-model-a then recorded-model-b (partial record)");
+    assert.equal(retained.originalModelEvidence.responses.length, 2);
+    assert.doesNotMatch(JSON.stringify(state.evidence), /PRIVATE_MODEL/);
+    assert.equal(state.personalEvaluation, undefined);
+    const fingerprint = createHash("sha256").update(JSON.stringify([app.config.appDbPath, app.config.sessionRoot, 30])).digest("hex");
+    assert.doesNotMatch(await readFile(path.join(app.context.dataDir, "collector", fingerprint, id + ".json"), "utf8"), /PRIVATE_MODEL/);
+    assert.deepEqual(await readFile(file), originalBytes);
 });
 
 test("collector checkpoints never retain full, empty, malformed, multiline or oversized JSON response payloads", async t => {

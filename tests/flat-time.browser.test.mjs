@@ -86,7 +86,7 @@ async function capture(page, name) {
     await writeFile(path.join(proofs, name + ".txt"), await page.locator(".chart-panel").ariaSnapshot());
 }
 
-test("a populated sparse Analyze timeline stays compact in the complete timing and results journey", async t => {
+test("a populated sparse Analyze timeline keeps a steady plot in the complete timing and results journey", async t => {
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-11T18:00:00Z") });
     const app = await authorFilterFixture(t, { serviceCases: true });
     const browser = await chromium.launch(), page = await browser.newPage({
@@ -115,7 +115,7 @@ test("a populated sparse Analyze timeline stays compact in the complete timing a
         return {
             panel: box(panel), heading: box(panel.querySelector(".chart-heading")), plot: box(panel.querySelector(".flat-time-plot")),
             count: box(panel.querySelector(".dimensional-count")), date: box(panel.querySelector(".dimensional-time-labels")),
-            footer: box(panel.querySelector("#chartFooter")), timing: box(document.querySelector("#recordedTiming")),
+            footer: box(panel.querySelector("#chartFooter")), timing: box(document.querySelector(".analyze-review")),
             results: box(document.querySelector("#activityView")), extent: Number(panel.querySelector(".flat-time-column").dataset.plotHeight),
             spacing: parseFloat(getComputedStyle(panel).getPropertyValue("--space-lg")),
         };
@@ -166,9 +166,11 @@ test("a populated sparse Analyze timeline stays compact in the complete timing a
     }
     assert.deepEqual(errors, []); assert.deepEqual(denied, []);
     assert.ok(measurements[0].panel.width < measurements[0].timing.width, "A single bin must not stretch its panel across the entire overview");
-    assert.ok(measurements[0].extent < daily.extent, "A single bin needs less plotting space than two bins");
-    assert.ok(measurements[0].count.y - measurements[0].heading.bottom <= measurements[0].spacing, "Count and mark belong directly under the heading");
-    assert.ok(measurements[0].footer.y - measurements[0].date.bottom <= measurements[0].spacing, "Reading notes follow the date, without a second empty lane");
+    assert.equal(measurements[0].extent, 200);
+    assert.equal(measurements[0].extent, daily.extent, "Regrouping one weekly bin into two daily bins keeps the same plotting extent");
+    assert.ok(measurements[0].count.y >= measurements[0].plot.y && measurements[0].count.bottom <= measurements[0].date.y,
+        "The unchanged exact-count action fits within the plot headroom");
+    assert.equal(measurements[0].footer.height, 0, "Definitions and scrolling instructions do not add conditional footer rows");
 });
 
 test("time view keeps readable exact labels, focus and 44px equivalents in both themes and narrow 200% text", async t => {
@@ -232,7 +234,7 @@ test("source bins, shares, DST and partial bounds drill into the same Analyze ID
     assert.deepEqual(analytics().timeSeries.points.map(point => [point.date, point.total]),
         [["2026-03-07", 1], ["2026-03-08", 4], ["2026-03-09", 1], ["2026-03-10", 0], ["2026-03-11", 2]]);
     await expect(page.locator("#chartFooter")).toContainText("1 undated");
-    await expect(page.locator("#chartFooter")).toContainText("not proof no activity occurred");
+    await expect(page.locator("#chartReadingNotes")).toContainText("Zero means no matching records, not proof that no activity occurred.");
     assert.equal(await page.locator("#chart .dimensional-ground,#chart .dimensional-cap").count(), 0);
     const columns = await page.locator(".flat-time-column").evaluateAll(nodes => nodes.map(svg => ({
         total: Number(svg.dataset.total), maximum: Number(svg.dataset.maximum), plotHeight: Number(svg.dataset.plotHeight),

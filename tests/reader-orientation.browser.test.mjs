@@ -74,7 +74,7 @@ test("source links visibly filter, and Back stays with orientation rather than r
     await page.goto(url + "#analyze"); await ready(page);
     const row = rowFor(page, "Three documents are enough.");
     const source = row.getByRole("link", { name: "Filter to chat: Sample: Harbor launch documents", exact: true });
-    await expect(source).toHaveText("Filter to chat: Sample: Harbor launch documents");
+    await expect(source).toHaveText("Sample: Harbor launch documents");
     await source.focus(); await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator("#pageProject")).toContainText("Filtered to chat: Sample: Harbor launch documents");
     const back = page.getByRole("link", { name: "Back to results", exact: true });

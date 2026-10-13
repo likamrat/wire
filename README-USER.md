@@ -134,7 +134,7 @@ Each status has its own icon and color. **Tool failed** is different from **Conn
 
 Choose **View interaction** directly from Analyze. A compact source row names the Copilot chat, project and recorded time, followed by the saved prompts, calls and replies in order. The selected prompt or exact call is marked. Long prompts and retained follow-ups need no extra expand step. At most one linked group before and after the selection is included, using recorded message IDs and consistent timestamps, never a guessed task or a whole-chat dump. The nearby-message note explains that linked messages may be separate work. Missing text, unknown times and missing, conflicting or unsupported sender details stay explicit.
 
-**Timing, reviews and record details** brings secondary information together below the exchange. Each interaction keeps its own counts, saved reviews, feedback controls and technical source record; nothing is pooled or reassessed against a later request. Analyze's filter form, filter chips and reset controls are not repeated in the reader. **Back to results** restores them unchanged when you want to adjust the view.
+**Reviews and record details** brings secondary information together below the exchange. Each interaction keeps its own counts, saved reviews, feedback controls and technical source record; nothing is pooled or reassessed against a later request. Analyze's filter form, filter chips and reset controls are not repeated in the reader. **Back to results** restores them unchanged when you want to adjust the view.
 
 **Filter to chat: [name]** narrows Analyze to records from that recorded source; it does not open the chat. **Back to results**, beside the page heading, returns to the previous results, filters and page. Removing the chat filter keeps other applied filters. The reader uses the same return control, or **Back to search** when opened from Search. A directly opened reader without an earlier results view offers **Back to Analyze** instead of pretending to restore a previous list.
 
@@ -146,22 +146,21 @@ Returned API-entry links are tied to the stored snapshot revision because their 
 
 The reader puts the text before its Copy and Hide controls. **Read prompt** shows the complete retained text. **Hide prompt** collapses only that text, keeping your place and report selection. **Copy prompt** copies that full original body, unmasked: not its preview, chat details, warnings, response or the whole page. The action reports success only after the clipboard write succeeds; denied or unavailable access shows an error and a manual-selection alternative. **About this prompt & copying** explains author uncertainty, partial text and clipboard implications. **Technical source record** keeps exact timestamps, identifiers and source codes separate from that reading help.
 
-**Notes on full interactions** keeps useful recorded failure reasons and missing-evidence or review problems beside Analyze's outcomes, without repeating the outcome totals. Full-interaction totals and the absence of saved reviews remain in the existing saved-review details. The reader keeps each call's result and recorded failure reason beside that call; **What the record shows** and saved assessments stay under each original request in **Timing, reviews and record details**. Each check keeps its own counts. Sign-in, timeout and access-denial wording describes the historical call, not your current access. A failed lookup can have a correct explanatory answer. If a reason behind a saved verdict was not retained, WIRE says so rather than inventing an explanation or running another AI review.
+**Notes on full interactions** keeps useful recorded failure reasons and missing-evidence or review problems beside Analyze's outcomes, without repeating the outcome totals. Full-interaction totals and the absence of saved reviews remain in the existing saved-review details. The reader keeps each call's result and recorded failure reason beside that call; **What the record shows** and saved assessments stay under each original request in **Reviews and record details**. Each check keeps its own counts. Sign-in, timeout and access-denial wording describes the historical call, not your current access. A failed lookup can have a correct explanatory answer. If a reason behind a saved verdict was not retained, WIRE says so rather than inventing an explanation or running another AI review.
 
-**Call duration in this view** groups matching-call timing beneath the charts,
-after filters, private search and service refinements. It measures **call start
-to recorded completion**, not the wait for a final response. Aligned label/value
-rows show exact durations and timed-call coverage. **Inspect call durations** opens
-the same matching calls so you can inspect their individual durations. When median
-and 95th percentile are equal, one value is labelled with both statistics. A
-single sample has no percentile, and missing timing is not zero. Definitions
-are in **Chart data and definitions**, not a separate dropdown for each number. Open
-**Request timing and reviews** directly below. Its control stays in place as
-the content opens and closes. A single scope sentence names the selected requests
-and distinguishes all their recorded calls from the calls matching your filters.
-Named timing rows come first, followed by saved review details and controls.
-These populations can differ even when their totals happen to match. Saved AI judgments, personal feedback and
-recorded tool completion remain distinct.
+**Time to recorded final response** appears beside each prompt in Interactions
+and in the opened interaction. It runs from that recorded message to its final-answer
+timestamp, when matching turn-completion metadata confirms the answer. It is not
+the time to display the answer on screen or proof that every call finished inside
+that interval. **Not recorded** means no qualified timing is available; a recorded
+zero remains zero. Timing metadata does not require saving the answer's text.
+
+Individual call durations stay beside calls in **Calls** and the reader. Use
+**Slowest first** or **Fastest first** to compare them; WIRE does not judge a long
+call as bad or flag a speed threshold. Missing call timing says **Not recorded**
+and sorts last in either direction. There is no detached timing widget or default
+median/P95 summary. **Saved reviews** remains separate, retaining its original
+interaction scope, status and controls.
 
 When no reviews or attempts are saved and automatic scoring is off with no
 approval, this area says **No saved reviews for these requests**. **Measure
@@ -180,9 +179,9 @@ Opened saved details stay open when the same scope or request is redrawn or revi
 
 **No saved review**, **Not enough saved evidence**, and **Review could not finish** describe different states. None is a failed answer or an instruction to grade it yourself. Missing historical attempt information stays unknown; it does not mean no review was attempted or that one is queued.
 
-**Request timing and reviews** separates all the selected requests' call durations from recorded request-to-final-response samples. HTTP response-header and transport-error timings retain their own boundaries. A single measured item shows its duration and **One sample, not overall performance**, without a percentile claim. No samples means **Not measured**, not zero; a recorded zero remains zero. Never sum concurrent calls, average medians, or treat recorded request bounds as the duration of a person's entire task. **Measure definitions** retains exact subset percentages with their denominators, milliseconds, boundaries, model and rubric; **Details and feedback** on a single interaction also offers optional personal verdicts and **Withdraw feedback**. Use the panel's header **Close** or **Escape** to leave. Closing feedback does not cancel a submitted update; check its existing result rather than repeating it. **Worked** means tool completion, not verified correctness.
+**Measure definitions** retains exact subset percentages, denominators, recorded timing samples and boundaries, model and rubric. These optional full-interaction aggregates can cover more calls than the filtered Calls list. HTTP response-header and transport-error timing remain separate measurements. Never sum concurrent calls, average medians, infer retry chains or treat a recorded response interval as the duration of a person's entire task. **Details and feedback** on a single interaction also offers optional personal verdicts and **Withdraw feedback**. Use the panel's header **Close** or **Escape** to leave. Closing feedback does not cancel a submitted update; check its existing result rather than repeating it. **Worked** means tool completion, not verified correctness.
 
-In Analyze, scoped search and filters select the request groups used by counts and Insights, across every page. The top recorded-timing section uses matching calls; Insights use those groups' full retained interactions, so their timing and completion denominators can be wider. Calls, API entries and HTTP records remain separate units. No matching groups means no interaction metrics, not the all-activity summary. Legacy private search keeps its browser-history compatibility. New Search text stays in panel memory and the on-device local runtime, never in links, logs or browser storage. Earlier Home and Activity links both open Analyze.
+In Analyze, scoped search and filters select the request groups used by counts and Insights, across every page. Each displayed response duration still belongs to its full original recorded message interval, not a filtered call subset. Calls, API entries and HTTP records remain separate units. No matching groups means no interaction metrics, not the all-activity summary. Legacy private search keeps its browser-history compatibility. New Search text stays in panel memory and the on-device local runtime, never in links, logs or browser storage. Earlier Home and Activity links both open Analyze.
 
 Reply saving is off unless previously approved. To keep recorded replies in WIRE, open **Settings > Privacy & saved data > Recorded replies**, select **Save Copilot replies locally**, then **Turn on response saving**. **Discard change** restores your current choice. **What gets saved** explains the source and limits. Deliberately opening an interaction immediately reads only its displayed context's already-retained, currently authorized replies. Analyze and hover do not preload them; explicit Search reads only already-authorized retained replies through the same permission gates. Every reply is checked independently against current access; opening context never turns saving on or reads the original source. **Copy response** copies only that response body and **Hide response** collapses it; an explicit hidden state is respected on rerender. Missing responses remain unavailable, read errors offer an explicit retry, and partial or unverified final-answer status is not upgraded. Turning response saving off removes optional text and dependent unsaved insights; activity and saved reports remain. This does not authorize model assessment.
 

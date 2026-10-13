@@ -236,7 +236,7 @@ test("Dates governs every widget while time grouping stays out of filters and Re
     const widgetState = () => page.evaluate(() => ({
         outcomes: [...document.querySelectorAll("#outcomeChart [data-count]")].map(node => [node.dataset.category, node.dataset.count]),
         breakdowns: [...document.querySelectorAll("#percentageCharts [data-count]")].map(node => [node.dataset.category, node.dataset.count]),
-        timing: document.querySelector("#recordedTiming").innerText,
+        timing: [...document.querySelectorAll("#activityList .response-timing")].map(node => node.innerText),
         records: [...document.querySelectorAll("#activityList .request-link")].map(node => new URLSearchParams(node.hash.split("?")[1]).get("request")),
         summary: document.querySelector("#activityListSummary").innerText,
         currentReportScope: document.querySelector("#scopeCount-current").textContent,
@@ -250,7 +250,8 @@ test("Dates governs every widget while time grouping stays out of filters and Re
         const total = snapshot.analytics.totals.count;
         await expect(page.locator("#activityCount")).toHaveText(String(total));
         await expect(page.locator("#outcomeChart .percentage-denominator")).toContainText(String(total));
-        await expect(page.locator("#recordedTiming .assessment-coverage")).toHaveText(`${total} of ${total} calls timed`);
+        await expect(page.locator("#recordedTiming")).toHaveCount(0);
+        await expect(page.locator("#activityList .response-timing")).toHaveCount(await page.locator("#activityList .request-row").count());
         const sum = await page.locator(".flat-time-column").evaluateAll(nodes => nodes.reduce((value, node) => value + Number(node.dataset.total), 0));
         assert.equal(sum, total - snapshot.analytics.timeSeries.undatedCount);
         assert.deepEqual(snapshot.analytics.timeSeries.points.flatMap(point => point.drilldownIds).sort(), ids());
@@ -453,7 +454,7 @@ test("Analyze dense and empty populations keep their own counts and readable bou
     const outcomes = await page.locator(".analyze-outcome-summary").boundingBox();
     const paths = await page.locator(".analyze-chart-main").boundingBox();
     const breakdowns = await page.locator("#percentageCharts").boundingBox();
-    assert.ok(outcomes.height < paths.height / 2, "Outcomes keep their content height beside long path lists");
+    assert.ok(Math.abs(outcomes.height - paths.height) < 2, "The paired widgets share row edges even when path content grows");
     assert.ok(breakdowns.y >= paths.y + paths.height, "Tools and Services remain below the chart row in every mode");
     assert.ok(breakdowns.y - (paths.y + paths.height) < 24, "The following row uses normal spacing, not reserved chart filler");
     for (const theme of ["light", "dark"]) {

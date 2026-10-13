@@ -107,7 +107,7 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     await selectActivityOption(page, "callSort", "fastest"); await ready(page);
     assert.equal(requests.filter(req => req.path === "/api/snapshot").length, beforeReads);
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click(); await ready(page);
-    await expect(page.locator("#activityList")).toContainText("Duration unavailable");
+    await expect(page.locator("#activityList")).toContainText("Not recorded");
     const target = app.snapshot().analytics.rows.find(row => row.toolCallId === "investigate-09");
     const open = row(page, target.id).locator(".request-link");
     await open.focus(); await frames(page);
@@ -240,7 +240,7 @@ test("Graph, code references and transport retain distinct units; native links a
         const target = app.snapshot().analytics.rows.find(predicate);
         const open = row(page, target.id).locator(".request-link");
         if (layer === "code-reference") {
-            await expect(row(page, target.id)).toContainText("Duration unavailable");
+            await expect(row(page, target.id)).toContainText("Not recorded");
             assert.doesNotMatch(await row(page, target.id).innerText(), /duration: .*ms/);
         }
         if (layer === "http") {

@@ -218,8 +218,8 @@ test("normal Analyze and changed-request context lead with supported findings an
     await selectActivityOption(page, "serviceAssociationFilter", "Calendar"); await ready(page);
     await expect(findings).toContainText("1 of 2 recorded calls failed; 1 succeeded");
     await expect(host.locator(".assessment-scope")).toContainText("full retained interaction");
-    await expect(page.locator("#recordedTiming .assessment-coverage")).toHaveText("1 of 1 call timed");
-    await expect(host.locator('[data-timing-boundary="tool-start-to-completion"] .assessment-coverage')).toHaveText("2 of 2 calls timed");
+    await expect(page.locator("#recordedTiming")).toHaveCount(0);
+    await expect(host.locator(".assessment-timing")).toHaveCount(0);
     await selectActivityOption(page, "serviceAssociationFilter", "all"); await ready(page);
     await page.locator("#activitySearch").fill("Three synthetic");
     await expect(findings.locator('[data-finding-origin="model-assessed"]')).toContainText("Answer: Correct");

@@ -87,6 +87,69 @@ test("new response metric preserves genuine zero and pools exact interaction sam
     assert.doesNotMatch(JSON.stringify(facts), /PRIVATE_FINAL_ANSWER|PRIVATE_REASONING/);
 });
 
+test("snapshot catalog projects each qualified response duration without borrowing the overview", () => {
+    const records = [0, 1200, 5000, null].map((duration, index) => {
+        const record = fixture(`row-response-${index}`);
+        record.sourceSessionId = `source-${index}`;
+        record.userPrompt = { ...record.userPrompt, sourceEventId: "prompt", sourceTimestamp: time(0) };
+        if (duration !== null) record.responseTiming = recordedResponseTiming(source(duration), prompt);
+        return record;
+    });
+    const state = { revision: 9, evidenceRevision: 4, pseudonymKey: "a".repeat(64), evidence: records, exports: [] };
+    const before = structuredClone(state), model = buildAssessmentModel(state);
+    assert.deepEqual(model.catalog.map(row => row.responseTiming?.durationMs), [0, 1200, 5000, null]);
+    for (const row of model.catalog) {
+        assert.equal(row.responseTiming.schemaVersion, 1);
+        assert.equal(row.responseTiming.sourceRevision, model.basis.sourceRevision);
+        assert.equal(row.responseTiming.interactionRef, row.interactionRef);
+        assert.equal(row.responseTiming.boundary, "recorded-request-to-final-answer");
+        assert.equal(row.responseTiming.status, row.responseTiming.durationMs === null ? "unavailable" : "measured");
+    }
+    assert.equal(model.overview.metrics.find(metric => metric.definitionId === "recorded-response-duration").value, 1200);
+    assert.deepEqual(state, before);
+});
+
+test("row timing stays unavailable for invalid response bounds, pruned membership and conflicting call identity", () => {
+    for (const change of [
+        record => { record.responseTiming.durationMs = -1; },
+        record => { record.responseTiming.respondedAt = time(500); },
+        record => { record.responseTiming.promptEventId = "another-prompt"; },
+        record => { record.responseTiming.completedAt = null; },
+        record => { record.assessmentMembershipPruned = true; },
+    ]) {
+        const record = fixture("unqualified-row-response");
+        record.userPrompt = { ...record.userPrompt, sourceEventId: "prompt", sourceTimestamp: time(0) };
+        record.responseTiming = recordedResponseTiming(source(), prompt);
+        change(record);
+        const model = buildAssessmentModel({ revision: 1, pseudonymKey: "a".repeat(64), evidence: [record], exports: [] });
+        assert.equal(model.catalog[0].responseTiming?.status, "unavailable");
+        assert.equal(model.catalog[0].responseTiming?.durationMs, null);
+    }
+    const records = ["a", "b"].map(id => {
+        const record = fixture(`conflicted-${id}`);
+        record.userPrompt = { ...record.userPrompt, sourceEventId: "prompt", sourceTimestamp: time(0) };
+        record.responseTiming = recordedResponseTiming(source(), prompt);
+        record.toolCalls[0].startEventId = "shared-start";
+        return record;
+    });
+    const model = buildAssessmentModel({ revision: 1, pseudonymKey: "a".repeat(64), evidence: records, exports: [] });
+    assert.ok(model.catalog.every(row => row.status === "excluded"));
+    assert.ok(model.catalog.every(row => row.responseTiming.status === "unavailable" && row.responseTiming.durationMs === null));
+});
+
+test("a grouped alias cannot borrow response timing from a differently timestamped prompt", () => {
+    const first = fixture("timed-alias-a"), second = fixture("timed-alias-b");
+    for (const record of [first, second]) {
+        record.userPrompt = { ...record.userPrompt, sourceEventId: "prompt", sourceTimestamp: time(0) };
+        record.responseTiming = recordedResponseTiming(source(), prompt);
+    }
+    second.userPrompt.sourceTimestamp = time(10);
+    const model = buildAssessmentModel({ revision: 1, pseudonymKey: "a".repeat(64), evidence: [first, second], exports: [] });
+    assert.equal(model.catalog[0].interactionRef, model.catalog[1].interactionRef);
+    assert.equal(model.catalog[0].responseTiming.durationMs, 1200);
+    assert.equal(model.catalog[1].responseTiming.durationMs, null);
+});
+
 test("actual collector projection retains only response metadata and extraction binds the full request", () => {
     const rows = source();
     rows.splice(1, 0, { id: "call-start", type: "tool.execution_start", timestamp: time(100),

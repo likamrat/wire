@@ -28,7 +28,7 @@ test("real range purge follows source call dates through capture, feedback, repo
         { toolCallId: id, toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch", arguments: { entityUrls: ["/me/messages"] } });
     const events = [
         event("startup", "session.start", `${firstDay}T10:00:00.000Z`, { sessionId: sourceId, version: 1 }),
-        event("prompt", "user.message", `${firstDay}T11:00:00.000Z`, { content: "SYNTHETIC_SHARED_REQUEST" }),
+        event("prompt", "user.message", `${firstDay}T11:00:00.000Z`, { content: "SYNTHETIC_SHARED_REQUEST", messageId: "shared-model-request" }),
         call("delete-A", firstDay), call("preserve-B", secondDay),
         event("complete-B", "tool.execution_complete", `${secondDay}T12:00:01.000Z`, { toolCallId: "preserve-B", success: true }),
     ];
@@ -48,11 +48,14 @@ test("real range purge follows source call dates through capture, feedback, repo
         expectedConsentRevision: 0, policyVersion: 1, enabled: true, categories: ["answer"], sourceConfigRef: source.sourceConfigRef,
         sourceConfigRevision: source.sourceConfigRevision, confirmed: true,
     }, { source: current => collector.assessmentSource(current) });
-    const answer = event("old-answer", "assistant.message", `${laterDay}T12:00:00.000Z`, { content: "SYNTHETIC_LATE_SHARED_ANSWER" });
+    const answer = event("old-answer", "assistant.message", `${laterDay}T12:00:00.000Z`, {
+        content: "SYNTHETIC_LATE_SHARED_ANSWER", originatingMessageId: "shared-model-request", model: "original-model-to-delete",
+    });
     await appendFile(file, jsonl([answer]));
     await collector.collectNow();
     state = await loadBoardState(context);
     assert.equal(state.personalEvaluation.captures.length, 1);
+    assert.equal(state.evidence[0].originalModelEvidence.responses[0].model, "original-model-to-delete");
     for (const verdict of ["pass", "fail"]) {
         state = await loadBoardState(context);
         const model = buildAssessmentModel(state);
@@ -82,6 +85,7 @@ test("real range purge follows source call dates through capture, feedback, repo
     state = await loadBoardState(context);
     assert.deepEqual(state.evidence[0].toolCalls, [retainedCall]);
     assert.equal(state.evidence[0].assessmentMembershipPruned, true);
+    assert.equal(state.evidence[0].originalModelEvidence, undefined);
     assert.deepEqual(state.personalEvaluation.captures, []);
     assert.deepEqual(state.personalEvaluation.feedback.records, []);
     assert.deepEqual(await readdir(path.join(context.dataDir, "assessment-evidence")), []);
@@ -104,6 +108,7 @@ test("real range purge follows source call dates through capture, feedback, repo
     state = await loadBoardState(context);
     assert.deepEqual(state.evidence.flatMap(record => record.toolCalls.map(call => call.toolCallId)), ["preserve-B"]);
     assert.equal(state.personalEvaluation.captures.length, 0, "Old shared answer cannot return after source rotation");
+    assert.ok(state.evidence.every(record => !record.originalModelEvidence), "Deleted model metadata cannot return after rotation or restart");
     await appendFile(file, jsonl([
         call("fresh-C", laterDay),
         event("fresh-answer", "assistant.message", `${laterDay}T12:02:00.000Z`, { content: "SYNTHETIC_NEW_SHARED_ANSWER" }),

@@ -8,6 +8,8 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { promptRecord } from "../lib/prompt-authorship.mjs";
+import { recordedInteractionModels } from "../lib/interaction-model.mjs";
+import { recordedResponseTiming } from "../lib/response-timing.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 
 const proofs = process.env.WIRE_CARD_HIERARCHY_PROOFS;
@@ -28,13 +30,15 @@ function records() {
         ["missing", "Read the launch notes if available.", undefined],
         ["empty", "No tool evidence was saved for this prompt.", "user"],
         ["unnamed", "A retained call has no recorded tool name.", "user"],
+        ["conflicting", "Read the recorded deployment choice without guessing.", "user"],
     ].map(([id, text, source], index) => {
         const record = fixture(`hierarchy-${id}`);
         record.sourceSessionId = `harbor-${id}`;
         record.sourceSessionName = `Sample: ${id === "archive" ? "Older checklist lookup" : "Harbor launch " + id}`;
         record.project = "Sample workspace: Harbor launch";
-        record.userPrompt = promptRecord({ type: "user.message", id: `prompt-${id}`, timestamp: `2026-10-10T09:3${9 - index}:00Z`,
-            data: { content: text, ...(source ? { source } : {}) } });
+        const user = { type: "user.message", id: `prompt-${id}`, timestamp: `2026-10-10T09:3${9 - index}:00Z`,
+            data: { content: text, messageId: `logical-${id}`, ...(source ? { source } : {}) } };
+        record.userPrompt = promptRecord(user);
         record.followUpPrompts = [];
         const base = record.toolCalls[0];
         const names = id === "multiple" ? ["workiq-fetch", "workiq-fetch", "workiq-ask"] : [id === "long" ? longTool : "workiq-fetch"];
@@ -57,6 +61,20 @@ function records() {
         }
         if (id === "empty") record.toolCalls = [];
         if (id === "unnamed") record.toolCalls[0].tool = null;
+        if (["retry", "multiple", "long", "conflicting"].includes(id)) {
+            const models = ["multiple", "conflicting"].includes(id) ? ["recorded-model-a", "recorded-model-b"]
+                : id === "long" ? ["model-" + "LongRecordedName".repeat(28) + "<img src=x>"] : ["recorded-model-a"];
+            const responses = models.map((model, index) => ({ id: `response-${id}-${index}`, type: "assistant.message",
+                timestamp: new Date(Date.parse(user.timestamp) + 2000 + index * 1000).toISOString(),
+                data: { model, originatingMessageId: user.data.messageId, apiCallId: `api-${id}-${id === "conflicting" ? 0 : index}`,
+                    turnId: `turn-${id}-${index}`, phase: "final_answer", toolRequests: [], content: "Invented reply, not model metadata" },
+            }));
+            const last = responses.at(-1);
+            const events = [user, ...responses, { id: `end-${id}`, type: "assistant.turn_end",
+                timestamp: new Date(Date.parse(last.timestamp) + 10).toISOString(), data: { turnId: last.data.turnId } }];
+            record.originalModelEvidence = recordedInteractionModels(events, record);
+            record.responseTiming = recordedResponseTiming(events, record.userPrompt);
+        }
         return record;
     });
 }
@@ -117,6 +135,51 @@ async function shot(page, name, card) {
 const interaction = (page, id) => page.locator(`.request-row[data-view-key="request:hierarchy-${id}"]`);
 const callCard = (page, id) => page.locator(".matched-action").filter({ has: page.locator(`.request-link[href*="hierarchy-${id}"]`) }).first();
 
+test("prompt emphasis fits the whole card's reading rhythm in both views", async t => {
+    const { page } = await setup(t), measurements = [];
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
+    for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        for (const mode of ["interactions", "calls"]) {
+            await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
+            for (const id of ["archive", "multiple", "long"]) {
+                const card = mode === "interactions" ? interaction(page, id) : callCard(page, id);
+                await card.evaluate(node => scrollBy(0, node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().height - 12));
+                await frames(page);
+                const prompt = card.locator(".full-text-preview");
+                const measured = await prompt.evaluate(node => {
+                    const css = getComputedStyle(node), rect = node.getBoundingClientRect();
+                    const card = node.closest(".activity-card"), cardBox = card.getBoundingClientRect();
+                    const range = document.createRange(); range.selectNodeContents(node);
+                    return { text: node.textContent, font: css.fontFamily, fontSize: css.fontSize, lineHeight: css.lineHeight,
+                        weight: css.fontWeight, style: css.fontStyle, textWidth: rect.width, height: rect.height,
+                        cardHeight: cardBox.height, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                        metadataSize: getComputedStyle(card.querySelector("dd")).fontSize,
+                        clipped: [...range.getClientRects()].some(box => box.left < rect.left - 1 || box.right > rect.right + 1 || box.bottom > rect.bottom + 1) };
+                });
+                const { root } = await cdp.send("DOM.getDocument");
+                const selector = mode === "interactions" ? `[data-view-key="request:hierarchy-${id}"] .full-text-preview`
+                    : `.matched-action:has(.request-link[href*="hierarchy-${id}"]) .full-text-preview`;
+                const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+                const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+                measurements.push({ theme, width, mode, id, ...measured, fonts });
+                assert.equal(measured.style, "italic");
+                assert.equal(measured.weight, "600", "Prompt emphasis uses the existing strong weight, not a heavier heading weight");
+                assert.equal(measured.fontSize, measured.metadataSize, "Prompt stays at the established body size, not a display heading");
+                assert.ok(fonts.some(font => /Asta/i.test(font.familyName) && font.glyphCount > 0), "Actual prompt glyphs use Asta, not only a declared font stack");
+                assert.equal(measured.clipped, false); assert.ok(measured.overflow <= 1);
+                if (proofs) {
+                    await mkdir(proofs, { recursive: true });
+                    await page.screenshot({ path: path.join(proofs, `prompt-${mode}-${id}-${theme}-${width}.png`) });
+                }
+            }
+        }
+    }
+    await cdp.detach();
+    if (proofs) await writeFile(path.join(proofs, "prompt-rhythm.json"), JSON.stringify(measurements, null, 2));
+});
+
 test("Interactions and Calls share emphasized prompts, stacked facts and distinct tools", async t => {
     const { page } = await setup(t), measurements = [];
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
@@ -143,7 +206,7 @@ test("Interactions and Calls share emphasized prompts, stacked facts and distinc
     }
     if (proofs) await writeFile(path.join(proofs, "hierarchy-measurements.json"), JSON.stringify(measurements, null, 2));
     for (const row of measurements) {
-        assert.ok(row.prompts.every(p => Number(p.weight) >= 700 && p.style === "italic"), `${row.mode}: actual prompt is bold and italic`);
+        assert.ok(row.prompts.every(p => p.weight === "600" && p.style === "italic"), `${row.mode}: actual prompt has restrained strong italic emphasis`);
         assert.ok(row.facts.length >= 4, `${row.mode}: categories are semantic key/value rows`);
         assert.ok(row.facts.every(fact => fact.label && fact.value && Number(fact.labelWeight) >= 700
             && fact.valueWeight === "400" && fact.labelCount === 1 && fact.valueCount === 1));
@@ -154,7 +217,141 @@ test("Interactions and Calls share emphasized prompts, stacked facts and distinc
     }
 });
 
-const fact = (card, label) => card.locator(".activity-card-facts>div").filter({ has: card.page().locator("dt").filter({ hasText: new RegExp(`^${label}$`) }) });
+const fact = (card, label) => card.locator(".activity-card-facts>div").filter({ has: card.page().locator("dt").filter({ hasText: new RegExp(`^${label}:$`) }) });
+
+test("card keys have one colon without changing values or distinctive value paint", async t => {
+    const { page } = await setup(t), measurements = [];
+    for (const [theme, width] of [["light", 1440], ["dark", 375]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        for (const mode of ["interactions", "calls"]) {
+            await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
+            const card = mode === "interactions" ? interaction(page, "multiple") : callCard(page, "multiple");
+            await shot(page, `keys-${mode}-${theme}-${width}`, card);
+            const measured = await card.evaluate(node => {
+                const appearance = element => {
+                    const css = getComputedStyle(element);
+                    return { text: element.textContent, color: css.color, background: css.backgroundColor, padding: css.padding,
+                        border: css.border, radius: css.borderRadius, font: css.font, width: element.getBoundingClientRect().width,
+                        height: element.getBoundingClientRect().height };
+                };
+                return { keys: [...node.querySelectorAll(".activity-card-facts dt")].map(item => item.textContent),
+                    values: [...node.querySelectorAll(".activity-card-facts dd")].map(item => item.textContent),
+                    origin: node.querySelector(".full-text-preview-label").textContent,
+                    distinct: [...node.querySelectorAll(".recorded-result,code.api-path,.service-cue svg")].map(appearance),
+                    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                    clipped: [...node.querySelectorAll(".activity-card-facts dt,.activity-card-facts dd")].filter(item => item.scrollWidth > item.clientWidth + 1).map(item => item.textContent) };
+            });
+            measurements.push({ theme, width, mode, ...measured });
+        }
+    }
+    if (proofs) await writeFile(path.join(proofs, "key-punctuation.json"), JSON.stringify(measurements, null, 2));
+    for (const row of measurements) {
+        assert.ok(row.keys.length && row.keys.every(label => /[^:]:$/.test(label) && !label.endsWith("::")), "Exactly one visible separator on actual metadata keys");
+        assert.equal(row.origin, "Agent prompt", "Standalone prompt label is not punctuated");
+        assert.ok(row.overflow <= 1); assert.deepEqual(row.clipped, []);
+    }
+});
+
+test("paired cards retain the same paper surface, content inset and actor cue", async t => {
+    const { page } = await setup(t), pairs = [];
+    await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
+    for (const [theme, width] of [["light", 1440], ["dark", 375]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        const pair = { theme, width };
+        for (const mode of ["interactions", "calls"]) {
+            await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
+            const card = mode === "interactions" ? interaction(page, "multiple") : callCard(page, "multiple");
+            await shot(page, `surface-${mode}-${theme}-${width}`, card);
+            pair[mode] = await card.evaluate(node => {
+                const css = getComputedStyle(node), cue = getComputedStyle(node.querySelector(".full-text-preview-label"));
+                // Native borders snap to device pixels; compare with an independent 3px border in this renderer.
+                const reference = document.createElement("span");
+                reference.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;border-inline-start:3px solid";
+                node.append(reference);
+                const intendedCueWidth = getComputedStyle(reference).borderInlineStartWidth;
+                reference.remove();
+                const bounds = node.getBoundingClientRect(), prompt = node.querySelector(".full-text").getBoundingClientRect();
+                return { background: css.backgroundColor, padding: css.padding, border: css.borderBottom,
+                    topBorder: css.borderTopWidth, radius: css.borderRadius, margin: css.marginTop,
+                    cueWidth: cue.borderInlineStartWidth, cueColor: cue.borderInlineStartColor, cuePadding: cue.paddingInlineStart,
+                    intendedCueWidth, devicePixelRatio,
+                    inset: prompt.left - bounds.left,
+                    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                    checkboxes: node.querySelectorAll("input[type=checkbox]").length };
+            });
+        }
+        pairs.push(pair);
+    }
+    if (proofs) await writeFile(path.join(proofs, "surface-pairs.json"), JSON.stringify(pairs, null, 2));
+    for (const { theme, interactions, calls } of pairs) {
+        for (const key of ["background", "padding", "border", "topBorder", "radius", "margin", "cueWidth", "cueColor", "cuePadding"]) {
+            assert.equal(calls[key], interactions[key], `${theme}: shared ${key}`);
+        }
+        assert.ok(calls.inset >= 8 && interactions.inset >= 8);
+        assert.equal(calls.checkboxes, 0); assert.equal(interactions.checkboxes, 1);
+        assert.ok(parseFloat(calls.cueWidth) > 0, "The actor cue remains present");
+        assert.equal(calls.cueWidth, calls.intendedCueWidth, "Calls uses the native rendered width of the intended 3px cue");
+        assert.equal(interactions.cueWidth, interactions.intendedCueWidth, "Interactions uses the native rendered width of the intended 3px cue");
+        assert.ok(calls.overflow <= 1 && interactions.overflow <= 1);
+    }
+});
+
+test("recorded models use the same stacked card fact and exact reader context without tool attribution", async t => {
+    const { page, data, snapshot } = await setup(t);
+    const multi = interaction(page, "multiple");
+    await expect(fact(multi, "Models").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
+    await expect(fact(interaction(page, "archive"), "Model").locator("dd")).toHaveText("Not recorded");
+    await expect(fact(interaction(page, "retry"), "Model").locator("dd")).toHaveText("recorded-model-a");
+    await expect(fact(interaction(page, "conflicting"), "Model").locator("dd")).toHaveText("Conflicting records");
+    await expect(fact(interaction(page, "archive"), "Time to recorded final response").locator("dd")).toHaveText("Not recorded");
+    await expect(multi.locator(".activity-card-facts>div").first().locator("dt")).toHaveText("Time to recorded final response:");
+    await expect(multi.locator(".response-timing data")).toHaveAttribute("value", "3000");
+    assert.equal(snapshot().assessment.catalog.find(row => row.scenarioId === "hierarchy-multiple").responseTiming.durationMs, 3000);
+    assert.deepEqual(await fact(multi, "Models").evaluate(node => ({
+        labelWeight: getComputedStyle(node.querySelector("dt")).fontWeight,
+        valueWeight: getComputedStyle(node.querySelector("dd")).fontWeight,
+        controls: node.querySelectorAll("a,button,input,details,[tabindex]").length,
+        next: node.nextElementSibling?.querySelector("dt")?.textContent,
+    })), { labelWeight: "700", valueWeight: "400", controls: 0, next: "Matching results:" });
+    await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
+    await expect(fact(multi, "Models").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
+    await expect(multi.locator(".response-timing data")).toHaveAttribute("value", "3000");
+    await expect(multi.locator(".card-tool-name")).toHaveText(["workiq-ask"]);
+    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
+    const call = callCard(page, "multiple");
+    await expect(fact(call, "Interaction model").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
+    await expect(fact(call, "Call duration").locator("dd")).toHaveText("1,200 ms");
+    await expect(call.locator(".response-timing")).toHaveCount(0);
+    await expect(call.locator(".interaction-tools")).not.toContainText("recorded-model");
+    const link = call.getByRole("link", { name: "Open exact call in context" });
+    await link.focus(); await page.keyboard.press("Enter"); await ready(page);
+    const reader = page.locator(".request-original .interaction-model-fact");
+    await expect(reader.locator("dt")).toHaveText("Models:");
+    await expect(reader.locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
+    await expect(page.locator(".request-original .response-timing dt")).toHaveText("Time to recorded final response:");
+    await expect(page.locator(".request-original .response-timing data")).toHaveAttribute("value", "3000");
+    assert.equal(await reader.evaluate(node => node.previousElementSibling?.className), "reader-response-timing");
+    await page.locator(".request-original").getByRole("button", { name: "Copy prompt", exact: true }).click();
+    assert.equal(await page.evaluate(() => window.copiedHierarchyText), data.find(row => row.scenarioId === "hierarchy-multiple").userPrompt.text);
+    for (const [theme, width] of [["light", 1440], ["dark", 375]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await expect(reader.locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
+        assert.deepEqual(await page.locator(".request-original").evaluate(node => ({
+            keys: [...node.querySelectorAll(".reader-response-timing dt,.interaction-model-fact dt")].map(item => item.textContent),
+            weights: [...node.querySelectorAll(".reader-response-timing dt,.interaction-model-fact dt")].map(item => getComputedStyle(item).fontWeight),
+            values: [...node.querySelectorAll(".reader-response-timing dd,.interaction-model-fact dd")].map(item => getComputedStyle(item).fontWeight),
+            overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        })), { keys: ["Time to recorded final response:", "Models:"], weights: ["600", "700"], values: ["400", "400"], overflow: 0 });
+        if (proofs) {
+            await mkdir(proofs, { recursive: true });
+            await page.screenshot({ path: path.join(proofs, `combined-reader-${theme}-${width}.png`), fullPage: true });
+            await writeFile(path.join(proofs, `combined-reader-${theme}-${width}.txt`), await page.locator("#requestContent").ariaSnapshot());
+        }
+    }
+    assert.match(await reader.ariaSnapshot(), /Models.*|recorded-model-a/);
+    await page.goBack(); await ready(page);
+    await expect(fact(callCard(page, "multiple"), "Interaction model").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
+});
 
 async function pointAt(page, target) {
     await target.evaluate(node => scrollBy(0, node.getBoundingClientRect().top - innerHeight / 2));
@@ -192,7 +389,7 @@ test("scoped tool lists retain individual names and counts without assigning agg
     await expect(call.locator(".card-tool-name")).toHaveText("workiq-ask");
     await expect(page.locator("#activityList .matched-action")).toHaveCount(1);
     await expect(call).toHaveAttribute("data-action-id", canonicalIds[2]);
-    await expect(fact(call, "Activity category")).toHaveText("Activity categoryMail");
+    await expect(fact(call, "Activity category")).toHaveText("Activity category:Mail");
     await expect(fact(call, "Tool completion").locator("[data-outcome=success]")).toHaveAttribute("data-count", "1");
     await shot(page, "calls-filtered-multiple-light-1440", call);
     const open = call.locator(".request-link"), point = await pointAt(page, open), url = page.url();
@@ -249,17 +446,26 @@ test("bold italic original reading, missing values and long metadata stay access
             await expect(fact(missing, "Request time")).toContainText("Not recorded");
             await expect(missing.locator("[data-outcome=unknown]")).toHaveAttribute("data-count", "1");
             if (mode === "calls") {
-                await expect(fact(missing, "Call duration")).toContainText("Duration unavailable");
+                await expect(fact(missing, "Call duration")).toContainText("Not recorded");
                 await expect(fact(missing, "API path")).toContainText("Not recorded");
             }
             for (const id of ["retry", "multiple", "archive"]) {
                 const card = mode === "interactions" ? interaction(page, id) : callCard(page, id);
                 assert.deepEqual(await card.locator(".full-text-preview").evaluate(node => ({
                     weight: getComputedStyle(node).fontWeight, style: getComputedStyle(node).fontStyle,
-                })), { weight: "700", style: "italic" });
+                })), { weight: "600", style: "italic" });
             }
             const card = mode === "interactions" ? interaction(page, "long") : callCard(page, "long");
             await expect(card.locator(".card-tool-name")).toHaveText(longTool);
+            const model = fact(card, mode === "interactions" ? "Model" : "Interaction model").locator("dd");
+            await expect(model).toHaveText(data.find(record => record.scenarioId === "hierarchy-long").originalModelEvidence.responses[0].model);
+            await expect(model.locator("img,script,a,button")).toHaveCount(0);
+            assert.ok(await model.evaluate(node => {
+                const range = document.createRange(); range.selectNodeContents(node);
+                const box = node.getBoundingClientRect();
+                return [...range.getClientRects()].every(rect => rect.left >= box.left - 1 && rect.right <= box.right + 1)
+                    && getComputedStyle(node).fontWeight === "400";
+            }), "The exact long model label wraps as ordinary text, not HTML");
             await card.locator(".full-text-toggle").click();
             const full = card.locator(".full-text-body pre");
             assert.equal(await full.textContent(), data.find(record => record.scenarioId === "hierarchy-long").userPrompt.text);
@@ -276,7 +482,7 @@ test("bold italic original reading, missing values and long metadata stay access
                     outside,
                     pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
             });
-            assert.equal(shape.weight, "700"); assert.equal(shape.style, "italic"); assert.equal(shape.overflow, "visible");
+            assert.equal(shape.weight, "600"); assert.equal(shape.style, "italic"); assert.equal(shape.overflow, "visible");
             assert.equal(shape.maxHeight, "none"); assert.deepEqual(shape.outside, [], JSON.stringify({ width, scale, mode, shape })); assert.ok(shape.pageOverflow <= 1);
             measurements.push({ viewportWidth: width, rootTextScale: scale, mode, ...shape });
             await card.getByRole("button", { name: "Copy prompt", exact: true }).click();

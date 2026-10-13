@@ -39,9 +39,9 @@ export const analyzeLayoutStyles = `
 #periodFeedback #periodHint {margin-top:2px}
 #homeView {container:analyze-view / inline-size}
 .analyze-dashboard {min-width:0}
-.analyze-chart-grid {display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:16px;align-items:start;min-width:0}
+.analyze-chart-grid {display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:16px;align-items:stretch;min-width:0}
 .analyze-outcome-summary {min-width:0;display:flex;flex-direction:column}
-#outcomeChart {min-width:0;display:flex}
+#outcomeChart {min-width:0;display:flex;flex:1}
 #outcomeChart>.percentage-card {width:100%;padding:20px 20px 0;border:0;background:none;display:flex;flex-direction:column;container:outcome-card / inline-size}
 #outcomeChart .percentage-card-heading {margin:0 0 12px;min-height:0}
 #outcomeChart .percentage-content {display:grid;grid-template-columns:minmax(0,9rem) minmax(0,24rem);justify-content:center;gap:16px;align-items:center;flex:1}
@@ -59,38 +59,25 @@ export const analyzeLayoutStyles = `
 .analyze-chart-main .chart-grouping {margin:0 0 12px;color:var(--muted);font-size:var(--type-small)}
 #homeView :is(.chart-heading h2,.percentage-card h3) {text-transform:none;letter-spacing:0;font-size:var(--type-section)}
 .analyze-chart-main #chartFooter {margin-top:8px;line-height:1.5}
+.analyze-chart-main #chartFooter:empty {display:none}
 .analyze-chart-main #chartFooter .chart-size-note {font-size:var(--type-caption)}
 #percentageCharts .percentage-section {margin-block:20px 16px}
-#percentageCharts .percentage-panels {gap:16px}
+#percentageCharts .percentage-panels {gap:16px;align-items:stretch}
 #percentageCharts .percentage-card {padding:16px 20px}
 #percentageCharts .percentage-card-heading {margin-bottom:4px;min-height:0}
 #homeView .percentage-denominator {margin-top:4px;font-size:var(--type-caption)}
 #homeView .percentage-exact>summary {font-size:var(--type-small)}
 .analyze-review {margin-block:var(--space-lg)}
-.analyze-review #recordedTiming {min-width:0;max-width:100%;container-type:normal}
-.analyze-review .timing-summary {display:grid;grid-template-columns:minmax(0,max-content) minmax(0,1fr);gap:0 var(--space-xl);width:fit-content;max-width:100%;margin:0;padding:0;border:0}
-.analyze-review .timing-summary .recorded-timing-row {display:grid;grid-column:1/-1;grid-template-columns:subgrid;align-items:baseline;row-gap:var(--space-sm);padding:0}
-.analyze-review .timing-summary .recorded-timing-row>:not(.timing-facts) {grid-column:1/-1}
-.analyze-review .timing-summary .recorded-timing-row+.recorded-timing-row {margin-top:var(--space-lg);padding-top:var(--space-lg)}
-.analyze-review .timing-summary h3,.analyze-review #homeInsights .assessment-heading h2 {font-size:var(--type-reading);line-height:var(--leading-ui)}
-.analyze-review .timing-summary .timing-identity {display:block;min-width:0;font-size:var(--type-body)}
-.analyze-review .timing-summary :is(.timing-boundary,.assessment-unavailable-reason) {font-size:var(--type-body);line-height:var(--leading-ui);color:var(--muted);margin:var(--space-xs) 0 0}
-.analyze-review .timing-summary .timing-facts {display:contents}
-.analyze-review .timing-facts>div {display:contents}
-.analyze-review .timing-summary :is(dt,dd,.assessment-value) {font-size:var(--type-body);line-height:var(--leading-ui);margin:0}
-.analyze-review .timing-summary dt {grid-column:1;color:var(--muted);font-weight:var(--weight-regular)}
-.analyze-review .timing-summary dd {grid-column:2;min-width:0;font-weight:var(--weight-strong)}
-.analyze-review .recorded-timing-row>a {display:flex;align-items:center;min-height:44px;width:fit-content;max-width:100%;font-size:var(--type-control);margin-top:var(--space-xs)}
+.analyze-review #homeInsights .assessment-heading h2 {font-size:var(--type-reading);line-height:var(--leading-ui)}
 #homeFindings {padding:12px 20px 16px;border-top:1px solid var(--rule);min-width:0}
 #homeFindings:has(>.assessment-findings[hidden]) {display:none}
 #homeFindings .assessment-findings {margin:0;font-size:var(--type-small)}
-#homeFindings .assessment-findings h3 {font-size:var(--type-small);margin-bottom:4px}
 #homeFindings .assessment-finding-limit {font-size:var(--type-caption)}
 .analyze-review-details {min-width:0;max-width:100%;margin-top:var(--space-sm)}
 .analyze-review-details>summary {width:fit-content;max-width:100%;min-height:44px;align-content:center;cursor:pointer;color:var(--accent);font-size:var(--type-control);overflow-wrap:anywhere}
 .analyze-review #homeInsights {margin:var(--space-sm) 0 0}
 .analyze-review #homeInsights>.assessment-scope {margin:0 0 var(--space-lg);padding:0;border:0;max-width:72ch;font-size:var(--type-body)}
-.analyze-review #homeInsights .assessment-summary>.assessment-heading {justify-content:flex-start;margin-top:var(--space-xl)}
+.analyze-review #homeInsights .assessment-summary>.assessment-heading {justify-content:flex-start}
 .analyze-review .assessment-empty-review {font-size:var(--type-body)}
 #homeView>.chart-actions {margin:0}
 #homeView>.chart-actions #meaning>summary,#homeView>#serviceDefinitions>summary {
@@ -106,6 +93,11 @@ export const analyzeLayoutStyles = `
 #meaning #chartReadingNotes dd {margin:2px 0 0}
 #meaning>section+section {margin-top:16px}
 #activityView {margin-top:24px}
+.reader-response-timing {min-width:0;margin:var(--space-sm) 0 var(--space-md);font-size:var(--type-body);line-height:var(--leading-ui);overflow-wrap:anywhere}
+.reader-response-timing>.response-timing {display:grid;gap:4px;min-width:0}
+.reader-response-timing dt {font-weight:var(--weight-strong)}
+.reader-response-timing dd {margin:0;font-weight:var(--weight-regular)}
+.response-timing data {font-variant-numeric:tabular-nums}
 #activityView>.section-heading {padding-bottom:8px;border-bottom:1px solid var(--rule);gap:8px 16px}
 #activityView .analyze-result-actions {margin-block:8px}
 @container analyze-view (min-width:44rem) {
@@ -120,11 +112,6 @@ export const analyzeLayoutStyles = `
 @container analyze-view (max-width:44rem) {
  .analyze-chart-grid {grid-template-columns:minmax(0,1fr)}
  #outcomeChart .percentage-content {grid-template-columns:minmax(0,8rem) minmax(0,1fr)}
-}
-@container analyze-view (max-width:28rem) {
- .analyze-review .timing-summary {grid-template-columns:minmax(0,1fr)}
- .analyze-review .timing-summary .recorded-timing-row {row-gap:var(--space-xs)}
- .analyze-review .timing-summary dd {grid-column:1;margin-bottom:var(--space-sm)}
 }
 @container outcome-card (max-width:24rem) {
  #outcomeChart .percentage-content {grid-template-columns:minmax(0,1fr)}

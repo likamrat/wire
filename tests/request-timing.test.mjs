@@ -71,3 +71,45 @@ test("origin and retained coverage are readable without promoting an inferred me
     assert.equal(timing.coverage({ status: "full", text: "Retained text" }), "Complete recorded text");
     assert.equal(timing.coverage({ status: "unexpected", text: "Retained text" }), "Text completeness not verified");
 });
+
+function responseSnapshot(durationMs = 1200) {
+    return { basis: { sourceRevision: 4 }, catalog: [{
+        scenarioId: "scenario", status: "retained", interactionRef: "interaction-a", interactionRefs: ["interaction-a"],
+        responseTiming: { schemaVersion: 1, sourceRevision: 4, interactionRef: "interaction-a",
+            boundary: "recorded-request-to-final-answer", status: durationMs === null ? "unavailable" : "measured", durationMs },
+    }] };
+}
+
+test("response timing uses one exact qualified catalog mapping and preserves zero and unavailable", () => {
+    for (const durationMs of [0, 1200, null]) {
+        const snapshot = responseSnapshot(durationMs), before = structuredClone(snapshot);
+        assert.deepEqual(timing.response("scenario", snapshot), { status: durationMs === null ? "unavailable" : "measured", durationMs });
+        assert.deepEqual(snapshot, before);
+    }
+    const snapshot = responseSnapshot();
+    assert.equal(timing.response("another-scenario", snapshot).status, "unavailable");
+    snapshot.catalog[0].status = "unverified";
+    assert.equal(timing.response("scenario", snapshot).status, "unavailable");
+    delete snapshot.catalog[0].responseTiming;
+    assert.equal(timing.response("scenario", snapshot).durationMs, null);
+});
+
+test("invalid or stale response projections surface a read error rather than missing or zero timing", () => {
+    for (const change of [
+        snapshot => { snapshot.catalog.push(structuredClone(snapshot.catalog[0])); },
+        snapshot => { snapshot.basis.sourceRevision++; },
+        snapshot => { snapshot.catalog[0].responseTiming.interactionRef = "another-interaction"; },
+        snapshot => { snapshot.catalog[0].interactionRefs.push("another-interaction"); },
+        snapshot => { snapshot.catalog[0].responseTiming.boundary = "tool-start-to-completion"; },
+        snapshot => { snapshot.catalog[0].responseTiming.schemaVersion = 2; },
+        snapshot => { snapshot.catalog[0].responseTiming.durationMs = -1; },
+        snapshot => { snapshot.catalog[0].responseTiming.durationMs = Infinity; },
+        snapshot => { snapshot.catalog[0].responseTiming.durationMs = null; },
+        snapshot => { snapshot.catalog[0].responseTiming.status = "unavailable"; },
+    ]) {
+        const snapshot = responseSnapshot();
+        change(snapshot);
+        assert.deepEqual(timing.response("scenario", snapshot), { status: "error", durationMs: null });
+    }
+    assert.equal(timing.response("scenario", null).status, "error");
+});

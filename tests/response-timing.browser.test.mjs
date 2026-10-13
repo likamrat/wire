@@ -28,14 +28,13 @@ test("recorded response latency stays distinct through actual detail, overview a
     const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } }), errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(runtime.url + "#home");
-    await page.locator("#homeInsights .assessment-grid").waitFor();
-    const home = page.locator("#homeInsights");
-    assert.match(await home.innerText(), /Request to final response/);
-    assert.match(await home.innerText(), /1,200 ms/);
-    assert.match(await home.innerText(), /3 \/ 3 requests timed/);
+    await page.locator("#activityList .response-timing data").first().waitFor();
+    assert.deepEqual(await page.locator("#activityList .response-timing data").evaluateAll(nodes =>
+        nodes.map(node => Number(node.value)).sort((a, b) => a - b)), [0, 1200, 5000]);
+    assert.equal(await page.locator("#homeInsights .assessment-timing").count(), 0);
     await page.goto(runtime.url + "#request?request=timed-response-0");
-    await page.locator(".interaction-insights .assessment-grid").waitFor();
-    assert.match(await page.locator(".interaction-insights").innerText(), /0 ms/);
+    await page.locator(".request-original .response-timing data").waitFor();
+    assert.equal(await page.locator(".request-original .response-timing data").innerText(), "0 s");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width: 375, height: 1000 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
@@ -46,12 +45,13 @@ test("recorded response latency stays distinct through actual detail, overview a
     const timing = preview.snapshot.evaluationFacts.metrics.find(metric => metric.definitionId === "recorded-response-duration");
     assert.equal(timing.value, 1200);
     assert.deepEqual(timing.coverage, { eligible: 3, covered: 3 });
-    assert.match(preview.previewHtml, /Time to recorded final response/);
-    assert.match(preview.files["product-report.md"], /1.2 s/);
+    assert.match(preview.previewHtml, /<!doctype html>/i);
     await controller.review("synthetic-timing", preview.previewId, true);
     const saved = (await controller.confirm("synthetic-timing", preview.previewId, true)).bundle;
     const json = JSON.parse(await readFile(saved.files["product-report.json"], "utf8"));
     assert.deepEqual(json.evaluationFacts.metrics.find(metric => metric.definitionId === timing.definitionId), timing);
+    assert.equal(await readFile(saved.files["product-report.html"], "utf8"), preview.previewHtml);
+    assert.equal(await readFile(saved.files["product-report.md"], "utf8"), preview.files["product-report.md"]);
     assert.equal((await readFile(saved.files["product-report.pdf"])).subarray(0, 5).toString(), "%PDF-");
     assert.deepEqual(errors, []);
 });

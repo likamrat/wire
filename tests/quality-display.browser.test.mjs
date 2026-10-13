@@ -93,7 +93,7 @@ async function readable(page, host) {
     });
     assert.equal(facts.overflow, false); assert.equal(facts.outside, false);
     assert.ok(facts.targets.every(height => height >= 44));
-    assert.ok(facts.headings.includes("Quality assessment")); assert.ok(facts.headings.includes("Recorded timing"));
+    assert.ok(facts.headings.includes("Quality assessment")); assert.ok(!facts.headings.includes("Recorded timing"));
 }
 const cases = [
     { name: "unassessed", options: {}, assessed: 0, eligible: 18 },
@@ -121,10 +121,10 @@ for (const scenario of cases) test(`quality readout: ${scenario.name} source fac
         assert.match(await accuracy.innerText(), /insufficient|not enough evidence/i);
         assert.match(await home.locator('[data-attempt-state="failed"]').innerText(), /1 request.*Evaluator attempt failed/s);
     }
-    const timing = home.locator(".assessment-timing");
-    assert.match(await timing.innerText(), /11 min 17\.96 s/);
-    assert.match(await timing.innerText(), new RegExp(`1 of ${scenario.eligible} requests timed`));
-    assert.match(await timing.innerText(), /one|single|1 timed|1 measured/i);
+    assert.equal(await home.locator(".assessment-timing").count(), 0);
+    const timing = page.locator("#activityList .response-timing data").first();
+    assert.equal(await timing.innerText(), "11 min 17.96 s");
+    assert.equal(await timing.getAttribute("value"), "677960");
     for (const [width, size, theme] of [[1440, 100, "light"], [1200, 100, "dark"], [375, 100, "light"], [375, 200, "dark"]]) {
         await page.setViewportSize({ width, height: 1100 }); await chooseTheme(page, theme);
         await page.evaluate(size => { document.documentElement.style.fontSize = `${size}%`; }, size);
@@ -174,10 +174,7 @@ test("missing final-response timing and historical attempt metadata remain visib
     const host = page.locator("#homeInsights");
     assert.match(await host.locator(".assessment-attempts").innerText(), /Assessment attempt history unavailable/);
     assert.equal(await host.locator("[data-attempt-state=none]").count(), 0);
-    const response = host.locator('.assessment-timing .assessment-fact').filter({ hasText: "Request to final response" });
-    assert.match(await response.innerText(), /Not measured/);
-    assert.match(await response.innerText(), /0 of 3 requests timed/);
-    assert.match(await response.innerText(), /3 requests without recorded timing/);
-    assert.match(await host.locator(".assessment-timing").innerText(), /6 of 7 calls timed/);
+    assert.equal(await host.locator(".assessment-timing").count(), 0);
+    assert.deepEqual(await page.locator("#activityList .response-timing dd").allTextContents(), Array(3).fill("Not recorded"));
     await capture(page, "#homeInsights", "historical-unknown-and-missing-timing");
 });

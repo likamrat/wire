@@ -159,7 +159,7 @@ test("normal isolated source opens retained correction, retry and reply immediat
         await expect(page.locator("#" + id)).toBeHidden();
     }
     await expect(page.locator(".request-context-heading")).toHaveCount(0);
-    await expect(page.locator(".request-context-summaries > summary")).toHaveText("Timing, reviews and record details");
+    await expect(page.locator(".request-context-summaries > summary")).toHaveText("Reviews and record details");
     await expect(page.locator(".request-context-summaries .request-recorded").first()).toBeHidden();
     const timeline = page.locator(".request-context-timeline");
     await expect(timeline.locator(".interaction-findings,.interaction-insights")).toHaveCount(0);
@@ -194,7 +194,8 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await expect(page.locator(".interaction-findings").first()).toContainText("Work IQ sign-in was required");
     await expect(page.locator(".request-context-summaries .full-request-results").first()).toContainText("1 Tool failed");
     await expect(page.locator(".request-context-summaries .full-request-results").nth(1)).toContainText("1 Worked");
-    await expect(page.locator(".request-context-summaries .assessment-timing")).toHaveCount(2);
+    await expect(page.locator(".request-context-summaries .assessment-timing")).toHaveCount(0);
+    await expect(page.locator(".request-context-timeline .response-timing")).toHaveCount(2);
     await expect(page.locator(".request-context-summaries .timing-summary")).toHaveCount(0);
     await expect(page.locator(".request-context-summaries [data-empty-reviews]")).toHaveCount(0);
     const feedback = page.locator(".request-context-summaries").getByRole("button", { name: "Details and feedback", exact: true }).first();
@@ -272,7 +273,7 @@ test("leaving before the shared reader is ready never starts an eager hidden pay
     await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
     await intercepted;
     await page.locator('nav [data-nav="analyze"]').click(); await ready(page);
-    await page.getByText("Request timing and reviews", { exact: true }).click();
+    await page.getByText("Saved reviews", { exact: true }).click();
     release();
     await expect(page.locator("#homeInsights .assessment-summary")).toBeVisible();
     assert.equal(payloadReads.length, 0);

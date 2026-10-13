@@ -42,8 +42,9 @@ function visibleInk() {
             const css = getComputedStyle(node), bg = background(node), color = value => `rgb(${value.slice(0, 3).join(",")})`;
             return { target: node.id || node.tagName + "." + node.className, background: color(bg),
                 ink: color(blend(rgba(css.color), bg)), font: css.fontFamily, weight: css.fontWeight,
-                cardEmphasis: !!node.closest("#activityList>.activity-card")
-                    && node.matches(".full-text-preview,.full-text-body pre,.activity-card-facts dt,.card-tool-name"),
+                cardEmphasis: node.matches("#requestContent .interaction-model-fact dt")
+                    || !!node.closest("#activityList>.activity-card")
+                    && node.matches(".activity-card-facts dt,.card-tool-name"),
                 placeholder: node.hasAttribute("placeholder") ? color(blend(rgba(getComputedStyle(node, "::placeholder").color), bg)) : null,
                 code: !!node.closest("code,kbd,samp,.mono,pre:not(.full-text-content)") };
         });
@@ -198,7 +199,7 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
         .map(font => ({ weight: font.weight, status: font.status }))), [{ weight: "300 800", status: "loaded" }]);
     const fontPaint = [];
     for (const selector of ["#periodHint", "#pageTitle", "#checkActivity", ".chart-heading h2", ".flat-time-axis > span"]) fontPaint.push(await paintedFont(selector));
-    fontPaint.push(await paintedFont("#activityList .full-text-preview", "700"));
+    fontPaint.push(await paintedFont("#activityList .full-text-preview", "600"));
     assert.equal(fontPaint.find(value => value.selector === "#periodHint").style.weight, "400");
     assert.equal(fontPaint.find(value => value.selector === "#pageTitle").style.weight, "600");
     assert.equal(fontPaint.find(value => value.selector === "#checkActivity").style.weight, "600");
@@ -213,7 +214,7 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
             assert.ok(contrast(text.ink, text.background) >= 4.5, `${theme} ${name} ${JSON.stringify(text)}`);
             if (text.placeholder) assert.ok(contrast(text.placeholder, text.background) >= 4.5, text.target);
             if (!text.code) assert.match(text.font, /^"Asta Sans"/, text.target);
-            if (text.cardEmphasis) assert.equal(text.weight, "700", `${name} ${text.target}: explicit prompt/key/tool emphasis`);
+            if (text.cardEmphasis) assert.equal(text.weight, "700", `${name} ${text.target}: explicit key/tool emphasis`);
             else assert.ok(["400", "500", "600"].includes(text.weight), `${name} ${text.target}: ${text.weight}`);
         }
         const widths = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }));
@@ -228,7 +229,7 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
         await inspect("analyze", theme);
         await page.locator('[data-analyze-mode="calls"]').click();
         await inspect("calls", theme);
-        fontPaint.push(await paintedFont("#activityList .full-text-preview", "700"));
+        fontPaint.push(await paintedFont("#activityList .full-text-preview", "600"));
         await page.locator('[data-analyze-mode="interactions"]').click();
         assert.deepEqual(await page.locator(".percentage-legend-row").evaluateAll(nodes => nodes.map(node => ({
             category: node.dataset.category, count: node.dataset.count, percentage: node.dataset.percentage,

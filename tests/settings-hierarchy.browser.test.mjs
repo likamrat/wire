@@ -101,8 +101,9 @@ test("Settings groups contain their own controls with consistent nearby columns 
         });
         assert.ok(Math.abs(geometry.history.x - geometry.cadence.x) <= 1, "Both preference controls use the same leading column");
         assert.ok(geometry.history.x - geometry.label.x <= 320, "Dropdown stays near its label, not the far pane edge");
+        // Native DOMRect rounding can exceed the shared bottom by 0.00001145 CSS px.
         assert.ok(geometry.actions.x >= geometry.root.x && geometry.actions.right <= geometry.root.right + 1
-            && geometry.actions.y >= geometry.cadence.bottom && geometry.actions.bottom <= geometry.root.bottom,
+            && geometry.actions.y >= geometry.cadence.bottom && geometry.actions.bottom <= geometry.root.bottom + 0.0001,
         "Save and Cancel are contained below the fields they govern");
         await capture(page, `connection-${width}-${theme}`);
         for (const category of ["privacy", "ai", "display", "troubleshooting"]) {

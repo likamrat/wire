@@ -320,7 +320,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 } else {
                     const model = presentation.summarize(data.metrics, { membershipStatus: membership.unavailable ? "partial" : "complete-retained",
                         assessmentAttempts: data.assessmentAttempts, reviewStatuses: data.reviewStatuses ?? null });
-                    renderSummary(host, model, { findingsHost, bindDetails, disclosureKey: "assessment:overview:" + JSON.stringify(membership.refs),
+                    renderSummary(host, model, { findingsHost, bindDetails, showTiming: false, disclosureKey: "assessment:overview:" + JSON.stringify(membership.refs),
                         helpButton: measureHelp, detailsLabel: "Measure definitions", onDetails: trigger => showDetails(model, null, trigger) });
                     automaticEntry(host);
                 }
@@ -379,7 +379,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 if (!sameBasis(data.basis, expected) || data.interaction.interactionRef !== mapping.interactionRef) throw new Error("Interaction identity or evidence version changed.");
                 const model = presentation.summarize(data.metrics, { membershipStatus: data.interaction.membershipStatus,
                     singleInteraction: true, reviewStatus: data.reviewStatus ?? null });
-                renderSummary(host, model, { findingsHost, bindDetails, disclosureKey: "assessment:interaction:" + mapping.interactionRef,
+                renderSummary(host, model, { findingsHost, bindDetails, showTiming: false, disclosureKey: "assessment:interaction:" + mapping.interactionRef,
                     helpButton: measureHelp, onDetails: trigger => showDetails(model, data, trigger) });
                 automaticEntry(host);
                 showResponse(responseHost, data, responseOptions);
