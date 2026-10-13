@@ -47,6 +47,14 @@ Corpus reads use the additive internal `readOnly` option on `loadBoardState` and
 
 Methods supersede earlier asynchronous operations. `ready`/`partial` is current availability, not completeness of original history. `stale`, `superseded`, `unavailable` and `closed` are not no-match results. Safe issue codes identify missing, corrupt/unsupported, inaccessible, cleanup-pending, unavailable-source and unauthorized/revoked inputs without logging content, private paths, query text or credentials. Missing reply payloads do not block independently authorized artifacts. A changed generation invalidates queued results, not the independent approval of an unchanged saved artifact.
 
+Each source issue also identifies its affected corpus `types`; unknown/global
+failures remain unclassified and fail closed. This permits a consumer with an
+explicit, receipt-bound type scope to distinguish an unrelated report failure
+from missing analytical activity. It does not remove issues, alter the global
+`partial` state, expand permissions or treat Related suggestions as analytical
+membership. Per-item saved-text completeness labels remain separate from whether
+all currently authorized retained items were successfully read.
+
 Saved-artifact targets form a closed data union, not executable actions or invented URLs. After `deliver`, live-search may dispatch only the corresponding read-only report/comparison open function. `open-saved-report-file` additionally carries `format: "json" | "markdown" | "pdf"`; its `documentHash` is the exact file hash, not the extracted text hash. An explicit later open calls `readSavedReportFile` with that format under the current read-only store gate and compares bundle, manifest and file identity. JSON/Markdown bytes are inert source text; PDF bytes belong only in a controlled local viewer or an explicit download. No corpus method opens, downloads or launches a file. The legacy `/api/report-file` download path is not the verified-format dispatcher; wiring transport for these targets requires its own scoped integration. Do not put capabilities/queries/paths in a URL. Settings/view focus must reveal/focus only and preserve independent approval flows.
 
 ## Availability, resource accounting and focused proof

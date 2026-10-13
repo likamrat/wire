@@ -75,6 +75,7 @@ export interface SearchWireContract {
     receipt(value: unknown): SearchWireReceipt;
     validReceipt(value: unknown): value is SearchWireReceipt;
     analysisReceipt(value: unknown): value is MatchReceipt & { queryPurpose: "analysis" };
+    completeCoverage(corpus: unknown, requestedTypes: unknown): boolean;
     sameReceipt(a: unknown, b: unknown): boolean;
     validResults(value: unknown): value is SearchResultsEvent;
 }

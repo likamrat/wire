@@ -57,7 +57,7 @@ identity and verified-file reader checks remain unchanged. A Matches receipt
 cannot open a Related-only ID.
 
 `membership()` additionally requires an original stored **analysis-purpose**
-strict receipt, current complete corpus and all four analytical types. It reads
+strict receipt, complete coverage of its requested types and all four analytical types. It reads
 only the strict map. Editing a Related purpose, swapping its policy field,
 changing query purpose/types or replaying another request/panel cannot promote
 the Related item. `validatePeriodSemanticSelection` uses the same v2 strict
@@ -220,6 +220,15 @@ produce explicitly labelled **exact/prefix only**, not false semantic success.
 Partial coverage and safe issue codes remain visible; stale, changing,
 disconnected and unavailable are not no-match.
 
+Source issues identify the item types they affect. Current Analyze requires
+interaction, context, reply and action coverage, so a corrupt saved report does
+not block an otherwise complete activity population. Navigation still reports
+the global coverage gap, and a request that includes report types cannot discard
+that gap. Missing, revoked or unreadable relevant content and unclassified issues
+still block analytical membership. The browser and server use the same
+type-coverage rule; periods and report preparation validate the server's owned
+receipt against its current corpus, not caller-supplied coverage.
+
 One active query plus **one replaceable latest query** is allowed per panel.
 Explicit item opening also has one owned read slot; concurrent opens are refused
 as busy, and closure waits for that read gate without admitting late content.
@@ -310,15 +319,15 @@ The internal synchronous authority method
 accepted state gate. It returns `{scenarioIds, actionIds, parentScenarioIds}` from
 the **last server-disclosed/admitted** hit map, not proof of browser display.
 It rejects wrong owner, changed source/revision/generation, active mutation,
-partial coverage or a category-limited receipt. Actual valid zero matches return
+incomplete coverage of the receipt's requested types or a category-limited receipt. Actual valid zero matches return
 three empty arrays. The frontend independently requires its observed current
 receipt/scope. HTTP consumers submit the receipt only, never trusted match IDs.
 The whole-retained-corpus mapping is independent of ordinary Analyze dates, so a
 paired-period consumer can apply both chosen date ranges without a new ranker.
 
 A complete, current receipt is required to display an analytical population.
-Partial results remain usable for labelled navigation, but neither partial empty
-nor partial nonempty matches render charts, rows, timed populations or outcome
+Results with missing coverage in the requested types remain usable for labelled
+navigation, but neither empty nor nonempty incomplete matches render charts, rows, timed populations or outcome
 facet counts. Visibility owners preserve that state during controls-only
 navigation too. Current-view reports remain unavailable; Selected/All still show
 their independent known populations without pretending that current matches are

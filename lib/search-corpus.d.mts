@@ -52,7 +52,12 @@ export interface CorpusStatus {
     readonly generation: number;
     readonly items: number;
     readonly textBytes: number;
-    readonly issues: readonly { readonly sourceId: string; readonly code: string }[];
+    readonly issues: readonly {
+        readonly sourceId: string;
+        readonly code: string;
+        /** Source-owned affected types; absent or unknown coverage remains fail-closed. */
+        readonly types?: readonly CorpusType[];
+    }[];
 }
 export interface CorpusReceipt { readonly generation: number }
 export interface CorpusTicket extends CorpusReceipt {

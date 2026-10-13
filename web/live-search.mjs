@@ -197,7 +197,9 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         (focused || input).focus({ preventScroll: true }); restore = null;
     }
     function paint() {
-        const current = state.snapshot(), status = current.status, partial = status?.corpus?.state === "partial";
+        const current = state.snapshot(), status = current.status;
+        const partial = status?.corpus?.state === "partial"
+            && (current.purpose !== "analysis" || !contract.completeCoverage(status.corpus, current.matches.receipt?.queryTypes));
         const wordSearchAvailable = Boolean(current.matches.receipt && status?.mode === "lexical-only");
         const labels = { queued: "Searching...",
             building: "Preparing search...",
@@ -308,7 +310,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         if (event.event === "results" && state.snapshot().matches === event.matches && scope.value === "analysis"
             && contract.analysisReceipt(event.matches.receipt)) {
             onAnalysis({ state: "ready", query: input.value, hits: event.matches.hits, receipt: event.matches.receipt,
-                complete: event.status?.corpus?.state === "ready", scopeKey: analysisKey });
+                complete: contract.completeCoverage(event.status?.corpus, event.matches.receipt.queryTypes), scopeKey: analysisKey });
         }
         if (event.event === "opened" && event.openId === openId && contract.sameReceipt(event.receipt, ownedReceipt(event.receipt))) {
             void showOpened(event.document, event.receipt, event.openId).catch(() => fail("The current item could not be displayed. Return to search and read it again."));
