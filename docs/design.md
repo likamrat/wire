@@ -202,6 +202,51 @@ Non-event JSON entries in manual history are ignored without aborting otherwise
 valid calls; they qualify model coverage as partial. Duplicate event deliveries
 remain available to the model conflict checks rather than being silently merged.
 
+Earlier collection checkpoints may have discarded response model fields before
+advancing to the end of the original history. Installing model detection does
+not revisit those unchanged sources, even when the originals still name a model.
+Explicit `POST /api/collection/models/qualify` repairs that retention gap for
+`{ operationId, scenarioIds, expectedSourceRevision }`. It requires the existing
+approved, enabled source and a current evidence revision; there is no automatic
+backfill or new source approval. Select at most six retained requests from two
+eligible source chats inside the approved date window.
+
+Qualification reuses the timing scanner with a separate metadata projection and
+the existing original-model association rules. It has one 32 MiB accounted read
+budget, 4 MiB chunks, the existing bounded history tail, and at most 2,000
+metadata events / 512 KiB context per source. Full response metadata is limited
+to explicitly linked selected messages, including late responses after a
+neighboring prompt; timing events are kept only in selected prompt intervals.
+Other prompts and assistant responses retain identity/ownership guards, not
+unrelated models or response payloads. These guards share the same context
+bounds and preserve earlier/later duplicate ownership conflicts; they are not
+silently truncated. A response linked before its original prompt is unavailable
+rather than having its discarded model guessed. Skipped, incomplete, changed,
+conflicting or exhausted sources fail closed. Every selected request must yield
+supported evidence before anything commits; partial model coverage remains
+explicitly qualified. Deleted dependencies and mismatched prompt aliases cannot
+be restored. The timing-only endpoint keeps its existing behavior.
+
+The synchronous operation uses the collector's existing serialization. It
+commits only selected `originalModelEvidence` plus its successful operation
+receipt in the same board write. Prompts, calls, services, response timings,
+reviews, source configuration and primary cursors are unchanged. The last
+successful receipt is available as `interactionModelQualification` in collection
+status and survives restart, so retrying the same operation/scope does not reread
+or write again. Receipts contain counts and outcome/reason values, never record,
+source, prompt or response identifiers; the operation-bound scope hash permits
+safe receipt replay after deletion without retaining or restoring deleted IDs.
+An applied model change emits the existing post-commit signal with
+`kind: "model-metadata"` to invalidate Search immediately, without invoking
+automatic scoring. Receipt replay and already-qualified no-ops neither write a
+new revision nor fence Search; no-op receipts are runtime-only.
+Failed/incomplete attempts change no persisted evidence and are
+reported in runtime status; they are not background jobs or automatically resumed.
+Later ordinary collection can restore model fields in an old timing checkpoint
+only from already-qualified evidence with identical source, response, logical
+message, timestamp and turn anchors. New incoming omissions or contradictions
+are never overwritten with a prior model.
+
 The snapshot exposes a normalized screen fact, not the new private linkage
 metadata. Report projections, frozen output, assessment schemas and evaluator
 fingerprints do not gain this field. Synthetic association, collection,

@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, mkdir, writeFile, appendFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, appendFile, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { discoverSources, validateSourcePaths } from "../lib/source-discovery.mjs";
 import { createCollector } from "../lib/collector.mjs";
-import { loadBoardState, mergeEvidenceWithState, replaceEvidence } from "../lib/store.mjs";
+import { loadBoardState, mergeEvidenceWithState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { createHash } from "node:crypto";
@@ -15,6 +15,9 @@ import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
 import { interactionModelFact } from "../lib/interaction-model.mjs";
+import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
+import { buildSanitizedRecord } from "../lib/export.mjs";
+import { eventIdentity } from "../lib/deletion-identities.mjs";
 
 // Invented app metadata and events, isolated from the user's installation.
 test("source path rejection is explicit for nonstrings, relative paths and wrong basenames", () => {
@@ -118,6 +121,165 @@ test("original model metadata survives collection, context eviction and restart 
     const fingerprint = createHash("sha256").update(JSON.stringify([app.config.appDbPath, app.config.sessionRoot, 30])).digest("hex");
     assert.doesNotMatch(await readFile(path.join(app.context.dataDir, "collector", fingerprint, id + ".json"), "utf8"), /PRIVATE_MODEL/);
     assert.deepEqual(await readFile(file), originalBytes);
+});
+
+async function legacyModelInstallation(t, { spacingMs = 2000 } = {}) {
+    const app = await installation(t), id = app.session(), now = Date.now() - spacingMs - 10000;
+    const timed = (type, data, ms, eventId) => ({ ...event(type, data, eventId), timestamp: new Date(now + ms).toISOString() });
+    const events = [0, 1].flatMap(index => [
+        timed("user.message", { content: "Invented legacy request", messageId: `message-${index}` }, index * spacingMs, `prompt-${index}`),
+        { ...call(`model-${index}`), timestamp: new Date(now + index * spacingMs + 10).toISOString(),
+            data: { ...call(`model-${index}`).data, model: "tool-only-hint" } },
+        timed("assistant.message", { originatingMessageId: `message-${index}`, apiCallId: "x".repeat(480) + index,
+            model: `original-model-${index}`, turnId: `${index}`, phase: "final_answer", toolRequests: [],
+            content: "PRIVATE_MODEL_REPLY", reasoningText: "PRIVATE_MODEL_REASONING" }, index * spacingMs + 100, `response-${index}`),
+        timed("assistant.turn_end", { turnId: `${index}` }, index * spacingMs + 101, `end-${index}`),
+    ]);
+    const file = await logFor(app, id, events);
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: true, windowDays: 30, pollSeconds: 5 });
+    const first = await loadBoardState(app.context);
+    assert.equal(interactionModelFact(first.evidence[0]).value, "original-model-0");
+    await replaceEvidence(app.context, records => ({ records: records.map(record => {
+        const { originalModelEvidence, ...legacy } = record;
+        return legacy;
+    }), importCoverage: first.importCoverage }));
+    const fingerprint = createHash("sha256").update(JSON.stringify([app.config.appDbPath, app.config.sessionRoot, 30])).digest("hex");
+    const checkpointFile = path.join(app.context.dataDir, "collector", fingerprint, id + ".json");
+    const checkpoint = JSON.parse(await readFile(checkpointFile, "utf8"));
+    for (const event of checkpoint.events) if (event.type === "assistant.message") delete event.data.wireOriginalModel;
+    await writeFile(checkpointFile, JSON.stringify(checkpoint));
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await collector.collectNow();
+    const before = await loadBoardState(app.context);
+    assert.ok(before.evidence.every(record => interactionModelFact(record).value === "Not verified (tool metadata only)"));
+    return { ...app, id, file, before, collector, checkpointFile, restart: async () => {
+        await collector.close();
+        collector = await createCollector(app.context, { timers: false });
+        return collector;
+    } };
+}
+
+test("explicit original-model qualification repairs only selected legacy EOF metadata and survives restart", async t => {
+    const app = await legacyModelInstallation(t);
+    const input = { operationId: randomUUID(), scenarioIds: [app.before.evidence[0].scenarioId],
+        expectedSourceRevision: app.before.evidenceRevision };
+    const sourceBefore = await readFile(app.file), checkpointBefore = await readFile(app.checkpointFile);
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json"), indexBefore = await readFile(indexFile);
+    const fingerprints = app.before.evidence.map(evaluationRecordFingerprint), key = "a".repeat(64);
+    const reports = app.before.evidence.map(record => buildSanitizedRecord(record, key));
+    const result = await app.collector.qualifyInteractionModels(input);
+    assert.equal(result.phase, "complete");
+    assert.equal(result.applied, 1);
+    const after = await loadBoardState(app.context);
+    assert.equal(interactionModelFact(after.evidence[0]).value, "original-model-0");
+    assert.deepEqual(after.evidence[1], app.before.evidence[1]);
+    assert.deepEqual(after.evidence.map(({ originalModelEvidence, ...record }) => record), app.before.evidence);
+    assert.deepEqual(after.evidence.map(evaluationRecordFingerprint), fingerprints);
+    assert.deepEqual(after.evidence.map(record => buildSanitizedRecord(record, key)), reports);
+    for (const field of ["cards", "exports", "personalEvaluation", "deletion", "pseudonymKey"]) assert.deepEqual(after[field], app.before[field]);
+    assert.deepEqual(await readFile(app.file), sourceBefore);
+    assert.deepEqual(await readFile(app.checkpointFile), checkpointBefore);
+    assert.deepEqual(await readFile(indexFile), indexBefore);
+    assert.doesNotMatch(JSON.stringify(after), /PRIVATE_MODEL/);
+    assert.deepEqual(await app.collector.qualifyInteractionModels(input), result);
+    const restarted = await app.restart();
+    assert.deepEqual((await restarted.status()).interactionModelQualification, result);
+    assert.deepEqual(await restarted.qualifyInteractionModels(input), result);
+    assert.equal((await loadBoardState(app.context)).revision, after.revision);
+    assert.equal(interactionModelFact((await loadBoardState(app.context)).evidence[0]).value, "original-model-0");
+    await appendFile(app.file, JSON.stringify(event("session.info", {})) + "\n");
+    await restarted.collectNow();
+    assert.equal(interactionModelFact((await loadBoardState(app.context)).evidence[0]).value, "original-model-0",
+        "Ordinary collection must not reinterpret pre-model checkpoint omissions as conflicting original metadata.");
+    await assert.rejects(restarted.qualifyInteractionModels({ ...input, scenarioIds: [app.before.evidence[1].scenarioId] }), /identity.*different scope/);
+    await assert.rejects(restarted.qualifyInteractionModels({ ...input, operationId: randomUUID() }), /Source evidence changed/);
+    await restarted.setEnabled(false);
+    await assert.rejects(restarted.qualifyInteractionModels({ ...input, operationId: randomUUID(),
+        expectedSourceRevision: after.evidenceRevision }), /already be enabled/);
+});
+
+test("original-model qualification leaves all selected evidence untouched for missing, conflicting or deleted metadata", async t => {
+    const app = await legacyModelInstallation(t), original = await readFile(app.file, "utf8");
+    for (const failure of ["missing", "conflicting", "deleted"]) {
+        const events = original.trim().split("\n").map(line => JSON.parse(line));
+        const response = events.find(event => event.id === "response-1");
+        if (failure === "missing") delete response.data.model;
+        if (failure === "conflicting") events.push({ ...response, data: { ...response.data, model: "conflicting-model" } });
+        if (failure === "deleted") await updateBoardState(app.context, state => {
+            state.deletion = { schemaVersion: 1, identities: [], contextCalls: [],
+                events: [eventIdentity(app.id, "response-1")], operations: {} };
+        });
+        await writeFile(app.file, events.map(event => JSON.stringify(event) + "\n").join(""));
+        const before = await loadBoardState(app.context), stateFile = path.join(app.context.dataDir, "workiq-evidence-board-v1.state.json");
+        const stateBytes = await readFile(stateFile), checkpointBytes = await readFile(app.checkpointFile);
+        const input = { operationId: randomUUID(), scenarioIds: before.evidence.map(record => record.scenarioId),
+            expectedSourceRevision: before.evidenceRevision };
+        const result = await app.collector.qualifyInteractionModels(input);
+        assert.equal(result.phase, "unavailable", failure);
+        assert.equal(result.applied, 0);
+        assert.equal(result.results[1].reason, failure === "missing" ? "unverified" : failure === "deleted" ? "deleted-model-dependency" : "conflicting");
+        assert.deepEqual(await app.collector.qualifyInteractionModels(input), result);
+        assert.deepEqual(await readFile(stateFile), stateBytes, failure);
+        assert.deepEqual(await readFile(app.checkpointFile), checkpointBytes);
+        assert.deepEqual((await loadBoardState(app.context)).evidence, before.evidence);
+    }
+});
+
+test("original-model qualification rejects stale, unapproved and noneligible scope before reading or writing", async t => {
+    const app = await legacyModelInstallation(t);
+    const input = { operationId: randomUUID(), scenarioIds: [app.before.evidence[0].scenarioId],
+        expectedSourceRevision: app.before.evidenceRevision };
+    const stateFile = path.join(app.context.dataDir, "workiq-evidence-board-v1.state.json"), bytes = await readFile(stateFile);
+    for (const invalid of [
+        { ...input, expectedSourceRevision: input.expectedSourceRevision - 1 },
+        { ...input, scenarioIds: ["not-retained"] },
+        { ...input, scenarioIds: [input.scenarioIds[0], input.scenarioIds[0]] },
+        { ...input, source: "unapproved" },
+    ]) await assert.rejects(app.collector.qualifyInteractionModels(invalid));
+    app.db.prepare("UPDATE sessions SET archived_at=? WHERE id=?").run(new Date().toISOString(), app.id);
+    await assert.rejects(app.collector.qualifyInteractionModels(input), /no longer eligible/);
+    assert.deepEqual(await readFile(stateFile), bytes);
+    const other = await installation(t), unapproved = await createCollector(other.context, { timers: false });
+    other.cleanup.push(() => unapproved.close());
+    await assert.rejects(unapproved.qualifyInteractionModels(input), /already be enabled/);
+});
+
+for (const scope of ["range", "all"]) test(`model qualification receipts retain no record identifiers through ${scope} deletion, managed copies and restart`, async t => {
+    const app = await legacyModelInstallation(t, { spacingMs: 86400000 });
+    const stateFile = path.join(app.context.dataDir, "workiq-evidence-board-v1.state.json");
+    const selected = app.before.evidence[0], input = { operationId: randomUUID(),
+        scenarioIds: [selected.scenarioId], expectedSourceRevision: app.before.evidenceRevision };
+    const result = await app.collector.qualifyInteractionModels(input);
+    const copy = await readFile(stateFile);
+    await writeFile(path.join(app.context.dataDir, "prior-state.snapshot.json"), copy);
+    await writeFile(path.join(app.context.dataDir, "collector", "before-dynamic-state.json"), copy);
+    const deletion = createDeletionController(app.context);
+    const day = selected.userPrompt.sourceTimestamp.slice(0, 10);
+    const preview = await deletion.preview("model-proof", { scope, ...(scope === "range" ? { from: day, to: day } : {}),
+        timeContext: { timeZone: "UTC", locale: "en-US" } });
+    await deletion.confirm("model-proof", { operationId: preview.operationId, confirmed: true });
+    const afterDelete = await loadBoardState(app.context);
+    assert.equal(afterDelete.evidence.length, scope === "all" ? 0 : 1);
+    const receipt = afterDelete.originalModelQualification;
+    assert.ok(receipt, "A content-free receipt retains lost-response meaning without restoring data.");
+    assert.ok(!JSON.stringify(receipt).includes(selected.scenarioId));
+    assert.ok(!JSON.stringify((await app.collector.status()).interactionModelQualification).includes(selected.scenarioId));
+    const rootFiles = async directory => (await Promise.all((await readdir(directory, { withFileTypes: true }))
+        .map(entry => entry.isDirectory() ? rootFiles(path.join(directory, entry.name)) : [path.join(directory, entry.name)]))).flat();
+    for (const file of await rootFiles(app.context.dataDir)) {
+        if (!file.endsWith(".json")) continue;
+        const text = await readFile(file, "utf8");
+        assert.ok(!text.includes(selected.scenarioId), `Deleted record identifier remains in ${path.relative(app.context.dataDir, file)}`);
+    }
+    const restarted = await app.restart();
+    const stateBytes = await readFile(stateFile);
+    assert.deepEqual((await restarted.status()).interactionModelQualification, result);
+    assert.deepEqual(await restarted.qualifyInteractionModels(input), result);
+    assert.deepEqual(await readFile(stateFile), stateBytes, "Replaying a receipt after deletion cannot restore metadata or advance the revision.");
+    assert.deepEqual((await loadBoardState(app.context)).evidence, afterDelete.evidence);
 });
 
 test("collector checkpoints never retain full, empty, malformed, multiline or oversized JSON response payloads", async t => {

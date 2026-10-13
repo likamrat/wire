@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { recordedInteractionModels, interactionModelFact, retainInteractionModelMetadata, projectInteractionModels } from "../lib/interaction-model.mjs";
+import { recordedInteractionModels, interactionModelFact, retainInteractionModelMetadata, projectInteractionModels, restoreRetainedInteractionModelMetadata } from "../lib/interaction-model.mjs";
+import { retainResponseTimingEvent } from "../lib/response-timing.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { extractGraphActivities } from "../lib/graph-history.mjs";
 
@@ -154,6 +155,28 @@ test("contradictory ownership and unsupported projection versions never keep a p
     } } };
     const projected = recordedInteractionModels([prompt, unsupported, end(unsupported)], record);
     assert.doesNotMatch(interactionModelFact({ ...record, originalModelEvidence: projected }).value, /model-a/);
+});
+
+test("only exact legacy checkpoint omissions reuse qualified model metadata during ordinary replay", () => {
+    const response = answer("a", "model-a"), old = retainResponseTimingEvent(response);
+    const evidence = recordedInteractionModels([prompt, response, end(response)], record);
+    const qualified = { ...record, originalModelEvidence: evidence };
+    const restored = restoreRetainedInteractionModelMetadata([old], [qualified], record.sourceSessionId)[0];
+    assert.deepEqual(restored.data.wireOriginalModel, retainInteractionModelMetadata(response));
+    assert.equal(old.data.wireOriginalModel, undefined);
+    for (const changed of [
+        { ...old, agentId: "child" },
+        { ...old, timestamp: at(500) },
+        { ...old, data: { ...old.data, originatingMessageId: "other" } },
+        { ...old, data: { ...old.data, turnId: "other" } },
+        { ...old, data: { ...old.data, model: null } },
+        { ...old, data: { ...old.data, apiCallId: "other" } },
+        { ...old, data: { ...old.data, wireOriginalModel: retainInteractionModelMetadata(answer("a", undefined)) } },
+    ]) assert.equal(restoreRetainedInteractionModelMetadata([changed], [qualified], record.sourceSessionId)[0], changed);
+    assert.equal(restoreRetainedInteractionModelMetadata([old], [qualified], "different-source")[0], old);
+    const conflicting = { ...qualified, originalModelEvidence: { ...evidence,
+        responses: [{ ...evidence.responses[0], model: "different" }] } };
+    assert.equal(restoreRetainedInteractionModelMetadata([old], [qualified, conflicting], record.sourceSessionId)[0], old);
 });
 
 test("manual extractors retain valid calls and qualify models when raw history contains non-event JSON", () => {

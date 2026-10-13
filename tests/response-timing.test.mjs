@@ -6,7 +6,9 @@ import { fixture } from "./helpers.mjs";
 import { retainEvent, mergedRecords } from "../lib/collector.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { filterDeletedRecords, eventIdentity, recordUnits } from "../lib/deletion-identities.mjs";
-import { qualifyRetainedResponseTimings } from "../lib/response-timing-qualification.mjs";
+import { qualifyRetainedResponseTimings, qualifyRetainedInteractionModels } from "../lib/response-timing-qualification.mjs";
+import { recordedInteractionModels, interactionModelFact } from "../lib/interaction-model.mjs";
+import { TAIL_LIMITS } from "../lib/collector-io.mjs";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -201,4 +203,92 @@ test("bounded original metadata qualification respects source window, context li
     const outside = await qualifyRetainedResponseTimings(config, sourceInfo, [record], null, 8 * 1024 ** 2, time(100));
     assert.deepEqual(outside.checkpoint.timings, {});
     assert.equal(outside.bytesRead, 0);
+});
+
+test("model qualification shares the bounded reader while keeping timing-only metadata and incomplete scans separate", async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "wire-model-metadata-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const sessionId = randomUUID(), sessionRoot = path.join(root, "session-state");
+    await mkdir(path.join(sessionRoot, sessionId), { recursive: true });
+    const file = path.join(sessionRoot, sessionId, "events.jsonl");
+    const rows = source();
+    rows[1].data.model = "original-model";
+    rows[1].data.apiCallId = "private-api-call";
+    const start = { id: "startup", type: "session.start", timestamp: time(0), data: { sessionId, version: 1 } };
+    const write = rows => writeFile(file, [start, ...rows].map(event => JSON.stringify(event) + "\n").join(""));
+    await write(rows);
+    const record = { sourceSessionId: sessionId, userPrompt: prompt };
+    const config = { approved: true, sessionRoot }, sourceInfo = { sessionId, eligible: true };
+    const bounded = await qualifyRetainedInteractionModels(config, sourceInfo, [record], null, 1024, time(0));
+    assert.equal(bounded.bytesRead, 0);
+    assert.equal(bounded.checkpoint.status, "pending");
+    assert.deepEqual(bounded.checkpoint.models, {});
+    const result = await qualifyRetainedInteractionModels(config, sourceInfo, [record], bounded.checkpoint, 8 * 1024 ** 2, time(0));
+    assert.equal(interactionModelFact({ ...record, originalModelEvidence: result.checkpoint.models.prompt }).value, "original-model");
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE_FINAL_ANSWER|PRIVATE_REASONING|Private request/);
+    assert.deepEqual(result.checkpoint.context, []);
+    const timing = await qualifyRetainedResponseTimings(config, sourceInfo, [record], result.checkpoint, 8 * 1024 ** 2, time(0));
+    assert.equal(timing.checkpoint.timings.prompt.durationMs, 1200);
+    assert.doesNotMatch(JSON.stringify(timing), /original-model|private-api-call|wireOriginalModel/);
+    const prior = { ...record, originalModelEvidence: recordedInteractionModels(rows, record) };
+    await write(rows.slice(1));
+    const absent = await qualifyRetainedInteractionModels(config, sourceInfo, [prior], null, 8 * 1024 ** 2, time(0));
+    assert.equal(absent.checkpoint.models.prompt, null, "A historical fact cannot substitute for the missing exact original prompt.");
+    await write([...rows, ...Array.from({ length: TAIL_LIMITS.maxContextEvents }, (_, index) => ({
+        id: `filler-${index}`, type: "assistant.turn_end", timestamp: time(2000), data: { turnId: "unrelated" },
+    }))]);
+    const exhausted = await qualifyRetainedInteractionModels(config, sourceInfo, [record], null, 8 * 1024 ** 2, time(0));
+    assert.equal(exhausted.checkpoint.reason, "model-context-limit");
+    assert.deepEqual(exhausted.checkpoint.models, {});
+    assert.deepEqual(exhausted.checkpoint.context, []);
+});
+
+test("scoped model context excludes unrelated payloads but keeps late links, duplicate prompts and wrong-owner conflicts", async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "wire-scoped-model-metadata-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const sessionId = randomUUID(), sessionRoot = path.join(root, "session-state");
+    await mkdir(path.join(sessionRoot, sessionId), { recursive: true });
+    const file = path.join(sessionRoot, sessionId, "events.jsonl");
+    const startup = { id: "startup", type: "session.start", timestamp: time(-5000), data: { sessionId, version: 1 } };
+    const unrelated = (prefix, at) => Array.from({ length: 500 }, (_, index) => [
+        { id: `${prefix}-start-${index}`, type: "assistant.turn_start", timestamp: time(at), data: { turnId: `${prefix}-${index}` } },
+        { id: `${prefix}-answer-${index}`, type: "assistant.message", timestamp: time(at + 1), data: {
+            turnId: `${prefix}-${index}`, originatingMessageId: `${prefix}-message`, model: "UNRELATED_MODEL",
+            apiCallId: "x".repeat(480), content: "PRIVATE_UNRELATED_RESPONSE", toolRequests: [],
+        } },
+        { id: `${prefix}-end-${index}`, type: "assistant.turn_end", timestamp: time(at + 2), data: { turnId: `${prefix}-${index}` } },
+    ]).flat();
+    const rows = source();
+    rows[1].data.model = "original-model";
+    rows[1].data.apiCallId = "original-call";
+    const neighbor = { id: "neighbor", type: "user.message", timestamp: time(2000), data: { messageId: "neighbor-message" } };
+    const late = { ...rows[1], id: "late", timestamp: time(5000),
+        data: { ...rows[1].data, model: "later-model", apiCallId: "late-call", turnId: "late-turn" } };
+    const record = { sourceSessionId: sessionId, userPrompt: prompt };
+    const config = { approved: true, sessionRoot }, sourceInfo = { sessionId, eligible: true };
+    const qualify = async (extra = [], preceding = []) => {
+        await writeFile(file, [startup, ...unrelated("before", -4000), ...preceding, ...rows, neighbor,
+            ...unrelated("neighbor", 3000), late, ...extra].map(event => JSON.stringify(event) + "\n").join(""));
+        return qualifyRetainedInteractionModels(config, sourceInfo, [record], null, 8 * 1024 ** 2, time(-5000));
+    };
+    const result = await qualify();
+    assert.equal(result.checkpoint.reason, undefined);
+    assert.equal(interactionModelFact({ ...record, originalModelEvidence: result.checkpoint.models.prompt }).value, "original-model then later-model");
+    assert.doesNotMatch(JSON.stringify(result), /UNRELATED_MODEL|PRIVATE_UNRELATED_RESPONSE|PRIVATE_FINAL_ANSWER/);
+    for (const changed of [
+        { ...rows[1], data: { ...rows[1].data, originatingMessageId: "neighbor-message" } },
+        { ...rows[1], agentId: "child" },
+        { ...rows[1], data: { ...rows[1].data, model: "conflicting-model" } },
+    ]) {
+        const conflict = await qualify([changed]);
+        assert.equal(interactionModelFact({ ...record, originalModelEvidence: conflict.checkpoint.models.prompt }).status, "conflicting");
+    }
+    const duplicatePrompt = await qualify([{ ...rows[0], id: "duplicate-logical-message", timestamp: time(6000) }]);
+    assert.equal(interactionModelFact({ ...record, originalModelEvidence: duplicatePrompt.checkpoint.models.prompt }).status, "unverified");
+    const precedingWrongOwner = await qualify([], [{ ...rows[1], timestamp: time(-100),
+        data: { ...rows[1].data, originatingMessageId: "neighbor-message" } }]);
+    assert.equal(interactionModelFact({ ...record, originalModelEvidence: precedingWrongOwner.checkpoint.models.prompt }).status, "conflicting");
+    const beforePrompt = await qualify([], [{ ...rows[1], timestamp: time(-100) }]);
+    assert.equal(beforePrompt.checkpoint.reason, "response-before-prompt");
+    assert.deepEqual(beforePrompt.checkpoint.models, {}, "An out-of-order original link cannot silently lose its model or identity conflict.");
 });
