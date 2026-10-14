@@ -166,5 +166,29 @@ safety checks do not requalify the feature or waive its original positive cases.
 Provisioning tests use controlled in-process responses and already approved
 bytes, never a network acquisition. Long core inputs remain complete; the live
 HTTP query limit remains 65,536 bytes.
-The original servicing target assertion remains an explicit TODO requirement,
-not a passing empty-result test or a waived acceptance label.
+`tests/search-linguistics-fixture.mjs` is the canonical expected-set ledger.
+Qualification requires `MUST ⊆ actual ⊆ ALLOWED`: the three original car queries
+require the automobile repair and permit, but do not require, the ambulance
+engine repair. Default and optional results are checked independently, including
+all original negatives and ordinary-work requirements. Their known missing
+positives remain failing qualification assertions, not TODOs or assertions that
+an empty result is correct. Resource-dependent qualification still requires the
+existing explicitly supplied local assets; no test acquires them.
+
+The three required raw positive pairs are no longer also forbidden by blanket
+modifier guards. This corrects the test contract, not the matcher: the modifier
+limitation and activation hold remain. Scope cases label genuine negative
+contrasts separately from implementation observations. Both-negated forms,
+unrequested `red`/`miniature` modifiers and `fake automobile` versus `fake vehicle`
+retain their current fail-closed mechanism checks, but have unspecified semantic
+acceptance (`must: null, allowed: null`), not permanent no-match requirements or
+invented positive targets. The separate 18 comparison/prospective
+probes preserve their allowed sets; nine have no primary required-set
+specification and are explicitly marked as unspecified recall. Passing an
+allowed-only or baseline-parity check cannot establish positive qualification.
+
+`node --test tests\search-expectations.test.mjs` checks ledger consistency and
+consumer assertions without inference. Invented admitted sets exercise strict
+Matches, analytical membership, both periods and frozen report scope; neither
+Related union nor dropping the required item passes. This proves the contract
+and consumer projection only, not semantic recall or default search quality.

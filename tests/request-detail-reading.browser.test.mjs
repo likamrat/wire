@@ -11,6 +11,8 @@ import { contract, samples } from "./assessment-ui-fixtures.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { promptRecord, promptAuthorship } from "../lib/prompt-authorship.mjs";
+import { recordedInteractionModels } from "../lib/interaction-model.mjs";
+import { recordedResponseTiming } from "../lib/response-timing.mjs";
 
 const proof = process.env.WIRE_DETAIL_PROOFS;
 const ready = page => page.locator('#workspace[aria-busy="false"]').waitFor();
@@ -35,7 +37,7 @@ function retainedResponse(text, record) {
     return contract.validateInteractionView(view);
 }
 
-async function setup(t, { text = "Find the synthetic planning note.", status = "full", actor = "unknown", calls = true, responseText, responseMode = "success", detailError = false, chatOrigin = true, sourceEvent } = {}) {
+async function setup(t, { text = "Find the synthetic planning note.", status = "full", actor = "unknown", calls = true, responseText, responseMode = "success", detailError = false, chatOrigin = true, sourceEvent, entry = "reader", modelTiming = false } = {}) {
     const record = fixture("detail-reading");
     record.sourceSessionName = "Synthetic planning chat";
     if (!chatOrigin) record.sourceHost = "imported-json";
@@ -54,6 +56,18 @@ async function setup(t, { text = "Find the synthetic planning note.", status = "
         ...call,
     }));
     else Object.assign(record.toolCalls[0], { startedAt: "2026-09-30T12:00:01Z", completedAt: "2026-09-30T12:00:02Z", durationMs: 1000 });
+    if (modelTiming) {
+        const events = [
+            { id: record.userPrompt.sourceEventId, type: "user.message", timestamp: record.userPrompt.sourceTimestamp, data: { messageId: "synthetic-logical-prompt" } },
+            { id: "synthetic-response", type: "assistant.message", timestamp: "2026-09-30T12:01:48.640Z", data: {
+                originatingMessageId: "synthetic-logical-prompt", apiCallId: "synthetic-api-anchor", model: "synthetic-model",
+                content: "Synthetic final response for metadata only.", turnId: "synthetic-turn", phase: "final_answer", toolRequests: [],
+            } },
+            { id: "synthetic-end", type: "assistant.turn_end", timestamp: "2026-09-30T12:01:48.700Z", data: { turnId: "synthetic-turn" } },
+        ];
+        record.responseTiming = recordedResponseTiming(events, record.userPrompt);
+        record.originalModelEvidence = recordedInteractionModels(events, record);
+    }
     const cleanup = [];
     const { context } = await privateFixture({ after: action => cleanup.push(action) }, [record]);
     const before = await loadBoardState(context);
@@ -118,7 +132,7 @@ async function setup(t, { text = "Find the synthetic planning note.", status = "
                 "Only local synthetic reads; no capture, collection, report, feedback or consent changes");
         } finally { for (const action of cleanup) await action(); }
     });
-    await page.goto(runtime.url + "#request?request=detail-reading"); await ready(page);
+    await page.goto(runtime.url + (entry === "card" ? "" : "#request?request=detail-reading")); await ready(page);
     await page.evaluate(() => document.fonts.ready);
     return { page, record, requests, runtime, responseState };
 }
@@ -142,6 +156,104 @@ function contentReads(requests) {
     return requests.filter(request => ["/api/snapshot", "/api/assessment/detail", "/api/assessment/evidence"].includes(new URL(request.url).pathname)).length;
 }
 
+test("card-to-reader continuity includes aligned actions, compact expanded facts and the exact return position", { timeout: 60000 }, async t => {
+    const text = "Review the planning presentation from the Northline kickoff and identify the decisions still waiting for an owner.";
+    const { page, record } = await setup(t, { actor: "user", text, entry: "card", modelTiming: true, calls: [{
+        tool: "workiq-ask", requestArgs: { question: "Find the invented Northline kickoff presentation.\n  Keep this exact indentation.", timeZone: "UTC" },
+        requestedApiPath: null, apiResults: [], durationMs: 73728,
+        startedAt: "2026-09-30T12:00:01.107Z", completedAt: "2026-09-30T12:01:14.835Z",
+        parentInvocationEvidence: "source-field-absent", parallelGroupEvidence: "adapter-not-supported",
+    }] });
+    const metrics = [];
+    for (const [theme, width, scale] of [["dark", 1440, 1], ["light", 1440, 1], ["dark", 420, 2], ["light", 420, 2]]) {
+        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await page.locator("#resultsLink").click();
+        const card = page.locator("#activityList>.request-row"), open = card.getByRole("link", { name: "View interaction", exact: true });
+        assert.match(await card.innerText(), /synthetic-model/);
+        assert.equal(await card.locator(".response-timing data").getAttribute("value"), "108640");
+        await open.scrollIntoViewIfNeeded();
+        const cardType = await card.locator(".full-text-preview").evaluate(node => {
+            const style = getComputedStyle(node);
+            return { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, style: style.fontStyle };
+        });
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await page.screenshot({ path: path.join(proof, `continuity-${theme}-${width}-${scale}-card.png`) });
+        }
+        const origin = page.url(), position = await open.boundingBox();
+        await page.mouse.click(position.x + position.width / 2, position.y + position.height / 2); await ready(page);
+        await page.locator(".interaction-response .reader-empty").waitFor();
+        const prompt = page.locator(".request-original"), call = page.locator('[data-tool-call-id="synthetic-reading-call-0"]');
+        assert.match(await prompt.locator(".interaction-model-fact").innerText(), /synthetic-model/);
+        assert.equal(await prompt.locator(".response-timing data").getAttribute("value"), "108640");
+        const read = prompt.locator(".full-text-toggle"), copy = prompt.getByRole("button", { name: "Copy prompt", exact: true });
+        if (await read.getAttribute("aria-expanded") === "false") await read.click();
+        await capture(page, `continuity-${theme}-${width}-${scale}-reader`);
+        const measures = await prompt.evaluate(node => {
+            const box = element => {
+                const r = element.getBoundingClientRect();
+                return { x: r.x, y: r.y, width: r.width, height: r.height, center: r.y + r.height / 2 };
+            };
+            const controls = [...node.querySelectorAll(".full-text-reader-actions>button")];
+            const style = getComputedStyle(node.querySelector(".full-text-content"));
+            return {
+                promptType: { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, style: style.fontStyle },
+                controls: controls.map(control => ({ ...box(control), marginTop: getComputedStyle(control).marginTop })),
+                content: box(node.querySelector(".full-text-content")),
+                keys: [...node.querySelectorAll("dt")].map(key => ({ weight: getComputedStyle(key).fontWeight, color: getComputedStyle(key).color })),
+                values: [...node.querySelectorAll("dd")].map(value => ({ weight: getComputedStyle(value).fontWeight, color: getComputedStyle(value).color })),
+            };
+        });
+        await copy.click();
+        assert.equal(await page.evaluate(() => window.clipboardProof.writes.at(-1)), text);
+        await read.focus(); await page.keyboard.press("Enter");
+        assert.equal(await prompt.locator(".full-text-content,.ux-copy").count(), 0);
+        assert.equal(await read.evaluate(node => node === document.activeElement), true);
+        await page.keyboard.press("Space");
+        assert.equal(await prompt.locator(".full-text-content").textContent(), text);
+        const details = call.locator(":scope > details");
+        if (!await details.evaluate(node => node.open)) await details.locator(":scope > summary").click();
+        await call.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
+        assert.equal(await page.evaluate(() => window.clipboardProof.writes.at(-1)), JSON.stringify(record.toolCalls[0].requestArgs, null, 2));
+        await capture(page, `continuity-${theme}-${width}-${scale}-expanded`, '[data-tool-call-id="synthetic-reading-call-0"]');
+        const technical = await details.innerText();
+        const expanded = await details.evaluate(node => ({
+            height: node.getBoundingClientRect().height,
+            emptyRows: [...node.querySelectorAll("dd")].filter(value => /^(Not recorded|Not in this record|Not supplied by source|Not collected by this adapter|false|true)$/u.test(value.textContent)).length,
+            helpButtons: node.querySelectorAll(".ux-help").length,
+            overflow: document.documentElement.scrollWidth - innerWidth,
+            keyWeights: [...node.querySelectorAll("dt")].map(key => getComputedStyle(key).fontWeight),
+        }));
+        metrics.push({ theme, width, scale, cardType, ...measures, technical, expanded });
+        await details.locator(":scope > summary").click();
+        await page.getByRole("button", { name: "Add to report", exact: true }).click();
+        assert.equal(await page.locator("#requestReportToggle").textContent(), "Remove from report");
+        await page.locator("#requestReportToggle").click();
+        await page.getByRole("link", { name: "Back to results", exact: true }).click(); await ready(page);
+        assert.equal(page.url(), origin);
+        assert.equal(await open.evaluate(node => node === document.activeElement), true);
+        assert.ok(Math.abs((await open.boundingBox()).y - position.y) < 3, "Back restores the card entry position");
+        assert.equal(await card.getByRole("checkbox").isChecked(), false);
+    }
+    if (proof) await writeFile(path.join(proof, "continuity-metrics.json"), JSON.stringify(metrics, null, 2));
+    for (const measurement of metrics) {
+        const { cardType, promptType, controls, keys, values, expanded, width, scale } = measurement;
+        assert.deepEqual(promptType, cardType, "The full prompt keeps the card's exact font role and bold-italic emphasis");
+        assert.ok(controls.every(control => control.height >= 44 && control.width >= 44));
+        if (width === 1440) {
+            assert.ok(Math.abs(controls[0].center - controls[1].center) <= 1, "Hide and Copy are optically centered on one row");
+            assert.ok(Math.abs(controls[0].height - controls[1].height) <= 1, "Hide and Copy have equal visible and hit-target heights");
+        }
+        assert.ok(keys.every(key => Number(key.weight) >= 500 && values.every(value => Number(value.weight) < Number(key.weight) && value.color !== key.color)));
+        assert.equal(expanded.emptyRows, 0, "Missing technical fields are consolidated, not repeated as empty rows");
+        assert.equal(expanded.helpButtons, 0, "Expanded facts explain necessary limits directly, not through a tooltip per fact");
+        assert.ok(expanded.overflow <= 1, `${width}/${scale}: expanded technical details fit`);
+        assert.ok(expanded.keyWeights.every(weight => Number(weight) >= 500));
+        if (width === 1440) assert.ok(expanded.height < 600, "One simple call's expanded detail fits a readable group, rather than a page of empty fields");
+    }
+});
+
 test("reader distillation keeps a legible story without repeated empty fields or per-text About disclosures", { timeout: 60000 }, async t => {
     const calls = Array.from({ length: 7 }, (_, index) => ({
         tool: index === 5 ? "workiq-fetch_blob" : "workiq-retrieve",
@@ -164,7 +276,7 @@ test("reader distillation keeps a legible story without repeated empty fields or
     assert.equal(await timeline.locator(".context-selected-label").count(), 0, "A direct interaction entry needs no Selected prompt badge");
     const action = timeline.locator("[data-tool-call-id=synthetic-reading-call-0]");
     await action.locator("details > summary").click();
-    assert.match(await action.innerText(), /API metadata: None recorded/);
+    assert.match(await action.innerText(), /No API result metadata recorded/);
     await action.locator("details > summary").click();
     for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 1200, 1], ["dark", 375, 2], ["light", 375, 2]]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
@@ -176,7 +288,11 @@ test("reader distillation keeps a legible story without repeated empty fields or
                 overflow: document.documentElement.scrollWidth - innerWidth,
                 facts: [...root.querySelectorAll(".reader-facts > dl > div")].map(node => node.getBoundingClientRect().x),
                 keyWeights: [...root.querySelectorAll(".reader-facts dt")].map(node => getComputedStyle(node).fontWeight),
-                values: [...root.querySelectorAll(".reader-facts dd")].map(node => node.getBoundingClientRect().x),
+                values: [...root.querySelectorAll(".reader-facts dd")].map(node => ({
+                    x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y,
+                    keyEnd: node.previousElementSibling.getBoundingClientRect().right,
+                    keyY: node.previousElementSibling.getBoundingClientRect().y,
+                })),
             };
         });
         assert.equal(new Set(styles.headings.map(style => style.size)).size, 1, "Prompt, response and call headings share one type role");
@@ -184,7 +300,8 @@ test("reader distillation keeps a legible story without repeated empty fields or
         assert.ok(styles.overflow <= 1, `${theme}/${width}/${scale} does not overflow`);
         assert.equal(new Set(styles.facts).size, 1, "Model and response timing keys align");
         assert.equal(new Set(styles.keyWeights).size, 1, "Metadata keys share one weight");
-        assert.equal(new Set(styles.values).size, 1, "Metadata values align");
+        assert.ok(styles.values.every(value => Math.abs(value.x - value.keyEnd - 8) < 1 || value.y > value.keyY),
+            "Each ordinary value follows its own bold key, wrapping below only when needed");
         await capture(page, `distilled-multicall-${theme}-${width}-${scale}`, '[data-tool-call-id="synthetic-reading-call-5"]');
     }
 });
@@ -230,6 +347,33 @@ test("reader failure copy is concise while sign-in signals and unknown outcomes 
         else assert.match(await details.innerText(), /not a verified cause, access policy, authorization or observed HTTP response/);
         await details.locator("summary").click();
     }
+});
+
+test("expanded details retain contradictory completion, real linkage and exact diagnostic arguments", async t => {
+    const args = { entityUrls: ["/me/messages"], script: "  synthetic diagnostic\n  preserve indentation" };
+    const { page } = await setup(t, { actor: "user", calls: [{
+        requestArgs: args, requestedApiPath: "/me/messages",
+        reportedOutcome: "succeeded", toolSucceeded: false, parentToolCallId: "synthetic-parent", parallelGroup: "synthetic-group",
+        observedGraphHttp: true, apiResults: [{ index: 0, statusCode: 403, errorCode: "SyntheticAccessDenied", evidenceLevel: "intermediary-reported" }],
+    }, { requestArgs: {}, requestedApiPath: null, apiResults: [], reportedOutcome: undefined, toolSucceeded: undefined }] });
+    const calls = page.locator(".request-context-timeline > li[data-context-kind=action]");
+    const details = calls.first().locator(":scope > details");
+    await details.locator(":scope > summary").click();
+    assert.match(await details.innerText(), /Reported outcome\s+succeeded\s+Execution success\s+false/);
+    assert.match(await details.innerText(), /synthetic-parent/);
+    assert.match(await details.innerText(), /synthetic-group/);
+    assert.match(await details.innerText(), /HTTP was directly observed/);
+    assert.match(await details.innerText(), /intermediary-reported/);
+    assert.match(await details.innerText(), /403/);
+    assert.match(await details.innerText(), /SyntheticAccessDenied/);
+    assert.doesNotMatch(await details.innerText(), /Missing linkage|No parent|does not collect parallel/);
+    assert.equal(await calls.first().locator(":scope > .action-fields code").textContent(), "/me/messages");
+    await details.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
+    assert.equal(await page.evaluate(() => window.clipboardProof.writes.at(-1)), JSON.stringify(args, null, 2));
+    await details.getByRole("button", { name: "Copy script", exact: true }).click();
+    assert.equal(await page.evaluate(() => window.clipboardProof.writes.at(-1)), args.script);
+    assert.doesNotMatch(await calls.nth(1).innerText(), /Tool failed|Failure cause/);
+    await capture(page, "contradictory-completion-expanded");
 });
 
 test("normal request page leads with readable content and explicit, scoped reader actions", { timeout: 60000 }, async t => {

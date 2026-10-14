@@ -1,3 +1,65 @@
+import assert from "node:assert/strict";
+
+export const originalDocuments = [
+    "The physician treated an injured patient in the hospital.",
+    "The mechanic repaired a broken automobile in the garage.",
+    "Employees cannot sign in because their credentials have expired.",
+    "The hospital maintenance crew repaired an ambulance engine in the garage.",
+    "The clinician scheduled a follow-up visit after the patient's recovery.",
+    "The support engineer renewed a revoked service account credential used by automated deployments.",
+    "The event planner booked a room for a quarterly staffing discussion.",
+    "The warehouse technician repaired a broken conveyor while collecting damaged components.",
+    "The researcher compared medical privacy policies without handling a patient's treatment.",
+];
+const required = (query, must, allowed = must) => ({ query, must, allowed });
+const forbidden = query => required(query, []);
+// Original frozen F09 bounds: the ambulance repair is permitted, not required.
+export const originalExpectations = [
+    required("fix my car", [1], [1, 3]),
+    required("vehicle servicing", [1], [1, 3]),
+    required("Find the car repair and the building where it happened.", [1], [1, 3]),
+    required("A doctor cared for somebody who was hurt.", [0]),
+    required("People could not log in with an out-of-date password.", [2]),
+    ...["Someone stole my car", "Buy a replacement automobile", "warehouse inventory",
+        "conveyor production capacity", "vehicle theft", "car insurance quote", "rent a car", "blood donation",
+        "A hospital accountant calculated quarterly payroll.", "Distant galaxies contain enormous black holes.",
+        "A recipe for chocolate cake and vanilla icing."].map(forbidden),
+];
+export const rawRequiredPairs = [
+    ["fix my car", originalDocuments[1]],
+    ["Find the car repair and the building where it happened.", originalDocuments[1]],
+    ["fix the pipe", "The plumber repaired a broken pipe in the building."],
+];
+export const scopeCases = [
+    { authority: "primary-negative-contrast", meaning: "Unrequested fake/imaginary objects, fictional actors or imaginary locations",
+        must: [], allowed: [], pairs: [
+            ["fix my car", "The mechanic repaired an imaginary automobile in the garage."],
+            ["fix the pipe", "The plumber repaired a fake pipe in the building."],
+            ["fix my car", "The fictional mechanic repaired an automobile in the garage."],
+            ["fix my car", "The mechanic repaired an automobile in an imaginary garage."],
+        ] },
+    { authority: "mechanism-observation", meaning: "Current positive-only proof abstains on both-negated forms",
+        must: null, allowed: null, pairs: [
+            ["do not fix my car", "The mechanic did not repair an automobile in the garage."],
+            ["do not repair my vehicle", "The mechanic did not repair a car."],
+            ["do not fix the pipe", "The plumber did not patch the pipe in the building."],
+            ["do not fix the pipe", "The plumber did not repair the pipe."],
+        ] },
+    { authority: "mechanism-observation", meaning: "Current modifier equality/broader-noun proof abstains; semantic acceptance unspecified",
+        must: null, allowed: null, pairs: [
+            ["fix my car", "The mechanic repaired a miniature automobile in the garage."],
+            ["fix my car", "The mechanic repaired a red automobile in the garage."],
+            ["fix the fake vehicle", "The mechanic repaired a fake automobile in the garage."],
+        ] },
+];
+
+export function assertSearchPopulation(actual, expectation) {
+    assert.ok(Array.isArray(expectation.must), "Unspecified recall cannot be claimed as qualification: " + expectation.query);
+    assert.equal(new Set(actual).size, actual.length, "Duplicate population members: " + expectation.query);
+    assert.ok(expectation.must.every(id => actual.includes(id)), "Missing required matches: " + expectation.query);
+    assert.ok(actual.every(id => expectation.allowed.includes(id)), "Forbidden matches: " + expectation.query);
+}
+
 export const ordinaryDocuments = [
     "The engineer restored the deleted database from yesterday's backup.",
     "The engineer rotated database passwords before deleting an old backup.",
@@ -33,6 +95,31 @@ export const prospectiveDocuments = [
     "The instructor shortened the training video by removing repeated demonstrations.",
     "The gardener moved a wilting plant into shade and watered its dry soil.",
     "The gardener trimmed dead branches from a tree after a storm.",
+];
+export const ordinaryExpectations = [
+    ...["recover lost records", "stop the app running out of RAM", "late supplier payment",
+        "get the printer back online", "remove permissions after someone leaves", "reschedule a job interview"]
+        .map((query, index) => required(query, [index * 2])),
+    ...["encrypt the database backup", "order more RAM", "raise supplier prices", "replace printer toner",
+        "recover deleted documents from the shared folder", "hire the candidate immediately"].map(forbidden),
+];
+// These retained contrast probes have allowed targets, but no primary required-set
+// specification. Empty results establish only absence of forbidden additions.
+const unspecified = (query, index) => ({ query, must: null, allowed: [index * 2] });
+export const contrastInventories = [
+    { name: "comparison", documents: comparisonDocuments, expectations: [
+        ...["the spreadsheet download is missing its last record", "stop water dripping under the sink",
+            "call off the room booking because the event moved", "keep the website TLS certificate valid",
+            "remove identifying contact details from survey results"].map(unspecified),
+        ...["restore a deleted spreadsheet", "install a new kitchen sink", "claim a flight delay refund",
+            "reset the website administrator password", "send marketing emails to survey participants"].map(forbidden),
+    ] },
+    { name: "prospective", documents: prospectiveDocuments, expectations: [
+        ...["make the test domain resolve to the right machine", "return the extra payment charged twice",
+            "provide subtitles for hearing accessibility", "help the drooping plant recover from lack of water"].map(unspecified),
+        ...["renew the staging website certificate", "increase the customer's subscription price",
+            "translate the lesson into Spanish", "remove insects from the plant"].map(forbidden),
+    ] },
 ];
 export const workTemplates = [
     "The developer repaired a pagination defect that omitted older records from the export.",

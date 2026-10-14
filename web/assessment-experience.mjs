@@ -421,7 +421,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         host.replaceChildren(el("h2", "Response"), state);
         if (host.dataset.contentFirst !== "true" || failed) responseDetails(host, reason);
     }
-    function showResponse(host, view, { eager = false, placeResponse, contentFirst = false } = {}) {
+    function showResponse(host, view, { eager = false, placeResponse, contentFirst = false, copyNoticeId } = {}) {
         if (contentFirst) host.dataset.contentFirst = "true";
         host.style.minHeight = "";
         host.removeAttribute("aria-busy");
@@ -443,7 +443,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 hosts.add(entry);
                 if (placeResponse) placeResponse(entry, answer);
                 else host.append(entry);
-                showResponse(entry, { ...view, observations: [answer] }, { eager: true, contentFirst });
+                showResponse(entry, { ...view, observations: [answer] }, { eager: true, contentFirst, copyNoticeId });
             }
             return;
         }
@@ -476,13 +476,13 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     || !["full-record", "bounded-fragment"].includes(data.completeness) || data.finality !== "unverified") throw new Error("The response does not match this evidence context.");
                 if (event) textAccess.setOpen(key, true);
                 reader.replaceChildren(textAccess.render({ text: data.text, status: data.completeness === "bounded-fragment" ? "partial" : "available" }, {
-                    key, mode: "complete", subject: "response", contentFirst,
+                    key, mode: "complete", subject: "response", contentFirst, copyNoticeId,
                     notice: "Copy includes the complete retained response body only, not the prompt or page metadata. It is original, unmasked text and is not included in reports. Other apps and clipboard history may access your system clipboard. This is recorded response text, not a verified final answer. Reading uses only already-retained local evidence.",
                 }));
                 if (contentFirst) {
                     host.querySelector(":scope > h2")?.remove();
                     host.querySelector(":scope > .reader-empty")?.remove();
-                    reader.querySelector(".full-text-header").append(el("span", "Final-answer status unverified", "reader-state"));
+                    reader.querySelector(".full-text-qualifiers").append(el("span", "Final-answer status unverified", "reader-state"));
                 }
                 load.hidden = true;
                 about.hidden = true;

@@ -42,7 +42,7 @@ function visibleInk() {
             const css = getComputedStyle(node), bg = background(node), color = value => `rgb(${value.slice(0, 3).join(",")})`;
             return { target: node.id || node.tagName + "." + node.className, background: color(bg),
                 ink: color(blend(rgba(css.color), bg)), font: css.fontFamily, weight: css.fontWeight,
-                cardEmphasis: node.matches("#requestContent .interaction-model-fact dt") ? "500"
+                cardEmphasis: node.matches("#requestContent .reader-facts dt, #requestContent .facts dt") ? "600"
                     : node.matches("#activityList>.activity-card .activity-card-facts dt") ? "500"
                         : node.matches("#activityList>.activity-card .card-tool-name") ? "400" : null,
                 placeholder: node.hasAttribute("placeholder") ? color(blend(rgba(getComputedStyle(node, "::placeholder").color), bg)) : null,

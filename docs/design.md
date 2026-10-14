@@ -2,16 +2,21 @@
 
 ## Interaction reading
 
-The interaction reader leads with source context and the exact retained prompt,
-then recorded calls and responses in their existing chronology. Prompt, response
-and call headings use one Asta Sans type role; model and final-response timing use
-aligned neutral keys and ordinary values. Call duration remains separate from
-final-response time. Unavailable timing or model identity is not guessed.
+The interaction reader extends the card's reading hierarchy rather than opening
+a differently styled document. The exact prompt keeps the card's Asta Sans body
+size and restrained bold-italic emphasis. Its compact subject label and aligned
+Hide/Read and Copy controls form one header, with controls wrapping at enlarged
+text sizes. Responses retain ordinary long-reading text. Model, timing and
+expanded record facts use bold neutral keys followed by ordinary contrasting
+values. Call duration remains separate from final-response time. Unavailable
+timing or model identity is not guessed.
 
 Source-author qualifiers, partial text, missing responses, failed calls and read
 errors remain visible. Copy names its subject, copies only that exact retained
 body and warns that clipboard text is unmasked and accessible to other apps.
-Read/Hide, deliberate copy, clipboard failure feedback, Back and selected-call
+One visible clipboard notice serves the prompt and retained replies; each Copy
+control references it and still names its exact subject. Read/Hide, deliberate
+copy, clipboard failure feedback, Back and selected-call
 anchors retain their existing behavior. A retained response has one heading and
 keeps its unverified final-answer status; a missing response is never an answer
 verdict. A request with no retained individual actions says so beside the prompt.
@@ -20,9 +25,21 @@ Repeated About-prompt/response disclosures and the Selected prompt badge are
 removed from this reader. Filter scope is stated once; out-of-view and missing
 API metadata remain in each call's existing technical details instead of
 repeating empty fields down the page. Recorded paths, returned-result summaries
-and actual failures stay in the reading flow. Technical details retain exact
-arguments, attribution and source limits; no new accordion layer is introduced.
-Report membership keeps its explicit action and state without a separate title.
+and actual failures stay in the reading flow. Expanded details state service
+evidence once, keep exact recorded timestamps and identifiers, and consolidate
+absent parent/parallel linkage into a qualified note. They do not repeat the
+visible call duration or consistent completion flags; conflicting or otherwise
+unrepresented raw completion evidence remains visible. Exact arguments, scripts,
+result attribution and source limits remain readable and copyable without a new
+accordion layer or a help button on every fact.
+
+A missing response uses one compact line, including the response-capture-off
+truth when known; it is not a failed call. Reviews and report membership share a
+footer with the explicit selection state and action. A single call's outcome is
+not duplicated in its review section. Multiple-call and linked-interaction
+summaries retain their useful counts and boundaries. Technical source records
+omit empty rows; linked-message explanations appear when there are linked
+messages to explain.
 
 Failures without a retained cause say **Failure cause unavailable.** in the
 reading flow. Existing technical details keep the exact source/collection
@@ -36,6 +53,11 @@ classification, model provenance, assessment logic, source collection and frozen
 reports are unchanged. Regression proof uses invented records, including linked
 corrections, multiple replies, failed/missing calls, unavailable text, exact
 copy, read/revocation errors and light/dark narrow layouts at enlarged text.
+The normal-entry continuity proof starts on the source card, opens its reader,
+reads and copies prompt and arguments, expands details, toggles report membership,
+and returns to the exact card position and focus. Whole-page before/after renders
+complement control geometry and font-role assertions; matching CSS dimensions
+alone are not visual acceptance.
 
 ## Analyze visual summaries
 
@@ -2224,6 +2246,13 @@ shown when the mapping records it; a folder project is not relabeled a repositor
 The list introduction gives one concise all-page population summary, without
 repeating filter instructions or how opening a record works. Partial-card
 boundaries, unlinked records, selection, empty and stale-state notices remain.
+
+Verified no-match results keep the Interactions / Calls heading and one brief
+next action: **Change filters or reset Analyze.** A private-search mismatch
+instead says **Try another phrase or clear Search.** Supporting text wraps
+naturally at narrow widths or enlarged text sizes. Source setup, unavailable
+history and read-error guidance stay distinct; routine no-match copy does not
+repeat source-setting or historical-coverage caveats.
 
 Interactions and Calls share one card grammar. The actual prompt leads in bold
 italic Asta, for user, agent and unverified authors alike. Unknown authors show

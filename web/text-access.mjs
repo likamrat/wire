@@ -19,7 +19,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }
         return end < compact.length ? compact.slice(0, end).trimEnd() + "..." : compact;
     }
-    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false }) {
+    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
@@ -41,24 +41,28 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }[authorship?.read(source).basis] || "Recorded sender details could not be verified";
         const root = document.createElement("div");
         root.className = "full-text" + (complete ? " full-text-complete" : "") + (complete && contentFirst ? " full-text-content-first" : "");
+        root.dataset.textSubject = subject;
         root.dataset.viewKey = "text:" + key;
         const header = document.createElement("div");
         header.className = "full-text-header";
         const readerActions = document.createElement("div");
         readerActions.className = "full-text-reader-actions";
+        const qualifiers = document.createElement("div");
+        qualifiers.className = "full-text-qualifiers";
         const heading = document.createElement(subject === "response" && !contentFirst ? "h3" : "h2");
         heading.id = "text-heading-" + encodeURIComponent(key);
         heading.textContent = subject === "response" ? contentFirst ? "Recorded response" : "Retained response text" : promptLabel;
         if (subject === "request") heading.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
         if (complete) {
             header.append(heading);
+            if (contentFirst) header.append(readerActions, qualifiers);
             root.append(header);
         }
         if (complete && subject === "request" && (authorship?.read(source).actor ?? "unknown") === "unknown") {
-            const author = authorship ? authorNote(authorGap) : document.createElement("span");
+            const author = authorship && !contentFirst ? authorNote(authorGap) : document.createElement("span");
             author.classList.add("reader-state");
-            if (!authorship) author.textContent = "Author unverified";
-            header.append(author);
+            if (contentFirst || !authorship) author.textContent = authorship ? authorGap : "Author unverified";
+            (contentFirst ? qualifiers : header).append(author);
         }
         const reading = document.createElement("p");
         reading.id = "text-excerpt-" + encodeURIComponent(key);
@@ -93,14 +97,14 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             note.className = complete ? "reader-state reader-state-partial" : "full-text-availability";
             note.textContent = complete ? "Partial text" : "Only part of the original was recorded. Missing text is not reconstructed.";
             if (complete) {
-                header.append(note);
+                (contentFirst ? qualifiers : header).append(note);
                 const explanation = document.createElement("p");
                 explanation.className = "full-text-availability";
                 explanation.textContent = "Only part of the original was recorded. Missing text is not reconstructed.";
                 if (!contentFirst) root.append(explanation);
             } else root.append(note);
         }
-        if (complete) (contentFirst ? root : header).append(readerActions);
+        if (complete && !contentFirst) header.append(readerActions);
         let details;
         if (complete && !contentFirst) {
             details = document.createElement("details");
@@ -180,16 +184,18 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                     scope.id = noticeId;
                     scope.className = "reader-copy-scope";
                     scope.textContent = contentFirst
-                        ? "Copies original text, unmasked, to your clipboard. Other apps and clipboard history may access it."
+                        ? "Copy uses unmasked text. Other apps and clipboard history may access it."
                         : "Copies original text, unmasked.";
-                    copy.setAttribute("aria-describedby", noticeId);
-                    readerActions.append(copy, scope);
+                    copy.setAttribute("aria-describedby", copyNoticeId ?? noticeId);
+                    readerActions.append(copy);
+                    if (!copyNoticeId) readerActions.append(scope);
                     body.append(pre);
                 } else {
                     body.append(ux.codeBlock(text, { label: subject === "response" ? "Exact retained text / local only" : promptLabel + " / local only", copyLabel, prose: true, ...(notice ? { tooltip: notice } : {}) }));
                 }
                 if (inline) passage.insertBefore(body, control);
-                else root.insertBefore(body, complete && contentFirst ? readerActions : details ?? null);
+                else if (complete && contentFirst) reading.after(body);
+                else root.insertBefore(body, details ?? null);
             }
         }
         control.addEventListener("click", event => {

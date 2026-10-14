@@ -9,13 +9,16 @@ import { searchWireContract } from "../lib/search-wire-contract.mjs";
 import { permittedSearchText } from "../lib/search-chunks.mjs";
 import { privateFixture, fixture } from "./helpers.mjs";
 import { inventedSource } from "./search-corpus-fixture.mjs";
+import { scopeCases, assertSearchPopulation } from "./search-linguistics-fixture.mjs";
 
 const directory = process.env.WIRE_SEARCH_LINGUISTICS_TEST_DIRECTORY;
 const modelDirectory = process.env.WIRE_SEARCH_MODEL_TEST_DIRECTORY;
 const resourceTest = { skip: !directory, timeout: 120000 };
 const regressions = [
-    { query: "do not fix my car", text: "The mechanic did not patch an automobile in the garage.", polarity: "negative" },
-    { query: "fix my car", text: "The mechanic repaired a fake automobile in the garage.", qualifier: "fake" },
+    { query: "do not fix my car", text: "The mechanic did not patch an automobile in the garage.", polarity: "negative",
+        authority: "mechanism-observation" },
+    { query: "fix my car", text: "The mechanic repaired a fake automobile in the garage.", qualifier: "fake",
+        authority: "primary-negative-contrast" },
 ];
 const sourceItem = (text, index = 0) => ({ id: `scope-${index}`, revision: searchHash(text), text });
 const target = hit => hit.target.href;
@@ -33,12 +36,12 @@ test("scope correction preserves baseline policy identities and invalidates the 
     assert.equal(searchWireContract.analysisReceipt({ ...receipt, matchPolicyId: SEARCH_MATCH_POLICY_ID }), true);
 });
 
-test("production linguistic helper rejects the reviewed negative-generalization and modifier-loss admissions", resourceTest, async t => {
+test("reviewed admission regressions distinguish mechanism abstention from a genuine fake-object negative", resourceTest, async t => {
     const helper = createSearchLinguistics({ directory });
     const model = createSearchModel({ directory: modelDirectory });
     t.after(() => helper.close()); t.after(() => model.close());
     for (const [index, item] of regressions.entries()) {
-        await t.test(item.query + " / " + item.text, async () => {
+        await t.test(item.authority + ": " + item.query + " / " + item.text, async () => {
             const source = sourceItem(item.text, index);
             const [prepared] = await helper.prepare([source]);
             assert.equal(prepared.intent.state, "supported", "Do not hide a matching defect behind a broken parse");
@@ -56,7 +59,7 @@ test("production linguistic helper rejects the reviewed negative-generalization 
             const lexical = lexicalMatch(item.query, { title: "Recorded request", text: canonical });
             assert.equal(lexical.tier, 0);
             assert.equal(lexical.blocked, false);
-            assert.ok(cosine < SEARCH_RANKING.semanticFloor, "Canonical baseline must exclude the reproduced wrong admission");
+            assert.ok(cosine < SEARCH_RANKING.semanticFloor, "Retain the observed canonical baseline exclusion.");
             const hits = await helper.match(item.query, [{ ...source, intent: prepared.intent }]);
             t.diagnostic(JSON.stringify({ query: item.query, canonical, cosine, lexical, helperIds: hits.map(hit => hit.id) }));
             assert.deepEqual(hits, [], item.query + " / " + item.text);
@@ -64,30 +67,16 @@ test("production linguistic helper rejects the reviewed negative-generalization 
     }
 });
 
-test("scope restrictions are generic across operations, arguments, locations and source modifiers", resourceTest, async t => {
+test("scope checks retain genuine negatives and separately document current fail-closed mechanism behavior", resourceTest, async t => {
     const helper = createSearchLinguistics({ directory });
     t.after(() => helper.close());
-    const cases = [
-        ["do not fix my car", "The mechanic did not repair an automobile in the garage."],
-        ["do not repair my vehicle", "The mechanic did not repair a car."],
-        ["do not fix the pipe", "The plumber did not patch the pipe in the building."],
-        ["do not fix the pipe", "The plumber did not repair the pipe."],
-        ["fix my car", "The mechanic repaired an imaginary automobile in the garage."],
-        ["fix my car", "The mechanic repaired a miniature automobile in the garage."],
-        ["fix my car", "The mechanic repaired a red automobile in the garage."],
-        ["fix my car", "The mechanic repaired a broken automobile in the garage."],
-        ["Find the car repair and the building where it happened.", "The mechanic repaired a broken automobile in the garage."],
-        ["fix the pipe", "The plumber repaired a fake pipe in the building."],
-        ["fix the pipe", "The plumber repaired a broken pipe in the building."],
-        ["fix my car", "The fictional mechanic repaired an automobile in the garage."],
-        ["fix my car", "The mechanic repaired an automobile in an imaginary garage."],
-        ["fix the fake vehicle", "The mechanic repaired a fake automobile in the garage."],
-    ];
-    for (const [query, text] of cases) {
+    for (const group of scopeCases) for (const [query, text] of group.pairs) await t.test(group.authority + ": " + query + " / " + text, async () => {
         const source = sourceItem(text), [prepared] = await helper.prepare([source]);
         assert.equal(prepared.intent.state, "supported", query + " / " + text);
-        assert.deepEqual(await helper.match(query, [{ ...source, intent: prepared.intent }]), [], query + " / " + text);
-    }
+        const hits = await helper.match(query, [{ ...source, intent: prepared.intent }]);
+        if (group.authority === "primary-negative-contrast") assertSearchPopulation(hits.map(hit => hit.id), { ...group, query });
+        else assert.deepEqual(hits, [], "Current mechanism abstains; this is not a permanent semantic prohibition.");
+    });
     for (const [query, text] of [
         ["fix my car", "The mechanic repaired an automobile in the garage."],
         ["fix the pipe", "The plumber repaired the pipe in the building."],
@@ -100,7 +89,7 @@ test("scope restrictions are generic across operations, arguments, locations and
     }
 });
 
-test("actual retrieval excludes scope-unsafe additions but preserves every complete baseline result", resourceTest, async t => {
+test("actual retrieval retains mechanism parity and required positives, not permanent bans on unsupported forms", resourceTest, async t => {
     const texts = [...regressions.map(item => item.text),
         "The plumber did not patch a pipe in the building.",
         "The plumber repaired an imaginary pipe in the building.",
@@ -132,6 +121,7 @@ test("actual retrieval excludes scope-unsafe additions but preserves every compl
         assert.ok(original && actual);
         const expected = new Set(original.map(target));
         if (query === "fix my car" || query === "Find the car repair and the building where it happened.") {
+            expected.add("#request?request=scope-4");
             expected.add("#request?request=scope-5");
         }
         assert.deepEqual(new Set(actual.map(target)), expected, query);

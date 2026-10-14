@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { createTextAccess } from "../web/text-access.mjs";
 
-test("content-first complete readers opt in without changing default or list DOM", async t => {
+test("complete reader actions stay beside their subject without changing default or list DOM", async t => {
     const browser = await chromium.launch();
     t.after(() => browser.close());
     const page = await browser.newPage();
@@ -41,6 +41,7 @@ test("content-first complete readers opt in without changing default or list DOM
             defaultControlsInHeader: ordinary.querySelector(".full-text-reader-actions").parentElement.className,
             defaultOrder: [...ordinary.children].map(node => node.className),
             contentOrder: [...content.children].map(node => node.className),
+            contentControlsInHeader: content.querySelector(".full-text-reader-actions").parentElement.className,
         };
     });
     assert.equal(shape.defaultSame, true);
@@ -48,15 +49,17 @@ test("content-first complete readers opt in without changing default or list DOM
     assert.equal(shape.inlineOptInOnly, true);
     assert.equal(shape.defaultControlsInHeader, "full-text-header");
     assert.deepEqual(shape.defaultOrder, ["full-text-header", "full-text-unavailable", "full-text-body", "reader-details"]);
-    assert.deepEqual(shape.contentOrder, ["full-text-header", "full-text-unavailable", "full-text-body", "full-text-reader-actions"]);
+    assert.deepEqual(shape.contentOrder, ["full-text-header", "full-text-unavailable", "full-text-body"]);
+    assert.equal(shape.contentControlsInHeader, "full-text-header");
     const story = page.locator("#story");
-    await story.locator("pre").focus();
-    await page.keyboard.press("Tab");
+    await story.getByRole("button", { name: "Hide prompt", exact: true }).focus();
     await expect(story.getByRole("button", { name: "Hide prompt", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(story.getByRole("button", { name: "Copy prompt", exact: true })).toBeFocused();
     await page.keyboard.press("Space");
     assert.deepEqual(await page.evaluate(() => window.copies), ["Keep the original text.\n  Including these spaces.  "]);
+    await page.keyboard.press("Tab");
+    await expect(story.locator("pre")).toBeFocused();
     await story.getByRole("button", { name: "Hide prompt", exact: true }).click();
     await expect(story.locator("pre,.ux-copy,.reader-copy-scope")).toHaveCount(0);
     await expect(story.getByRole("button", { name: "Read prompt", exact: true })).toBeFocused();

@@ -299,6 +299,64 @@ test("list population summaries stay concise without changing paging, filtered b
     assert.equal(app.snapshot().analytics.rows.length, 12);
 });
 
+test("unmatched Analyze filters keep one brief next action and reset restores matching records", async t => {
+    const { page } = await setup(t, scopeRecords().slice(1, 3));
+    await chooseTheme(page, "dark");
+    const matching = await rowIds(page);
+    assert.equal(matching.length, 2);
+    await selectActivityOption(page, "dateFilter", "custom");
+    await page.locator("#fromFilter").fill("2020-01-01");
+    await page.locator("#toFilter").fill("2020-01-02");
+    await page.locator("#applyDates").click(); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("0");
+    const empty = page.locator("#activityList .empty-state");
+    await expect(empty.locator("h3")).toHaveText("No matching interactions");
+    await empty.scrollIntoViewIfNeeded();
+    await capture(page, "no-match-desktop", "#activityView");
+    await expect(empty.locator("p")).toHaveText("Change filters or reset Analyze.");
+    for (const [width, fontSize] of [[1280, ""], [375, "200%"]]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate(size => { document.documentElement.style.fontSize = size; }, fontSize);
+        await frames(page);
+        const bounds = await empty.locator("p").evaluate(node => {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const box = node.getBoundingClientRect(), lines = [...range.getClientRects()];
+            return { lines: lines.length, contained: lines.every(line => line.left >= box.left - 1
+                && line.right <= box.right + 1 && line.top >= box.top - 1 && line.bottom <= box.bottom + 1),
+                overflow: node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight };
+        });
+        if (width === 1280) assert.equal(bounds.lines, 1, "Desktop needs only one supporting line");
+        else assert.ok(bounds.lines > 1, "Narrow enlarged text wraps normally");
+        assert.ok(bounds.contained, "The complete supporting text stays inside its paragraph");
+        assert.equal(bounds.overflow, false);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await empty.scrollIntoViewIfNeeded();
+        await capture(page, `no-match-${width}`, "#activityView");
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+    await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
+    await expect(empty.locator("h3")).toHaveText("No matching Work IQ tool calls");
+    await expect(empty.locator("p")).toHaveText("Change filters or reset Analyze.");
+    await expect(page.locator("#activityCount")).toHaveText("0");
+    await page.locator("#resetView").click(); await ready(page);
+    await expect(page.locator("#activityCount")).toHaveText("2");
+    await expect(page.locator("#resetView")).toBeDisabled();
+    await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
+    assert.deepEqual(await rowIds(page), matching);
+    await expect(empty).toHaveCount(0);
+    await capture(page, "matching-after-reset", "#activityView");
+    await restoreLegacySearch(page, "NO_ANALYZE_MATCH");
+    await expect(empty.locator("p")).toHaveText("Try another phrase or clear Search.");
+    await restoreLegacySearch(page, "");
+    assert.deepEqual(await rowIds(page), matching);
+    await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented no-match proof read failure." } }));
+    await page.reload();
+    await expect(page.locator("#message")).toContainText("Invented no-match proof read failure");
+    await expect(page.locator("#activityList .empty-state")).not.toBeVisible();
+});
+
 test("static list context preserves the first card without default reading instructions", { skip: !proofs }, async t => {
     const { page } = await setup(t);
     await page.setViewportSize({ width: 390, height: 1000 }); await chooseTheme(page, "light");

@@ -502,7 +502,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.append(cue);
         return heading;
     }
-    function actionHeading(title, service, row, layer = "tool") {
+    function actionHeading(title, service, row, layer = "tool", { inlineHelp = true } = {}) {
         const heading = el("div", "action-heading");
         heading.append(el("h3", "", title));
         if (service) {
@@ -517,7 +517,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ].filter(Boolean).join(" ");
             cue.lastElementChild.textContent = label;
             if (evidence) cue.querySelector("svg")?.remove();
-            identity.append(cue, ux.helpButton(label, help));
+            identity.append(cue);
+            if (inlineHelp) identity.append(ux.helpButton(label, help));
             heading.append(identity);
         }
         return heading;
@@ -644,10 +645,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function excerpt(scenario) {
         return textAccess.excerpt(scenario.userPrompt);
     }
-    function facts(pairs, { inlineHelp = true, missing = {}, technical = false } = {}) {
+    function facts(pairs, { inlineHelp = true, missing = {}, technical = false, omitMissing = false } = {}) {
         const list = el("dl", "facts");
         if (technical) list.classList.add("technical-facts");
         for (const [label, value] of pairs) {
+            if (omitMissing && (value == null || value === "")) continue;
             const cell = el("dd");
             if (value != null && ["Tool call ID", "Parent invocation", "Parallel group", "Copilot chat ID", "Source event"].includes(label)) cell.append(ux.inlineCode(String(value), { label: "Copy " + label.toLowerCase() }));
             else cell.textContent = value == null ? missing[label]?.label ?? "Not recorded" : String(value);
@@ -1145,7 +1147,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         value.append(path === null ? el("span", "muted", missing) : el("code", "api-path", path));
         list.append(el("dt", "", label), value);
     }
-    function actionFields(call, row, { includeTool = true, includeService = true, includePurpose = true, returned = false } = {}) {
+    function actionFields(call, row, { includeTool = true, includeService = true, includePurpose = true, includeMissing = true, returned = false } = {}) {
         const list = el("dl", "action-fields");
         const operation = !returned ? categories.operation(call?.tool || row?.tool) : null;
         const discovery = operation?.category === "Discovery";
@@ -1192,12 +1194,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 list.append(el("dt", "path-attribution", "Path source"), note);
             }
         } else if (evidence?.reason === "hosted-routing") {
-            pathField(list, "Downstream API path", null, "Not recorded");
-            list.append(el("dt", "", "HTTP method"), el("dd", "", "Not recorded"),
-                el("dt", "", "API version"), el("dd", "", "Not recorded"));
+            if (includeMissing) {
+                pathField(list, "Downstream API path", null, "Not recorded");
+                list.append(el("dt", "", "HTTP method"), el("dd", "", "Not recorded"),
+                    el("dt", "", "API version"), el("dd", "", "Not recorded"));
+            }
         } else if (!discovery || operation.pathLabel) {
             const paths = results.callPaths(call);
-            paths.forEach((path, index) => pathField(list, discovery ? operation.pathLabel : paths.length > 1 ? `API path ${index + 1}` : "API path", path));
+            paths.forEach((path, index) => {
+                if (path !== null || includeMissing) pathField(list, discovery ? operation.pathLabel : paths.length > 1 ? `API path ${index + 1}` : "API path", path);
+            });
         }
         return list;
     }
@@ -2315,9 +2321,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         activityPage = Math.min(activityPage, Math.max(0, Math.ceil(items.length / pageSize) - 1));
         if (!items.length) {
             host.append(empty(!state.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
-                (search ? "Try a different phrase or clear the private search. Other filters and report selections stay."
-                    : "Change a filter or use Reset Analyze. Source approval and collection settings stay unchanged.")
-                    + (state.scenarios.length ? " No matches does not prove that no activity occurred." : "")));
+                state.scenarios.length
+                    ? search ? "Try another phrase or clear Search." : "Change filters or reset Analyze."
+                    : search ? "Try a different phrase or clear the private search. Other filters and report selections stay."
+                        : "Change a filter or use Reset Analyze. Source approval and collection settings stay unchanged."));
         }
         for (const item of items.slice(activityPage * pageSize, (activityPage + 1) * pageSize)) {
             host.append(calls ? matchingAction(item) : requestCard(item));
@@ -2568,7 +2575,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         journey.setAttribute("aria-label", "Recorded prompts, calls and replies");
         const summaryContents = el("div", "request-summary-content");
         const summaries = disclosure("Reviews and record details", summaryContents, "request-context-summaries", detailOwner);
-        body.append(journey, summaries);
+        const footer = el("div", "reader-footer");
+        footer.append(summaries);
+        body.append(journey, footer);
+        const copyNoticeId = "reader-copy-notice";
         const entries = [], seen = new Set(), rendered = [];
         const relationLabel = relation => relation === "selected" ? "Selected interaction"
             : relation === "preceding" ? "Earlier linked context" : "Following linked context";
@@ -2582,8 +2592,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const moment = typeof entry.at === "string" && Number.isFinite(Date.parse(entry.at))
                 ? `${entry.kind === "response" ? "Response recorded" : entry.kind === "prompt" || entry.kind === "follow-up" ? "Message recorded" : entry.timeLabel || "Action started"}: ${timestamp(entry.at)}`
                 : "Time not recorded; position in the chronology is unknown.";
-            const label = el("p", "context-entry-label", entry.kind === "prompt" && entry.relation === "selected" ? "Selected prompt"
-                : entry.kind === "prompt" ? `${entry.relation === "preceding" ? "Earlier linked message" : "Next linked message"} / ${moment}` : moment);
+            const labelText = entry.kind === "prompt" && entry.relation === "selected" ? "Selected prompt"
+                : entry.kind === "prompt" ? `${entry.relation === "preceding" ? "Earlier linked message" : "Next linked message"} / ${moment}` : moment;
+            const label = el("p", "context-entry-label"), separator = labelText.indexOf(":");
+            if (separator >= 0) label.append(el("strong", "", labelText.slice(0, separator + 1)), document.createTextNode(labelText.slice(separator + 1)));
+            else label.textContent = labelText;
             item.prepend(label);
             if (entry.kind === "prompt" && entry.relation === "selected") {
                 item.id = "selectedContext";
@@ -2632,14 +2645,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const sourceMeta = el("div", "request-context-meta");
         const project = projectContext(source || scenario);
         if (originKind !== "copilot-chat" && project.classList.contains("unscoped")) project.textContent = "Project not recorded";
-        sourceMeta.append(project, el("p", "request-time", requestTiming.summary(scenario, applied.timeContext)));
+        const moment = requestTiming.entry(scenario, applied.timeContext), recordedTime = el("p", "request-time");
+        recordedTime.append(el("strong", "", moment.label + ":"), document.createTextNode(" " + moment.value));
+        sourceMeta.append(project, recordedTime);
         intro.append(sourceIdentity, sourceMeta);
         if (!sameScope) intro.append(el("p", "reader-scope", full
             ? `${count(rows.length)} of ${count(full.length)} ${results.unit(applied.layer, full.length)} match the current view. The full recorded interaction follows.`
             : "Matching context unavailable. The retained interaction follows."));
         const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
         requestText.append(textAccess.render(scenario.userPrompt, {
-            key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true,
+            key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true, copyNoticeId,
             originKind,
             notice: "Copy includes the complete retained prompt body only, without export masking. It does not include chat details, warnings, the response or the rest of this page. Other apps and clipboard history may access your system clipboard.",
         }));
@@ -2650,6 +2665,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const readerFacts = el("div", "reader-facts");
         readerFacts.append(modelFact, responseTime);
         requestText.append(readerFacts);
+        if (isSelected) {
+            const copyNotice = el("p", "reader-copy-scope", "Copy uses unmasked text. Other apps and clipboard history may access it.");
+            copyNotice.id = copyNoticeId;
+            requestText.append(copyNotice);
+        }
         const insightHost = el("div", "interaction-insights"), responseHost = el("section", "interaction-response");
         const findingsHost = el("div", "interaction-findings");
         findingsHost.dataset.presentation = "reader";
@@ -2665,7 +2685,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 item.append(requestText, responseHost);
                 return item;
             } });
-        assessmentUI.detail(insightHost, responseHost, scenario.scenarioId, { eager: true, contentFirst: true, findingsHost, placeResponse: (node, observation) => {
+        assessmentUI.detail(insightHost, responseHost, scenario.scenarioId, { eager: true, contentFirst: true, copyNoticeId, findingsHost, placeResponse: (node, observation) => {
             if (!journey.isConnected) return;
             insertEntry({ key: "response:" + observation.observationRef, at: observation.occurredAt,
                 scenarioId: scenario.scenarioId, relation: group.relation, kind: "response", render: () => node });
@@ -2674,17 +2694,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const support = el("div", "request-support");
         const provenance = el("div");
         provenance.append(facts([
-            ["Origin", requestTiming.origin(original)], ["Text retained", requestTiming.coverage(original)],
-            ["Message recorded", timestamp(original?.sourceTimestamp)], ["Raw message timestamp", original?.sourceTimestamp],
-            ["Group timestamp", timestamp(scenario.capturedAt)], ["Raw group timestamp", scenario.capturedAt], ["Source event", original?.sourceEventId],
-            ["Provenance", authorship.read(original).basis], ["Status", original?.status],
+            ["Prompt author", requestTiming.origin(original)], ["Text retained", requestTiming.coverage(original)], ["Message timestamp", original?.sourceTimestamp],
+            ["Group timestamp", scenario.capturedAt], ["Source event", original?.sourceEventId],
+            ["Provenance", authorship.read(original).basis],
             ["Copilot chat ID", scenario.sourceSessionId], ["Prompt association", scenario.promptAssociation],
             ["Coverage", scenario.coverageNote], ["Assessment", scenario.assessedFinding],
-        ]));
+        ], { inlineHelp: false, omitMissing: true }));
         support.append(disclosure("Technical source record", provenance));
         for (const message of context.messages.filter(message => message.scenarioId === scenario.scenarioId && message.kind === "follow-up")) {
             const followup = el("section", "request-context-prompt");
-            followup.append(textAccess.render(message.source, { key: message.key, mode: "complete", initialOpen: true, contentFirst: true, originKind }));
+            followup.append(textAccess.render(message.source, { key: message.key, mode: "complete", initialOpen: true, contentFirst: true, copyNoticeId, originKind }));
             if (message.source.association) provenance.append(el("p", "context-help-note", message.source.association));
             entries.push({ ...message, relation: group.relation, render: () => followup });
         }
@@ -2712,7 +2731,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         recordedTitle.id = "requestRecordedTitle-" + encodeURIComponent(scenario.scenarioId);
         recorded.dataset.contextGroup = scenario.scenarioId;
         recorded.setAttribute("aria-labelledby", recordedTitle.id);
-        recorded.append(recordedTitle, el("p", "context-help-note", "Prompt recorded: " + timestamp(scenario.userPrompt?.sourceTimestamp)), findingsHost, outcome, insightHost);
+        if (context.groups.length > 1) recorded.append(recordedTitle);
+        else recorded.removeAttribute("aria-labelledby");
+        recorded.append(findingsHost);
+        if (context.groups.length > 1 || full?.length > 1 || !sameScope) recorded.append(outcome);
+        recorded.append(insightHost);
         const entryStart = entries.length;
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (applied.layer === "tool" ? rows : undefined);
         for (const tool of scenario.toolCalls || []) {
@@ -2726,27 +2749,30 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const expert = el("div", "technical-detail");
             item.dataset.toolCallId = tool.toolCallId || "";
             const heading = el("div", "call-heading");
-            heading.append(actionHeading(tool.tool || "Recorded assistant action", row?.workload, row));
+            heading.append(actionHeading(tool.tool || "Recorded assistant action", row?.workload, row, "tool", { inlineHelp: false }));
             const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true });
             result.classList.add("journey-result");
-            heading.append(result, el("p", "call-duration", callDurationText(tool)));
+            const duration = el("p", "call-duration");
+            const durationText = callDurationText(tool), separator = durationText.indexOf(":");
+            duration.append(el("strong", "", durationText.slice(0, separator + 1)), document.createTextNode(durationText.slice(separator + 1)));
+            heading.append(result, duration);
             item.append(heading);
             const sourceCall = sourceCallFor(row) || tool;
-            const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false });
-            const secondaryFields = el("dl", "action-fields");
-            for (const term of [...fields.querySelectorAll(":scope > dt")]) {
-                const value = term.nextElementSibling;
-                if (!value.querySelector("code")) secondaryFields.append(term, value);
-            }
+            const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });
             if (fields.childElementCount) item.append(fields);
-            if (secondaryFields.childElementCount) expert.append(secondaryFields);
+            const serviceEvidence = categories.serviceEvidence(row ? { ...row, tool: tool.tool } : row, "tool");
+            const operation = categories.operation(tool.tool);
+            const explanation = el("p", "reader-call-evidence", serviceEvidence?.description ?? operation?.description);
+            const searchScope = categories.requestedSearchScope(sourceCall);
+            if (searchScope) explanation.append(" " + searchScope.description);
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
             if (apiRows?.length) {
                 const apiSummary = resultLine("reported-api", results.summarize(apiRows));
                 apiSummary.classList.add("call-api-summary");
                 item.append(apiSummary);
             }
-            else if (row?.workload !== "Discovery") expert.append(el("p", "result-missing-api", apiRows ? "API metadata: None recorded." : "API metadata: Unavailable."));
+            else if (row?.workload !== "Discovery") explanation.append(apiRows ? " No API result metadata recorded." : " API result metadata is unavailable.");
+            if (explanation.textContent.trim()) expert.prepend(explanation);
             if (!sameScope) {
                 actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
                 const scope = item.querySelector(".action-context");
@@ -2765,16 +2791,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     applied.layer === "reported-api" && target.actionId === row.id ? target.row.id : undefined);
                 if (returned) item.append(returned);
             }
-            expert.append(facts([["Started", timestamp(tool.startedAt)], ["Ended", timestamp(tool.completedAt ?? tool.endedAt)], ["Duration", tool.durationMs == null ? null : tool.durationMs + " ms"],
-                ["Raw start timestamp", tool.startedAt], ["Raw end timestamp", tool.completedAt ?? tool.endedAt],
-                ["Tool outcome", tool.reportedOutcome], ["Execution success", tool.toolSucceeded], ["HTTP observed", tool.observedGraphHttp ? "Yes" : "No"], ["Tool call ID", tool.toolCallId], ["Parent invocation", tool.parentToolCallId], ["Parallel group", tool.parallelGroup]], {
-                technical: true,
-                missing: {
-                    "Parent invocation": tool.parentInvocationEvidence === "source-field-absent" ? help.invocationAbsence.parentSource : help.invocationAbsence.unknownParent,
-                    "Parallel group": tool.parallelGroupEvidence === "adapter-not-supported" || scenario.sourceHost === "copilot-app" && scenario.workloadKind === "recorded-history"
-                        ? help.invocationAbsence.parallelAdapter : help.invocationAbsence.unknownParallel,
-                },
-            }));
+            const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
+                || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
+            expert.append(facts([
+                ["Recorded start", tool.startedAt], ["Recorded end", tool.completedAt ?? tool.endedAt],
+                ...consistentCompletion ? [] : [["Reported outcome", tool.reportedOutcome], ["Execution success", tool.toolSucceeded]],
+                ["Tool call ID", tool.toolCallId], ["Parent invocation", tool.parentToolCallId], ["Parallel group", tool.parallelGroup],
+            ], { inlineHelp: false, omitMissing: true }));
+            const limits = [
+                tool.observedGraphHttp ? "HTTP was directly observed." : "HTTP was not directly observed.",
+                ...!tool.parentToolCallId ? [tool.parentInvocationEvidence === "source-field-absent"
+                    ? "No parent invocation was supplied by the source." : "Parent invocation is unavailable in retained evidence."] : [],
+                ...!tool.parallelGroup ? [tool.parallelGroupEvidence === "adapter-not-supported" || scenario.sourceHost === "copilot-app" && scenario.workloadKind === "recorded-history"
+                    ? "This adapter does not collect parallel groups." : "Parallel group is unavailable in retained evidence."] : [],
+                ...!tool.parentToolCallId || !tool.parallelGroup ? ["Missing linkage does not establish that work was independent or serial."] : [],
+            ];
+            expert.append(el("p", "reader-record-limits", limits.join(" ")));
             if (tool.failureEvidence?.version === 1) {
                 const evidence = tool.failureEvidence;
                 const reason = help.failureMessageStatus[evidence.messageStatus] ?? "Error messages, stack traces and response bodies are excluded from collection.";
@@ -2783,7 +2815,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             expert.append(ux.codeBlock(JSON.stringify(tool.requestArgs, null, 2) ?? "[Arguments unavailable]",
                 { label: "Exact recorded arguments / local only", copyLabel: "Copy recorded arguments" }));
             for (const key of ["command", "code", "script"]) if (typeof tool.requestArgs?.[key] === "string") expert.append(ux.codeBlock(tool.requestArgs[key], { label: "Recorded " + key, copyLabel: "Copy " + key }));
-            for (const result of tool.apiResults || []) expert.append(facts([["Result attribution", result.evidenceLevel], ["Reported status", result.statusCode], ["Reported error", result.errorCode]]));
+            for (const result of tool.apiResults || []) expert.append(facts([["Result attribution", result.evidenceLevel], ["Reported status", result.statusCode], ["Reported error", result.errorCode]], { inlineHelp: false, omitMissing: true }));
             item.append(disclosure("Technical details", expert));
             return item;
             } });
@@ -2838,7 +2870,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         if (entryStart === entries.length) requestText.append(el("p", "reader-empty", "No individual action details were retained."));
         summaryContents.append(recorded);
-        if (isSelected) body.append(actions);
+        if (isSelected) footer.append(actions);
         for (const item of analytics.journeys || []) {
             if (item.scenarioId !== scenario.scenarioId || item.association === "none") continue;
             const relation = item.association === "same-prompt-after-failure" ? "A Graph request follows a Work IQ failure in this prompt group." : item.association === "explicit-transition" ? "The record contains an explicit transition to Graph." : "Work IQ and Graph activity occur in the same prompt group.";
@@ -2856,7 +2888,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else journey.after(contextNote);
         const boundary = el("section", "request-link-details");
         boundary.append(el("h3", "", "How these messages were linked"), el("p", "", context.boundary), el("p", "", context.limitation));
-        summaryContents.append(boundary);
+        if (context.groups.length > 1 || context.messages.some(message => message.kind === "follow-up")) summaryContents.append(boundary);
         detailOwner = "request:" + route.request;
     }
     function reportSelection(kind = reportScope) {

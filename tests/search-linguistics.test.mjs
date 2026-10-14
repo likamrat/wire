@@ -11,7 +11,8 @@ import { createSearchIntent, validSearchIntent } from "../lib/search-intent.mjs"
 import { fixture, privateFixture } from "./helpers.mjs";
 import { inventedSource, seedRetainedReply } from "./search-corpus-fixture.mjs";
 import { searchHash } from "../lib/search-model-assets.mjs";
-import { ordinaryDocuments, comparisonDocuments, prospectiveDocuments } from "./search-linguistics-fixture.mjs";
+import { originalDocuments as prompts, originalExpectations, rawRequiredPairs, ordinaryDocuments,
+    ordinaryExpectations, contrastInventories, assertSearchPopulation } from "./search-linguistics-fixture.mjs";
 import { provisionSearchLinguistics } from "../scripts/provision-search-linguistics.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
@@ -21,17 +22,6 @@ import { loadBoardState } from "../lib/store.mjs";
 const directory = process.env.WIRE_SEARCH_LINGUISTICS_TEST_DIRECTORY;
 const modelDirectory = process.env.WIRE_SEARCH_MODEL_TEST_DIRECTORY;
 const resourceTest = { skip: !directory, timeout: 120000 };
-const prompts = [
-    "The physician treated an injured patient in the hospital.",
-    "The mechanic repaired a broken automobile in the garage.",
-    "Employees cannot sign in because their credentials have expired.",
-    "The hospital maintenance crew repaired an ambulance engine in the garage.",
-    "The clinician scheduled a follow-up visit after the patient's recovery.",
-    "The support engineer renewed a revoked service account credential used by automated deployments.",
-    "The event planner booked a room for a quarterly staffing discussion.",
-    "The warehouse technician repaired a broken conveyor while collecting damaged components.",
-    "The researcher compared medical privacy policies without handling a patient's treatment.",
-];
 function records(count = prompts.length, repeated = false) {
     return Array.from({ length: count }, (_, i) => {
         const row = fixture(`search-${i}`);
@@ -56,6 +46,7 @@ function reader(engine) {
         return { hits, related, status };
     };
 }
+const targetIndices = hits => hits.map(hit => Number(new URLSearchParams(hit.target.href.split("?")[1]).get("request").split("-")[1]));
 test("linguistic resources stay opt-in and have a fixed complete licensed file set", () => {
     const helper = createSearchLinguistics();
     assert.equal(helper.enabled, false);
@@ -74,7 +65,7 @@ test("cancellation at linguistic helper startup settles without sending an orpha
     await assert.rejects(helper.prepare([], { signal: controller.signal }), error => error.code === "linguistics-cancelled");
     assert.equal(helper.status().state, "cancelled");
 });
-test("partial lexical search preserves strict controls, adds two original paraphrases, and leaves F09 servicing open", resourceTest, async t => {
+test("qualification: original required positives and forbidden results apply independently to default and optional search", resourceTest, async t => {
     const { context } = await privateFixture(t, records());
     await seedRetainedReply(context, inventedSource(), "The lab results show a steady recovery.");
     const base = createSearchRetrieval(context, { source: inventedSource, modelDirectory, onInvalidate: () => {} });
@@ -84,36 +75,28 @@ test("partial lexical search preserves strict controls, adds two original paraph
     const built = await enhanced.build();
     assert.equal(built.mode, "hybrid"); assert.equal(built.linguistics.state, "ready");
     const old = reader(base), read = reader(enhanced);
-    for (const query of ["fix my car", "Find the car repair and the building where it happened."]) {
-        assert.deepEqual((await old(query)).hits, []);
-        const retained = (await read(query)).hits;
-        assert.deepEqual(retained.map(hit => hit.target.href), ["#request?request=search-1"]);
-        assert.equal(retained[0].excerpt, prompts[1]);
-        assert.equal(Object.hasOwn(retained[0], "intent"), false);
-        const discovery = await read(query, ["interaction"], true);
-        assert.ok(discovery.hits.some(hit => hit.target.href === "#request?request=search-1"));
-        assert.ok(!discovery.related.hits.some(hit => discovery.hits.some(strict => strict.id === hit.id)));
+    for (const expectation of originalExpectations) for (const [name, search] of [["default", old], ["optional", read]]) {
+        await t.test(name + ": " + expectation.query, async () => {
+            const strict = await search(expectation.query), discovery = await search(expectation.query, ["interaction"], true);
+            assert.deepEqual(discovery.hits, strict.hits, "Discovery Matches must equal the complete strict result.");
+            assert.ok(discovery.related.hits.every(hit => !strict.hits.some(match => match.id === hit.id)));
+            assertSearchPopulation(targetIndices(strict.hits), expectation);
+            assert.ok(strict.hits.every(hit => !Object.hasOwn(hit, "intent")), "Parsed intent is not disclosed.");
+            if (name === "optional" && expectation.must.includes(1)) {
+                assert.equal(strict.hits.find(hit => hit.target.href === "#request?request=search-1").excerpt, prompts[1]);
+            }
+        });
     }
-    const servicing = await read("vehicle servicing");
-    await t.test("F09 still requires vehicle servicing to find the automobile repair", {
-        todo: "Unresolved full F09 requirement; not part of the accepted two-query increment",
-    }, () => {
-        assert.ok(servicing.hits.some(hit => hit.target.href === "#request?request=search-1"));
-    });
     for (const [query, types] of [
-        ["A doctor cared for somebody who was hurt.", ["interaction"]],
-        ["People could not log in with an out-of-date password.", ["interaction"]],
         ["repair", ["interaction"]],
         ["doctor calendar GET /me/calendarView 403", ["action"]],
         ["POST /me/calendarView 403", ["action"]],
         ["GET /me/imaginaryResource 599", ["action"]],
         ["workiq-fetc", ["tool"]],
-        ...["Someone stole my car", "Buy a replacement automobile", "warehouse inventory",
-            "conveyor production capacity", "vehicle theft", "car insurance quote", "rent a car", "blood donation",
-            "A hospital accountant calculated quarterly payroll.", "Distant galaxies contain enormous black holes.",
-            "A recipe for chocolate cake and vanilla icing."].map(query => [query, ["interaction"]]),
     ]) {
-        assert.deepEqual((await read(query, types)).hits.map(hit => hit.id), (await old(query, types)).hits.map(hit => hit.id), query);
+        await t.test("retained exact-control parity: " + query, async () => {
+            assert.deepEqual((await read(query, types)).hits.map(hit => hit.id), (await old(query, types)).hits.map(hit => hit.id));
+        });
     }
     t.diagnostic(JSON.stringify({ build: built.metrics, linguisticMemory: enhanced.status().linguistics }));
 });
@@ -136,7 +119,7 @@ test("role-bound additions do not drop negative scope, uncertainty, ownership or
     assert.equal(validSearchIntent(parsed, prompts[1]), false);
 });
 
-test("raw noun scope cannot discard quantifiers or turn a nearby place into the repaired object", resourceTest, async () => {
+test("raw noun scope retains genuine negatives and independently requires the original positives", resourceTest, async t => {
     const files = await readSearchLinguistics(directory);
     const { default: nlp } = await import(`data:text/javascript;base64,${files["compromise/builds/three/compromise-three.mjs"].toString("base64")}`);
     const engine = createSearchIntent(nlp, createWordNet(files));
@@ -152,12 +135,12 @@ test("raw noun scope cannot discard quantifiers or turn a nearby place into the 
         ["fix my car", "The mechanic repaired a toy automobile in the garage."],
         ["Find the car repair and the building where it happened.",
             "The mechanic repaired a broken automobile; the physician treated a patient in the garage."],
-    ]) assert.equal(engine.matches(engine.parse(query, "query"), engine.parse(text, "record")), false, query + " / " + text);
-    for (const [query, text] of [
-        ["fix my car", prompts[1]],
-        ["Find the car repair and the building where it happened.", prompts[1]],
-        ["fix the pipe", "The plumber repaired a broken pipe in the building."],
-    ]) assert.equal(engine.matches(engine.parse(query, "query"), engine.parse(text, "record")), true, query + " / " + text);
+    ]) await t.test("forbidden: " + query + " / " + text, () => {
+        assert.equal(engine.matches(engine.parse(query, "query"), engine.parse(text, "record")), false);
+    });
+    for (const [query, text] of rawRequiredPairs) await t.test("required: " + query + " / " + text, () => {
+        assert.equal(engine.matches(engine.parse(query, "query"), engine.parse(text, "record")), true);
+    });
 });
 
 test("actual corpus additions preserve raw negative and place-role contrasts without changing baseline hits", resourceTest, async t => {
@@ -184,15 +167,15 @@ test("actual corpus additions preserve raw negative and place-role contrasts wit
     for (const [query, additions] of [
         ["fix my car", [0, 4]], ["Find the car repair and the building where it happened.", [0]],
         ["fix no car", []], ["fix the building", []], ["fix the pipe", []],
-    ]) {
+    ]) await t.test(query, async () => {
         const original = (await old(query)).hits, actual = (await read(query)).hits;
         const expected = new Set([...original.map(hit => hit.target.href), ...additions.map(id => `#request?request=contrast-${id}`)]);
         assert.deepEqual(new Set(actual.map(hit => hit.target.href)), expected, query);
         for (const hit of original) assert.deepEqual(actual.find(value => value.id === hit.id), hit);
-    }
+    });
 });
 
-test("actual ordinary corpus preserves complete baseline sets and printer recall; five required misses remain open", resourceTest, async t => {
+test("qualification: ordinary-work recall cannot pass with an empty required population", resourceTest, async t => {
     const rows = records(ordinaryDocuments.length).map((row, i) => ({
         ...row, userPrompt: { ...row.userPrompt, text: ordinaryDocuments[i] },
     }));
@@ -204,20 +187,11 @@ test("actual ordinary corpus preserves complete baseline sets and printer recall
     assert.equal((await base.build()).mode, "hybrid");
     assert.equal((await enhanced.build()).mode, "hybrid");
     const old = reader(base), read = reader(enhanced);
-    const unresolved = [];
-    for (const [query, required] of [
-        ["recover lost records", 0], ["stop the app running out of RAM", 2], ["late supplier payment", 4],
-        ["get the printer back online", 6], ["remove permissions after someone leaves", 8], ["reschedule a job interview", 10],
-        ...["encrypt the database backup", "order more RAM", "raise supplier prices", "replace printer toner",
-            "recover deleted documents from the shared folder", "hire the candidate immediately"].map(query => [query, null]),
-    ]) {
-        const original = (await old(query)).hits, actual = (await read(query)).hits;
-        assert.deepEqual(actual, original, "No baseline loss or newly forbidden ordinary match: " + query);
-        if (required === 6) assert.deepEqual(actual.map(hit => hit.target.href), ["#request?request=search-6"]);
-        if (required !== null && !actual.some(hit => hit.target.href === `#request?request=search-${required}`)) unresolved.push(required);
+    for (const expectation of ordinaryExpectations) for (const [name, search] of [["default", old], ["optional", read]]) {
+        await t.test(name + ": " + expectation.query, async () => {
+            assertSearchPopulation(targetIndices((await search(expectation.query)).hits), expectation);
+        });
     }
-    assert.deepEqual(unresolved, [0, 2, 4, 8, 10], "This regression check must not be reported as ordinary-language acceptance.");
-    t.diagnostic("Five original ordinary recall requirements remain unsatisfied; printer recall is retained.");
 });
 
 test("linguistic query supersession, source revocation and build cancellation never disclose stale parsed records", resourceTest, async t => {
@@ -290,38 +264,20 @@ test("configured missing or corrupt linguistic resources fail explicitly without
     fetch.mock.restore();
 });
 
-test("the partial lexical path adds no forbidden records across preserved ordinary and comparison contrasts", resourceTest, async t => {
+test("contrast inventory: allowed-only probes are not positive recall qualification", resourceTest, async t => {
     const helper = createSearchLinguistics({ directory });
     t.after(() => helper.close());
-    const groups = [
-        [ordinaryDocuments, [
-            ["recover lost records", [0]], ["stop the app running out of RAM", [2]], ["late supplier payment", [4]],
-            ["get the printer back online", [6]], ["remove permissions after someone leaves", [8]], ["reschedule a job interview", [10]],
-            ...["encrypt the database backup", "order more RAM", "raise supplier prices", "replace printer toner",
-                "recover deleted documents from the shared folder", "hire the candidate immediately"].map(query => [query, []]),
-        ]],
-        [comparisonDocuments, [
-            ["the spreadsheet download is missing its last record", [0]], ["stop water dripping under the sink", [2]],
-            ["call off the room booking because the event moved", [4]], ["keep the website TLS certificate valid", [6]],
-            ["remove identifying contact details from survey results", [8]],
-            ...["restore a deleted spreadsheet", "install a new kitchen sink", "claim a flight delay refund",
-                "reset the website administrator password", "send marketing emails to survey participants"].map(query => [query, []]),
-        ]],
-        [prospectiveDocuments, [
-            ["make the test domain resolve to the right machine", [0]], ["return the extra payment charged twice", [2]],
-            ["provide subtitles for hearing accessibility", [4]], ["help the drooping plant recover from lack of water", [6]],
-            ...["renew the staging website certificate", "increase the customer's subscription price",
-                "translate the lesson into Spanish", "remove insects from the plant"].map(query => [query, []]),
-        ]],
-    ];
-    for (const [texts, cases] of groups) {
+    for (const { name, documents: texts, expectations } of contrastInventories) {
         const source = texts.map((text, i) => ({ id: String(i), revision: searchHash(text), text }));
         const prepared = await helper.prepare(source);
         const items = prepared.map((value, i) => ({ ...source[i], intent: value.intent }));
-        for (const [query, allowed] of cases) {
-            const hits = await helper.match(query, items);
-            assert.ok(hits.every(hit => allowed.includes(Number(hit.id))), query + ": " + JSON.stringify(hits));
-        }
+        for (const expectation of expectations) await t.test(name + ": " + expectation.query, async () => {
+            const hits = await helper.match(expectation.query, items), actual = hits.map(hit => Number(hit.id));
+            if (expectation.must === null) {
+                assert.ok(actual.every(id => expectation.allowed.includes(id)), "Forbidden contrast addition");
+                t.diagnostic("Recall acceptance unspecified; this check cannot establish a positive match.");
+            } else assertSearchPopulation(actual, expectation);
+        });
     }
 });
 

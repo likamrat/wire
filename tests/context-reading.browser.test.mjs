@@ -166,8 +166,13 @@ test("normal isolated source opens retained correction, retry and reply immediat
     assert.ok(await timeline.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-context-summaries")) & Node.DOCUMENT_POSITION_FOLLOWING)));
     assert.deepEqual(await timeline.locator(".full-text-complete").evaluateAll(nodes => nodes
         .filter(node => node.querySelector(".full-text-body"))
-        .map(node => Boolean(node.querySelector(".full-text-body").compareDocumentPosition(node.querySelector(".full-text-reader-actions")) & Node.DOCUMENT_POSITION_FOLLOWING))),
-    [true, true, true], "Prompt, correction and reply text precede their own secondary controls in DOM order");
+        .map(node => node.querySelector(".full-text-reader-actions").parentElement === node.querySelector(".full-text-header")
+            && Boolean(node.querySelector(".full-text-reader-actions").compareDocumentPosition(node.querySelector(".full-text-body")) & Node.DOCUMENT_POSITION_FOLLOWING))),
+    [true, true, true], "Prompt, correction and reply each keep their controls beside the subject, before its text");
+    await expect(page.locator("#reader-copy-notice")).toHaveCount(1);
+    for (const copy of await timeline.getByRole("button", { name: /^Copy (prompt|response)$/ }).all()) {
+        await expect(copy).toHaveAttribute("aria-describedby", "reader-copy-notice");
+    }
     assert.doesNotMatch(await timeline.innerText(), /UNRELATED_RECORD|Separate synthetic topic|More unrelated synthetic/);
     assert.deepEqual(await timeline.locator(".full-text-content").allTextContents(),
         [records[0].userPrompt.text, records[1].userPrompt.text, bodyText]);

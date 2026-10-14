@@ -491,7 +491,7 @@ test("Analyze dense and empty populations keep their own counts and readable bou
     await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("0");
     await expect(page.locator("#activityList")).toContainText("No matching interactions");
-    await expect(page.locator("#activityList")).toContainText("No matches does not prove that no activity occurred");
+    await expect(page.locator("#activityList .empty-state p")).toHaveText("Change filters or reset Analyze.");
     await expect(page.locator("#homeView .analyze-chart-grid")).toBeHidden();
     await expect(page.locator("#percentageCharts")).toBeHidden();
     await expect(page.locator("#homeView .analyze-review")).toBeHidden();
