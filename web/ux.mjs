@@ -369,7 +369,7 @@ export function createEvidenceUX(icons) {
         });
         return control;
     }
-    function copyButton({ label, getText, tooltip: help = label, showLabel = false }) {
+    function copyButton({ label, displayLabel = label, getText, tooltip: help = label, showLabel = false }) {
         if (!label || typeof getText !== "function") throw new TypeError("Clipboard controls require a contextual label and an explicit text getter.");
         const control = document.createElement("button");
         control.type = "button";
@@ -379,7 +379,7 @@ export function createEvidenceUX(icons) {
             control.replaceChildren(icon(name));
             if (showLabel) {
                 const text = document.createElement("span");
-                text.textContent = label;
+                text.textContent = displayLabel;
                 control.append(text);
             }
         }

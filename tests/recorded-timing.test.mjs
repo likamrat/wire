@@ -68,3 +68,21 @@ test("human duration rounding crosses minute/hour boundaries without losing exac
         assert.equal(row.band, "neutral");
     }
 });
+
+test("compact screen duration keeps exact milliseconds and report formatting independent", () => {
+    const screen = createTimingPresentation(undefined, { compact: true });
+    for (const [milliseconds, displayed] of [[null, "Not measured"], [0, "0 s"], [0.004, "<0.01 s"],
+        [9, "<0.01 s"], [10, "0.01 s"], [2955, "2.96 s"], [59994, "59.99 s"], [59995, "1:00 min"],
+        [60000, "1:00 min"], [84892, "1:25 min"], [104000, "1:44 min"], [114090, "1:54 min"],
+        [119499, "1:59 min"], [119500, "2:00 min"], [3599499, "59:59 min"], [3599500, "1:00:00 h"],
+        [3600000, "1:00:00 h"], [90061004, "25:01:01 h"]]) {
+        assert.equal(screen.duration(milliseconds), displayed);
+        if (milliseconds === null) continue;
+        const source = metric([milliseconds]), before = structuredClone(source), shown = screen.fromMetric(source);
+        assert.equal(shown.display.median, displayed);
+        assert.equal(shown.measurement.value, milliseconds);
+        assert.deepEqual(source, before);
+    }
+    assert.equal(timing.duration(114090), "1 min 54.09 s", "Frozen/native presentation retains its precise format");
+    for (const value of [undefined, NaN, Infinity, -1, "1000"]) assert.throws(() => screen.duration(value), TypeError);
+});

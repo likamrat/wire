@@ -1,7 +1,8 @@
 import { createActivityProjection } from "../lib/activity-projection.mjs";
 
+// Native reports keep the default format; screens opt into compact duration text.
 // Reuse the canonical nearest-rank calculation, never a percentile of medians.
-export function createTimingPresentation(summarize = createActivityProjection(null, null, ["unknown"]).summarize) {
+export function createTimingPresentation(summarize = createActivityProjection(null, null, ["unknown"]).summarize, { compact = false } = {}) {
     const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
     const definitions = {
         "tool-start-to-completion": ["Tool calls", "calls", "Call start to recorded completion"],
@@ -15,10 +16,15 @@ export function createTimingPresentation(summarize = createActivityProjection(nu
         if (!Number.isFinite(milliseconds) || milliseconds < 0) throw new TypeError("A duration must be nonnegative milliseconds or null.");
         if (milliseconds > 0 && milliseconds < 10) return "<0.01 s";
         const hundredths = Math.round(milliseconds / 10);
-        const seconds = number(hundredths % 6000 / 100);
-        return hundredths < 6000 ? `${seconds} s`
-            : hundredths < 360000 ? `${number(Math.floor(hundredths / 6000))} min ${seconds} s`
+        if (hundredths < 6000) return `${number(hundredths / 100)} s`;
+        if (!compact) {
+            const seconds = number(hundredths % 6000 / 100);
+            return hundredths < 360000 ? `${number(Math.floor(hundredths / 6000))} min ${seconds} s`
                 : `${number(Math.floor(hundredths / 360000))} h ${Math.floor(hundredths % 360000 / 6000)} min ${seconds} s`;
+        }
+        const seconds = Math.round(milliseconds / 1000), pad = value => String(value).padStart(2, "0");
+        return seconds < 3600 ? `${Math.floor(seconds / 60)}:${pad(seconds % 60)} min`
+            : `${number(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds % 3600 / 60))}:${pad(seconds % 60)} h`;
     }
     function fromSummary(summary, eligible, boundary) {
         const definition = definitions[boundary];
@@ -689,11 +695,12 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         return node;
     }
     const section = el("section", "assessment-summary");
-    section.setAttribute("aria-label", "Interaction insights");
     const compactLayout = findingsHost?.dataset.presentation === "compact";
-    const compactFindings = compactLayout || findingsHost?.dataset.presentation === "reader";
+    const readerLayout = findingsHost?.dataset.presentation === "reader";
+    section.setAttribute("aria-label", readerLayout ? "Saved reviews" : "Interaction insights");
+    const compactFindings = compactLayout || readerLayout;
     const heading = el("div", "assessment-heading");
-    heading.append(el("h2", "", compactLayout ? "Saved reviews" : "Insights"));
+    if (!readerLayout) heading.append(el("h2", "", compactLayout ? "Saved reviews" : "Insights"));
     if (compactLayout) {
         const attempts = model.evidence.assessmentAttempts;
         section.dataset.emptyReviews = String(!model.readingWarning
@@ -723,7 +730,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     const secondaryFindings = el("div", "assessment-secondary-findings");
     const secondaryCalls = el("ul", "assessment-finding-list");
     findings.setAttribute("aria-label", "What the record shows");
-    if (!comparisonFindings && !compactLayout) findings.append(el("h3", "", compactFindings ? "Notes on full interactions" : "What the record shows"));
+    if (!comparisonFindings && !compactFindings) findings.append(el("h3", "", "What the record shows"));
     const calls = el("ul", "assessment-finding-list");
     for (const item of model.findings.operational) {
         const entry = el("li", item.tone);
@@ -743,6 +750,9 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         } else if (comparisonFindings && item.kind === "cause") {
             entry.classList.add("period-cause");
             entry.append(el("span", "", item.label), el("span", "period-cause-count", `${number(item.count)} ${item.count === 1 ? "call" : "calls"}`));
+        } else if (readerLayout && item.kind === "execution-gap") {
+            entry.textContent = `Completion could not be verified for ${number(item.count)} ${item.count === 1 ? "call" : "calls"}.`;
+            secondaryCalls.append(el("li", "", item.text));
         } else if (item.parts) {
             entry.append(doc.createTextNode(item.prefix));
             item.parts.forEach((part, index) => {
@@ -758,7 +768,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     }
     findings.append(calls);
     if (secondaryCalls.childElementCount) secondaryFindings.append(secondaryCalls);
-    if (model.findings.recovery && !comparisonFindings && !compactLayout) findings.append(el("p", "assessment-finding-recovery",
+    if (model.findings.recovery && !comparisonFindings && !compactFindings) findings.append(el("p", "assessment-finding-recovery",
         "If still needed: /mcp auth workiq in Copilot. No retry here."));
     const lanes = new Map();
     for (const group of Object.values(model.evidence.quality)) for (const row of group.rows) {
@@ -805,7 +815,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         else if (!list.childElementCount) group.append(el("p", "assessment-finding-status", "No saved verdicts."));
         findings.append(group);
     }
-    if (!lanes.size) (compactFindings ? secondaryFindings : findings).append(el("p", "assessment-finding-status",
+    if (!lanes.size) (compactLayout ? secondaryFindings : findings).append(el("p", "assessment-finding-status",
         Object.values(model.evidence.quality).some(group => group.eligible > 0)
             ? "No saved review." : "Review coverage unavailable."));
     const attemptLabels = {
@@ -823,16 +833,17 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         } else findings.append(el("p", "assessment-finding-status",
             `${attemptLabels[item.state]}${model.findings.singleInteraction ? "" : ` (${number(item.count)} ${item.count === 1 ? "request" : "requests"})`}.`));
     }
-    if (comparisonFindings) {
+    if (comparisonFindings || readerLayout) {
         if (model.findings.rationale) findings.append(el("p", "assessment-finding-limit", "Review reasons not saved."));
     } else if (!compactFindings || model.findings.rationale) findings.append(el("p", "assessment-finding-limit",
         (model.findings.rationale ? "Verdict reasons not retained. " : "")
         + (compactFindings ? "" : model.findings.singleInteraction ? "Original request group only." : "Full interactions, not just matching calls.")));
-    findings.hidden = compactFindings && findings.children.length === (compactLayout ? 1 : 2) && !calls.childElementCount;
+    findings.hidden = readerLayout ? !findings.textContent.trim()
+        : compactFindings && findings.children.length === (compactLayout ? 1 : 2) && !calls.childElementCount;
     if (findingsHost && !compactLayout) findingsHost.replaceChildren(findings);
     else section.append(findings);
     const saved = el("details", "assessment-saved-details");
-    saved.append(el("summary", "", "Saved assessment details and counts"));
+    saved.append(el("summary", "", readerLayout ? "Saved check details" : "Saved assessment details and counts"));
     if (comparisonFindings) {
         heading.remove();
         if (definitions) saved.append(definitions);
@@ -1046,7 +1057,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         footer.hidden = !footer.childElementCount;
         findingsHost.replaceChildren(footer);
     }
-    else section.append(help);
+    else if (!readerLayout) section.append(help);
     root.replaceChildren(section);
     return section;
 }

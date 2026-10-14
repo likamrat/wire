@@ -126,7 +126,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const renderedContextBundles = new Set();
     const ux = createEvidenceUX(uxIcons);
     const metadata = createInlineMetadata(ux);
-    const categories = createServiceCategories();
+    // Keep operation wording on screen separate from saved report definitions.
+    const recordedCategories = createServiceCategories();
+    const categories = { ...recordedCategories, operation(tool) {
+        const operation = recordedCategories.operation(tool);
+        return tool === "workiq-ask" ? { ...operation, label: "Asked Copilot",
+            description: "Recorded attempt to ask Copilot or an agent, not confirmation of delivery." } : operation;
+    }, serviceEvidence(row, layer) {
+        const evidence = recordedCategories.serviceEvidence(row, layer);
+        return evidence?.reason === "hosted-routing" ? { ...evidence,
+            description: categories.operation("workiq-ask").description + " Its record does not identify a service or API path." } : evidence;
+    } };
     const help = createControlHelp(categories, assessmentFactories.wording);
     const dimensional = createDimensionalCharts();
     const reportScopes = createReportScope(authorship);
@@ -486,12 +496,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function categoryPresentation(row, layer = "tool") {
         const entry = categories.describe(row?.workload), evidence = categories.serviceEvidence(row, layer);
         return layer === "tool" && row?.workload === "Unknown" && row.tool === "workiq-ask" && evidence?.reason === "hosted-routing"
-            ? { ...entry, label: categories.operation(row.tool).label, description: evidence.description } : entry;
+            ? { ...entry, icon: "Assistance", label: categories.operation(row.tool).label, description: evidence.description } : entry;
     }
-    function serviceCue(tag, value) {
-        const entry = categories.describe(value), node = el(tag, `semantic-cue service-cue dimensional-tone-${dimensional.tone(entry.id)}`);
+    function serviceCue(tag, value, presentation) {
+        const entry = presentation ?? categories.describe(value), node = el(tag, `semantic-cue service-cue dimensional-tone-${dimensional.tone(entry.id)}`);
         node.dataset.service = entry.id;
-        node.innerHTML = dimensionalIcons[entry.id];
+        node.innerHTML = dimensionalIcons[entry.icon ?? entry.id];
         node.append(el("span", "", entry.label));
         return node;
     }
@@ -507,7 +517,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.append(el("h3", "", title));
         if (service) {
             const entry = categoryPresentation({ ...row, workload: service, tool: title }, layer), identity = el("span", "action-service-heading");
-            const operation = categories.operation(title), cue = serviceCue("span", service);
+            const operation = categories.operation(title), cue = serviceCue("span", service, entry);
             const evidence = categories.serviceEvidence(row ? { ...row, tool: title } : row, layer);
             const label = service === "Discovery" ? operation.label : entry.label;
             const scope = layer === "tool" ? categories.requestedSearchScope(sourceCallFor(row)) : null;
@@ -516,7 +526,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 scope ? `${scope.label}. ${scope.description}` : null,
             ].filter(Boolean).join(" ");
             cue.lastElementChild.textContent = label;
-            if (evidence) cue.querySelector("svg")?.remove();
+            if (evidence && !entry.icon) cue.querySelector("svg")?.remove();
             identity.append(cue);
             if (inlineHelp) identity.append(ux.helpButton(label, help));
             heading.append(identity);
@@ -1166,7 +1176,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }
                 if (!service.childNodes.length) service.textContent = "Service association unavailable in this snapshot.";
             } else {
-                const cue = serviceCue("span", row?.workload), scope = categories.requestedSearchScope(call);
+                const cue = serviceCue("span", row?.workload, categoryPresentation(row)), scope = categories.requestedSearchScope(call);
                 cue.lastElementChild.textContent = categoryPresentation(row).label;
                 if (scope) cue.lastElementChild.replaceChildren(metadata.item(cue.lastElementChild.textContent,
                     { help: `${scope.label}. ${scope.description}` }));
@@ -1207,14 +1217,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return list;
     }
-    function callDurationText(row, layer = "tool") {
-        const duration = callInvestigation.duration(row, layer);
-        return duration === null ? "Duration: Not recorded"
-            : `${layer === "tool" ? "Call" : layer === "reported-api" ? "API result" : "HTTP record"} duration: ${count(duration)} ms`;
-    }
     function responseTimingFact(scenario) {
         const timing = requestTiming.response(scenario.scenarioId, state.assessment);
-        const value = el("span"), field = cardFact("Time to recorded final response", value);
+        const value = el("span"), field = cardFact("Final response", value);
         field.classList.add("response-timing");
         if (timing.status === "measured") {
             const duration = el("data", "", timingPresentation.duration(timing.durationMs));
@@ -1682,7 +1687,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("filters").hidden = configurationOrStatus || route.view === "request" || route.view === "reports";
         $("projectContextHelp").hidden = configurationOrStatus || route.view === "reports";
         $("filterChips").hidden = configurationOrStatus || route.view === "reports" || route.view === "request";
-        $("coverage").hidden = configurationOrStatus;
+        $("coverage").hidden = configurationOrStatus || route.view === "request";
         $("coverageNotice").hidden = configurationOrStatus;
         $("activityCollectionLink").hidden = !["analyze", "request"].includes(route.view);
         $("settingsDraftNotice").hidden = settings || !collectionSettings?.hasDraft();
@@ -1751,7 +1756,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const returnKey = JSON.stringify([returnRoute, returnLabel, searchReturn]);
         if (returnKey !== contextReturnKey) {
             const back = returnRoute ? routeLink(returnLabel, returnRoute, "button-link", { restorePosition: true, searchReturn }) : null;
-            if (back) back.id = "contextBack";
+            if (back) {
+                back.id = "contextBack";
+                if (route.view === "request") {
+                    back.classList.add("reader-back");
+                    back.prepend(ux.icon("back"));
+                }
+            }
             $("contextReturn").replaceChildren(...(back ? [back] : []));
             contextReturnKey = returnKey;
         }
@@ -1765,7 +1776,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if ($("pageHeadingActions").parentElement !== contextHost) contextHost.append($("pageHeadingActions"));
         const activeClear = reports ? $("reportClearSelection") : $("activityClearSelection");
         if (activeClear.parentElement !== $("pageHeadingActions")) $("pageHeadingActions").append(activeClear);
-        const selectionHost = route.view === "analyze" ? $("analyzeResultActions") : document.querySelector(".page-heading");
+        const selectionHost = route.view === "analyze" ? $("analyzeResultActions") : route.view === "request" ? $("requestView") : document.querySelector(".page-heading");
         if ($("reportSelectionBar").parentElement !== selectionHost) {
             if (route.view === "analyze") selectionHost.prepend($("reportSelectionBar"));
             else selectionHost.append($("reportSelectionBar"));
@@ -2402,7 +2413,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const measured = callInvestigation.duration(row, applied.layer);
         details.append(cardFact(applied.layer === "tool" ? "Call duration" : applied.layer === "reported-api" ? "API result duration" : "Record duration",
-            el("span", "call-duration", measured === null ? "Not recorded" : `${count(measured)} ms`)),
+            durationValue(measured)),
         cardFact(recordedLabel, time.formatMoment(row.startedAt, applied.timeContext)));
         if (analytics.serviceInvolvement?.selection.contextOnlyIds.includes(row.id)) details.append(cardFact("Service scope",
             el("span", "service-context-label", "Missing-service context, not a known match to the selected service.")));
@@ -2437,6 +2448,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         row.append(el("dt", "", cardKey(label)), definition);
         return row;
     }
+    function durationValue(milliseconds) {
+        if (milliseconds === null) return el("span", "call-duration", "Not recorded");
+        const value = el("data", "call-duration", timingPresentation.duration(milliseconds));
+        value.value = String(milliseconds);
+        return value;
+    }
     function originalModelFact(scenario, { callContext = false } = {}) {
         const model = scenario.originalModel;
         const valid = model && ["Model", "Models"].includes(model.label) && typeof model.value === "string" && model.value.trim();
@@ -2470,15 +2487,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const reference = sourceReference(source);
             if (reference) chat.append(el("span", "source-reference", reference));
         } else chat.textContent = "Not recorded";
-        list.append(cardFact(applied.layer === "http" ? "Recorder source" : "Copilot chat", chat));
+        list.append(cardFact(applied.layer === "http" ? "Recorder source" : options.compact ? "Chat" : "Copilot chat", chat));
         const project = source || scenario;
         const projectLabel = project.projectType === "folder" ? "Copilot folder project"
             : project.projectType === "repository" ? "Copilot repository project" : "Copilot project";
-        list.append(cardFact(projectLabel, el("span", "project-context", project.projectId
+        if (!options.compact || project.projectId) list.append(cardFact(projectLabel, el("span", "project-context", project.projectId
             ? project.project || project.projectId : project.sessionId || project.sourceSessionId ? "No project associated" : "Not recorded")));
         const moment = requestTiming.entry(scenario, applied.timeContext);
-        list.append(cardFact(moment.label, moment.value));
-        list.append(originalModelFact(scenario, options));
+        list.append(cardFact(options.compact && moment.label === "Message recorded" ? "Recorded" : moment.label, moment.value));
+        if (options.includeModel !== false) list.append(originalModelFact(scenario, options));
     }
     function requestCard(scenario) {
         const rows = rowsFor(scenario.scenarioId), row = viewKey(el("article", "request-row activity-card"), "request:" + scenario.scenarioId);
@@ -2486,7 +2503,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const requestLink = link("View interaction", "request", { request: scenario.scenarioId }, "request-link text-link");
         content.append(textAccess.render(scenario.userPrompt, { key: "activity:" + scenario.scenarioId, navigationNode: requestLink, originKind: authorship.originKind(scenario), compactProvenance: true, inlinePreview: true }));
         const services = [...new Set(rows.map(row => row.workload).filter(Boolean))];
-        const cue = serviceCue("span", services.length > 1 ? "Multiple workloads" : services[0] || "Unknown");
+        const presentations = rows.map(row => categoryPresentation(row, applied.layer));
+        const sharedOperation = presentations.length && presentations.every(entry => entry.icon === "Assistance");
+        const cue = serviceCue("span", services.length > 1 ? "Multiple workloads" : services[0] || "Unknown", sharedOperation ? presentations[0] : undefined);
         cue.lastElementChild.remove();
         const serviceText = servicesFor(rows);
         const requestedScopes = applied.layer === "tool" ? [...new Set(rows.map(row => {
@@ -2503,15 +2522,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ].join(" ") },
         ]);
         meta.classList.add("request-meta");
-        const composition = el("div", "card-details"), activity = el("div", "card-activity");
+        const composition = el("div", "card-details interaction-details"), activity = el("div", "card-activity");
         const details = el("dl", "activity-card-facts"), context = el("dl", "activity-card-facts card-context");
         const tools = cardTools(rows);
-        details.append(cardFact(tools.children.length > 1 ? "Tools" : "Tool", tools),
-            cardFact(applied.layer === "tool" ? "Activity categories" : "Services", meta), responseTimingFact(scenario));
-        appendCardSource(context, scenario);
+        const category = cardFact(applied.layer === "tool" ? "Activity" : "Services", meta);
+        category.classList.add("card-operation");
+        details.append(category, responseTimingFact(scenario));
+        if (!sharedOperation) {
+            const toolFact = cardFact(tools.children.length > 1 ? "Tools" : "Tool", tools);
+            toolFact.classList.add("card-tools");
+            details.append(toolFact);
+        }
+        appendCardSource(context, scenario, { compact: true });
         const outcome = matchingResults(scenario.scenarioId, { compact: true });
         outcome.classList.add("card-outcomes");
-        activity.append(details, outcome);
+        category.lastElementChild.append(outcome);
+        activity.append(details);
         composition.append(activity, context);
         content.append(composition);
         const selection = el("label", "interaction-select");
@@ -2569,17 +2595,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const contextNote = el("p", "request-context-note", target.status === "available"
             ? `Nearby messages are context, not additional matches.${applied.layer === "tool" ? " Tool completion is not answer correctness." : ""}`
-            : context.groups.length > 1 || context.messages.some(message => message.kind === "follow-up") ? "Saved messages, not the whole chat. Linked messages may be separate work."
+            : context.groups.length > 1 || context.messages.some(message => message.kind === "follow-up") ? "Linked messages may be separate work; this is not the whole chat."
                 : "Saved messages only; unsaved parts of the conversation may be missing.");
         const journey = el("ol", "journey request-context-timeline");
         journey.setAttribute("aria-label", "Recorded prompts, calls and replies");
         const summaryContents = el("div", "request-summary-content");
-        const summaries = disclosure("Reviews and record details", summaryContents, "request-context-summaries", detailOwner);
+        const summaries = disclosure("Reviews and details", summaryContents, "request-context-summaries", detailOwner);
         const footer = el("div", "reader-footer");
         footer.append(summaries);
         body.append(journey, footer);
         const copyNoticeId = "reader-copy-notice";
-        const entries = [], seen = new Set(), rendered = [];
+        const entries = [], seen = new Set(), rendered = [], responseHosts = [];
         const relationLabel = relation => relation === "selected" ? "Selected interaction"
             : relation === "preceding" ? "Earlier linked context" : "Following linked context";
         function insertEntry(entry) {
@@ -2593,11 +2619,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ? `${entry.kind === "response" ? "Response recorded" : entry.kind === "prompt" || entry.kind === "follow-up" ? "Message recorded" : entry.timeLabel || "Action started"}: ${timestamp(entry.at)}`
                 : "Time not recorded; position in the chronology is unknown.";
             const labelText = entry.kind === "prompt" && entry.relation === "selected" ? "Selected prompt"
-                : entry.kind === "prompt" ? `${entry.relation === "preceding" ? "Earlier linked message" : "Next linked message"} / ${moment}` : moment;
+                : entry.kind === "prompt" ? `${entry.relation === "preceding" ? "Earlier linked message" : "Next linked message"} / ${typeof entry.at === "string" && Number.isFinite(Date.parse(entry.at)) ? timestamp(entry.at) : moment}` : moment;
             const label = el("p", "context-entry-label"), separator = labelText.indexOf(":");
             if (separator >= 0) label.append(el("strong", "", labelText.slice(0, separator + 1)), document.createTextNode(labelText.slice(separator + 1)));
             else label.textContent = labelText;
             item.prepend(label);
+            if (entry.kind === "action" && item.querySelector(".call-heading")) {
+                label.classList.add("call-started");
+                item.querySelector(".call-heading").after(label);
+                if (typeof entry.at === "string" && Number.isFinite(Date.parse(entry.at))) {
+                    label.textContent = "Started " + time.formatMoment(entry.at, applied.timeContext);
+                }
+            }
             if (entry.kind === "prompt" && entry.relation === "selected") {
                 item.id = "selectedContext";
                 if (target.status !== "available") item.setAttribute("aria-current", "true");
@@ -2637,18 +2670,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const intro = el("div", "request-intro");
         const source = sessionSource(scenario.sourceSessionId);
+        const sourceProject = source || scenario;
         const originKind = authorship.originKind?.(scenario);
-        const sourceIdentity = el("div", "request-source");
-        sourceIdentity.append(el("span", "request-source-label", originKind === "copilot-chat" ? "From Copilot chat"
-            : applied.layer === "http" ? "Recorder source" : "Source"),
-            el("strong", source && applied.layer !== "http" ? "copilot-chat-name" : "", source?.name ?? "Source not recorded"));
-        const sourceMeta = el("div", "request-context-meta");
-        const project = projectContext(source || scenario);
-        if (originKind !== "copilot-chat" && project.classList.contains("unscoped")) project.textContent = "Project not recorded";
-        const moment = requestTiming.entry(scenario, applied.timeContext), recordedTime = el("p", "request-time");
-        recordedTime.append(el("strong", "", moment.label + ":"), document.createTextNode(" " + moment.value));
-        sourceMeta.append(project, recordedTime);
-        intro.append(sourceIdentity, sourceMeta);
         if (!sameScope) intro.append(el("p", "reader-scope", full
             ? `${count(rows.length)} of ${count(full.length)} ${results.unit(applied.layer, full.length)} match the current view. The full recorded interaction follows.`
             : "Matching context unavailable. The retained interaction follows."));
@@ -2663,13 +2686,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const modelFact = el("dl", "activity-card-facts interaction-model-fact");
         modelFact.append(originalModelFact(scenario));
         const readerFacts = el("div", "reader-facts");
+        const sourceFacts = el("dl", "activity-card-facts reader-source");
+        appendCardSource(sourceFacts, scenario, { compact: true, includeModel: false });
+        if (isSelected) readerFacts.append(sourceFacts);
         readerFacts.append(modelFact, responseTime);
         requestText.append(readerFacts);
-        if (isSelected) {
-            const copyNotice = el("p", "reader-copy-scope", "Copy uses unmasked text. Other apps and clipboard history may access it.");
-            copyNotice.id = copyNoticeId;
-            requestText.append(copyNotice);
-        }
         const insightHost = el("div", "interaction-insights"), responseHost = el("section", "interaction-response");
         const findingsHost = el("div", "interaction-findings");
         findingsHost.dataset.presentation = "reader";
@@ -2682,9 +2703,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         entries.push({ key: "prompt:" + scenario.scenarioId, at: scenario.userPrompt?.sourceTimestamp,
             scenarioId: scenario.scenarioId, relation: group.relation, kind: "prompt", render: () => {
                 const item = el("li", "journey-item");
-                item.append(requestText, responseHost);
+                item.append(requestText);
                 return item;
             } });
+        responseHosts.push({ scenarioId: scenario.scenarioId, host: responseHost });
         assessmentUI.detail(insightHost, responseHost, scenario.scenarioId, { eager: true, contentFirst: true, copyNoticeId, findingsHost, placeResponse: (node, observation) => {
             if (!journey.isConnected) return;
             insertEntry({ key: "response:" + observation.observationRef, at: observation.occurredAt,
@@ -2698,6 +2720,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ["Group timestamp", scenario.capturedAt], ["Source event", original?.sourceEventId],
             ["Provenance", authorship.read(original).basis],
             ["Copilot chat ID", scenario.sourceSessionId], ["Prompt association", scenario.promptAssociation],
+            ["Project", sourceProject.projectId ? sourceProject.project || sourceProject.projectId
+                : sourceProject.sessionId || sourceProject.sourceSessionId ? "No project associated" : "Not recorded"],
             ["Coverage", scenario.coverageNote], ["Assessment", scenario.assessedFinding],
         ], { inlineHelp: false, omitMissing: true }));
         support.append(disclosure("Technical source record", provenance));
@@ -2708,13 +2732,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             entries.push({ ...message, relation: group.relation, render: () => followup });
         }
         const actions = el("section", "request-actions");
-        actions.setAttribute("aria-labelledby", "requestReportTitle");
+        actions.setAttribute("aria-label", "Report selection");
         const reportContext = el("div");
         const reportTitle = el("p", "muted");
         reportTitle.id = "requestReportTitle";
         const included = reportSelection().requests.some(request => request.aliases.includes(scenario.scenarioId));
         reportTitle.textContent = selected.has(scenario.scenarioId) ? "Selected for report."
-            : included ? "Included through the current report scope." : "Not selected for report.";
+            : included ? "Included through the current report scope." : "";
         reportContext.append(reportTitle);
         const pick = button(selected.has(scenario.scenarioId) ? "Remove from report" : "Add to report", () => {
             selected.has(scenario.scenarioId) ? selected.delete(scenario.scenarioId) : selected.add(scenario.scenarioId);
@@ -2749,19 +2773,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const expert = el("div", "technical-detail");
             item.dataset.toolCallId = tool.toolCallId || "";
             const heading = el("div", "call-heading");
-            heading.append(actionHeading(tool.tool || "Recorded assistant action", row?.workload, row, "tool", { inlineHelp: false }));
+            const operation = categories.operation(tool.tool);
+            const actionTitle = actionHeading(tool.tool || "Tool not recorded", row?.workload, row, "tool", { inlineHelp: false });
+            if (tool.tool === "workiq-ask") {
+                actionTitle.querySelector("h3").textContent = operation.label;
+                const identity = actionTitle.querySelector(".action-service-heading");
+                if (categoryPresentation({ ...row, tool: tool.tool }).icon === "Assistance") identity?.remove();
+                const icon = el("span", "operation-icon");
+                icon.innerHTML = dimensionalIcons.Assistance;
+                actionTitle.prepend(icon);
+            }
+            heading.append(actionTitle);
             const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true });
             result.classList.add("journey-result");
             const duration = el("p", "call-duration");
-            const durationText = callDurationText(tool), separator = durationText.indexOf(":");
-            duration.append(el("strong", "", durationText.slice(0, separator + 1)), document.createTextNode(durationText.slice(separator + 1)));
+            duration.append(el("span", "call-duration-label", "Call: "), durationValue(callInvestigation.duration(tool, "tool")));
             heading.append(result, duration);
             item.append(heading);
             const sourceCall = sourceCallFor(row) || tool;
             const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });
             if (fields.childElementCount) item.append(fields);
             const serviceEvidence = categories.serviceEvidence(row ? { ...row, tool: tool.tool } : row, "tool");
-            const operation = categories.operation(tool.tool);
             const explanation = el("p", "reader-call-evidence", serviceEvidence?.description ?? operation?.description);
             const searchScope = categories.requestedSearchScope(sourceCall);
             if (searchScope) explanation.append(" " + searchScope.description);
@@ -2794,7 +2826,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
                 || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
             expert.append(facts([
-                ["Recorded start", tool.startedAt], ["Recorded end", tool.completedAt ?? tool.endedAt],
+                ["Tool", tool.tool], ["Recorded start", tool.startedAt], ["Recorded end", tool.completedAt ?? tool.endedAt],
+                ["Call duration (ms)", callInvestigation.duration(tool, "tool")],
                 ...consistentCompletion ? [] : [["Reported outcome", tool.reportedOutcome], ["Execution success", tool.toolSucceeded]],
                 ["Tool call ID", tool.toolCallId], ["Parent invocation", tool.parentToolCallId], ["Parallel group", tool.parallelGroup],
             ], { inlineHelp: false, omitMissing: true }));
@@ -2881,14 +2914,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         entries.sort(requestContext.compare);
         for (const entry of entries) insertEntry(entry);
+        for (const { scenarioId, host } of responseHosts) {
+            const last = rendered.filter(entry => entry.scenarioId === scenarioId && ["prompt", "action"].includes(entry.kind)).at(-1);
+            if (last) last.node.insertBefore(host, last.node.querySelector(":scope > .detail-disclosure"));
+        }
+        const copyNotice = el("p", "reader-copy-scope", "Copy uses unmasked text. Other apps and clipboard history may access it.");
+        copyNotice.id = copyNoticeId;
+        journey.after(copyNotice);
         const firstLinkedMessage = rendered.find(entry => entry.kind === "prompt" && entry.relation !== "selected" || entry.kind === "follow-up")?.node;
         const selectedRecord = target.status === "available" ? body.querySelector("#selectedCall") : null;
         if (selectedRecord) selectedRecord.prepend(contextNote);
         else if (firstLinkedMessage && target.status !== "available") firstLinkedMessage.prepend(contextNote);
-        else journey.after(contextNote);
         const boundary = el("section", "request-link-details");
         boundary.append(el("h3", "", "How these messages were linked"), el("p", "", context.boundary), el("p", "", context.limitation));
         if (context.groups.length > 1 || context.messages.some(message => message.kind === "follow-up")) summaryContents.append(boundary);
+        const evidenceScope = el("p", "reader-evidence-scope", "Saved messages can have gaps. Tool outcomes do not establish answer correctness or permission. ");
+        evidenceScope.append(link("Collection coverage", "collection-status", { setting: "collection-details" }, "text-link"));
+        summaryContents.append(evidenceScope);
         detailOwner = "request:" + route.request;
     }
     function reportSelection(kind = reportScope) {

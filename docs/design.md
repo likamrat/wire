@@ -2,19 +2,36 @@
 
 ## Interaction reading
 
-The interaction reader extends the card's reading hierarchy rather than opening
-a differently styled document. The exact prompt keeps the card's Asta Sans body
-size and restrained bold-italic emphasis. Its compact subject label and aligned
-Hide/Read and Copy controls form one header, with controls wrapping at enlarged
-text sizes. Responses retain ordinary long-reading text. Model, timing and
-expanded record facts use bold neutral keys followed by ordinary contrasting
-values. Call duration remains separate from final-response time. Unavailable
-timing or model identity is not guessed.
+The activity card and interaction reader share a prompt-first reading hierarchy.
+The exact prompt keeps the card's Asta Sans body size and restrained bold-italic
+emphasis. Cards combine the operation and recorded outcome, then show compact
+chat, recorded time and model facts. The reader continues with that same prompt
+and source context, followed by the recorded calls and replies. It uses a bounded
+reading column and simple dividers instead of a second page title, breadcrumb and
+timeline rail. Back stays above the prompt; report selection stays below the
+reading flow. The semantic page heading remains available to assistive technology.
+
+The reader's **Hide/Read** and **Copy** text actions retain full subject-specific
+accessible names and 44px targets without competing outlined buttons. Responses
+retain ordinary long-reading text. Metadata uses **bold neutral keys (600)** and
+**ordinary values (400)** across cards and the reader. Compact inline arrangements
+must preserve that weight distinction. Source context appears once for the selected interaction, not again for
+every linked message. Missing projects remain explicit in technical source
+details rather than repeating a no-project sentence on each card.
+
+**Final response** means the existing recorded-request-to-final-response timing,
+not the call's duration. The screen-only timing option renders 114090 ms as
+**1:54 min**, 104000 ms as **1:44 min**, and 84892 ms as **1:25 min**.
+Minutes round to whole seconds with carry; hours use **h:mm:ss h**. Existing
+subminute hundredths, tiny-positive and true-zero displays remain distinct.
+Exact milliseconds stay in data elements and technical details. Native report
+formatting retains its default precise duration presentation; stored facts,
+timestamps, sorting and frozen output do not change.
 
 Source-author qualifiers, partial text, missing responses, failed calls and read
 errors remain visible. Copy names its subject, copies only that exact retained
 body and warns that clipboard text is unmasked and accessible to other apps.
-One visible clipboard notice serves the prompt and retained replies; each Copy
+One visible footer clipboard notice serves the prompt and retained replies; each Copy
 control references it and still names its exact subject. Read/Hide, deliberate
 copy, clipboard failure feedback, Back and selected-call
 anchors retain their existing behavior. A retained response has one heading and
@@ -28,14 +45,25 @@ repeating empty fields down the page. Recorded paths, returned-result summaries
 and actual failures stay in the reading flow. Expanded details state service
 evidence once, keep exact recorded timestamps and identifiers, and consolidate
 absent parent/parallel linkage into a qualified note. They do not repeat the
-visible call duration or consistent completion flags; conflicting or otherwise
+consistent completion flags; conflicting or otherwise
 unrepresented raw completion evidence remains visible. Exact arguments, scripts,
 result attribution and source limits remain readable and copyable without a new
 accordion layer or a help button on every fact.
 
-A missing response uses one compact line, including the response-capture-off
-truth when known; it is not a failed call. Reviews and report membership share a
-footer with the explicit selection state and action. A single call's outcome is
+A missing response follows its group's calls, before their technical details:
+**No saved response. Capture is off.** when that state is known. It is not a
+failed call or proof that Copilot did not answer. **Reviews and details** shows
+the selected interaction's review state and concise, truthful gaps. For example,
+**Completion could not be verified for 1 call.** does not change a reported
+outcome into a verified completion. Exact check counts, reasons and definitions
+remain in the existing saved-check details and feedback dialog; technical source
+records retain source-specific limits. Broad app-wide coverage stays in Analyze
+and Collection status, reachable through **Collection coverage**, not copied
+into the reader. One short scope note distinguishes missing messages, tool
+outcomes and answer/permission judgments. Report membership stays beside this
+section. The redundant unselected-status
+sentence is replaced by the explicit **Add to report** action; selected and
+broader-scope membership remain stated. A single call's outcome is
 not duplicated in its review section. Multiple-call and linked-interaction
 summaries retain their useful counts and boundaries. Technical source records
 omit empty rows; linked-message explanations appear when there are linked
@@ -48,7 +76,7 @@ Recorded sign-in requirements, access-denial wording, error codes and timeouts
 still appear as distinct failure statements, not as generic missing causes or
 instructions to sign in now. Unknown completion remains separate from failure.
 
-These are reader-only presentation changes. Card preview options, evidence
+These are screen presentation changes. Card preview options, evidence
 classification, model provenance, assessment logic, source collection and frozen
 reports are unchanged. Regression proof uses invented records, including linked
 corrections, multiple replies, failed/missing calls, unavailable text, exact
@@ -902,23 +930,30 @@ An action names **API discovery**, **Schema lookup** or **Agent discovery** besi
 tool name. The existing compact definition list carries a short purpose and **Data service:
 Not applicable**; only schema lookup shows a **Schema path**. No missing API-path/status
 warning is invented for a discovery-only action. Its actual completion/failure stays
-visible, and technical details remain available. Copilot assistance explains missing
+visible, and technical details remain available. Asked Copilot explains missing
 service details in that call's record without guessing from private text or changing Unknown into success.
 
 Remaining `Unknown` activity is displayed as **Service not shown**, not a service failure.
 For a targetless `workiq-ask` with the existing `hosted-routing` evidence reason,
-Interactions and Calls cards instead name the known operation **Copilot assistance**,
+Interactions and Calls cards instead name the known operation **Asked Copilot**,
 as the reader does. Existing category help explains that its service or API path
 is not recorded. Mixed interactions retain both assistance and real missing-service
 labels; known, partial and unsupported targets keep their existing categories.
 This presentation leaves the canonical `Unknown` identity and filter unchanged.
-The detail reader keeps **Copilot assistance** as a known purpose and names its data service
+The detail reader keeps **Asked Copilot** as a known operation and names its data service
 **Not in this record**. Other unknown records distinguish **Path not recognized**,
 **Target format not supported**, and **No target recorded**. Short on-demand explanations
 use only retained technical metadata; chart-definition and percentage disclosures describe
 the reasons present in the applied slice. Outcome counts and the result cue stay separate.
 The category uses a neutral information glyph in remaining glossary cues, never a
-new under-column icon row. Its canonical ID, color and filter value remain `Unknown`.
+new under-column icon row. The known `workiq-ask` operation instead uses the official
+Fluent **chat_sparkle_24_regular** glyph, also in its Services and operations row.
+It identifies a **recorded attempt** to ask Copilot or a selected agent, not proof
+that a question reached the remote service. Failed and pre-authentication calls
+can have the same recorded invocation. It does not establish reply success or
+results. Genuine missing-service cues are not replaced.
+Its canonical ID, color and filter value remain `Unknown`; the screen's operation
+label does not change shared report terminology or introduce a downstream service.
 
 An applied **Service not shown** filter now explains the actual matching rows
 above Home or Activity, without requiring a disclosure. It groups exact counts by
@@ -1177,9 +1212,9 @@ shows Not measured. Screen values preserve exact durations, including submillise
 values; the existing definitions panel retains the measurement details.
 
 Timing is contextual rather than a detached Analyze summary. Each Interactions
-prompt shows **Time to recorded final response**, using that exact interaction's
-qualified metric as the first card fact. After each retained reader prompt,
-the same timing fact precedes its Model/Models fact. Both use the shared
+prompt shows **Final response**, using that exact interaction's qualified metric.
+After each retained reader prompt, the same timing fact accompanies its
+Model/Models fact. Both use the shared
 single-colon key formatter. Each call retains its own
 start-to-completion duration and existing duration ordering. Missing values say
 **Not recorded**, genuine zero remains measured, and no duration receives a
@@ -1202,7 +1237,7 @@ existing **Saved reviews** disclosure retains independent state, asynchronous
 loading, scope, feedback and recovery controls. Screen assessment composition
 sets `showTiming: false`; the shared renderer's default, underlying aggregates,
 optional exact definitions and saved report output remain unchanged.
-The reader's secondary section is **Reviews and record details**, not a timing
+The reader's secondary section is **Reviews and details**, not a timing
 destination. Neither surface averages medians, sums concurrent calls or treats
 a duration as a quality percentage. The Search timing shortcut opens existing
 Calls instead of a removed widget. No new accordion or timing chart is added.

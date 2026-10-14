@@ -5,6 +5,10 @@ dictionary-backed matching code remains available for corrective safety testing,
 not as a validated recall improvement. The existing MiniLM, exact and prefix
 matcher remains unchanged.
 
+This activation hold is not a choice between local and provider-backed Search.
+Search must remain independent and on-device; an optional Copilot assessment
+or its spending approval cannot supply Search relevance.
+
 The original two-query qualification is **withdrawn** following corrections for
 negative-scope generalization and source-modifier loss. In particular, the
 retained **broken automobile** no longer supports an adjunct match to the

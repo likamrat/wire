@@ -416,7 +416,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         host.hidden = false;
         host.style.minHeight = "";
         host.removeAttribute("aria-busy");
-        const state = el("p", message, failed ? "reader-empty error" : "reader-empty");
+        const state = el("p", host.dataset.contentFirst === "true" && message === "No response text retained." ? "No saved response." : message, failed ? "reader-empty error" : "reader-empty");
         if (failed) state.setAttribute("role", "alert");
         host.replaceChildren(el("h2", "Response"), state);
         if (host.dataset.contentFirst !== "true" || failed) responseDetails(host, reason);
@@ -432,7 +432,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             responseUnavailable(host, "No response text retained.", view.consent.state !== "enabled"
                 ? "Optional response capture is off. The available evidence contains no readable response text."
                 : "No attributable response text was retained.");
-            if (contentFirst && view.consent.state !== "enabled") host.querySelector(".reader-empty").append(" Response capture is off.");
+            if (contentFirst && view.consent.state !== "enabled") host.querySelector(".reader-empty").append(" Capture is off.");
             return;
         }
         if (eager && (placeResponse || answers.length > 1)) {

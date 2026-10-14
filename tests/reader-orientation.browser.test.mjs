@@ -85,7 +85,8 @@ test("source links visibly filter, and Back stays with orientation rather than r
     await rowFor(page, "Three documents are enough.").getByRole("link", { name: "View interaction", exact: true }).click(); await ready(page);
     await expect(page.locator("#pageTitle")).toHaveText("Interaction");
     await expect(page.locator(".request-original .full-text-content")).toHaveText("Three documents are enough. I have signed in; please try again.");
-    await expect(page.locator(".request-source")).toContainText("From Copilot chat");
+    await expect(page.locator(".reader-source")).toContainText("Chat:");
+    await expect(page.locator(".reader-source").getByRole("link", { name: "Filter to chat: Sample: Harbor launch documents", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Back to results", exact: true }).click(); await ready(page);
     await expect(page.locator(".request-row")).toHaveCount(2);
     await page.getByRole("link", { name: "Back to results", exact: true }).click(); await ready(page);

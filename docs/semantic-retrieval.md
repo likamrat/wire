@@ -33,6 +33,13 @@ Normal startup, search, typing and retry never acquire packages or weights. Miss
 
 ## Local execution and privacy
 
+**Local-only is the product requirement, not a temporary model configuration.**
+Search must work independently inside WIRE, with no Copilot SDK session,
+provider-backed search mode, AI-credit budget or off-device query/content
+processing. Optional assessment grants do not apply to Search. Improving
+relevance must preserve this requirement; an unsuccessful local model or
+matching rule does not justify a remote fallback.
+
 The facade owns one fixed Node child using `process.execPath`, fixed arguments, ignored stdout/stderr and a minimal system/temp environment. No shell, inherited debugger/preload flags, `NODE_OPTIONS`, provider credentials or model-hub tokens are supplied. Queries travel only over private local IPC, never argv, URLs, logging, persistent storage or a cloud API. The child denies fetch/WebSocket/HTTP/TCP/DNS/UDP entry points before loading dependencies. It has no listener, browser worker or independent service lifecycle.
 
 The helper uses the Node export of **onnxruntime-web**, not **onnxruntime-node**. The selected upstream Node build disables JSEP, WebGL and the browser proxy and runs Emscripten CPU WASM. Its non-Windows platform telemetry provider is a no-op even on a Windows host. Native ONNX Runtime Windows builds have a different, default-on platform telemetry policy; they are deliberately not installed as a substitute. [Build source](https://github.com/microsoft/onnxruntime/blob/f217402897f40ebba457e2421bc0a4702771968e/js/web/script/build.ts#L557-L583), [telemetry implementation](https://github.com/microsoft/onnxruntime/blob/f217402897f40ebba457e2421bc0a4702771968e/onnxruntime/core/platform/telemetry.cc), [native privacy disclosure](https://github.com/microsoft/onnxruntime/blob/v1.21.0/docs/Privacy.md).

@@ -5,6 +5,7 @@ const services = {
     People: "person", Tasks: "task_list_ltr", Notes: "notebook", Directory: "organization",
     Search: "search", Discovery: "book_search", "Multiple workloads": "grid", "Platform metadata": "code", Unknown: "question_circle",
     "group:other": "apps_list",
+    Assistance: "chat_sparkle",
 };
 
 export const dimensionalIcons = Object.freeze(Object.fromEntries(Object.entries(services).map(([service, name]) => [

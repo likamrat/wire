@@ -599,6 +599,9 @@ importing and failed states never become a successful empty-history message.
 The single header **Search** entry provides [live on-device semantic and
 exact/prefix retrieval](docs/live-search.md). Its global text stays in panel and
 authenticated loopback-runtime memory, not history, URLs, logs or storage.
+Search runs independently inside WIRE: it does not use Copilot sessions, an SDK
+model service, AI credits or off-device processing of queries or saved content.
+Optional Copilot-powered assessments are separate and are not a Search dependency.
 **Current Analyze scope** explicitly binds its full verified interaction/action
 membership to charts, rows and current-view report eligibility. It does not index
 raw source histories. Existing metadata/list utilities keep their own scope and

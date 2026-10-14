@@ -10,7 +10,7 @@ import { assessmentDependencies, assessmentRef, assessmentSource, buildAssessmen
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { collectRecordedAnswerCandidates, commitRecordedAnswers } from "../lib/assessment-capture.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
-import { fixture, privateFixture, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, privateFixture, restoreLegacySearch, chooseTheme } from "./helpers.mjs";
 import { retainedContextFixture } from "./request-context-fixture.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -139,7 +139,7 @@ test("compact reader keeps read errors and a reachable retry rather than claimin
     await expect(findings).toContainText("Your feedback");
     await expect(host.getByRole("button", { name: "Details and feedback", exact: true })).toBeVisible();
     await expect(findings.locator("[data-finding-kind=execution]")).toHaveCount(0);
-    await expect(page.locator(".request-context-timeline")).toContainText("No response text retained.");
+    await expect(page.locator(".request-context-timeline")).toContainText("No saved response.");
 });
 
 test("normal isolated source opens retained correction, retry and reply immediately; Analyze Back is exact", { timeout: 40000 }, async t => {
@@ -159,7 +159,7 @@ test("normal isolated source opens retained correction, retry and reply immediat
         await expect(page.locator("#" + id)).toBeHidden();
     }
     await expect(page.locator(".request-context-heading")).toHaveCount(0);
-    await expect(page.locator(".request-context-summaries > summary")).toHaveText("Reviews and record details");
+    await expect(page.locator(".request-context-summaries > summary")).toHaveText("Reviews and details");
     await expect(page.locator(".request-context-summaries .request-recorded").first()).toBeHidden();
     const timeline = page.locator(".request-context-timeline");
     await expect(timeline.locator(".interaction-findings,.interaction-insights")).toHaveCount(0);
@@ -226,7 +226,7 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await response.getByRole("button", { name: "Hide response", exact: true }).click();
     const reads = payloadReads.length;
     await page.locator("#requestReportToggle").click();
-    await expect(page.locator(".interaction-response:visible")).toContainText(["No response text retained.", "Response text is hidden."]);
+    await expect(page.locator(".interaction-response:visible")).toContainText(["No saved response.", "Response text is hidden."]);
     assert.equal(payloadReads.length, reads, "Rerender never re-reads intentionally hidden private response text");
     await page.locator(".interaction-response:visible").getByRole("button", { name: "Read response", exact: true }).click();
     await expect(page.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
@@ -239,8 +239,9 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await expect(row.locator("input")).toBeChecked();
     await open.click(); await ready(page);
     await expect(page.locator(".interaction-response .full-text-content")).toHaveText(bodyText);
-    for (const [width, scale] of [[1280, 1], [375, 2]]) {
+    for (const [width, scale, theme] of [[1280, 1, "dark"], [375, 2, "light"]]) {
         await page.setViewportSize({ width, height: 1000 });
+        await chooseTheme(page, theme);
         await page.evaluate(scale => document.documentElement.style.fontSize = `${100 * scale}%`, scale);
         await frames(page);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
@@ -317,9 +318,9 @@ test("off capture, missing retained text and unmatched same-chat records remain 
     const { page, runtime, records, payloadReads } = await setup(t, { responses: false, missing: true });
     await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
     await expect(page.locator(".interaction-response:visible")).toHaveCount(2);
-    await expect(page.locator(".interaction-response:visible").first()).toContainText("No response text retained.");
+    await expect(page.locator(".interaction-response:visible").first()).toContainText("No saved response.");
     await expect(page.locator(".request-context-timeline")).toContainText("Prompt not available");
-    await expect(page.locator(".request-context-note")).toHaveText("Saved messages, not the whole chat. Linked messages may be separate work.");
+    await expect(page.locator(".request-context-note")).toHaveText("Linked messages may be separate work; this is not the whole chat.");
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /EXCLUDED_UNAVAILABLE_TEXT|UNRELATED_RECORD/);
     assert.equal(payloadReads.length, 0);
 });
@@ -390,8 +391,8 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
     await (await revokedSnapshot).finished();
     await ready(page);
     await expect(page.locator("#promptAuthorSummary")).toHaveAttribute("data-revision", String(revoked.revision));
-    const revokedResponse = page.locator(`[data-context-kind="prompt"][data-context-group="${records[1].scenarioId}"] .interaction-response`);
-    await expect(revokedResponse).toContainText("No response text retained.");
+    const revokedResponse = page.locator(`[data-context-kind="action"][data-context-group="${records[1].scenarioId}"] .interaction-response`);
+    await expect(revokedResponse).toContainText("No saved response.");
     await expect(page.locator(".interaction-response .full-text-content")).toHaveCount(0);
     const staleResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/evidence"));
     releaseStale();
@@ -406,7 +407,7 @@ test("late eager answers cannot survive navigation or revoked access; no mutatio
     await page.unroute("**/api/assessment/evidence");
     const reads = app.payloadReads.length;
     await page.reload(); await ready(page);
-    await expect(revokedResponse).toContainText("No response text retained.");
+    await expect(revokedResponse).toContainText("No saved response.");
     assert.equal(app.payloadReads.length, reads, "Revoked payloads aren't fetched on reopening");
     assert.equal(sourceChecks, 0, "Reconnect, the late answer and reload never dispatch or replay a source check");
 });

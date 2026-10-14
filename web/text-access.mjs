@@ -148,7 +148,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             const open = presentation.isOpen(stateKey, initiallyOpen);
             control.setAttribute("aria-expanded", String(open));
             const actionLabel = inline ? open ? "Read less" : "Read more" : open ? "Hide " + noun : label;
-            control.textContent = actionLabel;
+            control.textContent = complete && contentFirst ? open ? "Hide" : "Read" : actionLabel;
             if (complete) control.setAttribute("aria-label", actionLabel);
             reading.hidden = open;
             if (previewState) previewState.hidden = open;
@@ -178,7 +178,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                     pre.tabIndex = 0;
                     pre.setAttribute("aria-label", "Exact recorded " + noun + " text");
                     pre.textContent = text;
-                    const copy = ux.copyButton({ label: copyLabel, getText: () => text, showLabel: true,
+                    const copy = ux.copyButton({ label: copyLabel, displayLabel: contentFirst ? "Copy" : copyLabel, getText: () => text, showLabel: true,
                         tooltip: `Copy the complete retained ${noun}, unmasked.` });
                     const scope = document.createElement("span");
                     scope.id = noticeId;

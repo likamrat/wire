@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController, buildSanitizedBundle } from "../lib/export.mjs";
 import { serviceEvidenceFixture } from "./service-evidence-fixtures.mjs";
@@ -47,7 +47,7 @@ test("normal entry explains invented search, preparation and service gaps withou
     for (const [category, explanation] of [
         ["Search and retrieval", /tool name alone does not identify the services searched/],
         ["Discovery", /does not run the data operation/],
-        ["Copilot assistance", /Its record does not identify a service or API path/],
+        ["Asked Copilot", /Its record does not identify a service or API path/],
     ]) {
         await page.getByRole("button", { name: `About ${category}; recorded activity categories`, exact: true }).click();
         assert.match(await page.getByRole("tooltip").innerText(), explanation);
@@ -91,12 +91,14 @@ test("targetless assistance is named on interaction and call cards without hidin
         ...ask, tool, toolCallId: `card-${name}`, startEventId: `card-start-${name}`, requestArgs,
     });
     const records = [
-        ["assistance", [call("assistance", { question: "Invented help request", timeZone: "UTC" })], "Copilot assistance"],
+        ["assistance", [call("assistance", { question: "Invented help request", timeZone: "UTC" })], "Asked Copilot"],
+        ["preauth", [{ ...call("preauth", { question: "Invented blocked request" }), toolSucceeded: false, reportedOutcome: "failed",
+            failureEvidence: { version: 1, messageStatus: "text-excluded", messageSignal: "workiq-sign-in-required" } }], "Asked Copilot"],
         ["unsupported", [call("unsupported", { entityUrl: "https://untrusted.invalid/me/messages" })], "Service not shown"],
         ["known", [call("known", { entityUrl: "/me/messages" })], "Mail"],
         ["partial", [call("partial", { entityUrls: ["/me/messages", "/unrecognized/resource"] })], "More than one service"],
         ["mixed", [call("mixed-assistance", { question: "Invented help request" }), call("mixed-missing", {}, "workiq-fetch")],
-            "Copilot assistance, Service not shown"],
+            "Asked Copilot, Service not shown"],
     ];
     const evidence = records.map(([name, toolCalls]) => ({ ...structuredClone(source), scenarioId: `card-${name}`, toolCalls }));
     const { context } = await privateFixture(t, evidence);
@@ -110,25 +112,34 @@ test("targetless assistance is named on interaction and call cards without hidin
     const snapshot = page.waitForResponse(response => new URL(response.url()).pathname === "/api/snapshot" && response.ok());
     await page.goto(runtime.url + "#analyze"); await ready(page);
     const { analytics } = await (await snapshot).json();
-    assert.equal(analytics.totals.count, 6);
+    assert.equal(analytics.totals.count, 7);
     assert.deepEqual(analytics.rows.map(row => row.toolCallId).sort(), evidence.flatMap(record => record.toolCalls.map(call => call.toolCallId)).sort());
-    assert.ok(analytics.rows.every(row => row.outcome === "success"));
+    assert.ok(analytics.rows.every(row => row.outcome === (row.toolCallId === "card-preauth" ? "failure" : "success")));
     assert.equal(analytics.serviceInvolvement.definition.version, 1);
     for (const [name, , label] of records) {
         const card = page.locator(`[data-view-key="request:card-${name}"]`);
         assert.equal(await card.locator(".request-meta").textContent(), label);
     }
     const assistance = page.locator('[data-view-key="request:card-assistance"]');
-    await assistance.getByRole("button", { name: "About Copilot assistance; recorded activity categories", exact: true }).click();
+    await expect(assistance.locator("[data-fluent-icon=chat_sparkle_24_regular]")).toHaveCount(1);
+    await expect(page.locator('[data-view-key="request:card-unsupported"] [data-fluent-icon=question_circle_24_regular]')).toHaveCount(1);
+    await expect(page.locator('[data-view-key="request:card-mixed"] [data-fluent-icon=question_circle_24_regular]')).toHaveCount(1);
+    await assistance.getByRole("button", { name: "About Asked Copilot; recorded activity categories", exact: true }).click();
     assert.match(await page.getByRole("tooltip").innerText(), /Its record does not identify a service or API path/);
     await page.keyboard.press("Escape");
+    const preauth = page.locator('[data-view-key="request:card-preauth"]');
+    await expect(preauth.locator("[data-fluent-icon=chat_sparkle_24_regular]")).toHaveCount(1);
+    await preauth.getByRole("button", { name: "About Asked Copilot; recorded activity categories", exact: true }).click();
+    await expect(page.getByRole("tooltip")).toContainText("Recorded attempt");
+    await expect(page.getByRole("tooltip")).toContainText("not confirmation of delivery");
+    await page.keyboard.press("Escape");
     const mixed = page.locator('[data-view-key="request:card-mixed"]');
-    await mixed.getByRole("button", { name: "About Copilot assistance, Service not shown; recorded activity categories", exact: true }).click();
-    assert.match(await page.getByRole("tooltip").innerText(), /Copilot assistance:.*Service not shown:/);
+    await mixed.getByRole("button", { name: "About Asked Copilot, Service not shown; recorded activity categories", exact: true }).click();
+    assert.match(await page.getByRole("tooltip").innerText(), /Asked Copilot:.*Service not shown:/);
     await page.keyboard.press("Escape");
     await page.goto(runtime.url + "#analyze?mode=calls"); await ready(page);
     const callLabels = new Map(records.flatMap(([, calls, label]) => calls.map(call => [call.toolCallId,
-        call.toolCallId === "card-mixed-assistance" ? "Copilot assistance" : call.toolCallId === "card-mixed-missing" ? "Service not shown" : label])));
+        call.toolCallId === "card-mixed-assistance" ? "Asked Copilot" : call.toolCallId === "card-mixed-missing" ? "Service not shown" : label])));
     for (const row of analytics.rows) {
         const card = page.locator(`[data-action-id=${JSON.stringify(row.id)}]`);
         assert.equal(await card.locator(".action-service .service-cue").textContent(), callLabels.get(row.toolCallId));
@@ -138,8 +149,8 @@ test("targetless assistance is named on interaction and call cards without hidin
     const filtered = (await (await filteredSnapshot).json()).analytics;
     const expected = analytics.rows.filter(row => row.workload === "Unknown");
     assert.deepEqual(filtered.rows.map(row => row.id), expected.map(row => row.id));
-    assert.equal(filtered.totals.count, 4);
-    assert.equal(await page.locator("#activityList .matched-action").count(), 4);
+    assert.equal(filtered.totals.count, 5);
+    assert.equal(await page.locator("#activityList .matched-action").count(), 5);
     assert.deepEqual(errors, []);
 });
 
@@ -184,7 +195,7 @@ test("the Unknown-filtered entry explains its actual calls before any disclosure
     const explanation = page.locator("#serviceEvidenceSummary");
     assert.equal(await explanation.isVisible(), true, "The exact filtered entry must explain the service gap without opening hidden help.");
     assert.match(await explanation.innerText(), /3 of 3 Work IQ tool calls/);
-    assert.match(await explanation.innerText(), /Copilot assistance[\s\S]*workiq-ask/);
+    assert.match(await explanation.innerText(), /Asked Copilot[\s\S]*workiq-ask/);
     assert.match(await explanation.innerText(), /Path not recognized/);
     assert.match(await explanation.innerText(), /No target recorded/);
     assert.doesNotMatch(await explanation.innerText(), /Invented question|INVENTED-PRIVATE|\/unsupported\/resource/);
@@ -268,7 +279,7 @@ test("whole category view and detail explain remaining service evidence without 
         await shot(page, `remaining-${theme}-${width}-chart`);
         await page.goto(runtime.url + "#request?request=service-evidence&range=capture"); await ready(page);
         const ask = page.locator('[data-tool-call-id="service-evidence-call-0"]');
-        assert.match(await ask.innerText(), /Copilot assistance/);
+        assert.match(await ask.innerText(), /Asked Copilot/);
         assert.equal(await dataService(ask), "Not in this record");
         const unrecognized = page.locator('[data-tool-call-id="service-evidence-call-3"]');
         assert.match(await unrecognized.innerText(), /Service not shown/);
@@ -277,7 +288,7 @@ test("whole category view and detail explain remaining service evidence without 
         assert.equal(await dataService(missing), "No target recorded");
         assert.match(await page.locator('[data-tool-call-id="service-evidence-call-2"]').textContent(), /Files[\s\S]*Tool failed/);
         assert.match(await page.locator('[data-tool-call-id="service-evidence-call-5"]').innerText(), /Schema lookup[\s\S]*Not applicable[\s\S]*Schema path/);
-        await ask.getByRole("button", { name: "About Copilot assistance", exact: true }).click();
+        await ask.getByRole("button", { name: "About Asked Copilot", exact: true }).click();
         assert.match(await page.getByRole("tooltip").innerText(), /Its record does not identify a service or API path/);
         await page.keyboard.press("Escape");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));

@@ -604,8 +604,8 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityList>.activity-card .activity-card-facts {display:grid;align-content:start;gap:4px;margin:0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
 #requestContent .interaction-model-fact {display:grid;gap:6px;margin:4px 0 0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
 #activityList>.activity-card .activity-card-facts>div,#requestContent .interaction-model-fact>div {display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0}
-#activityList>.activity-card .activity-card-facts dt {font:inherit;font-weight:var(--weight-medium);color:var(--muted);overflow-wrap:anywhere;max-width:100%}
-#requestContent .interaction-model-fact dt {font:inherit;font-weight:700;overflow-wrap:anywhere;max-width:100%}
+#activityList>.activity-card .activity-card-facts dt {font:inherit;font-weight:var(--weight-strong);color:var(--muted);overflow-wrap:anywhere;max-width:100%}
+#requestContent .interaction-model-fact dt {font:inherit;font-weight:var(--weight-strong);overflow-wrap:anywhere;max-width:100%}
 #activityList>.activity-card .activity-card-facts dd,#requestContent .interaction-model-fact dd {font:inherit;margin:0;min-width:0;max-width:100%;overflow-wrap:anywhere}
 #activityList>.activity-card .activity-card-facts dd {color:var(--ink)}
 #activityList>.activity-card .activity-card-facts :is(.request-meta,.semantic-cue>span,.card-chat>.text-link,.source-reference,.service-context-label) {color:var(--ink)}
@@ -627,6 +627,13 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 @container(min-width:50rem) {
  #activityList>.activity-card .card-details {grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 }
+#activityList>.activity-card .interaction-details {grid-template-columns:minmax(0,1fr);gap:8px}
+#activityList>.activity-card .interaction-details .activity-card-facts {display:flex;flex-wrap:wrap;align-items:center;gap:4px 24px}
+#activityList>.activity-card .interaction-details .card-operation>dt {position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#activityList>.activity-card .interaction-details .card-operation>dd {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px}
+#activityList>.activity-card .interaction-details .card-tools {flex-basis:100%}
+#activityList>.activity-card .interaction-details .interaction-tools {display:flex;flex-wrap:wrap;gap:4px 16px}
+#activityList>.activity-card .interaction-details .card-context {column-gap:20px}
 @media(min-width:700px) {
  #activityList>.activity-card .full-text {display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px}
  #activityList>.activity-card .full-text>:not(.full-text-actions,.full-text-body) {grid-column:1}

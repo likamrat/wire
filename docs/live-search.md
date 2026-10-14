@@ -1,5 +1,12 @@
 # Live local search
 
+Search is an independent, on-device WIRE feature. Queries and authorized saved
+content are processed locally, without Copilot sessions, provider calls or AI
+credits. Optional model assessments and their permissions do not enable or
+authorize Search. Missing local resources never trigger a remote fallback.
+The [retrieval implementation](semantic-retrieval.md) describes local resource
+provisioning and the remaining meaning-matching limitations.
+
 ## Matches and Related results
 
 Navigation search shows separate **Matches** and **Related results**. Related

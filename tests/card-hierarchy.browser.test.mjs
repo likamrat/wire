@@ -373,7 +373,7 @@ test("static whole-card evidence covers filtered boundaries and sustained full r
     await writeFile(path.join(proofs, "whole-card-composition.json"), JSON.stringify(measurements, null, 2));
 });
 
-test("Interactions and Calls share emphasized prompts, stacked facts and distinct tools", async t => {
+test("Interactions and Calls share emphasized prompts, nonoverlapping facts and distinct tools", async t => {
     const { page } = await setup(t), measurements = [];
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
@@ -396,6 +396,7 @@ test("Interactions and Calls share emphasized prompts, stacked facts and distinc
                         && [...node.childNodes].some(child => child.nodeType === Node.TEXT_NODE && child.textContent.trim()))
                         .map(node => ({ text: node.textContent, weight: getComputedStyle(node).fontWeight })),
                     top: row.getBoundingClientRect().top, bottom: row.getBoundingClientRect().bottom,
+                    left: row.getBoundingClientRect().left, right: row.getBoundingClientRect().right,
                     labelCount: row.querySelectorAll(":scope>dt").length, valueCount: row.querySelectorAll(":scope>dd").length,
                 })),
             }), { mode, theme, width }));
@@ -405,17 +406,19 @@ test("Interactions and Calls share emphasized prompts, stacked facts and distinc
     for (const row of measurements) {
         assert.ok(row.prompts.every(p => p.weight === "600" && p.style === "italic"), `${row.mode}: actual prompt has restrained strong italic emphasis`);
         assert.ok(row.facts.length >= 4, `${row.mode}: categories are semantic key/value rows`);
-        assert.ok(row.facts.every(fact => fact.label && fact.value && fact.labelWeight === "500"
+        assert.ok(row.facts.every(fact => fact.label && fact.value && fact.labelWeight === "600"
             && fact.valueWeight === "400" && fact.labelCount === 1 && fact.valueCount === 1));
         for (const fact of row.facts) {
-            assert.notEqual(fact.labelColor, fact.valueColor, "Keys are subordinate to the reading value");
+            assert.notEqual(fact.labelColor, fact.valueColor, "Strong neutral keys remain distinct from ordinary values");
+            assert.ok(Number(fact.labelWeight) > Number(fact.valueWeight));
             assert.ok(contrast(fact.labelColor, fact.paper) >= 4.5, "Neutral keys retain readable contrast");
             assert.equal(new Set(rgb(fact.labelColor)).size, 1, "Keys use an achromatic screen role");
         }
         assert.deepEqual(row.facts.flatMap(fact => fact.textWeights).filter(text => text.weight !== "400"), [],
             `${row.mode}: actual metadata values, not just their containers, have normal weight`);
-        assert.ok(row.facts.every((fact, index) => !index || fact.group !== row.facts[index - 1].group || fact.top >= row.facts[index - 1].bottom),
-            `${row.mode}: each activity/context group has stacked, nonoverlapping facts`);
+        assert.ok(row.facts.every((fact, index) => !index || fact.group !== row.facts[index - 1].group
+            || fact.top >= row.facts[index - 1].bottom || fact.left >= row.facts[index - 1].right),
+            `${row.mode}: compact facts wrap without overlapping`);
     }
 });
 
@@ -441,7 +444,8 @@ test("card keys have one colon without changing values or distinctive value pain
                     origin: node.querySelector(".full-text-preview-label").textContent,
                     distinct: [...node.querySelectorAll(".recorded-result,code.api-path,.service-cue svg")].map(appearance),
                     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-                    clipped: [...node.querySelectorAll(".activity-card-facts dt,.activity-card-facts dd")].filter(item => item.scrollWidth > item.clientWidth + 1).map(item => item.textContent) };
+                    clipped: [...node.querySelectorAll(".activity-card-facts dt,.activity-card-facts dd")].filter(item =>
+                        !item.matches(".card-operation>dt") && item.scrollWidth > item.clientWidth + 1).map(item => item.textContent) };
             });
             measurements.push({ theme, width, mode, ...measured });
         }
@@ -505,7 +509,7 @@ test("recorded models use the same stacked card fact and exact reader context wi
     await expect(fact(interaction(page, "missing"), "Model").locator("dd")).toHaveText("Not recorded");
     await expect(fact(interaction(page, "retry"), "Model").locator("dd")).toHaveText("recorded-model-a");
     await expect(fact(interaction(page, "conflicting"), "Model").locator("dd")).toHaveText("Conflicting records");
-    await expect(fact(interaction(page, "archive"), "Time to recorded final response").locator("dd")).toHaveText("Not recorded");
+    await expect(fact(interaction(page, "archive"), "Final response").locator("dd")).toHaveText("Not recorded");
     await expect(multi.locator(".card-activity .response-timing")).toBeVisible();
     await expect(fact(interaction(page, "archive"), "Model").locator("dd")).toHaveText("Not verified (tool metadata only)");
     await expect(multi.locator(".response-timing data")).toHaveAttribute("value", "3000");
@@ -515,7 +519,7 @@ test("recorded models use the same stacked card fact and exact reader context wi
         valueWeight: getComputedStyle(node.querySelector("dd")).fontWeight,
         controls: node.querySelectorAll("a,button,input,details,[tabindex]").length,
         next: node.nextElementSibling?.querySelector("dt")?.textContent,
-    })), { labelWeight: "500", valueWeight: "400", controls: 0, next: undefined });
+    })), { labelWeight: "600", valueWeight: "400", controls: 0, next: undefined });
     await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
     await expect(fact(multi, "Models").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
     await expect(multi.locator(".response-timing data")).toHaveAttribute("value", "3000");
@@ -523,7 +527,8 @@ test("recorded models use the same stacked card fact and exact reader context wi
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     const call = callCard(page, "multiple");
     await expect(fact(call, "Interaction model").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
-    await expect(fact(call, "Call duration").locator("dd")).toHaveText("1,200 ms");
+    await expect(fact(call, "Call duration").locator("dd")).toHaveText("1.2 s");
+    await expect(fact(call, "Call duration").locator("data")).toHaveAttribute("value", "1200");
     await expect(call.locator(".response-timing")).toHaveCount(0);
     await expect(call.locator(".interaction-tools")).not.toContainText("recorded-model");
     const link = call.getByRole("link", { name: "Open exact call in context" });
@@ -531,9 +536,9 @@ test("recorded models use the same stacked card fact and exact reader context wi
     const reader = page.locator(".request-original .interaction-model-fact");
     await expect(reader.locator("dt")).toHaveText("Models:");
     await expect(reader.locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
-    await expect(page.locator(".request-original .response-timing dt")).toHaveText("Time to recorded final response:");
+    await expect(page.locator(".request-original .response-timing dt")).toHaveText("Final response:");
     await expect(page.locator(".request-original .response-timing data")).toHaveAttribute("value", "3000");
-    assert.equal(await reader.evaluate(node => node.previousElementSibling?.className), "reader-response-timing");
+    assert.equal(await reader.evaluate(node => node.previousElementSibling?.className), "activity-card-facts reader-source");
     await page.locator(".request-original").getByRole("button", { name: "Copy prompt", exact: true }).click();
     assert.equal(await page.evaluate(() => window.copiedHierarchyText), data.find(row => row.scenarioId === "hierarchy-multiple").userPrompt.text);
     for (const [theme, width] of [["light", 1440], ["dark", 375]]) {
@@ -544,7 +549,7 @@ test("recorded models use the same stacked card fact and exact reader context wi
             weights: [...node.querySelectorAll(".reader-response-timing dt,.interaction-model-fact dt")].map(item => getComputedStyle(item).fontWeight),
             values: [...node.querySelectorAll(".reader-response-timing dd,.interaction-model-fact dd")].map(item => getComputedStyle(item).fontWeight),
             overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        })), { keys: ["Time to recorded final response:", "Models:"], weights: ["600", "700"], values: ["400", "400"], overflow: 0 });
+        })), { keys: ["Models:", "Final response:"], weights: ["600", "600"], values: ["400", "400"], overflow: 0 });
         if (proofs) {
             await mkdir(proofs, { recursive: true });
             await page.screenshot({ path: path.join(proofs, `combined-reader-${theme}-${width}.png`), fullPage: true });
@@ -617,7 +622,7 @@ test("scoped tool lists retain individual names and counts without assigning agg
     await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
     await expect(multi.locator("input")).toBeChecked();
     await selectActivityOption(page, "toolFilter", "all"); await ready(page);
-    const chat = fact(multi, "Copilot chat").getByRole("link");
+    const chat = fact(multi, "Chat").getByRole("link");
     await expect(chat).toHaveAccessibleName("Filter to chat: Sample: Harbor launch multiple");
     await chat.focus(); const original = page.url(); await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator(".request-row")).toHaveCount(1);
@@ -643,7 +648,7 @@ test("emphasized previews and calm full reading retain exact text, missing value
     await expect(interaction(page, "empty")).toHaveCount(0);
     await expect(interaction(page, "unnamed")).toHaveCount(0);
     await expect(fact(interaction(page, "missing"), "Request time")).toContainText("Not recorded");
-    await expect(fact(interaction(page, "missing"), "Copilot project")).toContainText("No project associated");
+    await expect(fact(interaction(page, "missing"), "Copilot project")).toHaveCount(0);
     await expect(interaction(page, "missing").locator("[data-outcome=unknown]")).toHaveAttribute("data-count", "1");
     await expect(interaction(page, "archive").locator(".full-text-preview-label")).toHaveText("Prompt");
     await expect(interaction(page, "archive").locator(".full-text-preview-label")).toHaveAttribute("data-prompt-actor", "unknown");
@@ -659,8 +664,9 @@ test("emphasized previews and calm full reading retain exact text, missing value
             await page.locator(`[data-analyze-mode="${mode}"]`).click(); await ready(page);
             if (mode === "calls") await expect(callCard(page, "unnamed")).toHaveCount(0);
             const missing = mode === "interactions" ? interaction(page, "missing") : callCard(page, "missing");
-            await expect(fact(missing, "Copilot chat")).toContainText("Copilot chat name not recorded");
-            await expect(fact(missing, "Copilot project")).toContainText("No project associated");
+            await expect(fact(missing, mode === "interactions" ? "Chat" : "Copilot chat")).toContainText("Copilot chat name not recorded");
+            if (mode === "calls") await expect(fact(missing, "Copilot project")).toContainText("No project associated");
+            else await expect(fact(missing, "Copilot project")).toHaveCount(0);
             await expect(fact(missing, "Request time")).toContainText("Not recorded");
             await expect(missing.locator("[data-outcome=unknown]")).toHaveAttribute("data-count", "1");
             if (mode === "calls") {
@@ -708,13 +714,13 @@ test("emphasized previews and calm full reading retain exact text, missing value
             await shot(page, `${mode}-long-${theme}-${width}-${scale}`, card);
             await card.locator(".full-text-toggle").click();
             assert.deepEqual(await card.locator(".activity-card-facts dt,.activity-card-facts dd").evaluateAll(nodes =>
-                nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);
+                nodes.filter(node => !node.matches(".card-operation>dt") && node.scrollWidth > node.clientWidth + 1).map(node => node.textContent)), []);
         }
     }
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await callCard(page, "long").locator(".request-link").click(); await ready(page);
     const readerStyle = await page.locator(".request-original .full-text-content").first().evaluate(node => getComputedStyle(node).fontStyle);
-    assert.equal(readerStyle, "normal", "The separate exact reader is not restyled by activity-card emphasis");
+    assert.equal(readerStyle, "italic", "The exact prompt carries the same restrained emphasis from card to reader");
     if (proofs) await writeFile(path.join(proofs, "reading-geometry.json"), JSON.stringify(measurements, null, 2));
 });

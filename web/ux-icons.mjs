@@ -58,6 +58,7 @@ export const uxIconSources = Object.freeze({
     "settings-display": "desktop_24_regular",
     "settings-troubleshooting": "wrench_24_regular",
     close: "dismiss_20_regular",
+    back: "arrow_left_20_regular",
     refresh: "arrow_clockwise_20_regular",
     reset: "arrow_reset_24_regular",
     download: "arrow_download_20_regular",

@@ -107,8 +107,9 @@ test("Calls identify the tool and labeled result, with concise sorting and exact
     const app = await setup(t), { page } = app;
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     await selectActivityOption(page, "callSort", "fastest"); await ready(page);
-    const durations = await page.locator(".matched-action .call-duration").allTextContents();
-    assert.deepEqual(durations.map(value => value.match(/[\d,]+(?= ms)/)?.[0] ?? null), ["1,200", "1,200", "1,800", "2,100", null]);
+    const durations = page.locator(".matched-action .call-duration");
+    assert.deepEqual(await durations.allTextContents(), ["1.2 s", "1.2 s", "1.8 s", "2.1 s", "Not recorded"]);
+    assert.deepEqual(await durations.evaluateAll(nodes => nodes.map(node => node.getAttribute("value"))), ["1200", "1200", "1800", "2100", null]);
     const target = page.locator('.matched-action').filter({ has: page.locator('.request-link[href*="harbor-archive"]') });
     await target.scrollIntoViewIfNeeded();
     await capture(page, "calls-dark", target);
@@ -208,7 +209,7 @@ test("overlapping aliases retain matching versus outside context without duplica
     const card = page.locator("#activityList .request-row").filter({ hasText: "Synthetic overlapping request" });
     await expect(card).toContainText("1 of 2 Work IQ tool calls in this view");
     await card.locator(".request-link").click(); await ready(page);
-    await expect(page.locator(".journey-item .action-context").filter({ hasText: "1 matching" })).toHaveCount(1);
+    await expect(page.locator(".journey-item .action-context").filter({ hasText: "Matches current view" })).toHaveCount(1);
     await expect(page.locator(".journey-item .action-context").filter({ hasText: "Outside current view" })).toHaveCount(1);
     await expect(page.locator(".full-request-results [data-result-layer=tool] [data-outcome=success]")).toHaveAttribute("data-count", "2");
     const actions = await page.locator(".journey-item[data-action-id]").evaluateAll(nodes => nodes.map(node => node.dataset.actionId));
