@@ -326,7 +326,7 @@ test("integrated app has readable aligned type and exact-copy controls in both t
         assert.equal(await page.evaluate(() => window.clipboardWrites[0]), exactPrompt);
         assert.equal(await page.locator(".request-original pre").evaluate((node) => getComputedStyle(node).fontFamily), await page.locator("body").evaluate((node) => getComputedStyle(node).fontFamily));
         await page.locator("#requestView").getByText("Technical details", { exact: true }).first().click();
-        await page.getByText("Exact recorded arguments / local only", { exact: true }).first().click();
+        await page.getByText("Tool input (recorded)", { exact: true }).first().click();
         const argsCopy = page.getByRole("button", { name: "Copy recorded arguments", exact: true }).first();
         await argsCopy.click();
         await page.waitForFunction(() => window.clipboardWrites.length === 2);

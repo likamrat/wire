@@ -202,7 +202,7 @@ test("whole-context failure detail visual evidence", { timeout: 60000 }, async t
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; }, scale);
         const details = page.locator("#requestContent").getByText("Technical details", { exact: true });
         if (!await details.evaluate(node => node.parentElement.open)) await details.click();
-        const args = page.locator("#requestContent").getByText("Exact recorded arguments / local only", { exact: true }).first();
+        const args = page.locator("#requestContent").getByText("Tool input (recorded)", { exact: true }).first();
         if (!await args.evaluate(node => node.parentElement.open)) await args.click();
         await page.evaluate(() => { document.activeElement?.blur(); window.scrollTo(0, 0); });
         await page.evaluate(() => document.fonts.ready);

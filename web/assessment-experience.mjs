@@ -525,9 +525,9 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         detailTrigger = trigger; detailOrigin = trigger.closest("[data-insight-key]")?.dataset.insightKey;
         activeDetail = view;
         const body = detailsBody("Insight details");
-        body.append(el("p", model.takeaway));
+        if (!view) body.append(el("p", model.takeaway));
         if (view) {
-            body.append(el("p", "Personal feedback is optional and separate from automatic checks. It does not change recorded evidence."));
+            body.append(el("p", "Your feedback records your judgment; it does not change the recorded call."));
             const label = el("label", "Personal feedback (optional)"), select = el("select");
             for (const [value, dimension] of [["semantic-answer-correctness", "accuracy"], ["answer-support-validity", "answer-trust"], ["action-authorization-compliance", "action-trust"]]) {
                 const term = presentation.wording.resolve({ dimension, checkId: value, checkVersion: 1, origin: "user-personal" });
@@ -564,6 +564,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             for (const outcomes of summary.querySelectorAll(".assessment-secondary-findings > .assessment-finding-list")) body.append(outcomes.cloneNode(true));
             for (const paragraph of summary.querySelectorAll(".assessment-reading-help > p")) body.append(paragraph.cloneNode(true));
         }
+        if (!view) {
         const terms = el("details", undefined, "reading-section"), definitions = el("dl", undefined, "measure-glossary");
         definitions.dataset.measureGlossary = "";
         terms.append(el("summary", "Glossary"), definitions);
@@ -575,16 +576,83 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             definitions.append(entry);
         }
         body.append(terms);
+        }
         const measures = el("details", undefined, "reading-section");
         measures.append(el("summary", "Recorded measures and definitions"));
-        for (const row of [...Object.values(model.groups).flat(), ...model.diagnostics]) {
+        if (view) {
+            const table = el("table", undefined, "single-interaction-measures"), head = el("tr"), tbody = el("tbody");
+            table.dataset.interactionRef = view.interaction.interactionRef;
+            for (const label of ["Measure", "Recorded state", "Definition and basis"]) head.append(el("th", label));
+            const thead = el("thead"); thead.append(head); table.append(thead, tbody);
+            const groups = new Map();
+            for (const metric of view.metrics.filter(metric => metric.dimension !== "cost")) {
+                const localPlaceholder = metric.origin === "automatic-local" && metric.status === "unassessed"
+                    && metric.reason === "unsupported-check" && ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension)
+                    && metric.value === null && metric.denominator === 0 && metric.coverage.covered === 0 && metric.counts.evaluatorError === 0;
+                const key = localPlaceholder ? JSON.stringify([metric.definitionId, metric.definitionVersion, metric.boundary,
+                    metric.value, metric.numerator, metric.denominator, metric.coverage, metric.counts, [...metric.eligibleUnitRefs].sort(),
+                    metric.reason, metric.measurementBasis, metric.basis, metric.unassessedReasons ?? null, metric.observedTime,
+                    metric.createdAt, [...metric.coveredUnitRefs].sort(), [...metric.evidenceRefs].sort()])
+                    : metric.metricRef;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(metric);
+            }
+            function bindMetric(node, metric) {
+                for (const key of ["metricRef", "origin", "value", "numerator", "denominator", "definitionId", "checkId", "boundary"]) node.dataset[key] = String(metric[key]);
+                node.dataset.metricStatus = metric.status;
+                node.dataset.covered = String(metric.coverage.covered);
+                node.dataset.eligible = String(metric.coverage.eligible);
+                node.dataset.reason = String(metric.reason);
+                node.dataset.unassessedReasons = JSON.stringify(metric.unassessedReasons ?? null);
+                node.dataset.observedTime = JSON.stringify(metric.observedTime);
+                node.dataset.measurementBasis = metric.measurementBasis;
+                node.dataset.basis = JSON.stringify(metric.basis);
+                if (metric.evaluator) {
+                    node.dataset.evaluatorProvider = metric.evaluator.provider;
+                    node.dataset.evaluatorModel = metric.evaluator.model;
+                    node.dataset.evaluatorRubricId = metric.evaluator.rubricId;
+                    node.dataset.evaluatorRubricVersion = String(metric.evaluator.rubricVersion);
+                }
+                if (metric.counts) for (const [key, value] of Object.entries(metric.counts)) node.dataset[key] = String(value);
+            }
+            for (const metrics of groups.values()) {
+                const metric = metrics[0], shown = presentation.singleDetail(metric), row = el("tr");
+                const name = el("th"), value = el("td"), basis = el("td");
+                name.scope = "row";
+                if (metrics.length === 1) {
+                    bindMetric(row, metric); name.textContent = shown.label;
+                    basis.append(el("p", shown.origin), el("code", shown.definition));
+                } else {
+                    row.dataset.metricGroup = "unreviewed";
+                    const names = el("ul"), definitions = el("ul");
+                    for (const member of metrics) {
+                        names.append(el("li", presentation.singleDetail(member).label));
+                        const definition = el("li");
+                        bindMetric(definition, member);
+                        definition.append(el("code", `${member.checkId} v${member.checkVersion}`));
+                        definitions.append(definition);
+                    }
+                    name.append(names);
+                    basis.append(el("p", shown.origin), el("code", `${metric.definitionId} v${metric.definitionVersion}`), definitions);
+                }
+                value.append(el("span", shown.value, "single-measure-value " + shown.tone),
+                    el("p", `${metrics.length > 1 ? "Each check: " : ""}${shown.coverage.covered} ${shown.coverage.unit}; ${shown.coverage.eligible} eligible`, "single-measure-coverage"));
+                if (metric.dimension === "speed") basis.append(el("p", shown.boundary));
+                if (shown.evaluator) basis.append(el("p", `Review model: ${shown.evaluator.provider} / ${shown.evaluator.model}; rubric ${shown.evaluator.rubricId} v${shown.evaluator.rubricVersion}`, "single-measure-evaluator"));
+                if (shown.reason && !shown.unassessedReasons?.some(item => item.reason === shown.reason)) basis.append(el("p", shown.reason, "single-measure-reason"));
+                if (shown.unassessedReasons?.length) basis.append(el("p", shown.unassessedReasons
+                    .map(item => `${item.count} ${item.reason ?? "reason not recorded"}`).join("; "), "single-measure-reasons"));
+                tbody.append(row); row.append(name, value, basis);
+            }
+            measures.append(table);
+        } else for (const row of [...Object.values(model.groups).flat(), ...model.diagnostics]) {
             const section = el("section", undefined, "assessment-definition");
             const facts = el("ul", undefined, "assessment-detail-facts");
             for (const detail of row.details) facts.append(el("li", detail));
             section.append(el("h3", row.label), facts);
             measures.append(section);
         }
-        measures.append(el("p", "Pass-share colors are visual bands (v1): below 50% red, 50 to below 75% orange, 75 to below 90% gold, and 90 to 100% teal. They are not quality guarantees. Duration does not use these bands.", "assessment-band-note"));
+        if (!view) measures.append(el("p", "Pass-share colors are visual bands (v1): below 50% red, 50 to below 75% orange, 75 to below 90% gold, and 90 to 100% teal. They are not quality guarantees. Duration does not use these bands.", "assessment-band-note"));
         body.append(measures);
         if (!details.open) details.showModal();
         details.querySelector("button").focus();

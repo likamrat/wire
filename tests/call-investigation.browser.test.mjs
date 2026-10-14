@@ -131,7 +131,8 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     await expect(page.locator(".request-context-timeline")).toContainText(records[0].userPrompt.text);
     await expect(page.locator(".request-context-timeline")).toContainText(records[1].userPrompt.text.trim());
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /UNRELATED_CALL_CONTEXT/);
-    await expect(page.locator("#selectedCall")).toContainText("900 ms");
+    await expect(page.locator("#selectedCall .call-heading")).toContainText("0.9 s");
+    await expect(page.locator("#selectedCall .call-heading data")).toHaveAttribute("value", "900");
     await expect(page.locator("#selectedCall>.action-context")).toHaveCount(0);
     await expect(page.locator("#selectedCall .call-heading [data-result-layer=tool]")).toHaveAttribute("aria-label", "Tool completion: 1 Work IQ tool call");
     await expect(page.locator(".request-context-summaries .request-recorded")).toHaveCount(2);
@@ -139,7 +140,7 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
         nodes.map(node => node.dataset.contextGroup)), records.slice(0, 2).map(record => record.scenarioId));
     await capture(page, "exact-call-context-light");
     await page.locator("#selectedCall").getByText("Technical details", { exact: true }).click();
-    await expect(page.locator("#selectedCall .technical-detail .ux-code-label").first()).toHaveText("Exact recorded arguments / local only");
+    await expect(page.locator("#selectedCall .technical-detail .ux-code-label").first()).toHaveText("Tool input (recorded)");
     await expect(page.locator("#selectedCall .technical-detail details")).toHaveCount(0);
     await page.locator("#selectedCall").getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.callClipboard), [JSON.stringify(records[1].toolCalls[9].requestArgs, null, 2)]);

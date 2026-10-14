@@ -411,6 +411,53 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         validateMetric(metric);
         return present(metric);
     }
+    function singleDetail(metric) {
+        validateMetric(metric);
+        const row = present(metric, true), quality = qualityDimensions.includes(metric.dimension);
+        let value = row.value, tone = "neutral";
+        if (quality) {
+            const term = wording.resolve(metric);
+            if (!metric.coverage.eligible) value = "Not applicable";
+            else if (!metric.denominator && (metric.status === "evaluator-error" || metric.counts.evaluatorError)) {
+                value = "Review could not finish"; tone = "error";
+            }
+            else if (!metric.denominator) value = metric.reason === "unsupported-check" ? "Not reviewed" : wording.unavailable(metric);
+            else if (metric.coverage.eligible === 1 && metric.denominator === 1 && term.known) {
+                value = metric.counts.fail ? term.fail : term.pass;
+                tone = metric.counts.fail ? "negative" : "positive";
+            } else value = `${metric.counts.pass} passed; ${metric.counts.fail} failed`
+                + (metric.counts.evaluatorError ? `; ${metric.counts.evaluatorError} review ${metric.counts.evaluatorError === 1 ? "error" : "errors"}` : "");
+        } else if (metric.dimension === "speed") value = metric.value === null
+            ? metric.reason === "unverified-association" ? "Boundary not verified" : "Not measured" : `${metric.value} ms`;
+        else if (metric.checkId === "answer-evidence-present") {
+            if (!metric.coverage.eligible) value = "Not applicable";
+            else if (metric.value === null && (metric.status === "evaluator-error" || metric.counts.evaluatorError)) {
+                value = "Check unavailable"; tone = "error";
+            } else if (metric.value === null) value = metric.reason === "missing-evidence"
+                ? "No readable reply saved" : "Reply availability not established";
+            else value = metric.counts.pass ? "Reply available" : "Reply unavailable";
+        }
+        else if (metric.checkId === "recorded-tool-success") {
+            const { pass, fail, unassessed, evaluatorError } = metric.counts;
+            if (evaluatorError) tone = "error";
+            else if (metric.coverage.eligible === 1 && fail) tone = "negative";
+            value = !metric.coverage.eligible ? "No eligible calls" : metric.coverage.eligible === 1
+                ? evaluatorError ? "Completion check failed" : unassessed ? "Completion not verified" : fail ? "Failed" : "Completed"
+                : [[pass, "completed"], [fail, "failed"], [unassessed, "unverified"], [evaluatorError, "check errors"]]
+                    .filter(([count]) => count).map(([count, label]) => `${number(count)} ${label}`).join("; ");
+        }
+        return {
+            label: { "tool-duration": "Call duration", "recorded-response-duration": "Recorded final-response time",
+                "interaction-latency": "Verified request-to-answer time" }[metric.definitionId] ?? row.label,
+            value, tone, origin: metric.origin === "automatic-local" ? "Local observation" : row.origin, status: metric.status, reason: metric.reason,
+            evaluator: metric.evaluator ? { ...metric.evaluator } : null,
+            unassessedReasons: metric.unassessedReasons?.map(reason => ({ ...reason })) ?? null,
+            definition: `${metric.definitionId} v${metric.definitionVersion}${metric.checkId ? `; ${metric.checkId} v${metric.checkVersion}` : ""}`,
+            boundary: boundaryLabels[metric.boundary],
+            coverage: { ...metric.coverage, unit: quality ? "reviewed" : metric.dimension === "speed" ? "timed"
+                : metric.dimension === "cost" ? "priced" : metric.dimension === "evidence" ? "available" : "verified" },
+        };
+    }
     function missing(dimension) {
         return {
             dimension, label: dimensionLabels[dimension], value: ["speed", "cost"].includes(dimension) ? "Not measured" : "No saved review",
@@ -676,7 +723,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         return { groups, diagnostics, takeaway, bandVersion, readingNote, readingWarning: membershipStatus !== "complete-retained" ? takeaway : "", reviewStatus: review,
             evidence, findings: findingsFor(evidence, metrics, { singleInteraction, reviewStatus, reviewStatuses }) };
     }
-    return { format, summarize, band, bandVersion, wording };
+    return { format, singleDetail, summarize, band, bandVersion, wording };
 }
 
 // DOM-only; this renderer cannot fetch, assess, save feedback, or enable capture.
@@ -698,6 +745,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     const compactLayout = findingsHost?.dataset.presentation === "compact";
     const readerLayout = findingsHost?.dataset.presentation === "reader";
     section.setAttribute("aria-label", readerLayout ? "Saved reviews" : "Interaction insights");
+    if (readerLayout && model.reviewStatus) section.dataset.reviewStatus = "";
     const compactFindings = compactLayout || readerLayout;
     const heading = el("div", "assessment-heading");
     if (!readerLayout) heading.append(el("h2", "", compactLayout ? "Saved reviews" : "Insights"));
@@ -763,7 +811,9 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         } else entry.textContent = item.text;
         entry.dataset.findingKind = item.kind;
         if (item.cause) entry.dataset.findingCause = item.cause;
-        if (compactFindings && item.kind === "execution") secondaryCalls.append(entry);
+        if (compactFindings && item.kind === "execution") {
+            if (!readerLayout) secondaryCalls.append(entry);
+        }
         else calls.append(entry);
     }
     findings.append(calls);
@@ -816,7 +866,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         findings.append(group);
     }
     if (!lanes.size) (compactLayout ? secondaryFindings : findings).append(el("p", "assessment-finding-status",
-        Object.values(model.evidence.quality).some(group => group.eligible > 0)
+        readerLayout && model.reviewStatus ? model.reviewStatus.assessment : Object.values(model.evidence.quality).some(group => group.eligible > 0)
             ? "No saved review." : "Review coverage unavailable."));
     const attemptLabels = {
         failed: "Review could not finish; not a failed verdict",
@@ -825,6 +875,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         "not-run": "Not reached by the recorded assessment run", "not-current": "Earlier assessment attempt is not current",
     };
     for (const item of model.findings.answers.filter(item => item.kind === "attempt")) {
+        if (readerLayout && !lanes.size && model.reviewStatus) continue;
         if (comparisonFindings) {
             const status = el("p", "assessment-finding-status period-cause");
             status.append(el("span", "", attemptLabels[item.state]),
@@ -838,6 +889,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
     } else if (!compactFindings || model.findings.rationale) findings.append(el("p", "assessment-finding-limit",
         (model.findings.rationale ? "Verdict reasons not retained. " : "")
         + (compactFindings ? "" : model.findings.singleInteraction ? "Original request group only." : "Full interactions, not just matching calls.")));
+    if (readerLayout && model.findings.qualification) findings.append(el("p", "assessment-finding-limit", model.findings.qualification));
     findings.hidden = readerLayout ? !findings.textContent.trim()
         : compactFindings && findings.children.length === (compactLayout ? 1 : 2) && !calls.childElementCount;
     if (findingsHost && !compactLayout) findingsHost.replaceChildren(findings);
@@ -914,6 +966,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         el("p", "", showTiming
             ? `One request can have several tool calls. Median timing uses the recorded samples, not the total time spent in calls. Open ${detailsLabel} for exact values, denominators, timing boundaries and assessment provenance.`
             : `Open ${detailsLabel} for exact counts and review origins.`));
+    if (!readerLayout) {
     const grid = el("div", "assessment-grid");
     const qualityHeading = el("div", "assessment-quality-heading");
     qualityHeading.append(el("h3", "", "Saved quality assessments"),
@@ -979,6 +1032,7 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
         grid.append(host);
     }
     saved.append(grid);
+    }
     const attempts = model.evidence.assessmentAttempts;
     if (!reviewStatus) {
         const status = el("section", "assessment-attempts");
@@ -998,8 +1052,8 @@ export function renderAssessmentSummary(root, model, { onDetails, helpButton, de
             status.append(el("p", "assessment-execution-note", "An unfinished or failed evaluator attempt is not a failed quality verdict."));
         }
         saved.append(status);
-    } else saved.append(reviewStatus);
-    if (!compactLayout) section.append(saved);
+    } else if (!readerLayout) saved.append(reviewStatus);
+    if (!compactLayout && (!readerLayout || model.findings.operational.some(item => ["execution-gap", "unavailable"].includes(item.kind)))) section.append(saved);
     if (showTiming) {
         const timing = el("div");
         renderTiming(timing, model.evidence.timing.filter(row =>

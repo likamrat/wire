@@ -171,6 +171,7 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 #requestContent .journey-item>.detail-disclosure>summary {font-size:var(--type-small);color:var(--muted)}
 #requestContent .technical-detail>p {font-size:var(--type-body);line-height:var(--leading-reading);margin-block:8px}
 #requestContent .technical-detail .ux-code-block {margin-bottom:0}
+#requestContent .recorded-arguments>pre {white-space:pre-wrap;overflow-wrap:anywhere}
 #requestContent .reader-footer {display:flex;flex-wrap:wrap;align-items:center;gap:0 24px;border-top:1px solid var(--rule)}
 #requestContent .request-context-summaries {flex:1 1 auto;border:0;margin:0}
 #requestContent .request-context-summaries[open] {flex-basis:100%}
@@ -185,6 +186,23 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 #requestContent .request-context-summaries .assessment-saved-details>summary {font-size:var(--type-body)}
 #requestContent .reader-evidence-scope {margin-block:12px 0;font-size:var(--type-small);color:var(--muted)}
 #requestContent .reader-evidence-scope a {display:inline-flex;align-items:center;min-height:24px}
+.single-interaction-measures {width:100%;table-layout:fixed;font-size:var(--type-body);line-height:var(--leading-ui)}
+.single-interaction-measures :is(th,td) {vertical-align:top;overflow-wrap:anywhere;white-space:normal}
+.single-interaction-measures th {font-weight:var(--weight-strong);color:var(--muted)}
+.single-interaction-measures td,.single-interaction-measures td :is(p,code,.single-measure-value) {font-weight:var(--weight-regular)}
+.single-interaction-measures th:first-child {width:24%}
+.single-interaction-measures :is(p,code) {margin:4px 0;font-size:inherit;overflow-wrap:anywhere}
+.single-interaction-measures ul {list-style:none;margin:4px 0;padding:0}
+.single-interaction-measures li {margin:4px 0}
+.single-interaction-measures .single-measure-coverage,.single-interaction-measures .single-measure-reason {color:var(--muted)}
+.single-interaction-measures .positive {color:var(--success)}
+.single-interaction-measures :is(.negative,.error) {color:var(--danger)}
+@media(max-width:700px) {
+ .single-interaction-measures,.single-interaction-measures tbody {display:block}
+ .single-interaction-measures thead {position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%)}
+ .single-interaction-measures tr {display:grid;grid-template-columns:minmax(0,1fr);border-bottom:1px solid var(--rule);padding-block:12px}
+ .single-interaction-measures :is(th,td),.single-interaction-measures th:first-child {display:block;width:auto;padding:4px 0;border:0}
+}
 @container (max-width:32rem) {
  #requestContent .technical-detail .facts {grid-template-columns:minmax(0,1fr);gap:0}
  #requestContent .technical-detail .facts dd {margin-bottom:8px}

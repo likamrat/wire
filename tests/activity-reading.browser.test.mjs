@@ -172,7 +172,7 @@ test("activity card and reader form one exact, private reading and return journe
         await expect(page.locator("#coverage")).toBeHidden();
         const overview = page.locator(".request-context-summaries");
         await expect(overview).toContainText("Completion could not be verified for 1 call.");
-        await expect(overview.locator(".assessment-findings")).toContainText("No saved review.");
+        await expect(overview.locator(".assessment-findings")).toContainText("No saved AI review for this request.");
         assert.doesNotMatch(await overview.innerText(), /Notes on full interactions|Unassessed-check reasons|Current activity:|The date filter selects|How to read these results/);
         await expect(overview.locator(".reader-evidence-scope")).toContainText("answer correctness or permission");
         await overview.getByText("Saved check details", { exact: true }).click();

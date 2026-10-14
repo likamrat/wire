@@ -54,6 +54,57 @@ test("seconds are display-only and preserve zero, tiny positive times and exact 
         assert.deepEqual(metric, before);
     }
 });
+test("single-interaction details separate missing coverage from true zero and failed reviews", () => {
+    const unavailable = currentView().metrics.find(metric => metric.dimension === "accuracy");
+    const unreviewed = presentation.singleDetail(unavailable);
+    assert.equal(unreviewed.value, "Not reviewed");
+    assert.equal(unreviewed.tone, "neutral");
+    assert.equal(unreviewed.status, "unassessed");
+    assert.deepEqual(unreviewed.coverage, { ...unavailable.coverage, unit: "reviewed" });
+    const failed = quality("accuracy", { pass: 0, fail: 1, unassessed: 0, personal: true });
+    const before = structuredClone(failed), verdict = presentation.singleDetail(failed);
+    assert.equal(failed.value, 0);
+    assert.equal(verdict.value, "Not correct");
+    assert.equal(verdict.tone, "negative");
+    assert.deepEqual(failed, before);
+    const error = quality("accuracy", { pass: 0, fail: 0, unassessed: 1, personal: true });
+    error.status = "evaluator-error"; error.reason = "evaluator-failure";
+    error.counts = { pass: 0, fail: 0, unassessed: 0, evaluatorError: 1 };
+    assert.equal(presentation.singleDetail(error).value, "Review could not finish");
+    assert.equal(presentation.singleDetail(error).tone, "error");
+    assert.equal(presentation.singleDetail(samples.makeDuration([0])).value, "0 ms");
+    assert.equal(presentation.singleDetail(samples.makeRatio(0, 1)).value, "Failed");
+    assert.equal(presentation.singleDetail(samples.makeRatio(0, 1)).tone, "negative");
+});
+test("reply evidence errors, zero eligibility and ordinary missing evidence stay distinct", () => {
+    for (const [counts, reason, value, tone] of [
+        [[0, 0, 0, 1], "evaluator-failure", "Check unavailable", "error"],
+        [[0, 0, 0, 0], "no-eligible-units", "Not applicable", "neutral"],
+        [[0, 0, 1, 0], "missing-evidence", "No readable reply saved", "neutral"],
+    ]) {
+        const metric = samples.makeRatio(...counts);
+        Object.assign(metric, { checkId: "answer-evidence-present", dimension: "evidence", reason });
+        contract.validateMetric(metric);
+        const before = structuredClone(metric), shown = presentation.singleDetail(metric);
+        assert.equal(shown.value, value);
+        assert.equal(shown.tone, tone);
+        assert.equal(shown.status, metric.status);
+        assert.equal(shown.reason, reason);
+        assert.deepEqual(metric, before);
+    }
+});
+test("single-interaction model verdicts retain the actual evaluator and reason metadata", () => {
+    const metric = modelQuality("accuracy", { fail: 1, unassessed: 0 }), before = structuredClone(metric);
+    const shown = presentation.singleDetail(metric);
+    assert.equal(shown.value, "Not correct");
+    assert.deepEqual(shown.evaluator, metric.evaluator);
+    assert.notEqual(shown.evaluator, metric.evaluator);
+    const local = currentView().metrics.find(metric => metric.dimension === "accuracy");
+    local.unassessedReasons = [{ reason: "missing-evidence", count: 1 }];
+    contract.validateMetric(local);
+    assert.deepEqual(presentation.singleDetail(local).unassessedReasons, local.unassessedReasons);
+    assert.deepEqual(metric, before);
+});
 test("current adapter summary omits Cost and retains distinct answer/action trust", () => {
     const model = presentation.summarize(currentView().metrics);
     assert.deepEqual(Object.keys(model.groups), ["accuracy", "speed", "answer-trust", "action-trust"]);

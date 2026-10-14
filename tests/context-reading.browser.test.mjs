@@ -191,7 +191,7 @@ test("normal isolated source opens retained correction, retry and reply immediat
     }
     await expect(page.locator(".request-context-summaries .request-recorded").first()).toHaveAttribute("data-context-group", records[0].scenarioId);
     await expect(page.locator(".request-context-summaries .request-link-details")).toContainText("not inferred task boundaries");
-    await expect(page.locator(`.interaction-insights[data-context-group="${records[0].scenarioId}"]`)).toContainText("Your feedback");
+    await expect(page.locator(`.interaction-findings[data-context-group="${records[0].scenarioId}"]`)).toContainText("Your feedback");
     await page.locator(".request-context-summaries > summary").click();
     await expect(page.locator(".request-context-summaries .request-recorded")).toHaveCount(2);
     await expect(page.locator(".interaction-findings [data-finding-kind=execution]")).toHaveCount(0);
@@ -207,6 +207,10 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await expect(feedback).toBeVisible();
     await feedback.click();
     await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("dialog").getByText("Recorded measures and definitions", { exact: true }).click();
+    const failedVerdict = page.getByRole("dialog").locator('tr[data-origin="user-personal"][data-value="0"][data-denominator="1"]');
+    await expect(failedVerdict.locator(".single-measure-value.negative")).toHaveText("Not correct");
+    await expect(page.getByRole("dialog").locator('tr[data-metric-status="unassessed"] .negative')).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(feedback).toBeFocused();
     await page.locator(".request-context-summaries > summary").click();

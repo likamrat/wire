@@ -69,6 +69,36 @@ summaries retain their useful counts and boundaries. Technical source records
 omit empty rows; linked-message explanations appear when there are linked
 messages to explain.
 
+Single-interaction reading does not use aggregate scorecards for unrun checks.
+For example, **0 of 1 assessed** is coverage (no review for one eligible request),
+not a failed answer or a score of zero. Three unsupported local quality rules
+collapse into the actual saved-review state instead of three empty meters and
+repeated missing-data columns. A completed call without a saved reply has one
+concise availability/capture statement; it does not claim the requested work was
+completed. Tool input wraps as readable recorded text while exact JSON copying
+remains unchanged.
+
+**Details and feedback** uses one compact definition table with human states and
+explicit reviewed/timed coverage, not a pass percentage or repeated aggregate
+glossary. Identically scoped unsupported local checks share one explanation,
+without combining their counts. Each measure retains its definition and origin;
+machine-readable row data preserves its raw status, numeric value, numerator,
+denominator and coverage. Reasons remain visible. Genuine zero duration,
+a failed verdict, a failed review and an unreviewed item have different states.
+Verified request-to-answer time remains separate from measured recorded-final-
+response time: an unverified task boundary does not erase a recorded timestamp.
+Only actual verdicts receive positive/negative judgment colors; absent reviews
+stay neutral and review errors remain errors, not negative answer judgments.
+Aggregate screens, canonical metrics and frozen report output retain their
+existing definitions and values.
+
+Reply-availability check errors remain errors, distinct from missing reply
+evidence and zero eligible items. Model-assessed definitions name the actual
+review provider, model and rubric/version, not the original interaction model.
+Local placeholders share an explanation only when their reason breakdowns,
+source basis, timing qualifications and memberships also match; each metric
+retains its own recorded reasons.
+
 Failures without a retained cause say **Failure cause unavailable.** in the
 reading flow. Existing technical details keep the exact source/collection
 qualification and the limit on inferring current sign-in or permissions.

@@ -2845,8 +2845,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const reason = help.failureMessageStatus[evidence.messageStatus] ?? "Error messages, stack traces and response bodies are excluded from collection.";
                 expert.append(el("p", "context-help-note", reason));
             }
-            expert.append(ux.codeBlock(JSON.stringify(tool.requestArgs, null, 2) ?? "[Arguments unavailable]",
-                { label: "Exact recorded arguments / local only", copyLabel: "Copy recorded arguments" }));
+            const argumentsBlock = ux.codeBlock(JSON.stringify(tool.requestArgs, null, 2) ?? "[Arguments unavailable]",
+                { label: "Tool input (recorded)", copyLabel: "Copy recorded arguments" });
+            argumentsBlock.classList.add("recorded-arguments");
+            expert.append(argumentsBlock);
             for (const key of ["command", "code", "script"]) if (typeof tool.requestArgs?.[key] === "string") expert.append(ux.codeBlock(tool.requestArgs[key], { label: "Recorded " + key, copyLabel: "Copy " + key }));
             for (const result of tool.apiResults || []) expert.append(facts([["Result attribution", result.evidenceLevel], ["Reported status", result.statusCode], ["Reported error", result.errorCode]], { inlineHelp: false, omitMissing: true }));
             item.append(disclosure("Technical details", expert));

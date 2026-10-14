@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import { chromium } from "@playwright/test";
 import { createAssessmentExperience } from "../web/assessment-experience.mjs";
 import { createAssessmentPresentation, createAssessmentWording, renderAssessmentSummary, assessmentPresentationStyles, createTimingPresentation, renderRecordedTiming } from "../web/assessment-presentation.mjs";
@@ -15,6 +16,7 @@ import { styles } from "../web/styles.mjs";
 import { createControlHelp } from "../lib/control-help.mjs";
 import { createServiceCategories } from "../lib/service-categories.mjs";
 import { contract, currentView, samples, quality } from "./assessment-ui-fixtures.mjs";
+import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 
 const sourceLabel = "synthetic-scenario";
 const answerText = "ARTIFICIAL RESPONSE ONLY\n" + "Exact retained text \u65e5\u672c\u8a9e e\u0301 <not-html> & private. ".repeat(35);
@@ -129,6 +131,61 @@ async function setup(t, initialView = currentView()) {
         receive: value => page.evaluate(value => window.experience.receive(value), snapshot(value)),
     };
 }
+
+test("single definition table retains evaluator provider, review model and rubric provenance", async t => {
+    const { model } = qualityDisplayFixture({ requests: 1, calls: 1, judgments: ["fail"] });
+    const view = [...model.details.values()][0], evidence = view.metrics.find(metric => metric.checkId === "answer-evidence-present");
+    Object.assign(evidence, { status: "evaluator-error", reason: "evaluator-failure",
+        counts: { pass: 0, fail: 0, unassessed: 0, evaluatorError: 1 }, unassessedReasons: [] });
+    contract.validateInteractionView(view);
+    const before = structuredClone(view);
+    const { page, show, calls } = await setup(t, view);
+    await show();
+    await page.getByRole("button", { name: "Details and feedback", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Insight details", exact: true });
+    await dialog.getByText("Recorded measures and definitions", { exact: true }).click();
+    const error = dialog.locator('[data-check-id="answer-evidence-present"]');
+    assert.equal(await error.locator(".single-measure-value.error").textContent(), "Check unavailable");
+    assert.doesNotMatch(await error.innerText(), /No readable reply saved/);
+    for (const metric of view.metrics.filter(metric => metric.origin === "model-assessed")) {
+        const row = dialog.locator(`[data-metric-ref="${metric.metricRef}"]`);
+        assert.equal(await row.locator(".single-measure-evaluator").textContent(),
+            `Review model: ${metric.evaluator.provider} / ${metric.evaluator.model}; rubric ${metric.evaluator.rubricId} v${metric.evaluator.rubricVersion}`);
+        assert.deepEqual(await row.evaluate(node => ({
+            provider: node.dataset.evaluatorProvider, model: node.dataset.evaluatorModel,
+            rubricId: node.dataset.evaluatorRubricId, rubricVersion: Number(node.dataset.evaluatorRubricVersion),
+        })), metric.evaluator);
+        assert.equal(await row.getAttribute("data-metric-status"), metric.status);
+        assert.equal(await row.getAttribute("data-value"), String(metric.value));
+    }
+    assert.deepEqual(view, before);
+    assert.ok(calls.every(call => call.path.endsWith("/detail")));
+    if (process.env.WIRE_STORY_BASIS_PROOFS) {
+        await mkdir(process.env.WIRE_STORY_BASIS_PROOFS, { recursive: true });
+        await page.setViewportSize({ width: 1280, height: 2200 });
+        await page.screenshot({ path: path.join(process.env.WIRE_STORY_BASIS_PROOFS, "review-basis-and-error.png") });
+    }
+});
+
+test("single definition grouping keeps differing causes and temporal qualifications separate", async t => {
+    for (const kind of ["cause", "time"]) await t.test(kind, async t => {
+        const view = currentView(), metric = view.metrics.find(metric => metric.dimension === "accuracy");
+        if (kind === "cause") metric.unassessedReasons = [{ reason: "missing-evidence", count: 1 }];
+        else metric.observedTime = { state: "withheld", firstAt: null, lastAt: null, datedUnits: 0, undatedUnits: 1 };
+        contract.validateInteractionView(view);
+        const before = structuredClone(view), { page, show } = await setup(t, view);
+        await show();
+        await page.getByRole("button", { name: "Details and feedback", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: "Insight details", exact: true });
+        await dialog.getByText("Recorded measures and definitions", { exact: true }).click();
+        const row = dialog.locator(`tr[data-metric-ref="${metric.metricRef}"]`);
+        assert.equal(await row.count(), 1, "A distinct qualification must not merge into the common placeholder row");
+        assert.equal(await row.getAttribute("data-unassessed-reasons"), JSON.stringify(metric.unassessedReasons ?? null));
+        assert.equal(await row.getAttribute("data-observed-time"), JSON.stringify(metric.observedTime));
+        if (kind === "cause") assert.match(await row.innerText(), /1 missing-evidence/);
+        assert.deepEqual(view, before);
+    });
+});
 
 test("interaction insights preserve separate trust states and request private response only on explicit Read", { timeout: 30000 }, async t => {
     const { page, calls, show } = await setup(t, withResponse());
