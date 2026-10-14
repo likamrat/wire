@@ -6,6 +6,7 @@ import childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
 import { setImmediate } from "node:timers/promises";
 import { syncBuiltinESMExports } from "node:module";
+import { fileURLToPath } from "node:url";
 import { Tokenizer } from "@huggingface/tokenizers";
 import { createSearchModel, searchModelEnvironment } from "../lib/search-model.mjs";
 import { SEARCH_MODEL, SEARCH_MODEL_ID, readSearchModel } from "../lib/search-model-assets.mjs";
@@ -26,7 +27,8 @@ function monitorSearchChildren(t) {
         if (String(modulePath).endsWith("search-model-worker.mjs")) {
             assert.equal(options.execPath, process.execPath);
             assert.deepEqual(args, []);
-            assert.deepEqual(options.execArgv, ["--disallow-code-generation-from-strings"]);
+            assert.deepEqual(options.execArgv, ["--disallow-code-generation-from-strings", "--require",
+                fileURLToPath(new URL("../lib/search-model-guard.cjs", import.meta.url))]);
             assert.deepEqual(options.stdio, ["ignore", "ignore", "ignore", "ipc"]);
             assert.deepEqual(Object.keys(options.env).sort(), Object.keys(searchModelEnvironment()).sort());
             children.push(child);

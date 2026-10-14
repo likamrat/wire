@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
@@ -8,6 +9,7 @@ import path from "node:path";
 import { createSearchLinguistics } from "../lib/search-linguistics.mjs";
 import { SEARCH_INTENT_POLICY_ID, SEARCH_LINGUISTICS, readSearchLinguistics } from "../lib/search-linguistics-assets.mjs";
 import { SEARCH_MATCH_POLICY_ID, SEARCH_RELATED, SEARCH_LEXICAL_POLICIES, SEARCH_TYPES } from "../lib/search-ranking.mjs";
+import { SEARCH_MODEL_ID } from "../lib/search-model-assets.mjs";
 import { createSearchWireContract, searchWireContract } from "../lib/search-wire-contract.mjs";
 import { provisionSearchLinguistics } from "../scripts/provision-search-linguistics.mjs";
 import { privateFixture } from "./helpers.mjs";
@@ -58,7 +60,15 @@ test("malformed owned linguistic responses reject, close, and never disclose par
 });
 
 test("baseline and opt-in wire identities remain explicit, distinct, closed and serializable", () => {
-    assert.equal(SEARCH_RELATED.id, "1544a5093a15a386fa06361c344aabda392a5df77ad97cb1159ec87959637148");
+    const expectedRelated = {
+        version: "related-navigation-minilm-original-projection-v1", modelId: SEARCH_MODEL_ID,
+        strictPolicy: { version: "exact-prefix-cosine-v2", semanticFloor: 0.5 }, floor: 0.35, band: 0.02,
+        selection: "unchanged strict; related=remaining anchor/type-eligible scores>=floor and within band of strongest eligible score; no topN",
+        purpose: "navigate-only", indexProjection: "unchanged title/content/source", noMembership: true,
+    };
+    const relatedId = createHash("sha256").update(JSON.stringify(expectedRelated)).digest("hex");
+    assert.equal(relatedId, "7a21ab4304d8f1e1f955deaaf0e50498957b5ca34fdc004125756f13de56228b");
+    assert.deepEqual(SEARCH_RELATED, { ...expectedRelated, id: relatedId });
     assert.notEqual(SEARCH_LEXICAL_POLICIES.matchPolicyId, SEARCH_MATCH_POLICY_ID);
     const factory = new Function("return (" + createSearchWireContract.toString() + ")")();
     const baseline = factory({ matchPolicyId: SEARCH_MATCH_POLICY_ID, relatedPolicyId: SEARCH_RELATED.id, types: SEARCH_TYPES });

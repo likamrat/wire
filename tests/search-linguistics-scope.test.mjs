@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createSearchLinguistics } from "../lib/search-linguistics.mjs";
 import { createSearchModel } from "../lib/search-model.mjs";
 import { createSearchRetrieval } from "../lib/search-retrieval.mjs";
 import { SEARCH_RANKING, SEARCH_MATCH_POLICY_ID, SEARCH_RELATED, SEARCH_LEXICAL_POLICIES, lexicalMatch } from "../lib/search-ranking.mjs";
-import { searchHash } from "../lib/search-model-assets.mjs";
+import { SEARCH_MODEL_ID, searchHash } from "../lib/search-model-assets.mjs";
 import { searchWireContract } from "../lib/search-wire-contract.mjs";
 import { permittedSearchText } from "../lib/search-chunks.mjs";
 import { privateFixture, fixture } from "./helpers.mjs";
@@ -25,7 +26,15 @@ const target = hit => hit.target.href;
 
 test("scope correction preserves baseline policy identities and invalidates the unsafe opt-in policy", () => {
     assert.equal(SEARCH_MATCH_POLICY_ID, "077699b2dc5542dc983fde41e4f56c4b4be90deebc763492fa61191440365b6f");
-    assert.equal(SEARCH_RELATED.id, "1544a5093a15a386fa06361c344aabda392a5df77ad97cb1159ec87959637148");
+    const expectedRelated = {
+        version: "related-navigation-minilm-original-projection-v1", modelId: SEARCH_MODEL_ID,
+        strictPolicy: { version: "exact-prefix-cosine-v2", semanticFloor: 0.5 }, floor: 0.35, band: 0.02,
+        selection: "unchanged strict; related=remaining anchor/type-eligible scores>=floor and within band of strongest eligible score; no topN",
+        purpose: "navigate-only", indexProjection: "unchanged title/content/source", noMembership: true,
+    };
+    const relatedId = createHash("sha256").update(JSON.stringify(expectedRelated)).digest("hex");
+    assert.equal(relatedId, "7a21ab4304d8f1e1f955deaaf0e50498957b5ca34fdc004125756f13de56228b");
+    assert.deepEqual(SEARCH_RELATED, { ...expectedRelated, id: relatedId });
     const receipt = { schemaVersion: 2, panelId: "00000000-0000-0000-0000-000000000000", epoch: 0, requestId: 0,
         generation: 1, indexId: "1".repeat(64), modelId: "2".repeat(64), mode: "hybrid", revision: 1,
         queryPurpose: "analysis", queryTypes: [...searchWireContract.allTypes], purpose: "strict-match-population",

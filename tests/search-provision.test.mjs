@@ -43,7 +43,8 @@ test("provisioning is fixed, byte-verified, atomic and never overwrites a bad in
 test("locked omit-dev offline installation runs the real owned WASM helper without native ORT", { timeout: 120000 }, async t => {
     const { root } = await privateFixture(t), directory = path.join(root, "production");
     await mkdir(path.join(directory, "lib"), { recursive: true });
-    for (const file of ["package.json", "package-lock.json", "lib/search-model-worker.mjs", "lib/search-model-assets.mjs", "lib/search-chunks.mjs"]) {
+    for (const file of ["package.json", "package-lock.json", "lib/search-model-worker.mjs", "lib/search-model-guard.cjs",
+        "lib/search-model-assets.mjs", "lib/search-chunks.mjs"]) {
         await copyFile(new URL(`../${file}`, import.meta.url), path.join(directory, ...file.split("/")));
     }
     const run = promisify(execFile), args = ["ci", "--omit=dev", "--ignore-scripts", "--offline", "--no-audit", "--no-fund"];
@@ -52,7 +53,8 @@ test("locked omit-dev offline installation runs the real owned WASM helper witho
     await assert.rejects(readFile(path.join(directory, "node_modules", "onnxruntime-node", "package.json")), { code: "ENOENT" });
     await assert.rejects(readFile(path.join(directory, "node_modules", "@playwright", "test", "package.json")), { code: "ENOENT" });
     const child = fork(path.join(directory, "lib", "search-model-worker.mjs"), [], {
-        cwd: directory, execPath: process.execPath, execArgv: ["--disallow-code-generation-from-strings"],
+        cwd: directory, execPath: process.execPath, execArgv: ["--disallow-code-generation-from-strings", "--require",
+            path.join(directory, "lib", "search-model-guard.cjs")],
         serialization: "advanced", stdio: ["ignore", "ignore", "ignore", "ipc"], env: searchModelEnvironment(),
     });
     const exit = new Promise(resolve => child.once("close", resolve));
