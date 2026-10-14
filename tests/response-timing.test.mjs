@@ -292,3 +292,39 @@ test("scoped model context excludes unrelated payloads but keeps late links, dup
     assert.equal(beforePrompt.checkpoint.reason, "response-before-prompt");
     assert.deepEqual(beforePrompt.checkpoint.models, {}, "An out-of-order original link cannot silently lose its model or identity conflict.");
 });
+
+test("consecutive identical model metadata deliveries do not exhaust selected context or conceal a differing response", async t => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "wire-repeated-model-metadata-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const sessionId = randomUUID(), sessionRoot = path.join(root, "session-state");
+    await mkdir(path.join(sessionRoot, sessionId), { recursive: true });
+    const file = path.join(sessionRoot, sessionId, "events.jsonl");
+    const rows = source();
+    rows[1].data.model = "original-model";
+    rows[1].data.apiCallId = "original-call";
+    const startup = { id: "startup", type: "session.start", timestamp: time(0), data: { sessionId, version: 1 } };
+    const record = { sourceSessionId: sessionId, userPrompt: prompt };
+    const copies = Array.from({ length: TAIL_LIMITS.maxContextEvents + 1 }, () => rows[1]);
+    const direct = recordedInteractionModels([rows[0], ...copies, rows[2]], record);
+    assert.equal(direct.responses[0].model, "original-model");
+    assert.equal(direct.conflict, false);
+    const qualify = async changed => {
+        const events = [startup, rows[0], ...copies, ...(changed ? [changed] : []), rows[2]];
+        const text = events.map(event => JSON.stringify(event) + "\n").join("");
+        await writeFile(file, text);
+        const result = await qualifyRetainedInteractionModels({ approved: true, sessionRoot },
+            { sessionId, eligible: true }, [record], null, 8 * 1024 ** 2, time(0));
+        assert.equal(result.checkpoint.reason, undefined);
+        assert.equal(result.bytesRead, Buffer.byteLength(text) + 65536 + 256,
+            "Ignoring repeated context does not skip or discount original source reads.");
+        return result.checkpoint.models.prompt;
+    };
+    const evidence = await qualify();
+    assert.equal(interactionModelFact({ ...record, originalModelEvidence: evidence }).value, "original-model");
+    assert.equal(evidence.responses.length, 1);
+    for (const changed of [
+        { ...rows[1], data: { ...rows[1].data, model: "different-model" } },
+        { ...rows[1], data: { ...rows[1].data, originatingMessageId: "different-message" } },
+        { ...rows[1], data: { ...rows[1].data, model: undefined } },
+    ]) assert.equal(interactionModelFact({ ...record, originalModelEvidence: await qualify(changed) }).status, "conflicting");
+});

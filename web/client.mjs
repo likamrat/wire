@@ -145,7 +145,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("freshHelpBody").append($("activityCollectionLink"));
     $("periodActions").prepend($("resultsLink"));
     $("resultsLink").textContent = "View records";
-    const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData") });
+    const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData"), includeModels: true });
     const live = createLiveState();
     const sourceCheckKey = "workiq-evidence.source-check.v1";
     let sourcePending = false, sourceStorageWarning = "";
@@ -2062,7 +2062,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (open) renderCountTable();
             else $("countTable").replaceChildren();
         });
-        percentages.update(analytics, { ...applied, search: Boolean(search), withinServices: route.withinServices?.split(",") || [] });
+        percentages.update(analytics, { ...applied, search: Boolean(search), withinServices: route.withinServices?.split(",") || [] }, slice.scenarios);
     }
     function renderTime() {
         const series = analytics.timeSeries;

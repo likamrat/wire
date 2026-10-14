@@ -195,6 +195,26 @@ restart recovery. This is not a claim of human acceptance or a live release.
 
 ## Original interaction model
 
+Analyze's **Model** widget uses the existing horizontal bars, with exact recorded
+names and interaction counts rather than a pie or a tool-call total. It consumes
+the same accepted matching interaction slice as the cards: Dates, filters,
+service refinements and verified Search membership apply together. Multiple
+matching calls, response events, repeated model switches and aliases of the same
+source/prompt do not multiply an interaction's count for a model. Matching only
+one call retains the whole interaction's original-model scope.
+
+Bars use all matching interactions as the denominator; model memberships can
+overlap. A compact coverage line separates partial, not-recorded, unverified and
+conflicting interactions from actual model names. Supported names in partial
+records still count; conflicting and tool-only facts supply no names. Exact data
+and definitions live in the existing shared disclosure. Model labels and bars
+are read-only, without an invented model filter or inexact drilldown.
+The widget extends the existing Tools/Services row to three columns when space
+allows, spans the two-column row at intermediate widths and stacks on narrow
+screens. It does not change source collection, stored evidence, report membership
+or frozen exports. The screen projection adds only distinct validated names to
+the existing model fact; it exposes no additional response linkage.
+
 Interactions add one **Model/Models** row after chat, project and recorded time,
 before matching results. It uses the same stacked semantic key/value structure:
 bold category key, ordinary value, with no badge, control or extra explanation.
@@ -248,6 +268,11 @@ conflicting or exhausted sources fail closed. Every selected request must yield
 supported evidence before anything commits; partial model coverage remains
 explicitly qualified. Deleted dependencies and mismatched prompt aliases cannot
 be restored. The timing-only endpoint keeps its existing behavior.
+Consecutive identical projected metadata deliveries reuse one context entry;
+all source bytes are still read and charged. Any differing identity, ownership,
+model, timing or completion metadata remains available to conflict checks.
+This avoids exhausting the model context with duplicate deliveries without
+raising its limits, relaxing linkage or deduplicating by event ID alone.
 
 The synchronous operation uses the collector's existing serialization. It
 commits only selected `originalModelEvidence` plus its successful operation

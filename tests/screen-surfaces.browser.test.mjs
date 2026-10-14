@@ -127,7 +127,7 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
                     success: variable("chart-success"), failure: variable("chart-failure"), font: variable("font") };
             });
         });
-        assert.equal(surfaces.length, 5, "Filter, outcome, timeline, tools and services containers are covered");
+        assert.equal(surfaces.length, 6, "Filter, outcome, timeline, tools, services and Model containers are covered");
         const outcome = surfaces.find(value => value.surfaceOwner === "div.analyze-outcome-summary");
         assert.ok(outcome, "Transparent outcome internals resolve to their painted outer summary");
         assert.equal(outcome.rawBackground, "rgba(0, 0, 0, 0)");

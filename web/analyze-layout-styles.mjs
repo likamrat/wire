@@ -67,6 +67,8 @@ export const analyzeLayoutStyles = `
 #percentageCharts .percentage-legend {gap:4px}
 #percentageCharts .percentage-gap-list {margin:4px 0 0;padding-inline-start:28px;font-size:var(--type-caption);color:var(--muted)}
 #percentageCharts .percentage-gap-list>div {padding-block:2px}
+#percentageCharts .percentage-model-coverage {margin:8px 0 0;color:var(--muted);font-size:var(--type-caption)}
+#percentageCharts [data-breakdown=models] .percentage-label {min-height:36px}
 #homeView .percentage-denominator {margin-top:4px;font-size:var(--type-caption)}
 #homeView .percentage-exact>summary {font-size:var(--type-small)}
 .analyze-review {margin-block:var(--space-lg)}
@@ -111,8 +113,13 @@ export const analyzeLayoutStyles = `
 #activityView>.section-heading {padding-bottom:8px;border-bottom:1px solid var(--rule);gap:8px 16px}
 #activityView .analyze-result-actions {margin-block:8px}
 @container analyze-view (min-width:44rem) {
+ #percentageCharts [data-breakdown=models] {grid-column:1/-1}
  #homeView .flat-comparison {max-block-size:44rem;overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain;padding:4px}
  #homeView .flat-comparison:focus-visible {outline:2px solid var(--focus);outline-offset:2px}
+}
+@container analyze-view (min-width:72rem) {
+ #percentageCharts .percentage-panels {grid-template-columns:repeat(3,minmax(0,1fr))}
+ #percentageCharts [data-breakdown=models] {grid-column:auto}
 }
 @container analyze-view (max-width:54rem) {
  .analyze-chart-grid {grid-template-columns:minmax(0,1fr)}
