@@ -206,12 +206,12 @@ test("focus zone change invalidates in-flight preview and reviewed snapshot with
     await page.locator("#formatOptions input[value=pdf]").uncheck();
     await page.locator("#exportBtn").click();
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     const changed = page.waitForResponse(r => r.url().endsWith("/api/snapshot"));
     await page.evaluate(() => { globalThis.testZone = "Asia/Kathmandu"; window.dispatchEvent(new Event("focus")); });
     await changed; await ready(page);
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
     assert.ok(!requests.some(r => r.path === "/api/export"));
     assert.equal((await loadBoardState(context)).revision, initial.revision);
     assert.deepEqual(errors, []);

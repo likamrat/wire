@@ -269,7 +269,7 @@ test("saved report and comparison entries use the same danger treatment without 
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await navigateMain(page, "reports");
-        if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#bundles > summary").click();
+        if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
         for (const name of ["Delete report", "Delete saved comparison"]) {
             const entry = page.locator("#bundleList").getByRole("button", { name, exact: true, includeHidden: true }).first();
             const disclosure = entry.locator("xpath=ancestor::details[1]");

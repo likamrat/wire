@@ -327,10 +327,10 @@ test("finite painted-control inventory has balanced real content insets across t
     await scanReport(page);
     await matrix("report-review", ["#reportReviewBody .dialog-actions button"]);
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     await matrix("report-save", ["#reportSaveBody button"]);
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     await matrix("report-saved", [".report-downloads button"]);
     await navigateMain(page, "settings"); await ready(page);

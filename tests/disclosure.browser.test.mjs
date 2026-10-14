@@ -112,7 +112,7 @@ test("complete session groups, bounded cards, accessible independent toggles and
     }
     assert.equal(sessionIds.size, 18);
     await navigateMain(page, "reports");
-    assert.match(await page.locator("#previewSelectionSummary").innerText(), /1 request group included/);
+    assert.match(await page.locator("#previewSelectionSummary").innerText(), /1 chat · 1 interaction/);
     await reportContents(page);
     await page.locator("[name=promptMode][value=none]").check();
     const selected = await preview(page);
@@ -125,14 +125,13 @@ test("complete session groups, bounded cards, accessible independent toggles and
     assert.equal(new Set(current.records.map(r => r.scenarioId)).size, 114);
     assert.ok(current.records.some(record => record.scenarioId === selected.records[0].scenarioId));
     await cancelReportPreview(page);
-    await page.getByRole("button", { name: "1. Setup", exact: true }).click();
-    await page.locator("#reportRequests>summary").click();
+    await page.getByRole("button", { name: "1. Activity", exact: true }).click();
     assert.equal(await page.locator("#reportList .report-entry").count(), 4);
     assert.match(await page.locator("#reportList").innerText(), /1-4 of 114 report requests/);
     await page.locator("#reportList").getByRole("button", { name: "Next report requests", exact: true }).click();
     assert.match(await page.locator("#reportList").innerText(), /5-8 of 114 report requests/);
-    await page.locator("#reportRequests>summary").click();
-    assert.equal(await page.locator("#reportList .report-entry").count(), 0);
+    await reportContents(page);
+    assert.equal(await page.locator("#reportRequests").isVisible(), false);
     assert.deepEqual(await readFile(path.join(context.dataDir, stateFile)), before);
     assert.ok(!posts.some(p => ["/api/export", "/api/move", "/api/import", "/api/record", "/api/collection/now"].includes(p)));
 });
@@ -233,21 +232,22 @@ test("bounded prompt review retains edits and consent gates; presentation never 
     await page.locator("#formatOptions input[value=json]").check();
     const data = await preview(page);
     assert.ok(data.promptReview.length > 6);
-    assert.equal(await page.locator(".prompt-comparison").count(), 6);
-    assert.match(await page.locator(".prompt-review-summary").innerText(), /incomplete or unavailable sources/);
+    assert.equal(await page.locator(".prompt-comparison").count(), 1);
+    assert.match(await page.locator(".prompt-review-summary").innerText(), new RegExp(`${data.promptReview.length} copies · \\d+ removals`));
     await page.locator(".prompt-comparison").first().getByText("Edit or omit this report copy", { exact: true }).click();
     await page.locator(".prompt-comparison textarea").first().fill("SYNTHETIC EDIT KEPT ACROSS PAGES");
-    await page.getByRole("button", { name: "Next prompt copies", exact: true }).click();
-    await page.getByRole("button", { name: "Previous prompt copies", exact: true }).click();
+    await page.getByRole("button", { name: "Next report copies", exact: true }).click();
+    await page.getByRole("button", { name: "Previous report copies", exact: true }).click();
     assert.equal(await page.locator(".prompt-comparison textarea").first().inputValue(), "SYNTHETIC EDIT KEPT ACROSS PAGES");
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
     assert.equal(await page.locator(".attestation [data-review-control]").isDisabled(), true);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
     await page.locator(".attestation [data-review-control]:not(:disabled)").waitFor();
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isVisible(), false);
+    await page.getByRole("button", { name: "1. Activity", exact: true }).click();
     await page.locator("#reportsView [data-clear-selection]").first().click();
-    assert.equal(await page.locator("#previewSelectionSummary").innerText(), "No requests selected");
+    assert.equal(await page.locator("#previewSelectionSummary").innerText(), "No interactions included");
     assert.equal((await loadBoardState(context)).exports.length, 0);
 });
 
@@ -289,9 +289,7 @@ test("long exact tables, scan notes and saved history stay bounded with complete
     assert.equal(await page.locator(".evidence-notes li").count(), 6);
     assert.match(await page.locator("#collectionEvidenceDetails").innerText(), /of 19 scan notes/);
     await navigateMain(page, "reports");
-    assert.match(await page.locator("#bundles>summary").innerText(), /\(8\)/);
-    assert.equal(await page.locator("#bundleList details").count(), 0);
-    await page.locator("#bundles>summary").click();
+    assert.match(await page.locator("#savedLibraryTitle").innerText(), /\(8\)/);
     assert.equal(await page.locator("#bundleList details").count(), 6);
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     assert.equal(await page.locator("#bundleList details").count(), 2);

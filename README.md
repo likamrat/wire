@@ -1097,10 +1097,9 @@ source code from the scan file.
 
 ## Reports and disclosure
 
-Open **Reports** in top navigation to find saved reports or continue/create a
+Open **Reports** in the left sidebar to find saved reports or continue/create a
 draft. There is no redundant global Export button. Analyze, Reports and Settings
-retain filters and the current draft; the same full navigation labels wrap on
-narrow screens without a drawer.
+retain filters and the current draft; narrow screens keep the sliding navigation.
 
 From a focused analysis, **Create report for this Copilot chat** replaces the draft
 membership with only that chat's canonical eligible request groups, across
@@ -1109,25 +1108,27 @@ retained dates and services, not just the analysis slice. The context is explici
 before scanning; newly collected requests are not added to this selection.
 Selection alone writes nothing.
 
-Reports follows **Setup**, **Review**, and **Save locally**. Setup combines
-request scope, authors, prompt/context privacy and format choices, then
-**Scan and preview**. Review the formatted document inline, with
-top navigation still available, and open the prompt-copy comparisons as needed.
-An unchecked attestation and **Complete disclosure review** lead to the separate
-final **Confirm local export** action. Success exposes the actual local file
-downloads; an uncertain response never retries or claims a successful save.
-Back revisits choices without granting consent. Changing choices requires a new
-scan and review; navigation away invalidates review while retaining draft choices.
+Reports follows **Activity**, **Contents**, and **Review & save**. Activity chooses
+the reportable population and prompt authors; individual interactions can be selected
+inside the task. Contents keeps the existing prompt modes, optional linked context and
+four file formats. **Prepare report** opens the actual document, with flat Text/Files
+inspection views. The document grows with the page rather than using an inner scrollbar.
+An unchecked attestation and **Approve for local saving** enable a separate
+**Save report locally** action in that same workspace. An uncertain save offers only
+receipt-based **Check save status**, never an automatic repeat.
+Back preserves an unchanged preview; relevant choices, source or authority changes
+require new preparation and review.
 
-Alternatively, deliberately choose **All collected activity**, **Current view**,
-or **Selected requests** in Setup.
-New panels and reloads start with **Selected requests**, empty. Opening Export
+Choose **All saved sessions**, **Current Analyze view**, or **Selected interactions**
+in Activity. All saved sessions uses all retained reportable activity independently
+of Analyze dates, filters, search and paging. Chat and interaction counts are separate.
+New panels and reloads start with **Selected interactions**, empty. Opening Reports
 never opts into the whole collection. Deliberate selection and scope choices
 last while navigating this panel, including Back/Forward, not across reloads.
-**Scan and preview** prepares one report; the adjacent summary names the canonical
+**Prepare report** prepares one report; the adjacent summary names the canonical
 requests included, not a number of reports. Saved report counts are separate.
 
-**Clear selection**, beside report membership and throughout the report flow,
+**Clear selection**, beside report membership in Activity,
 empties the selection across all pages, returns All/Current to empty Selected,
 and discards the preview, attestation, chat report context and per-copy edits. Captured evidence,
 review labels, saved bundles, analytical filters and theme stay unchanged.
@@ -1135,6 +1136,18 @@ Prompt mode, formats and additional masking terms stay in this panel; reload
 resets report options too. Nothing about opening, clearing or cancelling writes
 an export or scans history. **Reset view** changes the analytical view, not the
 chosen report scope or explicit selection.
+
+The library is a paginated list, not a collapsible container. Scope/date identity
+and Open are primary; **Files & actions** holds downloads, full IDs, comparison and
+deletion. Frozen readers retain their original opaque sandbox and restore library
+search/page/focus on return. A completed report leaves a direct **Create a report**
+entry; an unfinished report keeps **Continue draft**.
+
+New human-readable output leads with a short factual **At a glance** section,
+followed by recorded patterns, timing and prompt-led examples. Unsupported local
+checks share an explanation without merging their separate coverage or verdicts.
+The output uses embedded Asta Sans and its own frozen presentation rules, not live
+screen tokens. JSON facts and comparison compatibility are unchanged.
 
 The counts before preview describe canonical request groups and separate Work IQ,
 returned API, Graph request-site, visible-status, owned HTTP and code-reference

@@ -108,7 +108,7 @@ async function revealRefresh(page) {
     const refresh = page.locator("#refreshBtn");
     if (!await refresh.isVisible()) {
         if (await page.locator("#freshHelp").isVisible()) await page.locator("#freshHelp > summary").click();
-        else if (await page.locator("#bundles").isVisible()) await page.locator("#bundles > summary").click();
+        else if (await page.locator("#bundles").isVisible()) await page.locator("#savedLibraryTitle").click();
     }
     return refresh;
 }
@@ -249,7 +249,7 @@ test("manual stored refresh cannot silently cancel an unsaved report preview", a
     assert.equal((await state(page)).reportPhase, "ready");
     assert.ok(!requests.slice(start).some(row => row.endpoint === "/api/snapshot" || row.endpoint === "/api/cancel-preview"),
         "A background revision read defers while the actual prepared report remains open.");
-    await page.getByRole("button", { name: "Back to setup", exact: true }).click();
+    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
     await expect(refresh).toBeDisabled();
     assert.ok(!requests.slice(start).some(row => row.endpoint === "/api/cancel-preview"));
     await page.locator('[name=promptMode][value=masked]').check();
@@ -400,7 +400,7 @@ test("a failed or cancelled scan with no prepared report leaves manual read reco
     await page.locator("#exportBtn").click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "blocked");
     await expect(await revealRefresh(page)).toBeEnabled();
-    await page.getByRole("button", { name: "Back to setup", exact: true }).click();
+    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
     const entered = deferred(), release = deferred();
     await page.route("**/api/preview", async route => {
         const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
@@ -408,7 +408,7 @@ test("a failed or cancelled scan with no prepared report leaves manual read reco
     t.after(() => release.resolve());
     await page.locator("#exportBtn").click(); await entered.promise;
     await expect(page.locator("#refreshBtn")).toBeDisabled();
-    await page.getByRole("button", { name: "Back to setup", exact: true }).click();
+    await page.getByRole("button", { name: "Back to contents", exact: true }).click();
     await expect(page.locator("#refreshBtn")).toBeEnabled();
     const cancelled = page.waitForResponse(response => response.url().endsWith("/api/cancel-preview"));
     release.resolve(); await cancelled;

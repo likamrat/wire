@@ -364,10 +364,10 @@ test("a real switch in another panel changes appearance without invalidating a f
     await other.getByRole("switch", { name: "Dark theme", exact: true }).click();
     await resolved(page, "dark");
     assert.equal(await page.locator("#themePreference").getAttribute("aria-checked"), "true");
-    assert.equal(await page.locator("#reportStage2").isVisible(), true);
+    assert.equal(await page.locator("#reportStage3").isVisible(), true);
     assert.equal(await page.locator("#reportReviewBody").innerHTML(), before, "Frozen preview and disclosure state are unchanged");
     assert.equal(await page.locator(".attestation input").isChecked(), false);
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true }).isDisabled(), true);
     assert.equal(page.url(), route);
     assert.equal(requests.length, count, "No refetch, preview cancellation, review or export request on theme change");
 }));
@@ -504,7 +504,7 @@ test("both themes cover all views, privacy preview, and 375/820/1200 layouts wit
         }));
         for (let index = 1; index < steps.length; index++) if (steps[index].top === steps[index - 1].top) assert.ok(steps[index].left - steps[index - 1].right >= 12, "Disclosure steps do not overlap");
         assert.equal(await page.locator(".attestation input").isChecked(), false);
-        assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true }).isDisabled(), true);
         await page.goBack();
         await page.locator("#overlay").waitFor({ state: "hidden" });
         await page.locator("#activitySearch").fill("no synthetic match");

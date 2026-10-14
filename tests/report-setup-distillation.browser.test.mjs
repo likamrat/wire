@@ -58,8 +58,8 @@ test("Setup keeps every choice with one relevant scope explanation and condition
     await capture(page, "setup-default");
     assert.equal(await page.locator(".scope-choice-help:visible").count(), 1);
     assert.equal(await page.locator('[name="reportScope"]:visible').count(), 3);
-    assert.equal(await page.locator('[name="promptMode"]:visible').count(), 3);
-    assert.equal(await page.locator("#formatOptions input:visible").count(), 4);
+    assert.equal(await page.locator('[name="promptMode"]:visible').count(), 0);
+    assert.equal(await page.locator("#formatOptions input:visible").count(), 0);
     assert.equal(await page.locator("#reportPromptAuthorFilter option").count(), 3);
     assert.equal(await page.locator("#reportRecordedContextHelp").isVisible(), false);
     for (const scope of ["all", "current", "selected"]) {
@@ -68,6 +68,10 @@ test("Setup keeps every choice with one relevant scope explanation and condition
         assert.equal(await page.locator(`[name=reportScope][value=${scope}]`).isChecked(), true);
         assert.ok((await page.locator("#reportScopeChoiceHelp").innerText()).length > 0);
     }
+    await chooseReportScope(page, "all");
+    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
+    assert.equal(await page.locator('[name="promptMode"]:visible').count(), 3);
+    assert.equal(await page.locator("#formatOptions input:visible").count(), 4);
     for (const mode of ["none", "masked", "original"]) {
         await page.locator(`[name=promptMode][value=${mode}]`).check();
         assert.equal(await page.locator("#promptOptions .prompt-choice > span > span:visible").count(), 1);
@@ -99,7 +103,7 @@ test("An empty library has one honest state and the existing create path instead
     assert.equal(await page.locator("#savedReportCount").isVisible(), false);
     assert.equal(await page.locator("#savedLibraryHelp").isVisible(), false);
     assert.equal(await page.locator("#savedLibraryManagement").isVisible(), false);
-    assert.equal(await page.locator("#bundles > summary").innerText(), "Saved reports");
+    assert.equal(await page.locator("#savedLibraryTitle").innerText(), "Saved reports");
     assert.match(await page.locator("#bundleList").innerText(), /No local reports have been saved/);
     await page.getByRole("link", { name: "Create a report", exact: true }).click();
     assert.equal(await page.locator("#reportStage1").isVisible(), true);
@@ -107,6 +111,8 @@ test("An empty library has one honest state and the existing create path instead
 
 test("Setup remains readable with all controls at desktop and narrow enlarged text in both themes", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
+    await chooseReportScope(page, "all");
+    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1600, 100], [375, 100], [375, 200]]) {
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
@@ -114,11 +120,11 @@ test("Setup remains readable with all controls at desktop and narrow enlarged te
         const measured = await capture(page, `setup-${theme}-${width}-${scale}`);
         assert.equal(measured.overflow, false);
         assert.ok(measured.words < 250, "Default Setup removes repeated explanations without removing choices");
-        assert.equal(await page.locator(".report-step[aria-current=step]").getAttribute("aria-label"), "1. Setup");
-        const clipping = await page.locator("#reportStage1").evaluate(root => [...root.querySelectorAll("label,summary,button")]
+        assert.equal(await page.locator(".report-step[aria-current=step]").getAttribute("aria-label"), "2. Contents");
+        const clipping = await page.locator("#reportStage2").evaluate(root => [...root.querySelectorAll("label,summary,button")]
             .filter(node => node.checkVisibility() && node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
         assert.deepEqual(clipping, []);
-        const rows = await page.locator("#reportStage1 .scope-choice,#reportStage1 .prompt-choice").evaluateAll(nodes => nodes.map(node => {
+        const rows = await page.locator("#reportStage2 .prompt-choice").evaluateAll(nodes => nodes.map(node => {
             const style = getComputedStyle(node);
             const contentHeight = Math.max(...[...node.children].map(child => child.getBoundingClientRect().height));
             return { text: node.textContent, actual: node.getBoundingClientRect().height,
@@ -137,6 +143,7 @@ test("verified empty transitions through actual review, separate save, frozen re
     const { page, context, writes } = await setup(t);
     const before = await loadBoardState(context);
     await chooseReportScope(page, "all");
+    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
     await page.locator("#formatOptions input[value=html]").uncheck();
     assert.equal(await page.locator("#exportBtn").isDisabled(), true);
     await page.locator("#formatOptions input[value=html]").check();
@@ -147,10 +154,10 @@ test("verified empty transitions through actual review, separate save, frozen re
     assert.ok(await page.locator("#reportReviewBody .prompt-comparison").count() > 0);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     assert.equal((await loadBoardState(context)).exports.length, 0, "Review is not Save");
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     const saved = (await loadBoardState(context)).exports[0];
     const frozenBefore = await Promise.all(Object.values(saved.files).map(file => readFile(file)));
@@ -177,7 +184,7 @@ test("verified empty transitions through actual review, separate save, frozen re
     await page.locator(".deletion-dialog:modal").getByRole("button", { name: "Close", exact: true }).click();
     await page.locator(".deletion-dialog:modal").waitFor({ state: "hidden" });
     assert.equal(await page.locator("#savedReportSearch").isVisible(), false);
-    await page.waitForFunction(() => document.activeElement?.matches("#bundles > summary,#reportCreateLink") && document.activeElement.checkVisibility());
+    await page.waitForFunction(() => document.activeElement?.matches("#savedLibraryTitle,#reportCreateLink") && document.activeElement.checkVisibility());
     let release;
     const gate = new Promise(resolve => { release = resolve; });
     t.after(() => release());

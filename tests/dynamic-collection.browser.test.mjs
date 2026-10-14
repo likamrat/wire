@@ -74,7 +74,7 @@ test("synthetic UI: fresh source approval, new session updates without reload, f
     await runtime.collector.collectNow();
     await page.locator("#newDataNotice").waitFor({ state: "visible", timeout: 15000 });
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.locator("#reportsView [data-clear-selection]").first().click();

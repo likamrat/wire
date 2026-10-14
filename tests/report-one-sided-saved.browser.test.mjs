@@ -96,7 +96,7 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         if (page.url().startsWith(runtime.url)) await page.reload();
         else await page.goto(runtime.url + "#reports");
         await page.locator('#workspace[aria-busy="false"]').waitFor();
-        if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#bundles>summary").click();
+        if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
         await page.locator("#savedReportSearch").fill(bundleId);
     }
     const item = id => page.locator(`#bundleList details[data-disclosure-key="bundle:${id}"]`);
@@ -108,13 +108,13 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         const rows = page.locator("#comparisonWorkspace .comparison-metrics tbody tr");
         const personal = rows.filter({ hasText: "Your feedback" });
         assert.equal(await personal.count(), 1);
-        assert.match(await personal.locator("th").innerText(), /Accuracy[\s\S]*Your feedback/);
+        assert.match(await personal.locator("th").innerText(), /Answer correctness/);
         const values = await personal.locator(".comparison-metric-value").allTextContents();
         assert.deepEqual(values, side === "baseline" ? ["0%", "Not saved"] : ["Not saved", "0%"]);
         assert.match(await personal.locator("td").last().innerText(), /Not comparable/);
         assert.equal(await personal.locator(".comparison-delta").count(), 0);
-        const automatic = rows.filter({ hasText: "Local observation (not a model assessment)" }).filter({ hasText: "Accuracy" });
-        assert.deepEqual(await automatic.locator(".comparison-metric-value").allTextContents(), ["Not assessed", "Not assessed"]);
+        const automatic = rows.filter({ hasText: "Local observation (not a model assessment)" }).filter({ hasText: "Answer correctness" });
+        assert.deepEqual(await automatic.locator(".comparison-metric-value").allTextContents(), ["Not checked automatically", "Not checked automatically"]);
     }
     for (const direction of directions) {
         await showReports(direction.baseline.bundleId);
@@ -182,7 +182,7 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         await frame.locator(".comparison-unavailable > summary").click();
         assert.match(await frame.locator(".report-comparison").innerText(), /Not preserved/);
         assert.match(await frame.locator(".report-comparison").innerText(), /No value has been reconstructed/);
-        await page.getByRole("button", { name: "Close saved comparison", exact: true }).click();
+        await page.getByRole("button", { name: "Back to report library", exact: true }).click();
         assert.deepEqual(await fileHashes(direction.legacy), direction.legacyHashes);
     }
     assert.deepEqual(await Promise.all([withoutFeedback, withFeedback].map(fileHashes)), sourceHashes);

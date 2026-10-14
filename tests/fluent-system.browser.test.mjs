@@ -319,7 +319,7 @@ test("populated saved-report comparison inherits Fluent roles without changing f
     });
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await page.locator("#bundles>summary").click();
+    await page.locator("#savedLibraryTitle").click();
     const row = page.locator("#bundleList summary").filter({ hasText: bundles[0].bundleId }).locator("..");
     await row.locator(":scope>summary").click();
     await row.getByRole("button", { name: "Compare saved reports", exact: true }).click();

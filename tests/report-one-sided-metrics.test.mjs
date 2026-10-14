@@ -35,7 +35,9 @@ for (const basis of ["user-assessment", "automatic-assessment"]) for (const side
         assert.deepEqual(row[side].coverage, { count: 2, eligible: 3, missing: 1 });
         const formatting = createReportComparison();
         const origin = basis === "user-assessment" ? "Your feedback" : "Automatic local checks";
-        assert.equal(formatting.definitionLabel(row), origin);
+        assert.equal(formatting.definitionLabel(row), "", "A one-sided origin must not label its absent peer");
+        assert.equal(formatting.sideDefinitionLabel(row, side), origin);
+        assert.equal(formatting.sideDefinitionLabel(row, missing), "");
         assert.equal(formatting.metricPresentation(row[missing], "accuracy").value, "Not saved");
         assert.equal(formatting.metricPresentation(row[side], "accuracy").value, side === "baseline" ? "0%" : "50%");
         const html = comparisonBodyHtml(result);
@@ -46,7 +48,7 @@ for (const basis of ["user-assessment", "automatic-assessment"]) for (const side
             bundleId: "export-fixture", preparedAtDisplay: "Synthetic one-sided proof",
             sourceReports: [result.baseline, result.later],
         });
-        const line = markdown.split("\n").find(item => item.startsWith("| Accuracy"));
+        const line = markdown.split("\n").find(item => item.startsWith("| Answer correctness"));
         assert.ok(line.includes(origin));
         assert.ok(line.includes(side === "baseline" ? "0%" : "50%"));
         assert.match(line, /Not saved/);
@@ -81,6 +83,7 @@ for (const side of ["baseline", "later"]) test(`one-sided unavailable automatic 
     assert.equal(row[side === "baseline" ? "later" : "baseline"], null);
     assert.equal(row.delta, null);
     const formatting = createReportComparison();
-    assert.equal(formatting.definitionLabel(row), "Local observation (not a model assessment)");
-    assert.equal(formatting.metricPresentation(row[side], "accuracy").value, "Not assessed");
+    assert.equal(formatting.definitionLabel(row), "");
+    assert.equal(formatting.sideDefinitionLabel(row, side), "Local observation (not a model assessment)");
+    assert.equal(formatting.metricPresentation(row[side], "accuracy").value, "Not checked automatically");
 });

@@ -76,7 +76,8 @@ async function inspect(t, name, bundle) {
     const compact = value => value.replace(/\s+/g, "").toLowerCase();
     const pdfPages = pages.map(compact);
     const samePage = texts => pdfPages.some(text => texts.every(part => text.includes(compact(part))));
-    const timingWarning = createReportComparison().readingNotes[3];
+    const nativeTimingNote = page.locator("#timing > .reading-note").last();
+    const timingWarning = await nativeTimingNote.count() ? await nativeTimingNote.textContent() : createReportComparison().readingNotes[3];
     assert.ok(samePage([timingWarning]), "A complete timing warning must not leave its final sentence on another page");
     const groups = await page.evaluate(() => ({
         tables: [...document.querySelectorAll(".native-table,.comparison-metrics,.comparison-patterns")].filter(table => table.tBodies[0]?.rows.length)
@@ -86,13 +87,16 @@ async function inspect(t, name, bundle) {
                 section.querySelector("tbody tr th").textContent]),
         charts: [...document.querySelectorAll(".native-breakdowns section")].filter(section => section.querySelector(".native-bar-heading"))
             .map(section => [section.querySelector("h3").textContent, section.querySelector(".native-bar-heading").textContent]),
-        coverage: [...document.querySelectorAll("#coverage>ul>li")].map(item => item.textContent),
+        coverage: [...document.querySelectorAll("#coverage ul>li")].map(item => item.textContent),
         notes: [...document.querySelectorAll(".reading-notes p,#definitions>p")].map(item => item.textContent),
         noteLeads: [...document.querySelectorAll(".comparison-document .reading-notes")].filter(section => section.querySelector("h2") && section.querySelector("p"))
             .map(section => [section.querySelector("h2").textContent, section.querySelector("p").textContent]),
     }));
     for (const group of [...groups.tables, ...groups.charts, ...groups.disclosures, ...groups.noteLeads]) assert.ok(samePage(group), `A heading/caption must stay with first data: ${group.join(" / ")}`);
-    if (groups.coverage.length) assert.ok(samePage(["Coverage and reading notes", ...groups.coverage]), "The bounded coverage notes must retain their heading and full list");
+    if (groups.coverage.length) {
+        assert.ok(samePage(["Coverage and reading notes", "Recorded numbers"]), "Coverage starts with its actual data rather than an orphaned heading");
+        for (const note of groups.coverage) assert.ok(samePage([note]), "Each short coverage note stays intact while the section can flow naturally");
+    }
     for (const note of groups.notes) assert.ok(samePage([note]), `Keep the complete short reading note together: ${note}`);
     const semanticText = await page.locator("p,li,pre,th,td,h2,h3,h4,summary").evaluateAll(nodes => nodes.map(node => {
         const copy = node.cloneNode(true);
@@ -168,9 +172,9 @@ test("F11 normal outputs retain metric origins once per row and use singular ser
     const bundle = await buildSanitizedBundle(records, key, { promptMode: "masked", formats }, undefined, undefined, facts);
     const { page, texts } = await inspect(t, "normal-metrics", bundle);
     for (const text of texts.map(text => text.replace(/-\s+/g, "-").replace(/\s+/g, " "))) {
-        assert.match(text, /1 call has missing service details/);
-        assert.match(text, /1 preparation call has no applicable data service/);
-        assert.match(text, /recorded error mentions access denial/);
+        assert.match(text, /1 call with missing or partial service details/);
+        assert.match(text, /1 preparation call with no applicable data service/);
+        assert.match(text, /Recorded access denial/);
         assert.match(text, /1 of 2 passed/);
         assert.match(text, /2 of 3 assessed/);
         assert.match(text, /Tool use vs\. request/);
@@ -607,7 +611,7 @@ test("F11 revised requests and bounded no-JSON reports give honest evidence path
         assert.doesNotMatch(text, /product-report\.json|see complete projected records/i);
         assert.match(text, /aggregate/i);
         assert.match(text, /11 earlier/);
-        assert.match(text, /not.*full.*records|not.*omitted.*records/i);
+        assert.match(text.replace(/\s+/g, " "), /not.*full.*records|not.*omitted.*records/i);
     }
     assert.match(bounded.files["product-report.md"], /18\. [^\n]+\n\n11 earlier/);
     const noPdf = await buildSanitizedBundle(many, key, { promptMode: "original", formats: ["html", "markdown"] });

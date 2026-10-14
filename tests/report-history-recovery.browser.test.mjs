@@ -47,8 +47,8 @@ async function save(page) {
     await chooseReportScope(page, "all");
     await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
 }
 async function history(page) {
@@ -74,7 +74,7 @@ test("UX-001 ordinary copy edit has one accurate recovery instruction", { timeou
     const editor = page.locator(".prompt-comparison textarea").first();
     await editor.fill("Artificial revised report copy");
     const guidance = await page.locator("#reportJourneyError:visible,.rebuild-preview:visible").allTextContents();
-    assert.equal(await page.getByRole("button", { name: "Complete disclosure review", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Approve for local saving", exact: true }).isDisabled(), true);
     assert.doesNotMatch(guidance.join("\n"), /Return to Contents/i, "Ordinary copy edits must not direct the user away from available Rebuild preview");
     assert.equal(guidance.length, 1, "Exactly one recovery instruction");
     assert.match(guidance[0], /Rebuild preview/);
@@ -96,7 +96,7 @@ test("UX-001 ordinary copy edit has one accurate recovery instruction", { timeou
     await page.locator(".prompt-comparison").first().getByText("Edit or omit this report copy", { exact: true }).click();
     await page.locator(".prompt-comparison").first().getByLabel("Omit this prompt from the report").check();
     assert.equal(await page.locator("#reportJourneyError:visible").count(), 0);
-    assert.equal(await page.getByRole("button", { name: "Complete disclosure review", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Approve for local saving", exact: true }).isDisabled(), true);
     const omitted = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
     assert.equal((await (await omitted).json()).promptReview[0].omitted, true);
@@ -121,7 +121,7 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     assert.deepEqual(state.exports.slice(0, 6), before.exports, "Presentation sorting cannot reorder or rewrite the persisted index");
     assert.deepEqual(await hashes(state.exports.slice(0, 6)), bytes, "Old artifact bytes remain frozen");
     const first = page.locator("#bundleList details").first();
-    assert.match(await first.locator(".saved-report-management").textContent(), /1 request group/, "Secondary membership remains available in Manage");
+    assert.match(await first.locator(".saved-report-summary").textContent(), /1 interaction/, "Membership is available without opening a second explanation");
     await first.locator(":scope > summary").focus();
     await page.keyboard.press("Enter");
     assert.equal(await first.evaluate(node => node.open), false);
@@ -176,8 +176,8 @@ test("UX-003 deleting the displayed saved report removes its ready result", { ti
     await chooseReportScope(page, "all");
     await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     await openReportLibrary(page);
     await page.locator("#bundleList details > summary").first().click();
@@ -201,7 +201,7 @@ test("UX-001 non-copy source and contents invalidations never retain the copy-on
     await read; await page.locator('#workspace[aria-busy="false"]').waitFor();
     assert.equal(await page.getByRole("button", { name: "Rebuild preview", exact: true }).count(), 0);
     assert.match(await page.locator("#reportJourneyError").textContent(), /new|fresh.*preview/i);
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
     for (const choice of ["mode", "format", "scope"]) {
         await scanReport(page);
         if (choice === "scope") await chooseReportScope(page, "selected");
@@ -210,8 +210,8 @@ test("UX-001 non-copy source and contents invalidations never retain the copy-on
             if (choice === "mode") await page.locator("[name=promptMode][value=original]").check();
             else await page.locator("#formatOptions input[value=json]").check();
         }
-        assert.equal(await page.getByRole("button", { name: "2. Review", exact: true }).isDisabled(), true);
-        assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
+        assert.equal(await page.locator(".attestation input[data-review-control]").isDisabled(), true);
         assert.equal(await page.getByRole("button", { name: "Rebuild preview", exact: true }).count(), 0);
     }
     assert.equal(requests.filter(value => value === "/api/export").length, 0);
@@ -283,10 +283,9 @@ test("UX-003 late completed deletion receipt cannot clear a successor saved repo
     const dialog = await deleteReport(page, old.bundleId);
     await dialog.getByRole("button", { name: "Check deletion result", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    await (await revealStoredRefresh(page)).click();
-    await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await page.locator("#reportsView[data-report-phase=unavailable]").waitFor();
     await openReportCreation(page);
-    await page.getByRole("button", { name: "Start a new report", exact: true }).click();
+    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft");
     await save(page);
     const successor = (await loadBoardState(context)).exports.at(-1);
     await page.getByRole("button", { name: "Check earlier saved-item deletion", exact: true }).click();
@@ -310,8 +309,8 @@ test("UX-003 a delayed export receipt cannot claim a report deleted before the r
     }, { times: 1 });
     await chooseReportScope(page, "all"); await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await pending;
     const saved = (await loadBoardState(context)).exports.at(-1);
     const other = await page.context().newPage();
@@ -333,7 +332,7 @@ test("UX-003 an in-flight download is not dispatched after the displayed target 
     let entered, release;
     const pending = new Promise(resolve => { entered = resolve; }), held = new Promise(resolve => { release = resolve; });
     t.after(() => release());
-    await page.route("**/api/report-file", async route => {
+    await page.route("**/api/artifact-file", async route => {
         const response = await route.fetch();
         entered(); await held; await route.fulfill({ response });
     }, { times: 1 });
@@ -344,7 +343,7 @@ test("UX-003 an in-flight download is not dispatched after the displayed target 
     const dialog = await deleteReport(page, saved.bundleId);
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    const response = page.waitForResponse(value => value.url().endsWith("/api/report-file"));
+    const response = page.waitForResponse(value => value.url().endsWith("/api/artifact-file"));
     release(); await response;
     await page.waitForTimeout(200);
     assert.deepEqual(downloads, [], "A stale file response cannot start a new browser download");
@@ -364,7 +363,8 @@ test("UX-002 report/comparison labels preserve named actions, chooser eligibilit
     assert.match(await comparisonRow.locator(":scope > summary").textContent(), /^Comparison.*HTML, JSON/);
     await comparisonRow.locator(":scope > summary").click();
     await comparisonRow.locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
-    await page.locator("#comparisonWorkspace").getByRole("heading", { name: "Saved comparison", exact: true }).waitFor();
+    await page.getByRole("dialog", { name: "Saved comparison", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     const dialog = await deleteReport(page, sources[0].bundleId);
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
@@ -383,9 +383,9 @@ test("UX-003 confirmed save with failed availability refresh stays explicit and 
     const { page, context, requests } = await setup(t);
     await chooseReportScope(page, "all"); await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Synthetic saved-list read unavailable" } }), { times: 1 });
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     assert.match(await page.locator("#reportJourneyError").textContent(), /save was confirmed.*availability could not be checked.*do not save it again/);
     assert.match(await page.locator("#message").textContent(), /use Retry without repeating the save/);

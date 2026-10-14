@@ -34,12 +34,12 @@ test("changed selected evidence cannot approve the otherwise frozen report previ
     await replaceEvidence(context, () => ({ records: [selected, outside], importCoverage: { counts: { includedSessions: 1, includedProjects: 1 }, roster: [] } }));
     await page.locator(".attestation input[data-review-control]").check();
     const review = page.waitForResponse(response => response.url().endsWith("/api/privacy-review"));
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     const response = await review;
     assert.equal(response.status(), 409, await response.text());
     assert.equal((await loadBoardState(context)).exports.length, 0);
     assert.equal(await page.locator(".report-frame").getAttribute("srcdoc"), originalPreviewText, "The rejected frozen preview is not silently rebuilt from changed evidence.");
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isEnabled(), false);
+    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isEnabled(), false);
     assert.equal(calls.includes("/api/export"), false);
     assert.ok(calls.every(path => [
         "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview",

@@ -76,7 +76,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await chooseReportScope(page, "all"); await reportContents(page); await page.locator("[name=promptMode][value=none]").check();
     const draft = await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     await openReportLibrary(page);
     const rowFor = id => page.locator(".saved-report").filter({ has: page.locator(".mono", { hasText: `Report ID: ${id}` }) });
@@ -90,7 +90,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await dialog.locator("iframe").waitFor();
     const frame = dialog.frameLocator("iframe");
     await frame.getByText("FROZEN_LEGACY_VALUE", { exact: true }).waitFor();
-    assert.match(await dialog.innerText(), new RegExp(first.bundleId));
+    assert.doesNotMatch(await dialog.innerText(), /Report ID:/, "Full identifiers remain in library details rather than competing with the saved document");
     assert.equal(await dialog.locator("iframe").getAttribute("sandbox"), "");
     assert.equal(await frame.locator('a[href]:not([href^="about:srcdoc#"])').count(), 0);
     assert.equal(await frame.locator("html").getAttribute("data-evidence-theme"), "light", "The frozen theme survives an OS-dark reader.");
@@ -135,7 +135,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     assert.equal(headerLayout.overflow, false);
     assert.ok(headerLayout.close.height >= 44 && headerLayout.close.x >= 0 && headerLayout.close.right <= 375);
     assert.ok(headerLayout.close.y >= 0 && headerLayout.close.bottom <= 1000);
-    const keyboardClose = dialog.getByRole("button", { name: "Close saved report", exact: true });
+    const keyboardClose = dialog.getByRole("button", { name: "Back to report library", exact: true });
     await keyboardClose.focus();
     assert.equal(await keyboardClose.evaluate(node => node === document.activeElement), true);
     await page.keyboard.press("Enter");
@@ -145,7 +145,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
     await open.click();
     await dialog.locator("iframe").waitFor();
-    await dialog.getByRole("button", { name: "Close saved report", exact: true }).click();
+    await dialog.getByRole("button", { name: "Back to report library", exact: true }).click();
     assert.equal(await open.evaluate(node => document.activeElement === node), true);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), true);
@@ -157,14 +157,14 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
         const response = await route.fetch(); read.resolve(); await release.promise; await route.fulfill({ response });
     });
     await open.click(); await read.promise;
-    await dialog.getByRole("button", { name: "Close saved report", exact: true }).click();
+    await dialog.getByRole("button", { name: "Back to report library", exact: true }).click();
     await secondRow.locator(":scope > summary").click();
     await secondRow.locator("..").getByRole("button", { name: "Open saved report", exact: true }).click();
     await dialog.locator("iframe").waitFor(); release.resolve();
     await page.waitForTimeout(50);
-    assert.match(await dialog.innerText(), new RegExp(second.bundleId));
+    assert.match(await dialog.frameLocator("iframe").locator("body").textContent(), new RegExp(second.bundleId));
     assert.equal(await dialog.frameLocator("iframe").getByText("FROZEN_LEGACY_VALUE", { exact: true }).count(), 0);
-    await dialog.getByRole("button", { name: "Close saved report", exact: true }).click();
+    await dialog.getByRole("button", { name: "Back to report library", exact: true }).click();
     const missingRow = rowFor(missing.bundleId); await missingRow.locator(":scope > summary").click();
     assert.equal(await missingRow.getByRole("button", { name: "Open saved report", exact: true }).count(), 0);
     assert.match(await missingRow.innerText(), /HTML was not saved/);

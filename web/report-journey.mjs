@@ -1,8 +1,101 @@
+// Prepared copies alone permit parent measurement; saved readers keep their opaque sandbox.
+export function createPreparedReportFrame(html, frozenFrame, { onError, doc = document } = {}) {
+    if (typeof frozenFrame !== "function" || typeof onError !== "function") throw new TypeError("Prepared reports require sanitization and an error handler.");
+    const frame = frozenFrame(html, doc), view = doc.defaultView;
+    frame.title = "Prepared report";
+    frame.setAttribute("sandbox", "allow-same-origin");
+    frame.style.height = "1px";
+    let active = true, source, scheduled = 0, lastWidth = -1, selfResizes = 0;
+    const bodySize = new view.ResizeObserver(schedule);
+    const frameSize = new view.ResizeObserver(() => {
+        if (frame.clientWidth !== lastWidth) { lastWidth = frame.clientWidth; refresh(); }
+    });
+    const textSize = new view.MutationObserver(refresh);
+    const removal = new view.MutationObserver(changes => {
+        if (!frame.isConnected && changes.some(change => [...change.removedNodes].some(node => node === frame || node.contains?.(frame)))) dispose();
+    });
+    function current() { return active && frame.isConnected && source === frame.contentDocument; }
+    function schedule() {
+        if (!active || scheduled) return;
+        scheduled = view.requestAnimationFrame(measure);
+    }
+    function refresh() { selfResizes = 0; schedule(); }
+    function measure() {
+        scheduled = 0;
+        if (!current() || !frame.checkVisibility()) return;
+        const fontSize = view.getComputedStyle(doc.documentElement).fontSize;
+        if (source.documentElement.style.fontSize !== fontSize) source.documentElement.style.fontSize = fontSize;
+        const body = source.body, style = frame.contentWindow.getComputedStyle(body);
+        const frameStyle = view.getComputedStyle(frame);
+        const edges = frameStyle.boxSizing === "border-box"
+            ? ["borderTopWidth", "borderBottomWidth", "paddingTop", "paddingBottom"].reduce((sum, key) => sum + (parseFloat(frameStyle[key]) || 0), 0) : 0;
+        const height = Math.ceil(Math.max(body.scrollHeight, body.getBoundingClientRect().height)
+            + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0) + edges);
+        if (Math.abs(parseFloat(frame.style.height) - height) <= 1) { selfResizes = 0; return; }
+        // Viewport-relative content can otherwise grow its own viewport indefinitely.
+        if (++selfResizes > 8) {
+            dispose();
+            onError("The prepared report layout did not settle. Prepare the report again.");
+            return;
+        }
+        frame.style.height = height + "px";
+    }
+    function navigate(event) {
+        const link = event.target.closest?.("a[href]");
+        if (!link || !current()) return;
+        event.preventDefault();
+        const id = link.getAttribute("href").split("#")[1];
+        const target = id && source.getElementById(id);
+        if (!target) return;
+        for (let parent = target.parentElement; parent; parent = parent.parentElement) if (parent.localName === "details") parent.open = true;
+        measure();
+        const toolbar = frame.closest(".report-review-body")?.querySelector(".report-inspection-tabs");
+        const offset = (toolbar?.getBoundingClientRect().bottom ?? parseFloat(view.getComputedStyle(doc.documentElement).scrollPaddingTop)) || 0;
+        const top = view.scrollY + frame.getBoundingClientRect().top + target.getBoundingClientRect().top - offset - 12;
+        if (!target.hasAttribute("tabindex")) target.tabIndex = -1;
+        target.focus({ preventScroll: true });
+        view.scrollTo({ top });
+    }
+    function loaded() {
+        if (!active || !frame.isConnected) return;
+        source = frame.contentDocument;
+        if (!source?.body) {
+            dispose();
+            onError("The prepared report could not be displayed. Prepare a new preview.");
+            return;
+        }
+        source.addEventListener("click", navigate);
+        source.addEventListener("toggle", refresh, true);
+        source.fonts.addEventListener("loadingdone", refresh);
+        bodySize.observe(source.body);
+        source.fonts.ready.then(refresh);
+        schedule();
+    }
+    function dispose() {
+        if (!active) return;
+        active = false;
+        view.cancelAnimationFrame(scheduled);
+        bodySize.disconnect(); frameSize.disconnect(); textSize.disconnect(); removal.disconnect();
+        frame.removeEventListener("load", loaded);
+        source?.removeEventListener("click", navigate);
+        source?.removeEventListener("toggle", refresh, true);
+        source?.fonts.removeEventListener("loadingdone", refresh);
+        source = undefined;
+        frame.srcdoc = "";
+        frame.remove();
+    }
+    frame.addEventListener("load", loaded);
+    frameSize.observe(frame);
+    textSize.observe(doc.documentElement, { attributes: true, attributeFilter: ["style", "class"] });
+    textSize.observe(doc.head, { childList: true, subtree: true, characterData: true });
+    removal.observe(doc.body, { childList: true, subtree: true });
+    return { frame, dispose };
+}
+
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.
-export function createReportJourney({ root, cancelReview, clearSelection, chooseRequests, showSourceIssues, downloadFile, openSavedReport, onStateChange } = {}) {
-    const labels = ["Setup", "Review", "Save locally"];
-    const questions = ["Set up your report", "Review your report", "Save your reviewed report"];
-    const modes = { none: "No prompts", masked: "Masked prompts", original: "Original prompts" };
+export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, showSourceIssues, downloadFile, openSavedReport, icon, onStateChange } = {}) {
+    const labels = ["Activity", "Contents", "Review & save"];
+    const questions = ["Choose activity", "Choose contents", "Review and save your report"];
     let step = 1, reached = 1, phase = "draft", preview, bundle, failure = "";
     let saveUnconfirmed = false;
     let model = { requestCount: 0, scope: "selected", scopeReady: false, scopeIssue: "", promptMode: "masked", formats: ["html"], timeLabel: "", entry: null };
@@ -19,17 +112,16 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
     }
     const snapshot = () => ({ step, reached, phase, saveUnconfirmed, hasPreview: Boolean(preview), completed: Boolean(bundle), ...structuredClone(model) });
     const ready = () => model.scopeReady && model.requestCount > 0;
-    const formatNames = () => model.formats.map(value => value === "markdown" ? "Markdown" : value.toUpperCase()).join(", ");
     const isWriting = () => phase === "writing";
     function reason(target) {
         if (isWriting()) return "Wait for the current local save to finish.";
         if (saveUnconfirmed) return "Check save status before preparing another report. The local write may have completed.";
         if (target === 1) return "";
         if (target === 3 && phase === "saved") return "";
-        if (!ready()) return model.scopeIssue || "Choose at least one readable request in Setup.";
-        if (!preview) return model.formats.length ? "Choose the report contents, then scan and preview in Setup." : "Choose at least one format in Setup.";
+        if (!ready()) return model.scopeIssue || "Choose at least one readable interaction in Activity.";
         if (target === 2) return "";
-        return ["reviewed", "saved"].includes(phase) ? "" : "Review the actual report and explicitly approve disclosure in Review.";
+        if (!preview) return model.formats.length ? "Prepare the report in Contents before reviewing it." : "Choose at least one format in Contents.";
+        return "";
     }
     function text(node, value) {
         if (node && node.textContent !== value) node.textContent = value;
@@ -50,30 +142,32 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             else control.removeAttribute("aria-current");
         });
         text(nodes.progress, phase === "saved" ? "Report saved" : phase === "unavailable" ? "Saved report unavailable" : `Step ${step} of 3`);
-        text(nodes.summary, bundle ? "Saved files use the reviewed snapshot." : model.requestCount ? `${({ selected: "Selected requests", current: "Current view", all: "All collected activity", period: "Two frozen comparison cohorts" })[model.scope]} / ${model.authorLabel ? model.authorLabel + " / " : ""}${modes[model.promptMode]} / ${formatNames() || "Choose a format"}` : "Nothing is included automatically.");
-        nodes.summary.hidden = step === 1;
+        text(nodes.scopeName, ({ selected: "Selected interactions", current: "Current Analyze view", all: "All saved sessions", period: "Paired periods" })[model.scope]
+            + (model.authorFiltered ? ` · ${model.authorLabel}` : ""));
+        nodes.start.hidden = step !== 1;
         text(nodes.context, model.entry
-            ? `GitHub Copilot chat: ${model.entry.sessionName || "Copilot chat name not recorded"} / ${model.entry.projectId ? "Copilot project: " + (model.entry.projectName || "Name unavailable") : "Copilot chat without a project"}. Complete eligible groups across all retained dates and services; new groups are not added automatically.`
+            ? `${model.entry.sessionName || "Copilot chat name not recorded"} · Saved activity across all retained dates and services. New interactions are not added automatically.`
             : "");
-        nodes.context.hidden = !nodes.context.textContent;
-        text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable requests in this Copilot chat. Return to the chat or check source issues." : "Choose at least one readable interaction in Analyze, or use another scope above."));
+        nodes.context.hidden = !nodes.context.textContent || step !== 1;
+        text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable interactions in this chat. Check source issues or choose another scope." : "Choose a scope above or select interactions below."));
         nodes.gap.hidden = ready();
         nodes.issues.hidden = ready() || !model.entry || !showSourceIssues;
-        text(nodes.choose, model.entry ? "Back to Copilot chat" : "Choose interactions in Analyze");
-        nodes.choose.hidden = ready();
-        nodes.choose.classList.toggle("primary", !ready());
+        nodes.next.disabled = !ready() || isWriting() || saveUnconfirmed;
         nodes.backButtons.forEach(control => {
             control.disabled = isWriting() || saveUnconfirmed;
-            if (control.dataset.target === "2") text(control, preview ? "Back to review" : "Back to setup");
         });
-        const returnToSave = nodes.reviewActions.querySelector("#reportReturnToSave");
-        if (returnToSave) returnToSave.hidden = phase !== "reviewed";
         if (nodes.reviewControl) nodes.reviewControl.hidden = phase === "reviewed";
-        text(nodes.scan, preview ? "Return to review" : "Scan and preview");
+        nodes.reviewActions.hidden = ["reviewed", "writing", "saved", "unavailable"].includes(phase) || saveUnconfirmed;
+        nodes.saveActions.hidden = !["reviewed", "writing"].includes(phase);
+        nodes.reviewHost.hidden = ["saved", "unavailable"].includes(phase);
+        nodes.saveHost.hidden = !["saved", "unavailable"].includes(phase) && !saveUnconfirmed;
+        text(nodes.scan, preview ? "Return to review" : "Prepare report");
         nodes.error.hidden = !failure;
+        nodes.retry.hidden = !failure || saveUnconfirmed || !readCurrent || isWriting();
         text(nodes.error, failure);
         if (nodes.feedback) nodes.feedback.hidden = Boolean(failure);
         nodes.reviewHost.setAttribute("aria-busy", String(phase === "scanning"));
+        for (const fields of root.querySelectorAll(".report-copy-controls")) fields.disabled = isWriting() || saveUnconfirmed;
         for (const control of root.querySelectorAll("[data-review-control]")) {
             if (!model.scopeReady) {
                 if (!suspendedControls.has(control)) suspendedControls.set(control, control.disabled);
@@ -84,11 +178,12 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             }
         }
         text(nodes.headings[2], phase === "saved" ? "Your report is saved" : phase === "unavailable" ? "Saved report unavailable"
-            : phase === "writing" ? "Saving your report" : phase === "blocked" && step === 3 ? "Save not confirmed" : "Save your reviewed report");
+            : phase === "writing" ? "Saving your report" : saveUnconfirmed ? "Save not confirmed" : "Review and save your report");
+        nodes.headings[2].classList.toggle("visually-hidden", ["ready", "reviewed"].includes(phase));
         if (focus) {
-            const samePreview = step < 2 || reading?.previewId === preview?.previewId;
+            const samePreview = step < 3 || reading?.previewId === preview?.previewId;
             const prior = reading?.focus;
-            const replacement = step === 2 ? nodes.reviewActions.querySelector("#reportReturnToSave") : null;
+            const replacement = step === 3 && phase === "reviewed" ? nodes.saveActions.querySelector("button") : null;
             const target = prior?.isConnected && prior.checkVisibility() && !prior.disabled ? prior
                 : replacement?.checkVisibility() && !replacement.disabled ? replacement : null;
             if (reading && samePreview && target && nodes.panels[step - 1].contains(target)) {
@@ -111,14 +206,16 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             phase = "draft";
             reached = 1;
             failure = "";
+            nodes?.reviewHost.replaceChildren();
             nodes?.saveHost.replaceChildren();
             nodes?.saveActions.replaceChildren();
         }
-        if (phase === "scanning" && target < 2) {
+        if (phase === "scanning" && target < 3) {
             cancelReview?.();
             phase = "draft";
             if (nodes) nodes.reviewHost.replaceChildren();
         }
+        if (phase === "blocked" && target < 3) { phase = "draft"; failure = ""; }
         step = target;
         reached = Math.max(reached, target);
         paint(true, returning ? positions.get(target) : null);
@@ -130,7 +227,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         suspendedControls.clear();
         preview = undefined;
         phase = "draft";
-        reached = Math.min(reached, 1);
+        reached = Math.min(reached, 2);
         if (nodes) {
             for (const control of root.querySelectorAll("[data-review-control]")) {
                 control.disabled = true;
@@ -139,8 +236,8 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             nodes.saveHost.replaceChildren();
             nodes.saveActions.replaceChildren();
         }
-        if ((hadPreview || message !== undefined || failure) && step >= 2) {
-            failure = message ?? "This preview is no longer current. Return to Setup and scan again before approving or saving.";
+        if ((hadPreview || message !== undefined || failure) && step === 3) {
+            failure = message ?? "This report changed. Return to Contents and prepare it again before approving or saving.";
         }
         paint();
     }
@@ -193,7 +290,8 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         const shell = el("div", "report-journey"), nav = el("nav", "report-progress"), list = el("ol");
         shell.id = "reportCreatePanel";
         nav.setAttribute("aria-label", "Report creation steps");
-        const progress = el("p", "report-progress-label visually-hidden"), summary = el("p", "report-choice-summary"), context = el("p", "report-entry-context");
+        const progress = el("p", "report-progress-label visually-hidden"), summary = el("div", "report-content-context"), context = el("p", "report-entry-context");
+        const scopeName = el("span", "report-content-scope");
         progress.setAttribute("role", "status");
         const steps = [], stepHints = [], panels = [], headings = [], backButtons = [];
         labels.forEach((label, index) => {
@@ -219,15 +317,21 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         nav.append(list);
         const existingStart = root.querySelector(".report-start");
         const scan = byId("exportBtn"), scanWrapper = scan.closest(".ux-disabled-help") || scan;
-        const controls = root.querySelector(".report-preview-controls");
-        controls.append(summary);
-        shell.append(progress, nav, existingStart, context);
+        summary.append(scopeName, byId("previewSelectionSummary"));
+        shell.append(progress, nav, context);
         const error = el("p", "notice error report-journey-error");
         error.id = "reportJourneyError";
         error.setAttribute("role", "alert");
         error.tabIndex = -1;
         shell.append(error);
-        const gap = el("p", "report-scope-gap"), choose = button("Choose interactions in Analyze", () => chooseRequests?.(), "primary");
+        const retry = button("Read current activity", async () => {
+            retry.disabled = true;
+            try { if (await readCurrent()) go(2); }
+            finally { retry.disabled = false; }
+        });
+        retry.dataset.storedRefreshRetry = "";
+        shell.append(retry);
+        const gap = el("p", "report-scope-gap"), next = button("Continue to contents", () => go(2), "primary");
         gap.id = "reportScopeGap";
         const issues = button("View source issues", () => showSourceIssues?.(), "quiet");
         const scope = root.querySelector(".export-scope"), choices = scope.querySelector(".scope-choices");
@@ -244,39 +348,41 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
         scopeLayout.append(scope, authorChoice);
         panels[0].append(scopeLayout);
         const firstFooter = el("div", "report-stage-actions");
-        firstFooter.append(gap, choose, issues, scanWrapper);
+        firstFooter.append(gap, issues, existingStart, next);
         root.querySelector(".report-text-options").append(byId("additionalMasking"));
-        panels[0].append(root.querySelector(".report-options"), firstFooter, scopeDetails, byId("reportRequests"));
+        panels[0].append(firstFooter, byId("reportRequests"), scopeDetails);
+        const contentFooter = el("div", "report-stage-actions"), activityBack = button("Back to activity", () => go(1));
+        backButtons.push(activityBack);
+        contentFooter.append(activityBack, scanWrapper);
+        panels[1].append(summary, root.querySelector(".report-options"), contentFooter);
         // Revisiting unchanged choices returns to the same frozen review; it never records approval.
         scan.addEventListener("click", event => {
             if (!preview) return;
             event.preventDefault();
             event.stopImmediatePropagation();
-            go(2);
+            go(3);
         }, true);
         const reviewHost = el("div", "report-review-body"), saveHost = el("div", "report-save-body");
         reviewHost.id = "reportReviewBody";
         saveHost.id = "reportSaveBody";
-        panels[1].append(reviewHost);
-        panels[2].append(saveHost);
+        panels[2].append(reviewHost, saveHost);
         const reviewActions = el("div", "report-next-actions"), saveActions = el("div", "report-next-actions");
-        for (const [panel, label, target] of [[panels[1], "Back to setup", 1], [panels[2], "Back to review", 2]]) {
-            const footer = el("div", "report-stage-actions"), back = button(label, () => go(target === 2 && !preview ? 1 : target));
-            back.dataset.target = String(target);
-            backButtons.push(back);
-            footer.append(back, target === 1 ? reviewActions : saveActions);
-            panel.append(footer);
-        }
+        const reviewFooter = el("div", "report-stage-actions"), back = button("Back to contents", () => go(2));
+        reviewFooter.id = "reportDecision";
+        reviewFooter.tabIndex = -1;
+        backButtons.push(back);
+        reviewFooter.append(back, reviewActions, saveActions);
+        panels[2].append(reviewFooter);
         root.insertBefore(shell, byId("savedReportsPanel"));
         shell.append(...panels);
-        nodes = { panels, steps, stepHints, headings, backButtons, progress, summary, context, gap, choose, issues, scan, error, reviewHost, saveHost, reviewActions, saveActions, el, button };
+        nodes = { panels, steps, stepHints, headings, backButtons, progress, scopeName, context, gap, next, issues, scan, error, retry, reviewHost, saveHost, reviewActions, saveActions, el, button, start: existingStart };
         paint();
     }
     return {
         snapshot, reason, go, invalidate, clear,
         get reviewHost() { return nodes?.reviewHost; },
         get saveHost() { return nodes?.saveHost; },
-        isReviewOpen: () => !saveUnconfirmed && (Boolean(preview) || step >= 2 && phase !== "saved") && (!root || !root.hidden),
+        isReviewOpen: () => !saveUnconfirmed && (Boolean(preview) || phase === "scanning") && (!root || !root.hidden),
         update(patch) {
             model = { ...model, ...structuredClone(patch) };
             paint();
@@ -287,7 +393,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             preview = bundle = undefined;
             failure = "";
             phase = "scanning";
-            step = reached = 2;
+            step = reached = 3;
             nodes?.reviewHost.replaceChildren();
             nodes?.saveHost.replaceChildren();
             nodes?.reviewActions.replaceChildren();
@@ -303,34 +409,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             if (nodes) {
                 const body = nodes.reviewHost, { el } = nodes;
                 body.querySelector(".privacy-steps")?.remove();
-                const comparison = body.querySelector(".prompt-comparisons");
-                if (comparison) {
-                    const disclosure = el("details", "detail-disclosure report-copy-inspection");
-                    const prompts = value.promptReview || [];
-                    const missing = prompts.filter(prompt => prompt.status !== "full" || prompt.original === null).length;
-                    const removals = prompts.reduce((total, prompt) => total + prompt.changes.length, 0);
-                    disclosure.append(el("summary", "", `Inspect ${prompts.length} ${value.snapshot?.recordedContext ? "report" : "prompt"} copies / ${removals} removals / ${missing} incomplete sources`));
-                    comparison.replaceWith(disclosure);
-                    disclosure.append(comparison);
-                    const frame = body.querySelector(".report-frame");
-                    if (frame) disclosure.before(frame.parentElement);
-                }
-                const summary = el("dl", "report-save-summary");
-                for (const [label, content] of [
-                    ["Requests", value.snapshot?.periodComparison
-                        ? `${value.snapshot.periodComparison.periods.baseline.rows.length} matching records in Period A; ${value.snapshot.periodComparison.periods.later.rows.length} in Period B. ${value.records.length} supporting-copy groups; no combined analytical cohort.`
-                        : `${value.records.length} request group${value.records.length === 1 ? "" : "s"} / ${model.authorLabel}`],
-                    ["Prompt copies", modes[value.promptMode]],
-                    ["Files", value.formats.map(format => format === "markdown" ? "Markdown" : format.toUpperCase()).join(", ")],
-                ]) {
-                    const row = el("div");
-                    row.append(el("dt", "", label), el("dd", "", content));
-                    summary.append(row);
-                }
-                nodes.saveHost.append(summary);
-                const snapshotDetails = body.querySelector(".report-snapshot-details");
-                if (snapshotDetails) nodes.saveHost.append(snapshotDetails.cloneNode(true));
-                nodes.saveHost.append(el("p", "report-save-boundary", "Writes these reviewed copies to local files. Nothing is uploaded."));
+                body.querySelector(".report-snapshot-details")?.remove();
                 if (confirm) nodes.saveActions.append(confirm.closest(".ux-disabled-help") || confirm);
                 nodes.feedback = feedback;
                 const review = body.querySelector("button[data-review-control]");
@@ -340,25 +419,15 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
                     nodes.reviewActions.append(nodes.reviewControl);
                 }
                 body.querySelector(".dialog-actions")?.remove();
-                const returnToSave = nodes.button("Continue to save", () => go(3), "primary");
-                returnToSave.id = "reportReturnToSave";
-                returnToSave.hidden = true;
-                nodes.reviewActions.append(returnToSave);
             }
             paint(true);
             return true;
         },
         reviewed() {
             if (phase !== "ready" || !preview) return false;
-            rememberStep();
             phase = "reviewed";
-            step = reached = 3;
-            if (nodes) {
-                nodes.reviewActions.querySelector("#reportReturnToSave").hidden = false;
-                nodes.reviewControl?.setAttribute("hidden", "");
-                if (nodes.feedback) nodes.saveHost.append(nodes.feedback);
-            }
-            paint(true);
+            paint();
+            nodes?.saveActions.querySelector("button")?.focus();
             return true;
         },
         writing(value) {
@@ -396,23 +465,33 @@ export function createReportJourney({ root, cancelReview, clearSelection, choose
             if (!available) { invalidateSavedReport(value.bundleId); return; }
             if (nodes) {
                 const { el, button, saveHost } = nodes;
-                const message = el("p", "report-save-success", "Local files are ready. Disclosure reviewed, not a privacy certification.");
+                const message = el("p", "report-save-success visually-hidden", "Report saved on this device.");
                 message.setAttribute("role", "status");
                 const details = el("details", "detail-disclosure");
                 details.append(el("summary", "", "Saved report details"), el("p", "report-saved-id", value.bundleId));
                 if (value.bundleDir) details.append(el("p", "report-saved-location", "Saved folder: " + value.bundleDir));
                 saveHost.replaceChildren(message);
-                if (value.files["product-report.html"] && openSavedReport) saveHost.append(button("Open saved report", event => openSavedReport(value, event.currentTarget), "primary"));
+                const actions = el("div", "report-saved-actions");
+                if (value.files["product-report.html"] && openSavedReport) actions.append(button("Open saved report", event => openSavedReport(value, event.currentTarget), "primary"));
                 else if (!value.files["product-report.html"]) saveHost.append(el("p", "muted", "HTML was not saved. Read one of the saved downloads below."));
+                actions.append(button("View saved reports", () => root.ownerDocument.getElementById("reportLibraryLink").click()));
+                saveHost.append(actions);
                 const downloads = el("div", "report-downloads");
+                downloads.setAttribute("role", "group");
+                downloads.setAttribute("aria-label", "Download saved files");
+                downloads.append(el("span", "report-download-label", "Download"));
                 for (const name of Object.keys(value.files)) {
-                    const control = button(`Download ${name}`, async () => {
+                    const label = name === "coverage-and-redaction-manifest.json" ? "Manifest" : name.endsWith(".html") ? "HTML"
+                        : name.endsWith(".pdf") ? "PDF" : name.endsWith(".md") ? "Markdown" : "JSON";
+                    const control = button(label, async () => {
                         control.disabled = true;
                         try { await downloadFile(value, name, () => bundle === savedBundle); }
                         catch (error) { if (bundle === savedBundle) { failure = `Download failed: ${error.message}`; paint(); } }
                         finally { control.disabled = false; }
                     });
-                    downloads.append(control);
+                    control.setAttribute("aria-label", `Download ${name}`);
+                    if (icon) { control.prepend(icon("download")); control.classList.add("icon-action"); }
+                    (name === "coverage-and-redaction-manifest.json" ? details : downloads).append(control);
                 }
                 saveHost.append(downloads, details, button("Start a new report", () => clearSelection?.()));
                 nodes.saveActions.replaceChildren();

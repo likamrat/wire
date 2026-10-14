@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 import { navigateMain, openActivitySessions, selectActivityOption, chooseTheme } from "./helpers.mjs";
-import { reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
+import { openReportCreation, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WIRE_AUTHOR_FILTER_PROOFS;
@@ -107,6 +107,7 @@ test("report author choice narrows selected base membership without losing hidde
     }
     await setAuthors(page, ["user"]);
     await navigateMain(page, "reports"); await ready(page);
+    await openReportCreation(page);
     assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 request groups/);
     await setAuthors(page, ["user"], "reportPromptAuthorFilter");
     assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 request groups/);
@@ -120,10 +121,10 @@ test("report author choice narrows selected base membership without losing hidde
     assert.equal(preview.records.length, 1);
     assert.equal(preview.records[0].toolCalls.length, 2);
     assert.ok(preview.records[0].prompts.every(prompt => prompt.text === null));
-    await page.getByRole("button", { name: "1. Setup", exact: true }).click();
+    await page.getByRole("button", { name: "1. Activity", exact: true }).click();
     await setAuthors(page, ["agent"], "reportPromptAuthorFilter");
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft");
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
     await setAuthors(page, ["user", "agent", "unknown"], "reportPromptAuthorFilter");
     assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 request groups/);
     await navigateMain(page, "activity"); await ready(page);

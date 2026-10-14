@@ -295,7 +295,7 @@ test("integrated navigation, charts, filters, formats and downloads use clean Fl
                 await page.keyboard.press("Escape");
             }
             if (route === "reports") {
-                await page.locator("#bundles > summary").click();
+                await page.locator("#savedLibraryTitle").click();
                 await page.locator("#bundleList details > summary").click();
                 assert.equal(await page.locator('#bundleList button [data-fluent-icon="arrow_download_20_regular"]').count(), 4);
                 assert.equal(await page.locator('#formatOptions input[type="checkbox"]').count(), 4);

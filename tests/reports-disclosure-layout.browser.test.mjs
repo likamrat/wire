@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme } from "./helpers.mjs";
-import { chooseReportScope, scanReport } from "./report-journey-helpers.mjs";
+import { chooseReportScope, scanReport, reportContents, inspectReportCopies } from "./report-journey-helpers.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 
@@ -226,7 +226,7 @@ test("help wraps long content without moving its summary and library reads retai
         await page.context().setOffline(false);
         await page.locator('#workspace[aria-busy="true"]').waitFor();
         assert.equal(await page.locator("#deleteAllReports").isDisabled(), true);
-        assert.equal(await page.locator("#bundles > summary").innerText(), "Saved reports (2)");
+        assert.equal(await page.locator("#savedLibraryTitle").innerText(), "Saved reports (2)");
         await togglePlacement(page, "#savedLibraryHelp", `pending-${theme}-${width}-${scale}`);
         await togglePlacement(page, "#savedLibraryManagement", `pending-management-${theme}-${width}-${scale}`);
         release();
@@ -237,7 +237,7 @@ test("help wraps long content without moving its summary and library reads retai
         await page.context().setOffline(false);
         await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false"
             && document.querySelector("#deleteAllReports").disabled);
-        assert.equal(await page.locator("#bundles > summary").innerText(), "Saved reports (2)");
+        assert.equal(await page.locator("#savedLibraryTitle").innerText(), "Saved reports (2)");
         await togglePlacement(page, "#savedLibraryHelp", `error-${theme}-${width}-${scale}`);
         await togglePlacement(page, "#savedLibraryManagement", `error-management-${theme}-${width}-${scale}`);
         await page.reload();
@@ -259,9 +259,11 @@ test("creation disclosures retain their anchors and controls at desktop and enla
         await page.setViewportSize({ width, height: 1100 });
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
-        for (const selector of ["#scopeDetails", "#additionalMasking", "#reportRequests"]) {
-            await togglePlacement(page, selector, `setup-${selector.slice(1)}-${theme}-${width}-${scale}`);
-        }
+        await page.getByRole("button", { name: "1. Activity", exact: true }).click();
+        await togglePlacement(page, "#scopeDetails", `activity-scope-${theme}-${width}-${scale}`);
+        assert.equal(await page.locator("#reportRequests").evaluate(node => node.tagName), "SECTION");
+        await reportContents(page);
+        await togglePlacement(page, "#additionalMasking", `contents-masking-${theme}-${width}-${scale}`);
     }
     await page.setViewportSize({ width: 1440, height: 1100 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
@@ -270,7 +272,8 @@ test("creation disclosures retain their anchors and controls at desktop and enla
         await page.setViewportSize({ width, height: 1100 });
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
-        for (const selector of [".report-snapshot-details:visible", ".report-copy-inspection:visible"]) {
+        await inspectReportCopies(page);
+        for (const selector of [".report-privacy-findings:visible", ".prompt-comparison>details"]) {
             await togglePlacement(page, selector, `review-${selector.split(":")[0].slice(1)}-${theme}-${width}-${scale}`);
         }
     }

@@ -353,7 +353,7 @@ test("unapproved and paused Settings results accurately locate permission bounda
 test("saved reports and report membership search the entire retained list without expanding selection", { timeout: 45000 }, async t => {
     const { page, requests } = await setup(t);
     await navigateMain(page, "reports");
-    await page.locator("#bundles>summary").click();
+    await page.locator("#savedLibraryTitle").click();
     await expect(page.locator("#bundleList")).toContainText("1-6 of 15 saved reports");
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     await expect(page.locator("#bundleList")).toContainText("7-12 of 15 saved reports");
@@ -366,15 +366,15 @@ test("saved reports and report membership search the entire retained list withou
     await page.keyboard.press("Escape");
     await expect(page.locator("#bundleList")).toContainText("7-12 of 15 saved reports");
     await chooseReportScope(page, "all");
-    await page.locator("#reportRequests>summary").click();
+    await expect(page.locator("#reportRequests")).toBeVisible();
     await expect(page.locator("#reportList")).toContainText("1-4 of 19 report requests");
     const summary = await page.locator("#scopeSummary").innerText();
     await page.locator("#reportRequestSearch").fill("unique-retained");
-    await expect(page.locator("#reportRequestSearchCount")).toHaveText("1 of 19 report requests shown. All 19 remain included.");
+    await expect(page.locator("#reportRequestSearchCount")).toHaveText("1 of 19 saved interactions shown. All 19 remain included.");
     await expect(page.locator("#reportList")).toContainText("UNIQUE RETAINED final-request");
     assert.equal(await page.locator("#scopeSummary").innerText(), summary);
     await page.locator("#reportRequestSearch").fill("<svg> nonmatching");
-    await expect(page.locator("#reportList")).toContainText("No report requests match");
+    await expect(page.locator("#reportList")).toContainText("No interactions match");
     assert.equal(await page.locator("#scopeSummary").innerText(), summary);
     await page.locator("#clearReportRequestSearch").click();
     await expect(page.locator("#reportList")).toContainText("1-4 of 19 report requests");

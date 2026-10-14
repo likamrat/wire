@@ -171,10 +171,10 @@ test("persisted model results stay connected through Home, Activity, interaction
     assert.match(preview.files["product-report.md"], /Time to recorded final response/);
     await capture(page, "report-review-light");
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     const exported = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     assert.equal((await exported).status(), 200);
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     const saved = (await loadBoardState(f.context)).exports.at(-1);

@@ -20,6 +20,7 @@ export function exportCatalogFor(records) {
 }
 
 export async function navigateMain(page, view) {
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     async function revealNavigation() {
         const trigger = page.locator("#navigationToggle");
         if (await trigger.isVisible() && await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();

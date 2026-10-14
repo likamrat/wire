@@ -8,7 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState, replaceEvidence } from "../lib/store.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { chooseTheme, navigateMain, selectActivityOption } from "./helpers.mjs";
-import { openReportCreation, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
+import { openReportCreation, reportContents, scanReport, inspectReportCopies, findReportCopy } from "./report-journey-helpers.mjs";
 
 test("lost contextual report save keeps its unknown outcome and recovers without another disclosure or export", { timeout: 30000 }, async t => {
     const cleanup = [];
@@ -44,28 +44,27 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     await navigateMain(page, "reports"); await openReportCreation(page);
     await expect(page.locator("#reportPopulationNote")).toContainText("outside the current browsing filters");
     const membership = await page.locator("#previewSelectionSummary").textContent();
+    await reportContents(page);
     await page.locator("#reportRecordedContext").check();
     for (const format of ["pdf", "json", "markdown"]) await page.locator(`#formatOptions input[value=${format}]`).check();
     await scanReport(page);
     await inspectReportCopies(page);
-    const reply = page.locator(".prompt-comparison").filter({ hasText: "Here are three synthetic" });
-    if (!await reply.evaluate(node => node.open)) await reply.locator(":scope > summary").click();
+    const reply = await findReportCopy(page, "Here are three synthetic");
     await reply.getByText("Edit or omit this report copy", { exact: true }).click();
     await reply.locator("textarea").fill("Edited contextual reply for reviewer@example.invalid.");
-    const earlier = page.locator(".prompt-comparison").filter({ hasText: "first@example.invalid" });
-    if (!await earlier.evaluate(node => node.open)) await earlier.locator(":scope > summary").click();
+    const earlier = await findReportCopy(page, "first@example.invalid");
     await earlier.getByText("Edit or omit this report copy", { exact: true }).click();
     await earlier.getByRole("checkbox", { name: "Omit this copy from the report", exact: true }).check();
     await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
     await page.locator("input[data-review-control]").check();
     const reviewResponse = page.waitForResponse(response => response.url().endsWith("/api/privacy-review"));
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     const reviewed = await (await reviewResponse).json();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     assert.equal((await loadBoardState(store)).exports.length, 0);
     await page.route("**/api/export", async route => { await route.fetch(); await route.abort("failed"); }, { times: 1 });
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await expect(page.locator("#reportsView")).not.toHaveAttribute("data-report-phase", "writing");
     const saved = await loadBoardState(store);
     assert.equal(saved.exports.length, 1);
@@ -80,7 +79,7 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     assert.doesNotMatch(await page.locator("#reportJourneyError").textContent(), /scope, source or review basis changed|scan again/i);
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), membership);
     assert.equal(await page.locator("#reportCreateLink").textContent(), "Save status");
-    assert.equal(await page.getByRole("button", { name: "1. Setup", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "1. Activity", exact: true }).isDisabled(), true);
     assert.equal(await page.locator("#reportClearSelection").isDisabled(), true);
     await page.locator("#reportClearSelection").evaluate(node => node.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), membership);
@@ -100,7 +99,7 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     await retry.click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
-    await expect(page.locator("#bundles > summary")).toHaveText("Saved reports (1)");
+    await expect(page.locator("#savedLibraryTitle")).toHaveText("Saved reports (1)");
     assert.equal(await page.locator("#reportSaveBody .report-saved-id").textContent(), saved.exports[0].bundleId);
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), membership);
     if (process.env.WIRE_REPORT_CONTEXT_PROOFS) {
@@ -157,12 +156,14 @@ test("normal Setup Review Save includes edited bounded context without changing 
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const row = page.locator("#activityList .request-row").filter({ hasText: "Three synthetic documents" });
     await row.locator("input[type=checkbox]").check();
-    await page.locator("#activitySearch").fill("UNRELATED_CONTEXT");
+    await selectActivityOption(page, "serviceAssociationFilter", "Mail");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await navigateMain(page, "reports");
     await openReportCreation(page);
-    await expect(page.locator("#previewSelectionSummary")).toContainText("1 request group");
+    await expect(page.locator("#previewSelectionSummary")).toContainText("1 interaction");
     await expect(page.locator("#reportPopulationNote")).toContainText("outside the current browsing filters");
     const analyticalScope = await page.locator("#reportPopulationNote").textContent();
+    await reportContents(page);
     const contextOption = page.locator("#reportRecordedContext");
     assert.equal(await contextOption.isChecked(), false, "Context requires a deliberate Setup choice");
     await contextOption.focus();
@@ -192,13 +193,12 @@ test("normal Setup Review Save includes edited bounded context without changing 
     assert.doesNotMatch(JSON.stringify(preview.snapshot.recordedContext), /reply@example|first@example|UNRELATED_CONTEXT/);
     assert.deepEqual(await page.locator("#reportPopulationNote").textContent(), analyticalScope);
     await inspectReportCopies(page);
-    const copy = page.locator(".prompt-comparison").filter({ hasText: "Here are three synthetic" });
-    await copy.locator(":scope > summary").click();
+    const copy = await findReportCopy(page, "Here are three synthetic");
     await copy.getByText("Edit or omit this report copy", { exact: true }).click();
     await copy.locator("textarea").fill("Edited contextual reply for reviewer@example.invalid.");
     await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    await expect(page.locator(".report-copy-inspection > summary")).toContainText("4 report copies");
+    await expect(page.getByRole("tab", { name: "Text (4)", exact: true })).toBeVisible();
     await expect(page.frameLocator(".report-frame").getByText("Edited contextual reply for [email identifier removed].", { exact: true })).toBeVisible();
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
@@ -219,12 +219,11 @@ test("normal Setup Review Save includes edited bounded context without changing 
     }
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.locator("input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     assert.equal((await loadBoardState(store)).exports.length, 0, "Disclosure approval does not save files");
-    await page.getByRole("button", { name: /Save locally/, exact: false }).last().click();
     const savedResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     const saved = await (await savedResponse).json();
     const state = await loadBoardState(store);
     assert.equal(state.exports.length, 1);
@@ -265,6 +264,7 @@ for (const change of ["consent", "context-source", "edited-consent", "stale-stat
     await page.locator("#activityList .request-row").filter({ hasText: "Three synthetic documents" }).locator("input[type=checkbox]").check();
     await navigateMain(page, "reports");
     await openReportCreation(page);
+    await reportContents(page);
     await page.locator("#reportRecordedContext").check();
     if (change === "late-preview") {
         let produced;
@@ -299,8 +299,7 @@ for (const change of ["consent", "context-source", "edited-consent", "stale-stat
     if (change === "edited-consent") {
         await inspectReportCopies(page);
         for (const [source, text] of [["Three synthetic documents are enough.", "KEEP_PROMPT_EDIT"], ["Here are three synthetic", "SOURCE_BOUND_REPLY_EDIT"]]) {
-            const copy = page.locator(".prompt-comparison").filter({ hasText: source });
-            if (!await copy.evaluate(node => node.open)) await copy.locator(":scope > summary").click();
+            const copy = await findReportCopy(page, source);
             await copy.getByText("Edit or omit this report copy", { exact: true }).click();
             await copy.locator("textarea").fill(text);
         }
@@ -308,7 +307,7 @@ for (const change of ["consent", "context-source", "edited-consent", "stale-stat
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
     }
     await page.locator("input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     if (change === "stale-status") {
         await page.route("**/api/collection/status", async route => {
@@ -333,8 +332,7 @@ for (const change of ["consent", "context-source", "edited-consent", "stale-stat
             await new Promise(resolve => { releaseSave = resolve; });
             await route.fulfill({ response });
         });
-        await page.getByRole("button", { name: /Save locally/, exact: false }).last().click();
-        await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+        await page.getByRole("button", { name: "Save report locally", exact: true }).click();
         await written;
     }
     if (change !== "context-source") await updateBoardState(store, state => {
@@ -361,11 +359,9 @@ for (const change of ["consent", "context-source", "edited-consent", "stale-stat
     }
     if (change === "edited-consent") {
         await reportContents(page);
-        const snapshot = page.waitForResponse(async response => response.url().endsWith("/api/snapshot")
-            && (await response.json()).revision === expectedRevision);
-        await snapshot;
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         const rebuilt = await scanReport(page);
+        assert.equal(rebuilt.revision, expectedRevision, "The fresh preview uses the accepted current state, whether its read finished before or after Back");
         assert.equal(rebuilt.promptReview.some(copy => copy.text === "KEEP_PROMPT_EDIT"), true);
         assert.doesNotMatch(JSON.stringify(rebuilt), /SOURCE_BOUND_REPLY_EDIT/);
         assert.equal(rebuilt.snapshot.recordedContext.entries.filter(copy => copy.kind === "response").every(copy => copy.text === null), true);

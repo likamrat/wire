@@ -38,18 +38,20 @@ test("report starts with outcomes, preserves exact optional copies and has worki
     assert.equal(bundle.snapshot.summary.metrics[0].count, 2);
     assert.equal(bundle.snapshot.summary.metrics[0].outcomes.failure, 1);
     assert.doesNotMatch(bundle.files["product-report.md"], /JSONL/);
-    assert.ok(bundle.files["product-report.md"].indexOf("What the record shows") < bundle.files["product-report.md"].indexOf("Coverage and reading notes"));
+    assert.ok(bundle.files["product-report.md"].indexOf("At a glance") >= 0);
+    assert.ok(bundle.files["product-report.md"].indexOf("At a glance") < bundle.files["product-report.md"].indexOf("Coverage and reading notes"));
     const browser = await chromium.launch();
     try {
         const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, javaScriptEnabled: false });
         await page.setContent(bundle.previewHtml);
         assert.ok((await page.locator("#findings").boundingBox()).y < 300);
         assert.match(await page.locator("#findings").innerText(), /1 of 2 recorded calls failed/);
-        assert.ok((await page.locator("#findings").boundingBox()).y < (await page.locator("#overview").boundingBox()).y);
+        assert.equal(await page.locator("#findings").evaluate(node => Boolean(node.compareDocumentPosition(document.getElementById("overview")) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
         assert.equal(await page.locator(".report-tool-score,.report-dimensions").count(), 0);
         assert.equal(await page.locator("#quality").getAttribute("open"), null);
         await page.locator("#quality > summary").click();
-        assert.match(await page.locator("#quality").innerText(), /Accuracy|Trust: answers|Trust: actions/);
+        assert.match(await page.locator("#quality").innerText(), /Answer correctness|Answer support|Permission for tool use/);
+        await page.locator('.report-nav a[href="#overview"]').click();
         assert.ok(await page.locator("#overview table").isVisible(), "Exact evidence-layer counts remain available below the headline summary");
         assert.ok((await page.locator("#examples").innerText()).includes("EXACT_REVIEWED_ORIGIN"));
         const sequence = await page.locator(".example li").allTextContents();
@@ -63,7 +65,8 @@ test("report starts with outcomes, preserves exact optional copies and has worki
         assert.equal(await page.locator("script,img,iframe,link").count(), 0);
         await page.emulateMedia({ media: "print" });
         assert.equal(await page.locator(".json-records-link").isVisible(), false);
-        assert.equal(await page.locator(".print-companion").isVisible(), true);
+        assert.equal(await page.locator(".report-nav").isVisible(), false, "Print omits screen navigation, not the audit reference");
+        assert.match(await page.locator("#examples").innerText(), /Complete projected records: product-report.json/);
         await page.emulateMedia({ media: "screen" });
         await page.setViewportSize({ width: 390, height: 844 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);

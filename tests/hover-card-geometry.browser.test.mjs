@@ -238,7 +238,7 @@ test("bounded production hover families retain aligned targets without painting 
         await inspect(open, "saved report Open");
         await open.click();
         await expect(page.frameLocator(".saved-report-dialog iframe").locator("h1")).toHaveText("Sample Lantern report");
-        const close = page.getByRole("button", { name: "Close saved report", exact: true });
+        const close = page.getByRole("button", { name: "Back to report library", exact: true });
         await inspect(close, "dialog Close");
         await close.click(); await expect(open).toBeFocused();
         await page.locator("#reportCreateLink").click();

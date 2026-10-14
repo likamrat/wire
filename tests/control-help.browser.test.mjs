@@ -293,7 +293,7 @@ test("report scopes, privacy and source meanings are available before actions wi
     assert.match(await page.locator("#reportsView").innerText(), /saving locally is not permission to share/);
     await page.locator("[name=promptMode][value=masked]").check();
     await readTooltip(page, page.locator("#exportBtn"), help.actions.exportBtn);
-    await page.getByRole("button", { name: "1. Setup", exact: true }).click();
+    await page.getByRole("button", { name: "1. Activity", exact: true }).click();
     await page.locator(".report-scope-details > summary").click();
     await readTooltip(page, page.getByRole("button", { name: "About Ready for report", exact: true }), help.reviewStates.ready_to_export);
     assert.equal(requests.length, before);
@@ -304,9 +304,7 @@ test("report scopes, privacy and source meanings are available before actions wi
     await ready(page);
     const reader = page.locator(".request-original .full-text-toggle");
     if (await reader.getAttribute("aria-expanded") === "false") await reader.click();
-    await page.locator(".request-original .reader-details > summary").click();
-    assert.match(await page.locator(".request-original .reader-details").innerText(), /without export masking.*Other apps.*system clipboard/);
-    await page.locator(".request-context-summaries > summary").click();
+    assert.match(await page.locator("#reader-copy-notice").innerText(), /unmasked.*Other apps.*clipboard/);
     assert.match(await page.locator(".request-link-details").innerText(), /recorded message ID.*not inferred task boundaries/);
     const copy = page.locator("#selectedContext").getByRole("button", { name: "Copy prompt", exact: true });
     await copy.focus(); await page.getByRole("tooltip").waitFor({ state: "visible" });

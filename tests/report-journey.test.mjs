@@ -7,18 +7,44 @@ function chosen(journey, count = 2) {
     journey.update({ requestCount: count, scopeReady: true, formats: ["html", "pdf", "json", "markdown"] });
 }
 
-test("Setup leads directly to actual Review, then a separate local Save", () => {
+test("Activity and Contents lead to Review with separate approval and save in the same stage", () => {
     const journey = createReportJourney();
     chosen(journey);
-    assert.equal(journey.go(2), false, "Setup cannot bypass scanning to reach Review");
+    assert.equal(journey.go(2), true, "Contents is available after deliberate activity selection");
+    assert.equal(journey.go(3), false, "Contents cannot bypass preparation");
     journey.beginScan();
-    assert.equal(journey.snapshot().step, 2);
+    assert.equal(journey.snapshot().step, 3);
     journey.previewReady(preview);
-    assert.equal(journey.go(3), false, "A preview is not disclosure approval");
+    journey.writing(true);
+    assert.equal(journey.snapshot().phase, "ready", "Viewing the report cannot save it");
     journey.reviewed();
     assert.equal(journey.snapshot().step, 3);
+    assert.equal(journey.snapshot().phase, "reviewed");
     assert.equal(journey.snapshot().completed, false, "Disclosure approval is not a save");
+    journey.writing(true);
+    assert.equal(journey.snapshot().phase, "writing", "Save is a separate transition");
     assert.equal(journey.go(4), false, "There is no fourth preliminary stage");
+});
+
+test("Contents does not claim a prepared review or defer ordinary reads", () => {
+    const journey = createReportJourney();
+    chosen(journey);
+    journey.go(2);
+    assert.equal(journey.isReviewOpen(), false);
+    journey.beginScan();
+    assert.equal(journey.isReviewOpen(), true);
+    journey.go(2);
+    assert.equal(journey.isReviewOpen(), false);
+});
+
+test("failed preparation has no review authority and permits current-state recovery", () => {
+    const journey = createReportJourney();
+    chosen(journey);
+    journey.beginScan();
+    journey.failed("Selected evidence changed. Prepare a new report.");
+    assert.equal(journey.snapshot().hasPreview, false);
+    assert.equal(journey.isReviewOpen(), false);
+    assert.equal(journey.go(2), true);
 });
 
 test("state notifications track prepared, revisited, cancelled and completed report guards without side effects", () => {
@@ -51,16 +77,16 @@ test("report starts empty and stages require scope, scan and explicit review in 
     assert.equal(journey.snapshot().step, 1);
     assert.equal(journey.snapshot().scope, "selected");
     assert.equal(journey.go(2), false);
-    assert.match(journey.reason(2), /Choose at least one readable request/);
+    assert.match(journey.reason(2), /Choose at least one readable interaction/);
     chosen(journey);
-    assert.equal(journey.go(2), false);
+    assert.equal(journey.go(2), true);
     assert.equal(journey.go(3), false);
     assert.equal(journey.reviewed(), false);
     journey.beginScan();
     assert.equal(journey.snapshot().phase, "scanning");
     assert.equal(journey.previewReady({ ...preview, privacy: {} }), false);
     assert.equal(journey.previewReady(preview), true);
-    assert.equal(journey.go(3), false);
+    assert.equal(journey.go(3), true, "Prepared content is readable before approval");
     assert.equal(journey.reviewed(), true);
     assert.equal(journey.snapshot().step, 3);
 });
@@ -93,12 +119,12 @@ test("an unverified read gates Save without manufacturing or discarding explicit
     assert.equal(journey.snapshot().completed, false);
 });
 
-test("Back during scan cancels once and late preview cannot revive it", () => {
+test("Back to Contents during preparation cancels once and a late preview cannot revive it", () => {
     let cancelled = 0;
     const journey = createReportJourney({ cancelReview: () => { cancelled++; } });
     chosen(journey);
     journey.beginScan();
-    assert.equal(journey.go(1), true);
+    assert.equal(journey.go(2), true);
     assert.equal(cancelled, 1);
     assert.equal(journey.previewReady(preview), false);
     assert.equal(journey.snapshot().phase, "draft");
@@ -170,7 +196,8 @@ test("factory is self-contained for serialization and missing formats block scan
     chosen(journey);
     journey.update({ formats: [] });
     assert.equal(journey.beginScan(), null);
-    assert.match(journey.reason(2), /Choose at least one format/);
+    assert.equal(journey.reason(2), "", "Formats are chosen in Contents");
+    assert.match(journey.reason(3), /Choose at least one format/);
     assert.equal(journey.go(1), true);
 });
 

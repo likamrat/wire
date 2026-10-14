@@ -55,7 +55,7 @@ test("all four report formats freeze identical author-filtered interactions and 
         assert.deepEqual(json.records, snapshot.records);
         assert.deepEqual(json.evaluationFacts, facts);
         assert.deepEqual(json.selectionScope, snapshot.selectionScope);
-        const scope = `${groups} of 7 request groups in the base scope included`;
+        const scope = `${groups} of 7 interactions included`;
         for (const contents of [preview.previewHtml, preview.files["product-report.md"], await pdfText(preview.files["product-report.pdf"])]) {
             assert.ok(contents.includes(scope));
         }

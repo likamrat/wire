@@ -397,11 +397,12 @@ export function createEvidenceUX(icons) {
             clearTimeout(resetTimer);
             pending = true;
             control.setAttribute("aria-disabled", "true");
+            control.setAttribute("aria-busy", "true");
             control.dataset.copyState = "pending";
-            paintIcon("copy");
+            paintIcon("pending");
             control.parentElement.append(status);
             status.hidden = false;
-            status.className = showLabel ? "ux-copy-status pending" : "ux-copy-status visually-hidden";
+            status.className = "ux-copy-status visually-hidden";
             status.setAttribute("role", "status");
             status.textContent = "Writing to clipboard...";
             let reading = true;
@@ -413,7 +414,7 @@ export function createEvidenceUX(icons) {
                 await navigator.clipboard.writeText(text);
                 control.dataset.copyState = "success";
                 paintIcon("check");
-                status.className = showLabel ? "ux-copy-status" : "ux-copy-status visually-hidden";
+                status.className = "ux-copy-status visually-hidden";
                 status.textContent = "Copied to clipboard.";
                 tooltip(control, "Copied to clipboard.");
                 resetTimer = setTimeout(() => {
@@ -423,6 +424,7 @@ export function createEvidenceUX(icons) {
                 }, 2200);
             } catch (error) {
                 control.dataset.copyState = "error";
+                paintIcon("copy");
                 status.className = "ux-copy-status error";
                 status.setAttribute("role", "alert");
                 status.textContent = error instanceof CopyUnavailableError ? error.message : reading
@@ -434,6 +436,7 @@ export function createEvidenceUX(icons) {
             } finally {
                 pending = false;
                 control.removeAttribute("aria-disabled");
+                control.removeAttribute("aria-busy");
             }
         });
         return control;

@@ -167,26 +167,16 @@ test("filter, result, evidence and report explanations have discoverable help wi
     await page.locator("#activityList input[type=checkbox]").first().check();
     await page.locator('nav a[data-nav="reports"]').click();
     await reportContents(page);
-    for (const label of ["Prompts in this report", "Export formats"]) {
-        await page.getByRole("button", { name: "About " + label, exact: true }).click();
-        await page.getByRole("tooltip").waitFor({ state: "visible" });
-        await page.keyboard.press("Escape");
-    }
+    assert.match(await page.locator("#promptOptions").innerText(), /masked.*confidential meaning/s);
+    assert.match(await page.locator("#formatOptions").innerText(), /same reviewed facts.*JSON keeps structured data/s);
     const selectedModes = await page.locator('input[name=promptMode]:checked').inputValue();
-    for (const label of ["HTML", "PDF", "JSON", "Markdown"]) {
-        await page.locator("#formatOptions").getByRole("button", { name: "About " + label, exact: true }).click();
-        await page.getByRole("tooltip").waitFor({ state: "visible" });
-        await page.keyboard.press("Escape");
-    }
+    assert.equal(await page.locator("#formatOptions .ux-help").count(), 0, "One consequential explanation replaces a help control per format");
     assert.equal(await page.locator('input[name=promptMode]:checked').inputValue(), selectedModes);
     assert.deepEqual(await page.locator("#formatOptions input:checked").evaluateAll((nodes) => nodes.map((node) => node.value)), ["html"]);
     await page.locator("#exportBtn").click();
     await page.locator("#reportsView[data-report-phase=ready]").waitFor();
     await inspectReportCopies(page);
-    await page.getByRole("button", { name: "About highlighted report copies", exact: true }).click();
-    await page.getByRole("tooltip").waitFor({ state: "visible" });
-    assert.equal(await page.locator("#evidence-tooltip").count(), 1);
-    await page.keyboard.press("Escape");
-    assert.equal(await page.locator("#reportStage2").isVisible(), true);
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+    assert.match(await page.locator(".prompt-review-summary").innerText(), /Originals stay unchanged; edits affect this report only/);
+    assert.equal(await page.locator("#reportStage3").isVisible(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true }).isDisabled(), true);
 }));

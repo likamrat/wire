@@ -486,11 +486,11 @@ test("joint: real meaning and legacy scope span both periods through Review Save
     await clear;
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
     await page.locator("input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     assert.equal((await loadBoardState(context)).exports.length, 0);
     const saving = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     const saved = await (await saving).json();
     assert.equal(saved.error, undefined, saved.error);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");

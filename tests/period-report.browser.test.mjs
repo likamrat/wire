@@ -13,6 +13,7 @@ import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 import { privateFixture, chooseTheme, restoreLegacySearch } from "./helpers.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { assessmentSource } from "../lib/assessment-read-model.mjs";
+import { reportContents } from "./report-journey-helpers.mjs";
 
 for (const lostSaveResponse of [false, true]) test(`normal paired report, all formats and frozen reopen${lostSaveResponse ? " after lost save response" : ""}`, { timeout: 120000 }, async t => {
     const fixture = periodFixture();
@@ -76,6 +77,7 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     await expect(page.locator("#reportPromptAuthorFilter")).toBeDisabled();
     assert.ok((await page.getByRole("button", { name: "Change comparison in Analyze", exact: true }).boundingBox()).height >= 44);
     await expect(page.locator("#reportPopulationNote")).toContainText("Period A: 3 matching records; Period B: 4");
+    await reportContents(page);
     await page.locator("#formatOptions input[value=json]").check();
     await page.locator("#formatOptions input[value=markdown]").check();
     await page.locator("#formatOptions input[value=pdf]").check();
@@ -129,7 +131,7 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     }
     await page.setViewportSize({ width: 1365, height: 1000 });
     await page.locator("input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     assert.equal((await loadBoardState(context)).exports.length, 0, "review does not save");
     await updateBoardState(context, state => { state.cards["period-request-9"].workflowState = "reviewing"; });
@@ -140,7 +142,7 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
         await route.abort("failed");
     });
     const savedResponse = lostSaveResponse ? null : page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     if (lostSaveResponse) {
         await expect(page.getByRole("button", { name: "Check save status", exact: true })).toBeVisible();
         await page.getByRole("button", { name: "Check save status", exact: true }).click();
@@ -176,8 +178,8 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
             const page = await document.getPage(index), viewport = page.getViewport({ scale: 1 }), operators = await page.getOperatorList();
             for (const id of new Set(operators.fnArray.flatMap((op, i) => op === OPS.setFont ? [operators.argsArray[i][0]] : []))) {
                 const font = page.commonObjs.get(id);
-                assert.equal(font.missingFile, false); assert.ok(font.data?.byteLength > 0);
-                fonts.push({ name: font.name, bytes: font.data.byteLength });
+                assert.equal(font.missingFile, false); assert.ok(font.data?.byteLength > 0 || font.isType3Font);
+                fonts.push({ name: font.name, bytes: font.data?.byteLength ?? 0, type3Glyphs: font.isType3Font });
             }
             for (const item of (await page.getTextContent()).items.filter(item => item.str?.trim())) {
                 assert.ok(item.transform[4] >= -1 && item.transform[4] + item.width <= viewport.width + 2, `page ${index} horizontal clipping: ${item.str}`);

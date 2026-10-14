@@ -54,6 +54,23 @@ async function shot(page, name) {
     await page.screenshot({ path: path.join(process.env.WIRE_LIBRARY_PROOFS, `${name}.png`), fullPage: !modal });
 }
 
+test("the library is an immediately readable list with useful scope identity and a direct return from frozen reading", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, 8);
+    assert.equal(await page.locator("#bundles").evaluate(node => node.tagName), "SECTION");
+    assert.equal(await page.locator("#bundleList .saved-report").count(), 6);
+    assert.match(await page.locator(".saved-report-summary").nth(1).innerText(), /8 interactions/);
+    assert.doesNotMatch(await page.locator("#bundleList").innerText(), /Report ID:/);
+    await page.locator("#savedReportSearch").fill("No prompts");
+    const open = page.getByRole("button", { name: "Open saved report", exact: true }).first();
+    await open.click();
+    await page.frameLocator(".saved-report-dialog iframe").locator("h1").waitFor();
+    assert.equal(await page.locator(".saved-report-dialog iframe").getAttribute("sandbox"), "");
+    assert.doesNotMatch(await page.locator(".saved-report-dialog").innerText(), /Report ID:/);
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    assert.equal(await page.locator("#savedReportSearch").inputValue(), "No prompts");
+    assert.equal(await open.evaluate(node => node === document.activeElement), true);
+});
+
 test("Reports opens directly on the library and switching to creation preserves the reviewed draft and browser Back", { timeout: 30000 }, async t => {
     const { page, requests } = await setup(t, 2);
     assert.equal(await page.locator("#pageTitle").innerText(), "Reports");
@@ -77,20 +94,20 @@ test("Reports opens directly on the library and switching to creation preserves 
     const preview = await (await previewResponse).json();
     await page.locator("#reportsView[data-report-phase=ready]").waitFor();
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     const countBefore = requests.length;
-    await page.getByRole("link", { name: "Saved reports", exact: true }).click();
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     assert.equal(await page.locator(".report-journey").isVisible(), false);
     await page.locator("#savedReportSearch").fill("masked");
     await page.locator("#bundleList").getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.locator(".saved-report-dialog iframe").waitFor();
-    await page.getByRole("button", { name: "Close saved report", exact: true }).click();
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     await page.goBack();
     assert.match(page.url(), /task=create/);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-step"), "3");
-    assert.equal(await page.getByRole("button", { name: "Confirm local export", exact: true }).isEnabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isEnabled(), true);
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), true);
     assert.equal(requests.slice(countBefore).some(url => ["/api/cancel-preview", "/api/preview", "/api/export"].includes(url)), false);
     assert.equal(requests.filter(url => url === "/api/preview").length, 1, preview.previewId);
@@ -113,18 +130,17 @@ test("Analyze chat create intent, request return and explicit creation deep link
     await page.getByRole("button", { name: "Create report for this Copilot chat", exact: true }).click();
     assert.match(page.url(), /task=create/);
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
-    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request group/);
+    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 interaction/);
     await page.goBack();
     assert.match(page.url(), /#analyze/);
     await page.goForward();
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
-    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request group/);
-    if (!await page.locator("#reportRequests").evaluate(node => node.open)) await page.locator("#reportRequests > summary").click();
+    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 interaction/);
     await page.locator("#reportList").getByRole("link", { name: "View interaction", exact: true }).click();
     await page.locator("#contextBack").click();
     assert.match(page.url(), /#reports.*task=create/);
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
-    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 request group/);
+    assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 interaction/);
     await navigateMain(page, "reports");
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), true, "Main Reports navigation always leads to the library");
     for (const hash of ["#reports?task=create", "#report", "#reports?request=test-scenario"]) {
@@ -132,7 +148,7 @@ test("Analyze chat create intent, request return and explicit creation deep link
         await page.reload();
         await page.locator('#workspace[aria-busy="false"]').waitFor();
         assert.equal(await page.locator("#reportCreatePanel").isVisible(), true, hash);
-        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No requests selected", "A fresh panel does not invent selection from a deep link");
+        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No interactions included", "A fresh panel does not invent selection from a deep link");
     }
     assert.equal(requests.some(url => ["/api/preview", "/api/export", "/api/artifact-deletion/confirm"].includes(url)), false);
 });
@@ -150,7 +166,7 @@ test("a thousand-report library has bounded rows, direct page navigation, metada
     assert.equal(await page.locator("#bundleList .saved-report").count(), 1);
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.frameLocator(".saved-report-dialog iframe").getByRole("heading", { name: "Frozen synthetic report 1", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Close saved report", exact: true }).click();
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     assert.equal(await page.getByRole("button", { name: "Open saved report", exact: true }).evaluate(node => node === document.activeElement), true);
     await page.locator("#savedReportSearch").fill("SYNTHETIC_PRIVATE_CONTENT_NEVER_SEARCHED");
     assert.match(await page.locator("#bundleList").textContent(), /No saved reports match/);
@@ -212,7 +228,7 @@ test("small, empty and error library states retain accessible controls at narrow
                 controls: [...root.querySelectorAll("button,summary,input"), ...document.querySelectorAll("#reportTaskNav a")].filter(node => node.checkVisibility()).map(rect),
                 search: root.querySelector("#savedReportSearch").getBoundingClientRect().width,
                 library: root.getBoundingClientRect().width,
-                fontLoaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
+                fontLoaded: getComputedStyle(document.body).fontFamily.startsWith('"Asta Sans"') && document.fonts.check('14px "Asta Sans"'),
                 colors: [...root.querySelectorAll(".saved-report-identity,.saved-report-metadata,.saved-report-manage,#savedReportCount")].map(colorPair),
             };
         });
@@ -230,7 +246,8 @@ test("small, empty and error library states retain accessible controls at narrow
     const gate = new Promise(resolve => { release = resolve; });
     t.after(() => release());
     await page.route("**/api/snapshot", async route => { await gate; await route.fulfill({ status: 503, json: { error: "Synthetic saved-list read unavailable." } }); }, { times: 1 });
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await page.context().setOffline(true);
+    await page.context().setOffline(false);
     await page.locator('#workspace[aria-busy="true"]').waitFor();
     assert.equal(await page.locator("#deleteAllReports").isDisabled(), true, "A pending list does not permit a new deletion preview");
     await shot(page, "library-loading");
@@ -240,7 +257,7 @@ test("small, empty and error library states retain accessible controls at narrow
     await shot(page, "library-error");
     await updateBoardState(context, state => { state.exports = []; });
     await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
-    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#bundles > summary").click();
+    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
     assert.match(await page.locator("#bundleList").innerText(), /No local reports have been saved/);
     assert.equal(await page.locator("#deleteAllReports").isDisabled(), true);
     await shot(page, "empty-library");

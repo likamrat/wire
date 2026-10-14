@@ -54,8 +54,8 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: fo
     const extracted = await pdfText(bundle.files["product-report.pdf"]);
     assert.match(extracted.text, /WIRE - local report/);
     assert.match(extracted.text, /Work IQ Request Explorer/);
-    assert.match(bundle.files["product-report.md"], /^# WIRE - product report/);
-    assert.match(bundle.files["product-report.html"], /<title>WIRE - product report<\/title>/);
+    assert.match(bundle.files["product-report.md"], /^# WIRE - activity report/);
+    assert.match(bundle.files["product-report.html"], /<title>WIRE - activity report<\/title>/);
     assert.match(bundle.files["product-report.html"], /class="brand-logo" aria-hidden="true"/);
     assert.equal(bundle.files["product-report.pdf"].subarray(0, 5).toString(), "%PDF-");
     assert.deepEqual(snapshot.records, bundle.records);
@@ -82,9 +82,9 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: fo
         assert.ok(manifest.promptCoverage.mandatoryRemovals >= 3);
     }
     const paintIds = new Set([...bundle.files["product-report.html"].matchAll(/<(?:linearGradient|filter|clipPath) id="(dimensional-[a-z0-9-]+)"/g)].map(match => match[1]));
-    assert.equal(bundle.files["product-report.html"].includes(fontDataUrl), false, "New native reports do not embed the historical CSS font");
+    assert.equal(bundle.files["product-report.html"].includes(fontDataUrl), true, "New readable reports embed the licensed Asta font independently of screen tokens");
     assert.ok(bundle.files["product-report.html"].includes(`--font:${uiFontStack}`));
-    const withoutLocalChartPaint = bundle.files["product-report.html"].replace(/url\(#wire-(light|dark)-r-emergence\)/g, (_, theme) => {
+    const withoutLocalChartPaint = bundle.files["product-report.html"].replace(`url("${fontDataUrl}")`, "").replace(/url\(#wire-(light|dark)-r-emergence\)/g, (_, theme) => {
         assert.ok(bundle.files["product-report.html"].includes(`<clipPath id="wire-${theme}-r-emergence">`));
         return "";
     }).replace(/url\(#(wire-dark-wire-(?:letter|cable)-ink)\)/g, (_, id) => {

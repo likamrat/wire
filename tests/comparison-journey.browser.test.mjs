@@ -68,7 +68,7 @@ async function setup(t, { comparison = false, timed = false, comparisonFormats =
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
-    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#bundles>summary").click();
+    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
     const row = id => page.locator(`#bundleList details[data-disclosure-key="bundle:${id}"]`);
     return { context, controller, page, calls, bundles, savedComparison, row };
 }
@@ -89,7 +89,7 @@ test("closing a frozen comparison restores its library entry and preserves the c
     const open = row(savedComparison.bundleId).locator("..").getByRole("button", { name: "Open saved comparison", exact: true });
     await open.click();
     await page.locator(".saved-report-dialog iframe").waitFor();
-    const back = page.getByRole("button", { name: "Close saved comparison", exact: true });
+    const back = page.getByRole("button", { name: "Back to report library", exact: true });
     await back.focus();
     const before = await workspace.evaluate(node => ({ top: node.getBoundingClientRect().top, scroll: scrollY }));
     const count = calls.length;
@@ -131,7 +131,7 @@ test("comparison choices describe saved scope and useful results precede unavail
     assert.deepEqual(await timing.locator(".comparison-metric-value").allTextContents(), ["200 ms", "150 ms"]);
     const unavailable = workspace.locator(".comparison-unavailable");
     assert.equal(await unavailable.evaluate(node => node.open), false);
-    assert.match(await unavailable.locator(":scope>summary").innerText(), /Accuracy.*Trust/s);
+    assert.match(await unavailable.locator(":scope>summary").innerText(), /Answer correctness.*Answer support/s);
     assert.doesNotMatch(await unavailable.locator(":scope>summary").innerText(), /Cost/);
     assert.equal(await unavailable.locator("table").isVisible(), false);
     await unavailable.locator(":scope>summary").focus();
@@ -197,7 +197,7 @@ test("two explicit saved reports produce a separately reviewed comparison withou
     assert.equal(inspectResponse.status(), 200, await inspectResponse.text());
     await workspace.locator(".report-comparison").waitFor();
     assert.equal((await loadBoardState(context)).exports.length, 2);
-    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No requests selected");
+    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No interactions included");
     for (const format of ["JSON", "PDF", "Markdown"]) await workspace.getByRole("checkbox", { name: format, exact: true }).check();
     const preview = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/preview"));
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
@@ -290,7 +290,7 @@ test("contextual report deletion cancels safely and preserves a saved comparison
     assert.equal(deletedResponse.status(), 200, await deletedResponse.text());
     await dialog.getByRole("button", { name: "Close", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    await page.waitForFunction(() => document.activeElement === document.querySelector("#bundles>summary"));
+    await page.waitForFunction(() => document.activeElement === document.querySelector("#savedLibraryTitle"));
     const state = await loadBoardState(context);
     assert.equal(state.exports.some(bundle => bundle.bundleId === bundles[0].bundleId), false);
     assert.equal(state.exports.some(bundle => bundle.bundleId === savedComparison.bundleId), true);
@@ -298,7 +298,7 @@ test("contextual report deletion cancels safely and preserves a saved comparison
     assert.deepEqual(await hashes(bundles[1]), other);
     assert.deepEqual(await hashes(savedComparison), comparisonHash);
     await assert.rejects(stat(bundles[0].files["product-report.json"]), { code: "ENOENT" });
-    assert.equal(await page.locator("#bundles>summary").evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator("#savedLibraryTitle").evaluate(node => node === document.activeElement), true);
     const keptComparison = row(savedComparison.bundleId);
     await keptComparison.locator(":scope>summary").click();
     const opened = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
@@ -410,7 +410,7 @@ test("library comparison Open reads its actual frozen HTML rather than today's c
     await page.frameLocator(".saved-report-dialog iframe").getByRole("heading", { name: "Independently reviewed historical comparison typography", exact: true }).waitFor();
     assert.equal(await page.frameLocator(".saved-report-dialog iframe").locator("script,a[href]").count(), 0);
     assert.equal(await page.evaluate(() => window.savedComparisonExecuted), undefined);
-    await page.getByRole("button", { name: "Close saved comparison", exact: true }).click();
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     assert.equal(await row(savedComparison.bundleId).locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).evaluate(node => node === document.activeElement), true);
     assert.equal(calls.slice(count).some(call => /\/(preview|review|save|export)$/.test(call.path)), false);
     assert.deepEqual(await hashes(savedComparison), original);
@@ -472,12 +472,13 @@ test("closing a pending frozen comparison fences its late response without chang
     });
     await row(savedComparison.bundleId).locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
     await reading.promise;
-    await page.getByRole("button", { name: "Close saved comparison", exact: true }).click();
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     await row(bundles[0].bundleId).locator("..").getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.locator(".saved-report-dialog iframe").waitFor();
     const completed = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
     release.resolve(); await completed;
-    assert.match(await page.locator(".saved-report-dialog").innerText(), new RegExp(bundles[0].bundleId));
+    assert.match(await page.frameLocator(".saved-report-dialog iframe").locator("body").textContent(), new RegExp(bundles[0].bundleId));
+    assert.match(await page.frameLocator(".saved-report-dialog iframe").locator("h1").innerText(), /Activity report/);
     assert.equal(await page.locator(".saved-report-dialog iframe").getAttribute("title"), "Frozen saved report");
 });
 
@@ -485,11 +486,11 @@ test("a comparison without saved HTML names that limit and exposes only its veri
     const { page, savedComparison, row } = await setup(t, { comparison: true, comparisonFormats: ["json"] });
     const entry = row(savedComparison.bundleId);
     assert.equal(await entry.locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).count(), 0);
-    assert.match(await entry.locator("..").innerText(), /No HTML/);
+    assert.match(await entry.locator("..").innerText(), /Download JSON/);
     await entry.locator(":scope > summary").click();
     assert.match(await entry.innerText(), /HTML was not saved/);
     const response = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
-    await entry.getByRole("button", { name: "Download comparison-report.json", exact: true }).click();
+    await entry.locator("..").getByRole("button", { name: "Download comparison-report.json", exact: true }).click();
     const value = await (await response).json();
     assert.equal(value.format, "json");
     assert.deepEqual(Buffer.from(value.data, "base64"), await readFile(savedComparison.files["comparison-report.json"]));

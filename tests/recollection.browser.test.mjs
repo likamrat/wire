@@ -115,9 +115,9 @@ test("deleted source activity stays absent until an explicit source-backed recol
     await page.frameLocator(".report-frame").locator("h1").waitFor();
     assert.match(await page.frameLocator(".report-frame").locator("body").textContent(), /Synthetic request selected-A/);
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     await capture(page, "recollection-new-report-saved");
     assert.equal((await loadBoardState(f.context)).exports.length, 1);

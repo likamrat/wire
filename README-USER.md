@@ -251,7 +251,8 @@ The comparison temporarily replaces ordinary date controls, charts and rows.
 query. **Exact matching records** opens the existing record/context reader; Back
 restores the paired periods and opened assessment details. Report selections
 remain separate. **Create comparison report** prepares this exact accepted pair
-through Setup, a disclosure Review, and a separate local Save. No earlier reports
+through Activity, Contents, then Review & save. Disclosure approval and local saving
+remain separate actions. No earlier reports
 are required, and the saved copy is not regenerated when reopened.
 
 Read the matching-record counts separately from **full retained interaction**
@@ -272,15 +273,26 @@ clear the live comparison; read the current stored view before comparing again.
 
 ## Create a report
 
-1. **Setup:** Reports opens the saved library; choose **Create a report** to start setup. Choose **Selected requests**, **Current view** or **All collected activity**, and **Prompt authors in this report** on the same surface as **No prompts**, **Masked prompts**, **Original prompts** and HTML/PDF/JSON/Markdown formats. Selection starts empty; use **Choose interactions in Analyze** or **Add to report** to select individual interactions. Author choices exclude whole interactions with their calls and scores, without deleting your base selection. Setup shows the actual included population across all pages, including selections hidden by browsing filters. Click **Scan and preview**.
-2. **Review:** Read the actual preview, prompt copies and privacy findings. **Inspect exact files** and **Included evidence and preparation details** show the underlying copies and counts. **Edit or omit this report copy** affects only exports; then **Rebuild preview**. Check approval and **Complete disclosure review**.
-3. **Save locally:** Check the approved requests, prompt mode and formats, then click **Confirm local export**. Use **Open saved report** or **Download**. Reopen files through **Saved reports > Open**.
+1. **Activity:** Open **Reports > Create a report**. Choose **All saved sessions**, **Current Analyze view**, or individual **Selected interactions** in the report's list. All saved sessions ignores Analyze dates, filters and search; it uses saved reportable activity, not complete chat transcripts. Counts distinguish chats from interactions. Prompt-author choices include or exclude whole interactions and keep hidden selections. Continue to Contents.
+2. **Contents:** Choose **No prompts**, **Masked prompts** or **Original prompts**, optional linked requests/replies, and the files to save. HTML is the existing default; PDF, JSON and Markdown are also available. **Prepare report** creates the actual copies for inspection without saving them.
+3. **Review & save:** Read the flowing report. **Text** shows originals, masked copies and removals; **Files** exposes the exact prepared files. Editing or omitting a copy requires **Rebuild preview**. Check the disclosure box and **Approve for local saving**, then separately click **Save report locally** in the same workspace.
 
-Back and the next action stay together in each step. Opening scope details and
-optional request labels is not a required step. Back to Setup keeps an unchanged preview;
+Back and the next action stay together. Scope details are optional, not another gate.
+Back to Contents keeps an unchanged preview;
 changing report choices or relevant source data requires a new scan and disclosure review.
 Unrelated browsing keeps the draft. A pending or failed read blocks saving until the
 report basis is verified again; an uncertain save is checked in saved history, never repeated automatically.
+
+After saving, **Open saved report** is the main action; downloads and **View saved reports**
+remain nearby. The library shows scope, preparation date and available formats, with
+**Files & actions** for secondary operations. Search and paging work across older reports.
+Opening one reads its frozen copy; it does not rerun an assessment. **Create a report**
+starts a new empty selection after a completed save, while **Continue draft** preserves unfinished work.
+
+New reports lead with **At a glance**: the recorded work represented, common tool/service
+patterns and supported findings. Examples use reviewed prompt text when included.
+Exact counts, distinct timing boundaries and coverage remain available; missing reviews
+are not failed scores. HTML, PDF, Markdown and JSON use the same frozen facts.
 
 Review masked copies too. Detected credentials are removed even in Original mode. Saving uploads nothing.
 Author membership and prompt text are separate: **No prompts** hides text, not interactions.

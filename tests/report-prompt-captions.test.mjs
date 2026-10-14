@@ -18,11 +18,11 @@ for (const provenance of ["human-authored", "coordinator-message", "recorded-use
         });
         const before = structuredClone(source);
         const bundle = await buildSanitizedBundle([source], "a".repeat(64), { promptMode: "masked", formats: ["html", "json", "markdown"] });
-        assert.match(bundle.previewHtml, /<h4>Prompt<\/h4>/);
-        assert.match(bundle.previewHtml, /Reviewed prompt excerpt:/);
-        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 2: query<\/h4>/);
-        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 2: filter<\/h4>/);
-        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 3: question<\/h4>/);
+        assert.match(bundle.previewHtml, /<h3>Prompt<span class="prompt-status"> · full source \/ masked-copy<\/span><\/h3>/);
+        assert.equal(bundle.previewHtml.split("SYNTHETIC_PROMPT_CAPTION").length - 1, 1);
+        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 2: query<span class="prompt-status">/);
+        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 2: filter<span class="prompt-status">/);
+        assert.match(bundle.previewHtml, /<h4>Recorded tool argument · Tool 3: question<span class="prompt-status">/);
         assert.match(bundle.files["product-report.md"], /\*\*Prompt\*\*/);
         assert.match(bundle.files["product-report.md"], /\*\*Recorded tool argument/);
         assert.doesNotMatch(bundle.previewHtml, /Human prompt|Agent-to-tool prompt|Reviewed request excerpt/);

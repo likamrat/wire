@@ -76,6 +76,31 @@ test("verified report basis ignores unrelated updates but detects same-count ide
     assert.equal(draft.synchronizeBasis(changed, { requests: [swap], baseRequests: [swap] }), true);
 });
 
+test("catalog timing freshness alone preserves a selected preview, but timing facts still invalidate it", () => {
+    const request = { scenarioId: "selected", aliases: ["selected"] };
+    const scope = { requests: [request], baseRequests: [request] };
+    const state = { revision: 1, scenarios: [{ scenarioId: "selected" }], assessment: { catalog: [{
+        scenarioId: "selected", interactionRef: "kept-ref", reviewStatusRevision: "kept-review",
+        responseTiming: { sourceRevision: 1, interactionRef: "kept-ref", boundary: "recorded-request-to-final-answer", status: "unavailable", durationMs: null },
+    }] } };
+    const draft = createReportDraft();
+    draft.synchronizeBasis(state, scope);
+    const token = draft.token(), refreshed = structuredClone(state);
+    refreshed.revision++;
+    refreshed.assessment.catalog[0].responseTiming.sourceRevision++;
+    assert.equal(draft.synchronizeBasis(refreshed, scope), false);
+    assert.equal(draft.current(token), true);
+    const changed = structuredClone(refreshed);
+    changed.assessment.catalog[0].responseTiming.status = "measured";
+    changed.assessment.catalog[0].responseTiming.durationMs = 25;
+    assert.equal(draft.synchronizeBasis(changed, scope), true);
+    assert.equal(draft.current(token), false);
+    assert.equal(state.assessment.catalog[0].responseTiming.sourceRevision, 1, "Fingerprinting does not mutate the accepted snapshot");
+    const paired = createReportDraft();
+    paired.synchronizeBasis(state, scope, { paired: true });
+    assert.equal(paired.synchronizeBasis(refreshed, scope, { paired: true }), true, "Accepted paired cohorts keep their revision-bound authority");
+});
+
 test("every report setting change invalidates the current review token without reusable consent", () => {
     const draft = createReportDraft();
     assert.equal(draft.options().promptMode, "masked");

@@ -126,7 +126,6 @@ test("compact reader keeps read errors and a reachable retry rather than claimin
         : route.continue());
     await page.goto(runtime.url + "#request?request=" + encodeURIComponent(records[0].scenarioId));
     await ready(page);
-    await page.locator(".request-context-summaries > summary").click();
     const host = page.locator(`.interaction-insights[data-context-group="${records[0].scenarioId}"]`);
     const findings = page.locator(`.interaction-findings[data-context-group="${records[0].scenarioId}"]`);
     await expect(findings).toContainText("Saved findings could not be read");
@@ -159,8 +158,8 @@ test("normal isolated source opens retained correction, retry and reply immediat
         await expect(page.locator("#" + id)).toBeHidden();
     }
     await expect(page.locator(".request-context-heading")).toHaveCount(0);
-    await expect(page.locator(".request-context-summaries > summary")).toHaveText("Reviews and details");
-    await expect(page.locator(".request-context-summaries .request-recorded").first()).toBeHidden();
+    await expect(page.locator(".request-context-summaries > h2")).toHaveText("Reviews");
+    await expect(page.locator(".request-context-summaries .request-recorded").first()).toBeVisible();
     const timeline = page.locator(".request-context-timeline");
     await expect(timeline.locator(".interaction-findings,.interaction-insights")).toHaveCount(0);
     assert.ok(await timeline.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-context-summaries")) & Node.DOCUMENT_POSITION_FOLLOWING)));
@@ -192,7 +191,6 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await expect(page.locator(".request-context-summaries .request-recorded").first()).toHaveAttribute("data-context-group", records[0].scenarioId);
     await expect(page.locator(".request-context-summaries .request-link-details")).toContainText("not inferred task boundaries");
     await expect(page.locator(`.interaction-findings[data-context-group="${records[0].scenarioId}"]`)).toContainText("Your feedback");
-    await page.locator(".request-context-summaries > summary").click();
     await expect(page.locator(".request-context-summaries .request-recorded")).toHaveCount(2);
     await expect(page.locator(".interaction-findings [data-finding-kind=execution]")).toHaveCount(0);
     await expect(page.locator(".interaction-findings").first()).toContainText("Your feedback");
@@ -213,13 +211,12 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await expect(page.getByRole("dialog").locator('tr[data-metric-status="unassessed"] .negative')).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(feedback).toBeFocused();
-    await page.locator(".request-context-summaries > summary").click();
     assert.equal(payloadReads.length, 1, "Only the independently authorized linked answer was read");
     await expect(timeline.locator(".reader-state-partial")).toHaveText("Partial text");
     const correction = timeline.locator(`[data-context-group="${records[1].scenarioId}"][data-context-kind=prompt]`);
     const copy = correction.getByRole("button", { name: "Copy prompt", exact: true });
     await copy.focus(); await page.keyboard.press("Enter");
-    assert.deepEqual(await page.evaluate(() => window.contextClipboard.writes), [records[1].userPrompt.text]);
+    await expect.poll(() => page.evaluate(() => window.contextClipboard.writes)).toEqual([records[1].userPrompt.text]);
     await page.evaluate(() => { window.contextClipboard.denied = true; });
     await copy.click();
     await expect(correction.locator("[role=alert]")).toContainText("Couldn't copy");

@@ -8,8 +8,10 @@ emphasis. Cards combine the operation and recorded outcome, then show compact
 chat, recorded time and model facts. The reader continues with that same prompt
 and source context, followed by the recorded calls and replies. It uses a bounded
 reading column and simple dividers instead of a second page title, breadcrumb and
-timeline rail. Back stays above the prompt; report selection stays below the
-reading flow. The semantic page heading remains available to assistive technology.
+timeline rail. Back and report selection stay above the prompt. A restrained
+neutral surface and leading edge distinguish the exact prompt from ordinary
+metadata without increasing its type size. The semantic page heading remains
+available to assistive technology.
 
 The reader's **Hide/Read** and **Copy** text actions retain full subject-specific
 accessible names and 44px targets without competing outlined buttons. Responses
@@ -32,8 +34,12 @@ Source-author qualifiers, partial text, missing responses, failed calls and read
 errors remain visible. Copy names its subject, copies only that exact retained
 body and warns that clipboard text is unmasked and accessible to other apps.
 One visible footer clipboard notice serves the prompt and retained replies; each Copy
-control references it and still names its exact subject. Read/Hide, deliberate
-copy, clipboard failure feedback, Back and selected-call
+control references it and still names its exact subject. Pending and successful
+copy feedback occupies only the existing button (spinner/check); a polite
+screen-reader announcement stays out of layout. No extra line or reserved blank
+row may move the prompt, controls or page. Copy failure stays explicit beside
+the control, with manual-copy guidance and retry. Read/Hide, deliberate
+copy, Back and selected-call
 anchors retain their existing behavior. A retained response has one heading and
 keeps its unverified final-answer status; a missing response is never an answer
 verdict. A request with no retained individual actions says so beside the prompt.
@@ -42,9 +48,16 @@ Repeated About-prompt/response disclosures and the Selected prompt badge are
 removed from this reader. Filter scope is stated once; out-of-view and missing
 API metadata remain in each call's existing technical details instead of
 repeating empty fields down the page. Recorded paths, returned-result summaries
-and actual failures stay in the reading flow. Expanded details state service
-evidence once, keep exact recorded timestamps and identifiers, and consolidate
-absent parent/parallel linkage into a qualified note. They do not repeat the
+and actual failures stay in the reading flow. The exact recorded tool name is primary, including `workiq-ask`; an operation
+description never replaces it. Expanded details state service
+evidence once, keep exact recorded timestamps and selectable identifiers without
+per-ID copy buttons. They do not recite absent parent/parallel linkage or a lack
+of direct HTTP observation for every call: these are recorder limits, not an
+error or an action for the user. Actual linkage values and observed HTTP evidence
+remain available. A missing-evidence explanation belongs beside the particular
+conclusion it limits, not as a default adapter-capability paragraph. Missing
+links never establish independent/serial execution, and missing HTTP evidence
+never establishes that no network activity occurred. Details do not repeat the
 consistent completion flags; conflicting or otherwise
 unrepresented raw completion evidence remains visible. Exact arguments, scripts,
 result attribution and source limits remain readable and copyable without a new
@@ -52,7 +65,7 @@ accordion layer or a help button on every fact.
 
 A missing response follows its group's calls, before their technical details:
 **No saved response. Capture is off.** when that state is known. It is not a
-failed call or proof that Copilot did not answer. **Reviews and details** shows
+failed call or proof that Copilot did not answer. **Reviews** directly shows
 the selected interaction's review state and concise, truthful gaps. For example,
 **Completion could not be verified for 1 call.** does not change a reported
 outcome into a verified completion. Exact check counts, reasons and definitions
@@ -60,10 +73,17 @@ remain in the existing saved-check details and feedback dialog; technical source
 records retain source-specific limits. Broad app-wide coverage stays in Analyze
 and Collection status, reachable through **Collection coverage**, not copied
 into the reader. One short scope note distinguishes missing messages, tool
-outcomes and answer/permission judgments. Report membership stays beside this
-section. The redundant unselected-status
-sentence is replaced by the explicit **Add to report** action; selected and
-broader-scope membership remain stated. A single call's outcome is
+outcomes and answer/permission judgments. Report membership stays at the top.
+There is no outer review disclosure to open before reading the review
+state or reaching its controls. The redundant unselected-status
+sentence is replaced by the top-level **Add to report** action; selected and
+broader-scope membership remain stated. **Continue to report** explicitly opens
+Selected report Activity; Add/Remove never navigates or saves. Both controls use
+the shared canonical-alias selection and write/recovery guards. Existing hidden
+selections, author choices, text/format preferences and Back position stay intact.
+Author/scope exclusions are stated inline, not mistaken for included activity.
+This one compact top action group replaces the reader's bottom selection bar.
+A single call's outcome is
 not duplicated in its review section. Multiple-call and linked-interaction
 summaries retain their useful counts and boundaries. Technical source records
 omit empty rows; linked-message explanations appear when there are linked
@@ -167,11 +187,11 @@ projections, saved output, classification and stored evidence are unchanged.
 
 ## Saved report library
 
-Reports opens directly on the saved library, expanded by default. The top-level
-**Saved reports / Create a report** links separate browsing from the
-Setup / Review / Save locally flow; users do not pass creation to find
-search. **Continue draft** returns to unfinished work and **Saved report details**
-returns to the most recent save state. Activity's explicit create action goes
+Reports opens directly on a saved-report list, without an outer disclosure.
+**Create a report** starts Activity / Contents / Review & save; users do not pass
+creation to find search. **Continue draft** returns to unfinished work. After a
+completed save, Create starts a new empty selection rather than reopening the
+old result. Activity's explicit create action goes
 straight to creation. `#reports?task=create` and the legacy `#report` creation
 link remain direct entries; the main Reports navigation opens the library.
 
@@ -186,7 +206,7 @@ Switching tasks within the same Reports context preserves choices, selection,
 prepared review and disclosure approval. Browser Back restores the task and
 library search/page. Relevant source, permission, filter and evidence changes
 still invalidate previews; switching tasks does not bypass their checks.
-The saved library remains separate from Setup / Review / Save locally.
+The saved library remains separate from Activity / Contents / Review & save.
 It uses the existing metadata search and six-item paginated history, not another
 list or search implementation. Reports and comparisons have explicit labels and
 separate counts. The range and Previous/Next remain together; the saved-library-only
@@ -201,11 +221,13 @@ below its trigger rather than moving the trigger from the right edge to a new ro
 Three short, labelled paragraphs explain search, preparation dates and frozen
 copies, with bounded line length and no smaller text at narrow sizes.
 A compact row aligns the
-report's preparation identity, prompt mode, format availability, **Manage** and
-direct **Open**. Manage holds membership count, full identity, download, comparison
-and individual deletion controls. Frozen-copy and search details stay in
-**About saved reports**. Missing HTML has an explicit no-HTML
-state rather than an inert Open action. Unknown metadata stays unknown.
+report's scope, interaction count, preparation identity, prompt mode, format
+availability, **Files & actions** and direct **Open**. The secondary area holds
+downloads, full identity, comparison and individual deletion controls. Frozen-copy
+and search details stay in **About saved reports**. Missing HTML offers an available
+PDF/Markdown/JSON download instead of an inert Open action; absent metadata stays unknown.
+The frozen reader gives its document the remaining viewport, with a short preparation
+caption and **Back to report library**. Its opaque sandbox and old bytes are unchanged.
 
 **Manage saved reports** follows the results as a separate, collapsed disclosure.
 It contains **Delete all saved reports**, never interpreted as deleting only
@@ -362,9 +384,9 @@ fingerprints do not gain this field. Synthetic association, collection,
 Graph-import, deletion, snapshot and browser tests establish these behaviors;
 they do not establish that every installed source records model identity.
 
-## Report setup
+## Report choices
 
-Setup keeps every scope, author, prompt and format choice, but explains the selected
+Activity and Contents keep the scope, author, prompt and format choices, but explain the selected
 scope once rather than repeating paragraphs inside each alternative. Scope labels
 and counts stay visible. The author summary appears when it adds exclusions,
 unavailable counts or the fixed membership of a period comparison; the main report
@@ -676,39 +698,55 @@ accessibility/layout guidance and the existing product contract were used.
 
 ## Report creation journey
 
-Reports uses one task surface for Setup, Review and Save locally. Its compact
-step navigation, selection summary and current stage stay together. The existing
-theme accent identifies the current step, visited steps and the next enabled
-action; it is not a quality score. Analytical **Reset to Home** remains available
-in its other contexts, not in Reports.
+Reports uses three stages: **Activity**, **Contents**, **Review & save**. Compact
+numbered navigation identifies the task, without large step cards or repeated
+prerequisite paragraphs. It wraps naturally at narrow/enlarged sizes without
+shrinking text. The left sliding sidebar, Asta Sans, official Fluent icons and
+neutral light/charcoal themes remain. Actions keep 44px hit targets.
 
-The three step controls reflow into compact full-width rows when the report
-container is at most 32rem wide. Setup, Review and Save locally keep whole words,
-the existing text size, numbered/current states and native keyboard/disabled
-semantics; wider containers retain the three-column header.
+Activity starts empty. **Selected interactions**, **All saved sessions** and
+**Current Analyze view** show distinct chat/interaction counts. The all-session
+choice explicitly ignores Analyze dates, filters and search, without collecting
+new history. Authors remain a separate membership choice. The existing canonical
+selection now has a plain, paginated in-task picker; changing its local search
+does not change membership. Hidden selections stay included. Scope details are
+available below the task, while unrelated classification actions remain in Analyze.
 
-Setup starts empty. Scope and prompt-author membership sit side by side when
-space allows, with matching labels, then stack at narrow or enlarged-text widths.
-Prerequisites appear beside the local action area instead of below a disabled
-future step. Clear selection appears only when there is a selection to clear.
-Optional request labels and scope details follow the actions; neither is a gate.
-All three scopes are visible alongside their actual all-page counts. Prompt mode
-and formats share Setup, not another preliminary step. Hidden selected groups
-remain included and are counted explicitly.
+Contents carries one concise scope/count line, the existing three text modes,
+optional linked requests/replies, additional masking and four formats. Explanations
+describe consequences beside the choice, not through an icon on every field.
+**Prepare report** performs no save. Formats become a single column when necessary
+so labels such as Markdown do not break into fragments.
 
-Every stage keeps Back and its next action together. Review retains the formatted
-copy, prompt comparison/edit/omit tools, scan findings and explicit disclosure
-checkbox. Exact files and frozen evidence/preparation facts have named disclosures.
-Save repeats the approved request membership, prompt mode and formats as aligned
-facts, with a separate local-write confirmation. Successful saves lead with the
-saved reader and downloads; history stays outside the unfinished task.
+Review gives the actual prepared document natural page height. Flat
+**Report / Text / Files** inspection views retain copy editing, omissions and
+privacy findings; the sticky inspection bar links directly to the decision area.
+**Approve for local saving** and **Save report locally** remain separate guarded
+actions in the same workspace. Approval updates the exact manifest without replacing
+the reading document. There is no fourth Save screen or repeated scope inventory.
+Changed evidence/text still requires rebuilding and a new explicit approval.
+Copy editing and omission lock while saving or checking an uncertain save.
+The result of that dispatched write is independent of later draft invalidation.
 
-Equivalent disclosures use one reading role and 44px targets. The journey reuses
-Asta, Fluent, existing light/navy tokens and help geometry. Local accessibility
-guidance, the supplied screenshots and actual synthetic runtime states informed
-the layout; no external screen-catalogue evidence was used. This is presentation
-only: selection, author scope, preview lifetime, approval invalidation, receipt
-recovery, refresh guards and immutable saved bytes are unchanged.
+Only prepared previews use the approved same-origin measurement exception to the
+existing script-blocked, sanitized frame. Height/text observers belong to the current
+frame and are disposed on invalidation, replacement or removal. Borders are included
+in height calculations; self-induced resize loops fail explicitly. Saved/Search/
+comparison readers remain opaque and immutable.
+
+Successful saves show Open and return-to-library together, with concise named downloads.
+An uncertain write instead offers receipt-only **Check save status** and cannot become
+a new draft or repeat a mutation. Back retains an unchanged draft/reading position.
+Fresh catalogue timing transport revisions alone do not invalidate unchanged selected
+facts; source, timing, permission, context and saved-review changes retain their guards.
+
+New human-readable reports lead with **At a glance**, grounded in frozen counts,
+tool/service patterns and actual saved findings. Prompt-led examples and exact timing/
+coverage support that account. Unrun canonical local checks share their explanation,
+not their separate values or denominators; errors and unknown definitions remain explicit.
+Red is reserved for failures, while service colors keep their distinct meaning. Report
+fonts/styles are embedded independently from screen tokens; old artifacts and machine
+facts are not rewritten. The same actual HTML, PDF and Markdown are inspected during proof.
 
 ## Offline historical metadata maintenance
 
@@ -1165,9 +1203,9 @@ cues rather than success/failure colors. Your prompt uses a dedicated cyan token
 on light surfaces and brighter on navy, distinct from ordinary blue links and violet Agent.
 The list marker and detail heading share that token; prompt bodies retain normal reading colors.
 Labels remain visible.
-Report Setup has its own explicit author membership choice; it narrows the chosen base
+Report Activity has its own explicit author membership choice; it narrows the chosen base
 scope without deleting hidden selections. Complete interactions, not agent-executed individual calls,
-are the membership unit. Prompt-text disclosure remains a separate choice within Setup.
+are the membership unit. Prompt-text disclosure remains a separate choice in Contents.
 
 ## Interaction insights
 
@@ -1267,7 +1305,7 @@ existing **Saved reviews** disclosure retains independent state, asynchronous
 loading, scope, feedback and recovery controls. Screen assessment composition
 sets `showTiming: false`; the shared renderer's default, underlying aggregates,
 optional exact definitions and saved report output remain unchanged.
-The reader's secondary section is **Reviews and details**, not a timing
+The reader's secondary section is **Reviews**, not a timing
 destination. Neither surface averages medians, sums concurrent calls or treats
 a duration as a quality percentage. The Search timing shortcut opens existing
 Calls instead of a removed widget. No new accordion or timing chart is added.
@@ -2333,8 +2371,8 @@ truncated. Plain-text/JSON reports do not carry visual title styling.
 | Request | Selected result marked within bounded retained prompts, calls, known failure reasons and authorized replies | Text opens immediately with original roles, inferred-association limits and missing evidence. Exact arguments and original per-group counts/verdicts remain secondary. | Follow the available back-and-forth without another context gate, guessed task boundaries or new source reads. |
 | Collection status | Collector state and next step, readable/eligible coverage, Chat history gap summary and compact search | Closed short reason groups, six chats per page; closed Technical details for inventory, exclusions, limits and stored refresh. Home check results and Activity link here. | Know whether collection is working, inspect missing activity when relevant and avoid treating every gap as a repair task. |
 | Settings | Connection & updates, Privacy & saved data, AI reviews, Display, Troubleshooting | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
-| Reports | Current-stage work, one-report inclusion summary, Clear selection and three-step navigation | Setup combines scope, authors, three prompt modes, four formats and Scan and preview. Detailed included requests remain four per page; saved history stays separate, six reports per page. | Choose membership and contents together, then review the actual disclosure before a separate local save. |
-| Review and Save | Review shows the frozen formatted preview, scope, incomplete-source/removal totals, limitations and unchecked attestation. Save shows the separate final confirmation, then actual file downloads. | Review opens six original/copy comparisons per page, retaining edits when paging; exact-file disclosures remain available. Save is reached only after explicit disclosure review. | Compare and approve the copies, then deliberately save; paging or changing stages never grants consent. |
+| Reports | Current-stage work, inclusion counts, Clear selection in Activity and three-step navigation | Activity chooses scope/authors; Contents chooses text/formats; Review & save displays the actual copies. The interaction picker has four rows per page; saved history has six. | Choose activity first, then contents. Approve disclosure and separately save in the same reading workspace. |
+| Review and save | The frozen document leads; Text and Files retain exact-copy inspection, limits and an unchecked attestation. | Text shows one original/copy pair per page, retaining edits when paging. Approval enables the separate Save action in this same workspace; completion offers Open and downloads. | Read and approve the copies, then deliberately save; paging or changing stages never grants consent. |
 
 Summary outcomes cover all matching actions, not just the visible result page.
 Individual interaction outcomes retain the matching-versus-full denominator.
@@ -3191,25 +3229,21 @@ missing reasons, polling/stale reads and selection identity. Existing
 text-access, result, navigation, report/privacy and Settings/chart-owner tests
 retain their independent contracts.
 
-**Reports** starts with an empty Selected requests scope, unless this panel
-already has a deliberate selection or scope choice. All collected activity,
-Current view and Selected requests each show their canonical request count.
+**Report creation** starts with empty Selected interactions unless the panel
+already has a deliberate selection. All saved sessions, Current Analyze view
+and Selected interactions show distinct canonical chat/interaction counts.
 From chat analysis, **Create report for this chat** atomically replaces
 draft IDs with only that source chat's canonical eligible request owners,
 across every page and alias. It explicitly includes full retained dates/services,
 not the current failure/date slice. Those IDs remain fixed as new requests arrive.
 The source chat/project context stays visible before review.
 
-Three numbered stages make the remaining task explicit: **Setup**, **Review**,
-**Save locally**. Setup shows all three scopes, author inclusion, actual membership,
-all three prompt modes and four formats together, with
-one **Scan and preview** action. Review presents the formatted document inline,
-then optional exact-copy comparisons; no modal hides the sidebar. Explicit
-unchecked attestation and disclosure review lead to Save, where the separate
-final confirmation writes files and successful completion shows download links.
-The adjacent **One report · N requests included** summary distinguishes membership
-from saved report history. Zero says **No requests selected** and explains the
-next collection/selection action. All is a deliberate opt-in, usable without
+The numbered stages are **Activity**, **Contents**, **Review & save**. Membership
+comes before text and format choices. **Prepare report** opens the actual flowing
+document; explicit disclosure approval and the separate Save action stay there.
+Flat Text/Files inspection remains available without a modal over the sidebar.
+Counts distinguish included interactions from saved report history; zero is a
+missing selection, not a failed result. All is a deliberate opt-in, usable without
 progressing dozens of cards through review states. It means available eligible
 collected evidence, including identifiable preserved records, not a new chat
 scan or inferred hidden calls. Current includes all matching pages and private
@@ -3217,8 +3251,7 @@ search. The report carries complete eligible evidence for matching requests, not
 only the individual chart actions. Work IQ/API/Graph/code-reference counts remain
 separate, known aliases count once, and scope exclusions are explicit.
 
-Clear selection is beside the Reports membership summary throughout the stages,
-including while preparing, and in the shared Home/Activity/request
+Clear selection is in Report Activity and in the shared Home/Activity/request
 selection strip. It clears every page's explicit IDs, switches All/Current to
 empty Selected, invalidates pending async previews and attestation, and discards
 per-copy edits and chat-entry context. It does not delete evidence, reclassify requests, delete saved
@@ -3240,7 +3273,7 @@ Selecting or unselecting a request therefore leaves its row, surrounding chat
 context and window scroll unchanged, including an already-expanded prompt.
 
 Review labels are independent user classifications. Optional changes remain in
-an expandable request list; no selection, preview, cancellation, download or
+Analyze and interaction details; no selection, preview, cancellation, download or
 completed export changes those labels. Scope, review and source revisions are
 checked again at the privacy boundary. Export history is appended separately;
 older reports are never overwritten. The preview is a readable
@@ -3265,7 +3298,7 @@ actions. Editing a copy or changing any export choice requires rebuilding and
 reviewing again. The final commit writes every selected format before appending
 an export-history entry; source records and their classifications remain unchanged.
 
-Saved-report reading starts with a short **At a glance**, not the disclosure
+Newly generated ordinary reports start with a short **At a glance**, not the disclosure
 manifest. Separate-unit counts, recorded outcomes, services and missing-status
 coverage lead; bounded request-to-action examples precede exact operation tables.
 HTML links to full prompt copies in native disclosures, while PDF expands those
@@ -3543,8 +3576,8 @@ keyboard reading. The accepted analysis-scope and filter-controls fixtures
 still prove all-page cohort parity, delayed-response guards and draft filters.
 
 There is no global **Export report** action in the rail/header/mobile shell.
-Open **Reports** in top navigation for the saved library, then **Create a report**
-for Setup, Review and Save locally. Contextual **Add to report**, **Review selection** and
+Open **Reports** in the left sidebar for the saved library, then **Create a report**
+for Activity, Contents and Review & save. Contextual **Add to report**, **Review selection** and
 chat-specific report creation remain. Navigation preserves deliberate empty
 selection, current draft, filters, privacy gates and saved/downloaded artifacts.
 
@@ -3568,7 +3601,7 @@ Empty views point to this same control rather than adding competing resets.
 
 Manual stored-data refresh is disabled while a report scan/review or prepared
 snapshot remains open, during a write, or while Settings edits are pending.
-Back to Setup alone keeps the prepared snapshot; changing report choices uses
+Back to Contents alone keeps the prepared snapshot; changing report choices uses
 existing invalidation, and completing the report releases the guard. A small
 state notification from report presentation synchronizes only the native control
 and its concise explanation. It never loads data, cancels a preview, navigates or

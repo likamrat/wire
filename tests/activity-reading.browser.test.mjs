@@ -114,7 +114,7 @@ test("activity card and reader form one exact, private reading and return journe
         await expect(page.locator(".request-original .response-timing data")).toHaveAttribute("value", "114090");
         await expect(page.locator(".request-original .response-timing data")).toHaveText("1:54 min");
         await expect(page.locator(".interaction-response")).toContainText(/Capture is off/i);
-        await expect(page.locator(".call-heading")).toContainText("Asked Copilot");
+        await expect(page.locator(".call-heading h3")).toHaveText("workiq-ask");
         await expect(page.locator(".call-heading [data-fluent-icon=chat_sparkle_24_regular]")).toHaveCount(1);
         await expect(page.locator(".call-heading data")).toHaveAttribute("value", "84892");
         await expect(page.locator(".call-heading data")).toHaveText("1:25 min");
@@ -167,7 +167,6 @@ test("activity card and reader form one exact, private reading and return journe
         await expect(call).toContainText("84892");
         await call.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
         assert.deepEqual(JSON.parse(await page.evaluate(() => window.readingCopies.at(-1))), record.toolCalls[0].requestArgs);
-        await page.locator(".request-context-summaries > summary").click();
         await expect(page.locator(".request-support")).toBeVisible();
         await expect(page.locator("#coverage")).toBeHidden();
         const overview = page.locator(".request-context-summaries");
@@ -188,13 +187,12 @@ test("activity card and reader form one exact, private reading and return journe
         await expect(page.locator("#collectionStatusView")).toBeVisible();
         await page.goBack(); await ready(page);
         assert.equal(page.url(), readerUrl);
-        await expect(overview).toHaveAttribute("open", "");
+        await expect(overview).toBeVisible();
         await page.locator("#requestReportToggle").click();
         await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
         await expect(page.locator(".request-original .full-text-content")).toHaveText(record.userPrompt.text);
         await page.locator("#requestReportToggle").click();
         await call.getByText("Technical details", { exact: true }).click();
-        await page.locator(".request-context-summaries > summary").click();
         await page.locator("#contextBack").click(); await ready(page); await frames(page);
         assert.equal(page.url(), origin);
         await expect(open).toBeFocused();

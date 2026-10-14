@@ -53,13 +53,20 @@ export function createReportDraft({ contextSelector } = {}) {
             const ids = new Set(scope.requests.flatMap(request => request.aliases));
             const ordered = rows => rows.slice().sort((a, b) => a.scenarioId.localeCompare(b.scenarioId));
             const assessment = snapshot.assessment;
+            const catalog = (assessment?.catalog || []).filter(item => ids.has(item.scenarioId)).map(item => {
+                if (!item.responseTiming || paired) return item;
+                const responseTiming = { ...item.responseTiming };
+                // This is the whole catalogue's read revision, not a changed selected timing fact.
+                delete responseTiming.sourceRevision;
+                return { ...item, responseTiming };
+            });
             const authority = JSON.stringify([
                 snapshot.boardId, snapshot.deletionVersion,
                 ordered(scope.baseRequests), ordered(scope.requests),
                 ordered(snapshot.scenarios.filter(scenario => ids.has(scenario.scenarioId))),
                 assessment?.source, assessment?.consent, assessment?.capabilities,
                 assessment?.basis?.consentRevision, assessment?.basis?.overrideRevision, assessment?.basis?.deletionEpoch,
-                ordered((assessment?.catalog || []).filter(item => ids.has(item.scenarioId))),
+                ordered(catalog),
                 // The snapshot exposes pooled model results, not per-report evaluation dependencies.
                 // A changed revision with model results therefore requires a fresh actual review.
                 !paired && assessment?.overview?.metrics?.some(metric => metric.origin === "model-assessed") ? snapshot.revision : null,

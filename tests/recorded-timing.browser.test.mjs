@@ -112,9 +112,8 @@ test("response timing belongs to each prompt and the reader, not a detached aggr
     await expect(page.locator("#homeInsights .assessment-timing")).toHaveCount(0);
     await rowFor(page).locator(".request-link").click();
     await expect(page.locator(".request-original .response-timing data")).toHaveText("11:18 min");
-    await expect(page.locator(".request-context-summaries > summary")).toHaveText("Reviews and details");
+    await expect(page.locator(".request-context-summaries > h2")).toHaveText("Reviews");
     await capturePage(page, "normal-interaction");
-    await page.locator(".request-context-summaries > summary").click();
     await expect(page.locator(".interaction-insights .assessment-timing")).toHaveCount(0);
     await page.locator(".interaction-insights [data-insight-details]").click();
     const dialog = page.getByRole("dialog", { name: "Insight details", exact: true });

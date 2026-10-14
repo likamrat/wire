@@ -123,8 +123,8 @@ test("all comparison formats share reviewed frozen facts and the real PDF remain
         const doc = await task.promise, text = [];
         for (let n = 1; n <= doc.numPages; n++) text.push((await (await doc.getPage(n)).getTextContent()).items.map(item => item.str ?? "").join(""));
         assert.match(text.join("\n"), /WIRE/);
-        assert.match(text.join("\n"), /Accuracy/);
-        assert.match(text.join("\n"), /Not assessed/);
+        assert.match(text.join("\n"), /Answer correctness/);
+        assert.match(text.join("\n"), /Not checked automatically/);
     } finally { await task.destroy(); }
     assert.equal((await loadBoardState(context)).exports.length, 3);
 });

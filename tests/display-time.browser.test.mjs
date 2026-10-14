@@ -104,7 +104,7 @@ test("display preference governs calendar data, reset, reload, navigation and ne
     await selectZone(page, "America/Los_Angeles");
     await navigateMain(page, "reports"); await ready(page);
     await reportContents(page);
-    assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
 });
 
 test("explicit zones govern day, week and month totals across the repeated fall-back hour", { timeout: 90000 }, async t => {
@@ -140,6 +140,7 @@ test("changing Display preserves saved report bytes while new previews use the s
     await selectZone(page, "UTC");
     await navigateMain(page, "reports");
     await chooseReportScope(page, "all");
+    await reportContents(page);
     const response = page.waitForResponse(value => value.url().endsWith("/api/preview"));
     await page.locator("#exportBtn").click();
     const fresh = await (await response).json();

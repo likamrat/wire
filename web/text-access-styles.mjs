@@ -140,6 +140,8 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 #requestContent .full-text-reader-actions>button::before {content:none}
 #requestContent .full-text-reader-actions>button:hover {background:var(--hover);color:var(--ink)}
 #requestContent [data-text-subject=request] .full-text-content {max-inline-size:68ch;font-size:var(--type-body);font-weight:var(--weight-strong);font-style:italic}
+#requestContent [data-text-subject=request]>.full-text-body {padding:12px 16px;background:var(--paper);border-inline-start:3px solid var(--control)}
+#requestContent [data-text-subject=request]:has([data-prompt-actor=user])>.full-text-body {border-inline-start-color:var(--screen-prompt-user)}
 #requestContent .full-text-content-first>.full-text-body {margin-top:4px}
 #requestContent .reader-copy-scope {font-size:var(--type-caption);line-height:var(--leading-ui);text-align:start;margin:16px 0 8px}
 #requestContent .request-context-timeline .reader-state {font-size:var(--type-body);line-height:var(--leading-ui)}
@@ -162,6 +164,7 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 #requestContent :is(.facts,.action-fields) {font-size:var(--type-body);line-height:var(--leading-ui);grid-template-columns:minmax(0,10rem) minmax(0,1fr);align-items:baseline;gap:4px 12px;margin-block:8px}
 #requestContent :is(.facts,.action-fields) dt {color:var(--muted);font-weight:var(--weight-strong)}
 #requestContent :is(.facts,.action-fields) dd {color:var(--ink);font-weight:var(--weight-regular)}
+#requestContent .reader-identifier {font-family:var(--font);font-size:inherit;user-select:text;overflow-wrap:anywhere}
 #requestContent .call-duration strong {font-weight:var(--weight-strong)}
 #requestContent .call-duration-label {font-weight:var(--weight-strong);color:var(--muted)}
 #requestContent .call-duration data {color:var(--ink);font-variant-numeric:tabular-nums}
@@ -172,10 +175,10 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 #requestContent .technical-detail>p {font-size:var(--type-body);line-height:var(--leading-reading);margin-block:8px}
 #requestContent .technical-detail .ux-code-block {margin-bottom:0}
 #requestContent .recorded-arguments>pre {white-space:pre-wrap;overflow-wrap:anywhere}
-#requestContent .reader-footer {display:flex;flex-wrap:wrap;align-items:center;gap:0 24px;border-top:1px solid var(--rule)}
-#requestContent .request-context-summaries {flex:1 1 auto;border:0;margin:0}
-#requestContent .request-context-summaries[open] {flex-basis:100%}
-#requestContent .request-actions {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:0;padding:0;border:0}
+#requestContent .reader-footer {border-top:1px solid var(--rule);padding-top:12px}
+#requestContent .request-context-summaries {border:0;margin:0}
+#requestContent .request-context-summaries>h2 {margin:0;font-size:var(--type-body);line-height:var(--leading-ui)}
+#requestContent .request-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:4px 12px;margin:0 0 8px;padding:0;border:0}
 #requestContent .request-actions>div {flex:0 1 auto}
 #requestContent .request-actions p {margin:0}
 #requestContent .request-recorded {padding-top:0;margin-top:8px;border:0}

@@ -168,9 +168,9 @@ test("collector -> real server -> Activity, reader and new report preserve truth
             .screenshot({ path: path.join(proof, "new-report-user.png") });
     }
     await page.locator(".attestation input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     const saved = await loadBoardState(app.context);
     assert.equal(saved.exports.length, 1);

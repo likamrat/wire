@@ -14,9 +14,12 @@ export function createReportScope(authorship) {
             const promptAuthors = authorship?.selection(authorSelection);
             const baseRequests = (catalog?.requests || []).filter(r => !requested || r.aliases.some(id => requested.has(id)));
             const requests = baseRequests.filter(request => !promptAuthors || promptAuthors.includes(request.promptAuthor ?? "unknown"));
+            const sourceSessionIds = requests.map(request => request.sourceSessionId);
+            const sourceSessionCount = Array.isArray(catalog?.requests) && sourceSessionIds.every(id => typeof id === "string" && id.length > 0)
+                ? new Set(sourceSessionIds).size : null;
             const counts = Object.fromEntries(countKeys.map((key) => [key, requests.every(r => Number.isSafeInteger(r.counts?.[key]) && r.counts[key] >= 0) ? requests.reduce((n, r) => n + r.counts[key], 0) : null]));
             return {
-                requests, baseRequests, counts, ids, promptAuthors, authorExcludedRequestGroups: baseRequests.length - requests.length,
+                requests, baseRequests, counts, ids, promptAuthors, sourceSessionCount, authorExcludedRequestGroups: baseRequests.length - requests.length,
                 available: Boolean(catalog) && Object.values(counts).every(value => value !== null),
                 excludedRequestedGroups: ids?.filter(id => !baseRequests.some(request => request.aliases.includes(id))).length || 0,
                 selection: revision => ({ kind, revision, ...(ids ? { scenarioIds: ids } : {}),

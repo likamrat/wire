@@ -171,8 +171,8 @@ test("native corpus: contextual native PDF remains readable with masked replies 
     const { report, status } = await indexedReport(corpus, artifact.bundleId);
     assert.ok(report, JSON.stringify(status));
     assert.equal(report.target.format, "pdf");
-    assert.match(report.content, /Personal interaction report/);
-    assert.match(report.content, /What the record shows/);
+    assert.match(report.content, /Activity report/);
+    assert.match(report.content, /At a glance/);
     assert.match(report.content, /Recorded context/);
     assert.match(report.content, /CONTEXT_NATIVE_REPLY/);
     assert.match(report.content, /finality unverified/);

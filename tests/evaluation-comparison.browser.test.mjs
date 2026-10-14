@@ -58,7 +58,7 @@ test("controlled model assessments survive the explicit two-report browser journ
     });
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#bundles>summary").click();
+    if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
     const item = page.locator(`#bundleList details[data-disclosure-key="bundle:${baseline.bundleId}"]`);
     await item.locator(":scope>summary").click();
     await item.getByRole("button", { name: "Compare saved reports", exact: true }).click();

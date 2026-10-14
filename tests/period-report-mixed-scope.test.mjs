@@ -198,6 +198,7 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
     await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (4)");
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await page.locator("#createPeriodReport").click();
+    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
     for (const format of ["json", "markdown", "pdf"]) await page.locator(`#formatOptions input[value=${format}]`).check();
     const scanned = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#exportBtn").click();
@@ -206,11 +207,11 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
     assertFrozenPair(preview.snapshot.periodComparison, live, initial.pseudonymKey);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
     await page.locator("input[data-review-control]").check();
-    await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     assert.equal((await loadBoardState(context)).exports.length, 0);
     const savedResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Confirm local export", exact: true }).click();
+    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
     const saved = await (await savedResponse).json();
     assert.equal(saved.error, undefined, saved.error);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");

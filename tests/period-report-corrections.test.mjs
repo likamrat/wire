@@ -50,6 +50,7 @@ test("paired Setup copy options revoke disclosure without invalidating the uncha
     const value = await (await compared).json();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await page.locator("#createPeriodReport").click();
+    await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
     await page.locator("#reportRecordedContext").check();
     await expect(page.locator("#exportBtn")).toBeEnabled();
     const pair = value.comparison;
@@ -65,10 +66,9 @@ test("paired Setup copy options revoke disclosure without invalidating the uncha
         assert.equal(Boolean(preview.snapshot.recordedContext), contextEnabled);
         assert.equal(preview.privacy.reviewerConfirmed, false);
         await page.locator("input[data-review-control]").check();
-        await page.getByRole("button", { name: "Complete disclosure review", exact: true }).click();
+        await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
-        await page.getByRole("button", { name: "Back to review", exact: true }).click();
-        await page.getByRole("button", { name: "Back to setup", exact: true }).click();
+        await page.getByRole("button", { name: "Back to contents", exact: true }).click();
     }
     await page.locator("#reportRecordedContext").check();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "draft");

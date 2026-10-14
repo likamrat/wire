@@ -12,7 +12,7 @@ test("readable reports explain unsupported checks and timing instead of exposing
     const snapshot = { evaluationFacts: facts }, model = nativeReportEvidence(snapshot);
     for (const text of [nativeQualityHtml(snapshot, model) + nativeTimingHtml(model),
         [...nativeQualityMarkdown(snapshot, model), ...nativeTimingMarkdown(model)].join("\n")]) {
-        assert.match(text, /Tool outcomes do not tell us whether the answer was correct/);
+        assert.match(text, /Tool outcomes cannot establish these judgments/);
         assert.match(text, /Not measured/);
         assert.match(text, /0 of 1 assessed/);
         assert.doesNotMatch(text, /Unavailable: unverified-association|unsupported-check|no-assessed-units/);
@@ -32,7 +32,7 @@ test("personal zero pass share and measured zero milliseconds remain actual zero
     assert.match(html, /performance-red">0%/);
     assert.match(html, /0 ms/);
     assert.match(html, /Your feedback/);
-    assert.match(markdown, /\| Accuracy \/ Your feedback \| 0% \|/);
+    assert.match(markdown, /\| Answer correctness \/ Your feedback \| 0% \|/);
     assert.match(markdown, /0 ms/);
 });
 

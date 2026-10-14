@@ -9,10 +9,82 @@ import { renderHtmlReport, renderMarkdownReport } from "../lib/product-report.mj
 import { matrixRecords } from "./report-evidence-matrix-fixtures.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const key = "a".repeat(64);
 const preparedAt = "2026-10-11T12:00:00.000Z";
 const freeze = records => buildReportFacts(records, { revision: 1, pseudonymKey: key, evidence: records }, { preparedAt }).facts;
+
+test("new reports lead with bounded working patterns from the exact disclosed population", async () => {
+    const records = matrixRecords("working-patterns", ["success", "failure", "unknown"], { groups: 2 });
+    records[1].sourceSessionId = "second-chat";
+    records[0].userPrompt.text = "PRIVATE_WORK_PATTERN owner: Morgan Vale morgan@example.invalid";
+    const bundle = await buildSanitizedBundle(records, key, { promptMode: "none", formats: ["html", "markdown", "json"] });
+    for (const content of [bundle.previewHtml, bundle.files["product-report.md"]]) {
+        assert.match(content, /At a glance/);
+        assert.match(content, /2 saved interactions across 2 chats/);
+        assert.match(content, /workiq-fetch.*3 of 3/);
+        assert.match(content, /failed Work IQ calls.*1 of 2 selected interactions/i);
+        assert.doesNotMatch(content, /PRIVATE_WORK_PATTERN|morgan@example.invalid|productivity grade|wasted effort/i);
+        assert.ok(content.indexOf("At a glance") < content.indexOf("Operation detail"));
+    }
+    const structured = JSON.parse(bundle.files["product-report.json"]);
+    assert.deepEqual(structured.records, bundle.records);
+    assert.equal(bundle.snapshot.summary.metrics[0].count, 3);
+    assert.equal(bundle.snapshot.summary.metrics[0].outcomes.failure, 1);
+});
+
+test("targetless retrieval remains a tool purpose, not a recorded service target, in every readable format", async () => {
+    const records = matrixRecords("targetless-summary", ["success"]);
+    Object.assign(records[0].toolCalls[0], { tool: "workiq-retrieve", requestArgs: { query: "Invented search" }, requestedApiPath: null, apiResults: [] });
+    const bundle = await buildSanitizedBundle(records, key, { promptMode: "none", formats: ["html", "markdown", "pdf", "json"] });
+    const task = getDocument({ data: new Uint8Array(bundle.files["product-report.pdf"]), useSystemFonts: true });
+    const pdf = await task.promise, pages = [];
+    try {
+        for (let number = 1; number <= pdf.numPages; number++) pages.push((await (await pdf.getPage(number)).getTextContent()).items.map(item => item.str).join(" "));
+    } finally { await task.destroy(); }
+    for (const content of [bundle.previewHtml, bundle.files["product-report.md"], pages.join("\n")]) {
+        assert.match(content, /Services and operations/);
+        assert.match(content, /Search and retrieval/);
+        assert.doesNotMatch(content, /Most frequent service targets/);
+        assert.match(content, /tool (?:name|purpose).*not.*(?:identify|proof)/s);
+    }
+    assert.equal(bundle.snapshot.evaluationFacts.serviceInvolvement.groups[0].service, "Search");
+    assert.equal(bundle.snapshot.evaluationFacts.serviceInvolvement.groups[0].count, 1);
+});
+
+test("ordinary readable reports keep short prompt copies and shared methodology once without losing distinct timing", async () => {
+    const records = matrixRecords("distilled-reading", ["success", "failure"], { groups: 2, durations: [800, 1400] });
+    records[0].userPrompt.text = "DISTILLED_PROMPT_ONE: Find the launch decisions.";
+    records[1].userPrompt.text = "DISTILLED_PROMPT_TWO: Find the review meetings.";
+    const bundle = await buildSanitizedBundle(records, key, { promptMode: "original", formats: ["html", "markdown", "json"] });
+    for (const content of [bundle.previewHtml, bundle.files["product-report.md"]]) {
+        for (const prompt of ["DISTILLED_PROMPT_ONE", "DISTILLED_PROMPT_TWO"]) {
+            assert.equal(content.split(prompt).length - 1, 1, "A complete short copy need not recur as an excerpt, heading and appendix");
+        }
+        assert.equal(content.split("Numeric API status is available").length - 1, 1);
+        assert.equal(content.split("Calls count once per supported service association. Services overlap; shares are not a 100% composition.").length - 1, 1);
+        assert.match(content, /Whole-interaction latency/);
+        assert.match(content, /Request to final response/);
+        assert.match(content, /0 of 2 requests timed/);
+        assert.match(content, /Call start to recorded completion/);
+        assert.match(content, /not.*(?:permission to publish|permission to share)/);
+        assert.match(content, /coverage-and-redaction-manifest.json/);
+    }
+    assert.deepEqual(JSON.parse(bundle.files["product-report.json"]).records, bundle.records);
+    assert.equal(bundle.snapshot.evaluationFacts.metrics.filter(metric => metric.definitionId === "tool-duration")[0].value, 800);
+});
+
+test("unrun local checks share their explanation without merging measures or hiding coverage", async () => {
+    const records = matrixRecords("unrun-reading", ["success", "failure"], { groups: 2 });
+    const bundle = await buildSanitizedBundle(records, key, { promptMode: "none", formats: ["html", "markdown", "json"] });
+    for (const content of [bundle.previewHtml, bundle.files["product-report.md"]]) {
+        assert.equal(content.split("Local observation (not a model assessment)").length - 1, 1);
+        for (const label of ["Answer correctness", "Answer support", "Permission for tool use"]) assert.ok(content.includes(label));
+        assert.equal(content.split("0 of 2 assessed").length - 1, 3);
+    }
+    assert.equal(bundle.snapshot.evaluationFacts.metrics.filter(metric => metric.counts?.fail).length, 1, "Only the real recorded execution check failed");
+});
 
 test("new frozen review statuses bind closed, content-free reasons to exact selected tool memberships", () => {
     const records = matrixRecords("frozen-reasons", ["failure", "failure", "success"], { groups: 3 });
@@ -104,7 +176,7 @@ test("frozen Services preserves overlapping, partially attributed and inapplicab
         undefined, undefined, facts);
     assert.match(bundle.files["product-report.md"], /Files \| 2 \/ 4 \| 50%/);
     assert.match(bundle.files["product-report.md"], /Mail \| 1 \/ 4 \| 25%/);
-    assert.match(bundle.files["product-report.md"], /2 calls have missing service details/);
+    assert.match(bundle.files["product-report.md"], /2 calls with missing or partial service details/);
     assert.doesNotThrow(() => assertProjectedBundle(bundle));
     assert.equal(JSON.stringify(facts), before);
     const legacy = structuredClone(facts);
@@ -147,10 +219,10 @@ test("native output leads with supported findings, keeps raw timing and quality 
     const html = renderHtmlReport(bundle.records, { snapshot: bundle.snapshot, filters: { tools: ["workiq-ask"] } });
     const markdown = renderMarkdownReport(bundle.records, { snapshot: bundle.snapshot, filters: { tools: ["workiq-ask"] } });
     for (const text of [html, markdown]) {
-        assert.match(text, /What the record shows/);
-        assert.match(text, /reported an MCP request timeout/);
+        assert.match(text, /At a glance/);
+        assert.match(text, /Tool request timed out/);
         assert.match(text, /completion event reference not retained/);
-        assert.match(text, /answer not correct/);
+        assert.match(text, /not correct/i);
         assert.match(text, /Specific reasons behind these saved verdicts were not retained/);
         assert.match(text, /1 of 2 passed/);
         assert.match(text, /2 of 3 assessed/);
@@ -159,8 +231,8 @@ test("native output leads with supported findings, keeps raw timing and quality 
         assert.match(text, /5 of 6 calls timed/);
         assert.match(text, /Historical activity bins were not saved/);
         assert.match(text, /6 Work IQ tool calls/);
-        assert.ok(text.indexOf("What the record shows") < text.indexOf("Recorded numbers"));
-        assert.ok(text.indexOf("Recorded numbers") < text.indexOf("Operation detail"));
+        assert.ok(text.indexOf("At a glance") < text.indexOf("Tools"));
+        assert.ok(text.lastIndexOf("Operation detail") < text.lastIndexOf("Evidence layer"), "Detailed counts support the report after its findings and examples");
         assert.doesNotMatch(text, /square-root height|minimum visible sections|class="report-tool-score"/);
     }
     assert.doesNotMatch(html, /class="dimensional-report|<linearGradient id="dimensional-/);
@@ -186,8 +258,10 @@ test("legacy frozen facts do not acquire operational explanations or current con
 
 test("zero, missing timing, single sample and unavailable assessments stay distinct in native output", async () => {
     await assert.rejects(buildSanitizedBundle([], key), /non-empty exact selection/);
-    assert.match(renderMarkdownReport([]), /0 selected interaction records; 0 Work IQ tool calls/);
-    assert.match(renderHtmlReport([]), /calls failed \(Not applicable\)/);
+    assert.match(renderMarkdownReport([]), /0 saved interactions across 0 chats/);
+    assert.match(renderMarkdownReport([]), /\| Work IQ tool calls \| 0 \| No qualifying records \|/);
+    assert.match(renderHtmlReport([]), /No qualifying records/);
+    assert.doesNotMatch(renderHtmlReport([]), /calls failed \(0%/);
     for (const [records, expected] of [
         [matrixRecords("single-zero", ["success"], { durations: [0] }), /0 s \(0 ms\).*Not shown for one sample/],
         [matrixRecords("single-missing", ["unknown"]), /Not measured/],
@@ -200,14 +274,14 @@ test("zero, missing timing, single sample and unavailable assessments stay disti
     }
     const records = matrixRecords("assessment-states", ["success"]);
     for (const [judgment, expected] of [
-        ["unassessed", /Insufficient recorded evidence/],
-        ["error", /evaluator could not complete; this is not a failed answer/],
-        ["fail", /answer not correct/],
+        ["unassessed", /Not enough saved evidence/],
+        ["error", /Review could not finish; this is not a failed verdict/],
+        ["fail", /Answer: Not correct/],
     ]) {
         const { state } = qualityDisplayFixture({ records, judgments: [judgment] });
         const facts = buildReportFacts(records, state, { preparedAt }).facts;
         const bundle = await buildSanitizedBundle(records, key, { promptMode: "none", formats: ["markdown"] }, undefined, undefined, facts);
         assert.match(bundle.files["product-report.md"], expected);
-        if (judgment !== "fail") assert.doesNotMatch(bundle.files["product-report.md"], /answer not correct/);
+        if (judgment !== "fail") assert.doesNotMatch(bundle.files["product-report.md"], /Answer: Not correct/);
     }
 });

@@ -65,8 +65,9 @@ test("personal assessment matrix separates accuracy, answer trust, action trust,
     assert.deepEqual(metric("action-trust", "user-personal").coverage, { covered: 1, eligible: 3 });
     assert.equal(metric("action-trust", "automatic-local").coverage.eligible, 3);
     for (const content of [baseline.preview.previewHtml, baseline.preview.files["product-report.md"]]) {
-        assert.match(content, /Personal assessment · 1 of 2 passed · 2 of 3 assessed · 1 not assessed/);
-        assert.match(content, /Personal assessment · 1 of 1 passed · 1 of 3 assessed · 2 not assessed/);
+        assert.match(content, /Your feedback/);
+        assert.match(content, /1 of 2 passed · 2 of 3 assessed · 1 not assessed/);
+        assert.match(content, /1 of 1 passed · 1 of 3 assessed · 2 not assessed/);
     }
     assert.equal(metrics.find(item => item.definitionId === "tool-duration").value, 200);
     assert.equal(metrics.some(item => item.dimension === "cost"), false);

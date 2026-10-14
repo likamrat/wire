@@ -49,7 +49,7 @@ for (const scenario of reportMatrixCases()) test(`report evidence matrix: ${scen
     if (expected.calls && expected.success + expected.failure === 0) assert.doesNotMatch(preview.previewHtml, /aria-label="Recorded tool success"/);
     for (const contents of [preview.files["product-report.json"], preview.files["product-report.md"], preview.previewHtml]) {
         assert.doesNotMatch(contents, /PRIVATE_MATRIX_|SYNTHETIC_PRIVATE|email@example|SYNTHETIC_LITERAL/);
-        assert.match(contents, /accuracy|Accuracy/);
+        assert.match(contents, /accuracy|Answer correctness/);
     }
     const reviewed = await controller.review("matrix", preview.previewId, true);
     const saved = (await controller.confirm("matrix", preview.previewId, true)).bundle;
@@ -76,16 +76,16 @@ for (const scenario of reportMatrixCases()) test(`report evidence matrix: ${scen
                 }
                 pages.push(content.items.map(item => item.str ?? "").join(""));
             }
-            assert.match(pages.join("\n"), /Accuracy/);
-            assert.match(pages.join("\n"), /Not assessed/);
+            assert.match(pages.join("\n"), /Answer correctness/);
+            assert.match(pages.join("\n"), /Not checked automatically|Not applicable/);
             assert.match(pages.join("\n"), /Not measured/);
             const compact = pages.join("").replace(/\s+/g, "");
             if (expected.calls && expected.success + expected.failure > 0) {
-                assert.ok(compact.includes(`${expected.success}of${expected.calls}`), "The PDF includes the actual all-call success counts");
+                if (expected.success) assert.ok(compact.includes(`${expected.success}succeeded`), "The PDF includes the actual successful-call count");
+                if (expected.failure) assert.ok(compact.includes(`${expected.failure}failed`), "The PDF includes the actual failed-call count");
             }
             if (expected.median !== null) {
-                const speed = createReportComparison().formatValue(expected.median, "ms").replace(/\s+/g, "");
-                assert.ok(compact.includes(`Speed${speed}`), `The PDF's Speed value is the independently expected ${speed}`);
+                assert.ok(compact.includes(`(${expected.median}ms)`), "The PDF keeps the exact independently calculated timing value");
             }
         } finally { await task.destroy(); }
     }

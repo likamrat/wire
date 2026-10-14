@@ -33,8 +33,8 @@ async function inspectPdf(bytes) {
             for (const id of new Set(operators.fnArray.flatMap((op, index) => op === OPS.setFont ? [operators.argsArray[index][0]] : []))) {
                 const font = page.commonObjs.get(id);
                 assert.equal(font.missingFile, false, font.name);
-                assert.ok(font.data?.byteLength > 0, `${font.name}: embedded font program required`);
-                fonts.set(id, { name: font.name, bytes: font.data.byteLength });
+                assert.ok(font.data?.byteLength > 0 || font.isType3Font, `${font.name}: embedded font data or Type 3 glyph programs required`);
+                fonts.set(id, { name: font.name, bytes: font.data?.byteLength ?? 0, type3Glyphs: font.isType3Font });
             }
             let paint = { font: null, color: null };
             const stack = [];
@@ -94,7 +94,9 @@ test("native report bars separate outcome pills and adjacent rows at normal and 
         const rows = [...document.querySelectorAll(".native-bars li")].filter(row => row.querySelector(".native-bar-results"));
         return {
             expectedGap: Math.max(parseFloat(root.getPropertyValue("--space-sm")), size * .5),
-            expectedRowGap: Math.max(parseFloat(root.getPropertyValue("--space-lg")), size),
+            expectedRowGap: matchMedia("print").matches
+                ? parseFloat(getComputedStyle(rows[0]).fontSize) * .65
+                : Math.max(parseFloat(root.getPropertyValue("--space-lg")), size),
             overflow: document.documentElement.scrollWidth > innerWidth + 1,
             rows: rows.map((row, index) => {
                 const bar = row.querySelector(".native-bar-track").getBoundingClientRect();
@@ -257,8 +259,8 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
     const bundle = await buildSanitizedBundle(state.evidence, state.pseudonymKey,
         { promptMode: "original", formats: ["html", "pdf", "json", "markdown"] }, undefined, undefined, facts);
     const pdf = await inspectPdf(bundle.files["product-report.pdf"]);
-    assert.match(pdf.text, /What the record shows/);
-    assert.match(pdf.text, /sign-in was required/);
+    assert.match(pdf.text, /At a glance/);
+    assert.match(pdf.text, /Work IQ sign-in required/);
     assert.match(pdf.text, /41100 ms/);
     assert.match(pdf.text, /677960 ms/);
     assert.match(pdf.text, /6 of 7 calls timed/);
@@ -270,11 +272,11 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
     assert.equal(bundle.snapshot.summary.metrics.find(row => row.layer === "http").outcomes.transport, 1);
     assert.equal(bundle.snapshot.evaluationFacts.serviceInvolvement.groups.reduce((count, group) => count + group.count, 0), 8);
     for (const text of [bundle.previewHtml, bundle.files["product-report.md"], pdf.text]) {
-        assert.equal([...text.matchAll(/Completion-evidence checks:/g)].length, 1, "Only Work IQ tool checks use the call-completion boundary");
+        assert.equal([...text.matchAll(/Completion checks:/g)].length, 1, "Only Work IQ tool checks use the call-completion boundary");
         assert.match(text, /7 eligible Work IQ calls/);
     }
     assert.ok(pdf.margins.length >= pdf.pageCount * 2);
-    assert.ok(pdf.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === "#515767"));
+    assert.ok(pdf.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === "#565656"));
     const directory = await keepProof("normal", { ...bundle.files, "pdf-extraction.json": JSON.stringify(pdf, null, 2) });
     const browser = await chromium.launch({ headless: true });
     t.after(() => browser.close());
@@ -306,9 +308,9 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
             })),
         }));
         assert.ok(layout.bodyWidth <= layout.width + 1, `${theme} narrow=${narrow}: body overflow`);
-        assert.equal(layout.background, theme === "dark" ? "rgb(15, 17, 26)" : "rgb(244, 245, 249)");
-        assert.equal(layout.fontFamily.replaceAll(" ", ""), uiFontStack.replaceAll(" ", ""));
-        assert.equal(layout.fonts.some(font => font.family === "Asta Sans"), false, "New native output does not embed the historical CSS font");
+        assert.equal(layout.background, theme === "dark" ? "rgb(16, 16, 16)" : "rgb(255, 255, 255)");
+        assert.ok(layout.fontFamily.startsWith('"Asta Sans"'));
+        assert.equal(layout.fonts.some(font => font.family === "Asta Sans" && font.status === "loaded"), true, "The new report font is embedded, not fetched from the screen");
         assert.equal(layout.radius, "999px");
         assert.ok(layout.capsules.length);
         assert.ok(layout.capsules.every(capsule => capsule.radius === "999px"));
@@ -316,15 +318,14 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
         for (const bar of layout.bars) assert.ok(Math.abs(bar.actual - bar.count / bar.denominator) < 0.002, "No inflated small values");
         layout.paint = await page.evaluate(measureChartPaint, ".native-bar");
         for (const mark of layout.paint) {
-            assert.ok(mark.local && mark.gradient && mark.colors.length === 2, "Native CSS marks consume the shared two-stop fade");
-            assert.notEqual(mark.colors[0], mark.colors[1]);
+            assert.ok(mark.local && !mark.gradient && mark.colors.length === 1, "New native marks use one local semantic color");
             assert.equal(mark.opacity, 1);
             for (const color of mark.colors) assert.ok(contrast(color, mark.background) >= 3, `${theme}: entire native fade is readable`);
         }
-        layout.orange = await page.evaluate(measureChartPaint, ".native-bar.dimensional-tone-pink,.native-bar.dimensional-tone-service-mail");
-        assert.ok(layout.orange.length >= 2, "Both failed-call and Mail marks are present");
-        for (const mark of layout.orange) for (const color of mark.colors) {
-            assert.ok(hue(color) >= 20 && hue(color) <= 32, `${theme}: failure and Mail remain orange, not yellow`);
+        layout.failures = await page.evaluate(measureChartPaint, ".native-bar[data-outcome=failure]");
+        assert.ok(layout.failures.length > 0, "Recorded failure marks are present");
+        for (const mark of layout.failures) for (const color of mark.colors) {
+            assert.ok(hue(color) < 15 || hue(color) > 345, `${theme}: failures are red`);
         }
         layout.outcomeLabels = await page.locator(".native-outcome").evaluateAll(nodes => nodes.map(node => ({
             text: node.textContent, color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor,
@@ -371,10 +372,10 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
         assert.match(await page.locator(".native-bar-results").innerText(), /1 failed \(1%\)/);
         const paint = await page.evaluate(measureChartPaint, '.native-bar[data-count="1"][data-denominator="100"]');
         assert.equal(paint.length, 1);
-        assert.ok(paint[0].gradient && paint[0].colors.length === 2);
+        assert.ok(!paint[0].gradient && paint[0].colors.length === 1);
         for (const color of paint[0].colors) {
             assert.ok(contrast(color, paint[0].background) >= 3);
-            assert.ok(hue(color) >= 20 && hue(color) <= 32);
+            assert.ok(hue(color) < 15 || hue(color) > 345);
         }
         tinyPaint.push({ theme, fraction: small, paint });
         if (tinyDirectory) await page.locator("#breakdowns").screenshot({ path: path.join(tinyDirectory, `${theme}-exact-one-percent.png`) });
@@ -405,7 +406,7 @@ test("four-format recorded context keeps changed requests, omissions and exact a
         assert.match(text, /Omitted from this report/);
         assert.match(text, /finality unverified/);
         assert.doesNotMatch(text, /first@example|reply@example|UNRELATED_CONTEXT|Find five synthetic/);
-        assert.ok(text.indexOf("Recorded context") < text.indexOf("Representative technical scenarios"));
+        assert.ok(text.indexOf("Recorded context") < text.indexOf("Examples from the recorded work"));
     }
     const snapshot = JSON.parse(files["product-report.json"]);
     assert.ok(files["product-report.html"].toString().indexOf('<section id="recorded-context">')
@@ -517,22 +518,22 @@ test("mixed saved origins stay beside each native finding in HTML, Markdown and 
     await page.route("**/*", route => route.abort());
     await page.setContent(bundle.previewHtml);
     const htmlFindings = await page.locator("#findings li").allTextContents();
-    const markdownFindings = bundle.files["product-report.md"].split("## What the record shows")[1]
-        .split('<a id="overview"></a>')[0].split("\n").filter(line => line.startsWith("- AI assessment:"));
+    const markdownFindings = bundle.files["product-report.md"].split("## At a glance")[1]
+        .split('<a id="overview"></a>')[0].split("\n").filter(line => line.startsWith("- Saved AI review"));
     const pdf = await inspectPdf(bundle.files["product-report.pdf"]);
-    const pdfFindings = pdf.text.split("What the record shows")[1].split("Recorded numbers")[0].replace(/\s+/g, " ");
+    const pdfFindings = pdf.text.split("At a glance")[1].split("Recorded numbers")[0].replace(/\s+/g, " ");
     const directory = await keepProof("mixed-origins", { ...bundle.files, "pdf-extraction.json": JSON.stringify(pdf, null, 2) });
-    const claims = ["answer correct in 1 request", "answer supported in 1 request", "actions matching the request in 1 request"];
+    const claims = ["Answer: Correct (1 request)", "Support: Supported (1 request)", "Tool use: Matched request (1 request)"];
     for (const origin of origins) for (const claim of claims) {
         const label = `Model assessment · ${origin.model} · rubric ${origin.rubricId} v${origin.rubricVersion}`;
         assert.equal(htmlFindings.filter(line => line.includes(claim) && line.includes(label)).length, 1,
             `HTML finding must carry its own saved origin: ${label} / ${claim}`);
         assert.equal(markdownFindings.filter(line => line.includes(claim) && line.includes(label)).length, 1,
             `Markdown finding must carry its own saved origin: ${label} / ${claim}`);
-        assert.ok(pdfFindings.replace(/\s/g, "").includes(`AI assessment: ${claim}. ${label}`.replace(/\s/g, "")),
+        assert.ok(pdfFindings.replace(/\s/g, "").includes(`${claim}. ${label}`.replace(/\s/g, "")),
             `PDF finding must carry its own saved origin: ${label} / ${claim}`);
     }
-    assert.equal(htmlFindings.filter(line => line.startsWith("AI assessment:")).length, 6);
+    assert.equal(htmlFindings.filter(line => line.startsWith("Saved AI review")).length, 6);
     assert.equal(markdownFindings.length, 6);
     assert.deepEqual(bundle.snapshot.evaluationFacts, before);
     assert.deepEqual(facts, before);
@@ -553,7 +554,7 @@ test("normal report navigation keeps every desktop target at least 44px with nar
     const expected = [
         ["Numbers", "#overview"], ["Timing", "#timing"], ["Recorded context", "#recorded-context"],
         ["Examples", "#examples"], ["Operation detail", "#operations"], ["Quality results", "#quality"],
-        ["Prompt appendix", "#prompts"], ["Coverage", "#coverage"], ["Complete JSON records", "product-report.json"],
+        ["Prompt copies", "#examples"], ["Coverage", "#coverage"], ["Complete JSON records", "product-report.json"],
     ];
     const bounds = () => page.locator(".report-nav a").evaluateAll(nodes => nodes.map(node => {
         const rect = node.getBoundingClientRect(), style = getComputedStyle(node);

@@ -60,10 +60,16 @@ full-interaction report scope or frozen report files.
 Private analytical search now uses the same all-page canonical call membership
 on Home, Activity and current-view report setup. **Current view** resolves the
 matching request IDs once, then includes their complete eligible interactions,
-not only chart-matching calls. Setup shows the matching-call count separately
+not only chart-matching calls. Activity shows the matching-call count separately
 from full report counts. **Selected** keeps hidden selections; **All collected
-activity** is not narrowed by browsing search. Report author/privacy rules,
-preview approval and frozen artifacts are unchanged. This is not the later
+activity** includes all sessions with retained reportable activity, regardless of
+Analyze Dates, filters, search or pagination. It includes current and preserved
+eligible evidence, not metadata-only sessions or complete original chats, and
+does not fetch new activity. Distinct included session counts come from canonical
+reportable interactions after the report's author choice; multiple interactions
+and known aliases do not multiply a session. A known empty selection has zero
+sessions; unavailable identities do not establish zero. Report author/privacy
+rules, preview approval and frozen artifacts are unchanged. This is not the later
 period-comparison report's frozen matching-call cohort contract.
 
 Returned entries use their explicit normalized endpoint, or the existing
@@ -153,24 +159,23 @@ Pass-share colors use versioned presentation bands: below 50%, 50% to below 75%,
 
 ## Saving a report
 
-The **Setup -> Review -> Save locally** flow stays deliberate and empty-first.
-Setup combines Selected/Current/All scope, author inclusion, prompt text mode and
-all four formats. Its counts use the actual full-interaction population across
-all pages, not the visible list. It names selected groups outside browsing filters.
-Reports navigation still opens the saved library; Create a report opens Setup.
+The **Activity -> Contents -> Review & save** flow stays deliberate and empty-first.
+Activity chooses Selected/Current/All membership and prompt authors, with an in-task
+interaction picker. Counts use the full canonical population across all pages and
+distinguish included chats from interactions. Contents holds the existing prompt modes,
+optional linked text and four formats. Reports navigation still opens the library.
 
-The current step and selection share one task header. Each stage has a local
-Back/next action area; missing prerequisites appear there, not under future steps.
-**Scope and exclusions** and **Included requests and optional labels** are
-supporting details, not extra steps. Reports has no analytical Reset to Home.
+Each stage has a local Back/next action area. Missing prerequisites appear there;
+scope/exclusion detail is supporting information, not another gate. Optional
+classification actions remain outside report creation. Reports has no analytical Reset.
 
-Review keeps **Included evidence and preparation details**, **Inspect exact files**,
-prompt copies and privacy findings available beside the formatted preview.
-Save shows the approved membership, prompt mode and formats before the separate
-**Confirm local export** action. Back to Setup can retain an unchanged prepared
-snapshot; stored-data refresh remains disabled while it exists.
+Review presents the actual document with flat Report/Text/Files views. Text copies
+and privacy findings stay available without nested comparison disclosures.
+**Approve for local saving** records disclosure; **Save report locally** is a
+separate action in that same reading workspace, not a fourth page repeating scope.
+Back to Contents retains an unchanged prepared snapshot.
 
-**Prompt authors in this report** is an explicit membership choice in Setup, separate from
+**Prompt authors in this report** is an explicit membership choice in Activity, separate from
 No prompts / Masked / Original. It intersects the chosen Selected requests, Current view or All
 collected activity base scope. Your-only excludes agent-originated and unverified interactions,
 including their complete calls and scores; select the unverified category explicitly to include it.
@@ -249,25 +254,44 @@ control; page bounds alone are not evidence of coherent pagination.
 
 ### New native reports
 
-New HTML, PDF and Markdown lead with **What the record shows**: recorded call
-outcomes, supported historical reasons, and separately qualified answer/action
-findings. Compact **Recorded numbers**, flat tool bars and recorded timing follow.
+New ordinary HTML, PDF and Markdown lead with **At a glance**: the frozen
+interaction/chat population, most frequent recorded tools/services, call outcomes,
+supported historical reasons, and separately qualified answer/action findings.
+Period reports retain **What the record shows** for their paired cohorts.
+Flat tool bars and recorded timing follow; exact evidence counts remain
+in coverage.
 Permitted bounded context precedes representative technical examples; full
 quality measures, operation tables, reviewed prompt copies and coverage remain
 available as supporting detail. HTML disclosures are native keyboard controls.
 PDF expands every disclosure and copy. JSON retains the factual snapshot rather
 than an inferred narrative.
 
-Native output consumes the shared METROPOLIS typography and light/dark palette:
-`Arial,"Helvetica Neue","Segoe UI",sans-serif`, shared heading roles, control/copy
-radii and semantic outcome capsules. Both theme wordmarks remain local.
-New HTML does not embed the retained historical Asta CSS font; that licensed
-asset remains unchanged for explicit historical consumers. Bars use exact
-linear fractions from zero, without minimum paint or perspective. Their CSS
-marks consume the shared `--chart-mark-low` / `--chart-mark-high` within-mark
-fade (including the shared service fade strength); no palette or SVG definitions
-are copied into a second native chart engine. Failed-call and Mail chart marks
-use the current shared orange identity, not yellow. Rounded tracks and fades
+The summary calls service involvement **Services and operations**, not recorded
+targets: targetless retrieval is Search by tool purpose, and the existing
+category explanation retains that distinction. No classifier or facts change.
+Short complete prompt copies appear once, with their representative call sequence;
+only longer or additional copies need the appendix. Each copy keeps author,
+availability, representation and mandatory-removal qualifications. Long examples
+remain bounded excerpts linked to complete copies, never truncated audit content.
+
+Unavailable timing keeps each distinct boundary and timed/eligible count in a
+concise note instead of repeating empty median/P95 cells. The nearest-rank method
+and missing-time/concurrency limits are stated once. Identically unsupported local
+checks share their explanation but keep separate named coverage counts; personal,
+model, unknown-definition and error results retain their own rows and origins.
+API-status coverage, service-overlap methodology, scope and privacy explanations
+each have one home. Full definitions, transformations and hashes remain in the
+manifest; JSON facts are unchanged. Print omits the screen's navigation controls
+and the redundant closing brand line, not evidence or limitations. Ordinary
+reports consolidate coverage into one account instead of repeatedly appending
+caveats; there is no page cap or smaller type.
+
+New native output embeds the existing licensed Asta Sans font and defines its
+own neutral light/dark presentation, isolated from screen styles. Shared heading
+roles, control/copy radii and semantic outcome capsules remain; failures are red.
+Both theme wordmarks remain local. Bars use exact linear fractions from zero,
+without minimum paint or perspective; shared service colors retain their
+distinct meanings. No separate chart engine is added. Rounded tracks
 do not alter count-derived widths, segment boundaries or zero/tiny values.
 Counts/shares and exact tables are readable
 without hover. A prepared report ignores narrower browsing filters: its complete
@@ -278,8 +302,11 @@ New native breakdowns separate bars from their outcome pills, separate wrapped
 pills, and keep a larger gap between adjacent rows. Spacing uses the existing
 small/large tokens with text-scaled floors: half a rem for bar/pill and pill/pill
 gaps, one rem between rows. At standard and 200% text this preserves visible
-grouping without fixed spacing compressing enlarged text. These CSS rules also
-apply to new period-report bar rows and to PDF generated from the same HTML;
+grouping without fixed spacing compressing enlarged text. Print uses a compact
+0.65em row margin instead of inheriting the larger screen gap; this prevents a
+short report's coverage from being pushed onto an almost-empty last page.
+Font sizes, every body character and long-copy pagination are preserved.
+These rules also apply to new period-report bar rows;
 they do not change counts, bar proportions, Markdown/JSON facts or saved files.
 
 `evaluationFacts.reviewStatuses` is an optional, closed content-free projection
@@ -336,8 +363,8 @@ involvement comparisons. Categories remain labelled **Activity categories**.
 ### Native print typography
 
 Native report width, gutters, bar height and print point sizes are unchanged.
-Print uses the selected report's shared palette rather than stale native-only
-ink/rule overrides. PDF generation uses locally available fonts and embeds their
+Print uses the selected report's output palette. PDF generation embeds the
+report's local fonts and their
 font programs; saved readers still forbid external resources and system-font
 fallback. Focused proof checks the real embedded program bytes, exact extracted
 text and page boundaries through the strict saved-PDF reader.
@@ -353,13 +380,21 @@ hardcoded palette. Only normalized color values and an HTML-escaped font stack
 enter template attributes. Native and new comparison PDFs share this margin
 styling; comparison layout and all saved artifact bytes remain unchanged.
 
-### Setup consumer contract
+### Creation consumer contract
 
-`createReportJourney` is still presentation-only: steps 1/2/3 are Setup/Review/Save
-locally. `beginScan` opens actual Review; only the export controller's confirmed
-disclosure response calls `reviewed()`. The separate final confirmation owns the
-local write. Back to Setup returns to the same preview only when unchanged.
+`createReportJourney` is presentation-only: steps 1/2/3 are Activity/Contents/Review
+& save. `beginScan` opens stage 3; only the controller's confirmed disclosure response
+calls `reviewed()`, without moving the document. The separate Save transition owns
+the local write. Contents alone is not an active review and does not defer reads.
 No report persistence, schema, preview/review/export endpoint or permission contract changes.
+
+Prepared frames reuse the existing frozen-document sanitizer and restrictive CSP.
+Only these frames permit `allow-same-origin`, so trusted parent code can measure
+natural height and mirror text size; scripts, forms, popups, external resources and
+top navigation remain blocked. Frame-bound observers disconnect on replacement,
+invalidation and removal. Non-settling viewport-dependent layouts fail explicitly.
+Borders are accounted for so a two-pixel internal scrollbar is not left behind.
+Saved/Search/comparison readers keep the existing opaque `sandbox=""` default.
 
 `createReportScope.resolve` supplies canonical requests, aliases, base membership,
 author exclusions and full-interaction counts. `updateSelection` synchronizes this
@@ -372,6 +407,24 @@ changes can keep verified approval; same-count identity swaps cannot. Global
 feedback/permission invalidations are conservative. When model results exist, the
 snapshot does not expose selected evaluation dependencies, so a revision change
 requires a new review without deleting copy edits. Backend validation is authoritative.
+The catalogue's `responseTiming.sourceRevision` is transport freshness, not a
+changed selected timing fact. Its revision alone does not revoke an unchanged
+ordinary selection; timing identity, boundary, status, value, selected source and
+review revisions remain in the fingerprint. Context retains its conservative
+revision-bound invalidation.
+
+Mounted picker checkboxes are synchronized from resolved Selected-base membership,
+not just the explicit ID that was clicked. Removing an alias-expanded owner removes
+its contributing selection aliases, while unrelated hidden selections, page and
+focus remain. Analyze checkboxes retain their explicit-ID semantics. Both mounted
+surfaces reconcile in place after accepted or rejected mutations, so a rejected
+native toggle is restored without replacing the focused control.
+The local `reportRequestSelection(id)` and
+`setReportRequestSelected(id, checked)` helpers expose this same state and guarded
+mutation for the coordinated reader action. `continueSelectedReport(id)` requires
+that interaction in Selected membership, then explicitly opens Activity without
+clearing text/format preferences, auto-adding activity or saving. Paired-period
+membership cannot be changed through these ordinary-selection helpers.
 
 An export whose response is lost stays **Save not confirmed**. Its outcome is
 separate from draft/context validity: later revisions still invalidate disclosure
@@ -382,16 +435,21 @@ exports again. An unavailable/missing receipt stays unconfirmed; a verified
 registered receipt opens the saved result and its frozen files. New preparation
 and selection clearing stay blocked until that outcome is resolved. Late recovery
 cannot replace a superseded journey.
+Copy edit/omit controls are disabled and their handlers are guarded during a
+dispatched write or unknown outcome, including copies mounted through pagination.
+A dispatched save settles its matching bundle receipt independently of subsequent
+draft-token invalidation. A confirmed write followed by an unavailable history
+read still uses receipt-only recovery; it never becomes a fresh unsaved draft.
 
 Only the transport's proven `request_rejected` disposition from the export request
-itself establishes that no write was dispatched. That case allows Setup/clear and
+itself establishes that no write was dispatched. That case allows Activity/clear and
 a fresh scan/disclosure after current-state validation; it does not wait for a
 nonexistent saved receipt. Arbitrary errors, HTTP 409s, lost responses and failures
 after the export response (including saved-history reads) retain outcome recovery.
 
 ### Bounded recorded context
 
-**Include bounded recorded context** is a separate, initially unchecked Setup
+**Include linked requests and replies** is a separate, initially unchecked Contents
 choice. The API option is `recordedContext: true`; omission defaults to false.
 No prompts forces the effective option off, opens no retained reply files, and
 adds no context text or context-review originals. This is a report-copy choice,
@@ -520,12 +578,12 @@ safety restrictions never modify saved bytes, including historical Cost content.
 ### Report a retained-period comparison
 
 **Create comparison report** in Analyze takes the currently accepted paired view
-directly to **Setup -> Review -> Save locally**. It does not prepare or invent two
+directly to **Activity -> Contents -> Review & save**. It does not prepare or invent two
 source reports. The action appears beside **What differs**, only after a current
 comparison with matching records is accepted. Changing either date, waiting for
 Search, or losing current evidence removes the action until the comparison is
 ready again; one empty side is allowed, but two empty sides cannot create a report.
-Setup names both inclusive local date ranges, the timezone and
+Activity names both inclusive local date ranges, the timezone and
 each exact matching-record count. Scope and author membership are fixed for this
 draft: use **Change comparison in Analyze** to change them. Ordinary report
 scope/author choices are unchanged.
@@ -533,7 +591,7 @@ scope/author choices are unchanged.
 None / Masked / Original, manual terms, copy edits and omission remain independent
 disclosure choices. Optional bounded recorded context uses the comparison's
 frozen author policy, including explicit unverified-author inclusion where chosen.
-It cannot enlarge either measured cohort. Setup and Save distinguish supporting
+It cannot enlarge either measured cohort. Activity and the actual report distinguish supporting
 copy groups from analytical membership. Unmapped interactions and unavailable
 context remain gaps, not reconstructed evidence.
 
@@ -705,8 +763,8 @@ Editing or omitting a prompt copy disables approval until you select **Rebuild p
 ### Finding and opening saved reports
 
 **Reports** opens on the saved library, not the creation wizard. Choose **Create
-a report** to enter **Setup -> Review -> Save locally**, or **Continue draft** to return
-to unfinished choices and review. **Saved reports** switches back without clearing
+a report** to enter **Activity -> Contents -> Review & save**, or **Continue draft** to return
+to unfinished choices and review. **Back to Reports** switches back without clearing
 selection or invalidating an otherwise unchanged prepared review. Browser Back
 and Forward restore these tasks and the saved-library search/page. The explicit
 Activity create action opens creation directly. `#reports?task=create` (and the
@@ -721,9 +779,13 @@ Search covers safe metadata across every page, not just the visible six items:
 IDs, preparation dates, formats, prompt modes and time zones. It does not read
 stored report bodies or prompts.
 
-Rows show preparation time, prompt mode and format availability. **Open** reads
-the registered frozen HTML directly; **Manage** reveals full identity, request-group
-count, preparation details, downloads, comparison and individual deletion actions.
+Rows prioritize known scope and interaction count, preparation time and Open.
+Prompt mode and format availability remain compact secondary metadata.
+**Files & actions** reveals full identity, downloads, comparison and deletion.
+The outer library is not collapsible. A missing HTML file offers an available
+saved PDF/Markdown/JSON download; missing metadata is never inferred from current activity.
+The saved reader keeps the old opaque sandbox, a short preparation caption and
+**Back to report library**, restoring the list's search/page/focus.
 This applies to ordinary reports and saved comparisons: no saved HTML is
 regenerated or restyled, including historical typography and missing facts.
 Missing HTML and unknown metadata remain explicit; other formats are available

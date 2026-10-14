@@ -357,12 +357,13 @@ test("integrated app has readable aligned type and exact-copy controls in both t
             const reportBox = await page.locator(".prompt-report .ux-code-block").boundingBox();
             assert.equal(originalBox.y, reportBox.y, "Original and report copy toolbars share a baseline");
         }
+        await page.getByRole("tab", { name: "Report", exact: true }).click();
         await page.locator(".report-document > details > summary").first().click();
         await page.getByRole("button", { name: "Copy report code", exact: true }).click();
         await page.waitForFunction(() => window.clipboardWrites.length === 5);
         assert.equal(await page.evaluate(() => window.clipboardWrites[4]), exactCommand);
         assert.equal(await page.locator(".attestation input").last().isChecked(), false);
-        assert.equal(await page.getByRole("button", { name: "3. Save locally", exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true }).isDisabled(), true);
         await inspect("preview");
         assert.equal(await page.evaluate(() => window.clipboardReads), 0);
         await page.close();
@@ -401,6 +402,7 @@ test("preview copy respects masked/no-prompts/original modes and exact raw repor
         }
         await page.getByRole("button", { name: "Copy local original", exact: true }).click();
         await page.waitForFunction((expected) => window.clipboardWrites.at(-1) === expected, previewOriginal);
+        await page.getByRole("tab", { name: /^Files \(/ }).click();
         await page.getByText("Inspect exact product-report.json", { exact: true }).first().click();
         await page.getByRole("button", { name: "Copy inspect exact product-report.json", exact: true }).click();
         const expected = previewFor({ promptMode: mode }).files["product-report.json"];
@@ -417,8 +419,8 @@ test("formatted report prose stays readable and wide exact-data tables scroll wi
         const page = await context.newPage();
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(url + "/print-report");
-        assert.equal((await page.locator("h1").innerText()).replace(/\s+/g, " ").trim(), "WIRE Personal interaction report");
-        assert.equal(await page.getByRole("heading", { level: 1, name: "WIRE Personal interaction report", exact: true }).count(), 1);
+        assert.equal((await page.locator("h1").innerText()).replace(/\s+/g, " ").trim(), "WIRE Activity report");
+        assert.equal(await page.getByRole("heading", { level: 1, name: "WIRE Activity report", exact: true }).count(), 1);
         assert.equal(await page.locator(".prompt pre").textContent(), previewMasked);
         assert.ok(await page.locator(".prompt pre").evaluate((node) => parseFloat(getComputedStyle(node).fontSize) >= 16));
         assert.ok(await page.locator("table").first().evaluate((node) => parseFloat(getComputedStyle(node).fontSize) >= 13));

@@ -15,9 +15,15 @@ import { executeAssessmentAction } from "../lib/assessment.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
-const contentText = pages => pages.map(page => page.text).join("")
-    .replaceAll("WIRE - local report", "").replace(/Page\s*\d+\s*of\s*\d+/g, "").replace(/\s+/g, "");
+const contentText = pages => pages.map(page => page.text
+    .replaceAll("WIRE - local report", "").replace(/Page\s*\d+\s*of\s*\d+$/, "")).join("").replace(/\s+/g, "");
 const lastPage = (pages, text) => pages.filter(page => page.text.replace(/\s+/g, "").includes(text.replace(/\s+/g, ""))).at(-1)?.number;
+const promptSummary = (record, index) => `Interaction ${index + 1}1 included copy · ${record.scenarioId}`;
+
+test("PDF text comparison preserves digits at the start of the following page", () => {
+    assert.equal(contentText([{ text: "FirstWIRE - local reportPage 1 of 2" },
+        { text: "1 included copyWIRE - local reportPage 2 of 2" }]), "First1includedcopy");
+});
 
 function printRecords(long = false) {
     return Array.from({ length: 4 }, (_, index) => {
@@ -91,13 +97,22 @@ test("four short prompt records remain complete on a page and avoid a nearly bla
     const beforeHtml = preview.previewHtml.replace(reportPrintPaginationStyles, "");
     const beforePdf = await renderPdf(beforeHtml), afterPdf = Buffer.from(preview.files["product-report.pdf"].data, "base64");
     const before = await readPages(beforePdf), after = await readPages(afterPdf);
+    if (process.env.WIRE_REPORT_PROOFS) {
+        await mkdir(process.env.WIRE_REPORT_PROOFS, { recursive: true });
+        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short.html"), preview.previewHtml);
+        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short-after.pdf"), afterPdf);
+        await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-short-pages.json"), JSON.stringify({ before, after }, null, 2));
+    }
     // Flat charts reduce pagination pressure even with the former spacing.
     // Assert the complete current pages rather than requiring the old defect.
     for (const [index, record] of preview.records.entries()) {
         assert.equal(lastPage(after, record.scenarioId), lastPage(after, `SHORT_BODY_${index + 1}`), `Short record ${index + 1} heading/metadata/body stay together`);
-        assert.equal(lastPage(after, `Request ${index + 1} · 1 included copies`), lastPage(after, `SHORT_BODY_${index + 1}`), "The two-line request summary does not split either");
+        assert.ok(lastPage(after, `SHORT_BODY_${index + 1}`), "Every short copy remains in the PDF");
+        if (preview.previewHtml.includes(`class="prompt-record" id="${record.scenarioId}"`)) {
+            assert.equal(lastPage(after, promptSummary(record, index)), lastPage(after, `SHORT_BODY_${index + 1}`), "Additional-copy summary and reference stay with the opening text");
+        }
     }
-    assert.equal(lastPage(after, "Coverage and reading notes"), lastPage(after, "Selected export inventory"), "Coverage heading stays with its first paragraph");
+    assert.equal(lastPage(after, "Coverage and reading notes"), lastPage(after, "Evidence layers - separate units"), "Coverage heading stays with its first data");
     assert.ok(after.length <= before.length, "Current chart and spacing do not add a wasteful extra page");
     assert.ok(after.length <= 5, "Four short prompts do not need six pages");
     assert.ok(after.at(-1).bodyBottom < after.at(-1).height * 0.65, "The final page is not just a few orphaned bullets and footer");
@@ -132,7 +147,7 @@ test("four short prompt records remain complete on a page and avoid a nearly bla
     }
 });
 
-test("long prompt records still paginate completely while following short records stay grouped", { timeout: 120000 }, async t => {
+test("long prompt copies paginate completely while inline short copies stay grouped", { timeout: 120000 }, async t => {
     const { preview } = await reportFixture(t, true);
     const bytes = Buffer.from(preview.files["product-report.pdf"].data, "base64"), pages = await readPages(bytes);
     const text = contentText(pages);
@@ -140,12 +155,18 @@ test("long prompt records still paginate completely while following short record
     const start = lastPage(pages, "LONG_LINE_000"), end = lastPage(pages, "LONG_LINE_239");
     assert.ok(end >= start + 2, "A truly long prompt splits across multiple pages instead of clipping or shrinking");
     assert.equal(lastPage(pages, preview.records[2].scenarioId), start, "Long prompt metadata stays with its opening text");
-    assert.equal(lastPage(pages, "Request 3 · 1 included copies"), start, "Long prompt request title stays with its identifier and opening text");
+    assert.equal(lastPage(pages, promptSummary(preview.records[2], 2)), start, "Long prompt request title stays with its identifier and opening text");
     for (const index of [0, 1, 3]) {
         assert.equal(lastPage(pages, preview.records[index].scenarioId), lastPage(pages, `SHORT_BODY_${index + 1}`));
     }
     assert.ok(text.includes("Coverageandreadingnotes"));
-    assert.ok(text.includes("LONG_LINE_239") && text.indexOf("LONG_LINE_239") < text.lastIndexOf("SHORT_BODY_4"), "Original content order is unchanged");
+    let previousLine = text.lastIndexOf("LONG_LINE_000");
+    for (let line = 1; line < 240; line++) {
+        const nextLine = text.indexOf(`LONG_LINE_${String(line).padStart(3, "0")}`, previousLine + 1);
+        assert.ok(nextLine > previousLine, `The complete long copy retains original line order at ${line}`);
+        previousLine = nextLine;
+    }
+    assert.ok(text.lastIndexOf("SHORT_BODY_4") < text.lastIndexOf("LONG_LINE_000"), "The complete short example is not repeated in the later appendix");
     if (process.env.WIRE_REPORT_PROOFS) {
         await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-long-after.pdf"), bytes);
         await writeFile(path.join(process.env.WIRE_REPORT_PROOFS, "logical-print-long-pages.json"), JSON.stringify(pages, null, 2));

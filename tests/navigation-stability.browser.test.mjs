@@ -227,24 +227,24 @@ test("request Back restores its nested page, expanded prompt, selection and link
     await expect(link).toBeFocused();
 });
 
-test("report-flow Back returns to the originating request-selection position, not the page heading", async t => {
+test("report-flow Back returns to the originating Contents action, not the page heading", async t => {
     const { page } = await setup(t, { route: "#reports", previewOnly: true });
     await chooseReportScope(page, "all");
-    await page.locator("#reportRequests > summary").click();
+    await reportContents(page);
     const next = page.locator("#exportBtn");
     await next.scrollIntoViewIfNeeded(); await next.focus(); await frames(page);
     const before = { y: (await next.boundingBox()).y, scroll: await page.evaluate(() => scrollY) };
-    await startTrace(page, "#reportStage1 .report-stage-actions button");
+    await startTrace(page, "#reportStage2 .report-stage-actions button");
     await next.click();
-    await expect(page.locator("#reportStage2")).toBeVisible();
+    await expect(page.locator("#reportStage3")).toBeVisible();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    await page.getByRole("button", { name: "Back to setup", exact: true }).click(); await frames(page);
+    await page.getByRole("button", { name: "Back to contents", exact: true }).click(); await frames(page);
     await finishTrace(page, "report-stage-back");
     const after = { y: (await next.boundingBox()).y, scroll: await page.evaluate(() => scrollY) };
     t.diagnostic(JSON.stringify({ before, after }));
     assert.deepEqual(after, before);
     await expect(next).toBeFocused();
-    assert.equal(await page.locator("#reportRequests").evaluate(node => node.open), true);
+    assert.equal(await page.locator("#reportStage2").isVisible(), true);
 });
 
 test("a failed contextual return keeps its original destination and retry control", async t => {
@@ -357,7 +357,7 @@ test("matching action/result pages use the shared contextual pager", async t => 
 
 test("saved report history pages stay at their disclosure without writing or opening report files", async t => {
     const { page } = await setup(t, { route: "#reports", savedReports: 7 });
-    await page.locator("#bundles > summary").click();
+    await page.locator("#savedLibraryTitle").click();
     const pager = page.locator("#bundleList .list-pager");
     await expect(pager).toContainText("1-6 of 7");
     await positionSection(page, "#bundleList .list-pager");
@@ -368,7 +368,7 @@ test("saved report history pages stay at their disclosure without writing or ope
     const trace = await finishTrace(page, "saved-history-next");
     assert.equal(trace.at(-1).section.y, Math.max(trace[0].section.y, trace.at(-1).section.documentY - trace.at(-1).maxScroll));
     await expect(pager.getByRole("button", { name: "Previous saved reports", exact: true })).toBeFocused();
-    assert.equal(await page.locator("#bundles").evaluate(node => node.open), true);
+    assert.equal(await page.locator("#bundles").isVisible(), true);
     await page.keyboard.press("Space"); await frames(page);
     await expect(pager).toContainText("1-6 of 7");
 });
@@ -443,8 +443,8 @@ test("Back from a synthetic unsaved review restores its Setup action without gra
     const before = (await scan.boundingBox()).y;
     await scan.click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    await page.getByRole("button", { name: "Back to setup", exact: true }).click(); await frames(page);
-    await expect(page.locator("#reportStage1")).toBeVisible();
+    await page.getByRole("button", { name: "Back to contents", exact: true }).click(); await frames(page);
+    await expect(page.locator("#reportStage2")).toBeVisible();
     await expect(scan).toBeFocused();
     assert.equal((await scan.boundingBox()).y, before);
     assert.ok(!requests.some(url => ["/api/privacy-review", "/api/export"].includes(url)));
@@ -453,7 +453,7 @@ test("Back from a synthetic unsaved review restores its Setup action without gra
 test("report request-list paging keeps its local anchor and full report membership", async t => {
     const { page } = await setup(t, { route: "#reports" });
     await chooseReportScope(page, "all");
-    await page.locator("#reportRequests > summary").click();
+    await expect(page.locator("#reportRequests")).toBeVisible();
     const pager = page.locator("#reportList > .list-pager");
     await expect(pager).toContainText("1-4 of 38");
     await positionSection(page, "#reportList > .list-pager");

@@ -43,19 +43,20 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
             }
             assert.equal(await page.locator(".report-tool-score,.report-dimensions,.dimensional-column").count(), 0);
             await page.locator("#quality > summary").click();
-            const quality = page.locator("#quality tbody");
-            assert.match(await quality.innerText(), /Not assessed/);
-            for (const label of ["Trust: answers", "Trust: actions"]) {
-                assert.match(await quality.locator("tr").filter({ hasText: label }).innerText(), /Not assessed/);
+            const quality = page.locator("#quality");
+            assert.match(await quality.innerText(), /Not checked automatically/);
+            for (const [label, checkId] of [["Answer support", "answer-support-validity"], ["Permission for tool use", "action-authorization-compliance"]]) {
+                const metric = bundle.snapshot.evaluationFacts.metrics.find(metric => metric.checkId === checkId);
+                assert.match(await quality.locator("li,tr").filter({ hasText: label }).innerText(), new RegExp(`0 of ${metric.coverage.eligible} assessed`));
             }
             const timing = page.locator("#timing tbody tr").filter({ hasText: /^Tool calls/ });
-            if (expected.calls) {
+            if (expected.timed) {
                 assert.match(await timing.innerText(), new RegExp(`${expected.timed} of ${expected.calls} calls? timed`));
-                assert.match(await timing.locator("td").first().innerText(), expected.median === null ? /Not measured/
-                    : new RegExp(`\\(${expected.median} ms\\)`));
+                assert.match(await timing.locator("td").first().innerText(), new RegExp(`\\(${expected.median} ms\\)`));
             } else {
-                assert.match(await timing.innerText(), /0 of 0 calls timed/);
-                assert.match(await timing.locator("td").first().innerText(), /Not measured/);
+                const note = await page.locator("#timing > .reading-note").filter({ hasText: /^Tool calls:/ }).innerText();
+                assert.match(note, new RegExp(`0 of ${expected.calls} calls? timed`));
+                assert.match(note, /Not measured/);
             }
             for (const theme of ["light", "dark"]) for (const width of [320, 768, 1200]) for (const size of ["100%", "200%"]) {
                 await page.setViewportSize({ width, height: 1000 });
@@ -65,7 +66,7 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
                 }, { theme, size });
                 const layout = await page.evaluate(() => ({
                     pageWidth: document.documentElement.scrollWidth,
-                    clipped: [...document.querySelectorAll(".native-counts strong,.native-bar-heading strong,#quality td,#timing td")]
+                    clipped: [...document.querySelectorAll(".native-counts strong,.native-bar-heading strong,#quality td,#quality li,#timing td,#timing>p")]
                         .filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent),
                 }));
                 assert.ok(layout.pageWidth <= width + 1, `${scenario.name}/${theme}/${width}/${size}: page overflow ${layout.pageWidth}`);
