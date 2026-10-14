@@ -425,6 +425,16 @@ mutation for the coordinated reader action. `continueSelectedReport(id)` require
 that interaction in Selected membership, then explicitly opens Activity without
 clearing text/format preferences, auto-adding activity or saving. Paired-period
 membership cannot be changed through these ordinary-selection helpers.
+Explicit Continue also reveals that interaction's canonical picker row: it keeps
+a matching picker search or clears only a search that hides the target, selects
+the existing page containing it, and focuses the checked row in view without
+triggering a checkbox tooltip. The next action stays visible alongside the row
+when both fit; enlarged/narrow views reveal the row without covering it with
+sticky controls.
+Author-excluded selected rows remain visible with their exclusion note, without
+changing the author policy or accepted count. Ordinary library/draft visits retain
+their paging; this named continuation intent alone overrides picker presentation.
+Reader/Card Back keeps its original position and focus.
 
 An export whose response is lost stays **Save not confirmed**. Its outcome is
 separate from draft/context validity: later revisions still invalidate disclosure

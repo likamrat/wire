@@ -2985,11 +2985,37 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             announce("Add this interaction to the report before continuing.", "stale");
             return false;
         }
+        const request = state.exportCatalog.requests.find(item => item.scenarioId === scenarioId)
+            ?? state.exportCatalog.requests.find(item => item.aliases.includes(scenarioId));
+        const choices = reportPickerRequests(), target = choices.find(item => item.scenarioId === request.scenarioId);
+        if (!target) { announce("This interaction is no longer available in the report picker.", "stale"); return false; }
+        const query = matchesReportRequest(target, localQuery("reportRequestSearch")) ? localQuery("reportRequestSearch") : "";
+        const matching = choices.filter(item => matchesReportRequest(item, query));
+        presentation.setPage("report:selected:" + query, Math.floor(matching.indexOf(target) / 4));
         reportScope = "selected";
         reportEntry = null;
         updateSelection();
         reportJourney.go(1);
-        go("reports", { task: "create", request: undefined });
+        const moved = go("reports", { task: "create", request: undefined,
+            localSearch: { ...route.localSearch, reportRequestSearch: query } });
+        const navigation = navigationGeneration, intent = readingIntent;
+        const reveal = loaded => {
+            if (!loaded || navigation !== navigationGeneration || intent !== readingIntent) return;
+            const control = $("report-select-" + encodeURIComponent(request.scenarioId));
+            if (!control?.checkVisibility() || !control.checked) {
+                announce("The continued interaction changed. Check the current report selection.", "stale");
+                return;
+            }
+            const entry = control.closest(".report-entry"), actions = $("reportStage1").querySelector(".report-stage-actions");
+            entry.tabIndex = -1;
+            entry.focus({ preventScroll: true });
+            const inset = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+            if (entry.getBoundingClientRect().bottom - actions.getBoundingClientRect().top <= innerHeight - inset - 16) {
+                actions.scrollIntoView({ block: "start", inline: "nearest" });
+            } else control.scrollIntoView({ block: "center", inline: "nearest" });
+        };
+        if (moved instanceof Promise) moved.then(reveal);
+        else reveal(moved);
         return true;
     }
     function clearReportSelection() {
@@ -3011,6 +3037,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function selectedScenarios() {
         const ids = new Set(reportSelection().requests.map((r) => r.scenarioId));
         return state ? state.scenarios.filter((scenario) => ids.has(scenario.scenarioId)) : [];
+    }
+    function reportPickerRequests() {
+        const ids = new Set((state.exportCatalog?.requests ?? []).map(request => request.scenarioId));
+        return state.scenarios.filter(scenario => ids.has(scenario.scenarioId));
+    }
+    function matchesReportRequest(scenario, query) {
+        return localSearch.matches(query, [scenario.userPrompt?.text, scenario.title, scenario.sourceSessionName,
+            sessionSource(scenario.sourceSessionId)?.name, scenario.project, scenario.sourceSessionId]);
     }
     function updateSelection() {
         if (!state) return;
@@ -3185,14 +3219,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         captureReading();
         $("reportTimeContext").textContent = `Report dates use ${time.label(applied.timeContext)} (${applied.timeContext.locale}). Source event timestamps stay withheld.`;
         const host = $("reportList"), picking = reportScope === "selected" && !periodReport;
-        const catalogIds = new Set((state.exportCatalog?.requests ?? []).map(request => request.scenarioId));
-        const requests = picking ? state.scenarios.filter(scenario => catalogIds.has(scenario.scenarioId)) : selectedScenarios();
+        const requests = picking ? reportPickerRequests() : selectedScenarios();
         $("reportRequestsTitle").textContent = picking ? "Choose interactions" : "Included interactions";
         host.replaceChildren();
         {
             const query = localQuery("reportRequestSearch");
             $("reportRequestSearchCount").hidden = !query;
-            const matching = requests.filter(scenario => localSearch.matches(query, [scenario.userPrompt?.text, scenario.title, scenario.sourceSessionName, sessionSource(scenario.sourceSessionId)?.name, scenario.project, scenario.sourceSessionId]));
+            const matching = requests.filter(scenario => matchesReportRequest(scenario, query));
             setText($("reportRequestSearchCount"), `${count(matching.length)} of ${count(requests.length)} saved interactions shown.${picking ? " Selections outside this list are kept." : ` All ${count(requests.length)} remain included.`}`);
             if (!requests.length) host.append(empty(picking ? "No reportable activity saved" : "No interactions included",
                 isStale ? "Activity could not be checked. Retry the stored view." : picking ? "This library uses activity already saved in WIRE." : "Choose another scope or include other prompt authors."));

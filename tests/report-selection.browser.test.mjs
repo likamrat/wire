@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption, openActivitySessions } from "./helpers.mjs";
+import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption, openActivitySessions, restoreLegacySearch } from "./helpers.mjs";
 import { reportContents, chooseReportScope, inspectReportCopies, cancelReportPreview, openReportCreation } from "./report-journey-helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 
@@ -25,15 +25,15 @@ async function inventory(root) {
         return [path.relative(root, file), createHash("sha256").update(await readFile(file)).digest("hex")];
     })));
 }
-async function setup(t) {
-    const records = Array.from({ length: 18 }, (_, index) => {
+async function setup(t, { total = 18, sharedPair = [0, 1] } = {}) {
+    const records = Array.from({ length: total }, (_, index) => {
         const record = fixture(`selection-${index}`);
         record.userPrompt.text = `Selection request ${String(index).padStart(2, "0")}`;
         record.toolCalls[0].toolSucceeded = index % 3 === 2 ? undefined : index % 3 === 0;
         record.toolCalls[0].reportedOutcome = index % 3 === 0 ? "succeeded" : index % 3 === 1 ? "failed" : "unknown";
         return record;
     });
-    records[1].toolCalls.unshift(structuredClone(records[0].toolCalls[0]));
+    records[sharedPair[1]].toolCalls.unshift(structuredClone(records[sharedPair[0]].toolCalls[0]));
     const { context } = await privateFixture(t, records), controller = createExportController(context);
     const initial = await loadBoardState(context);
     const previous = await controller.preview("existing-synthetic-report", undefined, { promptMode: "none", formats: ["html"] }, { kind: "selected", revision: initial.revision, scenarioIds: ["selection-0"] });
@@ -151,9 +151,13 @@ test("reader Continue connects canonical selection to report Activity and exact 
         await expect(page.locator("#reportStage1")).toBeVisible();
         await expect(page.locator("[name=reportScope]:checked")).toHaveValue("selected");
         await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 3 interactions");
-        await page.getByRole("button", { name: "Previous report requests", exact: true }).click();
         await expect(page.locator("#report-select-selection-0")).toBeChecked();
         await expect(page.locator("#report-select-selection-1")).toBeChecked();
+        await expect(page.locator("#report-select-selection-1").locator("xpath=ancestor::article[1]")).toBeFocused();
+        assert.equal(await page.locator("#report-select-selection-1").evaluate(node => {
+            const box = node.getBoundingClientRect(), inset = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+            return box.top >= inset && box.bottom <= innerHeight;
+        }), true, `${width}px/${scale}x: the selected continuation stays in view below the sticky header`);
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `reader-report-activity-${theme}-${width}-${scale}.png`), fullPage: true });
         await page.getByRole("button", { name: "Next report requests", exact: true }).click();
         await expect(page.locator("#report-select-selection-5")).toBeChecked();
@@ -179,6 +183,99 @@ test("reader Continue connects canonical selection to report Activity and exact 
     await expect(card.locator("input")).toBeChecked();
     assert.equal(requests.filter(request => ["/api/preview", "/api/privacy-review", "/api/export"].includes(request.path)).length, 0);
     if (proofDir) await writeFile(path.join(proofDir, "reader-report-join.json"), JSON.stringify(proof, null, 2));
+    await preserved();
+});
+
+test("explicit reader Continue reveals a distant selected target despite prior picker search and page", { timeout: 60000 }, async t => {
+    const { page, runtime, requests, preserved } = await setup(t, { total: 118, sharedPair: [112, 113] });
+    await page.goto(runtime.url + "#reports?task=create"); await ready(page);
+    await page.locator("#report-select-selection-2").check();
+    await reportContents(page);
+    await page.locator("[name=promptMode][value=original]").check();
+    await page.locator("#formatOptions input[value=json]").check();
+    await page.getByText("Additional masking", { exact: true }).click();
+    await page.locator("#manualTerms").fill("Keep the invented masking choice");
+    await chooseReportScope(page, "selected");
+    await page.locator("#reportRequestSearch").fill("Selection request 0");
+    await page.getByRole("button", { name: "Next report requests", exact: true }).click();
+    await expect(page.locator("#reportList")).toContainText("5-8 of 30");
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("link", { name: "Continue draft", exact: true }).click();
+    await expect(page.locator("#reportRequestSearch")).toHaveValue("Selection request 0");
+    await expect(page.locator("#reportList"), "Ordinary draft return retains its page").toContainText("5-8 of 30");
+    await navigateMain(page, "activity"); await ready(page);
+    await restoreLegacySearch(page, "Selection request 11");
+    const open = page.locator(".request-row").filter({ hasText: "Selection request 113" }).getByRole("link", { name: "View interaction", exact: true });
+    await open.scrollIntoViewIfNeeded();
+    const cardUrl = page.url(), cardBox = await open.boundingBox();
+    await page.mouse.click(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2); await ready(page);
+    const readerUrl = page.url(), next = page.locator("#requestReportContinue");
+    await page.locator("#requestReportToggle").click();
+    await next.focus();
+    const readerY = (await next.boundingBox()).y;
+    const assertRevealed = async (id, countText, search = "", pageText = "113-116 of 118") => {
+        await expect(page.locator("#reportStage1")).toBeVisible();
+        const chosen = page.locator(`#report-select-selection-${id}`);
+        await expect(chosen).toBeChecked();
+        await expect(chosen.locator("xpath=ancestor::article[1]")).toBeFocused();
+        assert.equal(await chosen.evaluate(node => {
+            const box = node.getBoundingClientRect(), inset = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+            return box.top >= inset && box.bottom <= innerHeight;
+        }), true, "The checked target is immediately in the viewport, not merely mounted on a distant page");
+        assert.equal(await chosen.evaluate(node => {
+            const actions = document.querySelector("#reportStage1 .report-stage-actions"), box = actions.getBoundingClientRect();
+            const entry = node.closest(".report-entry").getBoundingClientRect();
+            const inset = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+            return entry.bottom - box.top > innerHeight - inset - 16 || box.top >= inset - 1 && box.bottom <= innerHeight;
+        }), true, "When both fit, the next action stays fully visible above the revealed entry");
+        assert.equal(await page.locator("#evidence-tooltip").isVisible(), false, "Revealing a row must not cover its prompt with the checkbox tooltip");
+        await expect(page.locator("#reportList")).toContainText(pageText);
+        await expect(page.locator("#previewSelectionSummary")).toHaveText(countText);
+        await expect(page.locator("#reportRequestSearch")).toHaveValue(search);
+        assert.equal(await page.locator("[name=promptMode][value=original]").isChecked(), true);
+        assert.equal(await page.locator("#formatOptions input[value=json]").isChecked(), true);
+        assert.equal(await page.locator("#manualTerms").inputValue(), "Keep the invented masking choice");
+    };
+    await next.press("Enter"); await ready(page);
+    await assertRevealed(113, "1 chat · 3 interactions");
+    if (proofDir) await page.screenshot({ path: path.join(proofDir, "continued-distant-selected.png") });
+    const contents = page.getByRole("button", { name: "Continue to contents", exact: true });
+    await contents.focus(); await expect(contents).toBeInViewport();
+    await contents.press("Enter"); await expect(page.locator("#reportStage2")).toBeVisible();
+    await page.goBack(); await ready(page);
+    assert.equal(page.url(), readerUrl);
+    await expect(next).toBeFocused();
+    assert.ok(Math.abs((await next.boundingBox()).y - readerY) < 3);
+    await page.locator("#contextBack").click(); await ready(page);
+    assert.equal(page.url(), cardUrl);
+    await expect(open).toBeFocused();
+    assert.ok(Math.abs((await open.boundingBox()).y - cardBox.y) < 3);
+
+    await page.locator(".request-row").filter({ hasText: "Selection request 112" }).getByRole("link", { name: "View interaction", exact: true }).click();
+    await ready(page);
+    await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
+    await next.click(); await ready(page);
+    await assertRevealed(112, "1 chat · 3 interactions");
+    await selectActivityOption(page, "reportPromptAuthorFilter", ["agent"]);
+    await page.locator("#reportRequestSearch").fill("Selection request 0");
+    await page.getByRole("button", { name: "Next report requests", exact: true }).click();
+    await page.goBack(); await ready(page);
+    await expect(page.locator("#requestReportTitle")).toContainText("not included");
+    await next.click(); await ready(page);
+    await assertRevealed(112, "No interactions included");
+    await expect(page.locator("#report-select-selection-112").locator("xpath=ancestor::article[1]")).toContainText("Not included with the current prompt-author choice.");
+    await expect(contents).toBeDisabled();
+    assert.deepEqual(await page.locator("#reportPromptAuthorFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)), ["agent"]);
+    if (proofDir) await page.screenshot({ path: path.join(proofDir, "continued-alias-author-excluded.png") });
+    await page.locator("#reportRequestSearch").fill("Selection request 11");
+    await page.getByRole("button", { name: "Next report requests", exact: true }).click();
+    await navigateMain(page, "activity"); await ready(page);
+    await page.locator(".request-row").filter({ hasText: "Selection request 112" }).getByRole("link", { name: "View interaction", exact: true }).click(); await ready(page);
+    await next.click(); await ready(page);
+    await assertRevealed(112, "No interactions included", "Selection request 11", "1-4 of 9");
+    await page.locator("#reportRequestSearch").fill("Selection request 02");
+    await expect(page.locator("#report-select-selection-2")).toBeChecked();
+    assert.equal(requests.filter(request => ["/api/preview", "/api/privacy-review", "/api/export"].includes(request.path)).length, 0);
     await preserved();
 });
 
