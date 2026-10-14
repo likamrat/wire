@@ -44,24 +44,42 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     };
     await ready();
     const widget = page.locator('[data-percentage-card="models"]');
+    const data = page.locator('[data-view-key="percentage:models:exact"]');
     const exact = async (name, total, counts, calls) => {
         await ready();
         await expect(widget).toHaveAttribute("data-total", String(total));
+        await expect(widget.locator(".percentage-denominator")).toHaveClass(/visually-hidden/);
+        await expect(widget.locator(".percentage-denominator")).toHaveText(`${total} matching ${total === 1 ? "interaction" : "interactions"}`);
+        await expect(widget.locator(".percentage-model-coverage")).toHaveCount(0);
+        await expect(widget.locator(".percentage-content > :not(.percentage-legend,.percentage-empty)")).toHaveCount(0);
+        await expect(widget.locator(".percentage-empty")).toHaveCount(Object.keys(counts).length ? 0 : 1);
         await expect(page.locator("#activityCount")).toHaveText(String(calls));
         const rows = await widget.locator(".percentage-legend-row").evaluateAll(nodes => nodes.map(node => ({
             model: node.dataset.category, count: Number(node.dataset.count),
+            label: node.querySelector(".percentage-label").textContent,
+            value: node.querySelector(".percentage-value").textContent,
             fraction: Number(node.querySelector(".percentage-bar").dataset.fraction),
+            width: node.querySelector(".percentage-bar").style.width,
         })));
         assert.deepEqual(Object.fromEntries(rows.map(row => [row.model, row.count])), counts);
-        for (const row of rows) assert.equal(row.fraction, row.count / total);
+        for (const row of rows) {
+            assert.equal(row.label, row.model);
+            assert.equal(row.value, String(row.count));
+            assert.equal(row.fraction, row.count / total);
+            assert.ok(Math.abs(parseFloat(row.width) - row.count / total * 100) < .0001);
+        }
         const chartCalls = await page.locator(".flat-time-column").evaluateAll(nodes => nodes.reduce((sum, node) => sum + Number(node.dataset.total), 0));
         assert.equal(chartCalls, calls);
-        evidence.push({ name, total, calls, rows, coverage: await widget.locator(".percentage-model-coverage").allTextContents() });
+        const accessible = await widget.ariaSnapshot();
+        assert.ok(accessible.includes(`${total} matching ${total === 1 ? "interaction" : "interactions"}`));
+        evidence.push({ name, total, calls, rows, definitions: await data.locator(".percentage-note").textContent(), accessible });
     };
     const allCounts = { [modelNames[1]]: 2, [modelNames[0]]: 2, [modelNames[2]]: 1, [modelNames[3]]: 1 };
     await expect(widget.locator("h3")).toHaveText("Model");
     await exact("all", 9, allCounts, 11);
-    await expect(widget.locator(".percentage-model-coverage")).toHaveText("1 partial / 2 not recorded / 2 not verified / 1 conflicting");
+    const allDefinitions = "Original response models, not evaluator or tool models. An interaction counts once per recorded name, including partial records. Names are not inferred. Bars use all matching interactions; models can overlap."
+        + " Coverage: 1 partial / 2 not recorded / 2 not verified / 1 conflicting.";
+    await expect(data.locator(".percentage-note")).toHaveText(allDefinitions);
     assert.equal(await widget.locator("a,button,svg").count(), 0, "No inexact drilldown or overlapping pie");
     assert.equal(await page.locator("#dateFilter").count(), 1);
     for (const [value, total, counts, calls] of [
@@ -81,7 +99,13 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     await page.locator("#toFilter").fill("2026-09-30");
     await page.locator("#applyDates").click();
     await exact("historical absence is coverage", 1, {}, 1);
-    await expect(widget.locator(".percentage-model-coverage")).toHaveText("1 not recorded");
+    await expect(widget.locator(".percentage-empty")).toHaveText("No model names available.");
+    await page.locator("#meaning>summary").click();
+    await expect(data.locator(".percentage-note")).toBeVisible();
+    await expect(data.locator(".percentage-note")).toContainText("Coverage: 1 not recorded.");
+    await expect(data.locator("caption")).toHaveText("1 matching interactions. Each counts once per recorded model; model counts can overlap.");
+    await expect(data.locator("tbody tr")).toHaveCount(0);
+    await page.locator("#meaning>summary").click();
     await page.locator("#resetView").click();
     await exact("reset dates", 9, allCounts, 11);
     await selectActivityOption(page, "outcomeFilter", "failure");
@@ -97,13 +121,16 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     await expect(page.locator("#homeView")).toHaveAttribute("data-empty", "true");
     await expect(widget).toBeHidden();
     await expect(widget).toHaveAttribute("data-total", "0");
+    await expect(widget.locator(".percentage-empty")).toHaveText("No matching interactions.");
     await page.locator("#resetView").click();
     await exact("reset no-match", 9, allCounts, 11);
     await page.locator("#meaning>summary").click();
-    const data = page.locator('[data-view-key="percentage:models:exact"]');
+    await expect(data.locator(".percentage-note")).toBeVisible();
+    await expect(data.locator(".percentage-note")).toHaveText(allDefinitions);
     await expect(data.locator("tbody tr")).toHaveCount(4);
     assert.deepEqual(await data.locator("tbody th").allTextContents(), Object.keys(allCounts));
-    await expect(data.locator("caption")).toContainText("model counts can overlap");
+    assert.deepEqual(await data.locator("tbody td").allTextContents(), Object.values(allCounts).map(String));
+    await expect(data.locator("caption")).toHaveText("9 matching interactions. Each counts once per recorded model; model counts can overlap.");
     await page.locator("#meaning>summary").click();
     let release;
     await page.route("**/api/snapshot", async route => {
@@ -143,7 +170,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
             assert.ok(Math.abs(geometry.models.width - geometry.services.width) < 2);
         } else if (width === 1100) assert.ok(geometry.models.y >= Math.max(geometry.tools.bottom, geometry.services.bottom));
         else assert.ok(geometry.models.y >= geometry.services.bottom);
-        const clipped = await widget.locator(".percentage-label,.percentage-value,.percentage-denominator").evaluateAll(nodes =>
+        const clipped = await widget.locator(".percentage-label,.percentage-value").evaluateAll(nodes =>
             nodes.filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
         assert.deepEqual(clipped, [], "Exact model labels and counts wrap without clipping");
         evidence.push({ name: `${width}-${textSize || "normal"}-${theme}`, geometry });

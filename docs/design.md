@@ -204,11 +204,14 @@ source/prompt do not multiply an interaction's count for a model. Matching only
 one call retains the whole interaction's original-model scope.
 
 Bars use all matching interactions as the denominator; model memberships can
-overlap. A compact coverage line separates partial, not-recorded, unverified and
-conflicting interactions from actual model names. Supported names in partial
-records still count; conflicting and tool-only facts supply no names. Exact data
-and definitions live in the existing shared disclosure. Model labels and bars
-are read-only, without an invented model filter or inexact drilldown.
+overlap. The populated widget shows only **Model**, exact names, bars and counts;
+the interaction denominator remains accessible without a visible subtitle.
+Exact denominator, partial, not-recorded, unverified and conflicting coverage,
+and definitions stay in the existing **Chart data and definitions** disclosure,
+not a widget footer. Supported names in partial records still count; conflicting
+and tool-only facts supply no names. When matching interactions have no usable
+names, the widget says **No model names available.** Model labels and bars are
+read-only, without an invented model filter or inexact drilldown.
 The widget extends the existing Tools/Services row to three columns when space
 allows, spans the two-column row at intermediate widths and stacks on narrow
 screens. It does not change source collection, stored evidence, report membership

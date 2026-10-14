@@ -67,7 +67,6 @@ export const analyzeLayoutStyles = `
 #percentageCharts .percentage-legend {gap:4px}
 #percentageCharts .percentage-gap-list {margin:4px 0 0;padding-inline-start:28px;font-size:var(--type-caption);color:var(--muted)}
 #percentageCharts .percentage-gap-list>div {padding-block:2px}
-#percentageCharts .percentage-model-coverage {margin:8px 0 0;color:var(--muted);font-size:var(--type-caption)}
 #percentageCharts [data-breakdown=models] .percentage-label {min-height:36px}
 #homeView .percentage-denominator {margin-top:4px;font-size:var(--type-caption)}
 #homeView .percentage-exact>summary {font-size:var(--type-small)}
