@@ -225,7 +225,7 @@ test("pending, failed and empty periods use existing chooser guards without leav
     await page.locator("#pageAction").evaluate(node => node.click());
     assert.equal(page.url(), pendingUrl, "Disabled native navigation cannot use stale scope");
     release(); await ready(page);
-    assert.equal(await page.locator("#periodResult").innerText(), "1 Work IQ tool call");
+    assert.equal(await page.locator("#periodResult").innerText(), "1 Work IQ tool call (Oct 1 - Oct 5, 2026)");
     assert.equal(await page.locator("#applyDates").evaluate(node => node === document.activeElement), true);
     assertPlacement(await measure(page), "accepted period");
     await page.route("**/api/snapshot", route => route.fulfill({ status: 500, json: { error: "Synthetic chooser scope failed." } }), { times: 1 });
@@ -237,6 +237,6 @@ test("pending, failed and empty periods use existing chooser guards without leav
     await page.locator("#fromFilter").fill("2027-01-01");
     await page.locator("#toFilter").fill("2027-01-01");
     await page.locator("#applyDates").click(); await ready(page);
-    assert.equal(await page.locator("#periodResult").innerText(), "0 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "0 Work IQ tool calls (Jan 1, 2027)");
     assert.equal(await page.locator("#periodActions").isVisible(), false);
 });

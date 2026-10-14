@@ -1934,7 +1934,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("periodFeedback").classList.add("home-period-summary");
         setText(homeCount, count(rows.length));
         setText(homeUnit, results.unit(applied.layer, rows.length));
-        $("periodResult").replaceChildren(...(isStale ? ["Previous results: "] : []), homeCount, " ", homeUnit);
+        $("periodResult").replaceChildren(...(isStale ? ["Previous results: "] : []), homeCount, " ", homeUnit, ` (${model.caption})`);
         $("periodResult").dataset.revision = String(state.revision);
         setText($("periodHint"), isStale ? "The update failed. The last applied period is still shown; retry before using these results."
             : !state.scenarios.length && !collection?.config ? "No activity has been collected."
@@ -3336,7 +3336,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderCoverageDetails() {
         if (!state || !analytics || !applied) return;
         const host = $("collectionEvidenceDetails"), coverage = state.coverage || {}, c = analytics.coverage;
-        const key = JSON.stringify([state.revision, applied, c.firstAt, c.lastAt, coverage, analytics.warnings, collectionReadError, collection?.config?.approved, collection?.config?.windowDays]);
+        const checked = collection?.config?.approved ? collection.checkedWindow : coverage;
+        const key = JSON.stringify([state.revision, applied, c.firstAt, c.lastAt, coverage, checked, analytics.warnings, collectionReadError, collection?.config?.approved, collection?.config?.windowDays]);
         if (key === coverageDetailsKey) return;
         coverageDetailsKey = key;
         const range = (from, to) => from && to ? `${date(from, true)} to ${date(to, true)}` : null;
@@ -3348,6 +3349,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ["Selected date filter", selectedDates],
             ["Dated records in this view", range(c.firstAt, c.lastAt) || "No dated matching records"],
             ["Approved collection window", collectionReadError ? "Current approval unavailable" : collection?.config?.approved ? `${count(collection.config.windowDays)} days of local history` : "No approved collection window"],
+            ["Last checked history", checked?.since && checked?.until ? `${timestamp(checked.since)} to ${timestamp(checked.until)}` : "Not recorded"],
             ["Collection window at this snapshot", range(coverage.since, coverage.until) || "Not recorded"],
             ["Snapshot coverage checked", coverage.checkedAt ? timestamp(coverage.checkedAt) : "Not recorded"],
             ["Snapshot revision", state.revision],

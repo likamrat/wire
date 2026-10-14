@@ -228,7 +228,7 @@ for (const zone of ["UTC", "America/Los_Angeles", "Asia/Kolkata"]) test(`selecte
     await page.goto(app.runtime().url + url.hash); await ready(page);
     await verify("restart-selected-dates", ["start", "end", "next-day", "fresh-in-range"]);
     await dates(time.addDays(date, -60), next);
-    assert.match(await page.locator("#periodCoverageText").innerText(), /outside it may be missing.*does not collect/);
+    assert.equal(await page.locator("#periodCoverageText").innerText(), "Some of this period is outside checked history; activity may be missing.");
     assert.equal(await page.locator("#periodHistoryLink").isVisible(), true);
     await dates(time.addDays(next, 7), time.addDays(next, 8));
     await verify("future-empty-not-a-source-query", []);
@@ -634,7 +634,7 @@ test("Home ingests real appended local evidence and newly mapped chats before ap
     await app.check();
     assert.equal(await page.locator("#activityCount").innerText(), "3");
     assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "3");
-    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (All dates)");
     assert.ok((await app.runtime().collector.status()).cursors.some(row => row.sessionId === mapped.id));
     const mappedProof = await proof("newly-discovered-chat");
     await app.check();
@@ -656,7 +656,7 @@ test("Home ingests real appended local evidence and newly mapped chats before ap
     await page.locator("#activitySearch").fill("Synthetic first request");
     await page.waitForFunction(() => document.querySelector("#periodResult").textContent.includes("1 request group with 1 Work IQ tool call"));
     await navigateMain(page, "home"); await ready(page);
-    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls", "Home summary uses the Home chart scope, not the hidden Activity search");
+    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (All dates)", "Home summary uses the Home chart scope, not the hidden Activity search");
     assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "3");
     await selectActivityOption(page, "serviceFilter", "Calendar"); await ready(page);
     await appendFile(source.file, jsonl([event("user.message", { content: "Synthetic out-of-filter request" }), call("four"), complete("four")]));
@@ -713,7 +713,7 @@ test("compact summary and fresh action wrap accessibly in light/navy at every re
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; scrollTo(0, 0); }, scale);
         await page.keyboard.press("Escape"); await page.mouse.move(0, 0);
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        assert.equal(await page.locator("#periodResult").innerText(), "217 Work IQ tool calls");
+        assert.equal(await page.locator("#periodResult").innerText(), "217 Work IQ tool calls (All dates)");
         const metrics = await page.evaluate(() => {
             const box = id => { const r = document.getElementById(id).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height, width: r.width }; };
             const lines = id => {

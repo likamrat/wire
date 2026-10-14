@@ -195,7 +195,7 @@ async function facetCount(page, key) {
     const label = await page.locator(`#outcomeFilter option[value="${key}"]`).textContent();
     return number(label.match(/\(([\d,]+)\)$/)[1]);
 }
-async function reconcileView(page, snapshot) {
+async function reconcileView(page, snapshot, expectedPeriod = "All dates") {
     const data = snapshot.analytics, total = data.totals.count;
     assert.equal(number(await page.locator("#activityCount").innerText()), total);
     assert.equal(Number(await page.locator(".percentage-section").getAttribute("data-total")), total);
@@ -203,7 +203,7 @@ async function reconcileView(page, snapshot) {
         assert.equal(await page.locator(selector).getAttribute("data-revision"), String(snapshot.revision));
     }
     assert.equal(await page.locator("#activityUnit").innerText(), resultDefinitions.unit(data.layer, total));
-    assert.equal(await page.locator("#periodResult").innerText(), `${total} ${resultDefinitions.unit(data.layer, total)}`);
+    assert.equal(await page.locator("#periodResult").innerText(), `${total} ${resultDefinitions.unit(data.layer, total)} (${expectedPeriod})`);
     const barTotals = await page.locator("#chart .dimensional-column").evaluateAll(nodes => nodes.map(node => Number(node.dataset.total)));
     assert.equal(barTotals.reduce((sum, value) => sum + value, 0) + data.timeSeries.undatedCount, total);
     if (!new URL(page.url()).hash.includes("chart=workload")) {
@@ -851,7 +851,7 @@ test("newer dates and clearing supersede a held selection without losing scope o
         scope: "all", includeMetadata: false, projectIds: ["test-project"], workloads: ["Calendar"],
         from: "2026-09-20", to: "2026-09-20",
     });
-    await reconcileView(page, reads.at(-1).snapshot);
+    await reconcileView(page, reads.at(-1).snapshot, "Sep 20, 2026");
     const late = page.waitForResponse(response => response.url().endsWith("/api/snapshot")
         && response.request().postDataJSON().filters.from === "2026-09-20" && response.request().postDataJSON().filters.outcomes?.[0] === "failure");
     release(); await late;

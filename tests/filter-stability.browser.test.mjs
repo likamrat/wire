@@ -5,6 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
+import { time } from "../lib/time.mjs";
 import { fixture, privateFixture, chooseTheme, navigateMain, openActivitySessions, selectActivityOption, revealStoredRefresh } from "./helpers.mjs";
 
 const proofs = process.env.WIRE_FILTER_STABILITY_PROOFS;
@@ -58,7 +59,9 @@ async function setup(t, view = "home", { width = 1200, bucket = "week", spreadDa
     await ready(page);
     await expect(page.locator(`#${view}Insights .assessment-grid`)).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    return { page, runtime, today, from, posts };
+    const timeContext = time.normalize({ timeZone: "UTC", locale: "en-US" });
+    const expectedPeriod = `${time.formatDate(from, timeContext, from.slice(0, 4) !== today.slice(0, 4))} - ${time.formatDate(today, timeContext, true)}`;
+    return { page, runtime, today, from, posts, expectedPeriod };
 }
 async function startProbe(page, triggerId) {
     await page.evaluate(triggerId => {
@@ -354,7 +357,7 @@ test("a slower scoped insight read does not refresh the shell or mislabel previo
 });
 
 test("rapid refinements reject late replies without moving the active filter or replacing newer intent", async t => {
-    const { page } = await setup(t);
+    const { page, expectedPeriod } = await setup(t);
     const gates = [deferred(), deferred()], entered = [deferred(), deferred()];
     await page.route("**/api/snapshot", async route => {
         const project = route.request().postDataJSON().filters.projectIds?.[0];
@@ -367,13 +370,13 @@ test("rapid refinements reject late replies without moving the active filter or 
     await startProbe(page, "projectFilter-control"); await first(); await entered[0].promise;
     await selectActivityOption(page, "projectFilter", "project-b"); await entered[1].promise;
     await selectActivityOption(page, "projectFilter", "all"); await ready(page);
-    await expect(page.locator("#periodResult")).toHaveText("8 Work IQ tool calls");
+    await expect(page.locator("#periodResult")).toHaveText(`8 Work IQ tool calls (${expectedPeriod})`);
     const late = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.projectIds?.[0] === "project-a");
     const newerLate = page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.projectIds?.[0] === "project-b");
     gates[1].resolve(); await newerLate; gates[0].resolve(); await late; await frames(page);
     const trace = await finishProbe(page, "rapid-refinements");
     assert.equal(await page.locator("#projectFilter").inputValue(), "all");
-    await expect(page.locator("#periodResult")).toHaveText("8 Work IQ tool calls");
+    await expect(page.locator("#periodResult")).toHaveText(`8 Work IQ tool calls (${expectedPeriod})`);
     await expect(page.locator("#projectFilter-control")).toBeFocused();
     assert.deepEqual([...new Set(trace.frames.map(frame => frame.nodes["#projectFilter-control"].box.y))],
         [trace.frames[0].nodes["#projectFilter-control"].box.y]);
@@ -381,17 +384,17 @@ test("rapid refinements reject late replies without moving the active filter or 
 });
 
 test("failed refinement keeps accepted scope and contextual focus with a real recoverable error", async t => {
-    const { page } = await setup(t);
+    const { page, expectedPeriod } = await setup(t);
     await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented filter read failure." } }), { times: 1 });
     await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
     await expect(page.locator("#message")).toContainText("Invented filter read failure");
-    await expect(page.locator("#periodResult")).toHaveText("Previous results: 8 Work IQ tool calls");
+    await expect(page.locator("#periodResult")).toHaveText(`Previous results: 8 Work IQ tool calls (${expectedPeriod})`);
     assert.equal(await page.locator("#projectFilter").inputValue(), "all");
     await expect(page.locator("#projectFilter-control")).toBeFocused();
     await picture(page, "refinement-error");
     await selectActivityOption(page, "projectFilter", "project-a"); await ready(page);
     await expect(page.locator("#message")).toBeHidden();
-    await expect(page.locator("#periodResult")).toHaveText("4 Work IQ tool calls");
+    await expect(page.locator("#periodResult")).toHaveText(`4 Work IQ tool calls (${expectedPeriod})`);
     await expect(page.locator("#projectFilter-control")).toBeFocused();
 });
 

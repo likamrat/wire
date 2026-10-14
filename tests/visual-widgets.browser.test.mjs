@@ -325,7 +325,7 @@ test("empty, no-match, incomplete and failed reads are not replaced by a reassur
     await page.goto(url + "#analyze?range=custom&from=2025-01-01&to=2025-01-02"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("0");
     await expect(page.locator("#homeView")).toHaveAttribute("data-empty", "true");
-    await expect(page.locator("#periodCoverageText")).toContainText("Collection coverage dates are unavailable");
+    await expect(page.locator("#periodCoverageText")).toHaveText("Checked history is unknown; this view uses retained activity.");
     await capture(page, "after-no-match");
     await page.goto(url); await ready(page);
     app.failOverview(true);

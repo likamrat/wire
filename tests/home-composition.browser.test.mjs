@@ -150,7 +150,7 @@ test("Home date/result apply, clear, Back and failed reads keep one accepted cha
 test("Home leaves missing coverage explicit rather than removing it to simplify the page", async t => {
     const { page } = await setup(t, { knownCoverage: false });
     await expect(page.locator("#periodCoverage")).toBeVisible();
-    await expect(page.locator("#periodCoverageText")).toContainText("Collection coverage dates are unavailable");
-    await expect(page.locator("#periodResult")).toHaveText("121 Work IQ tool calls");
+    await expect(page.locator("#periodCoverageText")).toHaveText("Checked history is unknown; this view uses retained activity.");
+    await expect(page.locator("#periodResult")).toHaveText("121 Work IQ tool calls (Sep 21 - Sep 27, 2026)");
     await picture(page, "home-missing-coverage");
 });

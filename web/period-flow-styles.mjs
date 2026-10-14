@@ -51,9 +51,9 @@ export const periodFlowStyles = `
 .period-feedback>div:first-child {min-width:0;max-width:100%;flex:0 1 auto;overflow-wrap:anywhere}
 #periodResult {font-size:1rem;font-weight:600}
 #periodHint {font-size:1rem;color:var(--muted);margin-top:4px}
-.period-coverage {flex-basis:100%;padding:12px 16px;border-left:3px solid var(--warning);background:var(--paper);border-radius:var(--radius-small)}
-.period-coverage p {font-size:1rem}
-.period-coverage a {display:inline-flex;min-height:44px;align-items:center}
+.period-coverage {flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:0 16px;min-width:0;padding:4px 16px;border-left:3px solid var(--warning);background:var(--paper);border-radius:var(--radius-small)}
+.period-coverage p {font-size:1rem;margin:0;max-width:100%;overflow-wrap:anywhere}
+.period-coverage a {display:inline-flex;min-height:44px;max-width:100%;align-items:center;white-space:normal;overflow-wrap:anywhere}
 #periodActions {display:flex;align-items:center;gap:var(--pill-gap);min-width:0;max-width:100%;flex:0 1 auto}
 #periodActions:empty,#periodActions:has(>#pageAction[hidden]) {display:none}
 #periodActions a {min-height:44px}

@@ -195,16 +195,16 @@ test("Apply dates -> truthful feedback -> matching sessions -> analysis -> delib
             .observe(document.querySelector("#periodResult"), { childList: true, subtree: true, characterData: true });
     });
     await page.locator("#applyDates").focus(); await page.keyboard.press("Enter");
-    assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls (All dates)");
     assert.equal(await page.locator("#periodResult").getAttribute("aria-busy"), "true");
     assert.equal(await page.locator("#pageAction").getAttribute("aria-disabled"), "true");
     release(); await ready(page);
-    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (Jul 29 - Oct 5, 2026)");
     assert.match(await page.locator("#periodHint").innerText(), /^Jul 29, 2026 - Oct 5, 2026/);
     assert.equal(await page.locator("#applyDates").evaluate(node => node === document.activeElement), true);
-    assert.match(await page.locator("#periodCoverageText").innerText(), /Sep 5, 2026 - Oct 5, 2026.*may be missing.*does not collect/);
+    assert.equal(await page.locator("#periodCoverageText").innerText(), "Some of this period is outside checked history; activity may be missing.");
     assert.match(await page.locator("#homeInsightScope").textContent(), /3 request groups.*full retained interaction/);
-    assert.equal(await page.evaluate(() => window.periodAnnouncements.filter(text => text === "3 Work IQ tool calls").length), 1);
+    assert.equal(await page.evaluate(() => window.periodAnnouncements.filter(text => text === "3 Work IQ tool calls (Jul 29 - Oct 5, 2026)").length), 1);
     await page.locator("#pageAction").click(); await ready(page);
     assert.equal(await page.locator(".session-group").count(), 2);
     assert.match(page.url(), /from=2026-07-29.*to=2026-10-05/);
@@ -230,20 +230,20 @@ test("empty periods, failed and late snapshots do not claim coverage or a succes
     const { page, runtime, posts } = await setup(t);
     await page.goto(runtime.url); await ready(page);
     await period(page, "2027-01-01", "2027-01-03");
-    assert.equal(await page.locator("#periodResult").innerText(), "0 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "0 Work IQ tool calls (Jan 1 - Jan 3, 2027)");
     assert.match(await page.locator("#periodHint").innerText(), /not proof that no activity occurred/);
     assert.equal(await page.locator("#pageAction").isVisible(), false);
     await navigateMain(page, "activity"); await ready(page);
     assert.equal(await page.locator(".session-group").count(), 0, "Unmatched inventory sessions do not contradict period counts");
     await page.locator("#resetView").click(); await ready(page);
-    assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls (All dates)");
     await page.route("**/api/snapshot", async route => {
         if (route.request().postDataJSON().filters.from === "2026-09-01") return route.fulfill({ status: 500, json: { error: "Synthetic delayed read failed." } });
         await route.continue();
     });
     await period(page, "2026-09-01", "2026-10-05");
     assert.match(await page.locator("#message").innerText(), /Synthetic delayed read failed/);
-    assert.equal(await page.locator("#periodResult").innerText(), "Previous results: 4 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "Previous results: 4 Work IQ tool calls (All dates)");
     assert.equal(await page.locator("#pageAction").isVisible(), false);
     await page.unroute("**/api/snapshot");
     await (await revealStoredRefresh(page)).click(); await ready(page);
@@ -259,7 +259,7 @@ test("empty periods, failed and late snapshots do not claim coverage or a succes
     await page.locator("#resetView").click(); await ready(page);
     release();
     await page.waitForResponse(response => response.url().endsWith("/api/snapshot") && response.request().postDataJSON().filters.from === "2026-08-01");
-    assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "4 Work IQ tool calls (All dates)");
     assert.match(await page.locator("#periodHint").innerText(), /^All retained dates/);
     assert.equal(page.url().endsWith("#home"), true);
     assert.ok(posts.every(row => ["/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview"].includes(row.path)));
@@ -288,7 +288,7 @@ test("one filter row keeps refinements/routes and fits both themes", { timeout: 
         assert.match(page.url(), /#settings.*section=connection.*setting=history-window/);
         assert.equal(await page.locator("#collectionWindow-control").evaluate(node => node === document.activeElement), true);
         await page.goBack(); await ready(page);
-        assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls");
+        assert.equal(await page.locator("#periodResult").innerText(), "3 Work IQ tool calls (Jul 29 - Oct 5, 2026)");
         assert.equal(await page.locator("#moreFilters").count(), 0);
     }
     if (proofs) await writeFile(path.join(proofs, "period-controls.json"), JSON.stringify(measurements, null, 2));

@@ -87,7 +87,7 @@ test("period summary glyphs align without changing copy or chooser across themes
         await page.goto(url); await ready(page); await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         const geometry = await aligned(page), chooser = await page.locator("#pageAction").evaluate(textGeometry);
-        assert.equal(geometry.result.text, "219 Work IQ tool calls");
+        assert.equal(geometry.result.text, "219 Work IQ tool calls (All dates)");
         assert.equal(geometry.hint.text, "All retained dates · 36 Copilot chats");
         assert.equal(chooser.text, "Choose a Copilot chat");
         assert.equal(geometry.result.fontSize, `${22 * scale}px`);
@@ -126,7 +126,7 @@ test("pending and failed period text stay aligned while applied counts and nativ
     await aligned(page);
     assert.equal(await page.locator("#periodHint").innerText(), before.hint.text, "Pending scope still describes the accepted snapshot");
     assert.equal(await page.locator("#activityCount").innerText(), count);
-    assert.equal(await page.locator("#periodResult").innerText(), "219 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "219 Work IQ tool calls (Sep 1 - Oct 1, 2026)");
     assert.equal(await page.locator("#periodResult .pending-indicator").isVisible(), true);
     assert.equal(await page.locator("#periodResult .pending-indicator").getAttribute("aria-hidden"), "true");
     assert.equal(await page.locator("#pageAction").getAttribute("aria-disabled"), "true");

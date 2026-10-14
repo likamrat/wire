@@ -101,8 +101,9 @@ non-tool records do not enter this cohort. Remaining missing-target rows and
 reason counts are recomputed from the residual IDs, preserving known-service
 overlap. Canonical v1 missing-service coverage and saved report facts are unchanged.
 
-The headline retains distinct interaction and chat counts without repeating
-the visible Dates filter. Partial coverage and stale-result warnings remain.
+The headline appends the applied date span in parentheses beside its count and
+evidence unit, with distinct interaction and chat counts below. Partial coverage
+and stale-result warnings remain.
 These are screen-only presentations: reader/comparison findings, report
 projections, saved output, classification and stored evidence are unchanged.
 
@@ -335,6 +336,13 @@ Monday through Sunday. All dates, existing Last 7/30 days and inclusive Custom
 dates remain in this same control. A date choice changes canonical membership,
 not merely the time chart's columns. No widget carries a second range picker or
 repeats the selected period.
+The count headline alone names that applied span in parentheses: a single day,
+inclusive date range (including years), or **All dates** for unbounded retained
+history. Presets use their resolved calendar bounds, not a moving label beside
+old counts. Custom instant bounds retain times and UTC offsets; one-sided legacy
+bounds say **From** or **Through**. Draft, pending and failed dates never relabel
+accepted counts. Reset, Back and calendar rollover keep the caption and cohort
+together.
 
 Time columns aggregate automatically: day bins for calendar presets and bounded
 ranges up to 31 days, week bins for longer ranges up to a year, and month bins
@@ -2782,10 +2790,18 @@ height; no fixed-height mask or animation conceals that reflow. Cross-view
 navigation, Back/Forward reading restoration and explicit Reset keep their
 separate behavior.
 
-Filtering never collects additional history. If the requested local calendar
-period extends the known checked window, the warning names that window and links
-to Settings history preferences. It says activity may be absent, not that the
-entire selected period is complete, including partial boundary days. The
+Filtering never collects additional history. If elapsed time in the selected
+period extends the known checked window, one short sentence says some (or all)
+of this period is outside checked history and activity may be missing. **History
+settings** keeps the existing navigation action beside it at desktop sizes;
+text and link wrap naturally at narrow widths or enlarged text. The notice
+does not repeat a competing date span. Exact **Last checked history** instants
+remain in the existing Collection status evidence details, separately from
+selected dates, record dates and the snapshot collection window. Unknown
+coverage is explicitly unknown. A wholly checked past range needs no date-window
+warning; partial boundary days still use exact instants. Future portions of a
+calendar period are not missing past activity, but elapsed unchecked time still
+warns. Absence of this date-window notice never proves source completeness. The
 collector projects its most recent checked window separately from the immutable
 evidence snapshot's collection window, so a no-change check does not leave
 misleading stale bounds or rewrite old evidence. Unknown coverage stays unknown. Empty

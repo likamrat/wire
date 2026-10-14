@@ -150,7 +150,7 @@ test("chooser and every pill anchor family have decoration-free interactive stat
     const { page, runtime } = await setup(t);
     assert.equal(await page.locator("#pageAction").innerText(), "Choose a Copilot chat");
     assert.equal(await page.getByRole("link", { name: "Choose a Copilot chat", exact: true }).count(), 1);
-    assert.equal(await page.locator("#periodResult").innerText(), "2 Work IQ tool calls");
+    assert.equal(await page.locator("#periodResult").innerText(), "2 Work IQ tool calls (Sep 30, 2026)");
     assert.equal(await page.locator("#periodHint").innerText(), "Sep 30, 2026 - Sep 30, 2026 · 1 Copilot chat");
     assert.equal(await page.locator("#meaning").evaluate(node => node.open), false);
     await page.locator("#meaning > summary").click();

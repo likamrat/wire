@@ -216,7 +216,7 @@ test("late overview and snapshot responses cannot replace a newer private cohort
     await (await revealStoredRefresh(page)).click(); await ready(page);
     await expect(page.locator("#message")).toContainText("older snapshot was rejected");
     await expect(page.locator("#homeView")).toHaveAttribute("data-revision", String(acceptedRevision));
-    await expect(page.locator("#periodResult")).toHaveText("Previous results: 1 Work IQ tool call");
+    await expect(page.locator("#periodResult")).toHaveText("Previous results: 1 Work IQ tool call (All dates)");
     await page.unroute("**/api/snapshot");
     await (await revealStoredRefresh(page)).click(); await ready(page); await homeCount(page, 1);
     await navigateMain(page, "activity");

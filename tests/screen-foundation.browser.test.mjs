@@ -101,7 +101,7 @@ test("populated screens retain painted Asta roles and coherent Fluent disclosure
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(scale => document.documentElement.style.fontSize = `${100 * scale}%`, scale);
         await navigateMain(page, "analyze"); await ready(page);
-        await expect(page.locator("#periodResult")).toHaveText("230 Work IQ tool calls");
+        await expect(page.locator("#periodResult")).toHaveText("230 Work IQ tool calls (All dates)");
         const roles = await page.locator("#periodResult,#activityCount,#activityUnit").evaluateAll(nodes => nodes.map(node => {
             const css = getComputedStyle(node);
             return { size: css.fontSize, weight: css.fontWeight, line: css.lineHeight, font: css.fontFamily };

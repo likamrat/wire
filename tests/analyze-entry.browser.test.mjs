@@ -284,7 +284,7 @@ test("list population summaries stay concise without changing paging, filtered b
     });
     await (await revealStoredRefresh(page)).click(); await ready(page);
     await expect(page.locator("#freshContextMessage")).toContainText("older snapshot was rejected");
-    await expect(page.locator("#periodResult")).toHaveText("Previous results: 1 Work IQ tool call");
+    await expect(page.locator("#periodResult")).toHaveText("Previous results: 1 Work IQ tool call (All dates)");
     await expect(summary).toHaveText("1 Work IQ tool call from 1 interaction.");
     await page.unroute("**/api/snapshot");
     await (await revealStoredRefresh(page)).click(); await ready(page);

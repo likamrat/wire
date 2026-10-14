@@ -117,7 +117,7 @@ async function expectOne(page, session = false) {
     await expect(page.locator("#activityInsights")).toContainText("2 / 2 calls timed");
 }
 async function expectAll(page, host = "#activityInsights") {
-    await expect(page.locator("#periodResult")).toHaveText(host === "#homeInsights" ? "11 Work IQ tool calls" : "10 Copilot chats / 10 request groups with 11 Work IQ tool calls.");
+    await expect(page.locator("#periodResult")).toHaveText(host === "#homeInsights" ? "11 Work IQ tool calls (All dates)" : "10 Copilot chats / 10 request groups with 11 Work IQ tool calls.");
     await expect(page.locator(host)).toContainText("1 / 10 tool completions with a recorded success/failure result failed");
     await expect(page.locator(`${host} [data-dimension="speed"] .assessment-value`).first()).toHaveText("4,000 ms");
     await expect(page.locator(host)).toContainText("10 / 11 calls timed");
