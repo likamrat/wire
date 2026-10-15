@@ -1,5 +1,45 @@
 # Product design
 
+## Screen surfaces and motion
+
+Current Analyze, Reports and Settings screens use tonal surfaces and spacing
+instead of stacked decorative outlines. Widgets and report journey/library
+containers retain their existing radii and dimensions, without perimeter paint
+or widget shadows. Interaction cards use the existing small radius and retain
+their selected-card leading edge. Settings groups use spacing where a repeated
+rule adds no meaning; input, permission and action boundaries remain explicit.
+
+The left navigation marks the current destination with a neutral tonal strip,
+not an additional leading stripe. Expanded icon-and-text and collapsed icon-only
+states keep the same targets and alignment. Fine shell seams separate the rail
+and toolbar without a strong continuous frame. In forced colors the current
+destination uses system highlight colors. Keyboard focus, fields, errors, chart
+axes, code/data structure and consequential confirmations keep their functional
+boundaries; this is not a global reduction of rule or control contrast.
+
+The left rail retains its geometry-based glide and registered brand motion.
+The right sidebar retains its single-surface glide, actual column reflow,
+selected-card anchor compensation and fixed actions. Replacing its content does
+not replay the entrance. Owned request history suppresses native scroll
+restoration while the sidebar owns the anchor, then restores the caller's mode.
+Leaving before a delayed snapshot mounts the sidebar also releases that ownership.
+An ordinary authorized exit keeps its existing body and footer mounted but
+inert until settlement; pending reads cannot repaint them. Revocation,
+visibility changes and replacement still scrub immediately. Pending writes
+leave through their existing receipt recovery, not a retained interactive form.
+An action in the still-interactive origin finishes old exit cleanup before
+acquiring shared reading or automatic-score controls.
+Enabling reduced motion or changing the available layout settles the current
+motion immediately without replaying an earlier close or stealing newer focus.
+Motion must be checked in flight, including reversal and focus restoration,
+not inferred from endpoint screenshots.
+The supplied four-state reference establishes surfaces and collapsed/expanded
+geometry only; it does not establish animation timing or easing.
+
+These changes are screen-local. Search retains its capsule, result behavior and
+surface shadow. Report-facing tokens, typography, renderers and saved HTML,
+PDF, JSON and Markdown content are not restyled.
+
 ## Interaction reading
 
 Analyze cards contain only a regular Asta Sans prompt preview, recorded outcomes

@@ -3,7 +3,7 @@ export const reportJourneyStyles = `
 .report-task-nav>a{min-height:44px;align-content:center;white-space:normal}
 .report-task-nav>a[aria-current=page]{--pill-fill:var(--accent-soft);--pill-border:var(--accent);color:var(--accent);font-weight:var(--weight-strong)}
 #reportCreatePanel[hidden],#savedReportsPanel[hidden]{display:none!important}
-#reportsView #savedReportsPanel #bundles{margin-top:0;padding:12px 16px;border:1px solid var(--rule);border-radius:var(--radius-small);background:var(--paper)}
+#reportsView #savedReportsPanel #bundles{margin-top:0;padding:12px 16px;border:1px solid transparent;border-radius:var(--radius-small);background:var(--paper)}
 .assessment-dialog.saved-report-dialog{width:min(72rem,calc(100% - 24px))}
 .assessment-dialog.saved-report-dialog>.dialog-head{flex-wrap:wrap}
 .assessment-dialog.saved-report-dialog>.dialog-head h2{flex:1 1 auto;min-width:min-content;overflow-wrap:normal}
@@ -17,7 +17,7 @@ export const reportJourneyStyles = `
 #reportsView .report-start #reportPreviewContext{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;align-items:center;gap:4px 16px;margin:0;text-align:left}
 #reportsView #reportPreviewContext>#pageHeadingActions{grid-column:2;grid-row:1 / 3}
 #reportsView #reportPreviewContext>.report-choice-summary{grid-column:1;font-size:var(--type-body);margin:0}
-.report-journey{max-width:1100px;margin:0 0 20px;padding:20px 24px;background:var(--paper);border:1px solid var(--rule);border-radius:var(--radius-small);container:report-journey / inline-size}
+.report-journey{max-width:1100px;margin:0 0 20px;padding:20px 24px;background:var(--paper);border:1px solid transparent;border-radius:var(--radius-small);container:report-journey / inline-size}
 .report-progress-label{font-weight:var(--weight-strong);font-size:var(--type-body);margin:0 0 8px;color:var(--accent)}
 .report-progress ol{list-style:none;display:flex;flex-wrap:wrap;gap:8px 20px;margin:0;padding:0}
 .report-progress li{min-width:0}

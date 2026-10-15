@@ -211,11 +211,11 @@ body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px)
 #contextSidebar[open] {display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
 #contextSidebar[data-mode=overlay] {inset:0 0 0 auto;width:min(100%,40rem);height:100dvh}
 #contextSidebar::backdrop {background:var(--scrim)}
-.context-sidebar-header {grid-row:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 20px;border-bottom:1px solid var(--rule);min-width:0}
+.context-sidebar-header {grid-row:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 20px;border-bottom:1px solid color-mix(in srgb,var(--rule) 50%,var(--page));min-width:0}
 .context-sidebar-header>h2 {font-size:var(--type-body);font-weight:var(--weight-regular)}
 #closeContextSidebar {display:grid;place-items:center;flex:none;width:44px;min-height:44px;padding:10px}
 #contextSidebarBody {grid-row:3;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding:16px;padding:20px;container-type:inline-size}
-#contextSidebarFooter {grid-row:4;padding:8px 20px max(8px,env(safe-area-inset-bottom));border-top:1px solid var(--rule);background:var(--paper);min-width:0}
+#contextSidebarFooter {grid-row:4;padding:8px 20px max(8px,env(safe-area-inset-bottom));border-top:1px solid color-mix(in srgb,var(--rule) 50%,var(--paper));background:var(--paper);min-width:0}
 #contextSidebarFooter:empty {display:none}
 #contextSidebarFooter .request-actions {display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:flex-end;margin:0;padding:0;border:0}
 #contextSidebarFooter #requestReportTitle {flex-basis:100%;font-size:var(--type-small)}

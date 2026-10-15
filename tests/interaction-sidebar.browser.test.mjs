@@ -96,6 +96,88 @@ test("opening during an actual pending overview resumes the retained Analyze sum
     } finally { release(); await Promise.all(deliveries); }
 });
 
+test("closing while the background overview is pending resumes it after exit cleanup", { timeout: 20000 }, async t => {
+    let release, arrived;
+    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
+    const deliveries = [];
+    const { page } = await setup(t, { beforeNavigate: page => page.route("**/api/assessment/overview", route => {
+        const delivery = (async () => {
+            const response = await route.fetch();
+            arrived(); await held; await route.fulfill({ response });
+        })();
+        deliveries.push(delivery); return delivery;
+    }) });
+    try {
+        await restoreLegacySearch(page, "release checklist 0.");
+        await pending;
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await page.locator("#resultsLink").click();
+        await page.locator(".request-card-open").first().click();
+        await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+        await expect(page.locator("#homeInsights")).toHaveAttribute("aria-busy", "true");
+        await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        release(); await Promise.all(deliveries);
+        await expect(page.locator("#homeInsights[aria-busy=true]")).toHaveCount(0);
+        await expect(page.locator("#homeInsights .assessment-summary")).toHaveCount(1);
+        await expect(page.locator("#pageTitle")).toHaveText("Analyze");
+    } finally { release(); await Promise.all(deliveries); }
+});
+
+for (const action of ["Measure definitions", "Automatic scores"]) test(`an origin ${action} action takes ownership before old sidebar cleanup`, { timeout: 20000 }, async t => {
+    const { page } = await setup(t, action === "Automatic scores" ? { beforeNavigate: page =>
+        page.route("**/api/evaluation/automatic/summary", async route => {
+            const response = await route.fetch(), summary = await response.json();
+            await route.fulfill({ json: { ...summary, snapshot: { ...summary.snapshot, state: "paused", reason: "source-changed" } } });
+        }) } : {});
+    await restoreLegacySearch(page, "release checklist 0.");
+    await page.locator("#analyzeReviewDetails>summary").click();
+    const trigger = page.locator("#homeInsights").getByRole("button", { name: action, exact: true });
+    await expect(trigger).toBeVisible();
+    await page.locator("#resultsLink").click();
+    await page.locator(".request-card-open").first().click();
+    await expect(page.locator(".request-original pre")).toContainText("checklist 0.");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    let release, arrived;
+    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
+    const deliveries = [];
+    if (action === "Automatic scores") await page.route("**/api/evaluation/automatic/setup", route => {
+        const delivery = (async () => {
+            const response = await route.fetch();
+            arrived(); await held; await route.fulfill({ response });
+        })();
+        deliveries.push(delivery); return delivery;
+    });
+    try {
+        await page.locator("#closeContextSidebar").click();
+        await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+        const origin = page.url();
+        if (action === "Measure definitions") {
+            await trigger.focus();
+            await trigger.press("Enter");
+        } else {
+            await trigger.click();
+            await pending;
+        }
+        await page.locator("#contextSidebar").evaluate(node => { for (const animation of node.getAnimations()) animation.finish(); });
+        release(); await Promise.all(deliveries);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const dialog = action === "Measure definitions" ? page.locator('dialog[aria-label="Insight details"]')
+            : page.locator("dialog.automatic-score-dialog");
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toContainText(action === "Measure definitions" ? "What these results mean" : "Connect a supported local Copilot source");
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        assert.equal(await page.locator("#requestContent").textContent(), "", "Old private paint is gone before the new owner paints");
+        assert.equal(page.url(), origin, "Controller acquisition did not require navigation");
+        assert.equal(await page.locator("dialog[open]").count(), 1, "The latest dialog remains the only active surface");
+        await expect(dialog.locator("button").first()).toBeFocused();
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await page.screenshot({ path: path.join(proof, action === "Measure definitions" ? "origin-definitions.png" : "origin-automatic-scores.png") });
+        }
+    } finally { release(); await Promise.all(deliveries); }
+});
+
 test("minimal native card opens an anchored sidebar without replacing the Analyze DOM", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await page.locator("#resultsLink").click();
@@ -418,12 +500,367 @@ test("motion glides only the sidebar and interrupted close settles to the newest
     assert.ok(samples.some(sample => sample.panelX > samples.at(-1).panelX + 10), "Actual right-edge glide occurs");
     assert.ok(samples.every(sample => Math.abs(sample.cardY - box.y) < 3 && sample.cardTransform === "none"));
     await page.locator("#closeContextSidebar").click();
+    const reversingFrom = await page.locator("#contextSidebar").evaluate(async node => {
+        const animation = node.getAnimations()[0];
+        animation.pause(); await animation.ready; animation.currentTime = 60;
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        return getComputedStyle(node).transform;
+    });
     await b.click();
+    assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].effect.getKeyframes()[0].transform),
+        reversingFrom, "A new card reverses from the presented edge instead of snapping closed first");
     await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await expect(page.locator(".request-original pre")).toContainText("checklist 1.");
     assert.equal(await page.locator("dialog[open]").count(), 1);
     if (proof) await writeFile(path.join(proof, "motion.json"), JSON.stringify(samples, null, 2));
+});
+
+test("soft surfaces preserve functional edges, nav states and Search depth in all four shell states", { timeout: 45000 }, async t => {
+    const { page } = await setup(t, { savedReport: true });
+    const measurements = [];
+    for (const theme of ["light", "dark"]) for (const navigation of ["expanded", "collapsed"]) {
+        await chooseTheme(page, theme);
+        if (await page.locator("html").getAttribute("data-navigation") !== navigation) await page.locator("#navigationCollapse").click();
+        await navigateMain(page, "analyze");
+        const paint = await page.evaluate(() => {
+            const style = selector => getComputedStyle(document.querySelector(selector));
+            const active = document.querySelector('.primary-navigation a[aria-current=page]');
+            const widgets = [...document.querySelectorAll(".analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card")];
+            return {
+                widgets: widgets.map(node => ({ border: getComputedStyle(node).borderTopColor, shadow: getComputedStyle(node).boxShadow })),
+                active: { fill: getComputedStyle(active).backgroundColor, before: getComputedStyle(active, "::before").content,
+                    ink: getComputedStyle(active).color, weight: getComputedStyle(active).fontWeight },
+                rail: { fill: style("#sidebar").backgroundColor, edge: style("#sidebar").borderRightColor },
+                search: { shadow: style("#wireSearch").boxShadow, border: style("#wireSearch").borderTopColor,
+                    fill: style("#wireSearch").backgroundColor },
+                width: document.querySelector("#main").clientWidth,
+                promptSize: style(".request-card-prompt").fontSize,
+            };
+        });
+        assert.equal(paint.widgets.length, 6);
+        assert.ok(paint.widgets.every(widget => widget.border === "rgba(0, 0, 0, 0)" && widget.shadow === "none"));
+        assert.equal(paint.active.before, "none", "No redundant active-nav stripe");
+        assert.notEqual(paint.active.fill, paint.rail.fill);
+        assert.equal(paint.active.weight, "600");
+        assert.ok(contrast(paint.active.ink, paint.active.fill) >= 4.5);
+        assert.ok(contrast(paint.rail.edge, paint.rail.fill) > 1 && contrast(paint.rail.edge, paint.rail.fill) < 1.6);
+        assert.notEqual(paint.search.shadow, "none", "Search retains its own elevation");
+        assert.ok(contrast(paint.search.border, paint.search.fill) >= 3);
+        const nav = page.locator('.primary-navigation a[aria-current=page]');
+        await nav.focus();
+        assert.ok(await nav.evaluate(node => parseFloat(getComputedStyle(node).outlineWidth)) >= 2);
+        await page.mouse.move(500, 100);
+        await page.locator("#navigationCollapse").hover();
+        const hover = await page.locator("#navigationCollapse").evaluate(node => getComputedStyle(node).backgroundColor);
+        await page.mouse.down();
+        const pressed = await page.locator("#navigationCollapse").evaluate(node => getComputedStyle(node).backgroundColor);
+        await page.mouse.move(500, 100); await page.mouse.up();
+        assert.notEqual(hover, pressed, "Collapse has distinct hover and pressed feedback without a box");
+        await navigateMain(page, "reports");
+        assert.equal(await page.locator("#bundles").evaluate(node => getComputedStyle(node).borderTopColor), "rgba(0, 0, 0, 0)");
+        await expect(page.locator(".saved-library-row").first()).toBeVisible();
+        assert.notEqual(await page.locator(".saved-library-row").first().evaluate(node => getComputedStyle(node).borderTopColor), "rgba(0, 0, 0, 0)");
+        await page.locator("#reportCreateLink").click();
+        assert.equal(await page.locator(".report-journey").evaluate(node => getComputedStyle(node).borderTopColor), "rgba(0, 0, 0, 0)");
+        await expect(page.locator("#reportList input[type=checkbox]").first()).toBeVisible();
+        await page.locator("#reportList input[type=checkbox]").first().check();
+        await expect(page.locator("#reportList input[type=checkbox]").first()).toBeChecked();
+        await navigateMain(page, "settings");
+        assert.equal(await page.locator(".settings-categories").evaluate(node => getComputedStyle(node).borderRightColor), "rgba(0, 0, 0, 0)");
+        await expect(page.locator("#saveCollection")).toBeDisabled();
+        await expect(page.locator("#cancelPreferences")).toBeDisabled();
+        await page.emulateMedia({ forcedColors: "active" });
+        const highlighted = await page.locator('.primary-navigation a[aria-current=page]').evaluate(node => ({
+            fill: getComputedStyle(node).backgroundColor, ink: getComputedStyle(node).color,
+            icon: getComputedStyle(node.querySelector("svg")).color, adjustment: getComputedStyle(node).forcedColorAdjust,
+        }));
+        assert.equal(highlighted.adjustment, "none");
+        assert.equal(highlighted.ink, highlighted.icon);
+        assert.ok(contrast(highlighted.ink, highlighted.fill) >= 4.5);
+        await page.emulateMedia({ forcedColors: "none" });
+        measurements.push({ theme, navigation, ...paint, highlighted });
+    }
+    for (const theme of ["light", "dark"]) {
+        const expanded = measurements.find(row => row.theme === theme && row.navigation === "expanded");
+        const collapsed = measurements.find(row => row.theme === theme && row.navigation === "collapsed");
+        assert.ok(collapsed.width > expanded.width + 100);
+        assert.equal(collapsed.promptSize, expanded.promptSize, "Width is reclaimed without scaling text");
+    }
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        await writeFile(path.join(proof, "soft-surface-states.json"), JSON.stringify(measurements, null, 2));
+    }
+});
+
+test("four-state panel motion keeps anchors, fixed regions and content replacement coherent", { timeout: 60000 }, async t => {
+    const { page } = await setup(t);
+    const traces = [];
+    const settled = () => page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+    for (const theme of ["light", "dark"]) for (const navigation of ["expanded", "collapsed"]) {
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await chooseTheme(page, theme);
+        if (await page.locator("html").getAttribute("data-navigation") !== navigation) await page.locator("#navigationCollapse").click();
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await page.locator("#resultsLink").click();
+        const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
+        await a.scrollIntoViewIfNeeded();
+        const entry = await a.boundingBox(), width = await page.locator("#main").evaluate(node => node.clientWidth);
+        await page.evaluate(() => {
+            const panel = document.querySelector("#contextSidebar"), card = document.querySelector(".request-card-open");
+            window.surfaceMotion = { phase: "open", frames: [], running: true };
+            const state = window.surfaceMotion;
+            function frame(at) {
+                const rect = node => node.getBoundingClientRect();
+                const panelRect = rect(panel), css = getComputedStyle(panel);
+                state.frames.push({ at, phase: state.phase, open: panel.open,
+                    x: panelRect.x, width: panelRect.width, cardY: rect(card).y,
+                    transform: css.transform, opacity: css.opacity, cardTransform: getComputedStyle(card).transform,
+                    headerX: rect(panel.querySelector("header")).x, bodyX: rect(document.querySelector("#contextSidebarBody")).x,
+                    footerX: rect(document.querySelector("#contextSidebarFooter")).x, animations: panel.getAnimations().length,
+                    mainWidth: document.querySelector("#main").clientWidth });
+                if (state.running) requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+        });
+        await page.mouse.click(entry.x + entry.width / 2, entry.y + 20);
+        await expect(page.locator("#contextSidebar[open]")).toBeVisible(); await settled();
+        const panelWidth = await page.locator("#contextSidebar").evaluate(node => node.clientWidth);
+        assert.ok(await page.locator("#main").evaluate(node => node.clientWidth) < width - 250);
+        const reflow = await page.evaluate(() => {
+            const main = document.querySelector("#main").getBoundingClientRect();
+            const inside = selector => [...document.querySelectorAll(selector)].filter(node => node.checkVisibility()).every(node => {
+                const box = node.getBoundingClientRect();
+                return box.left >= main.left && box.right <= main.right + 1;
+            });
+            const grid = document.querySelector(".analyze-chart-grid");
+            return { columns: getComputedStyle(grid).gridTemplateColumns.split(" ").length,
+                widgets: inside("#analyzePopulation,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card"),
+                controls: inside("#filters button,#filters input,.percentage-legend-row"),
+                overflow: document.documentElement.scrollWidth > innerWidth + 1,
+                headerLayer: Number(getComputedStyle(document.querySelector(".app-header")).zIndex),
+                panelLayer: Number(getComputedStyle(document.querySelector("#contextSidebar")).zIndex) };
+        });
+        assert.equal(reflow.columns, 1, "Widgets stack for the remaining main column");
+        assert.ok(reflow.widgets && reflow.controls && !reflow.overflow, "Widgets, filters and legends fit the true remaining column");
+        assert.ok(reflow.panelLayer < reflow.headerLayer, "Docked panel stays below the header and Search");
+        await page.evaluate(() => window.surfaceMotion.phase = "replace");
+        const bBox = await b.boundingBox();
+        await page.mouse.click(bBox.x + bBox.width / 2, bBox.y + 20);
+        await expect(page.locator(".request-original pre")).toContainText("checklist 1.");
+        const aBox = await a.boundingBox();
+        await page.mouse.click(aBox.x + aBox.width / 2, aBox.y + 20);
+        await expect(page.locator(".request-original pre")).toContainText("checklist 0.");
+        await page.evaluate(() => window.surfaceMotion.phase = "close");
+        await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0); await settled();
+        await expect(a).toBeFocused();
+        assert.ok(Math.abs((await a.boundingBox()).y - entry.y) <= 3);
+        assert.equal(await page.locator("#main").evaluate(node => node.clientWidth), width);
+        const frames = await page.evaluate(() => { window.surfaceMotion.running = false; return window.surfaceMotion.frames; });
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await writeFile(path.join(proof, `panel-motion-${theme}-${navigation}.json`), JSON.stringify({ entry, frames }, null, 2));
+        }
+        for (const phase of ["open", "close"]) {
+            const moving = frames.filter(row => row.phase === phase && row.open && row.animations);
+            assert.ok(new Set(moving.map(row => Math.round(row.x))).size >= 3, `${theme}/${navigation}/${phase}: intermediate painted positions`);
+            assert.ok(moving.every(row => row.cardTransform === "none" && row.opacity === "1"));
+            assert.ok(moving.every(row => Math.abs(row.cardY - entry.y) <= 3),
+                `${phase}: card anchor ${entry.y}, observed ${moving.map(row => row.cardY)}`);
+            assert.ok(moving.every(row => Math.abs(row.headerX - row.bodyX) <= 1 && Math.abs(row.bodyX - row.footerX) <= 1));
+            assert.ok(moving.every(row => row.width >= panelWidth && row.width <= panelWidth + 2), "Panel translates without scaling or morphing");
+            assert.equal(new Set(moving.map(row => row.mainWidth)).size, 1, "Docked width does not animate reading text");
+            for (let i = 1; i < moving.length; i++) {
+                assert.ok(phase === "open" ? moving[i].x <= moving[i - 1].x + 1 : moving[i].x >= moving[i - 1].x - 1,
+                    "One directional glide without bounce");
+            }
+        }
+        assert.ok(frames.filter(row => row.phase === "replace").every(row => row.animations === 0), "No entrance replay on replacement");
+        traces.push({ theme, navigation, entryY: entry.y, width, reflow, frames });
+    }
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.locator(".request-card-open").first().press("Enter");
+    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length), 0);
+    await page.locator("#closeContextSidebar").press("Enter");
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        await writeFile(path.join(proof, "four-state-motion.json"), JSON.stringify(traces, null, 2));
+    }
+});
+
+test("enabling reduced motion settles an in-flight contextual entrance immediately", { timeout: 20000 }, async t => {
+    const { page } = await setup(t);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.locator("#resultsLink").click();
+    const link = page.locator(".request-card-open").first();
+    await link.scrollIntoViewIfNeeded();
+    const box = await link.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + 20);
+    await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 1);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const motion = await page.locator("#contextSidebar").evaluate(async node => {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        return node.getAnimations().map(animation => ({ state: animation.playState, time: animation.currentTime, duration: animation.effect.getTiming().duration }));
+    });
+    assert.deepEqual(motion, [], "An OS motion-preference change must not leave the running glide behind");
+    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+});
+
+test("owned sidebar history keeps Close, Escape, Back and Forward anchored and restores the caller's scroll mode", { timeout: 45000 }, async t => {
+    const { page, runtime } = await setup(t);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const measurements = [];
+    for (const mode of ["auto", "manual"]) for (const action of ["Close", "Escape", "Back"]) {
+        await page.evaluate(mode => history.scrollRestoration = mode, mode);
+        await page.locator("#resultsLink").click();
+        const link = page.locator(".request-card-open").first();
+        await link.scrollIntoViewIfNeeded();
+        const entry = await link.boundingBox();
+        await page.mouse.click(entry.x + entry.width / 2, entry.y + 20);
+        await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+        await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+        await page.evaluate(() => {
+            window.historyExit = { frames: [], running: true };
+            const trace = window.historyExit;
+            function sample() {
+                const panel = document.querySelector("#contextSidebar");
+                trace.frames.push({ open: panel.open, moving: panel.getAnimations().length > 0,
+                    cardY: document.querySelector(".request-card-open").getBoundingClientRect().y });
+                if (trace.running) requestAnimationFrame(sample);
+            }
+            requestAnimationFrame(sample);
+        });
+        if (action === "Close") await page.locator("#closeContextSidebar").click();
+        else if (action === "Escape") {
+            await page.locator("#contextSidebarTitle").focus();
+            await page.keyboard.press("Escape");
+        } else await page.goBack();
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        const frames = await page.evaluate(() => { window.historyExit.running = false; return window.historyExit.frames; });
+        assert.ok(frames.some(frame => frame.open && frame.moving));
+        assert.ok(frames.every(frame => Math.abs(frame.cardY - entry.y) <= 3), `${mode}/${action}: native restoration moved the card`);
+        assert.equal(await page.evaluate(() => history.scrollRestoration), mode);
+        await expect(link).toBeFocused();
+        await page.goForward();
+        await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+        await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+        assert.ok(Math.abs((await link.boundingBox()).y - entry.y) <= 3, "Forward restores the owned sidebar without native scroll");
+        await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        assert.equal(await page.evaluate(() => history.scrollRestoration), mode);
+        measurements.push({ mode, action, entryY: entry.y, frames });
+    }
+    await page.evaluate(() => history.scrollRestoration = "auto");
+    await page.goto(runtime.url + "#request?request=sidebar-0");
+    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    await expect(page.locator("#homeView")).toBeVisible();
+    assert.ok(page.url().startsWith(runtime.url), "Direct entry closes locally rather than navigating out of WIRE");
+    assert.equal(await page.evaluate(() => history.scrollRestoration), "auto");
+    await page.locator("#resultsLink").click();
+    await page.locator(".request-card-open").first().click();
+    await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+    await navigateMain(page, "settings");
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    assert.equal(await page.evaluate(() => history.scrollRestoration), "auto");
+    await page.evaluate(() => history.go(-2));
+    await expect(page.locator("#homeView")).toBeVisible();
+    await expect(page.locator("#settingsView")).toBeHidden();
+    assert.equal(await page.evaluate(() => history.scrollRestoration), "auto", "Skipping the request entry restores the marked origin mode");
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        await writeFile(path.join(proof, "owned-history-motion.json"), JSON.stringify(measurements, null, 2));
+    }
+});
+
+test("reduced-motion exit and newer keyboard intent settle without stale focus or docking", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.locator("#resultsLink").click();
+    const link = page.locator(".request-card-open").first();
+    await link.click();
+    await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+    await page.locator("#closeContextSidebar").click();
+    await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 1);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    await expect(link).toBeFocused();
+    assert.equal(await page.locator("body").getAttribute("data-context-docked"), null);
+    assert.equal(await page.evaluate(() => history.scrollRestoration), "auto");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await link.click();
+    await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+    await page.locator("#closeContextSidebar").click();
+    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+    await page.locator("#wireSearch").focus();
+    await page.keyboard.press("ArrowRight");
+    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].finish());
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    await expect(page.locator("#wireSearch")).toBeFocused();
+    assert.equal(await page.locator("body").getAttribute("data-context-docked"), null);
+    await page.locator("#wireSearch").press("Escape");
+});
+
+test("resizing during entry or exit settles the latest layout without a stale overlay", { timeout: 20000 }, async t => {
+    const { page } = await setup(t);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.locator("#resultsLink").click();
+    await page.locator(".request-card-open").first().click();
+    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+    await page.setViewportSize({ width: 375, height: 820 });
+    await expect.poll(() => page.locator("#contextSidebar").evaluate(node => node.matches(":modal") && node.getAnimations().length === 0)).toBe(true);
+    await expect(page.locator("#closeContextSidebar")).toBeInViewport();
+    await page.locator("#closeContextSidebar").click();
+    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    assert.equal(await page.locator("body").getAttribute("data-context-docked"), null);
+    assert.equal(await page.locator("#contextSidebar").evaluate(node => node.inert || node.matches(":modal")), false);
+    await expect(page.locator(".request-card-open").first()).toBeFocused();
+});
+
+test("leaving during a pending feedback receipt neither retains an interactive form nor replays the write", { timeout: 30000 }, async t => {
+    const { page, context } = await setup(t);
+    let release, arrived, writes = 0;
+    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
+    const deliveries = [];
+    await page.route("**/api/assessment/feedback", route => {
+        const delivery = (async () => {
+            writes++;
+            const response = await route.fetch();
+            arrived(); await held; await route.fulfill({ response });
+        })();
+        deliveries.push(delivery); return delivery;
+    });
+    try {
+        await page.locator("#resultsLink").click();
+        await page.locator(".request-card-open").first().click();
+        await page.locator("#requestContent [data-insight-details]").first().click();
+        await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
+        const form = page.locator("#requestContent .assessment-feedback-dialog");
+        await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
+        await page.locator(".select-option[data-value=pass]").click();
+        await form.getByRole("button", { name: "Save feedback", exact: true }).click();
+        await pending;
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        assert.equal(await page.locator("#requestContent .assessment-feedback-dialog").count(), 0);
+        assert.ok(await page.evaluate(() => sessionStorage.getItem("wire.assessment.pending")));
+        release(); await Promise.all(deliveries);
+        await page.waitForFunction(() => sessionStorage.getItem("wire.assessment.pending") === null);
+        assert.equal(writes, 1);
+        assert.equal((await loadBoardState(context)).personalEvaluation.feedback.records.length, 1);
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    } finally { release(); await Promise.all(deliveries); }
 });
 
 test("report continuation retains choices and returns to the original sidebar with current canonical membership", { timeout: 30000 }, async t => {

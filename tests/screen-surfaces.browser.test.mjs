@@ -42,8 +42,8 @@ function visibleInk() {
             const css = getComputedStyle(node), bg = background(node), color = value => `rgb(${value.slice(0, 3).join(",")})`;
             return { target: node.id || node.tagName + "." + node.className, background: color(bg),
                 ink: color(blend(rgba(css.color), bg)), font: css.fontFamily, weight: css.fontWeight,
-                cardEmphasis: node.matches("#requestContent .reader-facts dt, #requestContent .facts dt") ? "600"
-                    : node.matches("#activityList>.activity-card .activity-card-facts dt") ? "500"
+                cardEmphasis: node.matches("#requestContent .reader-facts dt, #requestContent .facts dt") ? "400"
+                    : node.matches("#activityList>.activity-card .activity-card-facts dt") ? "400"
                         : node.matches("#activityList>.activity-card .card-tool-name") ? "400" : null,
                 placeholder: node.hasAttribute("placeholder") ? color(blend(rgba(getComputedStyle(node, "::placeholder").color), bg)) : null,
                 code: !!node.closest("code,kbd,samp,.mono,pre:not(.full-text-content)") };
@@ -134,20 +134,18 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
         assert.equal(outcome.boundaryOwner, outcome.surfaceOwner);
         for (const measured of surfaces) {
             const ratios = { text: contrast(measured.ink, measured.paper), muted: contrast(measured.muted, measured.paper),
-                boundary: contrast(measured.rule, measured.paper), outerBoundary: contrast(measured.rule, measured.page),
                 control: contrast(measured.control, measured.canvas), surface: contrast(measured.paper, measured.page) };
             assert.ok(ratios.text >= 7, measured.target); assert.ok(ratios.muted >= 4.5, measured.target);
-            // Structural panel separators are not control boundaries.
-            assert.ok(ratios.boundary >= 1.5, measured.target); assert.ok(ratios.outerBoundary >= 1.4, measured.target);
+            assert.equal(measured.rule, "rgba(0, 0, 0, 0)", `${measured.target}: decorative perimeter has no paint`);
             assert.ok(ratios.control >= 3, measured.target); assert.ok(ratios.surface >= 1.05, measured.target);
-            for (const role of ["paper", "page", "canvas", "ink", "muted", "control", "rule"]) {
+            for (const role of ["paper", "page", "canvas", "ink", "muted", "control"]) {
                 const channels = rgb(measured[role]);
                 if (theme === "light" && role === "page") {
                     assert.ok(channels[2] > channels[0] && channels[2] - channels[0] <= 8, "Light canvas has only a subtle cool tint");
                 } else assert.ok(channels.every(channel => channel === channels[0]), `${role} is neutral: ${measured[role]}`);
             }
             assert.equal(measured.borderWidth, "1px");
-            assert.notEqual(measured.shadow, "none");
+            assert.equal(measured.shadow, "none", "Widgets use tonal grouping, not stacked shadows");
             assert.equal(measured.font, screenFontStack);
             assert.equal(measured.success, theme === "light" ? "#086d7c" : "#48bfd2");
             assert.equal(measured.failure, theme === "light" ? "#b3261e" : "#f28b82");
@@ -198,11 +196,13 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
     assert.deepEqual(await page.evaluate(() => [...document.fonts].filter(font => font.family === "Asta Sans")
         .map(font => ({ weight: font.weight, status: font.status }))), [{ weight: "300 800", status: "loaded" }]);
     const fontPaint = [];
-    for (const selector of ["#periodHint", "#pageTitle", "#checkActivity", ".chart-heading h2", ".flat-time-axis > span"]) fontPaint.push(await paintedFont(selector));
-    fontPaint.push(await paintedFont("#activityList .full-text-preview", "600"));
+    for (const selector of ["#periodHint", "#pageTitle", "#dateFilter-control", ".chart-heading h2", ".flat-time-axis > span"]) fontPaint.push(await paintedFont(selector));
+    fontPaint.push(await paintedFont("#activityList .request-card-prompt", "400"));
     assert.equal(fontPaint.find(value => value.selector === "#periodHint").style.weight, "400");
     assert.equal(fontPaint.find(value => value.selector === "#pageTitle").style.weight, "600");
-    assert.equal(fontPaint.find(value => value.selector === "#checkActivity").style.weight, "600");
+    await expect(page.locator("#checkActivity")).toHaveAttribute("aria-label", "Refresh");
+    await expect(page.locator("#checkActivity svg")).toHaveAttribute("data-lucide-icon", "refresh-cw");
+    assert.equal((await page.locator("#checkActivity").textContent()).trim(), "");
     const svgText = await page.locator("#workspace svg text").count();
     if (svgText) fontPaint.push(await paintedFont("#workspace svg text"));
     const screenPaint = [];
@@ -229,14 +229,14 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
         await inspect("analyze", theme);
         await page.locator('[data-analyze-mode="calls"]').click();
         await inspect("calls", theme);
-        fontPaint.push(await paintedFont("#activityList .full-text-preview", "600"));
+        fontPaint.push(await paintedFont("#activityList .full-text-preview", "400"));
         await page.locator('[data-analyze-mode="interactions"]').click();
         assert.deepEqual(await page.locator(".percentage-legend-row").evaluateAll(nodes => nodes.map(node => ({
             category: node.dataset.category, count: node.dataset.count, percentage: node.dataset.percentage,
         }))), counts);
         const controls = [];
         for (const selector of ["#checkActivity", "#dateFilter-control", "#outcomeFilter-control",
-            "#resultsLink", "#activityList a.request-link", ".percentage-label[href]"]) {
+            "#resultsLink", "#activityList a.request-card-open", ".percentage-label[href]"]) {
             const control = page.locator(selector).first();
             await control.hover();
             await inspect(`hover-${selector}`, theme);
@@ -256,7 +256,7 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
             assert.ok(paint.width >= 2, selector);
             assert.ok(contrast(paint.ring, paint.outside) >= 3, `${selector} outer focus`);
             assert.ok(contrast(paint.ring, paint.background) >= 3, `${selector} inner focus`);
-            if (paint.borderWidth) assert.ok(contrast(paint.border, paint.background) >= 3, `${selector} control boundary`);
+            if (paint.borderWidth && paint.border !== "rgba(0, 0, 0, 0)") assert.ok(contrast(paint.border, paint.background) >= 3, `${selector} control boundary`);
             controls.push({ selector, ...paint });
         }
         screenPaint.push({ name: "controls", theme, controls });
@@ -280,16 +280,16 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
         await page.keyboard.press("Escape");
         for (const node of await page.locator(".recorded-result.result-tone-failure").all()) {
             assert.equal(await node.evaluate(node => getComputedStyle(node).color), failure.color);
-            assert.equal(await node.locator("svg").evaluate(node => getComputedStyle(node).fill), failure.color);
+            assert.equal(await node.locator("svg").evaluate(node => getComputedStyle(node).stroke), failure.color);
         }
         await selectActivityOption(page, "outcomeFilter", "failure");
         await expect(page.locator("#activityCount")).toHaveText("5");
         assert.equal(await page.locator("#outcomeFilter-control .result-option-label").evaluate(node => getComputedStyle(node).color), failure.color);
         await selectActivityOption(page, "outcomeFilter", "all");
         await expect(page.locator("#activityCount")).toHaveText("12");
-        await page.locator("#activityList a.request-link").first().click();
+        await page.locator("#activityList a.request-card-open").first().click();
         await inspect("interaction", theme);
-        fontPaint.push(await paintedFont("#requestView h2"), await paintedFont("#requestView .full-text-content"));
+        fontPaint.push(await paintedFont("#contextSidebarTitle"), await paintedFont("#requestView .full-text-content"));
         await navigateMain(page, "reports");
         await inspect("reports-library", theme);
         await page.locator("#reportCreateLink").click();

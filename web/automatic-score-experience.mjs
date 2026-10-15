@@ -252,6 +252,7 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
     renderRow();
     return {
         observe, open,
+        invalidatePendingViewReads() { generation++; },
         invalidate(message) { view?.invalidate(message); },
         leave() {
             generation++;

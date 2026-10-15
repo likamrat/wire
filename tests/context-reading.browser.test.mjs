@@ -319,6 +319,93 @@ test("deep retained-reply reading returns after authorized payloads settle witho
     } finally { release(); await Promise.all(deliveries); }
 });
 
+for (const ending of ["complete", "replacement", "revocation", "visibility"]) test(`authorized reply and footer exit paint ends safely on ${ending}`, { timeout: 30000 }, async t => {
+    const app = await setup(t), { page, runtime, records, context } = app;
+    await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page);
+    const reply = page.locator(".interaction-response .full-text-content").filter({ hasText: "Here are three synthetic documents:" });
+    await expect(reply).toHaveText(bodyText);
+    await expect(page.locator("#requestContent .interaction-insights[aria-busy=true]")).toHaveCount(0);
+    const copy = await reply.locator("xpath=ancestor::div[contains(@class,'full-text-complete')][1]").locator(".ux-copy").elementHandle();
+    const before = await page.locator("#requestContent").textContent();
+    const footer = await page.locator("#contextSidebarFooter").textContent();
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.locator("#closeContextSidebar").click();
+    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+    assert.equal(await page.locator("#contextSidebar").evaluate(node => node.inert), true, "Exiting paint cannot accept another action");
+    const samples = [];
+    for (const time of [0, 60, 120, 179]) {
+        await page.locator("#contextSidebar").evaluate((node, time) => node.getAnimations()[0].currentTime = time, time);
+        await frames(page);
+        assert.equal(await page.locator("#requestContent").textContent(), before, "Authorized content stays mounted until ordinary exit ends");
+        assert.equal(await page.locator("#contextSidebarFooter").textContent(), footer, "Fixed action paint travels with the body");
+        await expect(reply).toHaveText(bodyText);
+        const sample = await page.evaluate(() => {
+            const box = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+            return { header: box(".context-sidebar-header"), body: box("#contextSidebarBody"), footer: box("#contextSidebarFooter") };
+        });
+        assert.equal(sample.header.x, sample.body.x);
+        assert.equal(sample.body.x, sample.footer.x);
+        samples.push({ time, ...sample });
+    }
+    if (ending === "replacement") {
+        await page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first().click();
+        await expect(page.locator(".request-original pre")).toContainText("UNRELATED_RECORD");
+        await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+        await frames(page);
+        await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+        await expect(page.locator(".request-original pre")).toContainText("UNRELATED_RECORD");
+        assert.equal(await page.locator("#contextSidebar").evaluate(node => node.inert), false);
+    } else if (ending === "revocation") {
+        await updateBoardState(context, state => {
+            state.personalEvaluation.consent = { ...state.personalEvaluation.consent, state: "revoked", revision: 2,
+                categories: [], revokedAt: "2026-10-01T12:00:00.000Z" };
+        });
+        await app.acceptFixtureChange();
+        await page.evaluate(() => dispatchEvent(new Event("online")));
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    } else if (ending === "visibility") {
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    } else {
+        await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].finish());
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    }
+    assert.ok(!(await page.locator("body").textContent()).includes(bodyText), "No stale or hidden reply pane remains");
+    await copy.evaluate(node => node.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    assert.deepEqual(await page.evaluate(() => window.contextClipboard.writes), [], "Detached private Copy cannot recover old payload");
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        await writeFile(path.join(proof, `authorized-exit-${ending}.json`), JSON.stringify(samples, null, 2));
+    }
+});
+
+test("a retained-reply read completing during an ordinary exit cannot repaint the inert pane", { timeout: 20000 }, async t => {
+    const { page, runtime, records } = await setup(t);
+    let release, arrived;
+    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
+    const deliveries = [];
+    await page.route("**/api/assessment/evidence", route => {
+        const delivery = (async () => {
+            const response = await route.fetch();
+            arrived(); await held; await route.fulfill({ response });
+        })();
+        deliveries.push(delivery); return delivery;
+    });
+    try {
+        await page.goto(runtime.url + "#request?request=" + records[1].scenarioId); await ready(page); await pending;
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await page.locator("#closeContextSidebar").click();
+        await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+        const before = await page.locator("#requestContent").textContent();
+        release(); await Promise.all(deliveries); await frames(page);
+        assert.equal(await page.locator("#requestContent").textContent(), before);
+        assert.ok(!(await page.locator("body").textContent()).includes(bodyText));
+        await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].finish());
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        assert.equal(await page.locator("#requestContent").textContent(), "");
+    } finally { release(); await Promise.all(deliveries); }
+});
+
 for (const interruption of ["reading", "switch", "revocation"]) test(`pending retained-reading restoration yields to ${interruption}`, { timeout: 30000 }, async t => {
     const text = "DEFERRED_READING_REPLY\n" + "Invented saved evidence with deliberate long reading content.\n".repeat(180);
     const app = await setup(t, { extraReplies: [

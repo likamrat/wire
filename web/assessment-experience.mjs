@@ -792,6 +792,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         } catch (error) { if (host.isConnected) unavailable(host, error.message, () => setup(host)); }
     }
     return { receive, observe, overview, detail, setup, leave, invalidate, clearPrivateText, scoringStatus,
+        invalidatePendingViewReads() { generation++; },
         hasUnsentFeedback: () => activeFeedback?.hasUnsentDraft() === true,
         discardFeedback() { if (activeFeedback?.hasUnsentDraft()) activeFeedback.cancel(); },
         focusFeedback() { details.hidden = false; detailTrigger?.setAttribute("aria-expanded", "true"); feedbackView?.focus?.(); },

@@ -1,7 +1,7 @@
 export const analyzeLayoutStyles = `
 .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card {
- border:1px solid var(--rule);border-radius:var(--radius);
- background:var(--paper);box-shadow:var(--surface-shadow);
+ border:1px solid transparent;border-radius:var(--radius);
+ background:var(--paper);box-shadow:none;
 }
 :root[data-evidence-theme=dark] :is(.analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card) {background:color-mix(in srgb,var(--paper) 96%,var(--ink))}
 @media(prefers-color-scheme:dark) {
@@ -20,14 +20,14 @@ export const analyzeLayoutStyles = `
 #analyzePopulation #filterChips:empty {display:none}
 #analyzePopulation #filterChips:not(:empty) {margin:8px 0}
 #analyzePopulation .filter-tools:has(>[hidden]) {display:none}
-#analyzePopulation .fresh-activity {margin:8px 0 0;padding-top:8px;border-top:1px solid var(--rule)}
+#analyzePopulation .fresh-activity {margin:8px 0 0;padding-top:8px;border-top:1px solid transparent}
 #analyzePopulation .fresh-controls {display:flex;flex-wrap:wrap;align-items:start;gap:0 16px}
 #analyzePopulation .fresh-controls>.ux-disabled-help {flex:none}
 #analyzePopulation .fresh-details {display:block;min-width:0;flex:1 1 16rem}
 #analyzePopulation .fresh-result {flex:0 1 100%;padding-block:12px}
 #analyzePopulation .fresh-result p {font-size:var(--type-small);font-weight:var(--weight-regular)}
 #analyzePopulation #freshHelp {width:100%}
-#analyzePopulation .fresh-help-body {max-width:none;padding:12px 16px;background:var(--canvas);border:1px solid var(--rule);border-radius:var(--radius-small)}
+#analyzePopulation .fresh-help-body {max-width:none;padding:12px 16px;background:var(--canvas);border:1px solid transparent;border-radius:var(--radius-small)}
 #analyzePopulation .fresh-help-body>p {max-width:80ch}
 #analyzePopulation #activityCollectionLink {margin:12px 0 0;padding-top:8px;border-top:1px solid var(--rule)}
 #analyzePopulation #activityCollectionLink a {display:inline-flex;align-items:center;min-height:44px;margin-right:16px}
@@ -50,7 +50,7 @@ export const analyzeLayoutStyles = `
 #outcomeChart .percentage-legend-row {grid-template-columns:20px minmax(0,1fr) max-content;gap:8px}
 #outcomeChart .percentage-value {gap:0 4px;grid-column:auto}
 .analyze-chart-main {min-width:0;display:flex;flex-direction:column;overflow:visible}
-.analyze-chart-main>.insight-header {padding:8px 16px;margin:0;border-bottom:1px solid var(--rule)}
+.analyze-chart-main>.insight-header {padding:8px 16px;margin:0;border-bottom:1px solid transparent}
 .analyze-chart-main .view-switch {display:flex;flex-wrap:wrap;gap:4px}
 .analyze-chart-main .view-switch>button {flex:0 1 auto;overflow-wrap:normal}
 #homeView .analyze-chart-main .chart-panel {border:0;background:none;box-shadow:none;max-inline-size:none;padding:12px 20px 8px;flex:1}

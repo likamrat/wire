@@ -580,9 +580,9 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityView>.section-heading>.filter-field {margin-inline-start:auto}
 .analyze-result-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-block:12px}
 .analyze-result-actions .report-selection-bar {margin:0}
-#activityList>.activity-card {container-type:inline-size;padding:16px 8px;border:0;border-bottom:1px solid var(--rule);border-radius:0;background:var(--paper);margin-top:8px}
+#activityList>.activity-card {container-type:inline-size;padding:16px 8px;border:0;border-bottom:1px solid transparent;border-radius:var(--radius-small);background:var(--paper);margin-top:8px}
 #activityList>.request-row {display:block;padding:0}
-.request-card-open {display:block;min-height:44px;padding:16px 12px;color:var(--ink);border-inline-start:3px solid transparent}
+.request-card-open {display:block;min-height:44px;padding:16px 12px;color:var(--ink);border-inline-start:3px solid transparent;border-radius:inherit}
 .request-card-open:hover {background:var(--hover)}
 .request-row[data-detail-active]>.request-card-open {border-inline-start-color:var(--control);background:var(--canvas)}
 .request-card-prompt {font:var(--type-body)/var(--leading-reading) var(--font);max-width:68ch}
@@ -663,8 +663,6 @@ ${analyzeLayoutStyles}
  --chart-pink-cap:var(--chart-failure);--chart-pink-label:var(--chart-failure);
  --prompt-author-user:var(--screen-prompt-user);
 }
-.primary-navigation a[aria-current=page] {background:var(--hover)}
-.primary-navigation a[aria-current=page]::before {background:var(--ink)}
 .settings-search-results mark,body .comparison-reading summary {font-weight:var(--weight-medium)}
 .result-tone-failure,.recorded-result.result-tone-failure:is(:hover,:active) {color:var(--chart-failure)}
 .percentage-card[data-breakdown=outcomes] [data-category=failure] .percentage-label,
@@ -676,7 +674,8 @@ ${analyzeLayoutStyles}
  --column-side:var(--chart-cyan-side);--column-cap:var(--chart-cyan-cap);--column-label:var(--chart-cyan-label);
 }
 @media(forced-colors:active) {
- .primary-navigation a[aria-current=page]::before {background:Highlight}
+ :is(.primary-navigation,.settings-categories) a[aria-current=page] {background:Highlight;color:HighlightText;forced-color-adjust:none}
+ .primary-navigation a[aria-current=page]>.wire-icon {color:HighlightText}
  .result-tone-failure,.recorded-result.result-tone-failure:is(:hover,:active),
  .percentage-card[data-breakdown=outcomes] [data-category=failure] .percentage-label,
  .select-option[data-value=failure] .result-option-label,

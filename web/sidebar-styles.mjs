@@ -1,7 +1,7 @@
 export const sidebarStyles = `
-.app-header {border-bottom-color:color-mix(in srgb,var(--rule) 75%,var(--muted))}
+.app-header {border-bottom-color:color-mix(in srgb,var(--rule) 50%,var(--paper))}
 .app-header .header-inner {display:grid;grid-template-columns:var(--app-sidebar-width,196px) minmax(0,1fr);min-height:76px;max-width:none;gap:0;padding:0}
-.app-header .brand {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:46px auto;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid color-mix(in srgb,var(--rule) 75%,var(--muted));overflow:hidden}
+.app-header .brand {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:46px auto;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid color-mix(in srgb,var(--rule) 50%,var(--paper));overflow:hidden}
 .app-header .brand-home {position:relative;grid-area:1/1;justify-self:start;flex:none;width:148px;height:46px;max-width:none}
 .app-header .brand-logo {width:148px;height:46px;max-width:none}
 .app-header .brand-caption {grid-area:2/1;flex:none;width:148px;font-size:.6875rem;white-space:normal}
@@ -19,11 +19,11 @@ export const sidebarStyles = `
 .workspace-utilities .theme-control {flex:none}
 .header-inner .theme-control {margin-left:0}
 html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
-.app-sidebar {position:fixed;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:196px;padding:16px 12px;background:var(--paper);border-right:1px solid color-mix(in srgb,var(--rule) 75%,var(--muted));overflow-y:auto;overscroll-behavior:contain}
+.app-sidebar {position:fixed;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:196px;padding:16px 12px;background:var(--paper);border-right:1px solid color-mix(in srgb,var(--rule) 50%,var(--paper));overflow-y:auto;overscroll-behavior:contain}
 .navigation-content {display:flex;flex-direction:column;gap:24px}
-.navigation-collapse {display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0 0 12px;padding:10px;border:1px solid var(--control);border-radius:6px;background:var(--paper);color:var(--ink);box-shadow:none}
-.navigation-collapse:hover {background:var(--hover);border-color:var(--control)}
-.navigation-collapse:active {background:var(--pill-pressed);border-color:var(--control)}
+.navigation-collapse {display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0 0 12px;padding:10px;border:1px solid transparent;border-radius:var(--radius-control);background:var(--paper);color:var(--ink);box-shadow:none}
+.navigation-collapse:hover {background:var(--hover);border-color:transparent}
+.navigation-collapse:active {background:var(--pill-pressed);border-color:transparent}
 .navigation-collapse:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
 :root[data-navigation=collapsed] .app-sidebar {min-width:0;width:max-content}
 :root[data-navigation=collapsed] .app-sidebar .primary-navigation a {gap:0;width:44px}
@@ -39,8 +39,7 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .navigation-group-label {margin:0;padding:4px 10px 8px;color:var(--muted);font-size:var(--type-caption);line-height:var(--leading-caption);font-weight:var(--weight-strong)}
 .primary-navigation a {position:relative;display:grid;grid-template-columns:24px max-content;gap:10px;align-items:center;min-height:44px;min-width:0;padding:8px 10px;color:var(--ink);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-regular);text-decoration:none;border-radius:6px;border:0;background:transparent;box-shadow:none}
 .primary-navigation a,.navigation-group-label,.navigation-drawer .drawer-heading h2,.navigation-drawer .drawer-heading>button {white-space:nowrap;overflow-wrap:normal}
-.primary-navigation a[aria-current=page] {color:var(--ink);font-weight:var(--weight-strong);background:color-mix(in srgb,var(--warning) 14%,var(--paper))}
-.primary-navigation a[aria-current=page]::before {content:"";position:absolute;inset:10px auto 10px 0;width:3px;border-radius:2px;background:var(--warning)}
+.primary-navigation a[aria-current=page] {color:var(--ink);font-weight:var(--weight-strong);background:var(--hover)}
 .primary-navigation a:hover {color:var(--ink);background:var(--hover)}
 .primary-navigation a:active {color:var(--ink);background:var(--pill-pressed)}
 .primary-navigation a:focus-visible {z-index:1;outline:2px solid var(--focus);outline-offset:3px}
@@ -52,7 +51,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 #workspace>:not(#homeView),#homeView>.chart-actions,#homeView>.supporting {max-width:1384px}
 .navigation-toggle {display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;padding:10px}
 .navigation-drawer {margin:0;inset:0 auto 0 0;width:min(304px,calc(100vw - 16px));max-width:none;height:100dvh;max-height:100dvh;border:0;border-right:1px solid var(--rule);border-radius:0;padding:20px 12px;background:var(--paper);color:var(--ink)}
-.navigation-drawer .drawer-heading {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--control)}
+.navigation-drawer .drawer-heading {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--rule)}
 .navigation-drawer .drawer-heading h2 {flex:1 1 7rem;min-width:0}
 .navigation-drawer .drawer-heading>button {margin-inline-start:auto}
 .navigation-drawer .brand {margin:0 10px 20px}

@@ -45,7 +45,7 @@ export const settingsStyles = `
 .settings-content,.settings-rail,.settings-categories,.settings-search {min-width:0}
 .settings-rail {position:sticky;top:calc(var(--app-header-height,80px) + var(--space-lg));max-height:calc(100dvh - var(--app-header-height,80px) - 32px);overflow:auto;padding:8px;margin:-8px}
 .settings-content {max-width:52rem;container:settings-pane / inline-size}
-.settings-categories {padding:4px var(--space-lg) 4px 0;border-inline-end:1px solid var(--rule)}
+.settings-categories {padding:4px var(--space-lg) 4px 0;border-inline-end:1px solid transparent}
 .settings-categories>summary {display:none}
 .settings-categories nav {display:flex;flex-direction:column;gap:4px}
 .settings-categories a {position:relative;display:flex;align-items:flex-start;gap:var(--space-sm);min-height:44px;padding:8px 10px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
@@ -54,7 +54,6 @@ export const settingsStyles = `
 .settings-categories a:hover {background:var(--hover);color:var(--ink);text-decoration:none}
 .settings-categories a:active {background:var(--pill-pressed);color:var(--ink)}
 .settings-categories a[aria-current=page] {background:var(--paper);color:var(--ink);font-weight:var(--weight-strong)}
-.settings-categories a[aria-current=page]::before {content:"";position:absolute;inset-inline-start:0;inset-block:12px;width:3px;border-radius:3px;background:var(--accent)}
 .settings-categories a[aria-current=page]:hover {background:var(--hover)}
 .settings-categories a[aria-current=page]:active {background:var(--pill-pressed)}
 .settings-categories>summary {padding:10px 12px;background:var(--canvas);color:var(--ink);border:0;border-radius:var(--settings-nav-radius);cursor:pointer;min-height:44px;overflow-wrap:anywhere}
@@ -138,7 +137,7 @@ export const settingsStyles = `
 .settings-view .settings-subheading {font-size:var(--type-reading);margin-top:var(--space-xl)}
 .settings-view .settings-subheading+.settings-preferences {margin-top:var(--space-md)}
 .settings-view p,.settings-view summary {overflow-wrap:anywhere}
-.settings-view :is(.settings-preferences .settings-field,.display-time-field,.settings-task-row) {display:grid;grid-template-columns:minmax(0,18rem) minmax(0,1fr);align-items:start;gap:4px var(--space-lg);padding-block:16px;border-top:1px solid var(--rule)}
+.settings-view :is(.settings-preferences .settings-field,.display-time-field,.settings-task-row) {display:grid;grid-template-columns:minmax(0,18rem) minmax(0,1fr);align-items:start;gap:4px var(--space-lg);padding-block:16px;border-top:1px solid transparent}
 .settings-preferences .settings-field>label {grid-column:1;grid-row:1;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
 .display-time-field>h3 {grid-column:1;grid-row:1;margin:0}
 .display-time-field>h3>label {padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
@@ -152,7 +151,7 @@ export const settingsStyles = `
 #approvedConnection>p {margin:0}
 #approvedConnection>.settings-actions {margin-top:8px}
 #unapprovedConnection>p {margin:0}
-.settings-group,.settings-view .fresh-activity {margin:0;padding-block:16px;border-top:1px solid var(--rule)}
+.settings-group,.settings-view .fresh-activity {margin:0;padding-block:16px;border-top:1px solid transparent}
 .settings-group-heading {display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
 .settings-view :is(.settings-group h3,.fresh-activity>h3) {font-size:var(--type-reading);font-weight:var(--weight-strong);margin:0 0 12px}
 .settings-view #connectionSource {display:grid;grid-template-columns:minmax(0,18rem) minmax(0,1fr);gap:0 var(--space-lg)}

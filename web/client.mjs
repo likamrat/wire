@@ -181,9 +181,30 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const issueAttempts = new Map();
     const presentation = createDisclosureState(), readingPositions = new Map();
     const sidebarPositions = new Map();
-    let sidebarIdentity = null, sidebarOrigin = null, sidebarAnimation = null, requestRenderKey = null, heldDeparture = null, requestInvalidated = false, contextOwner = null;
+    let sidebarIdentity = null, sidebarOrigin = null, sidebarAnimation = null, sidebarAnimationFinish = null, sidebarExit = null, requestRenderKey = null, heldDeparture = null, requestInvalidated = false, contextOwner = null;
     let sidebarReadingFocus = null, cancelSidebarReading = null;
     const contextSidebar = $("contextSidebar"), contextBody = $("contextSidebarBody");
+    const sidebarReducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    let sidebarHistoryMode = null;
+    function restoreSidebarHistoryMode() {
+        const previous = sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration;
+        sidebarHistoryMode = null;
+        if (!["auto", "manual"].includes(previous)) return;
+        if (history.scrollRestoration === "manual") history.scrollRestoration = previous;
+        if (readRoute().view !== "request" && history.state?.evidenceView?.sidebarRestoration) {
+            const { sidebarRestoration, ...entry } = history.state.evidenceView;
+            history.replaceState({ ...history.state, evidenceView: entry }, "");
+        }
+    }
+    function ownSidebarHistory(origin = false) {
+        if (sidebarHistoryMode === null) {
+            const remembered = history.state?.evidenceView?.sidebarRestoration;
+            sidebarHistoryMode = ["auto", "manual"].includes(remembered) ? remembered : history.scrollRestoration;
+        }
+        // Set the origin entry before pushing; popstate is too late to prevent native restoration.
+        if (origin) history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView, sidebarRestoration: sidebarHistoryMode } }, "");
+        history.scrollRestoration = "manual";
+    }
     let periodReturnReading = null;
     const textAccess = createTextAccess(ux, presentation, authorship, metadata);
     const requestContext = createRequestContext();
@@ -249,6 +270,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (contextBody.contains(event.target)) cancelSidebarReading?.();
         }, { capture: true, passive: true });
     }
+    // Background review actions reuse the controllers released by the exiting reader.
+    document.addEventListener("click", event => {
+        const action = event.target.closest?.("[data-insight-details],[data-automatic-scores],.settings-automatic-actions button");
+        if (!sidebarExit || !action || contextSidebar.contains(action)) return;
+        readingIntent++;
+        finishSidebarMotion();
+    }, { capture: true });
 
     function viewKey(node, key) { node.dataset.viewKey = key; return node; }
     function keyed(key) { return [...document.querySelectorAll("[data-view-key]")].find(node => node.dataset.viewKey === key); }
@@ -281,16 +309,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         focus?.focus({ preventScroll: true });
         if (modal) window.scrollTo(scrollX, pageY);
     }
+    function finishSidebarMotion() {
+        const animation = sidebarAnimation, finish = sidebarAnimationFinish;
+        sidebarAnimation = null; sidebarAnimationFinish = null;
+        animation?.cancel();
+        finish?.();
+    }
     function moveSidebar(entering, finish = () => {}) {
         const from = sidebarAnimation ? getComputedStyle(contextSidebar).transform : entering ? "translateX(100%)" : "translateX(0)";
         sidebarAnimation?.cancel();
-        sidebarAnimation = null;
-        if (matchMedia("(prefers-reduced-motion: reduce)").matches) { finish(); return; }
+        sidebarAnimation = null; sidebarAnimationFinish = null;
+        if (sidebarReducedMotion.matches) { finish(); return; }
         const animation = contextSidebar.animate([{ transform: from }, { transform: entering ? "translateX(0)" : "translateX(100%)" }],
             { duration: entering ? 240 : 180, easing: "cubic-bezier(.2,0,0,1)" });
-        sidebarAnimation = animation;
-        animation.onfinish = () => { if (sidebarAnimation !== animation) return; sidebarAnimation = null; finish(); };
+        sidebarAnimation = animation; sidebarAnimationFinish = finish;
+        animation.onfinish = () => { if (sidebarAnimation === animation) finishSidebarMotion(); };
     }
+    sidebarReducedMotion.addEventListener("change", () => { if (sidebarReducedMotion.matches) finishSidebarMotion(); });
+    function clearSidebarExit() {
+        const exit = sidebarExit;
+        if (!exit) return;
+        sidebarExit = null;
+        contextSidebar.inert = false;
+        exit.cleanup();
+    }
+    contextSidebar.addEventListener("click", event => {
+        if (!sidebarExit) return;
+        event.preventDefault(); event.stopImmediatePropagation();
+    }, { capture: true });
     function saveSidebarPosition() {
         if (!sidebarIdentity || cancelSidebarReading) return;
         for (const node of contextBody.querySelectorAll("details[data-disclosure-key]")) presentation.setOpen(node.dataset.disclosureKey, node.open);
@@ -323,6 +369,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (entering) moveSidebar(true);
     }
     function showInteractionSidebar() {
+        ownSidebarHistory();
         showContextSidebar({ identity: requestIdentity(), title: route.call ? "Call in context" : "Interaction",
             body: $("requestView"), anchor: sidebarAnchor() || document.activeElement?.closest("[data-view-key]"),
             requestClose: closeContextSidebar });
@@ -383,18 +430,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.call) revealSessionResult();
     }
     function hideContextSidebar({ restoreFocus = true, preserveAnchor = true, onClosed } = {}) {
-        if (!sidebarIdentity) { onClosed?.(); return; }
+        if (!sidebarIdentity) { restoreSidebarHistoryMode(); onClosed?.(); return; }
         saveSidebarPosition();
         cancelSidebarReading?.();
         const anchor = sidebarAnchor(), top = anchor?.getBoundingClientRect().top;
-        sidebarIdentity = null; contextOwner = null; requestRenderKey = null; sidebarReadingFocus = null;
+        const navigation = navigationGeneration, intent = readingIntent, closingOwner = contextOwner;
+        sidebarIdentity = null; requestRenderKey = null; sidebarReadingFocus = null;
         $("contextSidebarGuard").hidden = true; heldDeparture = null;
         updateActiveCard();
         moveSidebar(false, () => {
+            const currentTop = intent === readingIntent ? top : anchor?.getBoundingClientRect().top;
             contextSidebar.close();
             document.body.removeAttribute("data-context-docked");
-            if (preserveAnchor && anchor?.isConnected && anchor.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - top);
-            if (restoreFocus) ux.restoreFocus(anchor?.querySelector(".request-card-open,.request-link") || $("activityTitle"));
+            if (contextOwner === closingOwner) contextOwner = null;
+            if (preserveAnchor && navigation === navigationGeneration && anchor?.isConnected && anchor.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - currentTop);
+            if (restoreFocus && navigation === navigationGeneration && intent === readingIntent) ux.restoreFocus(anchor?.querySelector(".request-card-open,.request-link") || $("activityTitle"));
+            restoreSidebarHistoryMode();
             onClosed?.();
         });
     }
@@ -435,7 +486,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (document.querySelector(".ux-tooltip:not([hidden]),.select-popup:not([hidden])")) return;
         event.preventDefault(); contextOwner?.requestClose();
     });
-    new ResizeObserver(() => fitContextSidebar()).observe(document.documentElement);
+    let sidebarViewport = innerWidth, sidebarTextSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    new ResizeObserver(() => {
+        const textSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        if (sidebarViewport !== innerWidth || sidebarTextSize !== textSize) finishSidebarMotion();
+        sidebarViewport = innerWidth; sidebarTextSize = textSize;
+        fitContextSidebar();
+    }).observe(document.documentElement);
     function sliceKey() { return JSON.stringify([query(), search, route.withinServices?.split(",") || []]); }
     function scrollOwner(node) {
         for (let parent = node.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
@@ -928,11 +985,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         },
         onInvalidateOpen() {
-            if (!searchOpenedRequest || route.view !== "request" || route.request !== searchOpenedRequest) return;
+            if (!searchOpenedRequest || (route.view === "request" ? route.request : sidebarExit?.request) !== searchOpenedRequest) return;
             searchTargetInvalid = true;
             assessmentUI?.invalidate("Search authorization changed. Reopen the current item.");
             assessmentUI?.clearPrivateText();
-            $("requestContent").replaceChildren(el("p", "notice", "This search destination is no longer current. Return to Search and reopen its verified current item."));
+            if (route.view === "request") $("requestContent").replaceChildren(el("p", "notice", "This search destination is no longer current. Return to Search and reopen its verified current item."));
         },
         onAnalysis(update) {
             if (!state) return;
@@ -985,6 +1042,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ...assessmentFactories, api, ux, textAccess, glossary: help.glossary,
         requestDeparture: action => { if (!guardDeparture(action)) action(); },
         onInvalidated: message => {
+            if (sidebarExit) { clearSidebarExit(); finishSidebarMotion(); }
             cancelSidebarReading?.();
             sidebarReadingFocus = null;
             for (const node of contextBody.querySelectorAll("[data-disclosure-key],.full-text[data-view-key]")) presentation.forget(node.dataset.disclosureKey || node.dataset.viewKey);
@@ -1197,6 +1255,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         // Private-text search belongs to this browser history entry, never a copied URL.
         const navigationState = { ...history.state, evidenceView: { url, search: next.search || "", position: historyPosition,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
+            sidebarRestoration: next.view === "request" ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
             returnToSessions: sessionJourney.returnRoute(next.returnToSessions),
             returnToResults: next.view === "request" ? sessionJourney.returnRoute(next.returnToResults, true) : undefined,
             localSearch: next.localSearch } };
@@ -1216,6 +1275,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             searchReturnMarker = null;
         }
         if (next.view === "request" && route.view !== "request") {
+            ownSidebarHistory(true);
             next = { ...next, returnToResults: sessionJourney.returnRoute({ ...route, search }, true), sidebarEntry: sidebarHistoryKey };
         }
         if (next.view === "request" && route.view === "request") replace = true;
@@ -1676,6 +1736,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const navigation = ++navigationGeneration;
         const intent = readingIntent;
+        if (sidebarExit) {
+            if (next.view === "request") clearSidebarExit();
+            else finishSidebarMotion();
+        }
         const previousRoute = route, clearingFilter = $("filterChips").contains(document.activeElement);
         let searchReturn = null, returnReading = null, sidebarClosed = true, navigationFinished = false;
         function finishSearchReturn() {
@@ -1711,10 +1775,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             searchReturn = sameOrigin && route.request === searchOpenedRequest && liveSearchUI.canRestore(searchReturnMarker) ? searchReturnMarker : null;
             returnReading = searchReturn ? readingPositions.get(readingKey(underlyingRoute())) : null;
             sidebarClosed = false;
+            const retainPaint = unchanged && !requestInvalidated && !contextBody.querySelector("form[aria-busy=true]");
+            const cleanup = () => {
+                assessmentUI.leave(); automaticUI.leave();
+                $("requestContent").replaceChildren(); $("contextSidebarFooter").replaceChildren();
+            };
+            if (retainPaint) {
+                assessmentUI.invalidatePendingViewReads(); automaticUI.invalidatePendingViewReads();
+                contextSidebar.inert = true;
+                sidebarExit = { request: route.request, cleanup };
+                ux.hideTooltip(); selectControls?.close();
+            }
             hideContextSidebar({ restoreFocus: unchanged && !searchReturn, preserveAnchor: !searchReturn,
-                onClosed: () => { sidebarClosed = true; finishSearchReturn(); } });
-            assessmentUI.leave(); automaticUI.leave();
-            $("requestContent").replaceChildren(); $("contextSidebarFooter").replaceChildren();
+                onClosed: () => {
+                    clearSidebarExit();
+                    sidebarClosed = true;
+                    if (navigation === navigationGeneration) resumeOriginInsights();
+                    finishSearchReturn();
+                } });
+            if (!retainPaint) { cleanup(); finishSidebarMotion(); }
             if (unchanged) {
                 route = canonicalRoute(next);
                 appliedRoute = { ...route };
@@ -4972,8 +5051,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.scrollIntoView({ block: "start" });
     });
     window.addEventListener("popstate", () => {
-        if (restoringGuardHistory) { restoringGuardHistory = false; return; }
         const next = readRoute();
+        if (next.view === "request") ownSidebarHistory();
+        else if (route.view !== "request") restoreSidebarHistoryMode();
+        if (restoringGuardHistory) { restoringGuardHistory = false; return; }
         const position = history.state?.evidenceView?.position;
         if (route.view === "request" && assessmentUI.hasUnsentFeedback()) {
             const delta = Number.isSafeInteger(position) ? position - historyPosition : 1;
@@ -4995,9 +5076,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     window.addEventListener("focus", () => { if (!exportWriting) ensureCurrentTime(); });
     window.addEventListener("languagechange", () => { if (!exportWriting) ensureCurrentTime(); });
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pagehide", () => { pageInactive = true; preparedReportReader?.dispose(); preparedReportReader = null; assessmentUI.leave(); automaticUI.leave(); savedArtifactUI?.leave(); clearTimeout(pollTimer); });
+    window.addEventListener("pagehide", () => { pageInactive = true; clearSidebarExit(); finishSidebarMotion(); restoreSidebarHistoryMode(); preparedReportReader?.dispose(); preparedReportReader = null; assessmentUI.leave(); automaticUI.leave(); savedArtifactUI?.leave(); clearTimeout(pollTimer); });
     window.addEventListener("pageshow", () => { pageInactive = false; clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); });
-    document.addEventListener("visibilitychange", () => { assessmentUI.clearPrivateText(); if (!document.hidden) { clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); } });
+    document.addEventListener("visibilitychange", () => { if (sidebarExit) { clearSidebarExit(); finishSidebarMotion(); } assessmentUI.clearPrivateText(); if (!document.hidden) { clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); } });
     for (const node of document.querySelectorAll("details[id]")) {
         if (!node.dataset.disclosureKey && node.id !== "settingsCategories") bindDetails(node, node.id, undefined, node.id === "bundles");
     }

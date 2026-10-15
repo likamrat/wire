@@ -228,6 +228,99 @@ test("cross-layer verified Search action restores the tool Analyze controls, cou
     assert.deepEqual(errors, []);
 });
 
+for (const mode of ["auto", "manual"]) test(`Back before a cross-layer Search snapshot mounts restores ${mode} history ownership`, { timeout: 20000 }, async t => {
+    const records = searchRecords(3);
+    records[0].toolCalls[0].apiResults.push({ ...records[0].toolCalls[0].apiResults[0], index: 1, statusCode: 403 });
+    const app = await searchFixture(t, { records, reply: false });
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "no-preference" });
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.goto(app.runtime.url + "#analyze?mode=calls"); await ready(page);
+    await page.evaluate(mode => history.scrollRestoration = mode, mode);
+    const origin = { route: page.url(), count: await page.locator("#activityCount").textContent(),
+        records: await page.locator("#activityList .matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId)) };
+    await page.locator("#wireSearch").fill("reported-api");
+    await selectActivityOption(page, "wireSearchType", "action");
+    const hit = page.locator("#wireSearchResults button").filter({ hasText: "Failed" }).first();
+    await expect(hit).toBeVisible();
+    const hitId = await hit.getAttribute("data-search-id");
+    let release, arrived;
+    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
+    const deliveries = [];
+    await page.route("**/api/snapshot", route => {
+        if (route.request().postDataJSON().layer !== "reported-api") return route.continue();
+        const delivery = (async () => {
+            const response = await route.fetch();
+            arrived(); await held; await route.fulfill({ response });
+        })();
+        deliveries.push(delivery); return delivery;
+    });
+    try {
+        await hit.click(); await pending;
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        assert.equal(await page.evaluate(() => history.scrollRestoration), "manual", "Owned entry claimed restoration before the delayed snapshot");
+        await page.goBack(); await ready(page);
+        assert.equal(page.url(), origin.route);
+        await expect(page.locator("#layerFilter")).toHaveValue("tool");
+        await expect(page.locator("#activityCount")).toHaveText(origin.count);
+        assert.deepEqual(await page.locator("#activityList .matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId)), origin.records);
+        const restoredHit = page.locator(`.wire-search-hit[data-search-id="${hitId}"]`);
+        await expect(restoredHit).toBeFocused();
+        await expect(page.locator("#wireSearch")).toHaveValue("reported-api");
+        assert.equal(await page.evaluate(() => history.scrollRestoration), mode, "A no-host close releases the caller's history mode");
+        release(); await Promise.all(deliveries);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(page.url(), origin.route);
+        await expect(restoredHit).toBeFocused();
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        await expect(page.locator("#selectedCall")).toHaveCount(0);
+        await expect(page.locator("#activityCount")).toHaveText(origin.count);
+        assert.deepEqual(errors, []);
+    } finally { release(); await Promise.all(deliveries); }
+});
+
+test("Settings automatic-score review survives a preceding Search sidebar exit", { timeout: 20000 }, async t => {
+    const records = searchRecords(3), app = await searchFixture(t, { records, reply: false });
+    const browser = await chromium.launch(); t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "no-preference" });
+    const errors = []; page.on("pageerror", error => errors.push(error.message));
+    await page.goto(app.runtime.url + "#settings?section=ai"); await ready(page);
+    await expect(page.locator("#automaticScoreReview")).toBeVisible();
+    const origin = page.url();
+    await page.locator("#wireSearch").fill("physician");
+    await selectActivityOption(page, "wireSearchType", "interaction");
+    await page.locator(".wire-search-hit").first().click();
+    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
+    let release, arrived;
+    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
+    const deliveries = [];
+    await page.route("**/api/evaluation/automatic/setup", route => {
+        const delivery = (async () => {
+            const response = await route.fetch();
+            arrived(); await held; await route.fulfill({ response });
+        })();
+        deliveries.push(delivery); return delivery;
+    });
+    try {
+        await page.locator("#closeContextSidebar").click();
+        await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+        await page.locator("#automaticScoreReview").click(); await pending;
+        await page.locator("#contextSidebar").evaluate(node => { for (const animation of node.getAnimations()) animation.finish(); });
+        release(); await Promise.all(deliveries);
+        const dialog = page.locator("dialog.automatic-score-dialog");
+        await expect(dialog).toBeVisible();
+        await expect(dialog).not.toContainText("Reading the approved source and chat scope...");
+        await expect(dialog.locator("button").first()).toBeFocused();
+        assert.equal(page.url(), origin);
+        assert.equal(await page.locator("#requestContent").textContent(), "");
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+        assert.deepEqual(errors, []);
+    } finally { release(); await Promise.all(deliveries); }
+});
+
 test("sidebar Close reuses the current search query, category, page and focused result", { timeout: 40000 }, async t => {
     const records = searchRecords(24);
     records.forEach((record, index) => {
