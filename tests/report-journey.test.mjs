@@ -7,6 +7,23 @@ function chosen(journey, count = 2) {
     journey.update({ requestCount: count, scopeReady: true, formats: ["html", "pdf", "json", "markdown"] });
 }
 
+test("contextual hosting follows deliberate journey entry without granting preview or save authority", () => {
+    const presentations = [];
+    const journey = createReportJourney({ presentStep: value => presentations.push(value) });
+    chosen(journey);
+    journey.go(2);
+    assert.deepEqual(presentations.at(-1), { step: 2, focus: true });
+    assert.equal(journey.snapshot().phase, "draft");
+    journey.update({ promptMode: "original" });
+    assert.deepEqual(presentations.at(-1), { step: 2, focus: false }, "Field updates cannot reopen a closed setup");
+    journey.beginScan();
+    assert.deepEqual(presentations.at(-1), { step: 3, focus: true }, "Actual review releases the contextual host");
+    journey.previewReady(preview);
+    journey.go(2);
+    assert.equal(journey.snapshot().hasPreview, true);
+    assert.equal(journey.snapshot().phase, "ready", "Returning to unchanged setup is not disclosure approval");
+});
+
 test("Activity and Contents lead to Review with separate approval and save in the same stage", () => {
     const journey = createReportJourney();
     chosen(journey);
@@ -213,4 +230,13 @@ test("revisiting Setup after a completed save starts a draft, not a success-shap
     assert.equal(journey.snapshot().completed, false);
     assert.equal(journey.snapshot().requestCount, 2);
     assert.equal(journey.go(3), false);
+});
+
+test("a previously opened setup can be restored after its last member is removed but cannot prepare", () => {
+    const journey = createReportJourney();
+    chosen(journey);
+    journey.go(2);
+    chosen(journey, 0);
+    assert.equal(journey.go(2), true, "Returning from a peek must not strand the draft");
+    assert.equal(journey.beginScan(), null);
 });

@@ -244,7 +244,7 @@ test("bounded prompt review retains edits and consent gates; presentation never 
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
     await page.locator(".attestation [data-review-control]:not(:disabled)").waitFor();
-    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isVisible(), false);
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
     await page.getByRole("button", { name: "1. Activity", exact: true }).click();
     await page.locator("#reportsView [data-clear-selection]").first().click();
     assert.equal(await page.locator("#previewSelectionSummary").innerText(), "No interactions included");

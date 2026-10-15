@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain, revealStoredRefresh, selectActivityOption, restoreLegacySearch } from "./helpers.mjs";
-import { chooseReportScope, reportContents, inspectReportCopies, scanReport, openReportLibrary, openReportCreation } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, inspectReportCopies, scanReport, openReportLibrary, openReportCreation, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WORKIQ_JOURNEY_PROOFS;
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -48,7 +48,7 @@ test("expired export capability is rejected before dispatch and permits a fresh 
     }, { times: 1 });
     const rejectedResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
     const renewal = page.waitForResponse(response => response.url().endsWith("/api/session"));
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     const rejected = await rejectedResponse;
     assert.equal(rejected.status(), 403);
     assert.equal((await rejected.json()).code, "session_expired");
@@ -69,7 +69,7 @@ test("expired export capability is rejected before dispatch and permits a fresh 
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     assert.equal((await loadBoardState(context)).exports.length, 0);
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     assert.equal((await loadBoardState(context)).exports.length, 1);
     assert.deepEqual(requests.filter(item => item.path === "/api/export").map(item => item.body.previewId), [original.previewId, fresh.previewId]);
@@ -108,7 +108,7 @@ test("guided actual frontend: deliberate one-session scope, three stages and all
         assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 2 interactions");
         await reportContents(page);
         assert.equal(await page.locator("#reportStage2").isVisible(), true);
-        assert.equal(await page.locator(".export-scope").isVisible(), false);
+        assert.equal(await page.locator(".export-scope").isVisible(), true, "Activity stays visible beside contextual Contents");
         await page.locator(`[name=promptMode][value=${mode}]`).check();
         for (const format of ["pdf", "json", "markdown"]) await page.locator(`#formatOptions input[value=${format}]`).check();
         const preview = await scanReport(page);
@@ -149,13 +149,13 @@ test("guided actual frontend: deliberate one-session scope, three stages and all
         await page.locator("#exportBtn").click();
         assert.equal(requests.filter(request => request.path === "/api/preview").length, scans, "Revisiting unchanged choices does not rescan or approve");
         await page.locator(".attestation input[data-review-control]").check();
-        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isVisible(), false);
+        assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
         await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
         await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).evaluate(node => node === document.activeElement), true);
+        assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).evaluate(node => node === document.activeElement), true);
         assert.equal((await loadBoardState(context)).exports.length, ["masked", "none", "original"].indexOf(mode));
         const saved = page.waitForResponse(response => response.url().endsWith("/api/export"));
-        await page.getByRole("button", { name: "Save report locally", exact: true }).dblclick();
+        await page.getByRole("button", { name: "Save report", exact: true }).dblclick();
         await saved;
         await page.locator("#reportsView[data-report-phase=saved]").waitFor();
         if (mode === "masked") for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
@@ -217,7 +217,7 @@ test("report-list search preserves the genuine frozen preview and complete expor
     await page.locator(".attestation input[data-review-control]").check();
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     const final = await loadBoardState(context), saved = final.exports[0];
     assert.equal(final.exports.length, 1);
@@ -255,7 +255,7 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     const { page, runtime, context, requests, errors } = await setup(t, records);
     const privateQuery = "setup target 11";
     await page.goto(runtime.url + "#analyze"); await ready(page);
-    await page.locator('[data-view-key="request:setup-0"] input').check();
+    await selectAnalyzeRequest(page, page.locator('[data-view-key="request:setup-0"]'));
     await page.locator("#pageAction").click();
     await reportContents(page);
     await page.locator("[name=promptMode][value=none]").check();
@@ -273,21 +273,22 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     assert.match(await page.locator("#scopeCount-current").textContent(), / · 1 interaction$/);
     assert.match(await page.locator("#scopeCount-all").textContent(), / · 12 interactions$/);
     assert.equal(requests.filter(item => item.path === "/api/preview").length, 1);
-    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isEnabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isEnabled(), true);
 
     await navigateMain(page, "activity");
     let release, arrived;
     const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
     await page.route("**/api/snapshot", async route => {
         const response = await route.fetch(); arrived(); await held; await route.fulfill({ response });
-    }, { times: 1 });
+    });
     await selectActivityOption(page, "outcomeFilter", "failure"); await pending;
-    await navigateMain(page, "reports"); await openReportCreation(page);
-    const save = page.getByRole("button", { name: "Save report locally", exact: true });
+    const save = page.getByRole("button", { name: "Save report", exact: true, includeHidden: true });
     assert.equal(await save.isDisabled(), true, "An in-flight read cannot reuse approval");
     await save.evaluate(node => node.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     assert.equal(requests.filter(item => item.path === "/api/export").length, 0);
     release(); await ready(page);
+    await page.unroute("**/api/snapshot");
+    await navigateMain(page, "reports"); await openReportCreation(page);
     assert.equal(await save.isEnabled(), true, "Only an accepted unchanged basis restores the gate");
 
     records[11].userPrompt.text += " unrelated source update";
@@ -353,7 +354,7 @@ test("preserved Selected review saves original frozen copies after an unrelated 
     const observedSnapshots = [];
     page.on("response", response => { if (response.url().endsWith("/api/snapshot") && response.ok()) observedSnapshots.push(response); });
     await page.goto(runtime.url + "#analyze"); await ready(page);
-    await page.locator('[data-view-key="request:preserved-selected"] input').check();
+    await selectAnalyzeRequest(page, page.locator('[data-view-key="request:preserved-selected"]'));
     await page.locator("#pageAction").click();
     await reportContents(page);
     await page.locator("#formatOptions input[value=json]").check();
@@ -404,7 +405,7 @@ test("preserved Selected review saves original frozen copies after an unrelated 
     assert.equal((await loadBoardState(context)).exports.length, 0);
 
     const exportResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     const response = await exportResponse;
     assert.equal(response.ok(), true, "The backend accepts the preserved reviewed preview");
     const exported = await response.json();
@@ -470,8 +471,8 @@ test("keyboard Setup, actual Review and separate Save remain reachable at 375px 
         await page.getByRole("button", { name: "Approve for local saving", exact: true }).focus();
         await page.keyboard.press("Enter");
         await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).evaluate(node => node === document.activeElement), true);
-        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isEnabled(), true);
+        assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).evaluate(node => node === document.activeElement), true);
+        assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isEnabled(), true);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         if (proofs) await page.screenshot({ path: path.join(proofs, `keyboard-save-${theme}-375-200.png`), fullPage: true });
         await page.getByRole("button", { name: "1. Activity", exact: true }).focus();
@@ -490,6 +491,7 @@ test("guided scope and controls stay usable at 375/820/1200 in both themes; no a
     await page.goto(runtime.url + "#reports"); await ready(page);
     assert.equal(await page.locator("#collectionForm").isVisible(), false);
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
+        if (await page.locator("#contextSidebar[open]").count()) await page.locator("#closeContextSidebar").click();
         await page.setViewportSize({ width, height: 960 }); await chooseTheme(page, theme);
         await chooseReportScope(page, "all");
         assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 84 interactions");
@@ -592,11 +594,11 @@ test("final save survives read/lifecycle events, while an uncertain export is ne
         const response = await route.fetch();
         arrived(); await held; await route.fulfill({ response });
     }, { times: 1 });
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await pending;
-    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).getAttribute("data-pending"), "true");
-    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).getAttribute("aria-busy"), "true");
-    assert.equal(await page.locator("#reportStage3 .pending-indicator").isVisible(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).getAttribute("data-pending"), "true");
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).getAttribute("aria-busy"), "true");
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).locator("svg").count(), 0, "Text-only save keeps its busy state without an icon");
     assert.equal(await page.getByRole("button", { name: "1. Activity", exact: true }).isDisabled(), true);
     await page.evaluate(() => {
         document.dispatchEvent(new Event("visibilitychange"));
@@ -616,7 +618,7 @@ test("final save survives read/lifecycle events, while an uncertain export is ne
         await route.fetch();
         await route.abort("failed");
     }, { times: 1 });
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     assert.match(await page.locator("#reportJourneyError").textContent(), /not replayed|No action was replayed/);
     assert.match(await page.locator("#reportJourneyError").textContent(), /may have completed/);
@@ -651,7 +653,7 @@ test("a dispatched real save locks copy edits and retains its receipt through so
             if (lostResponse) await route.abort("failed");
             else await route.fulfill({ response });
         }, { times: 1 });
-        await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+        await page.getByRole("button", { name: "Save report", exact: true }).click();
         await pending;
         const [saved] = (await loadBoardState(context)).exports;
         assert.equal(saved.bundleId, preview.bundleId);

@@ -102,7 +102,7 @@ test("narrow report steps keep whole words and keyboard actions across Setup Rev
     await page.getByRole("button", { name: "3. Review & save", exact: true }).focus(); await page.keyboard.press("Enter");
     assert.equal(await page.locator("#reportStage3").isVisible(), true);
     await page.route("**/api/export", async route => { await route.fetch(); await route.abort("failed"); }, { times: 1 });
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     await capture("unknown", 3, [true, true, true]);
     await page.getByRole("button", { name: "Check save status", exact: true }).click();
@@ -163,11 +163,11 @@ test("report hierarchy belongs to the current task, with local actions and consi
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     const saveFooter = page.locator("#reportStage3>.report-stage-actions");
     assert.equal(await saveFooter.getByRole("button", { name: "Back to contents", exact: true }).count(), 1);
-    assert.equal(await saveFooter.getByRole("button", { name: "Save report locally", exact: true }).count(), 1);
+    assert.equal(await saveFooter.getByRole("button", { name: "Save report", exact: true }).count(), 1);
     assert.equal(await page.locator("#reportStage3 .report-save-summary").count(), 0, "Save does not repeat the document's scope inventory");
     await page.getByRole("button", { name: "Back to contents", exact: true }).click();
     await page.getByRole("button", { name: "Return to review", exact: true }).click();
-    assert.equal(await saveFooter.getByRole("button", { name: "Save report locally", exact: true }).isEnabled(), true);
+    assert.equal(await saveFooter.getByRole("button", { name: "Save report", exact: true }).isEnabled(), true);
 });
 
 test("normal report journey remains readable through scope, pending, dirty, recovery and saved states", { timeout: 180000 }, async t => {
@@ -321,7 +321,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     await page.locator("#exportBtn").click();
     assert.equal(requests.filter(endpoint => endpoint === "/api/preview").length, scans);
     const writing = await hold("/api/export");
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click(); await writing.pending;
+    await page.getByRole("button", { name: "Save report", exact: true }).click(); await writing.pending;
     assert.equal(await page.getByRole("button", { name: "Back to contents", exact: true }).isDisabled(), true);
     await capture("save-pending");
     writing.release();
@@ -339,7 +339,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     await page.route("**/api/export", async route => { await route.fetch(); await route.abort("failed"); }, { times: 1 });
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     await capture("uncertain-save");
     assert.equal(await page.locator(".report-journey .notice.error:visible").count(), 1, "One current error, not duplicate confirmation feedback.");

@@ -8,7 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState, replaceEvidence } from "../lib/store.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { chooseTheme, navigateMain, selectActivityOption } from "./helpers.mjs";
-import { openReportCreation, reportContents, scanReport, inspectReportCopies, findReportCopy } from "./report-journey-helpers.mjs";
+import { openReportCreation, reportContents, scanReport, inspectReportCopies, findReportCopy, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 
 test("lost contextual report save keeps its unknown outcome and recovers without another disclosure or export", { timeout: 30000 }, async t => {
     const cleanup = [];
@@ -29,7 +29,7 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     });
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+        const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail", "/api/assessment/evidence",
             "/api/evaluation/automatic/summary", "/api/preview", "/api/privacy-review", "/api/export", "/api/cancel-preview"];
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && !allowed.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
@@ -38,7 +38,7 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     });
     await page.goto(server.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#activityList .request-row").filter({ hasText: "Three synthetic documents" }).locator("input[type=checkbox]").check();
+    await selectAnalyzeRequest(page, page.locator("#activityList .request-row").filter({ hasText: "Three synthetic documents" }));
     await selectActivityOption(page, "serviceAssociationFilter", "Mail");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await navigateMain(page, "reports"); await openReportCreation(page);
@@ -64,7 +64,7 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     assert.equal((await loadBoardState(store)).exports.length, 0);
     await page.route("**/api/export", async route => { await route.fetch(); await route.abort("failed"); }, { times: 1 });
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).not.toHaveAttribute("data-report-phase", "writing");
     const saved = await loadBoardState(store);
     assert.equal(saved.exports.length, 1);
@@ -143,7 +143,7 @@ test("normal Setup Review Save includes edited bounded context without changing 
     page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+        const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail", "/api/assessment/evidence",
             "/api/evaluation/automatic/summary", "/api/preview", "/api/privacy-review", "/api/export", "/api/cancel-preview"];
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && !allowed.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
@@ -154,8 +154,10 @@ test("normal Setup Review Save includes edited bounded context without changing 
     page.setDefaultTimeout(8000);
     await page.goto(server.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    const row = page.locator("#activityList .request-row").filter({ hasText: "Three synthetic documents" });
+    await page.locator("#pageAction").click();
+    const row = page.locator("#reportList .report-entry").filter({ hasText: "Three synthetic documents" });
     await row.locator("input[type=checkbox]").check();
+    await navigateMain(page, "analyze");
     await selectActivityOption(page, "serviceAssociationFilter", "Mail");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await navigateMain(page, "reports");
@@ -173,8 +175,10 @@ test("normal Setup Review Save includes edited bounded context without changing 
         "Context help must not stretch every equal-height prompt-mode row");
     const enlargedSetup = await page.addStyleTag({ content: "html { font-size: 200%; }" });
     for (const theme of ["light", "dark"]) {
+        await page.locator("#closeContextSidebar").click();
         await chooseTheme(page, theme);
         await page.setViewportSize({ width: 375, height: 950 });
+        await reportContents(page);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
         assert.equal(await page.locator(".prompt-choice").filter({ has: contextOption }).evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
         if (process.env.WIRE_REPORT_CONTEXT_PROOFS) {
@@ -223,7 +227,7 @@ test("normal Setup Review Save includes edited bounded context without changing 
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "reviewed");
     assert.equal((await loadBoardState(store)).exports.length, 0, "Disclosure approval does not save files");
     const savedResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     const saved = await (await savedResponse).json();
     const state = await loadBoardState(store);
     assert.equal(state.exports.length, 1);
@@ -261,7 +265,7 @@ for (const change of ["consent", "context-source", "edited-consent", "stale-stat
     page.setDefaultTimeout(7000);
     await page.goto(server.url + "#analyze");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#activityList .request-row").filter({ hasText: "Three synthetic documents" }).locator("input[type=checkbox]").check();
+    await selectAnalyzeRequest(page, page.locator("#activityList .request-row").filter({ hasText: "Three synthetic documents" }));
     await navigateMain(page, "reports");
     await openReportCreation(page);
     await reportContents(page);
@@ -332,7 +336,7 @@ for (const change of ["consent", "context-source", "edited-consent", "stale-stat
             await new Promise(resolve => { releaseSave = resolve; });
             await route.fulfill({ response });
         });
-        await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+        await page.getByRole("button", { name: "Save report", exact: true }).click();
         await written;
     }
     if (change !== "context-source") await updateBoardState(store, state => {

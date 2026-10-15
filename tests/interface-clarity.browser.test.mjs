@@ -153,7 +153,7 @@ test("library keeps one count and opens the actual frozen report after separate 
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     assert.equal((await loadBoardState(context)).exports.length, 0);
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     const saved = (await loadBoardState(context)).exports[0];
     const before = await Promise.all(Object.values(saved.files).map(file => readFile(file)));

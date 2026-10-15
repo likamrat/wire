@@ -93,7 +93,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, doc = do
 }
 
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.
-export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, showSourceIssues, downloadFile, openSavedReport, icon, utility, onStateChange } = {}) {
+export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, showSourceIssues, downloadFile, openSavedReport, icon, utility, onStateChange, presentStep, requestStep } = {}) {
     const labels = ["Activity", "Contents", "Review & save"];
     const questions = ["Choose activity", "Choose contents", "Review and save your report"];
     let step = 1, reached = 1, phase = "draft", preview, bundle, failure = "";
@@ -103,7 +103,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
     const positions = new Map();
     const suspendedControls = new Map();
     function rememberStep() {
-        if (!nodes) return;
+        if (!nodes || step === 2 && presentStep) return;
         const panel = nodes.panels[step - 1], focus = root.ownerDocument.activeElement;
         if (!panel.contains(focus)) return;
         positions.set(step, { focus, top: focus.getBoundingClientRect().top, previewId: preview?.previewId,
@@ -118,6 +118,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         if (saveUnconfirmed) return "Check save status before preparing another report. The local write may have completed.";
         if (target === 1) return "";
         if (target === 3 && phase === "saved") return "";
+        if (target === 2 && reached >= 2) return "";
         if (!ready()) return model.scopeIssue || "Choose at least one readable interaction in Activity.";
         if (target === 2) return "";
         if (!preview) return model.formats.length ? "Prepare the report in Contents before reviewing it." : "Choose at least one format in Contents.";
@@ -128,10 +129,13 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
     }
     function paint(focus = false, reading = null) {
         onStateChange?.();
-        if (!nodes) return;
+        if (!nodes) { presentStep?.({ step, focus }); return; }
         root.dataset.reportStep = String(step);
         root.dataset.reportPhase = phase;
-        nodes.panels.forEach((panel, index) => { panel.hidden = index + 1 !== step; });
+        nodes.panels.forEach((panel, index) => {
+            if (presentStep && index === 1) return;
+            panel.hidden = index + 1 !== step && !(presentStep && step === 2 && index === 0);
+        });
         nodes.steps.forEach((control, index) => {
             const target = index + 1, blocked = reason(target);
             control.disabled = Boolean(blocked) || target > reached;
@@ -144,12 +148,13 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         text(nodes.progress, phase === "saved" ? "Report saved" : phase === "unavailable" ? "Saved report unavailable" : `Step ${step} of 3`);
         text(nodes.scopeName, ({ selected: "Selected interactions", current: "Current Analyze view", all: "All saved sessions", period: "Paired periods" })[model.scope]
             + (model.authorFiltered ? ` · ${model.authorLabel}` : ""));
-        nodes.start.hidden = step !== 1;
+        const activityVisible = step === 1 || Boolean(presentStep && step === 2);
+        nodes.start.hidden = !activityVisible;
         text(nodes.context, model.entry
             ? `${model.entry.sessionName || "Copilot chat name not recorded"} · Saved activity across all retained dates and services. New interactions are not added automatically.`
             : "");
-        nodes.context.hidden = !nodes.context.textContent || step !== 1;
-        text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable interactions in this chat. Check source issues or choose another scope." : "Choose a scope above or select interactions below."));
+        nodes.context.hidden = !nodes.context.textContent || !activityVisible;
+        text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable interactions in this chat. Check source issues or choose another scope." : "Select interactions below, or choose another scope."));
         nodes.gap.hidden = ready();
         nodes.issues.hidden = ready() || !model.entry || !showSourceIssues;
         nodes.next.disabled = !ready() || isWriting() || saveUnconfirmed;
@@ -180,6 +185,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         text(nodes.headings[2], phase === "saved" ? "Your report is saved" : phase === "unavailable" ? "Saved report unavailable"
             : phase === "writing" ? "Saving your report" : saveUnconfirmed ? "Save not confirmed" : "Review and save your report");
         nodes.headings[2].classList.toggle("visually-hidden", ["ready", "reviewed"].includes(phase));
+        if (presentStep?.({ step, focus, contents: nodes.panels[1], footer: nodes.contentFooter })) return;
         if (focus) {
             const samePreview = step < 3 || reading?.previewId === preview?.previewId;
             const prior = reading?.focus;
@@ -199,6 +205,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
     }
     function go(target) {
         if (!Number.isInteger(target) || target < 1 || target > 3 || reason(target)) return false;
+        if (requestStep && !requestStep(() => go(target))) return false;
         const returning = target < step;
         rememberStep();
         if (["saved", "unavailable"].includes(phase) && target < 3) {
@@ -306,6 +313,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
             list.append(item);
             steps.push(control); stepHints.push(hint);
             const panel = el("section", "report-stage"), heading = el("h2", "", questions[index]);
+            panel.hidden = index !== 0;
             panel.id = `reportStage${index + 1}`;
             heading.id = `reportStepTitle${index + 1}`;
             heading.tabIndex = -1;
@@ -352,6 +360,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         root.querySelector(".report-text-options").append(byId("additionalMasking"));
         panels[0].append(firstFooter, byId("reportRequests"), scopeDetails);
         const contentFooter = el("div", "report-stage-actions"), activityBack = button("Back to activity", () => go(1));
+        contentFooter.id = "reportContentsActions";
         backButtons.push(activityBack);
         contentFooter.append(activityBack, scanWrapper);
         panels[1].append(summary, root.querySelector(".report-options"), contentFooter);
@@ -375,7 +384,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         panels[2].append(reviewFooter);
         root.insertBefore(shell, byId("savedReportsPanel"));
         shell.append(...panels);
-        nodes = { panels, steps, stepHints, headings, backButtons, progress, scopeName, context, gap, next, issues, scan, error, retry, reviewHost, saveHost, reviewActions, saveActions, el, button, start: existingStart };
+        nodes = { panels, steps, stepHints, headings, backButtons, progress, scopeName, context, gap, next, issues, scan, error, retry, reviewHost, saveHost, reviewActions, saveActions, contentFooter, el, button, start: existingStart };
         paint();
     }
     return {

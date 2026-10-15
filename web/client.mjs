@@ -183,6 +183,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const sidebarPositions = new Map();
     let sidebarIdentity = null, sidebarOrigin = null, sidebarAnimation = null, sidebarAnimationFinish = null, sidebarExit = null, requestRenderKey = null, heldDeparture = null, requestInvalidated = false, contextOwner = null;
     let sidebarReadingFocus = null, cancelSidebarReading = null;
+    let reportSetupReturn = null;
     const contextSidebar = $("contextSidebar"), contextBody = $("contextSidebarBody");
     const sidebarReducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     let sidebarHistoryMode = null;
@@ -281,16 +282,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function viewKey(node, key) { node.dataset.viewKey = key; return node; }
     function keyed(key) { return [...document.querySelectorAll("[data-view-key]")].find(node => node.dataset.viewKey === key); }
     const underlyingRoute = () => sessionJourney.underlying(route);
+    function fromReportCreation() {
+        const origin = underlyingRoute();
+        return origin.view === "reports" && origin.task === "create";
+    }
     function requestIdentity(value = route) { return JSON.stringify([value.request, value.call, value.callRevision]); }
     function sidebarAnchor() {
         return keyed("request:" + route.request)?.closest(".activity-card")
             ?? document.querySelector(`[data-action-id="${CSS.escape(route.call || "")}"].activity-card`)
             ?? (sidebarOrigin?.anchor?.isConnected ? sidebarOrigin.anchor : null);
     }
+    function rememberSidebarAnchor() {
+        if (!sidebarIdentity) return;
+        const anchor = sidebarAnchor();
+        if (anchor?.checkVisibility()) sidebarOrigin = { anchor, top: anchor.getBoundingClientRect().top };
+    }
     function keepAnchor(action) {
         const anchor = sidebarAnchor(), top = anchor?.getBoundingClientRect().top;
         action();
         if (anchor?.isConnected && anchor.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - top);
+        rememberSidebarAnchor();
     }
     function fitContextSidebar() {
         if (!sidebarIdentity) return;
@@ -338,7 +349,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         event.preventDefault(); event.stopImmediatePropagation();
     }, { capture: true });
     function saveSidebarPosition() {
-        if (!sidebarIdentity || cancelSidebarReading) return;
+        if (!sidebarIdentity || contextOwner?.identity === "report-setup" || cancelSidebarReading) return;
         for (const node of contextBody.querySelectorAll("details[data-disclosure-key]")) presentation.setOpen(node.dataset.disclosureKey, node.open);
         sidebarPositions.set(sidebarIdentity, { top: contextBody.scrollTop, revision: state?.revision, basis: JSON.stringify(state?.assessment?.basis),
             focus: sidebarReadingFocus,
@@ -349,8 +360,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const target = event.target;
         sidebarReadingFocus = { id: target.id, key: target.closest("[data-view-key]")?.dataset.viewKey,
             tag: target.tagName, label: target.getAttribute("aria-label") };
+        if (contextOwner?.identity === "report-setup") reportSetupReturn = { ...reportSetupReturn, focus: target };
     });
-    function showContextSidebar({ identity, title, body, anchor, requestClose }) {
+    function showContextSidebar({ identity, title, body, footer, anchor, requestClose, closeLabel = "Close interaction" }) {
         const entering = !sidebarIdentity;
         if (entering) {
             sidebarOrigin = { anchor, top: anchor?.getBoundingClientRect().top };
@@ -358,22 +370,93 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (sidebarIdentity !== identity) {
             cancelSidebarReading?.();
             sidebarReadingFocus = null;
+            if (contextOwner?.footer) $("contextSidebarParking").append(contextOwner.footer);
+            $("contextSidebarFooter").replaceChildren();
         }
         sidebarIdentity = identity;
-        contextOwner = { identity, requestClose };
+        contextOwner = { identity, requestClose, footer };
         contextSidebar.hidden = false;
-        if (body.parentElement !== contextBody) contextBody.replaceChildren(body);
+        if (body.parentElement !== contextBody) {
+            for (const previous of [...contextBody.children]) {
+                previous.hidden = true;
+                $("contextSidebarParking").append(previous);
+            }
+            contextBody.append(body);
+        }
+        if (footer && footer.parentElement !== $("contextSidebarFooter")) $("contextSidebarFooter").replaceChildren(footer);
         body.hidden = false;
         $("contextSidebarTitle").textContent = title;
+        $("closeContextSidebar").setAttribute("aria-label", closeLabel);
+        ux.tooltip($("closeContextSidebar"), closeLabel);
         fitContextSidebar();
         if (entering) moveSidebar(true);
     }
     function showInteractionSidebar() {
         ownSidebarHistory();
+        if (contextOwner?.identity === "report-setup") rememberReportSetup(true);
         showContextSidebar({ identity: requestIdentity(), title: route.call ? "Call in context" : "Interaction",
             body: $("requestView"), anchor: sidebarAnchor() || document.activeElement?.closest("[data-view-key]"),
             requestClose: closeContextSidebar });
         updateActiveCard();
+    }
+    function rememberReportSetup(peek = false) {
+        reportSetupReturn = { ...reportSetupReturn, top: contextBody.scrollTop, peek };
+    }
+    function closeReportSetup({ restoreFocus = true, focusJourney = false } = {}) {
+        if (sidebarIdentity !== "report-setup") return;
+        rememberReportSetup();
+        const contents = $("reportStage2"), intent = readingIntent, navigation = navigationGeneration;
+        hideContextSidebar({ restoreFocus: false, onClosed: () => {
+            contents.hidden = true;
+            if (intent !== readingIntent || navigation !== navigationGeneration || route.view !== "reports" || route.task !== "create") return;
+            if (focusJourney) $("reportStepTitle" + reportJourney.snapshot().step)?.focus({ preventScroll: true });
+            else if (restoreFocus) {
+                const next = $("reportStage1").querySelector(".primary");
+                (next?.disabled ? $("reportStepTitle1") : next)?.focus({ preventScroll: true });
+            }
+        } });
+    }
+    function presentReportStep({ step, focus, contents, footer }) {
+        if (step !== 2) {
+            if (contextOwner?.identity === "report-setup") closeReportSetup({ restoreFocus: false, focusJourney: focus });
+            if (focus) reportSetupReturn = null;
+            if (focus && route.view === "request" && fromReportCreation()) navigate(underlyingRoute(), true, { restorePosition: true });
+            return false;
+        }
+        if (!focus || !contents) return true;
+        if (route.view === "request") {
+            returnToReportSetup();
+            return true;
+        }
+        if (route.view !== "reports" || route.task !== "create") return true;
+        if (sidebarExit) {
+            clearSidebarExit();
+            restoreSidebarHistoryMode();
+        }
+        const saved = reportSetupReturn;
+        showContextSidebar({ identity: "report-setup", title: "Report setup", body: contents, footer,
+            anchor: $("reportStage1").querySelector(".primary"), requestClose: closeReportSetup, closeLabel: "Close report setup" });
+        $("reportStepTitle2").classList.add("visually-hidden");
+        const target = saved?.focus?.isConnected && saved.focus.checkVisibility() && !saved.focus.disabled ? saved.focus : $("contextSidebarTitle");
+        target.focus({ preventScroll: true });
+        contextBody.scrollTop = saved?.top || 0;
+        reportSetupReturn = { ...saved, peek: false };
+        return true;
+    }
+    function returnToReportSetup() {
+        const origin = underlyingRoute();
+        if (origin.view !== "reports" || origin.task !== "create") return;
+        if (!requestInvalidated) saveSidebarPosition();
+        navigate(origin, true, { restorePosition: true, reportSetup: true });
+    }
+    function returnFromReportInspection() {
+        if (reportSetupReturn?.peek) returnToReportSetup();
+        else navigate(underlyingRoute(), true, { restorePosition: true });
+    }
+    function renderReportInspectionReturn() {
+        const footer = $("contextSidebarFooter");
+        footer.replaceChildren();
+        if (fromReportCreation()) footer.append(button(reportSetupReturn?.peek ? "Back to report setup" : "Back to activity", returnFromReportInspection));
     }
     function resumeOriginInsights() {
         if ($("homeInsights").getAttribute("aria-busy") !== "true") return;
@@ -442,7 +525,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const currentTop = intent === readingIntent ? top : anchor?.getBoundingClientRect().top;
             contextSidebar.close();
             document.body.removeAttribute("data-context-docked");
-            if (contextOwner === closingOwner) contextOwner = null;
+            if (contextOwner === closingOwner) {
+                if (closingOwner?.footer) $("contextSidebarParking").append(closingOwner.footer);
+                contextOwner = null;
+            }
             if (preserveAnchor && navigation === navigationGeneration && anchor?.isConnected && anchor.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - currentTop);
             if (restoreFocus && navigation === navigationGeneration && intent === readingIntent) ux.restoreFocus(anchor?.querySelector(".request-card-open,.request-link") || $("activityTitle"));
             restoreSidebarHistoryMode();
@@ -487,11 +573,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         event.preventDefault(); contextOwner?.requestClose();
     });
     let sidebarViewport = innerWidth, sidebarTextSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    window.addEventListener("scroll", () => {
+        if (sidebarIdentity && sidebarViewport === innerWidth && sidebarTextSize === parseFloat(getComputedStyle(document.documentElement).fontSize)) rememberSidebarAnchor();
+    }, { passive: true });
     new ResizeObserver(() => {
         const textSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        if (sidebarViewport !== innerWidth || sidebarTextSize !== textSize) finishSidebarMotion();
+        const changed = sidebarViewport !== innerWidth || sidebarTextSize !== textSize;
+        // The observer sees the new layout; retain the last pre-reflow reading anchor.
+        const anchor = sidebarIdentity ? sidebarAnchor() : null, top = sidebarOrigin?.anchor === anchor ? sidebarOrigin.top : anchor?.getBoundingClientRect().top;
+        if (changed) finishSidebarMotion();
         sidebarViewport = innerWidth; sidebarTextSize = textSize;
         fitContextSidebar();
+        if (changed && sidebarIdentity && Number.isFinite(top) && anchor?.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - top);
+        rememberSidebarAnchor();
     }).observe(document.documentElement);
     function sliceKey() { return JSON.stringify([query(), search, route.withinServices?.split(",") || []]); }
     function scrollOwner(node) {
@@ -530,7 +624,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             left: node.scrollLeft, top: node.scrollTop,
         }));
         const activeReader = contextSidebar.contains(active) ? null : active?.closest(".full-text");
+        const requestAnchor = route.view === "request" ? sidebarAnchor() : active?.closest(".activity-card");
         const anchor = activeReader?.querySelector(".full-text-body pre")?.checkVisibility() ? activeReader
+            : requestAnchor?.checkVisibility() ? requestAnchor
             : [...$("workspace").querySelectorAll("[data-view-key]")].find(node => node.checkVisibility() && node.getBoundingClientRect().top >= 100 && node.getBoundingClientRect().top < innerHeight);
         const selection = window.getSelection(), selectedText = selection?.anchorNode;
         const reader = selectedText?.parentElement?.closest(".full-text-body pre");
@@ -554,6 +650,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const anchor = saved.anchor ? keyed(saved.anchor) : null;
         window.scrollTo(saved.x, anchor?.checkVisibility() ? scrollY + anchor.getBoundingClientRect().top - saved.top : saved.y);
+        rememberSidebarAnchor();
         if (saved.textSelection) {
             const { key, text, anchor, focus } = saved.textSelection;
             const reader = key ? keyed(key)?.querySelector(".full-text-body pre") : null;
@@ -1053,7 +1150,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (route.view === "request") {
                 requestInvalidated = true;
                 $("requestContent").replaceChildren(el("p", "notice", message));
-                $("contextSidebarFooter").replaceChildren();
+                renderReportInspectionReturn();
             }
         },
         bindDetails: (node, key) => {
@@ -1122,7 +1219,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onSearch: value => { $("activitySearch").value = value; $("activitySearch").dispatchEvent(new Event("input")); },
         openSearch: () => liveSearchUI.analysisScope(),
         syncFilters: () => selectControls?.sync(),
-        createReport: (value, semanticSelection) => {
+        createReport: function createPeriodReport(value, semanticSelection) {
+            if (guardDeparture(() => createPeriodReport(value, semanticSelection))) return;
             if (reportJourney?.snapshot().saveUnconfirmed) { announce(reportJourney.reason(1), "stale"); return; }
             if (exportWriting || isLoading || isStale) return;
             const ids = [...new Set(Object.values(value.periods).flatMap(side => side.scenarioIds))];
@@ -1338,6 +1436,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return `${applied.layer === "http" ? "Source" : "Chat"} ${length < source.sessionId.length ? "..." : ""}${source.sessionId.slice(-length)}`;
     }
     function createSessionReport() {
+        if (guardDeparture(createSessionReport)) return;
         if (reportJourney?.snapshot().saveUnconfirmed) { announce(reportJourney.reason(1), "stale"); return; }
         const source = sessionSource(), requestIds = sessionJourney.reportIds(state?.exportCatalog, source?.sessionId);
         if (isLoading || isStale || requestIds === null) { announce("Copilot chat report scope is unavailable. Refresh before selecting request groups.", "error"); return; }
@@ -1728,7 +1827,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         }
     }
-    function applyRoute(next, { keepFocus = false, restorePosition = false, reset = false, paging = null } = {}) {
+    function applyRoute(next, { keepFocus = false, restorePosition = false, reset = false, paging = null, reportSetup = false } = {}) {
         if (exportWriting || collectionSettings?.isBusy()) {
             rememberRoute(route, true);
             announce("Wait for the current local save to finish before leaving this view.");
@@ -1750,6 +1849,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             restoreReading(returnReading);
             liveSearchUI.restore(marker);
         }
+        if (contextOwner?.identity === "report-setup" && next.view !== "request"
+            && (next.view !== "reports" || next.task !== "create")) closeReportSetup({ restoreFocus: false });
         if (analytics && !isLoading && !isStale && next.view === "request"
             && (route.view === "request" || readingKey(route) === readingKey(sessionJourney.underlying(next)))
             && JSON.stringify(applied) === JSON.stringify(query(next))) {
@@ -1774,30 +1875,37 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const unchanged = sameOrigin && !isLoading && !isStale && JSON.stringify(applied) === JSON.stringify(query(next));
             searchReturn = sameOrigin && route.request === searchOpenedRequest && liveSearchUI.canRestore(searchReturnMarker) ? searchReturnMarker : null;
             returnReading = searchReturn ? readingPositions.get(readingKey(underlyingRoute())) : null;
-            sidebarClosed = false;
-            const retainPaint = unchanged && !requestInvalidated && !contextBody.querySelector("form[aria-busy=true]");
             const cleanup = () => {
                 assessmentUI.leave(); automaticUI.leave();
+                requestRenderKey = null;
                 $("requestContent").replaceChildren(); $("contextSidebarFooter").replaceChildren();
             };
-            if (retainPaint) {
-                assessmentUI.invalidatePendingViewReads(); automaticUI.invalidatePendingViewReads();
-                contextSidebar.inert = true;
-                sidebarExit = { request: route.request, cleanup };
-                ux.hideTooltip(); selectControls?.close();
+            if (reportSetup && sameOrigin) {
+                cleanup();
+                restoreSidebarHistoryMode();
+            } else {
+                sidebarClosed = false;
+                const retainPaint = unchanged && !requestInvalidated && !contextBody.querySelector("form[aria-busy=true]");
+                if (retainPaint) {
+                    assessmentUI.invalidatePendingViewReads(); automaticUI.invalidatePendingViewReads();
+                    contextSidebar.inert = true;
+                    sidebarExit = { request: route.request, cleanup };
+                    ux.hideTooltip(); selectControls?.close();
+                }
+                hideContextSidebar({ restoreFocus: unchanged && !searchReturn, preserveAnchor: !searchReturn,
+                    onClosed: () => {
+                        clearSidebarExit();
+                        sidebarClosed = true;
+                        if (navigation === navigationGeneration) resumeOriginInsights();
+                        finishSearchReturn();
+                    } });
+                if (!retainPaint) { cleanup(); finishSidebarMotion(); }
+                if (reportSetupReturn) reportSetupReturn.peek = false;
             }
-            hideContextSidebar({ restoreFocus: unchanged && !searchReturn, preserveAnchor: !searchReturn,
-                onClosed: () => {
-                    clearSidebarExit();
-                    sidebarClosed = true;
-                    if (navigation === navigationGeneration) resumeOriginInsights();
-                    finishSearchReturn();
-                } });
-            if (!retainPaint) { cleanup(); finishSidebarMotion(); }
             if (unchanged) {
                 route = canonicalRoute(next);
                 appliedRoute = { ...route };
-                renderCurrentViewInsights();
+                if (reportSetup) reportJourney.go(2);
                 navigationFinished = true;
                 finishSearchReturn();
                 return true;
@@ -1851,7 +1959,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const finishNavigation = (loaded = true) => {
             if (!loaded || navigation !== navigationGeneration || refinement || intent !== readingIntent) return;
             if (searchReturn) { navigationFinished = true; finishSearchReturn(); return; }
-            if (route.view === "request") { focusSidebar(); return; }
+            if (route.view === "request") {
+                const reading = previousRoute.view === "reports" ? readingPositions.get(readingKey(underlyingRoute())) ?? position : position;
+                if (restorePosition && reading) restoreReading(reading);
+                focusSidebar();
+                return;
+            }
             if (paging) { restorePager(paging); return; }
             if (route.view === "settings") {
                 revealSetting();
@@ -1865,6 +1978,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else if (position) restoreReading(position);
             else if (route.view === "analyze" && previousRoute.view === "analyze" && route.mode !== previousRoute.mode) revealResults();
             else if (mounted && !revealSessionResult()) { $("pageTitle").focus({ preventScroll: true }); window.scrollTo(0, 0); }
+            if (reportSetup && route.view === "reports" && route.task === "create") reportJourney.go(2);
         };
         if (update instanceof Promise) update.then(finishNavigation);
         else finishNavigation();
@@ -2912,7 +3026,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const context = requestContext.select(state.scenarios, route.request);
         const target = callInvestigation.resolve(state.requestActivity, state.scenarios, route, state.revision);
         const body = $("requestContent");
-        $("contextSidebarFooter").replaceChildren();
+        renderReportInspectionReturn();
         body.replaceChildren();
         detailOwner = "request:" + route.request;
         viewKey(body, detailOwner);
@@ -3085,7 +3199,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         pick.id = "requestReportToggle";
         const continueReport = button("Continue to report", () => {
-            if (continueReport.isConnected && route.view === "request" && route.request === scenario.scenarioId) continueSelectedReport(scenario.scenarioId);
+            if (!continueReport.isConnected || route.view !== "request" || route.request !== scenario.scenarioId) return;
+            if (fromReportCreation()) returnFromReportInspection();
+            else continueSelectedReport(scenario.scenarioId);
         }, "primary");
         continueReport.id = "requestReportContinue";
         actions.append(reportTitle, pick, continueReport);
@@ -3277,17 +3393,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const membership = reportRequestSelection(route.request);
         const pick = $("requestReportToggle"), next = $("requestReportContinue"), title = $("requestReportTitle");
         const fixedScope = underlyingRoute().view === "reports" && reportScope !== "selected";
+        const reportOrigin = fromReportCreation();
         setText(pick, membership.selected ? "Remove from report" : "Add to report");
+        pick.hidden = fixedScope || Boolean(periodReport);
         pick.disabled = membership.disabled || fixedScope;
-        next.disabled = membership.disabled || fixedScope || !membership.selected;
-        setText(title, fixedScope ? "Membership follows the report's activity scope. Return to report Activity to change it."
+        setText(next, reportOrigin ? reportSetupReturn?.peek ? "Back to report setup" : "Back to activity" : "Continue to report");
+        next.disabled = reportOrigin ? exportWriting : membership.disabled || fixedScope || !membership.selected;
+        setText(title, periodReport ? "This report uses fixed paired periods. Change the comparison in Analyze to change its activity."
+            : fixedScope ? membership.included ? "Included by this report's activity scope. Change the scope in Activity."
+                : "Not included with this report's scope and author choices. Change them in Activity."
             : membership.selected && !membership.included ? "Selected; not included with current report choices."
             : !membership.selected && membership.included ? "Included through the current report scope." : "");
         title.hidden = !title.textContent;
         const block = reportSelectionBlock();
         ux.tooltip(pick, block || (membership.disabled ? "This interaction has no reportable activity."
             : membership.selected ? help.actions.removeRequest : help.actions.selectRequest));
-        ux.tooltip(next, block || (membership.selected ? "Review selected activity and the report's author choices."
+        ux.tooltip(next, reportOrigin ? reportSetupReturn?.peek ? "Back to report setup" : "Back to activity" : block || (membership.selected ? "Review selected activity and the report's author choices."
             : "Add this interaction before continuing to the report."));
     }
     function reportSelection(kind = reportScope) {
@@ -3379,6 +3500,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return true;
     }
     function clearReportSelection() {
+        if (guardDeparture(clearReportSelection)) return;
         if (exportWriting || reportJourney?.snapshot().saveUnconfirmed) return;
         reportScope = "selected";
         reportEntry = null;
@@ -3556,7 +3678,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             pairedSummary.replaceChildren(el("h3", "", "Report this comparison"),
                 el("p", "", `Period A: ${a.range.from} to ${a.range.to}. Period B: ${b.range.from} to ${b.range.to}. ${time.label(periodReport.timeContext)}.`),
                 el("p", "", "Authors and matching records are fixed to this comparison. Change them in Analyze and create a new comparison report."),
-                button("Change comparison in Analyze", () => {
+                button("Change comparison in Analyze", function changeComparison() {
+                    if (guardDeparture(changeComparison)) return;
                     const returnTo = periodReport.returnTo;
                     clearReportSelection();
                     navigate(returnTo);
@@ -3601,9 +3724,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const row = viewKey(el("article", "report-entry"), detailOwner), text = el("div");
             const requestLink = link("View interaction", "request", { request: scenario.scenarioId }, "request-link text-link");
             const source = sessionSource(scenario.sourceSessionId);
-            const identity = el("p", "report-entry-meta");
-            identity.append(el("strong", "", "Chat "), document.createTextNode(source?.name || scenario.sourceSessionName || "Name not recorded"));
-            text.append(textAccess.render(scenario.userPrompt, { key: "report:" + scenario.scenarioId, navigationNode: requestLink, originKind: authorship.originKind(scenario) }), identity);
+            const prompt = textAccess.render(scenario.userPrompt, { key: "report:" + scenario.scenarioId, navigationNode: requestLink, originKind: authorship.originKind(scenario) });
+            prompt.querySelector(".full-text-preview-state")?.remove();
+            const heading = el("div", "report-prompt-heading");
+            heading.append(prompt.querySelector(".full-text-provenance"), prompt.querySelector(".full-text-actions"));
+            prompt.prepend(heading);
+            const identity = el("dl", "report-entry-meta"), chatName = source?.name || scenario.sourceSessionName;
+            if (chatName) identity.append(cardFact("Copilot Chat", chatName));
+            const outcomes = results.entries("tool", results.summarize(fullRowsFor(scenario.scenarioId, "tool")));
+            if (outcomes?.length) {
+                const values = el("span");
+                for (const outcome of outcomes) {
+                    if (values.childNodes.length) values.append(document.createTextNode(" · "));
+                    const value = el("span", "request-card-outcome", `${count(outcome.count)} ${outcome.label}`);
+                    value.dataset.outcome = outcome.key;
+                    values.append(value);
+                }
+                identity.append(cardFact("Work IQ calls", values));
+            }
+            const moment = requestTiming.entry(scenario, applied.timeContext);
+            if (moment.label !== "Request time") identity.append(cardFact(moment.label === "Message recorded" ? "Recorded" : moment.label, moment.value));
+            text.append(prompt, identity);
             if (picking) {
                 const checkbox = selectionCheckbox(scenario, true);
                 checkbox.disabled = reportRequestSelection(scenario.scenarioId).disabled;
@@ -4695,7 +4836,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         review.disabled = true;
         review.dataset.reviewControl = "";
         checkbox.addEventListener("change", () => { review.disabled = !checkbox.checked || !draft.current(operation); });
-        const confirm = button("Save report locally", async () => {
+        const confirm = button("Save report", async () => {
             if (exportWriting || isLoading || isStale || !ensureCurrentTime() || !draft.current(operation) || activePreview?.privacy?.reviewerConfirmed !== true || !reportJourney.isReviewOpen()) return;
             confirm.disabled = true;
             ux.pending(confirm, true);
@@ -4942,7 +5083,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             savedReportSearch: "Clear saved report search", reportRequestSearch: "Clear report request search",
         })[id]);
         $(id).addEventListener("input", () => {
-            route = { ...route, localSearch: { ...route.localSearch, [id]: $(id).value } };
+            const localSearch = { ...route.localSearch, [id]: $(id).value };
+            route = { ...route, localSearch,
+                ...(id === "reportRequestSearch" && route.view === "request" && underlyingRoute().view === "reports"
+                    ? { returnToResults: { ...underlyingRoute(), localSearch } } : {}) };
             rememberRoute(route, true); appliedRoute = { ...route };
             syncLocalSearchFields();
             if (id === "settingsSearch") renderSettingsSearch();
@@ -5085,6 +5229,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     // The shared panel stays put; the plot's top changes with mode-specific heading controls.
     viewKey($("chart").closest(".analyze-chart-main"), "chart");
     reportJourney = createReportJourney({
+        presentStep: presentReportStep,
+        requestStep: resume => !guardDeparture(resume),
         onStateChange: () => { renderStoredRefresh(); renderReportTask(); updateRequestReportActions(); },
         root: $("reportsView"), cancelReview: invalidatePreview, clearSelection: clearReportSelection,
         readCurrent: () => load(),
@@ -5096,6 +5242,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         icon: name => ux.icon(name),
         utility: (...args) => ux.utility(...args),
     });
+    ux.tooltip($("exportBtn"), () => $("exportBtn").textContent);
     reportComparisonUI = assessmentFactories.mountComparison($("comparisonWorkspace"), {
         api, renderer: assessmentFactories.createReportComparison(), timeContext: () => viewerTime,
         refresh: () => load({ background: true }), onError: message => announce(message, "error"),

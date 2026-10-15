@@ -48,7 +48,7 @@ async function save(page) {
     await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
 }
 async function history(page) {
@@ -177,7 +177,7 @@ test("UX-003 deleting the displayed saved report removes its ready result", { ti
     await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     await openReportLibrary(page);
     await page.locator("#bundleList details > summary").first().click();
@@ -310,7 +310,7 @@ test("UX-003 a delayed export receipt cannot claim a report deleted before the r
     await chooseReportScope(page, "all"); await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await pending;
     const saved = (await loadBoardState(context)).exports.at(-1);
     const other = await page.context().newPage();
@@ -385,7 +385,7 @@ test("UX-003 confirmed save with failed availability refresh stays explicit and 
     await page.locator(".attestation input[data-review-control]").check();
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Synthetic saved-list read unavailable" } }), { times: 1 });
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     assert.match(await page.locator("#reportJourneyError").textContent(), /save was confirmed.*availability could not be checked.*do not save it again/);
     assert.match(await page.locator("#message").textContent(), /use Retry without repeating the save/);

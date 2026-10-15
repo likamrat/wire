@@ -162,20 +162,52 @@ Pass-share colors use versioned presentation bands: below 50%, 50% to below 75%,
 The **Activity -> Contents -> Review & save** flow stays deliberate and empty-first.
 Activity chooses Selected/Current/All membership and prompt authors, with an in-task
 interaction picker. Counts use the full canonical population across all pages and
-distinguish included chats from interactions. Contents holds the existing prompt modes,
-optional linked text and four formats. Reports navigation still opens the library.
+distinguish included chats from interactions. **Continue to contents** opens **Report
+setup** in the same right sidebar used for interaction details. The Activity picker
+stays visible and interactive beside it on desktop. Setup holds the existing prompt
+modes, optional linked text, four formats and additional masking. Reports navigation
+still opens the library.
+
+Picker checkboxes only select; **View interaction** only inspects. Inspecting while
+setup is open replaces that panel's content, not the picker or draft. **Back to report
+setup** restores the same fields, reading position and focus. In Selected scope,
+Add/Remove uses canonical membership and keeps hidden selections. Current/All and
+paired-period peeks explain inclusion instead of offering a misleading membership
+toggle; return to Activity (or Change comparison in Analyze) to change their scope.
+Author exclusions still apply to all included calls, scores and optional context.
+These Back actions are creation-specific. Inspecting an interaction from Search
+while browsing the saved library keeps the existing Add/Continue to report actions.
+
+The picker uses the same regular prompt and equal-weight fact conventions as the
+interaction reader. Its bounded prompt surface carries the leading edge; the author
+and View/Read controls stay aligned with selection. Read expands the exact retained
+text, including partial fragments, without reconstructing missing text. Optional facts
+show Copilot Chat, full-interaction Work IQ outcomes and qualified time when known,
+not only the calls matching the current Analyze filter. Missing metadata is omitted;
+missing prompt text and unverified authors remain explicit.
+
+Closing setup keeps its memory-only choices without a confirmation. Continue to
+contents reopens it; picker search and pagination do not close it or clear selection.
+Only unsaved personal feedback in an interaction peek uses the inline Discard changes /
+Keep editing guard. It is not a report-draft Save/Discard gate. On narrow or enlarged
+views the same sidebar is a modal overlay: use Back to activity or Close to reach the
+picker, rather than interacting through the overlay.
 
 Each stage has a local Back/next action area. Missing prerequisites appear there;
 scope/exclusion detail is supporting information, not another gate. Optional
 classification actions remain outside report creation. Reports has no analytical Reset.
 
-Review presents the actual document with flat Report/Text/Files views. Text copies
+Prepare report runs the existing local preview controller. Its loading/error state
+and the actual prepared document occupy the main workspace, with the sidebar closed
+for reading room. Review presents flat Report/Text/Files views. Text copies
 and privacy findings stay available without nested comparison disclosures.
-**Approve for local saving** records disclosure; **Save report locally** is a
+**Approve for local saving** records disclosure; the text-only **Save report** is a
 separate action in that same reading workspace, not a fourth page repeating scope.
-Back to Contents retains an unchanged prepared snapshot.
+Back to contents reopens setup and retains an unchanged prepared snapshot. Changing
+membership, options or source authority invalidates that review as before; copy
+edits/omissions require Rebuild preview and a fresh disclosure approval.
 
-**Prompt authors in this report** is an explicit membership choice in Activity, separate from
+**Prompt authors** is an explicit membership choice in Activity, separate from
 No prompts / Masked / Original. It intersects the chosen Selected requests, Current view or All
 collected activity base scope. Your-only excludes agent-originated and unverified interactions,
 including their complete calls and scores; select the unverified category explicitly to include it.
@@ -387,6 +419,29 @@ styling; comparison layout and all saved artifact bytes remain unchanged.
 calls `reviewed()`, without moving the document. The separate Save transition owns
 the local write. Contents alone is not an active review and does not defer reads.
 No report persistence, schema, preview/review/export endpoint or permission contract changes.
+
+The journey's `presentStep` callback supplies the existing Contents node and action
+footer to the shared presentation host. These nodes are moved, not cloned or rebuilt;
+inactive content remains mounted in a hidden parking host so existing field handlers
+and IDs stay authoritative. The client keeps one report-owned setup return context,
+containing only focus/scroll and the interaction-return intent. The shell has no report
+selection, consent or receipt state. `requestStep` admits a transition through the
+existing personal-feedback departure guard before changing the journey. The setup
+host owns its visibility during the exit glide: fields and footer stay painted
+until it closes, then focus returns to the main journey unless newer user input
+has already moved it.
+If setup replaces an interaction that is still exiting, the presenter first settles
+that interaction's cleanup and native-history ownership. The new form must not
+inherit an inert panel or a deferred cleanup that can erase its footer.
+Browser Back from report creation restores the existing caller reading anchor before
+focusing the returned interaction. Viewport/text adaptation retains its pre-reflow
+position while ordinary main-workspace scrolling updates that position. Unchanged
+accepted summaries are not repainted on Close; pending summaries still resume after
+the exiting owner releases them.
+Revisiting an already-opened setup remains possible after its last member is removed;
+zero or unavailable membership still blocks preparation. Neither Close nor a field
+change prepares, approves or saves anything. A pending/unknown dispatched save cannot
+be cleared or called cancelled by panel navigation; only its original receipt settles it.
 
 Prepared frames reuse the existing frozen-document sanitizer and restrictive CSP.
 Only these frames permit `allow-same-origin`, so trusted parent code can measure

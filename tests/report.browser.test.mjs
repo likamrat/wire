@@ -66,7 +66,7 @@ test("synthetic full report journey: choices, comparisons, current review, all f
         assert.deepEqual(preview.formats, ["html", "pdf", "json", "markdown"]);
         assert.equal((await loadBoardState(context)).exports.length, mode === "masked" ? 0 : mode === "none" ? 1 : 2);
         assert.equal(await page.locator("#reportStage3").isVisible(), true);
-        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isVisible(), false);
+        assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
         assert.equal(await page.frameLocator(".report-frame").locator("script,img,iframe").count(), 0);
         assert.equal((await page.frameLocator(".report-frame").locator(".report-brand h1").innerText()).replace(/\s+/g, " ").trim(), "WIRE Activity report");
         assert.equal(await page.frameLocator(".report-frame").getByRole("heading", { level: 1, name: "WIRE Activity report", exact: true }).count(), 1);
@@ -88,7 +88,7 @@ test("synthetic full report journey: choices, comparisons, current review, all f
             await page.locator(".prompt-comparison").first().getByText("Edit or omit this report copy", { exact: true }).click();
             await page.locator(".prompt-comparison textarea").first().fill("EDITED_BROWSER_COPY\npassword='EDIT_SECRET'");
             await page.getByRole("button", { name: "Rebuild preview", exact: true }).waitFor();
-            assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isVisible(), false);
+            assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
             const rebuilt = page.waitForResponse((response) => response.url().endsWith("/api/preview"));
             await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
             preview = await (await rebuilt).json();
@@ -108,10 +108,10 @@ test("synthetic full report journey: choices, comparisons, current review, all f
             assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
         }
         await page.locator(".attestation input[data-review-control]").check();
-        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isVisible(), false);
+        assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
         await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
         await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-        await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+        await page.getByRole("button", { name: "Save report", exact: true }).click();
         await page.locator("#reportsView[data-report-phase=saved]").waitFor();
         await openReportLibrary(page);
         const saved = await loadBoardState(context), latest = saved.exports.at(-1);

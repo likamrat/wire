@@ -107,7 +107,7 @@ test("Reports opens directly on the library and switching to creation preserves 
     assert.match(page.url(), /task=create/);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-step"), "3");
-    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isEnabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isEnabled(), true);
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), true);
     assert.equal(requests.slice(countBefore).some(url => ["/api/cancel-preview", "/api/preview", "/api/export"].includes(url)), false);
     assert.equal(requests.filter(url => url === "/api/preview").length, 1, preview.previewId);

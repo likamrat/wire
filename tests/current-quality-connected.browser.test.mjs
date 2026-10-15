@@ -174,7 +174,7 @@ test("persisted model results stay connected through Home, Activity, interaction
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     const exported = page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     assert.equal((await exported).status(), 200);
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     const saved = (await loadBoardState(f.context)).exports.at(-1);

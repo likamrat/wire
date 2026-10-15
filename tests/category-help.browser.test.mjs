@@ -178,5 +178,5 @@ test("filter, result, evidence and report explanations have discoverable help wi
     await inspectReportCopies(page);
     assert.match(await page.locator(".prompt-review-summary").innerText(), /Originals stay unchanged; edits affect this report only/);
     assert.equal(await page.locator("#reportStage3").isVisible(), true);
-    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true, includeHidden: true }).isDisabled(), true);
 }));

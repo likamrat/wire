@@ -119,7 +119,7 @@ test("chat wording across the real date, analysis, result, request, report and i
     await page.locator("#reportsView[data-report-phase=ready]").waitFor();
     assert.match(await page.locator("#reportScopeChoiceHelp").textContent(), /interactions you choose/);
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
-    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true, includeHidden: true }).isDisabled(), true);
     await navigateMain(page, "settings"); await ready(page);
     await page.waitForResponse(response => response.url().endsWith("/api/collection/status"));
     assert.match(await page.locator("#connectionTitle").locator("..").innerText(), /GitHub Copilot chat source/);

@@ -345,7 +345,7 @@ test("reader report actions cannot change a dispatched save or an unconfirmed wr
         await route.fetch();
         arrived(); await held; await route.abort("failed");
     }, { times: 1 });
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click(); await pending;
+    await page.getByRole("button", { name: "Save report", exact: true }).click(); await pending;
     const selection = await page.locator("#activitySelectionSummary").textContent();
     await page.goBack();
     await expect(page.locator("#reportsView")).toBeVisible();
@@ -398,14 +398,13 @@ test("reader cannot replace paired report cohorts with individual selection", { 
     const scope = await page.locator("#periodReportScope").textContent();
     await page.locator("#reportList").getByRole("link", { name: "View interaction", exact: true }).first().click(); await ready(page);
     await expect(page.locator("#requestReportToggle")).toBeDisabled();
-    await expect(page.locator("#requestReportContinue")).toBeDisabled();
+    await expect(page.locator("#requestReportToggle")).toBeHidden();
+    await expect(page.locator("#requestReportContinue")).toHaveText("Back to activity");
     const location = page.url();
-    for (const id of ["requestReportToggle", "requestReportContinue"]) {
-        await page.locator("#" + id).evaluate(node => node.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    }
+    await page.locator("#requestReportToggle").evaluate(node => node.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     assert.equal(page.url(), location);
     await expect(page.locator("#message")).toContainText("paired periods");
-    await page.locator("#closeContextSidebar").click(); await ready(page);
+    await page.getByRole("button", { name: "Back to activity", exact: true }).click(); await ready(page);
     assert.equal(await page.locator("#periodReportScope").textContent(), scope);
     assert.equal(requests.filter(value => ["/api/preview", "/api/privacy-review", "/api/export"].includes(value)).length, 0);
     const after = await loadBoardState(context);
@@ -608,7 +607,7 @@ test("clear discards per-copy edits and attestation, including late previews and
     const fresh = await preview(page);
     assert.ok(!JSON.stringify(fresh.records).includes("EDITED_SELECTION_COPY"));
     assert.deepEqual(requests.filter(request => request.path === "/api/preview").at(-1).body.options.overrides, []);
-    const confirm = page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true });
+    const confirm = page.getByRole("button", { name: "Save report", exact: true, includeHidden: true });
     assert.equal(await confirm.isDisabled(), true);
     await page.locator(".attestation input[data-review-control]").check();
     assert.equal(await confirm.isDisabled(), true);
@@ -673,7 +672,7 @@ test("selection summaries and shared pills stay compact and unclipped in light/n
         assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 18 interactions");
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `reports-included-${theme}-${width}.png`), fullPage: true });
         await reportContents(page);
-        const report = await page.locator("#reportStage2 .report-stage-actions").evaluate(node => {
+        const report = await page.locator("#contextSidebarFooter .report-stage-actions").evaluate(node => {
             const box = node.getBoundingClientRect();
             const button = node.querySelector("#exportBtn"), style = getComputedStyle(button);
             return { left: box.left, right: box.right, overflow: node.scrollWidth > node.clientWidth, buttonHeight: button.getBoundingClientRect().height, radius: style.borderRadius,
@@ -683,6 +682,7 @@ test("selection summaries and shared pills stay compact and unclipped in light/n
         assert.equal(report.overflow, false);
         assert.equal(report.radius, report.expectedRadius);
         assert.equal(report.buttonHeight, 44);
+        await page.locator("#closeContextSidebar").click();
         await navigateMain(page, "activity"); await ready(page);
         await selectActivityOption(page, "serviceFilter", "Calendar"); await ready(page);
         const metrics = await page.evaluate(() => {

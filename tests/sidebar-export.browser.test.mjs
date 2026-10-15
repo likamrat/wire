@@ -104,7 +104,7 @@ test("sidebar and mobile drawer enter Reports without a global export action and
     assert.equal(allPreview.records.length, 18);
     assert.deepEqual(allPreview.formats, ["html", "pdf", "json", "markdown"]);
     assert.equal(allPreview.timeContext.timeZone, "America/Los_Angeles");
-    const confirm = page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true });
+    const confirm = page.getByRole("button", { name: "Save report", exact: true, includeHidden: true });
     assert.equal(await confirm.isDisabled(), true);
     await page.locator(".attestation input[data-review-control]").check();
     assert.equal(await confirm.isDisabled(), true);

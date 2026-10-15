@@ -92,7 +92,7 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
     await page.locator(".report-frame").evaluate(node => { window.preparedFrameBeforeApproval = node; });
-    assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true }).isVisible(), false);
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.locator(".attestation input[data-review-control]").check();
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
@@ -109,7 +109,7 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
         await page.getByRole("button", { name: "Review & save", exact: true }).click();
         await page.screenshot({ path: path.join(proofs, "06-approved-in-place.png") });
     }
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     const saved = (await loadBoardState(context)).exports;
     assert.equal(saved.length, 1);

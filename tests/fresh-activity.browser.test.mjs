@@ -365,11 +365,11 @@ test("first Home through approved fresh collection, selected dates, exact reques
     }
     async function approveAndSave() {
         assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false, "No disclosure approval is borrowed");
-        assert.equal(await page.getByRole("button", { name: "Save report locally", exact: true, includeHidden: true }).isDisabled(), true);
+        assert.equal(await page.getByRole("button", { name: "Save report", exact: true, includeHidden: true }).isDisabled(), true);
         await page.locator(".attestation input[data-review-control]").check();
         await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
         await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
-        await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+        await page.getByRole("button", { name: "Save report", exact: true }).click();
         await page.locator("#reportsView[data-report-phase=saved]").waitFor(); await ready(page);
     }
     await page.goto(app.runtime().url); await ready(page);

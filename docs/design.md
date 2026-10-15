@@ -855,16 +855,41 @@ selection now has a plain, paginated in-task picker; changing its local search
 does not change membership. Hidden selections stay included. Scope details are
 available below the task, while unrelated classification actions remain in Analyze.
 
-Contents carries one concise scope/count line, the existing three text modes,
-optional linked requests/replies, additional masking and four formats. Explanations
-describe consequences beside the choice, not through an icon on every field.
-**Prepare report** performs no save. Formats become a single column when necessary
-so labels such as Markdown do not break into fragments.
+Picker rows place the regular retained prompt on a subtle bounded surface with its
+leading edge on the text, not on the author label. The checkbox aligns with the author
+and View/Read actions; narrow or enlarged layouts give the prompt the full row width.
+Full-text access, exact copying, partial/missing text and unverified-author explanations
+remain with the existing text-access controls. Compact equal-weight facts use
+**Copilot Chat**, full-interaction Work IQ outcomes and qualified recorded/first-action
+time when known; they do not add Model/Final response or empty-fact recitals.
+**Find an interaction** is the visible list label, **Prompt authors** is the short
+membership label, and empty selection has one clear instruction.
 
-Review gives the actual prepared document natural page height. Flat
+**Continue to contents** opens Report setup in the existing right sidebar while
+Activity, its scope/authors and canonical picker remain interactive in the main
+workspace on desktop. One mounted form carries the concise scope/count line, existing
+three text modes, optional linked requests/replies, additional masking and four formats.
+The fixed footer offers **Back to activity** and **Prepare report**. Setup fields
+respond to the panel's own width; the same form becomes a native modal overlay when
+both columns cannot fit, including narrow and enlarged-text views.
+
+Inspecting a picker interaction replaces only the sidebar content. **Back to report
+setup** restores its fields, scroll and focus without tabs, cloned forms or another
+report controller. Checkboxes select; inspection never selects. Current/All and
+paired-period membership remain fixed by their scope rather than silently becoming
+Selected. Close keeps the memory-only draft, and picker search/page changes do not
+dismiss setup. Only unsaved personal feedback in a peek needs Discard / Keep editing.
+Fields and footer remain painted through an exit, then main-workspace focus returns.
+Browser Back from creation restores the original interaction's main-workspace anchor;
+narrow/doubled-text adaptation preserves it without suppressing deliberate page scrolling.
+Replacing an exiting interaction first settles its old cleanup/history ownership.
+No field change, Close or return action scans, approves or saves.
+
+Preparation closes the sidebar and gives the actual document full main-workspace
+width and natural page height. Flat
 **Report / Text / Files** inspection views retain copy editing, omissions and
 privacy findings; the sticky inspection bar links directly to the decision area.
-**Approve for local saving** and **Save report locally** remain separate guarded
+**Approve for local saving** and text-only **Save report** remain separate guarded
 actions in the same workspace. Approval updates the exact manifest without replacing
 the reading document. There is no fourth Save screen or repeated scope inventory.
 Changed evidence/text still requires rebuilding and a new explicit approval.
@@ -2514,7 +2539,7 @@ truncated. Plain-text/JSON reports do not carry visual title styling.
 | Request | Selected result marked within bounded retained prompts, calls, known failure reasons and authorized replies | Text opens immediately with original roles, inferred-association limits and missing evidence. Exact arguments and original per-group counts/verdicts remain secondary. | Follow the available back-and-forth without another context gate, guessed task boundaries or new source reads. |
 | Collection status | Collector state and next step, readable/eligible coverage, Chat history gap summary and compact search | Closed short reason groups, six chats per page; closed Technical details for inventory, exclusions, limits and stored refresh. Home check results and Activity link here. | Know whether collection is working, inspect missing activity when relevant and avoid treating every gap as a repair task. |
 | Settings | Connection & updates, Privacy & saved data, AI reviews, Display, Troubleshooting | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
-| Reports | Current-stage work, inclusion counts, Clear selection in Activity and three-step navigation | Activity chooses scope/authors; Contents chooses text/formats; Review & save displays the actual copies. The interaction picker has four rows per page; saved history has six. | Choose activity first, then contents. Approve disclosure and separately save in the same reading workspace. |
+| Reports | Activity and actual document review in main; Contents in the shared contextual sidebar | Activity keeps scope/authors, counts, Clear selection and its four-row picker. Setup and interaction peeks share one panel; saved history remains separate with six rows per page. | Choose activity, configure contents, then review at full width. Approve disclosure and separately Save report. Closing setup keeps the draft. |
 | Review and save | The frozen document leads; Text and Files retain exact-copy inspection, limits and an unchecked attestation. | Text shows one original/copy pair per page, retaining edits when paging. Approval enables the separate Save action in this same workspace; completion offers Open and downloads. | Read and approve the copies, then deliberately save; paging or changing stages never grants consent. |
 
 Summary outcomes cover all matching actions, not just the visible result page.
@@ -3382,9 +3407,9 @@ not the current failure/date slice. Those IDs remain fixed as new requests arriv
 The source chat/project context stays visible before review.
 
 The numbered stages are **Activity**, **Contents**, **Review & save**. Membership
-comes before text and format choices. **Prepare report** opens the actual flowing
-document; explicit disclosure approval and the separate Save action stay there.
-Flat Text/Files inspection remains available without a modal over the sidebar.
+stays in the main workspace beside contextual text/format setup. **Prepare report**
+closes setup and opens the actual flowing document in main; explicit disclosure
+approval, separate Save report and flat Text/Files inspection stay there.
 Counts distinguish included interactions from saved report history; zero is a
 missing selection, not a failed result. All is a deliberate opt-in, usable without
 progressing dozens of cards through review states. It means available eligible

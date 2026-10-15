@@ -78,6 +78,14 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     assert.ok((await page.getByRole("button", { name: "Change comparison in Analyze", exact: true }).boundingBox()).height >= 44);
     await expect(page.locator("#reportPopulationNote")).toContainText("Period A: 3 matching records; Period B: 4");
     await reportContents(page);
+    await expect(page.locator("#contextSidebarBody #reportStage2")).toBeVisible();
+    await expect(page.locator("#reportList input")).toHaveCount(0);
+    await page.locator("#reportList .request-link").first().click();
+    await expect(page.locator("#requestReportToggle")).toBeHidden();
+    await expect(page.locator("#requestReportTitle")).toContainText("fixed paired periods");
+    await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
+    await expect(page.locator("#contextSidebarBody #reportStage2")).toBeVisible();
+    await expect(page.locator("#reportPopulationNote")).toContainText("Period A: 3 matching records; Period B: 4");
     await page.locator("#formatOptions input[value=json]").check();
     await page.locator("#formatOptions input[value=markdown]").check();
     await page.locator("#formatOptions input[value=pdf]").check();
@@ -142,7 +150,7 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
         await route.abort("failed");
     });
     const savedResponse = lostSaveResponse ? null : page.waitForResponse(response => response.url().endsWith("/api/export"));
-    await page.getByRole("button", { name: "Save report locally", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
     if (lostSaveResponse) {
         await expect(page.getByRole("button", { name: "Check save status", exact: true })).toBeVisible();
         await page.getByRole("button", { name: "Check save status", exact: true }).click();
