@@ -227,8 +227,8 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
         if (format === "json") assertFrozenPair(document.snapshot.periodComparison, live, initial.pseudonymKey);
     }
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await expect(page.locator(".saved-report-dialog")).toBeVisible();
-    await expect(page.frameLocator(".saved-report-dialog iframe").locator("#numbers")).toContainText("4");
+    await expect(page.locator("#savedReportReader")).toBeVisible();
+    await expect(page.frameLocator("#savedReportReader iframe").locator("#numbers")).toContainText("4");
     assert.deepEqual(errors, []); assert.deepEqual(denied, []);
     if (process.env.WIRE_PERIOD_F12_PROOFS) {
         await mkdir(process.env.WIRE_PERIOD_F12_PROOFS, { recursive: true });

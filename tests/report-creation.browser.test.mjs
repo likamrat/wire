@@ -121,9 +121,9 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
     }
     await capture("07-saved");
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await page.frameLocator(".saved-report-dialog iframe").locator("h1").waitFor();
+    await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
     await capture("08-frozen-reader");
-    await page.getByRole("dialog", { name: "Saved report", exact: true }).getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.getByRole("region", { name: "Saved report", exact: true }).getByRole("button", { name: "Back to report library", exact: true }).click();
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), true, "The reader's library action returns directly to the library after saving");
     await capture("09-library");
     await page.getByRole("link", { name: "Create a report", exact: true }).click();

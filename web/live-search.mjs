@@ -123,8 +123,6 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-meta {display:flex;gap:4px 6px;flex-wrap:wrap;align-items:center}
 .wire-search-kind {color:var(--ink)}
 .wire-search-paging:not(:empty) {padding:8px;font-size:var(--type-caption)}
-.wire-search-document pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font);line-height:var(--leading-ui)}
-.wire-search-document .report-frame {width:100%;min-height:65vh;border:1px solid var(--rule)}
 @media(max-width:600px) {
  .wire-search-entry {flex-basis:100%;max-width:none}
  .wire-search-filters {align-items:stretch}
@@ -168,7 +166,7 @@ export function createFrozenReportFrame(html, doc = document) {
     return frame;
 }
 
-export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, presentHit }) {
+export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, presentHit }) {
     const $ = id => document.getElementById(id);
     const input = $("wireSearch"), panel = $("wireSearchPanel"), list = $("wireSearchResults");
     const home = $("wireSearchHome");
@@ -176,7 +174,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
     const lists = { matches: list };
     const pagers = { matches: $("wireSearchPaging") };
     const returns = new Map();
-    let stream, timer, heartbeat, sequence = 0, openId = 0, restore, analysisKey = null, dialog;
+    let stream, timer, heartbeat, sequence = 0, openId = 0, restore, analysisKey = null, documentReturn = null;
     let pages = { matches: 0 }, drawnKeys = { matches: null };
     let connected = false, connecting = false, disposed = false;
     let hidden = document.hidden, resumeVisibleQuery = false;
@@ -227,9 +225,9 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
             : "Search your saved activity and reports. This does not collect new data.";
     }
     function eraseDocument() {
+        if (documentReturn) returns.delete(documentReturn);
+        documentReturn = null;
         onInvalidateOpen();
-        if (dialog) dialog.querySelector(".assessment-dialog-body").replaceChildren(el("p",
-            "The available content changed. Return to Search and open this item again."));
     }
     function fail(message = "Search disconnected. Results were cleared; reconnect to read current items.") {
         connected = connecting = resumeVisibleQuery = false;
@@ -382,6 +380,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         });
     }
     function schedule(resetPage = true) {
+        if (documentReturn) eraseDocument();
         clearTimeout(timer);
         if (!input.value.trim()) resumeVisibleQuery = false;
         openId++;
@@ -424,41 +423,17 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         }
     }
     async function showOpened(value, receipt, id) {
+        const returnKey = history.state?.wireSearchReturn;
+        const isCurrent = () => !disposed && !document.hidden && connected && id === openId && contract.sameReceipt(receipt, ownedReceipt());
         hide();
-        await navigate(value.kind === "route" ? value : { kind: "route", href: "#reports" });
-        if (id !== openId || !contract.sameReceipt(receipt, ownedReceipt())) return;
+        if (value.kind === "route") await navigate(value);
+        else if (isCurrent()) {
+            documentReturn = returnKey;
+            if (!await presentDocument(value, { isCurrent, returnKey })) return;
+        }
+        if (!isCurrent()) return;
         const { wireSearchReturn, ...next } = history.state || {};
         history.replaceState(next, "");
-        if (value.kind === "route") return;
-        if (!["html", "json", "markdown", "pdf"].includes(value.kind)) throw new Error("Unsupported verified saved-file format.");
-        const label = value.artifact?.kind === "comparison" ? "Saved comparison"
-            : value.artifact?.reportType === "period-comparison" ? "Saved period comparison report" : "Saved report";
-        dialog?.close();
-        dialog = el("dialog", undefined, "assessment-dialog saved-report-dialog wire-search-document");
-        dialog.setAttribute("aria-label", label);
-        const heading = el("div", undefined, "dialog-head"), body = el("div", undefined, "assessment-dialog-body");
-        heading.append(el("h2", label + " / " + value.kind.toUpperCase()),
-            button("Back to search", () => history.back()));
-        body.append(el("p", "Verified frozen saved copy. Nothing was regenerated."));
-        if (value.artifact?.sourceReports?.some(source => !source.available)) body.append(el("p",
-            "An original report is no longer available. This independently reviewed saved copy is unchanged."));
-        if (value.kind === "html") {
-            const frame = frozenFrame(value.text);
-            frame.title = "Frozen " + label.toLowerCase();
-            body.append(frame);
-        }
-        else if (["json", "markdown"].includes(value.kind)) body.append(el("pre", value.text));
-        else if (value.kind === "pdf") {
-            const bytes = Uint8Array.from(atob(value.data), character => character.charCodeAt(0));
-            const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
-            const anchor = el("a"); anchor.href = url; anchor.download = value.name ?? "product-report.pdf"; anchor.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-            body.append(el("p", "The verified PDF was downloaded by your explicit Open action. No PDF scripting or external resources run in WIRE."));
-        }
-        dialog.append(heading, body); document.body.append(dialog);
-        dialog.addEventListener("cancel", event => { event.preventDefault(); history.back(); });
-        dialog.addEventListener("close", () => { dialog?.remove(); dialog = null; }, { once: true });
-        dialog.showModal(); heading.querySelector("button").focus();
     }
     input.addEventListener("focus", () => { show(); paint(); });
     input.addEventListener("click", () => { if (panel.hidden) { show(); paint(); } });
@@ -485,7 +460,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         }
     });
     function restoreSearch(key) {
-        if (dialog) dialog.close();
+        documentReturn = null;
         const saved = !disposed && returns.get(key);
         if (!saved) { hide(); return false; }
         input.value = saved.query; scope.value = saved.scope; category.value = saved.category;

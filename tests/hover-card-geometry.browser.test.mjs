@@ -233,13 +233,13 @@ test("bounded production hover families retain aligned targets without painting 
         await page.locator("#meaning>summary").click();
         await navigateMain(page, "reports"); await ready(page);
         const saved = page.locator("#bundleList .saved-report");
-        await inspect(saved.locator("summary"), "saved report Manage disclosure");
+        await inspect(saved, "saved report inspection");
         const open = page.locator("#bundleList").getByRole("button", { name: "Open saved report", exact: true });
         await inspect(open, "saved report Open");
         await open.click();
-        await expect(page.frameLocator(".saved-report-dialog iframe").locator("h1")).toHaveText("Sample Lantern report");
+        await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toHaveText("Sample Lantern report");
         const close = page.getByRole("button", { name: "Back to report library", exact: true });
-        await inspect(close, "dialog Close");
+        await inspect(close, "saved report Back");
         await close.click(); await expect(open).toBeFocused();
         await page.locator("#reportCreateLink").click();
         const disabled = page.locator(".report-step:disabled").first();

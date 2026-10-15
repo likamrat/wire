@@ -54,3 +54,29 @@ test("return routes allow only existing local state and one bounded source retur
     assert.equal(journey.returnRoute({ view: "https://elsewhere.invalid" }), null);
     assert.equal(journey.returnRoute(undefined), null);
 });
+
+test("saved workspace routes accept only artifact identities and bounded library state", () => {
+    const journey = createSessionJourney();
+    const id = "export-11111111-2222-4333-8444-555555555555";
+    assert.deepEqual(journey.savedRoute({ view: "reports", bundle: id, inspect: id, task: "create", order: "oldest" }),
+        { view: "reports", bundle: id, order: "oldest" });
+    assert.deepEqual(journey.savedRoute({ view: "reports", inspect: id, order: "oldest" }),
+        { view: "reports", inspect: id, order: "oldest" });
+    assert.deepEqual(journey.savedRoute({ view: "reports", bundle: "private text", inspect: "https://example.invalid", order: "anything" }),
+        { view: "reports" });
+    assert.deepEqual(journey.savedRoute({ view: "analyze", bundle: id, inspect: id, order: "oldest" }), { view: "analyze" });
+    assert.deepEqual(journey.returnRoute({ view: "reports", inspect: id, order: "oldest", localSearch: { savedReportSearch: "private" }, receipt: "secret" }),
+        { view: "reports", inspect: id, order: "oldest", localSearch: { savedReportSearch: "private" } });
+});
+
+test("saved document origins preserve one sanitized interaction and exact-call return without authority", () => {
+    const journey = createSessionJourney();
+    assert.deepEqual(journey.savedOrigin({ view: "request", request: "interaction-a", call: "call-a", callRevision: "7",
+        origin: "reports", receipt: "not-return-state", html: "not-return-state", savedAuthority: "search",
+        returnToResults: { view: "reports", task: "create", localSearch: { reportRequestSearch: "private query" },
+            receipt: "not-return-state", returnToResults: { view: "request", request: "nested" } } }),
+    { view: "request", origin: "reports", request: "interaction-a", call: "call-a", callRevision: "7",
+        returnToResults: { view: "reports", task: "create", localSearch: { reportRequestSearch: "private query" } } });
+    assert.equal(journey.savedOrigin({ view: "request", request: "" }), null);
+    assert.equal(journey.savedOrigin(null), null);
+});

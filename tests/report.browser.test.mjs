@@ -115,15 +115,15 @@ test("synthetic full report journey: choices, comparisons, current review, all f
         await page.locator("#reportsView[data-report-phase=saved]").waitFor();
         await openReportLibrary(page);
         const saved = await loadBoardState(context), latest = saved.exports.at(-1);
-        const savedRow = page.locator(`#bundleList details[data-disclosure-key="bundle:${latest.bundleId}"]`);
-        await savedRow.locator(":scope > summary").click();
+        const savedRow = page.locator(`#bundleList [data-bundle-id="${latest.bundleId}"]`);
+        await savedRow.locator(".saved-report-summary").click();
         const download = page.waitForEvent("download");
-        await savedRow.getByRole("button", { name: "Download product-report.json", exact: true }).click();
+        await page.locator("#contextSidebar").getByRole("button", { name: `Download product-report.json for ${latest.bundleId}`, exact: true }).click();
         const item = await download;
         const downloaded = JSON.parse(await readFile(await item.path(), "utf8"));
         assert.equal(downloaded.promptMode, mode);
         assert.deepEqual(downloaded.records, preview.records);
-        await page.locator("#savedLibraryTitle").click();
+        await page.locator("#closeContextSidebar").click();
     }
     assert.deepEqual(await readFile(path.join(context.dataDir, "private-evidence", initial.evidenceFile)), originalBytes);
     assert.deepEqual((await loadBoardState(context)).cards, initial.cards);

@@ -213,10 +213,10 @@ test("help wraps long content without moving its summary and library reads retai
         await page.locator("#savedLibraryManagement > summary").click();
         const open = page.getByRole("button", { name: "Open saved report", exact: true }).first();
         await open.click();
-        await page.frameLocator(".saved-report-dialog iframe").getByRole("heading", { name: "Invented report 2", exact: true }).waitFor();
-        await page.keyboard.press("Escape");
-        await page.locator(".saved-report-dialog").waitFor({ state: "detached" });
-        assert.equal(await page.locator(".saved-report-dialog").count(), 0);
+        await page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: "Invented report 2", exact: true }).waitFor();
+        await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+        await page.locator("#savedReportReader").waitFor({ state: "hidden" });
+        assert.equal(await page.locator("#savedReportReader iframe").count(), 0);
         assert.equal(await open.evaluate(node => node === document.activeElement), true);
         let release;
         const gate = new Promise(resolve => { release = resolve; });

@@ -1,5 +1,5 @@
 // The report controller owns facts, privacy approval, and frozen files.
-export function mountReportComparisonJourney(root, { api, renderer, timeContext, refresh, onError }) {
+export function mountReportComparisonJourney(root, { api, renderer, timeContext, refresh, onError, inspectSource, onRead }) {
     const doc = root.ownerDocument;
     let generation = 0, preview = null, approved = false, writing = false, unknownSave = false, comparison = null, artifacts = [], savedMode = false, savedArtifactId = null, artifactPending = false;
     function el(tag, text, cls) {
@@ -19,10 +19,10 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
     const identities = new Map();
     for (const [text, select] of [["Baseline report", baseline], ["Later report", later]]) {
         const choice = el("div", undefined, "comparison-report-choice"), label = el("label", text);
-        const identity = el("details", undefined, "comparison-report-identity"), detail = el("p", undefined, "comparison-meta");
-        identity.append(el("summary", "Report details"), detail);
+        const identity = button("Inspect " + text.toLowerCase(), event => inspectSource(select.value, event.currentTarget), "quiet comparison-report-identity");
+        identity.dataset.viewKey = "inspect-comparison-source:" + text;
         identity.hidden = true;
-        identities.set(select, { identity, detail });
+        identities.set(select, { identity });
         label.append(select); choice.append(label, identity); selectors.append(choice);
     }
     const status = el("p"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
@@ -85,10 +85,10 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         savedBack.hidden = savedContent.hidden = !savedMode;
         if (savedMode) reviewHost.hidden = true;
         for (const select of [baseline, later]) {
-            const { identity, detail } = identities.get(select);
+            const { identity } = identities.get(select);
             const description = select.selectedOptions[0]?.dataset.detail;
             identity.hidden = !description;
-            detail.textContent = description ?? "";
+            identity.disabled = writing || artifactPending;
         }
     }
     async function cancelPrevious(previous) {
@@ -118,6 +118,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
     reviewCheck.addEventListener("change", () => { approved = false; paint(); });
     async function inspectPair() {
         if (inspect.disabled) return;
+        onRead?.();
         invalidate("");
         const token = ++generation, selected = signature();
         writing = true; message("Reading the two selected reports..."); paint();
@@ -132,6 +133,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
     }
     async function prepareCopy() {
         if (prepare.disabled) return;
+        onRead?.();
         const token = ++generation, selected = signature();
         writing = true; message("Preparing a comparison copy for your review..."); paint();
         try {
@@ -247,7 +249,8 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
             const result = await api("/api/report-artifacts/list", {});
             if (!Array.isArray(result.artifacts)) throw new Error("Saved report choices are unavailable.");
             receive(result.artifacts);
-            message("Select a baseline and a later report. Nothing is selected automatically.");
+            message(unknownSave ? "A comparison save is not confirmed. Read saved comparisons; do not repeat the save."
+                : "Select a baseline and a later report. Nothing is selected automatically.");
         } catch (error) { message(error.message, true); }
     }
     function invalidateSavedReport(bundleId) {

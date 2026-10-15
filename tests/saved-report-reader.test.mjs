@@ -79,13 +79,12 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     await openReportLibrary(page);
-    const rowFor = id => page.locator(".saved-report").filter({ has: page.locator(".mono", { hasText: `Report ID: ${id}` }) });
+    const rowFor = id => page.locator(`[data-bundle-id="${id}"]`);
     const firstRow = rowFor(first.bundleId), secondRow = rowFor(second.bundleId);
-    await firstRow.locator(":scope > summary").click();
-    const open = firstRow.locator("..").getByRole("button", { name: "Open saved report", exact: true });
+    const open = firstRow.getByRole("button", { name: "Open saved report", exact: true });
     await open.click();
-    const dialog = page.getByRole("dialog", { name: "Saved report", exact: true });
-    await page.waitForFunction(() => document.querySelector(".saved-report-dialog iframe,.saved-report-dialog .error"));
+    const dialog = page.getByRole("region", { name: "Saved report", exact: true });
+    await page.waitForFunction(() => document.querySelector("#savedReportReader iframe,#savedReportReader .error"));
     assert.equal(await dialog.locator("iframe").count(), 1, await dialog.innerText());
     await dialog.locator("iframe").waitFor();
     const frame = dialog.frameLocator("iframe");
@@ -97,7 +96,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     assert.equal(await frame.locator("html").getAttribute("lang"), "en");
     assert.equal(await frame.locator("script,base,iframe,meta[http-equiv=refresh]").count(), 0);
     await frame.getByText("External link", { exact: true }).click();
-    assert.equal(page.url(), runtime.url + "#reports");
+    assert.equal(new URL(page.url()).hash.split("?")[0], "#reports");
     const coverage = frame.getByRole("link", { name: "Coverage", exact: true });
     await coverage.click();
     await frame.locator("#coverage").waitFor({ state: "visible" });
@@ -110,7 +109,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     await page.setViewportSize({ width: 375, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     await page.evaluate(() => document.fonts.ready);
-    const headerLayout = await dialog.locator(".dialog-head").evaluate(header => {
+    const headerLayout = await dialog.locator(".saved-reader-heading").evaluate(header => {
         const title = header.querySelector("h2"), close = header.querySelector("button");
         const bounds = node => {
             const { x, y, width, height, right, bottom } = node.getBoundingClientRect();
@@ -131,7 +130,7 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     }
     assert.ok(headerLayout.titleLines <= 2, `Saved report must wrap by words, not characters: ${JSON.stringify(headerLayout)}`);
     assert.ok(headerLayout.header.height <= 240, "The reader header must leave useful space for the frozen document.");
-    assert.ok(headerLayout.title.width >= 100 && headerLayout.close.width >= 100);
+    assert.ok(headerLayout.title.width >= 100 && headerLayout.close.width >= 44);
     assert.equal(headerLayout.overflow, false);
     assert.ok(headerLayout.close.height >= 44 && headerLayout.close.x >= 0 && headerLayout.close.right <= 375);
     assert.ok(headerLayout.close.y >= 0 && headerLayout.close.bottom <= 1000);
@@ -158,16 +157,15 @@ test("saved HTML open is capability-gated, inert, draft-preserving and fences cl
     });
     await open.click(); await read.promise;
     await dialog.getByRole("button", { name: "Back to report library", exact: true }).click();
-    await secondRow.locator(":scope > summary").click();
-    await secondRow.locator("..").getByRole("button", { name: "Open saved report", exact: true }).click();
+    await secondRow.getByRole("button", { name: "Open saved report", exact: true }).click();
     await dialog.locator("iframe").waitFor(); release.resolve();
     await page.waitForTimeout(50);
     assert.match(await dialog.frameLocator("iframe").locator("body").textContent(), new RegExp(second.bundleId));
     assert.equal(await dialog.frameLocator("iframe").getByText("FROZEN_LEGACY_VALUE", { exact: true }).count(), 0);
     await dialog.getByRole("button", { name: "Back to report library", exact: true }).click();
-    const missingRow = rowFor(missing.bundleId); await missingRow.locator(":scope > summary").click();
+    const missingRow = rowFor(missing.bundleId); await missingRow.locator(".saved-report-summary").click();
     assert.equal(await missingRow.getByRole("button", { name: "Open saved report", exact: true }).count(), 0);
-    assert.match(await missingRow.innerText(), /HTML was not saved/);
+    assert.match(await page.locator("#contextSidebar").innerText(), /HTML was not saved/);
     assert.deepEqual(await Promise.all(Object.values(first.files).map(file => readFile(file))), frozen);
     assert.equal((await loadBoardState(context)).exports.length, 3);
     assert.ok(draft.previewId);

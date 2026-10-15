@@ -33,7 +33,7 @@ async function setup(t, count = 1001) {
         });
     }
     await updateBoardState(context, state => { state.exports.push(...entries); });
-    const runtime = await startServer(context, createExportController(context), { port: 0 });
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); runtime.server.closeAllConnections(); await runtime.close(); });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, reducedMotion: "reduce", timezoneId: "UTC" });
@@ -55,18 +55,32 @@ async function shot(page, name) {
 }
 
 test("the library is an immediately readable list with useful scope identity and a direct return from frozen reading", { timeout: 30000 }, async t => {
-    const { page } = await setup(t, 8);
+    const { page, requests } = await setup(t, 8);
+    page.setDefaultTimeout(8000);
     assert.equal(await page.locator("#bundles").evaluate(node => node.tagName), "SECTION");
     assert.equal(await page.locator("#bundleList .saved-report").count(), 6);
     assert.match(await page.locator(".saved-report-summary").nth(1).innerText(), /8 interactions/);
     assert.doesNotMatch(await page.locator("#bundleList").innerText(), /Report ID:/);
     await page.locator("#savedReportSearch").fill("No prompts");
+    const inspect = page.locator(".saved-library-row").filter({ has: page.getByRole("button", { name: "Open saved report", exact: true }) }).first().locator(".saved-report-summary");
+    await inspect.click();
+    await page.getByRole("dialog", { name: "Saved report details", exact: true }).waitFor();
+    assert.equal(requests.includes("/api/report/open"), false, "Selection reads indexed metadata only");
+    assert.match(await page.locator("#contextSidebarBody").innerText(), /Report ID/);
+    await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
+    assert.equal(await page.locator("#contextSidebar").isVisible(), false);
+    assert.equal(await page.locator("#savedReaderTitle").evaluate(node => node === document.activeElement), true);
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.getByRole("dialog", { name: "Saved report details", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
     const open = page.getByRole("button", { name: "Open saved report", exact: true }).first();
     await open.click();
-    await page.frameLocator(".saved-report-dialog iframe").locator("h1").waitFor();
-    assert.equal(await page.locator(".saved-report-dialog iframe").getAttribute("sandbox"), "");
-    assert.doesNotMatch(await page.locator(".saved-report-dialog").innerText(), /Report ID:/);
+    await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
+    assert.equal(await page.locator("#savedReportReader iframe").getAttribute("sandbox"), "");
+    assert.doesNotMatch(await page.locator("#savedReportReader").innerText(), /Report ID:/);
     await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    assert.equal(await page.locator("#contextSidebar").isVisible(), false, "Direct Open does not force an inspector on return");
     assert.equal(await page.locator("#savedReportSearch").inputValue(), "No prompts");
     assert.equal(await open.evaluate(node => node === document.activeElement), true);
 });
@@ -101,7 +115,7 @@ test("Reports opens directly on the library and switching to creation preserves 
     assert.equal(await page.locator(".report-journey").isVisible(), false);
     await page.locator("#savedReportSearch").fill("masked");
     await page.locator("#bundleList").getByRole("button", { name: "Open saved report", exact: true }).click();
-    await page.locator(".saved-report-dialog iframe").waitFor();
+    await page.locator("#savedReportReader iframe").waitFor();
     await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     await page.goBack();
     assert.match(page.url(), /task=create/);
@@ -124,6 +138,7 @@ test("Reports opens directly on the library and switching to creation preserves 
 
 test("Analyze chat create intent, request return and explicit creation deep links bypass the library without losing selection", { timeout: 30000 }, async t => {
     const { page, requests } = await setup(t, 2);
+    page.setDefaultTimeout(8000);
     const origin = new URL(page.url()).origin;
     await page.goto(origin + "/#activity?session=test-session");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
@@ -137,7 +152,7 @@ test("Analyze chat create intent, request return and explicit creation deep link
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
     assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 interaction/);
     await page.locator("#reportList").getByRole("link", { name: "View interaction", exact: true }).click();
-    await page.locator("#contextBack").click();
+    await page.locator("#contextSidebarFooter").getByRole("button", { name: "Back to activity", exact: true }).click();
     assert.match(page.url(), /#reports.*task=create/);
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
     assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 interaction/);
@@ -165,7 +180,7 @@ test("a thousand-report library has bounded rows, direct page navigation, metada
     await page.locator("#savedReportSearch").fill(entries[0].bundleId);
     assert.equal(await page.locator("#bundleList .saved-report").count(), 1);
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await page.frameLocator(".saved-report-dialog iframe").getByRole("heading", { name: "Frozen synthetic report 1", exact: true }).waitFor();
+    await page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: "Frozen synthetic report 1", exact: true }).waitFor();
     await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     assert.equal(await page.getByRole("button", { name: "Open saved report", exact: true }).evaluate(node => node === document.activeElement), true);
     await page.locator("#savedReportSearch").fill("SYNTHETIC_PRIVATE_CONTENT_NEVER_SEARCHED");
@@ -176,10 +191,11 @@ test("a thousand-report library has bounded rows, direct page navigation, metada
     await navigateMain(page, "activity"); await page.goBack();
     assert.match(await page.locator("#bundleList").innerText(), /997-1,002 of 1,002/);
     await page.locator("#savedReportSearch").fill(entries[0].bundleId);
-    await page.locator("#bundleList .saved-report > summary").click();
-    await page.locator("#bundleList").getByRole("button", { name: "Delete report", exact: true }).click();
+    await page.locator("#bundleList .saved-report-summary").click();
+    await page.locator("#contextSidebar").getByRole("button", { name: "Delete report", exact: true }).click();
     await page.locator(".delete-object-confirm:not([disabled])").waitFor();
     await page.locator(".deletion-dialog").getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.locator("#closeContextSidebar").click();
     await page.locator("#savedLibraryManagement > summary").click();
     const previewResponse = page.waitForResponse(response => response.url().endsWith("/api/artifact-deletion/preview"), { timeout: 60000 });
     await page.locator("#deleteAllReports").click();

@@ -102,7 +102,7 @@ test("normal literal fragments and exact anchors open all types and restore Back
         const row = page.locator(`#wireSearchResults button[data-search-bundle="${bundles[index].bundleId}"]`);
         const download = kind === "pdf" ? page.waitForEvent("download") : null;
         await row.click();
-        const dialog = page.locator(".wire-search-document");
+        const dialog = page.locator("#savedReportReader");
         await expect(dialog).toBeVisible();
         if (kind === "html") await expect(dialog.locator("iframe")).toHaveCount(1);
         if (kind === "json" || kind === "markdown") await expect(dialog.locator("pre")).toContainText("physician");
@@ -112,7 +112,7 @@ test("normal literal fragments and exact anchors open all types and restore Back
     }
     await find(page, "Saved comparison", "comparison");
     await page.locator("#wireSearchResults button").first().click();
-    await expect(page.locator(".wire-search-document")).toContainText("Saved comparison");
+    await expect(page.locator("#savedReportReader")).toContainText("Saved comparison");
     await page.goBack();
     const storage = await page.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), history.state]));
     assert.doesNotMatch(storage, /PHYS|physician|lab results|GET \/me|workiq-fet/);
@@ -157,7 +157,7 @@ test("a tampered saved copy refuses opening and leaves an explicit search retry"
     await find(page, "physician", "report");
     await appendFile(bundles[0].files["product-report.json"], "\n");
     await page.locator("#wireSearchResults button").first().click();
-    await expect(page.locator(".wire-search-document")).toHaveCount(0);
+    await expect(page.locator("#savedReportReader")).toBeHidden();
     await expect(page.locator("#wireSearchStatus")).toContainText("changed");
     await expect(page.locator("#wireSearchResults button")).toHaveCount(0);
     await expect(page.locator("#wireSearchRetry")).toBeVisible();
@@ -516,8 +516,8 @@ test("joint: literal matching and legacy scope span both periods through Review 
     await find(page, "Period A", "report");
     await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
     await page.locator("#wireSearchResults button").click();
-    await expect(page.locator(".wire-search-document")).toBeVisible();
-    await expect(page.frameLocator(".wire-search-document iframe").getByRole("heading", { name: /Retained-period comparison report/ })).toBeVisible();
+    await expect(page.locator("#savedReportReader")).toBeVisible();
+    await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: /Retained-period comparison report/ })).toBeVisible();
     if (process.env.WIRE_SEARCH_PROOFS) await page.screenshot({ path: path.join(process.env.WIRE_SEARCH_PROOFS, "joint-frozen.png") });
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator("#wireSearch")).toHaveValue("Period A");
@@ -646,33 +646,33 @@ test("frozen-reader: search opens actual historical comparison HTML and JSON-onl
     assert.equal(file.sha256, reportHash(frozen));
     assert.equal((await (await api("/api/search/status")).json()).indexId, beforeRead.indexId, "A verified file read is not a mutation fence");
     await page.locator(`#wireSearchResults button[data-search-bundle="${html.bundleId}"]`).click();
-    await expect(page.getByRole("dialog", { name: "Saved comparison", exact: true })).toBeVisible();
-    await expect(page.frameLocator(".wire-search-document iframe").locator("#frozen-layout-proof")).toHaveText(marker);
+    await expect(page.getByRole("region", { name: "Saved comparison", exact: true })).toBeVisible();
+    await expect(page.frameLocator("#savedReportReader iframe").locator("#frozen-layout-proof")).toHaveText(marker);
     assert.equal(await readFile(htmlPath, "utf8"), frozen);
     if (process.env.WIRE_SEARCH_PROOFS) {
-        await page.frameLocator(".wire-search-document iframe").locator("#frozen-layout-proof").scrollIntoViewIfNeeded();
+        await page.frameLocator("#savedReportReader iframe").locator("#frozen-layout-proof").scrollIntoViewIfNeeded();
         await page.screenshot({ path: path.join(process.env.WIRE_SEARCH_PROOFS, "frozen-comparison-html.png") });
     }
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator(`#wireSearchResults button[data-search-bundle="${html.bundleId}"]`)).toBeFocused();
     await page.locator(`#wireSearchResults button[data-search-bundle="${json.bundleId}"]`).click();
     const jsonBytes = await readFile(json.files["comparison-report.json"], "utf8");
-    await expect(page.locator(".wire-search-document pre")).toHaveText(jsonBytes);
-    assert.equal(await page.locator(".wire-search-document pre").textContent(), jsonBytes);
-    await expect(page.locator(".wire-search-document iframe")).toHaveCount(0);
+    await expect(page.locator("#savedReportReader pre")).toHaveText(jsonBytes);
+    assert.equal(await page.locator("#savedReportReader pre").textContent(), jsonBytes);
+    await expect(page.locator("#savedReportReader iframe")).toHaveCount(0);
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator(`#wireSearchResults button[data-search-bundle="${json.bundleId}"]`)).toBeFocused();
     await appendFile(htmlPath, "\nUnreviewed change");
     assert.equal((await readSavedComparisonFile(context, await loadBoardState(context), html.bundleId, "json")).format, "json");
     await page.locator(`#wireSearchResults button[data-search-bundle="${html.bundleId}"]`).click();
     await expect(page.locator("#wireSearchStatus")).toContainText("file changed");
-    await expect(page.locator(".wire-search-document")).toHaveCount(0);
+    await expect(page.locator("#savedReportReader")).toBeHidden();
     await expect(page.locator("#wireSearchRetry")).toBeVisible();
     await unlink(htmlPath);
     await page.locator("#wireSearchRetry").click();
     await expect(page.locator("#wireSearchResults button")).toHaveCount(2);
     await page.locator(`#wireSearchResults button[data-search-bundle="${html.bundleId}"]`).click();
     await expect(page.locator("#wireSearchStatus")).toContainText("no longer available");
-    await expect(page.locator(".wire-search-document")).toHaveCount(0);
+    await expect(page.locator("#savedReportReader")).toBeHidden();
     assert.deepEqual(errors, []);
 });

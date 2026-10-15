@@ -290,9 +290,9 @@ test("long exact tables, scan notes and saved history stay bounded with complete
     assert.match(await page.locator("#collectionEvidenceDetails").innerText(), /of 19 scan notes/);
     await navigateMain(page, "reports");
     assert.match(await page.locator("#savedLibraryTitle").innerText(), /\(8\)/);
-    assert.equal(await page.locator("#bundleList details").count(), 6);
+    assert.equal(await page.locator("#bundleList .saved-library-row").count(), 6);
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
-    assert.equal(await page.locator("#bundleList details").count(), 2);
+    assert.equal(await page.locator("#bundleList .saved-library-row").count(), 2);
     for (const [file, bytes] of oldFiles) assert.deepEqual(await readFile(file), bytes);
     assert.equal((await loadBoardState(context)).revision, state.revision);
     const touch = await browser.newPage({ viewport: { width: 375, height: 820 }, hasTouch: true });

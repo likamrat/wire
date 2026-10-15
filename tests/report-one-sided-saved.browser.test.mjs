@@ -99,7 +99,7 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
         await page.locator("#savedReportSearch").fill(bundleId);
     }
-    const item = id => page.locator(`#bundleList details[data-disclosure-key="bundle:${id}"]`);
+    const item = id => page.locator(`#bundleList [data-bundle-id="${id}"]`);
     async function select(label, id) {
         await page.locator("#comparisonWorkspace").getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup .select-option[data-value="${id}"]`).click();
@@ -118,8 +118,8 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
     }
     for (const direction of directions) {
         await showReports(direction.baseline.bundleId);
-        await item(direction.baseline.bundleId).locator(":scope>summary").click();
-        await item(direction.baseline.bundleId).getByRole("button", { name: "Compare saved reports", exact: true }).click();
+        await item(direction.baseline.bundleId).locator(".saved-report-summary").click();
+        await page.locator("#contextSidebar").getByRole("button", { name: "Compare saved reports", exact: true }).click();
         await select("Baseline report", direction.baseline.bundleId);
         await select("Later report", direction.later.bundleId);
         const inspecting = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/inspect"));
@@ -157,10 +157,10 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         assert.deepEqual(await fileHashes(saved), newHashes);
 
         await showReports(direction.legacy.bundleId);
-        await item(direction.legacy.bundleId).locator(":scope>summary").click();
+        await item(direction.legacy.bundleId).locator(".saved-report-summary").click();
         const beforeOpen = await loadBoardState(context);
         const opening = page.waitForResponse(result => result.url().endsWith("/api/artifact-file"));
-        await item(direction.legacy.bundleId).locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
+        await item(direction.legacy.bundleId).getByRole("button", { name: "Open saved comparison", exact: true }).click();
         const openResponse = await opening;
         assert.equal(openResponse.status(), 200, await openResponse.text());
         const document = await openResponse.json();
@@ -178,7 +178,7 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         const afterOpen = await loadBoardState(context);
         assert.deepEqual(afterOpen.exports, beforeOpen.exports, "Compatibility display never rewrites the saved index");
         assert.equal(afterOpen.revision, beforeOpen.revision);
-        const frame = page.frameLocator(".saved-report-dialog iframe");
+        const frame = page.frameLocator("#savedReportReader iframe");
         await frame.locator(".comparison-unavailable > summary").click();
         assert.match(await frame.locator(".report-comparison").innerText(), /Not preserved/);
         assert.match(await frame.locator(".report-comparison").innerText(), /No value has been reconstructed/);
@@ -188,9 +188,9 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
     assert.deepEqual(await Promise.all([withoutFeedback, withFeedback].map(fileHashes)), sourceHashes);
     // Remove only an isolated source bundle: legacy display must still use its embedded copies.
     await showReports(withFeedback.bundleId);
-    await item(withFeedback.bundleId).locator(":scope>summary").click();
+    await item(withFeedback.bundleId).locator(".saved-report-summary").click();
     const deletionPreview = page.waitForResponse(response => response.url().endsWith("/api/artifact-deletion/preview"));
-    await item(withFeedback.bundleId).getByRole("button", { name: "Delete report", exact: true }).click();
+    await page.locator("#contextSidebar").getByRole("button", { name: "Delete report", exact: true }).click();
     assert.equal((await deletionPreview).status(), 200);
     const dialog = page.locator(".deletion-dialog");
     const deletion = page.waitForResponse(response => response.url().endsWith("/api/artifact-deletion/confirm"));
@@ -205,11 +205,11 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         assert.deepEqual(await fileHashes(direction.legacy), direction.legacyHashes);
     }
     await showReports(directions[0].legacy.bundleId);
-    await item(directions[0].legacy.bundleId).locator(":scope>summary").click();
+    await item(directions[0].legacy.bundleId).locator(".saved-report-summary").click();
     const reopened = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
-    await item(directions[0].legacy.bundleId).locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await item(directions[0].legacy.bundleId).getByRole("button", { name: "Open saved comparison", exact: true }).click();
     assert.equal((await reopened).status(), 200);
-    const frozen = page.frameLocator(".saved-report-dialog iframe");
+    const frozen = page.frameLocator("#savedReportReader iframe");
     await frozen.locator(".comparison-unavailable > summary").click();
     assert.match(await frozen.locator(".report-comparison").innerText(), /Not preserved/);
     assert.deepEqual(errors, []);

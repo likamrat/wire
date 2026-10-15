@@ -163,8 +163,8 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     assert.equal(entry.kind, "report"); assert.equal(entry.reportType, "period-comparison");
     const filesBefore = new Map(await Promise.all(Object.entries(entry.files).map(async ([name, file]) => [name, await readFile(file)])));
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
-    await expect(page.locator(".saved-report-dialog")).toBeVisible();
-    await expect(page.frameLocator(".saved-report-dialog iframe").getByRole("heading", { name: /Retained-period comparison report/ })).toBeVisible();
+    await expect(page.locator("#savedReportReader")).toBeVisible();
+    await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: /Retained-period comparison report/ })).toBeVisible();
     await assert.rejects(loadSavedReportSource(context, state, entry.bundleId), /two frozen cohorts/);
     const inventory = await createSavedArtifactDescriptor(context)(state, { artifactKind: "report", artifactId: entry.bundleId });
     assert.equal(inventory.files.length, 5);

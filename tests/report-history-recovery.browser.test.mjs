@@ -28,7 +28,7 @@ async function setup(t, savedCount = 0) {
         await controller.confirm("synthetic-seed", preview.previewId, true);
     }
     if (savedCount) t.mock.timers.reset();
-    const runtime = await startServer(context, controller, { port: 0 });
+    const runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
     const browser = await chromium.launch({ headless: true });
     t.after(async () => { await browser.close(); await runtime.close(); });
     const browserContext = await browser.newContext({ viewport: { width: 1200, height: 960 }, timezoneId: "America/Los_Angeles", reducedMotion: "reduce" });
@@ -57,9 +57,8 @@ async function history(page) {
 async function deleteReport(page, id) {
     await history(page);
     await page.locator("#savedReportSearch").fill(id);
-    const row = page.locator("#bundleList details").first();
-    if (!await row.evaluate(node => node.open)) await row.locator(":scope > summary").click();
-    await row.getByRole("button", { name: "Delete report", exact: true }).click();
+    await page.locator("#bundleList .saved-report-summary").first().click();
+    await page.locator("#contextSidebar").getByRole("button", { name: "Delete report", exact: true }).click();
     const dialog = page.locator("dialog[open]").filter({ has: page.locator("#savedArtifactDeleteTitle") });
     await dialog.getByRole("button", { name: "Delete report", exact: true }).click();
     return dialog;
@@ -113,25 +112,28 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     const state = await loadBoardState(context), newest = state.exports.at(-1);
     assert.equal(state.exports.length, 7);
     await openReportLibrary(page);
-    const summaries = await page.locator("#bundleList details > summary").allTextContents();
+    const summaries = await page.locator("#bundleList .saved-report-summary").allTextContents();
     assert.equal(summaries.length, 6);
     assert.match(summaries[0], /Masked prompts.*HTML/i, "Collapsed saved reports need safe identifying metadata");
-    await page.locator("#bundleList details > summary").first().click();
-    assert.ok((await page.locator("#bundleList details").first().innerText()).includes(newest.bundleId), "Newest report is the first row");
+    await page.locator("#bundleList .saved-report-summary").first().click();
+    assert.ok((await page.locator("#contextSidebar").innerText()).includes(newest.bundleId), "Newest report is the first row");
     assert.deepEqual(state.exports.slice(0, 6), before.exports, "Presentation sorting cannot reorder or rewrite the persisted index");
     assert.deepEqual(await hashes(state.exports.slice(0, 6)), bytes, "Old artifact bytes remain frozen");
-    const first = page.locator("#bundleList details").first();
+    const first = page.locator("#bundleList .saved-library-row").first();
     assert.match(await first.locator(".saved-report-summary").textContent(), /1 interaction/, "Membership is available without opening a second explanation");
-    await first.locator(":scope > summary").focus();
+    await page.locator("#closeContextSidebar").focus();
     await page.keyboard.press("Enter");
-    assert.equal(await first.evaluate(node => node.open), false);
+    await page.locator("#contextSidebar").waitFor({ state: "hidden" });
+    assert.equal(await first.locator(".saved-report-summary").evaluate(node => node === document.activeElement), true);
     await page.keyboard.press("Space");
-    assert.equal(await first.evaluate(node => node.open), true);
-    assert.equal(await first.locator(":scope > summary").evaluate(node => node === document.activeElement), true);
+    await page.locator("#contextSidebar[open]").waitFor();
+    assert.equal(await page.locator("#contextSidebarTitle").evaluate(node => node === document.activeElement), true);
+    await page.keyboard.press("Escape");
+    await page.locator("#contextSidebar").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     await page.locator("#savedReportSearch").fill(before.exports[0].bundleId);
-    assert.equal(await page.locator("#bundleList details").count(), 1, "Search filters all rows before pagination");
-    assert.match(await page.locator("#bundleList").textContent(), new RegExp(before.exports[0].bundleId));
+    assert.equal(await page.locator("#bundleList .saved-library-row").count(), 1, "Search filters all rows before pagination");
+    assert.equal(await page.locator("#bundleList .saved-library-row").getAttribute("data-bundle-id"), before.exports[0].bundleId);
     await page.locator("#savedReportSearch").fill("SYNTHETIC_PRIVATE_PROMPT");
     assert.match(await page.locator("#bundleList").textContent(), /No saved reports match/);
     await page.locator("#clearSavedReportSearch").click();
@@ -151,14 +153,14 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     for (const theme of ["light", "dark"]) for (const width of [320, 375, 1200]) for (const size of ["100%", "200%"]) {
         await page.setViewportSize({ width, height: 960 }); await chooseTheme(page, theme);
         await page.evaluate(size => { document.documentElement.style.fontSize = size; }, size);
-        const dimensions = await page.locator("#bundleList details > summary").evaluateAll(nodes => nodes.map(node => ({
+        const dimensions = await page.locator("#bundleList .saved-report-summary").evaluateAll(nodes => nodes.map(node => ({
             height: node.getBoundingClientRect().height, clipped: node.scrollWidth > node.clientWidth + 1,
         })));
         assert.ok(dimensions.every(row => row.height >= 44 && !row.clipped), `${theme}/${width}/${size}: readable 44px summaries`);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${theme}/${width}/${size}: no page overflow`);
         if (process.env.WIRE_REPORT_UX_PROOFS && width === 375 && size === "200%") {
             await mkdir(process.env.WIRE_REPORT_UX_PROOFS, { recursive: true });
-            await page.locator("#bundleList details").first().screenshot({ path: path.join(process.env.WIRE_REPORT_UX_PROOFS, `history-${theme}-${width}-${size}.png`) });
+            await page.locator("#bundleList .saved-library-row").first().screenshot({ path: path.join(process.env.WIRE_REPORT_UX_PROOFS, `history-${theme}-${width}-${size}.png`) });
         }
     }
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
@@ -168,7 +170,7 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     const next = (await loadBoardState(context)).exports.at(-1);
     assert.equal(await page.locator("#savedReportSearch").inputValue(), "masked", "Explicit saves keep the history query");
     assert.match(await page.locator("#bundleList").textContent(), /1-6 of 8 saved reports/);
-    assert.equal(await page.locator("#bundleList details").first().getAttribute("data-disclosure-key"), "bundle:" + next.bundleId, "Explicit save returns only the active history page to the top");
+    assert.equal(await page.locator("#bundleList .saved-library-row").first().getAttribute("data-view-key"), "bundle:" + next.bundleId, "Explicit save returns only the active history page to the top");
 });
 
 test("UX-003 deleting the displayed saved report removes its ready result", { timeout: 60000 }, async t => {
@@ -180,8 +182,8 @@ test("UX-003 deleting the displayed saved report removes its ready result", { ti
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
     await openReportLibrary(page);
-    await page.locator("#bundleList details > summary").first().click();
-    await page.locator("#bundleList").getByRole("button", { name: "Delete report", exact: true }).click();
+    await page.locator("#bundleList .saved-report-summary").first().click();
+    await page.locator("#contextSidebar").getByRole("button", { name: "Delete report", exact: true }).click();
     const dialog = page.locator("dialog[open]").filter({ has: page.locator("#savedArtifactDeleteTitle") });
     await dialog.getByRole("button", { name: "Delete report", exact: true }).click();
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
@@ -234,9 +236,9 @@ test("UX-002 deterministic ties, truthful legacy/unknown metadata and long froze
     const registered = await loadBoardState(context);
     await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
     await history(page);
-    const ids = await page.locator("#bundleList details").evaluateAll(nodes => nodes.map(node => node.dataset.disclosureKey));
+    const ids = await page.locator("#bundleList .saved-library-row").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey));
     assert.deepEqual(ids, [5, 4, 3, 2, 0, 1].map(index => "bundle:" + registered.exports[index].bundleId), "Exact timestamp ties use reverse registration order; missing dates remain stable at the end");
-    const labels = await page.locator("#bundleList details > summary").allTextContents();
+    const labels = await page.locator("#bundleList .saved-report-summary").allTextContents();
     assert.match(labels[4], /Report.*Preparation time unavailable/);
     assert.doesNotMatch(labels[4], /Masked|Original|HTML|request group/);
     assert.match(labels[5], /Preparation time unavailable/);
@@ -245,8 +247,8 @@ test("UX-002 deterministic ties, truthful legacy/unknown metadata and long froze
     await page.locator("#savedReportSearch").fill("[");
     assert.match(await page.locator("#bundleList").textContent(), /No saved reports match/, "Search is literal, not a regex");
     await page.locator("#savedReportSearch").fill(registered.exports[0].bundleId);
-    await page.locator("#bundleList details > summary").click();
-    assert.match(await page.locator("#bundleList .mono").first().textContent(), new RegExp(registered.exports[0].bundleId));
+    await page.locator("#bundleList .saved-report-summary").click();
+    assert.match(await page.locator("#contextSidebar").textContent(), new RegExp(registered.exports[0].bundleId));
     assert.deepEqual((await loadBoardState(context)).exports, registered.exports);
     assert.deepEqual(await hashes(registered.exports), frozen);
 });
@@ -359,11 +361,11 @@ test("UX-002 report/comparison labels preserve named actions, chooser eligibilit
     const bytes = await hashes([comparison]);
     await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
     await history(page);
-    const comparisonRow = page.locator("#bundleList details").first();
-    assert.match(await comparisonRow.locator(":scope > summary").textContent(), /^Comparison.*HTML, JSON/);
-    await comparisonRow.locator(":scope > summary").click();
-    await comparisonRow.locator("..").getByRole("button", { name: "Open saved comparison", exact: true }).click();
-    await page.getByRole("dialog", { name: "Saved comparison", exact: true }).waitFor();
+    const comparisonRow = page.locator("#bundleList .saved-library-row").first();
+    assert.match(await comparisonRow.locator(".saved-report-summary").textContent(), /^Comparison.*HTML, JSON/);
+    await comparisonRow.locator(".saved-report-summary").click();
+    await comparisonRow.getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await page.getByRole("region", { name: "Saved comparison", exact: true }).waitFor();
     await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     const dialog = await deleteReport(page, sources[0].bundleId);
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
@@ -372,8 +374,8 @@ test("UX-002 report/comparison labels preserve named actions, chooser eligibilit
     const opened = await controller.openComparison("synthetic-comparison", comparison.bundleId);
     assert.deepEqual(opened.sources.map(source => source.available), [false, true]);
     await page.locator("#savedReportSearch").fill(sources[1].bundleId);
-    await page.locator("#bundleList details > summary").click();
-    await page.locator("#bundleList").getByRole("button", { name: "Compare saved reports", exact: true }).click();
+    await page.locator("#bundleList .saved-report-summary").click();
+    await page.locator("#contextSidebar").getByRole("button", { name: "Compare saved reports", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("#comparisonWorkspace select")?.options.length === 2);
     const options = await page.locator("#comparisonWorkspace select").first().locator("option").evaluateAll(nodes => nodes.map(node => node.value));
     assert.deepEqual(options.filter(Boolean), [sources[1].bundleId], "Comparison artifacts remain ineligible as report inputs");

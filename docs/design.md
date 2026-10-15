@@ -346,7 +346,7 @@ report updates this presentation without a reload or focus left in hidden contro
 
 Switching tasks within the same Reports context preserves choices, selection,
 prepared review and disclosure approval. Browser Back restores the task and
-library search/page. Relevant source, permission, filter and evidence changes
+library search/page/order. Relevant source, permission, filter and evidence changes
 still invalidate previews; switching tasks does not bypass their checks.
 The saved library remains separate from Activity / Contents / Review & save.
 It uses the existing metadata search and six-item paginated history, not another
@@ -364,12 +364,18 @@ Three short, labelled paragraphs explain search, preparation dates and frozen
 copies, with bounded line length and no smaller text at narrow sizes.
 A compact row aligns the
 report's scope, interaction count, preparation identity, prompt mode, format
-availability, **Files & actions** and direct **Open**. The secondary area holds
-downloads, full identity, comparison and individual deletion controls. Frozen-copy
+availability and direct **Open**. The rest of the row is a native inspection button,
+with controlled/expanded state and a quiet selected edge. It supplies indexed
+metadata to the one shared right sidebar, not an in-row disclosure or file read.
+Its body holds downloads, full identity, comparison and individual deletion controls.
+The footer opens the saved report. Frozen-copy
 and search details stay in **About saved reports**. Missing HTML offers an available
 PDF/Markdown/JSON download instead of an inert Open action; absent metadata stays unknown.
-The frozen reader gives its document the remaining viewport, with a short preparation
-caption and **Back to report library**. Its opaque sandbox and old bytes are unchanged.
+The frozen reader uses the full Reports main width, not a floating dialog. Opening
+closes the contextual pane and focuses the reader heading. Its short preparation
+caption and Back utility restore the precise library origin and prior inspector
+only when one was open. Its opaque sandbox and old bytes are unchanged; no height
+measurement privilege is added. Prepared report measurement remains separate.
 
 **Manage saved reports** follows the results as a separate, collapsed disclosure.
 It contains **Delete all saved reports**, never interpreted as deleting only
@@ -385,21 +391,34 @@ and possible partial cleanup. Comparison retention is explained once; the UI
 retains recovery details and offers **Check deletion result**, without requiring
 users to manually keep a receipt or repeat a destructive request.
 
-Search, page, disclosures and Back retain their prior state; deletions clamp
+Search, preparation sort, page, disclosures and Back retain their prior state; deletions clamp
 the surviving page. Loading and failed snapshot states disable the new bulk
 entry. The immutable saved reader and refresh/draft guards are unchanged.
-Screen layout consumes the bundled IQOS Asta Sans face, compact outlines,
+Screen layout consumes the bundled IQOS Asta Sans face, quiet tonal surfaces,
 capsules and light/dark tokens, with visible focus and 44px controls, wrapping at
 narrow widths and 200% text without truncating labels. Comparison marks use the
 shared restrained fades with the screen's red failed-call identity. Frozen
 comparison files retain their original typography and palette.
 
 Both **Report** and **Comparison** Open actions read actual verified frozen HTML
-inside the same inert reader. Closing returns focus to the library entry without
+inside the same inert main reader. Back returns focus to the library entry without
 changing report or comparison drafts. A **Period comparison report** remains one
 report with two frozen cohorts: directly readable, but not an ordinary comparison
 side. Entries without HTML expose that limit and their verified downloads.
 Structured compatibility views are not substituted for historical file contents.
+Inspection and reading use sanitized artifact IDs in Reports routes; private
+queries and consent/receipt material never appear in URLs. Same-tab native history
+retains its origin; direct/reloaded entries without one return safely to the library.
+Search presents its already verified payload through the same host while retaining
+its own receipt/current-source/visibility fence. It never borrows library authority
+after invalidation, reload or a late response. Library copies remain independently
+readable when live evidence permission changes. No hidden copy of a closed or revoked
+reader is kept for presentation restoration.
+Search document entry from an interaction uses the same inline unsaved-feedback
+guard. A held destination is not a rejected read: it remains pending until Discard,
+Keep editing, replacement or invalidation resolves it. Back preserves the exact
+interaction/call context and permitted Search return. A closing saved inspector
+releases its inert exit owner before a subsequent interaction acquires the panel.
 
 Preparing a new saved-report comparison shows its frozen formatted copy and exact
 text files before disclosure confirmation. Save is separate; an uncertain Save
@@ -407,6 +426,10 @@ offers a saved-library read, not replay. The app's comparison view follows its
 current light/dark theme, while new frozen comparison HTML explicitly stays light,
 including on a dark OS. Browser print expands unopened coverage disclosures.
 Changing the app theme never restyles existing saved files.
+The explicit baseline/later chooser stays in main. Its source-inspection buttons
+reuse the saved-item sidebar without changing either selected identity; Compare
+and Prepare close that pane for full-width facts and review. Close never discards
+the comparison or its unknown-save recovery.
 
 The supplied screenshot and Distill playbook informed this simplification.
 Local catalogue execution was unavailable (no Python runtime); the installed

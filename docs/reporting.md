@@ -846,11 +846,26 @@ stored report bodies or prompts.
 
 Rows prioritize known scope and interaction count, preparation time and Open.
 Prompt mode and format availability remain compact secondary metadata.
-**Files & actions** reveals full identity, downloads, comparison and deletion.
+Selecting a row opens its safe indexed metadata in the shared right sidebar:
+known scope/count, preparation time, prompt mode, timezone/locale, full identity
+and saved file actions. Selection never reads the full file, downloads or deletes.
+The independent row **Open** bypasses inspection. Preparation order can be newest
+or oldest first; unknown dates remain last. The current search, page and order stay
+in place while inspecting.
 The outer library is not collapsible. A missing HTML file offers an available
 saved PDF/Markdown/JSON download; missing metadata is never inferred from current activity.
-The saved reader keeps the old opaque sandbox, a short preparation caption and
-**Back to report library**, restoring the list's search/page/focus.
+The inspector footer opens saved HTML, or explicitly offers an actually saved
+format download when HTML is absent. Format labels are content beside Lucide
+download icons with file-and-report-specific accessible names. Compare and Delete
+are separate text actions; Delete retains its existing named confirmation and
+original-operation receipt recovery.
+
+The saved reader occupies the full-width Reports main workspace, with the
+contextual pane closed and focus on its heading. It keeps the old opaque sandbox,
+a short preparation caption and **Back to report library**, restoring the list's
+search/page/order/focus and its inspector only when one was open. Direct row Open
+does not create an inspector on return. Opening from the completed Save result
+still returns to the library, without discarding another in-memory draft.
 This applies to ordinary reports and saved comparisons: no saved HTML is
 regenerated or restyled, including historical typography and missing facts.
 Missing HTML and unknown metadata remain explicit; other formats are available
@@ -877,7 +892,29 @@ that saved artifact does. Pending reader responses cannot replace a newer reader
 Preparation time is not the activity period. Reports appear newest-prepared first;
 exact timestamp ties use newest registration first. Unknown dates follow in original
 registration order, without guessing from private contents or file modification times.
-Identical summaries include the ID; every expanded entry retains its full ID.
+Identical summaries include the ID; every inspector retains its full ID.
+
+`#reports?inspect=<bundleId>` and `#reports?bundle=<bundleId>` identify indexed
+inspection and frozen reading; `#report?bundle=<bundleId>` is compatible. Invalid
+identities are removed. Private search text, files, consent and receipts never
+enter URLs. Same-tab Back/Forward restores owned origins; direct/reloaded entries
+without a surviving origin return safely to Reports. The native Navigation API,
+where available, traverses the known parent entry rather than an opaque frame's
+section-link history; older hosts replace with the sanitized origin.
+
+Search uses the same main reader through a presentation callback, not the library's
+read authority. Its current receipt, source, panel, sequence and visibility checks
+still fence the verified result. Invalidation clears the document and its actions;
+reload or Forward without a current Search payload offers reopening Search, never
+an automatic library-read fallback. An independently permitted library copy remains
+readable after live-source/capture changes. Late reads/downloads cannot paint or act
+for a different inspector/reader.
+Opening a Search document from an interaction also honors its unsaved-feedback
+guard, including exact-call entries. Keep editing cancels that departure; Discard
+opens only its still-current verified payload. Changing Search or revoking access
+cancels the held payload without borrowing library permission. Back retains the
+sanitized interaction/call origin and restores Search focus only while its return
+marker remains valid, including hosts without the Navigation API.
 
 Saving returns the current history search to its first page without clearing its query or other filters. Background refreshes preserve the history page and disclosures. Deleting the displayed saved report replaces its ready message and downloads with an unavailable state, including when another tab's deletion is observed. Unrelated deletions leave newer saved results and unfinished report drafts intact.
 
@@ -886,7 +923,11 @@ Saving returns the current history search to its first page without clearing its
 Choose an earlier report and a later report explicitly. Reading the comparison does not create an export or run an assessment against the APIs again.
 Choices lead with preparation date and time, followed by saved request-group counts and prompt mode,
 not a long report ID. Formats and the full ID remain available as secondary
-option text and in the selected report's details. Unknown metadata stays unknown;
+option text and the shared saved-item inspector. Inspect baseline/later report
+does not select, swap or complete a pair. Comparing facts and preparing the actual
+copy close that contextual pane and keep the chooser, compatibility explanations,
+wide results and separate disclosure/Save in main. Sidebar Close is not Discard
+comparison. Unknown metadata stays unknown;
 preparation time is never presented as the activity period.
 
 New comparisons keep the four current metric results (including the two trust checks),

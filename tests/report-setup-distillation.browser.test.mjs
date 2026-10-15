@@ -171,9 +171,9 @@ test("verified empty transitions through actual review, separate save, frozen re
     await page.locator("#savedReportSearch").fill("HTML");
     const open = page.getByRole("button", { name: "Open saved report", exact: true });
     await open.click();
-    await page.frameLocator(".saved-report-dialog iframe").locator("h1").waitFor();
-    await page.keyboard.press("Escape");
-    await page.locator(".saved-report-dialog").waitFor({ state: "detached" });
+    await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.locator("#savedReportReader").waitFor({ state: "hidden" });
     assert.equal(await open.evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#savedReportSearch").inputValue(), "HTML");
     assert.deepEqual(await Promise.all(Object.values(saved.files).map(file => readFile(file))), frozenBefore);

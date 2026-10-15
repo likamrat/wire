@@ -294,9 +294,10 @@ test("integrated navigation, charts, filters, formats and downloads use clean Lu
             }
             if (route === "reports") {
                 await page.locator("#savedLibraryTitle").click();
-                await page.locator("#bundleList details > summary").click();
-                assert.equal(await page.locator('#bundleList button [data-lucide-icon="download"]').count(), 4);
+                await page.locator("#bundleList .saved-report-summary").click();
+                assert.equal(await page.locator('#contextSidebar button [data-lucide-icon="download"]').count(), 4);
                 assert.equal(await page.locator('#formatOptions input[type="checkbox"]').count(), 4);
+                await page.locator("#closeContextSidebar").click();
             }
             if (route.includes("service=Calendar")) {
                 assert.equal(await page.locator("#filterChips button").count(), 2);

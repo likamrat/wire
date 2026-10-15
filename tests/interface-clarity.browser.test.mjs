@@ -169,7 +169,7 @@ test("library keeps one count and opens the actual frozen report after separate 
     await page.locator("#clearSavedReportSearch").click();
     const open = page.getByRole("button", { name: "Open saved report", exact: true });
     await open.click();
-    await page.frameLocator(".saved-report-dialog iframe").locator("h1").waitFor();
+    await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
     await page.keyboard.press("Escape");
     await expect(open).toBeFocused();
     assert.deepEqual(await Promise.all(Object.values(saved.files).map(file => readFile(file))), before);
