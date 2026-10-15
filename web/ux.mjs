@@ -4,6 +4,7 @@ export function createEvidenceUX(icons) {
     const tooltipOptions = new WeakMap();
     const disabledReasons = new WeakMap();
     const pendingIcons = new WeakMap();
+    const copySources = new WeakMap();
     const bubble = document.createElement("div");
     bubble.id = "evidence-tooltip";
     bubble.className = "ux-tooltip";
@@ -263,6 +264,9 @@ export function createEvidenceUX(icons) {
             else {
                 enhanceDisclosures(change.target);
                 for (const node of change.addedNodes) if (node instanceof Element) enhanceDisclosures(node);
+                for (const node of change.removedNodes) if (node instanceof Element && !node.isConnected) {
+                    for (const control of [node, ...node.querySelectorAll(".ux-copy")]) copySources.delete(control);
+                }
             }
         }
         if (active && (!active.isConnected || !active.checkVisibility())) hideTooltip();
@@ -344,9 +348,9 @@ export function createEvidenceUX(icons) {
         return wrapper;
     }
     function icon(name) {
-        if (!Object.hasOwn(icons, name) || typeof icons[name] !== "string") throw new TypeError(`Unknown Fluent icon: ${name}`);
+        if (!Object.hasOwn(icons, name) || typeof icons[name] !== "string") throw new TypeError(`Unknown Lucide icon: ${name}`);
         const svg = new DOMParser().parseFromString(icons[name], "image/svg+xml").documentElement;
-        if (svg.localName !== "svg" || svg.namespaceURI !== "http://www.w3.org/2000/svg" || svg.querySelector("parsererror")) throw new TypeError(`Invalid Fluent icon: ${name}`);
+        if (svg.localName !== "svg" || svg.namespaceURI !== "http://www.w3.org/2000/svg" || svg.querySelector("parsererror")) throw new TypeError(`Invalid Lucide icon: ${name}`);
         const node = document.importNode(svg, true);
         node.setAttribute("aria-hidden", "true");
         node.setAttribute("focusable", "false");
@@ -369,19 +373,23 @@ export function createEvidenceUX(icons) {
         });
         return control;
     }
-    function copyButton({ label, displayLabel = label, getText, tooltip: help = label, showLabel = false }) {
+    function utility(control, role, label, tip = label) {
+        control.classList.add("icon-action", "icon-only");
+        control.setAttribute("aria-label", label);
+        control.replaceChildren(icon(role));
+        tooltip(control, tip);
+        return control;
+    }
+    function copyButton({ label, getText, tooltip: help = label }) {
         if (!label || typeof getText !== "function") throw new TypeError("Clipboard controls require a contextual label and an explicit text getter.");
         const control = document.createElement("button");
         control.type = "button";
-        control.className = "ux-copy" + (showLabel ? " ux-copy-labeled" : "");
+        control.className = "ux-copy";
+        copySources.set(control, getText);
+        getText = null;
         control.setAttribute("aria-label", label);
         function paintIcon(name) {
             control.replaceChildren(icon(name));
-            if (showLabel) {
-                const text = document.createElement("span");
-                text.textContent = displayLabel;
-                control.append(text);
-            }
         }
         paintIcon("copy");
         tooltip(control, help);
@@ -407,11 +415,12 @@ export function createEvidenceUX(icons) {
             status.textContent = "Writing to clipboard...";
             let reading = true;
             try {
-                const text = getText();
+                const text = control.isConnected ? copySources.get(control)?.() : null;
                 if (typeof text !== "string") throw new CopyUnavailableError("The text is unavailable. Reopen this section and try again.");
                 reading = false;
                 if (!navigator.clipboard?.writeText) throw new CopyUnavailableError("Clipboard access is unavailable in this browser. Select the text and copy it manually.");
                 await navigator.clipboard.writeText(text);
+                if (!control.isConnected || !copySources.has(control)) return;
                 control.dataset.copyState = "success";
                 paintIcon("check");
                 status.className = "ux-copy-status visually-hidden";
@@ -423,6 +432,7 @@ export function createEvidenceUX(icons) {
                     tooltip(control, help);
                 }, 2200);
             } catch (error) {
+                if (!control.isConnected || !copySources.has(control)) return;
                 control.dataset.copyState = "error";
                 paintIcon("copy");
                 status.className = "ux-copy-status error";
@@ -474,9 +484,10 @@ export function createEvidenceUX(icons) {
         node.dataset.pending = String(value);
         const control = node.matches("button");
         if (control) node.setAttribute("aria-busy", String(value));
+        if (control && !node.querySelector(":scope > .wire-icon,:scope > [data-progress-icon]")) return;
         let marker = node.querySelector(":scope > [data-progress-icon]");
         if (!marker) {
-            marker = node.querySelector(":scope > .fluent-icon");
+            marker = node.querySelector(":scope > .wire-icon");
             if (!marker) {
                 marker = document.createElement("span");
                 marker.className = "progress-slot";
@@ -495,9 +506,9 @@ export function createEvidenceUX(icons) {
             marker = icon(size === 16 ? "pending-small" : "pending");
             for (const name of original.classList) marker.classList.add(name);
             if (size === 24) {
-                // Keep a 20px optical glyph centered in the action's existing 24px slot.
                 marker.classList.add("progress-icon-large");
-                marker.setAttribute("viewBox", "-2 -2 24 24");
+                marker.setAttribute("width", "24"); marker.setAttribute("height", "24");
+                marker.dataset.iconSize = "24";
             }
             marker.dataset.progressIcon = "";
             original.replaceWith(marker);
@@ -510,7 +521,7 @@ export function createEvidenceUX(icons) {
         }
         marker.classList.toggle("pending-indicator", value);
     }
-    return { icon, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, pending,
+    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, pending,
         destroy() {
             clearTooltip();
             observer.disconnect();

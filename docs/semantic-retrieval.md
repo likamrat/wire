@@ -1,5 +1,15 @@
 # On-device hybrid retrieval
 
+> **Historical research, not active Search.** The product now uses
+> [deterministic local text search](live-search.md), without models, tokenizers
+> for inference, semantic admission, Related inference or the denial veto.
+> The implementation/qualification notes below describe the former contract;
+> its source baseline is `8dab98f4e847186c2606efb3fe2ada87c609db98`.
+> Its old model setup and semantic expectations are not current setup/gates.
+> Former backend test files are preserved as same-directory `.historical.mjs`
+> snapshots; see [the retirement/coverage map](search-history.md). Commands below
+> refer to the historical source baseline, not the current text product.
+
 `lib/search-retrieval.mjs` is a private, in-memory retrieval facade over the [authorized corpus](search-corpus.md). `lib/search-retrieval.d.mts` is its consumer contract. It implements actual pretrained embeddings plus independent lexical precision. It does **not** attach itself to the running collector, expose HTTP routes, change the browser's existing analytical search, render results, or open targets.
 
 Its additive `discover()` method can also produce separately stamped **Related results** for navigation. The producer contract below is implemented; runtime/UI consumers must separately wire purpose-checked receipts before exposing it. Existing `search()` remains strict-only and unchanged.
@@ -109,7 +119,7 @@ All returned text is inert. Preserve each entry's source, coverage, original/mas
 
 ## Retrieval behavior and limitations
 
-The rules below describe the unchanged MiniLM baseline. The separately
+The rules below retain the MiniLM scorer with a narrow explicit-denial correction. The separately
 provisioned [role-bound lexical adjunct](search-linguistics.md) is disabled by
 default and **not currently qualified for activation**. Corrections for negative
 scope and source-modifier loss invalidate its earlier two-query qualification.
@@ -122,7 +132,44 @@ The real WordPiece tokenizer partitions source strings into overlapping original
 
 Every chunk uses attention-mask-aware mean pooling and L2 normalization into 384 Float32 components. Long queries use the same complete chunking. Item semantic relevance is the maximum query-chunk/document-chunk cosine; therefore a long multi-part query behaves as an OR over its chunk meanings, not an assertion that a result satisfies every clause.
 
-Lexical tiers prioritize a complete title, exact phrase, all exact words, then all word prefixes. Structured tool-name prefixes, paths, underscores, uppercase HTTP verbs and three-digit statuses require literal anchors; a semantically similar but different status/path does not substitute. Once every required anchor is present, unmatched prose can still pass the semantic floor; anchor presence alone does not block semantic ranking. This behavior is bound to ranking policy `exact-prefix-cosine-v2` in the index identity. Unicode text is preserved; lexical normalization uses NFKC and lowercasing without an ASCII-only word filter. Ordinary lowercase "get" and prose such as "sign-in problems" are not automatically HTTP/tool identifiers.
+Lexical tiers prioritize a complete title, exact phrase, all exact words, then all word prefixes. Structured tool-name prefixes, paths, underscores, uppercase HTTP verbs and three-digit statuses require literal anchors; a semantically similar but different status/path does not substitute. Once every required anchor is present, unmatched prose can still pass the semantic floor; anchor presence alone does not block semantic ranking. This behavior and the denial correction below are bound to ranking policy `exact-prefix-cosine-complete-denial-v4` in the index identity. Unicode text is preserved; lexical normalization uses NFKC and lowercasing without an ASCII-only word filter. Ordinary lowercase "get" and prose such as "sign-in problems" are not automatically HTTP/tool identifiers.
+
+**Narrow explicit-denial correction, not general contextual matching.** A fully
+consumed retained interaction, follow-up or reply such as `did not repair the car`
+cannot supply a strict match for `repair the car`, even with an exact phrase or
+high cosine. The dependency-free recognizer accepts only an operation word,
+`a | an | the`, and one object word; the negative record must contain that exact
+phrase after `do/does/did not` or its contraction, optionally preceded by a
+personal pronoun or `the` plus one subject word. Case/whitespace, a terminal
+period and typographic apostrophes normalize; roles and all other text remain.
+Operation, article and object must agree literally, without stemming or synonyms.
+The index carries the corpus's existing completeness qualification separately
+from searchable text. A veto additionally requires `full` for an interaction or
+follow-up, or `full-record` for a reply. Partial/bounded/truncated, unavailable,
+missing or unknown qualification never supplies negative evidence: a retained
+fragment can omit a later positive clause. Those items keep baseline matching,
+not a blanket partial-source exclusion. `full-record` concerns the captured
+record, not verified reply finality or complete conversation coverage.
+
+Questions, quotations, modifiers, named owners, quantifiers, compound objects,
+different words, subordinate clauses and multi-clause content are **unknown** to
+this recognizer and do not veto baseline admission. In particular, a record
+with both denied and positive work is not rejected by finding its negative span.
+Literal structured anchors and title/source-label matches remain available;
+other source types are unchanged. The optional adjunct cannot re-add a rejected
+record. A denied same-topic result can still qualify for navigation-only Related,
+never strict analytical membership. Both paths retain one `corpus.deliver` gate.
+
+`node --test tests\search-denial.test.mjs tests\search-expectations.test.mjs`
+uses no model inference: synthetic vectors and stubbed owned children check the
+correction, unknown/positive controls, real corpus delivery and current-source
+fences, full-versus-partial corpus entries with identical retained words, and
+actual wire receipts with 64 strict IDs across four page slices (63 interactions
+and one bounded reply, mapping to 63 distinct interactions),
+both periods and in-memory frozen report scope. These are not real-model or
+browser performance results. Fake-object and wrong-role admissions outside
+this grammar, broader negation and all missing paraphrase recall remain open;
+the original/ordinary/contrast expected-set ledger is unchanged.
 
 Semantic-only hits require cosine >= **0.50**. This policy is versioned, does not pad to a result count, and emits only `match: "exact" | "prefix" | "semantic"` rather than similarity/answer-quality percentages. Three real-model positive fixtures scored **0.630, 0.544, 0.543**; twelve negative comparisons, including a neighboring hospital/payroll topic, had maximum **0.180**. The full corpus path separately asserts unrelated-query rejection. These bounded controls support this cutoff but are not a universal relevance calibration.
 
@@ -144,9 +191,9 @@ This encoder is **English-oriented**. Unicode lexical retrieval and complete Uni
 }
 ```
 
-`matches.hits` preserves baseline strict IDs, match labels and exact excerpts. When configured, the optional linguistic path adds only separately supported records before disclosure. Its discovery-only receipt extends the existing stamp with `purpose: "strict-match-population"`, `matchPolicyId` and `types`. The **existing `search()` receipt retains its shape**. Both discovery stamps use canonical effective types: empty/omitted means all ten types in `SEARCH_TYPES` order; repeated types are deduplicated and invalid types reject.
+`matches.hits` is the same complete corrected strict population as `search()`, preserving labels and excerpts for retained matches. When configured, the optional linguistic path adds only separately supported records that do not contradict the narrow denial rule. Its discovery-only receipt extends the existing stamp with `purpose: "strict-match-population"`, `matchPolicyId` and `types`. The **existing `search()` receipt retains its shape**. Both discovery stamps use canonical effective types: empty/omitted means all ten types in `SEARCH_TYPES` order; repeated types are deduplicated and invalid types reject.
 
-Related hits carry only original corpus fields plus `match: "related"` and `purpose: "navigate-only"`. The Related receipt additionally binds `purpose: "related-navigation"` and `relatedPolicyId`. No scores or generated explanations are disclosed. With the linguistic adjunct disabled, `SEARCH_MATCH_POLICY_ID` remains unchanged and the two-thread execution's model-bound `SEARCH_RELATED.id` is **`7a21ab4304d8f1e1f955deaaf0e50498957b5ca34fdc004125756f13de56228b`**. The one-thread control used `1544a5093a15a386fa06361c344aabda392a5df77ad97cb1159ec87959637148`; this derived identity change is not a change to the Related selection rule. Explicitly enabled search uses the distinct pair in `SEARCH_LEXICAL_POLICIES`, binding the optional rule/resources and Related exclusion. Related metadata does not enter the strict index identity. Enabling the linguistic rule adds its own identity; disabling it preserves the core index identity and receipt policy values for that same model/execution identity.
+Related hits carry only original corpus fields plus `match: "related"` and `purpose: "navigate-only"`. The Related receipt additionally binds `purpose: "related-navigation"` and `relatedPolicyId`. No scores or generated explanations are disclosed. The completeness-qualified denial correction changes `SEARCH_MATCH_POLICY_ID` to **`7a1856ac8d53036a49501aaf0e9631a621c381b5338ec757762b9af0342f9b7c`** and the model/strict-policy-bound `SEARCH_RELATED.id` to **`68e7bbeb045c2e7c9cd5c8a1ab90dd89981ae4aecd79e1cd69e2432f9666c424`**. Old receipt policies are not upgraded. Explicitly enabled search uses the distinct pair in `SEARCH_LEXICAL_POLICIES`, binding the optional rule/resources and denial-aware composition. Model/resource identities, Related score/band and wire receipt shapes are unchanged. Related metadata does not enter the strict index identity.
 
 The frozen Related rule uses the same current admitted title/content/source projection and model. After type and exact-anchor gates, candidates must be absent from the strict set (including configured linguistic additions), have cosine at least **0.35**, and lie within **0.02** of the strongest eligible item score, including strict hits. All qualifying candidates are returned with stable typed-item deduplication and deterministic ties; there is no top-N/page cap or extra model run.
 

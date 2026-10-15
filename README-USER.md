@@ -190,29 +190,23 @@ Reply saving is off unless previously approved. To keep recorded replies in WIRE
 
 ## Search
 
-Type in the search field, then click a result. Each plain row identifies the
-item, its category and source. **Filters** provides optional scope/type choices;
-it stays closed until you open it and shows any active choices in its summary.
-Focusing an empty field does not open another form.
+Type in the header's **Search** field; matching results appear as you type,
+without Submit or autocomplete. **POWER** finds **PowerPoint**, and **owerp**
+also finds it in the middle of the word. A multiword query matches that literal
+phrase, not those words scattered through a record. Search ignores case but
+does not guess intent, expand synonyms or correct spelling. For example,
+**repair the car** also finds **did not repair the car**.
 
-**Matches** and **Related results** are separate. Related results discuss similar
-topics, but may describe different work. They can help you open a saved item;
-they do not change your charts or report selection. Each group keeps its own page
-and focused result when you return with Back. **Current Analyze scope** uses
-matches only, never Related suggestions.
+**Everywhere** searches existing interactions, prompts and follow-ups, authorized
+retained replies, recorded calls, saved report/comparison content, tools, services,
+views and settings across all pages. Saved report titles and bodies are searchable.
+Each row shows its category and source, with the matching original text visibly
+marked. There are no AI-generated answers or Related suggestions.
 
-If search by meaning is unavailable, the panel says when exact-word search still
-works. **Search troubleshooting** opens the existing help; typing never downloads
-or installs a model. Incomplete saved content is shown separately from Related
-suggestions.
-
-Type in the header's **Search** field; results appear without Submit. Meaning
-matching works alongside exact tool names, API methods/paths, statuses and
-prefixes. **Everywhere** finds existing interactions/context/replies, calls,
-saved report/comparison contents, tools, services, views and settings.
-Each result names its source and destination. Enter or click opens the actual
-item directly; Back restores your query, category, page and focused result.
-Settings opens the named setting without operating its control.
+Enter or click opens the verified item; Back restores your query, category, page
+and focused result. Settings opens the named setting without operating its control.
+**Filters** provides optional scope/type choices and stays closed until you open it.
+Focusing an empty field does not open another form or move the Search field.
 
 Choose **Current Analyze scope** (also available through **Search this Analyze
 scope**) only when you want the matching population to refine Analyze. Global
@@ -221,13 +215,13 @@ shows unavailable measures, not fabricated zero counts. Partial navigation match
 remain labelled, but cannot establish an analytical population or current-view report. Selected/All report
 choices and hidden selected requests remain separate.
 
-Search is on-device. It never enables collection, runs a tool or assessment, saves
-replies or downloads model assets while typing. Missing/corrupt local assets show
-**Exact/prefix search only**, with an explicit setup notice. A busy runtime,
+Search is deterministic and local, with **no AI or model setup**. It never enables
+collection, runs a tool or assessment, saves replies or downloads assets. A busy runtime,
 disconnection or permission/source change clears results rather than retaining
 clickable stale targets. Saved HTML/JSON/Markdown open their verified frozen copy;
 explicit PDF Open downloads the verified saved PDF. Nothing is regenerated.
-See [runtime boundaries and local setup](docs/live-search.md).
+Missing or unreadable content is reported as incomplete/unavailable, not a claim
+that everything was searched and nothing matched. See [text-search details](docs/live-search.md).
 
 ## Compare retained periods
 

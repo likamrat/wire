@@ -1,6 +1,6 @@
 export function createSearchMembership(snapshot, options, withinServices, hits, receipt, contract) {
     if (!contract?.analysisReceipt(receipt) || receipt.revision !== snapshot.revision
-        || !Array.isArray(hits) || hits.some(hit => !hit || !["exact", "prefix", "semantic"].includes(hit.match)
+        || !Array.isArray(hits) || hits.some(hit => !hit || hit.match !== "text"
             || hit.purpose === "navigate-only")) {
         throw new TypeError("Search membership requires a current strict analysis receipt and its matched items.");
     }

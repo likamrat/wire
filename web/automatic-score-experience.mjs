@@ -4,10 +4,19 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
         setItem: (key, value) => sessionStorage.setItem(key, value),
         removeItem: key => sessionStorage.removeItem(key),
     } });
-    const dialog = document.createElement("dialog");
+    const modal = document.createElement("dialog");
+    let dialog = modal;
     dialog.className = "assessment-dialog automatic-score-dialog";
     document.body.append(dialog);
     let current = null, view = null, scopeStamp = null, generation = 0, observing = null, trigger = null, stopping = false;
+    const isOpen = () => dialog === modal ? dialog.open : dialog.isConnected && !dialog.hidden;
+    function closeView() {
+        if (dialog === modal) dialog.close();
+        else {
+            dialog.hidden = true;
+            if (trigger?.isConnected && trigger.checkVisibility()) ux.restoreFocus(trigger);
+        }
+    }
     const stopKey = "wire.automaticScore.stop";
     let stopReceipt = null, stopStorageWarning = false;
     try {
@@ -69,7 +78,7 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
             try {
                 const data = await api("/api/evaluation/automatic/summary", {});
                 if (data.schemaVersion !== 1 || !data.snapshot || !Object.hasOwn(reasons, data.snapshot.reason)) throw new Error("Automatic-score status is unavailable.");
-                if (dialog.open && scopeStamp && !client.snapshot().receipt && scopeStamp !== stamp(data)) view?.invalidate("The score approval or source changed.");
+                if (isOpen() && scopeStamp && !client.snapshot().receipt && scopeStamp !== stamp(data)) view?.invalidate("The score approval or source changed.");
                 current = data; renderRow();
             } catch (error) {
                 row.receive({ state: "paused", reason: error.message, busy: false });
@@ -81,17 +90,21 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
     function frame(title) {
         view = null; scopeStamp = null;
         const heading = el("h2", title); heading.id = "automaticScoreDialogTitle";
-        const close = button("Close", () => dialog.close()), head = el("div", undefined, "dialog-head"), body = el("div", undefined, "assessment-dialog-body");
+        const close = button("Close", closeView), head = el("div", undefined, "dialog-head"), body = el("div", undefined, "assessment-dialog-body");
+        close.setAttribute("aria-label", "Close automatic scores");
+        close.replaceChildren(ux.icon("close"));
+        ux.tooltip(close, "Close scores");
         head.append(heading, close); dialog.replaceChildren(head, body);
         dialog.setAttribute("aria-labelledby", heading.id);
         dialog.onclose = () => { if (trigger?.isConnected && trigger.checkVisibility()) ux.restoreFocus(trigger); };
-        if (!dialog.open) dialog.showModal();
-        close.focus();
+        if (dialog !== modal) dialog.hidden = false;
+        else if (!dialog.open) dialog.showModal();
+        close.focus({ preventScroll: true });
         return body;
     }
     async function finish(expectedView = null, expectedBody = null) {
         if (expectedView && view === expectedView) expectedView.complete();
-        if (expectedBody && dialog.contains(expectedBody) && dialog.open) dialog.close();
+        if (expectedBody && dialog.contains(expectedBody) && isOpen()) closeView();
         onChanged();
         await observe();
         await refresh();
@@ -122,8 +135,12 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
     async function open(from) {
         ux.hideTooltip?.();
         trigger = from;
+        if (dialog !== modal) dialog.remove();
+        const inlineHost = from?.closest("#requestContent") ? from.closest(".interaction-insights") : null;
+        dialog = inlineHost ? el("section", undefined, "assessment-inline automatic-score-dialog") : modal;
+        if (inlineHost) inlineHost.append(dialog);
         const opened = ++generation, body = frame("Automatic scores");
-        const isCurrent = () => opened === generation && dialog.open && dialog.contains(body);
+        const isCurrent = () => opened === generation && isOpen() && dialog.contains(body);
         if (stopReceipt || stopping) {
             body.append(el("p", "Read the earlier stop result before approving scores again."),
                 button("Check stop result", () => checkStop(body)));
@@ -135,7 +152,7 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
             if (receipt.receipt) body.append(button("Check approval result", async () => {
                 try {
                     await checkApproval();
-                    if (dialog.open && !client.snapshot().receipt) {
+                    if (isOpen() && !client.snapshot().receipt) {
                         body.replaceChildren(el("p", client.snapshot().message || "The earlier result is known. Close and review the current scope."));
                         dialog.querySelector(".dialog-head button")?.focus();
                     }
@@ -166,7 +183,7 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
                 chat.latestAt ? formatTimestamp(chat.latestAt) : "Date unavailable", `Chat ${chat.shortId}`,
             ].join(" - ") }));
             view = mountApproval(dialog, {
-                setup, ux, onSubmit: submit, onCheck: checkApproval,
+                setup, ux, inline: dialog !== modal, onSubmit: submit, onCheck: checkApproval,
                 onClose: () => { view = null; scopeStamp = null; },
             });
             view.open(from);
@@ -230,12 +247,18 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
                 }
             } finally { stopping = false; await observe(); renderRow(); }
         }, "danger");
-        body.append(confirm, button("Cancel", () => dialog.close()));
+        body.append(confirm, button("Cancel", closeView));
     }
     renderRow();
     return {
         observe, open,
         invalidate(message) { view?.invalidate(message); },
-        leave() { generation++; if (dialog.open) dialog.close(); view = null; scopeStamp = null; },
+        leave() {
+            generation++;
+            if (dialog === modal && dialog.open) dialog.close();
+            if (dialog !== modal) dialog.remove();
+            dialog = modal; dialog.replaceChildren();
+            view = null; scopeStamp = null;
+        },
     };
 }

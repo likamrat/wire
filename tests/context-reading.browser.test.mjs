@@ -267,6 +267,121 @@ test("normal isolated source opens retained correction, retry and reply immediat
     }
 });
 
+test("deep retained-reply reading returns after authorized payloads settle without losing focus or disclosures", { timeout: 30000 }, async t => {
+    const longText = Array.from({ length: 240 }, (_, index) => `LONG_RETAINED_LINE_${index}: invented release evidence and unresolved follow-up decisions.`).join("\n");
+    const { page, runtime, records } = await setup(t, { extraReplies: [
+        { sourceEventId: "long-answer", messageEventId: "three", at: "2026-09-30T12:00:10.000Z", text: longText },
+    ] });
+    await page.goto(runtime.url + "#analyze"); await ready(page);
+    await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
+    const a = page.locator(`.request-row[data-view-key="request:${records[1].scenarioId}"] .request-card-open`);
+    const b = page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first();
+    await a.click();
+    const reply = page.locator(".interaction-response .full-text-content").filter({ hasText: "LONG_RETAINED_LINE_0:" });
+    await expect(reply).toHaveText(longText);
+    const technical = page.locator("#requestContent .journey-item>.detail-disclosure").first();
+    await technical.locator("summary").click();
+    await reply.focus();
+    await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop += 3500);
+    const original = await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop);
+    assert.ok(original > 3000, "The reading position requires the retained reply's actual height");
+    await b.click();
+    assert.doesNotMatch(await page.locator("body").textContent(), /LONG_RETAINED_LINE_0:/);
+    let release, arrived;
+    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
+    const deliveries = [];
+    await page.route("**/api/assessment/evidence", route => {
+        const delivery = (async () => {
+            const response = await route.fetch();
+            arrived(); await held;
+            await route.fulfill({ response });
+        })();
+        deliveries.push(delivery);
+        return delivery;
+    });
+    try {
+        await a.click(); await pending;
+        assert.equal(await reply.count(), 0, "Returning rereads current authorization; it does not keep a hidden response pane");
+        release(); await Promise.all(deliveries);
+        await expect(reply).toHaveText(longText);
+        await expect.poll(async () => Math.abs(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop) - original)).toBeLessThan(3);
+        await expect(reply).toBeFocused();
+        await expect(technical).toHaveAttribute("open", "");
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await page.screenshot({ path: path.join(proof, "deep-retained-return.png") });
+            await writeFile(path.join(proof, "deep-retained-return.json"), JSON.stringify({
+                before: original, after: await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop),
+                focus: await reply.evaluate(node => document.activeElement === node),
+                disclosureOpen: await technical.getAttribute("open") !== null,
+            }, null, 2));
+        }
+    } finally { release(); await Promise.all(deliveries); }
+});
+
+for (const interruption of ["reading", "switch", "revocation"]) test(`pending retained-reading restoration yields to ${interruption}`, { timeout: 30000 }, async t => {
+    const text = "DEFERRED_READING_REPLY\n" + "Invented saved evidence with deliberate long reading content.\n".repeat(180);
+    const app = await setup(t, { extraReplies: [
+        { sourceEventId: "deferred-answer", messageEventId: "three", at: "2026-09-30T12:00:10.000Z", text },
+    ] });
+    const { page, runtime, records, context } = app;
+    await page.goto(runtime.url + "#analyze"); await ready(page);
+    await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click();
+    const a = page.locator(`.request-row[data-view-key="request:${records[1].scenarioId}"] .request-card-open`);
+    const b = page.locator(".request-card-open").filter({ hasText: "UNRELATED_RECORD" }).first();
+    await a.click();
+    const reply = page.locator(".interaction-response .full-text-content").filter({ hasText: "DEFERRED_READING_REPLY" });
+    await expect(reply).toHaveText(text);
+    await reply.focus();
+    await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop += 3000);
+    const original = await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop);
+    await b.click();
+    let release, arrived;
+    const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
+    const deliveries = [];
+    await page.route("**/api/assessment/evidence", route => {
+        const delivery = (async () => {
+            const response = await route.fetch();
+            arrived(); await held; await route.fulfill({ response });
+        })();
+        deliveries.push(delivery); return delivery;
+    });
+    try {
+        await a.click(); await pending;
+        if (interruption === "reading") {
+            await page.locator(".request-original .full-text-toggle").first().focus();
+            await page.keyboard.press("Control+Home");
+            await expect.poll(() => page.locator("#contextSidebarBody").evaluate(node => node.scrollTop)).toBe(0);
+        } else if (interruption === "switch") await b.click();
+        else {
+            await updateBoardState(context, state => {
+                state.personalEvaluation.consent = { ...state.personalEvaluation.consent, state: "revoked", revision: 2,
+                    categories: [], revokedAt: "2026-10-01T12:00:00.000Z" };
+            });
+            await app.acceptFixtureChange();
+            await page.evaluate(() => dispatchEvent(new Event("online")));
+            await expect(page.locator("#requestContent")).toContainText("Capture is off.");
+            await ready(page);
+        }
+        const current = await page.evaluate(() => ({ focus: document.activeElement.id, route: location.hash, page: scrollY }));
+        release(); await Promise.all(deliveries); await frames(page);
+        assert.equal(await page.evaluate(() => location.hash), current.route);
+        assert.equal(await page.evaluate(() => document.activeElement.id), current.focus);
+        assert.equal(await page.evaluate(() => scrollY), current.page);
+        if (interruption === "reading") {
+            await expect(reply).toHaveText(text);
+            assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0, "Late reads cannot undo new reading intent");
+        } else {
+            assert.doesNotMatch(await page.locator("body").textContent(), /DEFERRED_READING_REPLY/);
+            if (interruption === "switch") {
+                await a.click();
+                await expect(reply).toHaveText(text);
+                await expect.poll(async () => Math.abs(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop) - original)).toBeLessThan(3);
+            }
+        }
+    } finally { release(); await Promise.all(deliveries); }
+});
+
 test("leaving before the shared reader is ready never starts an eager hidden payload read", { timeout: 20000 }, async t => {
     const { page, runtime, records, payloadReads } = await setup(t);
     let release, reached;

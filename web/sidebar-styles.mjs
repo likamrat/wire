@@ -44,9 +44,9 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .primary-navigation a:hover {color:var(--ink);background:var(--hover)}
 .primary-navigation a:active {color:var(--ink);background:var(--pill-pressed)}
 .primary-navigation a:focus-visible {z-index:1;outline:2px solid var(--focus);outline-offset:3px}
-.primary-navigation a>.fluent-icon,.navigation-collapse>.fluent-icon {width:24px;height:24px}
-.primary-navigation a>.fluent-icon {color:var(--muted);justify-self:center}
-.primary-navigation a:is([aria-current=page],:hover,:focus-visible)>.fluent-icon {color:var(--ink)}
+.primary-navigation a>.wire-icon,.navigation-collapse>.wire-icon {width:24px;height:24px}
+.primary-navigation a>.wire-icon {color:var(--muted);justify-self:center}
+.primary-navigation a:is([aria-current=page],:hover,:focus-visible)>.wire-icon {color:var(--ink)}
 body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--app-sidebar-width,196px);padding:24px 24px 64px;min-width:0;max-width:none}
 #workspace {min-width:0}
 #workspace>:not(#homeView),#homeView>.chart-actions,#homeView>.supporting {max-width:1384px}

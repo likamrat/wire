@@ -74,15 +74,15 @@ function originalStrict(items, query, queryChunks, types) {
 
 test("shared discovery scoring preserves frozen strict ranking and applies type/anchor gates before its strongest score", async () => {
     const expectedRelated = {
-        version: "related-navigation-minilm-original-projection-v1", modelId: SEARCH_MODEL_ID,
-        strictPolicy: { version: "exact-prefix-cosine-v2", semanticFloor: 0.5 }, floor: 0.35, band: 0.02,
-        selection: "unchanged strict; related=remaining anchor/type-eligible scores>=floor and within band of strongest eligible score; no topN",
+        version: "related-navigation-minilm-original-projection-v3", modelId: SEARCH_MODEL_ID,
+        strictPolicy: { version: "exact-prefix-cosine-complete-denial-v4", semanticFloor: 0.5 }, floor: 0.35, band: 0.02,
+        selection: "related=remaining non-strict anchor/type-eligible scores>=floor and within band of strongest eligible score; no topN",
         purpose: "navigate-only", indexProjection: "unchanged title/content/source", noMembership: true,
     };
     const relatedId = createHash("sha256").update(JSON.stringify(expectedRelated)).digest("hex");
-    assert.equal(relatedId, "7a21ab4304d8f1e1f955deaaf0e50498957b5ca34fdc004125756f13de56228b");
+    assert.equal(relatedId, "68e7bbeb045c2e7c9cd5c8a1ab90dd89981ae4aecd79e1cd69e2432f9666c424");
     assert.deepEqual(SEARCH_RELATED, { ...expectedRelated, id: relatedId });
-    assert.deepEqual(SEARCH_RANKING, { version: "exact-prefix-cosine-v2", semanticFloor: 0.5 });
+    assert.deepEqual(SEARCH_RANKING, { version: "exact-prefix-cosine-complete-denial-v4", semanticFloor: 0.5 });
     assert.equal(SEARCH_MATCH_POLICY_ID, searchHash(JSON.stringify(SEARCH_RANKING)));
     const vector = score => { const value = new Float32Array(384); value[0] = score; value[1] = Math.sqrt(1 - score ** 2); return value; };
     const queryChunks = [{ vector: vector(1) }];

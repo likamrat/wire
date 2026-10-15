@@ -21,7 +21,7 @@ export const percentageChartStyles = `
 .percentage-card[data-breakdown=services] .percentage-value {margin-inline-start:4px}
 .percentage-tool-list .percentage-legend-row {grid-template-columns:minmax(0,1fr) minmax(0,max-content)}
 .percentage-cue {display:flex;align-items:center;justify-content:center;color:var(--column-label)}
-.percentage-cue svg {width:var(--percentage-icon-size,20px);height:var(--percentage-icon-size,20px);fill:currentColor}
+.percentage-cue svg {width:var(--percentage-icon-size,20px);height:var(--percentage-icon-size,20px);fill:none}
 .percentage-label {display:block;justify-self:start;min-width:44px;max-width:100%;padding-inline:6px;overflow-wrap:anywhere;font-size:var(--type-small);line-height:1.4;min-height:44px;align-content:center;border-radius:var(--radius-small)}
 .percentage-label[href] {color:var(--accent);text-decoration:none;scroll-margin-block:calc(var(--app-header-height,76px) + 16px) 16px}
 .percentage-label[href]:hover {background:var(--hover);color:var(--ink)}

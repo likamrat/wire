@@ -93,7 +93,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, doc = do
 }
 
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.
-export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, showSourceIssues, downloadFile, openSavedReport, icon, onStateChange } = {}) {
+export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, showSourceIssues, downloadFile, openSavedReport, icon, utility, onStateChange } = {}) {
     const labels = ["Activity", "Contents", "Review & save"];
     const questions = ["Choose activity", "Choose contents", "Review and save your report"];
     let step = 1, reached = 1, phase = "draft", preview, bundle, failure = "";
@@ -490,8 +490,10 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
                         finally { control.disabled = false; }
                     });
                     control.setAttribute("aria-label", `Download ${name}`);
-                    if (icon) { control.prepend(icon("download")); control.classList.add("icon-action"); }
-                    (name === "coverage-and-redaction-manifest.json" ? details : downloads).append(control);
+                    if (utility) utility(control, "download", `Download ${name}`, `Download ${label}`);
+                    const file = el("span", "report-file-action");
+                    file.append(el("span", "", label), control);
+                    (name === "coverage-and-redaction-manifest.json" ? details : downloads).append(file);
                 }
                 saveHost.append(downloads, details, button("Start a new report", () => clearSelection?.()));
                 nodes.saveActions.replaceChildren();

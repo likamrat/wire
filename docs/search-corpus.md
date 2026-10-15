@@ -2,7 +2,7 @@
 
 `lib/search-corpus.mjs` provides a process-private, derived corpus for subsequent on-device retrieval. `lib/search-corpus.d.mts` is the consumer contract. It does not install a model, rank queries, expose an HTTP endpoint, render search UI, modify analysis membership, collect original history, or persist an index.
 
-The [on-device hybrid retrieval facade](semantic-retrieval.md) consumes this contract through `index` and `deliver`. Its model provisioning is explicit and separate; no runtime transport or UI integration is activated by either module.
+The [deterministic text retrieval facade](live-search.md) consumes this contract through `index` and `deliver`. It uses no AI, inference tokenizer or model resources.
 
 The [live-search owner](live-search.md) connects that unchanged facade to the
 loopback runtime, ordered generation stream, single field and verified opening
@@ -16,15 +16,21 @@ journey. It does not bypass these readers or add a persistent corpus cache.
 | Retained reply | `buildAssessmentModel` discovers authorized observations. Only `executeAssessmentAction(get_interaction_evidence)` reads payloads; its source/consent/membership/integrity and before/after basis guards remain authoritative. | Observation identity is hashed; raw observation refs, capture files and consent/source handles are not exposed. Direct interaction reader, bounded completeness and unverified finality preserved. |
 | Recorded action | The same `buildActivityAnalytics` canonical projection used by `buildRequestActivity`, and `createCallInvestigation.resolve`, across all supported layers. Tool, normalized method/path/query-key names, recorded status/outcome, retained failure code/reason/signal and qualified service associations. No argument values, response bodies or reconstructed rationale. | Layer plus canonical call identity. Exact request/layer/call route; returned API entries also require the accepted `callRevision`, because offsets can be reused. |
 | Tool / service | Names actually present in qualified retained actions, never inferred from prompt text. | Existing Analyze tool/service filter routes, explicitly `scope=all`. Discovery is not an analytical population until the user opens the named destination. |
-| Saved report | `readSavedReportFile`: registered ownership, disclosure manifest and exact file bytes/hash. HTML retains conservative inert visible-body extraction; JSON reads a verified projected snapshot; Markdown is inert source text; PDF reads its saved text layer locally. No source regeneration or resource/link fetching. | Registered bundle ID; independently bound format, manifest hash, file hash and artifact revision. HTML keeps `open-saved-report`; other formats use the closed `open-saved-report-file` target. |
+| Saved report | `readSavedReportFile`: registered ownership, disclosure manifest and exact file bytes/hash. HTML retains conservative inert visible-body extraction and its plain document title; JSON reads a verified projected snapshot; Markdown is inert source text; PDF reads its saved text layer locally. No source regeneration or resource/link fetching. | Registered bundle ID; independently bound format, manifest hash, file hash and artifact revision. HTML keeps `open-saved-report`; other formats use the closed `open-saved-report-file` target. |
 | Saved comparison | `readSavedComparison`: frozen manifest integrity and the accepted frozen compatibility reader. Allowlisted displayed metric/outcome/pattern/narrative fields only, not `sourceFacts` or internal membership/hash metadata. | Registered comparison ID and its own manifest/content revision. Typed `open-saved-comparison` target. Deleting a source report does not delete the separately saved comparison. |
 | View / Setting | Fixed existing navigation metadata; all 20 entries from `createSettingsNavigation`, categories and `resolve`. No DOM values or live permission/path fields. | Existing route allowlist; Settings uses `#settings?section=...&setting=...`, operational entries use `#collection-status?setting=...`. Three visualization targets include existing focus-only container IDs. Never click a control or open approval. |
 
 IDs are `wire-search-v1:<type>:<SHA-256 of canonical identity>`. `contentHash` hashes the permitted content. `source.revision` binds the actual input provenance; `revision` binds the entire item including coverage and target. IDs survive content changes; revisions do not. A follow-up lacking a recorded event uses the existing context reader's fallback key, not a claim of recovered message identity.
 
-Only title, content/excerpt, readable source label and explicitly permitted display coverage are search text. IDs, target descriptors, hashes and lifecycle metadata are routing/validation data, not embedding or lexical text. `excerpt` currently equals the complete permitted content: this unit adds no arbitrary truncation or result/page limit. Subsequent retrieval may select an excerpt only from this content.
+Only title, content/excerpt, readable source label and explicitly permitted display coverage are search text. IDs, target descriptors, hashes and lifecycle metadata are routing/validation data, not searchable text. Corpus `excerpt` equals complete permitted content: this unit adds no arbitrary truncation or result/page limit. Text retrieval selects an original excerpt/range from the matched title, content or readable source label, never from routing/private fields.
 
 All extracted content is plain text. Consumers must use text rendering, never `innerHTML`, including when a frozen report contains escaped markup.
+
+Interaction/context/reply display titles use a bounded, at-most-120-grapheme
+original slice of already-admitted text. No summary, ellipsis or role label is
+added to searchable content; empty/unavailable text retains its generic fallback.
+Full content and coverage are unchanged, and the title remains part of the entry
+revision. Saved report titles come from their verified document, not this preview.
 
 The fixed **Compare periods** destination is `#analyze?compare=periods`. It only navigates to the accepted comparison view; it does not create a report, refresh sources or start a tool action.
 

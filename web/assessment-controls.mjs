@@ -15,6 +15,7 @@ export function createAssessmentControls(contract) {
         }
         return {
             snapshot: () => clone(state),
+            hasUnsentDraft: () => !locked() && state.draft !== null,
             edit(value) {
                 if (locked()) throw new Error("Read the pending result or current context before editing.");
                 state = { ...state, phase: "editing", draft: clone(value), message: "", mutationRef: null };

@@ -7,16 +7,18 @@ export const uxStyles = `
 .progress-slot-trailing {margin-inline:.5em 0}
 .progress-slot-trailing:not(.pending-indicator) {display:none}
 .pending-indicator {visibility:visible;animation:evidence-pending .8s linear infinite;flex-shrink:0}
-.progress-slot>.fluent-icon {display:block}
+.progress-slot>.wire-icon {display:block}
 @keyframes evidence-pending {to {transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce) {.pending-indicator {animation:none}}
-.fluent-icon {display:inline-block;flex:none;vertical-align:middle;fill:currentColor;width:var(--icon-size);height:var(--icon-size)}
-.fluent-icon[data-fluent-icon*="_16_"] {width:var(--icon-size-small);height:var(--icon-size-small)}
-.fluent-icon[data-fluent-icon*="_24_"] {width:24px;height:24px}
-.fluent-icon.progress-icon-large {width:24px;height:24px}
-.fluent-icon.disclosure-icon {vertical-align:calc((1cap - 16px)/2)}
+.wire-icon {display:inline-block;flex:none;vertical-align:middle;fill:none;stroke:currentColor;width:var(--icon-size);height:var(--icon-size)}
+.wire-icon[data-icon-size="16"] {width:var(--icon-size-small);height:var(--icon-size-small)}
+.wire-icon[data-icon-size="24"] {width:24px;height:24px}
+.wire-icon.progress-icon-large {width:24px;height:24px}
+.wire-icon.disclosure-icon {vertical-align:calc((1cap - 16px)/2)}
 .icon-action,.filter-chip {display:inline-flex;align-items:center;justify-content:center;gap:var(--pill-gap)}
-.icon-action>.fluent-icon,.filter-chip>.fluent-icon {display:block;flex:none}
+.icon-action>.wire-icon,.filter-chip>.wire-icon {display:block;flex:none}
+button.icon-only,a.icon-only,.full-text-toggle.icon-only {display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:44px;min-height:44px;padding:10px}
+.report-file-action {display:inline-flex;align-items:center;gap:4px}
 :where(button,.button-link):has(>.progress-slot) {--action-progress-inset:12px;position:relative;display:inline-flex;align-items:center;justify-content:center;text-align:center;padding-inline:calc(var(--pill-inset) + var(--action-progress-inset))}
 :where(button,.button-link)>.progress-slot {position:absolute;inset-inline-start:4px;margin:0;width:16px;height:16px}
 p {max-width:72ch}
@@ -76,8 +78,8 @@ pre {font-size:var(--type-small);line-height:var(--leading-reading);white-space:
 .ux-code-label {flex:1;min-width:0;font-size:var(--type-caption);font-family:var(--font);font-weight:var(--weight-medium);color:var(--muted);overflow-wrap:anywhere}
 .ux-code-block>pre {margin:0;border-radius:0;min-width:0;scrollbar-gutter:stable;max-height:360px}
 .ux-code-block>pre:focus-visible {outline:2px solid var(--focus);outline-offset:-3px}
-.ux-copy {width:40px;height:40px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;padding:8px;flex:0 0 auto;color:var(--accent);border:1px solid var(--control);background:var(--paper);vertical-align:middle}
-.ux-copy svg {width:20px;height:20px;display:block;fill:currentColor;flex:0 0 auto}
+.ux-copy {width:44px;height:44px;min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;padding:10px;flex:0 0 auto;color:var(--accent);border:1px solid var(--control);background:var(--paper);vertical-align:middle}
+.ux-copy svg {width:20px;height:20px;display:block;fill:none;flex:0 0 auto}
 .ux-copy[data-copy-state=success] {color:var(--success)}
 .ux-copy[data-copy-state=error] {color:var(--danger);border-color:var(--danger)}
 .ux-copy[aria-disabled=true] {cursor:progress;color:var(--muted)}
@@ -103,8 +105,8 @@ code.api-path {display:block;width:fit-content;min-width:0;max-width:100%;paddin
 .ux-tooltip::backdrop {background:transparent;pointer-events:none}
 .ux-tooltip[data-tone=contrast] {background:var(--ink);color:var(--paper);border-color:var(--ink)}
 /* Inline-flex exposes the glyph baseline, not the expanded hit target's bottom. */
-.ux-help {display:inline-flex;align-items:center;justify-content:flex-start;vertical-align:calc((1cap - var(--help-icon))/2);flex:0 0 auto;width:var(--help-target);height:var(--help-target);min-width:var(--help-target);min-height:var(--help-target);padding:0;border:0;border-radius:var(--radius-small);background:transparent;color:var(--muted);font:inherit;touch-action:manipulation}
-.ux-help>svg.fluent-icon {display:block;width:var(--help-icon);height:var(--help-icon);fill:currentColor;flex:0 0 auto}
+.ux-help {display:inline-flex;align-items:center;justify-content:flex-start;vertical-align:calc((1cap - var(--help-icon))/2);flex:0 0 auto;width:max(44px,var(--help-target));height:max(44px,var(--help-target));min-width:44px;min-height:44px;padding:0;border:0;border-radius:var(--radius-small);background:transparent;color:var(--muted);font:inherit;touch-action:manipulation}
+.ux-help>svg.wire-icon {display:block;width:var(--help-icon);height:var(--help-icon);fill:none;flex:0 0 auto}
 .ux-help:hover:not(:disabled),.ux-help:active:not(:disabled) {color:var(--ink);background:transparent;border-color:transparent}
 .help-heading {display:flex;align-items:center;gap:var(--help-gap);min-width:0}
 .help-heading>label {flex:initial}

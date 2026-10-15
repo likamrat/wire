@@ -114,7 +114,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     return { render, focus: () => input.focus() };
 }
 
-export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel, onSubmit, onCheck, onClose, wording = createAssessmentWording() }) {
+export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel, onSubmit, onCheck, onClose, requestClose = action => action(), inline = false, wording = createAssessmentWording() }) {
     const doc = dialog.ownerDocument;
     dialog.classList.add("assessment-feedback-dialog");
     const dimensions = {
@@ -135,6 +135,7 @@ export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel
     const note = el("p", term.explanation + " Optional personal feedback; recorded evidence stays unchanged.");
     const automatic = el("p", automaticLabel), saved = el("p");
     const form = el("form"), label = el("label", "Your assessment"), select = el("select");
+    select.id = "feedback-verdict-" + checkId;
     for (const [value, text] of [["", "Choose a verdict"], ["pass", term.pass], ["fail", term.fail], ["unassessed", "Not sure"]]) {
         const option = el("option", text);
         option.value = value;
@@ -202,20 +203,31 @@ export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel
         onCheck(packet);
     });
     cancel.addEventListener("click", () => {
-        if (!locked(control.snapshot())) control.cancel();
-        dialog.close();
+        requestClose(() => {
+            if (!locked(control.snapshot())) control.cancel();
+            close();
+        });
     });
     dialog.oncancel = () => {
         if (!locked(control.snapshot())) control.cancel();
     };
-    dialog.onclose = () => {
-        if (dialog.open) return;
+    function didClose() {
         onClose?.();
         if (trigger?.isConnected && trigger.checkVisibility() && (!trigger.closest("dialog") || trigger.closest("dialog").open)) trigger.focus({ preventScroll: true });
-    };
+    }
+    function close() {
+        if (inline) { dialog.hidden = true; didClose(); }
+        else dialog.close();
+    }
+    dialog.onclose = () => { if (!dialog.open) didClose(); };
     render();
     return {
-        render,
-        open(button) { trigger = button; render(); dialog.showModal(); cancel.focus(); },
+        render, close, focus: () => { dialog.hidden = false; (doc.getElementById(select.id + "-control") || select).focus({ preventScroll: true }); },
+        open(button) {
+            trigger = button; render();
+            if (inline) dialog.hidden = false;
+            else dialog.showModal();
+            cancel.focus({ preventScroll: true });
+        },
     };
 }

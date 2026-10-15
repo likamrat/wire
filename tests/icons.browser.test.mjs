@@ -123,7 +123,7 @@ async function ready(page) {
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 }
 async function inspectIcons(page, width) {
-    const result = await page.locator("svg.fluent-icon").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => {
+    const result = await page.locator("svg.wire-icon").evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => {
         const box = node.getBoundingClientRect(), size = Number(node.getAttribute("width")), control = node.closest("button");
         const target = control?.getBoundingClientRect();
         const color = getComputedStyle(node).color;
@@ -143,7 +143,7 @@ async function inspectIcons(page, width) {
             .reduce((sum, n, index) => sum + n * [.2126, .7152, .0722][index], 0);
         const light = luminance(color), dark = luminance(background || "rgb(255,255,255)");
         return {
-            asset: node.dataset.fluentIcon, size, width: box.width, height: box.height,
+            asset: node.dataset.lucideIcon, size, width: box.width, height: box.height,
             hidden: node.getAttribute("aria-hidden"), focusable: node.getAttribute("focusable"),
             contrast: (Math.max(light, dark) + .05) / (Math.min(light, dark) + .05),
             paths: [...node.querySelectorAll("path")].map(item => item.getAttribute("d")),
@@ -154,12 +154,12 @@ async function inspectIcons(page, width) {
         };
     }));
     const known = Object.fromEntries([...Object.values(uxIcons), ...Object.values(dimensionalIcons)].map(svg => [
-        /data-fluent-icon="([^"]+)"/.exec(svg)[1], [...svg.matchAll(/<path\b[^>]*\bd="([^"]+)"/g)].map(match => match[1]),
+        /data-lucide-icon="([^"]+)"/.exec(svg)[1], [...svg.matchAll(/<path\b[^>]*\bd="([^"]+)"/g)].map(match => match[1]),
     ]));
     assert.ok(result.length > 0);
     for (const icon of result) {
         assert.deepEqual(icon.paths, known[icon.asset], `${icon.asset}: package geometry`);
-        assert.ok([16, 20].includes(icon.size));
+        assert.ok([16, 20, 24].includes(icon.size));
         assert.equal(icon.width, icon.size, `${icon.asset}: native optical width`);
         assert.equal(icon.height, icon.size, `${icon.asset}: native optical height`);
         assert.equal(icon.hidden, "true");
@@ -167,7 +167,7 @@ async function inspectIcons(page, width) {
         assert.ok(icon.contrast >= 3, `${icon.asset}: contrast ${icon.contrast}`);
         if (icon.iconOnly) assert.ok(icon.label, `${icon.asset}: contextual name`);
         if (icon.helpOrCopy) {
-            const minimum = icon.metadataHelp ? (icon.coarse ? 32 : 24) : (icon.coarse || width <= 600 ? 44 : 40);
+            const minimum = 44;
             assert.ok(icon.hitWidth >= minimum, `${icon.asset}: ${icon.metadataHelp ? "inline metadata" : "standard"} target width`);
             assert.ok(icon.hitHeight >= minimum, `${icon.asset}: ${icon.metadataHelp ? "inline metadata" : "standard"} target height`);
         }
@@ -175,19 +175,19 @@ async function inspectIcons(page, width) {
     return result;
 }
 
-test("Fluent primitives reject missing icons and keep copy, error and dialog feedback accessible", { timeout: 30000 }, async () => fixture(async ({ context, origin }) => {
+test("Lucide primitives reject missing icons and keep copy, error and dialog feedback accessible", { timeout: 30000 }, async () => fixture(async ({ context, origin }) => {
     const page = await context.newPage();
     await page.goto(origin + "/primitives");
     const failures = await page.evaluate(() => ["missing", "constructor", "toString"].map(name => {
         try { window.syntheticUX.icon(name); return null; } catch (error) { return error.message; }
     }));
-    assert.deepEqual(failures, ["Unknown Fluent icon: missing", "Unknown Fluent icon: constructor", "Unknown Fluent icon: toString"]);
+    assert.deepEqual(failures, ["Unknown Lucide icon: missing", "Unknown Lucide icon: constructor", "Unknown Lucide icon: toString"]);
     const malformed = await page.evaluate(() => {
         const bad = createEvidenceUX({ malformed: "<svg><broken", html: "<span>Not SVG</span>" });
         return ["malformed", "html"].map(name => { try { bad.icon(name); return null; } catch (error) { return error.message; } });
     });
-    assert.deepEqual(malformed, ["Invalid Fluent icon: malformed", "Invalid Fluent icon: html"]);
-    assert.equal(await page.locator('[data-fixture-icon="export"] [data-fluent-icon="arrow_export_ltr_20_regular"]').count(), 1);
+    assert.deepEqual(malformed, ["Invalid Lucide icon: malformed", "Invalid Lucide icon: html"]);
+    assert.equal(await page.locator('[data-fixture-icon="export"] [data-lucide-icon="file-output"]').count(), 1);
     const copy = page.getByRole("button", { name: "Copy synthetic original", exact: true });
     await copy.focus();
     await page.getByRole("tooltip").waitFor({ state: "visible" });
@@ -196,14 +196,14 @@ test("Fluent primitives reject missing icons and keep copy, error and dialog fee
     await copy.click();
     await page.waitForFunction(() => document.querySelector(".ux-copy").dataset.copyState === "success");
     assert.deepEqual(await copy.boundingBox(), before);
-    assert.equal(await copy.locator('[data-fluent-icon="checkmark_20_regular"]').count(), 1);
-    assert.equal(await copy.textContent(), "");
+    assert.equal(await copy.locator('[data-lucide-icon="check"]').count(), 1);
+    assert.equal((await copy.textContent()).trim(), "");
     assert.deepEqual(await page.evaluate(() => window.syntheticWrites), ["SYNTHETIC displayed text\n  exact spacing"]);
     await page.evaluate(() => { window.rejectSyntheticCopy = true; });
     await copy.click();
     await page.getByRole("alert").waitFor();
     assert.equal(await copy.getAttribute("data-copy-state"), "error");
-    assert.equal(await copy.locator('[data-fluent-icon="copy_20_regular"]').count(), 1);
+    assert.equal(await copy.locator('[data-lucide-icon="copy"]').count(), 1);
     await page.getByRole("button", { name: "Open synthetic comparison", exact: true }).click();
     await page.getByRole("button", { name: "Copy synthetic report copy", exact: true }).focus();
     await page.getByRole("tooltip").waitFor();
@@ -214,14 +214,14 @@ test("Fluent primitives reject missing icons and keep copy, error and dialog fee
     assert.equal(await page.locator("dialog").evaluate(node => node.open), false);
 }));
 
-test("disabled explanations keep a visible Fluent info target without enabling the action", { timeout: 30000 }, async () => fixture(async ({ context, origin }) => {
+test("disabled explanations keep a visible Lucide info target without enabling the action", { timeout: 30000 }, async () => fixture(async ({ context, origin }) => {
     const page = await context.newPage();
     await page.goto(origin + "/primitives");
     const wrapper = page.locator(".ux-disabled-help");
     assert.equal(await wrapper.getAttribute("tabindex"), "0");
     assert.equal(await wrapper.getAttribute("role"), "group");
     const help = wrapper.getByRole("button", { name: "About unavailable Preview synthetic report", exact: true });
-    assert.equal(await help.locator('[data-fluent-icon="info_16_regular"]').count(), 1);
+    assert.equal(await help.locator('[data-lucide-icon="info"]').count(), 1);
     await help.click();
     await page.getByRole("tooltip").waitFor({ state: "visible" });
     assert.equal(await page.getByRole("tooltip").textContent(), "Choose a synthetic request first.");
@@ -261,7 +261,7 @@ test("icon hover, focus, disabled help and copy success/error retain contrast in
     }
 }));
 
-test("integrated navigation, charts, filters, formats and downloads use clean Fluent glyphs in both themes", { timeout: 60000 }, async () => fixture(async ({ context, origin }) => {
+test("integrated navigation, charts, filters, formats and downloads use clean Lucide glyphs in both themes", { timeout: 60000 }, async () => fixture(async ({ context, origin }) => {
     const measurements = [];
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
         const page = await context.newPage();
@@ -283,13 +283,11 @@ test("integrated navigation, charts, filters, formats and downloads use clean Fl
                 await page.locator("#navigationToggle").click();
                 await page.locator("#navigationDrawer").waitFor({ state: "visible" });
                 assert.deepEqual(await page.locator("#navigationDrawer .primary-navigation a").evaluateAll(nodes => nodes.map(node => ({
-                    route: node.dataset.nav, label: node.textContent, icon: node.querySelector("[data-fluent-icon]")?.dataset.fluentIcon,
+                    route: node.dataset.nav, label: node.querySelector(".navigation-label").textContent, icon: node.querySelector("[data-lucide-icon]")?.dataset.lucideIcon,
                 }))), [
-                    { route: "home", label: "Home", icon: "home_20_regular" },
-                    { route: "activity", label: "Activity", icon: "history_20_regular" },
-                    { route: "reports", label: "Reports", icon: "document_bullet_list_20_regular" },
-                    { route: "collection-status", label: "Collection status", icon: "document_search_20_regular" },
-                    { route: "settings", label: "Settings", icon: "settings_20_regular" },
+                    { route: "analyze", label: "Analyze", icon: "chart-no-axes-combined" },
+                    { route: "reports", label: "Reports", icon: "file-text" },
+                    { route: "settings", label: "Settings", icon: "settings" },
                 ]);
                 await inspectIcons(page, width);
                 await page.keyboard.press("Escape");
@@ -297,13 +295,13 @@ test("integrated navigation, charts, filters, formats and downloads use clean Fl
             if (route === "reports") {
                 await page.locator("#savedLibraryTitle").click();
                 await page.locator("#bundleList details > summary").click();
-                assert.equal(await page.locator('#bundleList button [data-fluent-icon="arrow_download_20_regular"]').count(), 4);
+                assert.equal(await page.locator('#bundleList button [data-lucide-icon="download"]').count(), 4);
                 assert.equal(await page.locator('#formatOptions input[type="checkbox"]').count(), 4);
             }
             if (route.includes("service=Calendar")) {
                 assert.equal(await page.locator("#filterChips button").count(), 2);
-                assert.equal(await page.locator('#filterChips [data-fluent-icon="dismiss_20_regular"]').count(), 2);
-                assert.equal(await page.locator('#resetView [data-fluent-icon="arrow_counterclockwise_20_regular"]').count(), 1);
+                assert.equal(await page.locator('#filterChips [data-lucide-icon="x"]').count(), 2);
+                assert.equal(await page.locator('#resetView [data-lucide-icon="rotate-ccw"]').count(), 1);
                 const chip = page.getByRole("button", { name: /^Remove date filter:/ });
                 await chip.focus();
                 await page.getByRole("tooltip").waitFor();
@@ -338,8 +336,8 @@ test("theme icons keep fixed bounds and touch help uses the shared dismissible t
         await page.locator("#themePreference").click();
         assert.equal(await page.locator("html").getAttribute("data-evidence-theme"), theme);
         assert.deepEqual(await page.locator("#themePreference").boundingBox(), before);
-        for (const asset of ["weather_sunny", "weather_moon"]) {
-            assert.equal(await page.locator(`#themePreference [data-fluent-icon="${asset}_20_regular"]`).count(), 1);
+        for (const asset of ["sun", "moon"]) {
+            assert.equal(await page.locator(`#themePreference [data-lucide-icon="${asset}"]`).count(), 1);
         }
         assert.equal(await page.locator("#themePreference").getAttribute("aria-checked"), String(theme === "dark"));
     }

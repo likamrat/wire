@@ -4,6 +4,7 @@ export function createDisclosureState() {
     return {
         isOpen: (key, initial = false) => opened.has(key) ? opened.get(key) : initial,
         setOpen: (key, value) => opened.set(key, Boolean(value)),
+        forget(key) { opened.delete(key); pages.delete(key); orders.delete(key); },
         page(key, total, size) {
             const value = Math.min(pages.get(key) || 0, Math.max(0, Math.ceil(total / size) - 1));
             pages.set(key, value);

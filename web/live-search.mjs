@@ -1,5 +1,66 @@
 import { uxIcons } from "./ux-icons.mjs";
 
+export function searchHitPresentation(hit) {
+    const invalid = () => { throw new TypeError("Search match text or range is invalid. Search again."); };
+    if (![hit?.title, hit?.excerpt, hit?.source?.label].every(value => typeof value === "string")
+        || !hit.textMatch || Object.keys(hit.textMatch).sort().join(",") !== "end,excerptStart,field,start") invalid();
+    const { field, start, end, excerptStart } = hit.textMatch;
+    if (!["title", "content", "source"].includes(field)
+        || ![start, end, excerptStart].every(Number.isSafeInteger) || excerptStart < 0 || start < excerptStart || end <= start) invalid();
+    function boundary(text, index) {
+        return !(index > 0 && index < text.length && text.charCodeAt(index - 1) >= 0xd800
+            && text.charCodeAt(index - 1) <= 0xdbff && text.charCodeAt(index) >= 0xdc00 && text.charCodeAt(index) <= 0xdfff);
+    }
+    const from = start - excerptStart, to = end - excerptStart;
+    if (to > hit.excerpt.length || !boundary(hit.excerpt, from) || !boundary(hit.excerpt, to)) invalid();
+    if (field !== "content") {
+        const original = field === "title" ? hit.title : hit.source.label;
+        if (end > original.length || !boundary(original, start) || !boundary(original, end)
+            || original.slice(start, end) !== hit.excerpt.slice(from, to)) invalid();
+    }
+    const plain = text => [{ text, match: false }];
+    const marked = (text, from, to) => [
+        { text: text.slice(0, from), match: false },
+        { text: text.slice(from, to), match: true },
+        { text: text.slice(to), match: false },
+    ].filter(part => part.text);
+    const shown = {
+        title: field === "title" ? marked(hit.title, start, end) : plain(hit.title),
+        excerpt: field === "content" ? marked(hit.excerpt, from, to) : [],
+        source: field === "source" ? marked(hit.source.label, start, end) : plain(hit.source.label),
+    };
+    if (shown.excerpt.length && hit.excerpt === hit.title) {
+        shown.title = shown.excerpt; shown.excerpt = [];
+    }
+    if (hit.source.label === hit.title) {
+        if (field === "source") shown.title = shown.source;
+        shown.source = [];
+    } else if (shown.excerpt.length && hit.source.label === hit.excerpt) shown.source = [];
+    if (shown.excerpt.length) {
+        const prefix = hit.excerpt.slice(0, from), suffix = hit.excerpt.slice(to);
+        const graphemes = new Intl.Segmenter("und", { granularity: "grapheme" });
+        function context(text, before) {
+            const paragraphs = text.split(/\r\n|[\r\n]/u), paragraph = before ? paragraphs.at(-1) : paragraphs[0];
+            const units = [...graphemes.segment(paragraph)].map(part => part.segment);
+            let value = (before ? units.slice(-32) : units.slice(0, 56)).join("");
+            if (value.length < paragraph.length) value = before ? value.replace(/^\S+\s/u, "") : value.replace(/\s+\S*$/u, "");
+            return value;
+        }
+        const left = context(prefix, true), right = context(suffix, false);
+        shown.excerpt = [
+            { text: ((left.length < prefix.length ? "... " : "") + left).replace(/\s+/gu, " "), match: false },
+            { text: hit.excerpt.slice(from, to), match: true },
+            { text: (right + (right.length < suffix.length ? " ..." : "")).replace(/\s+/gu, " "), match: false },
+        ].filter(part => part.text);
+    }
+    if (field !== "source" && hit.type === "view" && hit.target?.kind === "route" && typeof hit.target.href === "string") {
+        const names = { analyze: "Analyze", reports: "Reports", settings: "Settings", "collection-status": "Collection status" };
+        const view = hit.target.href.slice(1).split("?")[0];
+        if (Object.hasOwn(names, view)) shown.source = names[view] === hit.title ? [] : plain(names[view]);
+    }
+    return shown;
+}
+
 export const liveSearchPanel = `
 <section id="wireSearchPanel" class="wire-search-panel" aria-labelledby="wireSearchTitle" hidden>
   <h2 id="wireSearchTitle" class="visually-hidden">Search results</h2>
@@ -8,19 +69,11 @@ export const liveSearchPanel = `
   <button id="wireSearchRetry" type="button" class="quiet" hidden>Reconnect search</button>
   <div class="wire-search-health">
     <p id="wireSearchCoverage" class="muted"></p>
-    <a id="wireSearchTroubleshooting" class="text-link" href="#settings?section=troubleshooting&amp;setting=settings-search" hidden>Search troubleshooting</a>
   </div>
   <section id="wireSearchMatches" class="wire-search-set" aria-labelledby="wireSearchMatchesTitle" hidden>
     <h3 id="wireSearchMatchesTitle">Matches</h3>
     <ol id="wireSearchResults" class="wire-search-results" aria-label="Search results"></ol>
     <div id="wireSearchPaging" class="wire-search-paging"></div>
-  </section>
-  <section id="wireSearchRelated" class="wire-search-set" aria-labelledby="wireSearchRelatedTitle" hidden>
-    <h3 id="wireSearchRelatedTitle">Related results</h3>
-    <p class="muted">Similar topics, possibly different work. These do not change your charts or report selection.</p>
-    <p id="wireSearchRelatedCount" class="visually-hidden"></p>
-    <ol id="wireSearchRelatedResults" class="wire-search-results" aria-label="Related results"></ol>
-    <div id="wireSearchRelatedPaging" class="wire-search-paging"></div>
   </section>
   <details id="wireSearchOptions" class="wire-search-options">
     <summary id="wireSearchFilterSummary">Filters</summary>
@@ -46,7 +99,7 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-entry {position:relative;display:grid;grid-template-columns:minmax(0,1fr);align-items:center;flex:1 1 280px;min-width:180px;max-width:480px}
 .wire-search-entry>label {font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);white-space:nowrap}
 .wire-search-icon {position:absolute;inset-inline-start:14px;top:50%;transform:translateY(-50%);display:flex;pointer-events:none;color:var(--muted)}
-.wire-search-icon .fluent-icon {width:20px;height:20px}
+.wire-search-icon .wire-icon {width:20px;height:20px}
 #wireSearch {width:100%;min-width:0;min-height:var(--pill-height);border-radius:var(--radius-pill);padding-inline:42px var(--pill-inset);background:var(--paper);box-shadow:var(--surface-shadow)}
 .wire-search-panel {position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--surface-shadow);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
 .wire-search-options {border-top:1px solid var(--rule);margin-top:4px;padding-inline:8px}
@@ -60,14 +113,15 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-set {margin:0;min-width:0}
 .wire-search-set>h3:not(.visually-hidden),.wire-search-set>p:not(.visually-hidden) {margin:8px;font-size:var(--type-caption)}
 .wire-search-results {padding:4px;margin:0;list-style:none}
-.wire-search-results .wire-search-hit {display:grid;gap:4px;width:100%;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);padding:10px 8px}
+.wire-search-results .wire-search-hit {display:grid;grid-template-columns:minmax(0,1fr);gap:4px;width:100%;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);padding:10px 8px}
 #wireSearchPanel .wire-search-hit::before {content:none}
 #wireSearchPanel .wire-search-hit:is(:hover,:active):not(:disabled)::before {content:"";inset:0;border:0}
-.wire-search-hit strong {font-size:var(--type-body);font-weight:var(--weight-medium)}
-.wire-search-excerpt {white-space:pre-wrap;overflow-wrap:anywhere;font-weight:var(--weight-regular);line-height:var(--leading-ui)}
+.wire-search-hit strong {font-size:var(--type-body);font-weight:var(--weight-regular);min-width:0;overflow-wrap:anywhere}
+.wire-search-hit mark {background:var(--accent-soft);color:inherit;text-decoration:underline;text-underline-offset:.15em}
+.wire-search-excerpt {white-space:normal;overflow-wrap:anywhere;font-weight:var(--weight-regular);line-height:var(--leading-ui)}
 .wire-search-meta,.wire-search-limitation {font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--muted);overflow-wrap:anywhere}
 .wire-search-meta {display:flex;gap:4px 6px;flex-wrap:wrap;align-items:center}
-.wire-search-kind {color:var(--muted)}
+.wire-search-kind {color:var(--ink)}
 .wire-search-paging:not(:empty) {padding:8px;font-size:var(--type-caption)}
 .wire-search-document pre {white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font);line-height:var(--leading-ui)}
 .wire-search-document .report-frame {width:100%;min-height:65vh;border:1px solid var(--rule)}
@@ -114,25 +168,24 @@ export function createFrozenReportFrame(html, doc = document) {
     return frame;
 }
 
-export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAnalysis, onAnalysis, onInvalidateOpen, contract }) {
+export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, presentHit }) {
     const $ = id => document.getElementById(id);
     const input = $("wireSearch"), panel = $("wireSearchPanel"), list = $("wireSearchResults");
     const home = $("wireSearchHome");
     const scope = $("wireSearchScope"), category = $("wireSearchType"), state = createState();
-    const lists = { matches: list, related: $("wireSearchRelatedResults") };
-    const pagers = { matches: $("wireSearchPaging"), related: $("wireSearchRelatedPaging") };
+    const lists = { matches: list };
+    const pagers = { matches: $("wireSearchPaging") };
     const returns = new Map();
     let stream, timer, heartbeat, sequence = 0, openId = 0, restore, analysisKey = null, dialog;
-    let pages = { matches: 0, related: 0 }, drawnKeys = { matches: null, related: null };
+    let pages = { matches: 0 }, drawnKeys = { matches: null };
     let connected = false, connecting = false, disposed = false;
     let hidden = document.hidden, resumeVisibleQuery = false;
     const purpose = () => scope.value === "analysis" ? "analysis" : "navigation";
     const types = () => scope.value === "analysis" ? ["interaction", "context", "reply", "action"] : category.value ? [category.value] : [];
-    const ownedReceipt = receipt => state.snapshot()[receipt?.purpose === "related-navigation" ? "related" : "matches"]?.receipt;
+    const ownedReceipt = () => state.snapshot().matches?.receipt;
     function eraseLists() {
-        for (const key of ["matches", "related"]) { lists[key].replaceChildren(); pagers[key].replaceChildren(); drawnKeys[key] = null; }
-        $("wireSearchMatches").hidden = $("wireSearchRelated").hidden = true;
-        $("wireSearchRelatedCount").textContent = "";
+        list.replaceChildren(); pagers.matches.replaceChildren(); drawnKeys.matches = null;
+        $("wireSearchMatches").hidden = true;
     }
     function el(tag, text, cls) {
         const node = document.createElement(tag);
@@ -141,7 +194,10 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         return node;
     }
     function button(text, action) {
-        const node = el("button", text, "quiet"); node.type = "button"; node.addEventListener("click", action); return node;
+        const node = el("button", text, "quiet"); node.type = "button"; node.addEventListener("click", action);
+        const role = text.startsWith("Previous ") ? "previous" : text.startsWith("Next ") ? "next" : text === "Back to search" ? "back" : null;
+        if (role) ux?.utility(node, role, text);
+        return node;
     }
     function failureMessage(error) {
         if (error.reason === "search-protocol-changed") return "Search changed. Reload this panel.";
@@ -184,7 +240,6 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         $("wireSearchStatus").textContent = message;
         $("wireSearchStatus").classList.remove("visually-hidden");
         $("wireSearchCoverage").textContent = "";
-        $("wireSearchTroubleshooting").hidden = true;
         $("wireSearchRetry").hidden = false;
         onAnalysis({ state: "unavailable", query: scope.value === "analysis" ? input.value : null });
     }
@@ -192,7 +247,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         const current = state.snapshot(), context = getAnalysis();
         if (!restore || panel.hidden || !current.matches.receipt || context?.pending || current.matches.receipt.revision !== context?.revision
             || scope.value === "analysis" && analysisKey !== context?.key) return;
-        for (const key of ["matches", "related"]) lists[key].scrollTop = restore.scroll[key];
+        lists.matches.scrollTop = restore.scroll.matches;
         panel.scrollTop = restore.panelScroll;
         const focused = [...lists[restore.set].querySelectorAll("button")].find(node => node.dataset.searchId === restore.focus);
         (focused || input).focus({ preventScroll: true }); restore = null;
@@ -200,41 +255,33 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
     function paint() {
         if (document.hidden) return;
         const current = state.snapshot(), status = current.status;
-        const partial = status?.corpus?.state === "partial"
-            && (current.purpose !== "analysis" || !contract.completeCoverage(status.corpus, current.matches.receipt?.queryTypes));
-        const wordSearchAvailable = Boolean(current.matches.receipt && status?.mode === "lexical-only");
+        panel.dataset.searchState = current.state;
+        const partial = Boolean(current.matches.receipt && !contract.completeCoverage(status?.corpus, current.matches.receipt.queryTypes));
         const labels = { queued: "Searching...",
             building: "Preparing search...",
             searching: "Searching...", stale: "Saved content changed. Search again.",
             changing: "Saved content changed. Search again.",
             unavailable: "Search is unavailable. Try again.",
             disconnected: "Connect local search to begin.", closed: "Local search closed.", superseded: "A newer query replaced this read.",
+            incomplete: "Search is incomplete. Some saved content could not be searched.",
             "no-match": "No matches. Try different words." };
         $("wireSearchStatus").textContent = !input.value.trim() ? ""
             : current.matches.receipt ? current.matches.total
                 ? `${current.matches.total} ${partial ? "available " : ""}match${current.matches.total === 1 ? "" : "es"}`
-                : current.related?.total ? "No matches. Related results may help you find the saved item."
-                    : "No matches. Try different words."
+                : partial ? labels.incomplete : labels["no-match"]
                 : labels[current.state] || "Ready for a local search.";
-        $("wireSearchStatus").classList.toggle("visually-hidden", Boolean(current.matches.total || current.related?.total));
+        $("wireSearchStatus").classList.toggle("visually-hidden", Boolean(current.matches.total));
         $("wireSearchFilterSummary").textContent = ["Filters",
             scope.value === "analysis" ? "Current Analyze scope" : "",
             category.value ? category.selectedOptions[0].textContent : "",
         ].filter(Boolean).join(" · ");
-        $("wireSearchCoverage").textContent = [
-            wordSearchAvailable ? "Word search only." : "",
-            partial ? "Some saved content is unavailable." : "",
-        ].filter(Boolean).join(" ");
+        $("wireSearchCoverage").textContent = partial && current.matches.total ? "Some saved content is unavailable." : "";
         $("wireSearchCoverage").hidden = !$("wireSearchCoverage").textContent;
-        $("wireSearchTroubleshooting").hidden = !wordSearchAvailable;
         $("wireSearchRetry").hidden = !input.value.trim() || !["disconnected", "stale", "unavailable", "closed", "changing"].includes(current.state);
         $("wireSearchRetry").textContent = connected ? "Retry search" : "Reconnect search";
         $("wireSearchMatches").hidden = !current.matches.total;
-        $("wireSearchMatchesTitle").classList.toggle("visually-hidden", !current.related?.total);
-        $("wireSearchRelated").hidden = current.purpose !== "navigation" || !current.related?.total;
-        $("wireSearchRelatedCount").textContent = current.related?.total
-            ? `${current.related.total} suggestion${current.related.total === 1 ? "" : "s"}` : "";
-        for (const key of ["matches", "related"]) paintSet(key, current[key]);
+        $("wireSearchMatchesTitle").classList.add("visually-hidden");
+        paintSet("matches", current.matches);
         restoreResultFocus();
     }
     function paintSet(key, value) {
@@ -246,53 +293,50 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         const list = lists[key], paging = pagers[key];
         list.replaceChildren();
         for (const hit of hits.slice(pages[key] * size, (pages[key] + 1) * size)) {
+            const shown = presentHit(hit);
             const row = el("li"), target = button("", () => open(hit, key));
             target.className = "wire-search-hit"; target.dataset.searchId = hit.id;
             target.dataset.searchSet = key;
             if (hit.target.bundleId) target.dataset.searchBundle = hit.target.bundleId;
             const meta = el("span", undefined, "wire-search-meta");
-            const lines = hit.excerpt.trim().split("\n");
-            while (lines[0]?.trim() === hit.title) lines.shift();
-            if (lines.at(-1)?.trim() === hit.source.label) lines.pop();
             const shorten = value => {
                 const chars = Array.from(value.trim());
                 return chars.length > 220 ? chars.slice(0, 220).join("") + "..." : value.trim();
             };
-            const interaction = ["interaction", "context", "reply"].includes(hit.type);
-            const title = interaction && lines[0]?.trim() ? lines.shift().trim() : hit.title;
-            const excerpt = interaction || ["tool", "service", "view", "setting"].includes(hit.type) ? ""
-                : hit.type === "action" ? lines.find(line => /\p{L}.*\s.*\p{L}/u.test(line)
-                    && !/^\s*(?:[{\[]|(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s|https?:|\/)/i.test(line)) || ""
-                    : lines.find(line => line.trim() && line.trim() !== title) || "";
-            target.append(el("strong", shorten(title)));
-            if (excerpt) target.append(el("span", shorten(excerpt), "wire-search-excerpt"));
+            const textParts = (node, parts) => {
+                for (const part of parts) node.append(part.match ? el("mark", part.text) : document.createTextNode(part.text));
+                return node;
+            };
+            target.append(textParts(el("strong"), shown.title));
             const outcome = ({ success: "Succeeded", failure: "Failed", partial: "Partial result", transport: "No response" })[hit.coverage?.outcome];
-            const sourceLabel = hit.type === "setting" && hit.source.label.startsWith("Settings / ") ? hit.source.label.slice(11)
-                : hit.type === "view" && hit.target.kind === "route"
-                    ? ({ analyze: "Analyze", reports: "Reports", settings: "Settings", "collection-status": "Collection status" })[hit.target.href.slice(1).split("?")[0]] || hit.source.label
-                    : hit.source.label;
-            meta.append(el("span", hit.category, "wire-search-kind"), el("span", "·"), el("span", sourceLabel),
-                ...(outcome ? [el("span", "·"), el("span", outcome)] : []));
+            const categoryLabel = ({ interaction: "Interaction", context: "Prompt context", reply: "Reply", action: "Recorded action",
+                tool: "Tool", service: "Service", report: "Report", comparison: "Comparison", view: "View", setting: "Setting" })[hit.type];
+            meta.append(el("span", categoryLabel, "wire-search-kind"));
+            if (shown.source.length) meta.append(el("span", "·"), textParts(el("span", undefined, "wire-search-source"), shown.source));
+            if (outcome) meta.append(el("span", "·"), el("span", outcome));
             target.append(meta);
+            if (shown.excerpt.length) target.append(textParts(el("span", undefined, "wire-search-excerpt"), shown.excerpt));
             const call = hit.target.kind === "route" && hit.target.href.startsWith("#request?")
                 && new URLSearchParams(hit.target.href.split("?")[1]).has("call") && hit.coverage?.layer !== "code-reference";
-            const destination = interaction ? "Open interaction" : ["action", "tool", "service"].includes(hit.type)
+            const destination = ["interaction", "context", "reply"].includes(hit.type) ? "Open interaction" : ["action", "tool", "service"].includes(hit.type)
                 ? call ? "Open recorded call" : "Open in Analyze"
                 : ({ report: "Open saved report", comparison: "Open saved comparison", setting: "Open setting", view: "Open view" })[hit.type];
             const limitation = hit.coverage?.completeness === "partial" || hit.coverage?.completeness === "bounded-fragment" ? "Only part of this text was saved."
                 : hit.coverage?.completeness === "unavailable" ? "Saved text is unavailable." : "";
-            target.setAttribute("aria-label", [`${destination}: ${shorten(title)}; ${hit.category}; ${sourceLabel}`,
+            target.setAttribute("aria-label", [`${destination}: ${shorten(hit.title)}; ${categoryLabel}`,
+                shown.source.map(part => part.text).join(""),
+                shown.excerpt.map(part => part.text).join("").replace(/\s+/gu, " "),
                 outcome, limitation].filter(Boolean).join("; "));
             if (limitation) target.append(el("span", limitation, "wire-search-limitation"));
             row.append(target); list.append(row);
         }
         paging.replaceChildren();
         if (pageCount > 1) {
-            const noun = key === "related" ? "suggestions" : "results";
+            const noun = "results";
             const previous = button("Previous " + noun, () => { restore = null; pages[key]--; paint(); list.querySelector("button")?.focus(); });
             const next = button("Next " + noun, () => { restore = null; pages[key]++; paint(); list.querySelector("button")?.focus(); });
             previous.disabled = !pages[key]; next.disabled = pages[key] >= pageCount - 1;
-            paging.append(previous, el("span", `Page ${pages[key] + 1} of ${pageCount}; ${hits.length} ${key === "related" ? "suggestions" : "total"}`), next);
+            paging.append(previous, el("span", `Page ${pages[key] + 1} of ${pageCount}; ${hits.length} total`), next);
         }
     }
     function receive(event) {
@@ -319,7 +363,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
             onAnalysis({ state: "ready", query: input.value, hits: event.matches.hits, receipt: event.matches.receipt,
                 complete: contract.completeCoverage(event.status?.corpus, event.matches.receipt.queryTypes), scopeKey: analysisKey });
         }
-        if (event.event === "opened" && event.openId === openId && contract.sameReceipt(event.receipt, ownedReceipt(event.receipt))) {
+        if (event.event === "opened" && event.openId === openId && contract.sameReceipt(event.receipt, ownedReceipt())) {
             void showOpened(event.document, event.receipt, event.openId).catch(() => fail("The current item could not be displayed. Return to search and read it again."));
         }
         paint();
@@ -333,7 +377,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         heartbeat = setTimeout(() => fail("The local search connection did not become ready. No results were retained."), 10000);
         api.searchEvents(event => {
             if (stream === owned && !owned.signal.aborted) receive(event);
-        }, { signal: owned.signal }).catch(error => {
+        }, { signal: owned.signal, schemaVersion: contract.schemaVersion }).catch(error => {
             if (!owned.signal.aborted && stream === owned) fail(failureMessage(error));
         });
     }
@@ -343,7 +387,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         openId++;
         const requestId = ++sequence;
         state.query(requestId, purpose(), types());
-        if (resetPage && !restore) pages = { matches: 0, related: 0 };
+        if (resetPage && !restore) pages = { matches: 0 };
         analysisKey = getAnalysis()?.key ?? null;
         onAnalysis({ state: "pending", query: scope.value === "analysis" ? input.value : null, scopeKey: analysisKey });
         paint();
@@ -351,7 +395,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         if (!connected) { connect(); return; }
         timer = setTimeout(async () => {
             try {
-                await api("/api/search/query", { schemaVersion: 2, purpose: purpose(), query: input.value, requestId, types: types() }, { signal: stream.signal });
+                await api("/api/search/query", { schemaVersion: contract.schemaVersion, purpose: purpose(), query: input.value, requestId, types: types() }, { signal: stream.signal });
             } catch (error) { if (requestId === sequence && error.reason !== "search_cancelled") fail(failureMessage(error)); }
         }, 120);
     }
@@ -359,7 +403,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         const key = crypto.randomUUID();
         returns.set(key, { query: input.value, scope: scope.value, category: category.value, pages: { ...pages },
             panelScroll: panel.scrollTop,
-            scroll: { matches: lists.matches.scrollTop, related: lists.related.scrollTop },
+            scroll: { matches: lists.matches.scrollTop },
             set: document.activeElement?.dataset.searchSet || "matches", focus: document.activeElement?.dataset.searchId });
         // Only an opaque local navigation marker enters history, never global text or hits.
         history.replaceState({ ...history.state, wireSearchReturn: key }, "");
@@ -382,7 +426,7 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
     async function showOpened(value, receipt, id) {
         hide();
         await navigate(value.kind === "route" ? value : { kind: "route", href: "#reports" });
-        if (id !== openId || !contract.sameReceipt(receipt, ownedReceipt(receipt))) return;
+        if (id !== openId || !contract.sameReceipt(receipt, ownedReceipt())) return;
         const { wireSearchReturn, ...next } = history.state || {};
         history.replaceState(next, "");
         if (value.kind === "route") return;
@@ -425,16 +469,11 @@ export function mountLiveSearch({ api, createState, frozenFrame, navigate, getAn
         schedule();
     });
     category.addEventListener("change", () => { restore = null; schedule(); });
-    $("wireSearchClear").addEventListener("click", () => { restore = null; input.value = ""; schedule(); input.focus(); });
+    $("wireSearchClear").addEventListener("click", () => { restore = null; input.value = ""; show(); schedule(); input.focus(); });
     $("wireSearchRetry").addEventListener("click", () => { connected ? schedule() : connect(); });
-    $("wireSearchTroubleshooting").addEventListener("click", event => {
-        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        event.preventDefault(); hide();
-        void navigate({ kind: "route", href: "#settings?section=troubleshooting&setting=settings-search" });
-    });
     input.addEventListener("keydown", event => {
         if (event.isComposing) return;
-        if (event.key === "ArrowDown") { event.preventDefault(); show(); (lists.matches.querySelector("button") || lists.related.querySelector("button"))?.focus(); }
+        if (event.key === "ArrowDown") { event.preventDefault(); show(); lists.matches.querySelector("button")?.focus(); }
         if (event.key === "Escape") { event.preventDefault(); hide(); }
     });
     for (const list of Object.values(lists)) list.addEventListener("keydown", event => {

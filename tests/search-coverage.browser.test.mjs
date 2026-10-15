@@ -8,12 +8,10 @@ import { selectActivityOption } from "./helpers.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createSearchWireContract, searchWireContract } from "../lib/search-wire-contract.mjs";
 
-const modelDirectory = process.env.WIRE_SEARCH_MODEL_TEST_DIRECTORY;
 const analyticalTypes = ["action", "context", "interaction", "reply"];
 test("coverage uses explicit affected types and fails closed for relevant or unclassified issues", () => {
     const factory = new Function("return (" + createSearchWireContract.toString() + ")")();
-    const serialized = factory({ matchPolicyId: searchWireContract.matchPolicyId,
-        relatedPolicyId: searchWireContract.relatedPolicyId, types: searchWireContract.allTypes });
+    const serialized = factory({ matchPolicyId: searchWireContract.matchPolicyId, types: searchWireContract.allTypes });
     for (const contract of [searchWireContract, serialized]) {
         const partial = types => ({ state: "partial", issues: [{ sourceId: "invented", code: "missing", types }] });
         assert.equal(contract.completeCoverage({ state: "ready", issues: [] }, analyticalTypes), true);
@@ -43,7 +41,7 @@ async function corruptedReportFixture(t) {
         records[index].toolCalls[0].startedAt = records[index].capturedAt;
         records[index].httpRecords[0].startedAt = records[index].capturedAt;
     }
-    const app = await searchFixture(t, { records, formats: ["html"], search: { modelDirectory } });
+    const app = await searchFixture(t, { records, formats: ["html"] });
     await appendFile(app.bundles[0].files["product-report.html"], "\nUnapproved changed report bytes.");
     return app;
 }
@@ -61,7 +59,7 @@ test("normal Analyze search remains usable when only an unrelated report is corr
     await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches across all pages.", { timeout: 15000 });
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#activityCount")).toHaveText("2");
-    await expect(page.locator("#wireSearchRelated")).toBeHidden();
+    await expect(page.locator("#wireSearchRelated")).toHaveCount(0);
     await selectActivityOption(page, "wireSearchScope", "everywhere");
     await expect(page.locator("#wireSearchCoverage")).toContainText("Some saved content is unavailable.");
     await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
@@ -123,7 +121,7 @@ test("type-scoped analytical coverage reaches both periods and reports but fails
 });
 
 test("missing authorized replies still block analytical coverage despite complete matching activity", { timeout: 20000 }, async t => {
-    const app = await searchFixture(t, { search: { modelDirectory } });
+    const app = await searchFixture(t);
     const state = await loadBoardState(app.context);
     await unlink(path.join(app.context.dataDir, "assessment-evidence", state.personalEvaluation.captures[0].payloadFile));
     const panel = await streamPanel(app.runtime, { purpose: "analysis" });

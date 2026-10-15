@@ -99,7 +99,7 @@ export const settingsMarkup = `
     </section>
     <details id="serviceProvenanceHelp" class="settings-advanced"><summary>Service details</summary><p>Services come from recorded targets, not prompts or citations. Discovery does not prove a service ran.</p><a href="#analyze?mode=calls" data-settings-link>Open Calls in Analyze</a></details>
     <details id="authorProvenanceHelp" class="settings-advanced"><summary>Prompt authors</summary><p>The prompt author comes from sender metadata, not message wording or who executed a tool.</p><a href="#analyze?mode=interactions" data-settings-link>Open interactions in Analyze</a></details>
-    <details id="settingsSearchDetails" class="settings-advanced"><summary>Search troubleshooting</summary><p>For missing search model files, run <code>npm run search:model:provision</code> from the WIRE source folder. Corrupt files require repair first. Word search remains available.</p></details>
+    <details id="settingsSearchDetails" class="settings-advanced"><summary>Search troubleshooting</summary><p>Search matches text in saved activity and reports. A partial collection may leave results out; refresh the stored view and retry.</p></details>
   </section>
   </div>
   </div>

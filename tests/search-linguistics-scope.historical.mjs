@@ -24,16 +24,16 @@ const regressions = [
 const sourceItem = (text, index = 0) => ({ id: `scope-${index}`, revision: searchHash(text), text });
 const target = hit => hit.target.href;
 
-test("scope correction preserves baseline policy identities and invalidates the unsafe opt-in policy", () => {
-    assert.equal(SEARCH_MATCH_POLICY_ID, "077699b2dc5542dc983fde41e4f56c4b4be90deebc763492fa61191440365b6f");
+test("current strict policy binds denial correction and invalidates older receipt policies", () => {
+    assert.equal(SEARCH_MATCH_POLICY_ID, "7a1856ac8d53036a49501aaf0e9631a621c381b5338ec757762b9af0342f9b7c");
     const expectedRelated = {
-        version: "related-navigation-minilm-original-projection-v1", modelId: SEARCH_MODEL_ID,
-        strictPolicy: { version: "exact-prefix-cosine-v2", semanticFloor: 0.5 }, floor: 0.35, band: 0.02,
-        selection: "unchanged strict; related=remaining anchor/type-eligible scores>=floor and within band of strongest eligible score; no topN",
+        version: "related-navigation-minilm-original-projection-v3", modelId: SEARCH_MODEL_ID,
+        strictPolicy: { version: "exact-prefix-cosine-complete-denial-v4", semanticFloor: 0.5 }, floor: 0.35, band: 0.02,
+        selection: "related=remaining non-strict anchor/type-eligible scores>=floor and within band of strongest eligible score; no topN",
         purpose: "navigate-only", indexProjection: "unchanged title/content/source", noMembership: true,
     };
     const relatedId = createHash("sha256").update(JSON.stringify(expectedRelated)).digest("hex");
-    assert.equal(relatedId, "7a21ab4304d8f1e1f955deaaf0e50498957b5ca34fdc004125756f13de56228b");
+    assert.equal(relatedId, "68e7bbeb045c2e7c9cd5c8a1ab90dd89981ae4aecd79e1cd69e2432f9666c424");
     assert.deepEqual(SEARCH_RELATED, { ...expectedRelated, id: relatedId });
     const receipt = { schemaVersion: 2, panelId: "00000000-0000-0000-0000-000000000000", epoch: 0, requestId: 0,
         generation: 1, indexId: "1".repeat(64), modelId: "2".repeat(64), mode: "hybrid", revision: 1,
@@ -43,6 +43,10 @@ test("scope correction preserves baseline policy identities and invalidates the 
     assert.equal(searchWireContract.analysisReceipt({ ...receipt,
         matchPolicyId: "5b0d27bfc3d7c7257751e8618ab967a0bad160166613bbecf4fe1a22607fc674" }), false);
     assert.equal(searchWireContract.analysisReceipt({ ...receipt, matchPolicyId: SEARCH_MATCH_POLICY_ID }), true);
+    assert.equal(searchWireContract.analysisReceipt({ ...receipt,
+        matchPolicyId: "077699b2dc5542dc983fde41e4f56c4b4be90deebc763492fa61191440365b6f" }), false);
+    assert.equal(searchWireContract.analysisReceipt({ ...receipt,
+        matchPolicyId: "f16ede3a34199db95881d843f6ef84aeb24b9b578b54ff349420361bf5ea26da" }), false);
 });
 
 test("reviewed admission regressions distinguish mechanism abstention from a genuine fake-object negative", resourceTest, async t => {

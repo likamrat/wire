@@ -596,20 +596,22 @@ importing and failed states never become a successful empty-history message.
 
 ### Local search scopes
 
-The single header **Search** entry provides [live on-device semantic and
-exact/prefix retrieval](docs/live-search.md). Its global text stays in panel and
-authenticated loopback-runtime memory, not history, URLs, logs or storage.
-Search runs independently inside WIRE: it does not use Copilot sessions, an SDK
-model service, AI credits or off-device processing of queries or saved content.
+The single header **Search** entry provides [live local text search](docs/live-search.md).
+Type any part of a word or a literal phrase: **POWER** finds **PowerPoint**, including
+inside saved report bodies. Case does not matter; matching does not guess intent,
+expand synonyms or correct spelling. Results cover the complete authorized corpus,
+not just the visible page. Each result identifies its category/source and the
+original matching title, content excerpt or source label.
+Global query text stays in panel and authenticated loopback-runtime memory, not
+history, URLs, logs or storage. Search uses **no AI**, including local embeddings,
+tokenizers for inference, model helpers, Copilot sessions, providers or AI credits.
 Optional Copilot-powered assessments are separate and are not a Search dependency.
 **Current Analyze scope** explicitly binds its full verified interaction/action
 membership to charts, rows and current-view report eligibility. It does not index
-raw source histories. Existing metadata/list utilities keep their own scope and
-browser-history compatibility. Metadata searches match words
-across their named fields, ignoring case, accents and punctuation. Activity keeps
-phrase matching within a field, with the same normalization, rather than widening
-one numbered request into unrelated word matches. Clear and Escape are available;
-no-result counts remain explicit.
+raw source histories. Separate legacy metadata/list utilities retain their own
+field-specific normalization and browser-history compatibility; those are not
+the header's literal matching rule. Clear and Escape are available, and empty,
+incomplete and unavailable results remain distinct.
 
 | Surface | Search decision and scope |
 | --- | --- |
@@ -903,7 +905,7 @@ interaction reader; dedicated call sorting and exact-action context navigation
 are separate work, not implied by this entry.
 
 **Search this Analyze scope** uses the single live Search field and its
-receipt-bound semantic/exact membership. Legacy browser-history phrase queries
+receipt-bound literal text membership. Legacy browser-history phrase queries
 remain compatible. Charts, summaries, rows and current-view report IDs share the same
 all-page matched membership. Insights and ordinary reports still include full
 selected interactions; their scope notes distinguish them from matching calls.

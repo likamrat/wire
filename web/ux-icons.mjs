@@ -3,74 +3,40 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
-// Keep the official path geometry and optical size; only add presentation semantics.
-export function fluentIcon(name, size = 20, variant = "regular") {
-    if (!/^[a-z][a-z0-9_]*$/.test(name) || ![16, 20, 24].includes(size) || !["regular", "filled"].includes(variant)) throw new TypeError("Fluent icons require a package glyph name, a 16, 20 or 24 pixel optical size, and a regular or filled variant.");
-    const asset = `${name}_${size}_${variant}`;
-    const svg = readFileSync(require.resolve(`@fluentui/svg-icons/icons/${asset}.svg`), "utf8");
-    return svg.replace("<svg ", `<svg class="fluent-icon" data-fluent-icon="${asset}" aria-hidden="true" focusable="false" fill="currentColor" `);
+// Preserve the official 24-unit geometry; display size belongs to the role.
+export function lucideIcon(name, size = 20) {
+    if (!/^[a-z][a-z0-9-]*$/.test(name) || ![16, 20, 24].includes(size)) {
+        throw new TypeError("Lucide icons require an asset name and a 16, 20 or 24 pixel display size.");
+    }
+    const svg = readFileSync(require.resolve(`lucide-static/icons/${name}.svg`), "utf8");
+    return svg.slice(svg.indexOf("<svg"))
+        .replace(/class="[^"]*"/, `class="wire-icon" data-lucide-icon="${name}" data-icon-size="${size}" aria-hidden="true" focusable="false"`)
+        .replace('width="24"', `width="${size}"`).replace('height="24"', `height="${size}"`);
 }
 
+export const lucideLicense = readFileSync(require.resolve("lucide-static/LICENSE"), "utf8");
+
 export const uxIconSources = Object.freeze({
-    copy: "copy_20_regular",
-    check: "checkmark_20_regular",
-    warning: "warning_20_regular",
-    unobserved: "question_circle_20_regular",
-    info: "info_16_regular",
-    "result-failure": "dismiss_circle_20_regular",
-    "result-partial": "circle_half_fill_20_regular",
-    "result-other": "info_20_regular",
-    "result-transport": "plug_disconnected_20_regular",
-    "check-compact": "checkmark_16_regular",
-    "result-failure-compact": "dismiss_circle_16_regular",
-    "unobserved-compact": "question_circle_16_regular",
-    "result-partial-compact": "circle_half_fill_16_regular",
-    "result-other-compact": "info_16_regular",
-    "result-transport-compact": "plug_disconnected_16_regular",
-    "select-check": "checkmark_16_regular",
-    sun: "weather_sunny_20_regular",
-    moon: "weather_moon_20_regular",
-    chevron: "chevron_down_16_regular",
-    disclosure: "chevron_right_16_regular",
-    pending: "spinner_ios_20_regular",
-    "pending-small": "spinner_ios_16_regular",
-    home: "home_20_regular",
-    activity: "history_20_regular",
-    reports: "document_bullet_list_20_regular",
-    settings: "settings_20_regular",
-    "collection-status": "document_search_20_regular",
-    "home-selected": "home_20_filled",
-    "activity-selected": "history_20_filled",
-    "reports-selected": "document_bullet_list_20_filled",
-    "settings-selected": "settings_20_filled",
-    "collection-status-selected": "document_search_20_filled",
-    export: "arrow_export_ltr_20_regular",
-    menu: "navigation_20_regular",
-    "navigation-home": "home_24_regular",
-    "navigation-analyze": "data_trending_24_regular",
-    "navigation-reports": "document_24_regular",
-    "navigation-settings": "settings_24_regular",
-    "navigation-collapse": "panel_left_contract_24_regular",
-    "navigation-expand": "panel_left_expand_24_regular",
-    "settings-connection": "plug_connected_24_regular",
-    "settings-privacy": "shield_24_regular",
-    "settings-ai": "clipboard_task_24_regular",
-    "settings-display": "desktop_24_regular",
-    "settings-troubleshooting": "wrench_24_regular",
-    close: "dismiss_20_regular",
-    back: "arrow_left_20_regular",
-    refresh: "arrow_clockwise_20_regular",
-    reset: "arrow_reset_24_regular",
-    download: "arrow_download_20_regular",
-    search: "search_20_regular",
-    clock: "clock_20_regular",
-    "time-zone": "globe_clock_20_regular",
-    connection: "plug_connected_20_regular",
-    database: "database_20_regular",
+    copy: "copy", check: "check", warning: "triangle-alert", unobserved: "circle-question-mark", info: "info",
+    "result-failure": "circle-x", "result-partial": "circle-dashed", "result-other": "info", "result-transport": "unplug",
+    "check-compact": "check", "result-failure-compact": "circle-x", "unobserved-compact": "circle-question-mark",
+    "result-partial-compact": "circle-dashed", "result-other-compact": "info", "result-transport-compact": "unplug",
+    "select-check": "check", sun: "sun", moon: "moon", chevron: "chevron-down", disclosure: "chevron-right",
+    pending: "loader-circle", "pending-small": "loader-circle",
+    home: "house", activity: "rotate-ccw-clock", reports: "file-text", settings: "settings", "collection-status": "file-search",
+    "home-selected": "house", "activity-selected": "rotate-ccw-clock", "reports-selected": "file-text",
+    "settings-selected": "settings", "collection-status-selected": "file-search",
+    export: "file-output", menu: "menu", "navigation-home": "house", "navigation-analyze": "chart-no-axes-combined",
+    "navigation-reports": "file-text", "navigation-settings": "settings",
+    "navigation-collapse": "panel-left-close", "navigation-expand": "panel-left-open",
+    "settings-connection": "plug", "settings-privacy": "shield", "settings-ai": "clipboard-check",
+    "settings-display": "monitor", "settings-troubleshooting": "wrench",
+    close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download",
+    search: "search", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
+    read: "eye", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
 });
 
-// MIT-licensed Fluent System Icons are read at startup, never fetched by the browser.
-export const uxIcons = Object.freeze(Object.fromEntries(Object.entries(uxIconSources).map(([key, asset]) => {
-    const [, name, size, variant] = /^(.*)_(16|20|24)_(regular|filled)$/.exec(asset);
-    return [key, fluentIcon(name, Number(size), variant)];
-})));
+export const uxIcons = Object.freeze(Object.fromEntries(Object.entries(uxIconSources).map(([role, asset]) => [
+    role, lucideIcon(asset, role.startsWith("navigation-") || role.startsWith("settings-") ? 24
+        : role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small"].includes(role) ? 16 : 20),
+])));

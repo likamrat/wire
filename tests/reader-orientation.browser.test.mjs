@@ -6,7 +6,6 @@ import { createExportController } from "../lib/export.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { privateFixture, restoreLegacySearch, selectActivityOption } from "./helpers.mjs";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
-import path from "node:path";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 
@@ -192,13 +191,50 @@ test("direct reader links have an honest local fallback and precise missing-send
     await expect(page.locator(".request-row")).toHaveCount(3);
 });
 
-test("visible Back to search reuses the current search query, category, page and focused result", { timeout: 40000 }, async t => {
+test("cross-layer verified Search action restores the tool Analyze controls, counts and records on Close", { timeout: 30000 }, async t => {
+    const records = searchRecords(3);
+    records[0].toolCalls[0].apiResults.push({ ...records[0].toolCalls[0].apiResults[0], index: 1, statusCode: 403 });
+    const app = await searchFixture(t, { records, reply: false });
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    const errors = [], layers = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("request", request => {
+        if (request.url().endsWith("/api/snapshot")) layers.push(request.postDataJSON().layer);
+    });
+    await page.goto(app.runtime.url + "#analyze?mode=calls"); await ready(page);
+    const origin = { route: page.url(), count: await page.locator("#activityCount").textContent(),
+        unit: await page.locator("#activityUnit").textContent(),
+        records: await page.locator("#activityList .matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId)) };
+    await page.locator("#wireSearch").fill("reported-api");
+    await selectActivityOption(page, "wireSearchType", "action");
+    const hit = page.locator("#wireSearchResults button").filter({ hasText: "Failed" }).first();
+    await expect(hit).toBeVisible();
+    await hit.click();
+    await expect(page).toHaveURL(/layer=reported-api/);
+    await expect(page.locator("#selectedCall")).toContainText("Error result");
+    await expect(page.locator("#layerFilter")).toHaveValue("reported-api");
+    await expect(page.locator("#activityCount")).toHaveText("4");
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
+    await ready(page);
+    assert.equal(page.url(), origin.route);
+    await expect(page.locator("#layerFilter")).toHaveValue("tool");
+    await expect(page.locator("#activityCount")).toHaveText(origin.count);
+    await expect(page.locator("#activityUnit")).toHaveText(origin.unit);
+    assert.deepEqual(await page.locator("#activityList .matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId)), origin.records);
+    assert.deepEqual(layers, ["tool", "reported-api", "tool"], "Close must verify the restored layer instead of reusing reported-API analytics");
+    assert.deepEqual(errors, []);
+});
+
+test("sidebar Close reuses the current search query, category, page and focused result", { timeout: 40000 }, async t => {
     const records = searchRecords(24);
     records.forEach((record, index) => {
         record.userPrompt.text = `Harbor launch checklist item ${index + 1}.`;
         record.userPrompt.authorship = { actor: "user", basis: "source-user" };
     });
-    const app = await searchFixture(t, { records, reply: false, search: root => ({ modelDirectory: path.join(root, "no-model-needed-for-exact-query") }) });
+    const app = await searchFixture(t, { records, reply: false });
     const browser = await chromium.launch();
     t.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, reducedMotion: "reduce" });
@@ -212,9 +248,9 @@ test("visible Back to search reuses the current search query, category, page and
     const hit = page.locator("#wireSearchResults button").first();
     const id = await hit.getAttribute("data-search-id"), label = (await hit.innerText()).match(/Harbor launch checklist item \d+\./)[0];
     await hit.focus(); await page.keyboard.press("Enter");
-    await expect(page.locator("#pageTitle")).toHaveText("Interaction");
+    await expect(page.locator("#contextSidebarTitle")).toHaveText("Interaction");
     await expect(page.locator(".request-original .full-text-content")).toHaveText(label);
-    await page.getByRole("link", { name: "Back to search", exact: true }).click(); await ready(page);
+    await page.locator("#closeContextSidebar").click(); await ready(page);
     await expect(page.locator("#wireSearch")).toHaveValue("Harbor launch checklist");
     await expect(page.locator("#wireSearchType")).toHaveValue("interaction");
     await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2");
@@ -223,16 +259,16 @@ test("visible Back to search reuses the current search query, category, page and
     assert.doesNotMatch(await page.evaluate(() => JSON.stringify([history.state, { ...localStorage }, { ...sessionStorage }])),
         /Harbor launch checklist|receipt|capability/);
     await page.locator("#wireSearchResults button").first().click();
-    await expect(page.getByRole("link", { name: "Back to search", exact: true })).toBeVisible();
+    await expect(page.locator("#closeContextSidebar")).toBeVisible();
     await page.goBack();
     await expect(page.locator("#wireSearchResults button").first()).toBeFocused();
     await page.locator("#wireSearchResults button").first().click();
-    await expect(page.getByRole("link", { name: "Back to search", exact: true })).toBeVisible();
+    await expect(page.locator("#closeContextSidebar")).toBeVisible();
     let release, reached;
     const held = new Promise(resolve => { release = resolve; });
     const queried = new Promise(resolve => { reached = resolve; });
     await page.route("**/api/search/query", async route => { reached(); await held; await route.continue(); });
-    await page.getByRole("link", { name: "Back to search", exact: true }).click();
+    await page.locator("#closeContextSidebar").click();
     await queried;
     await page.locator('nav [data-nav="settings"]').click(); await ready(page);
     const focus = await page.evaluate(() => ({ id: document.activeElement.id, text: document.activeElement.textContent }));

@@ -14,6 +14,19 @@ const feedback = () => controls.feedback({
     interactionRef: samples.id("interaction"), basis: samples.basis(), checkId: "semantic-answer-correctness",
 });
 const answerConsent = () => ({ ...samples.enabledConsent(), categories: ["answer"] });
+test("departure guards only unsent edits, never pending, uncertain or invalidated feedback", () => {
+    const edit = feedback();
+    assert.equal(edit.hasUnsentDraft(), false);
+    edit.edit({ verdict: "fail", withdraw: false });
+    assert.equal(edit.hasUnsentDraft(), true);
+    const packet = edit.begin(mutation(91));
+    assert.equal(edit.hasUnsentDraft(), false);
+    edit.uncertain(packet.token, "The result is not yet known.");
+    assert.equal(edit.hasUnsentDraft(), false);
+    edit.invalidate("The evidence is no longer current.");
+    assert.equal(edit.hasUnsentDraft(), false);
+});
+
 test("opening consent is read-only, off by default, without an implicit draft", () => {
     const edit = consent();
     assert.equal(edit.snapshot().applied.state, "off");

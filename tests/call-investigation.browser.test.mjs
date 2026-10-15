@@ -79,8 +79,10 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     const app = await setup(t), { page, runtime, records, requests } = app;
     await page.goto(runtime.url + "#analyze"); await ready(page);
     const targetGroup = records[1].scenarioId;
-    const interaction = page.locator(".request-row").filter({ has: page.locator(`a.request-link[href*="${targetGroup}"]`) });
-    await interaction.locator("input").check();
+    const interaction = page.locator(".request-row").filter({ has: page.locator(`a.request-card-open[href*="${targetGroup}"]`) });
+    await interaction.locator("a").click();
+    await page.locator("#requestReportToggle").click();
+    await page.locator("#closeContextSidebar").click();
     await restoreLegacySearch(page, "synthetic documents");
     await selectActivityOption(page, "serviceAssociationFilter", "Files");
     await selectActivityOption(page, "promptAuthorFilter", "user");
@@ -144,7 +146,7 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     await expect(page.locator("#selectedCall .technical-detail details")).toHaveCount(0);
     await page.locator("#selectedCall").getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.callClipboard), [JSON.stringify(records[1].toolCalls[9].requestArgs, null, 2)]);
-    await page.locator("#contextBack").click(); await ready(page); await frames(page);
+    await page.locator("#closeContextSidebar").click(); await ready(page); await frames(page);
     assert.equal(page.url(), origin);
     await expect(open).toBeFocused();
     assert.ok(Math.abs((await open.boundingBox()).y - position.y) < 3);
@@ -152,7 +154,9 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     await expect(page.locator("#callSort")).toHaveValue("fastest");
     await expect(page.locator("#serviceFocusScope")).toContainText("Files + calls with missing service details");
     await page.locator('[data-analyze-mode="interactions"]').click();
-    await expect(interaction.locator("input")).toBeChecked();
+    await interaction.locator("a").click();
+    await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
+    await page.locator("#closeContextSidebar").click();
     await page.locator('[data-analyze-mode="calls"]').click();
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
     const failed = app.snapshot().analytics.rows.find(row => row.toolCallId === "investigate-08");
@@ -335,18 +339,20 @@ test("Graph, code references and transport retain distinct units; native links a
                 await capture(page, "exact-call-delayed-context");
                 await page.goBack(); await ready(page);
             } else if (interrupt === "scroll") {
+                const documentY = await page.evaluate(() => scrollY);
                 await page.keyboard.press("Control+Home");
-                await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+                await expect.poll(() => page.locator("#contextSidebarBody").evaluate(node => node.scrollTop)).toBe(0);
                 const focused = await page.evaluate(() => document.activeElement.id);
                 release();
                 await expect(page.locator('#requestContent [aria-busy="true"]')).toHaveCount(0);
                 await frames(page);
-                assert.equal(await page.evaluate(() => scrollY), 0, "Late retained-context layout must not undo deliberate scrolling");
+                assert.equal(await page.evaluate(() => scrollY), documentY, "Panel scrolling cannot move the origin document");
+                assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0, "Late retained-context layout must not undo deliberate panel scrolling");
                 assert.equal(await page.evaluate(() => document.activeElement.id), focused);
                 await expect(page.locator("#selectedCall")).not.toBeInViewport();
                 await page.goBack(); await ready(page);
             } else {
-                await page.locator("#contextBack").click(); await ready(page);
+                await page.locator("#closeContextSidebar").click(); await ready(page);
                 release();
                 await Promise.all(deliveries);
                 await frames(page);

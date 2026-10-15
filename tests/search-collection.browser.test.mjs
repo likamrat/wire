@@ -37,7 +37,7 @@ test("normal Search survives quiet automatic collection and fences real source c
     const checks = [], notifications = [], waiters = [];
     const exports = createExportController(context);
     const runtime = await startServer(context, exports, {
-        port: 0, search: { modelDirectory: process.env.WIRE_SEARCH_MODEL_TEST_DIRECTORY },
+        port: 0,
         collector: { onCommitted(check, change) {
             checks.push(check);
             notifications.push(change);
@@ -102,7 +102,7 @@ test("normal Search survives quiet automatic collection and fences real source c
     releaseRead();
     await expect(page.locator("#wireSearchResults button")).not.toHaveCount(0, { timeout: 20000 });
     const ready = (await api("/api/search/status")).body;
-    assert.equal(ready.mode, "hybrid"); assert.equal(ready.model.state, "ready"); assert.ok(ready.indexId);
+    assert.equal(ready.mode, "text"); assert.equal(Object.hasOwn(ready, "model"), false); assert.ok(ready.indexId);
     assert.equal(requests.length, 1, "No frontend resubmission is needed after quiet collection.");
     const ids = await page.locator("#wireSearchResults button").evaluateAll(nodes => nodes.map(node => node.dataset.searchId));
     const readyCheck = checks.length;
@@ -164,6 +164,6 @@ test("normal Search survives quiet automatic collection and fences real source c
     assert.equal((await api("/api/search/close")).body.state, "closed");
     assert.equal(runtime.search.status().panels, 0);
     t.diagnostic(JSON.stringify({ quietBuildChecks: 3, quietReadyChecks: 2, quietQueryChecks: 1,
-        queryRequests: requests.length, initialItems: ready.items, initialChunks: ready.chunks,
-        realChange: "new call during query, archive eligibility, source window and source closure", model: ready.model.state }));
+        queryRequests: requests.length, initialItems: ready.items,
+        realChange: "new call during query, archive eligibility, source window and source closure", mode: ready.mode }));
 });

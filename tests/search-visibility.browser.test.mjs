@@ -20,7 +20,7 @@ async function setup(t, options = {}) {
     const cleanup = [], children = [], fork = childProcess.fork;
     const forkMock = t.mock.method(childProcess, "fork", (...args) => {
         const child = fork(...args);
-        if (String(args[0]).endsWith("search-model-worker.mjs")) children.push(child);
+        if (/search-(?:model|linguistics)-worker\.mjs$/.test(String(args[0]))) children.push(child);
         return child;
     });
     syncBuiltinESMExports();
@@ -29,10 +29,10 @@ async function setup(t, options = {}) {
         await browser?.close();
         for (const close of cleanup) await close();
         forkMock.mock.restore(); syncBuiltinESMExports();
-        assert.ok(children.every(child => child.exitCode !== null || child.signalCode !== null), "All owned model helpers must exit.");
+        assert.equal(children.length, 0, "Literal Search must not start model or linguistic inference helpers.");
     });
     const app = await searchFixture({ after: close => cleanup.push(close) }, {
-        search: { modelDirectory: process.env.WIRE_SEARCH_MODEL_TEST_DIRECTORY ?? "missing-visibility-fixture-model", heartbeatMs: 50 },
+        search: { heartbeatMs: 50 },
         ...options,
     });
     browser = await chromium.launch({ channel: "msedge" });
@@ -99,10 +99,9 @@ test("four typed intents ending in latest retain one preparing index across hide
     hold = false; release.resolve();
     await expect.poll(async () => (await status()).body.indexId, { timeout: 10000 }).toBeTruthy();
     const built = (await status()).body;
-    if (process.env.WIRE_SEARCH_MODEL_TEST_DIRECTORY) {
-        assert.equal(built.model.state, "ready");
-        assert.equal(children.length, 1);
-    }
+    assert.equal(built.mode, "text");
+    assert.equal(Object.hasOwn(built, "model"), false);
+    assert.equal(children.length, 0);
     assert.equal(queries.length, 4, "Hiding must not dispatch another query.");
     assert.equal(await page.locator("#wireSearchResults button").count(), 0, "Hidden frames must not disclose saved text.");
     await visibility(page, false);
@@ -110,7 +109,7 @@ test("four typed intents ending in latest retain one preparing index across hide
     await expect(page.locator("#wireSearchStatus")).toHaveText("2 matches", { timeout: 10000 });
     assert.equal((await status()).body.indexId, built.indexId, "Return must reuse the prepared current index.");
     assert.equal(queries.length, 5, "Return must revalidate once, not start a retry loop.");
-    if (process.env.WIRE_SEARCH_MODEL_TEST_DIRECTORY) assert.equal(children.length, 1, "Return must not restart the healthy model.");
+    assert.equal(children.length, 0, "Return does not initialize an inference helper.");
     assert.equal(queries.at(-1).query, "latest");
     assert.equal(await input.inputValue(), "latest");
     assert.deepEqual(await input.evaluate(node => ({
@@ -165,13 +164,13 @@ test("consent revocation while hidden cannot revive a retained reply on return",
     assert.equal(revoked.status, 200);
     await expect.poll(async () => (await status()).body.indexId).toBe(null);
     await visibility(page, false);
-    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches. Try different words.", { timeout: 10000 });
+    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is incomplete. Some saved content could not be searched.", { timeout: 10000 });
     assert.equal(await page.locator("#wireSearchResults button").count(), 0);
 });
 
 test("a silent stream on visible return still reaches an explicit reconnect instead of waiting forever", { timeout: 20000 }, async t => {
     const { page, runtime, queries } = await setup(t, {
-        search: { modelDirectory: "missing-visibility-fixture-model", heartbeatMs: 60000 },
+        search: { heartbeatMs: 60000 },
     });
     await page.locator("#wireSearch").fill("physician");
     await expect(page.locator("#wireSearchResults button").first()).toBeVisible();

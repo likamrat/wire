@@ -6,6 +6,8 @@ import { chromium } from "playwright";
 import { styles } from "../web/styles.mjs";
 import { assessmentPresentationStyles } from "../web/assessment-presentation.mjs";
 import { mountAutomaticScoresRow, mountAutomaticScoresApproval, automaticScoreStyles } from "../web/automatic-score-views.mjs";
+import { createEvidenceUX } from "../web/ux.mjs";
+import { uxIcons } from "../web/ux-icons.mjs";
 
 async function fixture(t, snapshot = null) {
     const browser = await chromium.launch();
@@ -28,7 +30,7 @@ async function fixture(t, snapshot = null) {
             chats:[{chatRef:"chat-${"b".repeat(32)}",name:"Synthetic calendar chat",outsideWindow:1},
                 {chatRef:"chat-${"c".repeat(32)}",name:"Synthetic research chat",outsideWindow:0}],
         };
-        const ux={restoreFocus:node=>node.focus()};
+        const ux=(${createEvidenceUX.toString()})(${JSON.stringify(uxIcons)});
         window.row=(${mountAutomaticScoresRow.toString()})(document.getElementById("automatic"),{onReview:trigger=>{
             window.view=(${mountAutomaticScoresApproval.toString()})(document.getElementById("approval"),{
                 setup,ux,onSubmit:packet=>window.packets.push(packet),
@@ -139,7 +141,7 @@ test("automatic score row and consent remain keyboard/touch readable at desktop,
         await trigger.focus();
         await page.keyboard.press("Enter");
         await dialog.waitFor();
-        assert.equal(await dialog.getByRole("button", { name: "Close", exact: true }).evaluate(node => node === document.activeElement), true);
+        assert.equal(await dialog.getByRole("button", { name: "Close automatic scores", exact: true }).evaluate(node => node === document.activeElement), true);
         assert.equal(await dialog.locator("h2").evaluate(node => {
             const word = document.createRange();
             word.setStart(node.firstChild, 0); word.setEnd(node.firstChild, "Automatic".length);

@@ -1,5 +1,5 @@
 // Serialized into the shell. Reads only versioned local projections and explicit retained text.
-export function createAssessmentExperience({ api, createPresentation, renderSummary, createControls, mountConsent, mountFeedback, ux, glossary, textAccess, bindDetails, refresh, onChanged, onNotice, onSaved, onAutomaticSetup }) {
+export function createAssessmentExperience({ api, createPresentation, renderSummary, createControls, mountConsent, mountFeedback, ux, glossary, textAccess, bindDetails, refresh, onChanged, onNotice, onSaved, onAutomaticSetup, onInvalidated, requestDeparture = action => action() }) {
     let snapshot = null, contract, contractPromise, presentation, controls, generation = 0;
     let consentView, consentControl, consentSignature = "", activeFeedback, feedbackView, activeDetail, focusInteractionRef = null;
     const detailCache = new Map(), overviewCache = new Map(), pending = new Map(), readers = new Map(), hosts = new Set();
@@ -117,7 +117,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             recovery = value; showRecovery();
         }
     } catch { recoveryInvalid = true; showRecovery("The panel cannot read its earlier update receipt. No new update will be sent until the receipt can be checked."); }
-    const details = el("dialog", undefined, "assessment-dialog"), feedbackDialog = el("dialog", undefined, "assessment-dialog");
+    const detailsModal = el("dialog", undefined, "assessment-dialog"), feedbackModal = el("dialog", undefined, "assessment-dialog");
+    let details = detailsModal, feedbackDialog = feedbackModal;
     details.setAttribute("aria-label", "Insight details");
     document.body.append(details, feedbackDialog);
     let detailTrigger, detailOrigin;
@@ -133,14 +134,21 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         }
     });
     function detailsBody(title) {
-        const restoreInside = details.open && details.contains(document.activeElement);
+        const restoreInside = details.contains(document.activeElement);
         const header = el("div", undefined, "dialog-head");
-        const close = button("Close", () => details.close());
+        const close = button("Close", () => requestDeparture(closeDetails));
+        close.setAttribute("aria-label", "Close insight details");
+        close.replaceChildren(ux.icon("close"));
+        ux.tooltip(close, "Close details");
         header.append(el("h2", title), close);
         const body = el("div", undefined, "assessment-dialog-body");
         details.replaceChildren(header, body);
         if (restoreInside) ux.restoreFocus(close);
         return body;
+    }
+    function closeDetails() {
+        if (details === detailsModal) { if (details.open) details.close(); }
+        else { details.hidden = true; detailTrigger?.setAttribute("aria-expanded", "false"); ux.restoreFocus(detailTrigger); }
     }
     const basisKey = basis => JSON.stringify(contract.BASIS_KEYS.map(key => basis?.[key]));
     const sameBasis = (left, right) => Boolean(left && right) && contract.BASIS_KEYS.every(key => left[key] === right[key]);
@@ -180,6 +188,9 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         if (feedbackDialog.open) feedbackDialog.close();
         if (details.open) details.close();
         feedbackDialog.replaceChildren(); details.replaceChildren();
+        if (feedbackDialog !== feedbackModal) feedbackDialog.remove();
+        if (details !== detailsModal) details.remove();
+        feedbackDialog = feedbackModal; details = detailsModal;
         feedbackDialog.removeAttribute("aria-labelledby");
         if (previousFeedback && recovery) showRecovery(pendingRequest
             ? "An assessment update is still in progress. Leaving this view did not cancel it."
@@ -198,7 +209,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         feedbackView?.render();
         consentSignature = "";
         activeDetail = null;
-        if (details.open) detailsBody("Insights changed").append(el("p", message));
+        if (details.open || details !== detailsModal && details.isConnected) detailsBody("Insights changed").append(el("p", message));
+        onInvalidated?.(message);
     }
     function receive(value) {
         if (!value || value.schemaVersion !== 1 || !value.basis || !Array.isArray(value.catalog)) {
@@ -521,7 +533,25 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
     }
     function showDetails(model, view, trigger) {
         if (!trigger.isConnected || !trigger.checkVisibility()) return;
+        if (trigger === detailTrigger && details !== detailsModal && details.isConnected) {
+            details.hidden = !details.hidden;
+            trigger.setAttribute("aria-expanded", String(!details.hidden));
+            return;
+        }
+        if (activeFeedback?.hasUnsentDraft()) {
+            requestDeparture(() => showDetails(model, view, trigger));
+            return;
+        }
         ux.hideTooltip();
+        if (details !== detailsModal) details.remove();
+        const inline = Boolean(trigger.closest("#requestContent"));
+        details = inline ? el("section", undefined, "assessment-inline") : detailsModal;
+        if (inline) {
+            details.id = "inline-insight-details";
+            trigger.closest(".interaction-insights").append(details);
+            trigger.setAttribute("aria-expanded", "true");
+            trigger.setAttribute("aria-controls", details.id);
+        }
         detailTrigger = trigger; detailOrigin = trigger.closest("[data-insight-key]")?.dataset.insightKey;
         activeDetail = view;
         const body = detailsBody("Insight details");
@@ -535,6 +565,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             }
             label.append(select);
             body.append(label, button("Give personal feedback", event => {
+                const feedbackTrigger = event.currentTarget;
+                requestDeparture(() => {
                 if (!activeDetail || !sameBasis(activeDetail.basis, snapshot?.basis)) return;
                 const checkId = select.value;
                 const personal = view.assessments.filter(item => item.origin === "user-personal" && item.checkId === checkId).sort((a, b) => b.revision - a.revision)[0] ?? null;
@@ -544,8 +576,11 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                     ? "Permission is not checked automatically."
                     : "Automatic local check: " + (local ? presentation.format(local).value : "No saved local check");
                 activeFeedback = controls.feedback({ interactionRef: view.interaction.interactionRef, basis: view.basis, checkId, latestPersonal: personal });
+                if (feedbackDialog !== feedbackModal) feedbackDialog.remove();
+                feedbackDialog = inline ? el("section", undefined, "assessment-inline") : feedbackModal;
+                if (inline) body.append(feedbackDialog);
                 feedbackView = mountFeedback(feedbackDialog, {
-                    control: activeFeedback, checkId, wording: presentation.wording,
+                    control: activeFeedback, checkId, wording: presentation.wording, inline, requestClose: requestDeparture,
                     automaticLabel,
                     onSubmit: packet => mutate(activeFeedback, feedbackView, packet),
                     onCheck: packet => checkMutation(activeFeedback, feedbackView, packet),
@@ -556,7 +591,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                             : "The earlier assessment update needs checking. It will not be repeated.");
                     },
                 });
-                feedbackView.open(event.currentTarget);
+                feedbackView.open(feedbackTrigger);
+                });
             }));
         } else body.append(el("p", "What these results mean and which requests they cover. Open a single request to add optional personal feedback."));
         const summary = trigger.closest(".assessment-summary");
@@ -654,8 +690,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         }
         if (!view) measures.append(el("p", "Pass-share colors are visual bands (v1): below 50% red, 50 to below 75% orange, 75 to below 90% gold, and 90 to 100% teal. They are not quality guarantees. Duration does not use these bands.", "assessment-band-note"));
         body.append(measures);
-        if (!details.open) details.showModal();
-        details.querySelector("button").focus();
+        if (!inline && !details.open) details.showModal();
+        if (!inline) details.querySelector("button").focus({ preventScroll: true });
     }
     function receipt(result, packet) {
         if (!result || result.schemaVersion !== 1 || result.mutationRef !== packet.input.mutationRef) throw new Error("The update receipt does not match this operation.");
@@ -675,8 +711,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             if (result.data?.assessment) {
                 if (accepted && currentFeedback) {
                     focusInteractionRef = result.data.assessment.interactionRef;
-                    if (feedbackDialog.open) feedbackDialog.close();
-                    if (details.open) details.close();
+                    feedbackView?.close();
+                    closeDetails();
                 }
                 onSaved?.(result.data.assessment.withdrawn ? "Personal feedback withdrawn. Recorded evidence is unchanged." : "Personal feedback saved. Recorded evidence is unchanged.");
             } else onSaved?.("Response saving updated.");
@@ -755,5 +791,9 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             consentSignature = signature;
         } catch (error) { if (host.isConnected) unavailable(host, error.message, () => setup(host)); }
     }
-    return { receive, observe, overview, detail, setup, leave, invalidate, clearPrivateText, scoringStatus, isOpen: () => details.open || feedbackDialog.open };
+    return { receive, observe, overview, detail, setup, leave, invalidate, clearPrivateText, scoringStatus,
+        hasUnsentFeedback: () => activeFeedback?.hasUnsentDraft() === true,
+        discardFeedback() { if (activeFeedback?.hasUnsentDraft()) activeFeedback.cancel(); },
+        focusFeedback() { details.hidden = false; detailTrigger?.setAttribute("aria-expanded", "true"); feedbackView?.focus?.(); },
+        isOpen: () => details.open || feedbackDialog.open || details !== detailsModal && !details.hidden };
 }

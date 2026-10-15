@@ -7,6 +7,7 @@ import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { seedRetainedReply } from "./search-corpus-fixture.mjs";
+import { searchWireContract } from "../lib/search-wire-contract.mjs";
 
 export function searchRecords(count = 3) {
     return Array.from({ length: count }, (_, index) => {
@@ -66,12 +67,13 @@ export async function streamPanel(runtime, { purpose = "navigation" } = {}) {
     const session = await (await fetch(origin + "/api/session", { method: "POST", headers, body: "{}" })).json();
     headers["X-Board-Capability"] = session.capability;
     const api = async (path, body = {}) => {
-        const input = path === "/api/search/query" ? { schemaVersion: 2, purpose, ...body } : body;
+        const input = path === "/api/search/query" ? { schemaVersion: searchWireContract.schemaVersion, purpose, ...body } : body;
         const response = await fetch(origin + path, { method: "POST", headers, body: JSON.stringify(input) });
         return { code: response.status, body: await response.json() };
     };
     const controller = new AbortController();
-    const response = await fetch(origin + "/api/search/events", { method: "POST", headers, body: '{"schemaVersion":2}', signal: controller.signal });
+    const response = await fetch(origin + "/api/search/events", { method: "POST", headers,
+        body: JSON.stringify({ schemaVersion: searchWireContract.schemaVersion }), signal: controller.signal });
     if (!response.ok) return { response, api, close: () => controller.abort() };
     const reader = response.body.getReader(), decoder = new TextDecoder();
     const events = [], waiters = [];

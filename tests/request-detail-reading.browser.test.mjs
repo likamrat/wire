@@ -652,7 +652,8 @@ test("normal response reader opens retained text immediately with explicit Retry
     const copy = host.getByRole("button", { name: "Copy response", exact: true });
     await copy.waitFor();
     assert.equal(await host.getByRole("button", { name: "Hide response", exact: true }).evaluate(node => node === document.activeElement), true, "Reading response restores focus to its reader action");
-    assert.equal((await copy.textContent()).trim(), "Copy");
+    assert.equal((await copy.textContent()).trim(), "");
+    assert.equal(await copy.getAttribute("aria-label"), "Copy response");
     assert.equal(await host.locator(".full-text-content").textContent(), responseText);
     assert.equal(await host.locator(".reader-details:visible").count(), 0, "Response qualifications and copy privacy stay visible without another disclosure");
     assert.equal(await host.getByRole("heading").count(), 1, "The retained response has one heading, not a second nested title");
@@ -668,9 +669,13 @@ test("normal response reader opens retained text immediately with explicit Retry
     assert.equal(evidenceReads(), reads, "Copy/Hide/reopen use only this authorized in-memory response");
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), "Find the synthetic planning note.");
     for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 2 }]) {
+        await page.locator("#closeContextSidebar").click();
+        await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         await chooseTheme(page, theme);
+        await page.locator(".request-card-open").first().click();
+        await host.locator(".full-text-content").waitFor();
         assert.equal(await host.locator(".full-text-content").evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
         await capture(page, `response-retained-${theme}-${width}-${scale}`, ".interaction-response");

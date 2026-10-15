@@ -15,7 +15,7 @@ async function capture(page, name) {
     await mkdir(proofs, { recursive: true });
     await page.screenshot({ path: path.join(proofs, name + ".png") });
 }
-async function setup(t) {
+async function setup(t, { touch = false } = {}) {
     const paths = ["/me/drive/root", "/me/calendarView", "/me/messages", "/me/joinedTeams",
         "/me/people", "/me/todo/lists", "/me/onenote/notebooks", "/users",
         "/me/drive/root", "/me/drive/root", "/me/drive/root", "/me/drive/root"];
@@ -38,7 +38,7 @@ async function setup(t) {
             readSource: async () => { throw Error("No icon proof source reads"); } } });
     const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined,
         ignoreDefaultArgs: ["--hide-scrollbars"], args: ["--force-device-scale-factor=1.5"] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce", hasTouch: touch });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     page.setDefaultTimeout(6000);
@@ -58,10 +58,11 @@ async function opticalSize(locator, size) {
     for (const node of await locator.all()) {
         const actual = await node.evaluate(icon => {
             const box = icon.getBoundingClientRect();
-            return { asset: icon.dataset.fluentIcon, width: box.width, height: box.height,
+            return { asset: icon.dataset.lucideIcon, size: Number(icon.dataset.iconSize), width: box.width, height: box.height,
                 decorative: icon.getAttribute("aria-hidden"), focusable: icon.getAttribute("focusable") };
         });
-        assert.match(actual.asset, new RegExp(`_${size}_regular$`));
+        assert.ok(actual.asset);
+        assert.equal(actual.size, size);
         assert.ok(Math.abs(actual.width - size) < .1 && Math.abs(actual.height - size) < .1, JSON.stringify(actual));
         assert.equal(actual.decorative, "true"); assert.equal(actual.focusable, "false");
     }
@@ -81,38 +82,40 @@ async function serviceGeometry(page) {
     }
 }
 async function metadataAlignment(page) {
-    const offsets = await page.locator("#activityList .metadata-help-with-label:has(.service-cue)").evaluateAll(nodes => nodes.map(node => {
-        const icon = node.querySelector(".service-cue .fluent-icon").getBoundingClientRect();
-        const text = node.querySelector(".metadata-label");
+    const offsets = await page.locator("#activityList .service-cue").evaluateAll(nodes => nodes.map(node => {
+        const icon = node.querySelector(".wire-icon").getBoundingClientRect();
+        const text = node.querySelector(".metadata-label") || node.querySelector(":scope>span");
         return icon.y + icon.height / 2 - text.getBoundingClientRect().y - parseFloat(getComputedStyle(text).lineHeight) / 2;
     }));
     assert.ok(offsets.length && offsets.every(offset => Number.isFinite(offset) && Math.abs(offset) < 1), JSON.stringify(offsets));
 }
 test("screen service, Settings, reader and report-control icons use coherent optical roles", async t => {
     const page = await setup(t);
-    await opticalSize(page.locator("#themePreference .fluent-icon"), 20);
-    await opticalSize(page.locator("#percentageCharts [data-breakdown=services] .percentage-cue .fluent-icon"), 24);
+    await opticalSize(page.locator("#themePreference .wire-icon"), 20);
+    await opticalSize(page.locator("#percentageCharts [data-breakdown=services] .percentage-cue .wire-icon"), 24);
     await serviceGeometry(page);
     await page.locator("#percentageCharts").scrollIntoViewIfNeeded();
     await capture(page, "service-legends");
     await page.getByRole("link", { name: "View records", exact: true }).click();
-    await opticalSize(page.locator("#activityList .service-cue .fluent-icon"), 24);
-    await opticalSize(page.locator("#activityList .recorded-result .fluent-icon"), 16);
+    assert.equal(await page.locator("#activityList .request-row svg").count(), 0, "Minimal cards do not repeat decorative status/service glyphs");
+    await page.locator('[data-analyze-mode="calls"]').click();
+    await opticalSize(page.locator("#activityList .service-cue .wire-icon"), 24);
+    await opticalSize(page.locator("#activityList .recorded-result .wire-icon"), 16);
     await metadataAlignment(page);
     await capture(page, "service-and-result-roles");
     await page.locator("#activityList .request-link").first().click(); await ready(page);
-    await opticalSize(page.locator("#requestContent .service-cue .fluent-icon"), 24);
-    await opticalSize(page.locator("#requestContent .ux-copy:visible .fluent-icon"), 20);
+    await opticalSize(page.locator("#requestContent .service-cue .wire-icon"), 24);
+    await opticalSize(page.locator("#requestContent .ux-copy:visible .wire-icon"), 20);
     await capture(page, "reader-roles");
     await navigateMain(page, "reports"); await ready(page);
     await page.getByRole("link", { name: "Create a report", exact: true }).click();
-    await opticalSize(page.locator("#reportsView .ux-help:visible .fluent-icon"), 16);
+    await opticalSize(page.locator("#reportsView .ux-help:visible .wire-icon"), 16);
     await capture(page, "report-workspace-roles");
     await navigateMain(page, "settings"); await ready(page);
     await navigateSettings(page, "privacy");
     await page.locator("#deleteActivity").click();
     await expect(page.locator("#deleteDialog")).toBeVisible();
-    await opticalSize(page.locator("#deleteWarningIcon .fluent-icon"), 20);
+    await opticalSize(page.locator("#deleteWarningIcon .wire-icon"), 20);
     await capture(page, "dialog-warning-role");
     await page.locator("#deleteCancel").click();
     for (const [width, textScale, theme] of [[1440, 1, "light"], [375, 2, "dark"]]) {
@@ -121,17 +124,12 @@ test("screen service, Settings, reader and report-control icons use coherent opt
         await chooseTheme(page, theme);
         await navigateSettings(page, "connection");
         if (!await page.locator("#settingsCategoryNav").isVisible()) await page.locator("#settingsCategorySummary").click();
-        await opticalSize(page.locator("#settingsCategoryNav .fluent-icon"), 24);
+        assert.equal(await page.locator("#settingsCategoryNav .wire-icon").count(), 0);
         const metrics = await page.locator("#settingsCategoryNav a").evaluateAll(nodes => nodes.map(node => {
-            const icon = node.querySelector(".fluent-icon").getBoundingClientRect();
             const label = node.querySelector(".settings-category-label"), rect = label.getBoundingClientRect();
-            return { glyph: node.querySelector(".fluent-icon").dataset.fluentIcon,
-                targetHeight: node.getBoundingClientRect().height,
-                alignment: icon.y + icon.height / 2 - rect.y - parseFloat(getComputedStyle(label).lineHeight) / 2 };
+            return { label: label.textContent, targetHeight: node.getBoundingClientRect().height, fits: rect.right <= innerWidth };
         }));
-        assert.ok(metrics.every(row => row.targetHeight >= 44 && Math.abs(row.alignment) < 1), JSON.stringify(metrics));
-        assert.deepEqual(metrics.map(row => row.glyph), ["plug_connected_24_regular", "shield_24_regular",
-            "clipboard_task_24_regular", "desktop_24_regular", "wrench_24_regular"]);
+        assert.ok(metrics.length === 5 && metrics.every(row => row.label && row.targetHeight >= 44 && row.fits), JSON.stringify(metrics));
         await capture(page, `settings-${theme}-${width}-text${textScale}`);
         if (proofs) await writeFile(path.join(proofs, `settings-${theme}-${width}.json`), JSON.stringify(metrics, null, 2));
         await navigateSettings(page, "display");
@@ -146,9 +144,10 @@ test("screen service, Settings, reader and report-control icons use coherent opt
     await page.locator("#percentageCharts").scrollIntoViewIfNeeded();
     await capture(page, "service-legends-narrow-enlarged");
     await page.getByRole("link", { name: "View records", exact: true }).click();
-    await opticalSize(page.locator("#activityList .service-cue .fluent-icon"), 24);
+    await page.locator('[data-analyze-mode="calls"]').click();
+    await opticalSize(page.locator("#activityList .service-cue .wire-icon"), 24);
     await metadataAlignment(page);
-    await page.locator("#activityList .metadata-help-with-label:has(.service-cue)").first().scrollIntoViewIfNeeded();
+    await page.locator("#activityList .service-cue").first().scrollIntoViewIfNeeded();
     await capture(page, "service-metadata-narrow-enlarged");
 });
 
@@ -156,16 +155,13 @@ test("Reset Analyze uses a clear reset glyph distinct from Refresh without chang
     const page = await setup(t), metrics = [];
     const reset = page.locator("#resetView");
     const measure = phase => page.evaluate(phase => {
-        const control = document.querySelector("#resetView"), icon = control.querySelector(".fluent-icon");
-        const refresh = document.querySelector("#checkActivity .fluent-icon");
+        const control = document.querySelector("#resetView"), icon = control.querySelector(".wire-icon");
+        const refresh = document.querySelector("#checkActivity .wire-icon");
         const rect = node => node.getBoundingClientRect().toJSON();
-        const text = document.createRange();
-        const label = [...control.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
-        text.selectNode(label);
-        return { phase, disabled: control.disabled, parent: control.parentElement.id, asset: icon.dataset.fluentIcon,
-            icon: rect(icon), target: rect(control), text: text.getBoundingClientRect().toJSON(),
-            opacity: getComputedStyle(icon).opacity, color: getComputedStyle(icon).color, fill: getComputedStyle(icon).fill,
-            outline: getComputedStyle(control).outlineStyle, refreshAsset: refresh.dataset.fluentIcon, refresh: rect(refresh) };
+        return { phase, disabled: control.disabled, parent: control.parentElement.id, asset: icon.dataset.lucideIcon,
+            icon: rect(icon), target: rect(control), label: control.getAttribute("aria-label"),
+            opacity: getComputedStyle(icon).opacity, color: getComputedStyle(icon).color, fill: getComputedStyle(icon).fill, stroke: getComputedStyle(icon).stroke,
+            outline: getComputedStyle(control).outlineStyle, refreshAsset: refresh.dataset.lucideIcon, refresh: rect(refresh) };
     }, phase);
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
         await page.setViewportSize({ width, height: 1100 }); await chooseTheme(page, theme);
@@ -185,30 +181,50 @@ test("Reset Analyze uses a clear reset glyph distinct from Refresh without chang
         metrics.push({ theme, width, ...focused });
         assert.notEqual(focused.outline, "none");
         await capture(page, `reset-${theme}-${width}-focus`);
-        await page.locator("#activityList input[type=checkbox]").first().check();
+        await page.locator(".request-card-open").first().click();
+        await page.locator("#requestReportToggle").click();
+        await page.locator("#closeContextSidebar").click();
         await reset.press("Enter"); await ready(page);
         await expect(reset).toBeDisabled();
-        await expect(page.locator("#activityList input[type=checkbox]").first()).toBeChecked();
+        await page.locator(".request-card-open").first().click();
+        await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
+        await page.locator("#requestReportToggle").click();
+        await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#serviceAssociationFilter")).toHaveValue("all");
         assert.equal(await reset.evaluate(node => node.parentElement.id), parent);
-        assert.equal(await reset.textContent(), "Reset Analyze");
+        assert.equal((await reset.textContent()).trim(), "");
+        assert.equal(enabled.label, "Reset Analyze");
         assert.ok(Math.abs(enabled.target.height - 44) < .1 && enabled.target.width >= 44, "The larger native glyph does not grow the existing 44px control");
-        assert.ok(Math.abs(enabled.icon.y + enabled.icon.height / 2 - enabled.text.y - enabled.text.height / 2) < 2,
-            "Native reset glyph and label share the same visual center");
+        assert.ok(Math.abs(enabled.icon.y + enabled.icon.height / 2 - enabled.target.y - enabled.target.height / 2) < 2,
+            "Reset glyph stays centered in its icon-only target");
         assert.equal(enabled.opacity, "1", "Enabled glyph is not faded by a competing style");
-        assert.equal(enabled.fill, enabled.color, "The official path inherits the same foreground paint as its control");
+        assert.equal(enabled.fill, "none");
+        assert.equal(enabled.stroke, enabled.color, "Official strokes inherit the control's foreground");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        await page.locator("#activityList input[type=checkbox]").first().uncheck();
     }
     if (proofs) await writeFile(path.join(proofs, "reset-icon-roles.json"), JSON.stringify(metrics, null, 2));
-    assert.ok(metrics.every(entry => entry.asset === "arrow_reset_24_regular"), "Reset uses the official native24 return-to-start glyph, not the small circular refresh-like glyph");
-    assert.ok(metrics.every(entry => Math.abs(entry.icon.width - 24) < .1 && Math.abs(entry.icon.height - 24) < .1));
-    assert.ok(metrics.every(entry => entry.refreshAsset === "arrow_clockwise_20_regular" && Math.abs(entry.refresh.width - 20) < .1),
+    assert.ok(metrics.every(entry => entry.asset === "rotate-ccw"), "Reset uses its own official return-to-start glyph");
+    assert.ok(metrics.every(entry => Math.abs(entry.icon.width - 20) < .1 && Math.abs(entry.icon.height - 20) < .1));
+    assert.ok(metrics.every(entry => entry.refreshAsset === "refresh-cw" && Math.abs(entry.refresh.width - 20) < .1),
         "Nearby Refresh retains its separate clockwise action and role");
 });
 
 test("Outcome status glyphs and selection checks align independently without changing draft semantics", async t => {
-    const page = await setup(t);
+    const page = await setup(t, { touch: true });
+    async function checkPaint(row, selected) {
+        const paint = await row.locator(".select-check").evaluate(svg => ({
+            outline: getComputedStyle(svg).outlineStyle,
+            outlineWidth: parseFloat(getComputedStyle(svg).outlineWidth),
+            paths: [...svg.querySelectorAll("path,polyline")].map(node => {
+                const style = getComputedStyle(node);
+                return { visible: node.checkVisibility({ visibilityProperty: true }), stroke: style.stroke, opacity: style.opacity };
+            }),
+        }));
+        assert.ok(paint.outline !== "none" && paint.outlineWidth > 0, "The checkbox affordance remains visible");
+        assert.ok(paint.paths.length > 0);
+        assert.ok(paint.paths.every(shape => (shape.visible && Number(shape.opacity) > 0 && !["none", "transparent", "rgba(0, 0, 0, 0)"].includes(shape.stroke)) === selected),
+            `Selected=${selected}: actual Lucide stroke paint ${JSON.stringify(paint)}`);
+    }
     for (const [width, scale, theme] of [[1440, 1, "light"], [375, 2, "dark"]]) {
         await page.setViewportSize({ width, height: 1100 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
@@ -216,7 +232,7 @@ test("Outcome status glyphs and selection checks align independently without cha
         await page.locator('[data-select-id="outcomeFilter"]').click();
         const rows = page.locator(".select-popup .select-option"), popup = page.locator(".select-popup");
         await expect(rows).toHaveCount(6);
-        await opticalSize(rows.locator(".result-legend-icon .fluent-icon"), 20);
+        await opticalSize(rows.locator(".result-legend-icon .wire-icon"), 20);
         const metrics = await rows.evaluateAll(nodes => nodes.map(node => {
             const left = node.querySelector(".result-legend-icon").getBoundingClientRect();
             const label = node.querySelector(".result-option-label"), text = label.getBoundingClientRect();
@@ -225,18 +241,20 @@ test("Outcome status glyphs and selection checks align independently without cha
                 statusAlignment: left.y + left.height / 2 - text.y - parseFloat(getComputedStyle(label).lineHeight) / 2,
                 checkSize: box.width, checkContentSize: box.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
                     - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth),
-                checkAsset: check.dataset.fluentIcon, height: node.getBoundingClientRect().height };
+                checkAsset: check.dataset.lucideIcon, height: node.getBoundingClientRect().height };
         }));
         assert.ok(metrics.every(row => Math.abs(row.statusAlignment) < 1 && row.height >= 44));
         assert.equal(new Set(metrics.map(row => row.leftX)).size, 1);
         assert.equal(new Set(metrics.map(row => row.rightX)).size, 1);
-        assert.ok(metrics.every(row => Math.abs(row.checkSize - 20) < .1 && Math.abs(row.checkContentSize - 16) < .1 && row.checkAsset === "checkmark_16_regular"));
+        assert.ok(metrics.every(row => Math.abs(row.checkSize - 20) < .1 && Math.abs(row.checkContentSize - 16) < .1 && row.checkAsset === "check"));
         assert.deepEqual(metrics.map(row => row.value), ["success", "failure", "unknown", "partial", "other", "transport"]);
         assert.match(metrics[0].text, /\(7\)/); assert.match(metrics[1].text, /\(5\)/);
         assert.ok(metrics.slice(2).every(row => row.text.endsWith("(0)")));
         await rows.first().hover(); await capture(page, `outcome-${theme}-${width}-selected`);
         await rows.first().click();
         await expect(rows.first()).toHaveAttribute("aria-selected", "false");
+        await checkPaint(rows.first(), false);
+        await checkPaint(rows.nth(1), true);
         await expect(page.locator("#activityCount")).toHaveText("12");
         await capture(page, `outcome-${theme}-${width}-draft`);
         await expect(popup.getByRole("checkbox", { name: /^Select all results/ })).toHaveAttribute("aria-checked", "mixed");
@@ -247,12 +265,18 @@ test("Outcome status glyphs and selection checks align independently without cha
         await popup.getByRole("button", { name: "Cancel", exact: true }).click();
         await page.locator('[data-select-id="outcomeFilter"]').click();
         await expect(rows.first()).toHaveAttribute("aria-selected", "true");
+        await checkPaint(rows.first(), true);
+        await page.locator('[data-select-id="outcomeFilter"]').press("Space");
+        await expect(rows.first()).toHaveAttribute("aria-selected", "false");
+        await checkPaint(rows.first(), false);
         await page.keyboard.press("Escape"); await expect(popup).toBeHidden();
         await expect(page.locator('[data-select-id="outcomeFilter"]')).toBeFocused();
         await expect(page.locator("#activityCount")).toHaveText("12");
-        await page.locator('[data-select-id="outcomeFilter"]').click();
-        await rows.first().click();
-        await popup.getByRole("button", { name: "Apply", exact: true }).click(); await ready(page);
+        await page.locator('[data-select-id="outcomeFilter"]').tap();
+        await checkPaint(rows.first(), true);
+        await rows.first().tap();
+        await checkPaint(rows.first(), false);
+        await popup.getByRole("button", { name: "Apply", exact: true }).tap(); await ready(page);
         await expect(page.locator("#activityCount")).toHaveText("5");
         await page.locator("#clearResultFilter").click(); await ready(page);
         await expect(page.locator("#activityCount")).toHaveText("12");

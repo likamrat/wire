@@ -6,7 +6,7 @@ export const homeResultFilterStyles = `
 .local-filter-row>.select-control {width:auto;max-width:24rem;min-width:0}
 .filter-clear-slot {display:flex;align-items:center;justify-content:center;width:44px;min-height:44px}
 .filter-clear {display:inline-flex;align-items:center;justify-content:center;width:44px;min-width:44px;min-height:44px;padding:10px}
-.filter-clear .fluent-icon {width:20px;height:20px}
+.filter-clear .wire-icon {width:20px;height:20px}
 .home-result-filter>p {font-size:var(--type-small);color:var(--muted);max-width:52ch;padding-block:10px;line-height:1.5}
 .period-controls>.home-result-filter {margin:0;max-width:100%}
 .period-controls .result-filter-field>label {display:flex;flex-direction:row;align-items:center;justify-content:flex-start;min-height:var(--select-help-target);font-weight:var(--weight-regular)}

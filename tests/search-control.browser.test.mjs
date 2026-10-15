@@ -10,10 +10,7 @@ import { chooseReportScope } from "./report-journey-helpers.mjs";
 
 async function setup(t, options = {}, browserOptions = {}) {
     const cleanup = [];
-    const app = await searchFixture({ after: action => cleanup.push(action) }, {
-        search: { modelDirectory: "missing-control-fixture-model" },
-        ...options,
-    });
+    const app = await searchFixture({ after: action => cleanup.push(action) }, options);
     const browser = await chromium.launch(browserOptions);
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
     const errors = [], nonlocal = [];
@@ -317,7 +314,7 @@ test("compact Search exposes held, superseded, disconnected and retry states wit
     await page.unroute("**/api/search/query");
     await page.locator("#wireSearchRetry").click();
     await expect(page.locator("#wireSearchStatus")).toHaveText("No matches. Try different words.");
-    await expect(page.locator("#wireSearchCoverage")).toContainText("Word search only.");
+    await expect(page.locator("#wireSearchCoverage")).not.toContainText("Word search only.");
     await screenshot(page, "search-composer-empty");
     const clearing = Promise.withResolvers(), clearedResponse = Promise.withResolvers();
     t.after(() => clearedResponse.resolve());
@@ -362,7 +359,7 @@ test("compact Search opens the exact retained interaction and restores its resul
         await expect(page.locator("#requestContent")).toContainText("The physician treated an injured patient in the hospital.");
         await expect(page.locator("#wireSearchHome #wireSearch")).toHaveCount(1);
         await expect(page.locator("#wireSearchPanel")).toBeHidden();
-        await page.getByRole("link", { name: "Back to search", exact: true }).click();
+        await page.locator("#closeContextSidebar").click();
         await expect(result).toBeFocused();
         await expect(result).toHaveAttribute("data-search-id", id);
         await expect(input).toHaveValue("physician");
@@ -402,7 +399,7 @@ test("Search preserves View records through live results, dismissal and record B
             await input.press("ArrowDown");
             const id = await page.locator("#wireSearchResults button:focus").getAttribute("data-search-id");
             await page.keyboard.press("Enter");
-            await expect(page.getByRole("link", { name: "Back to search", exact: true })).toBeVisible();
+            await expect(page.locator("#closeContextSidebar")).toBeVisible();
             await page.goBack();
             await expect(page.locator("#wireSearchResults button:focus")).toHaveAttribute("data-search-id", id);
             await expect(input).toHaveValue("Invented local");
@@ -430,17 +427,17 @@ test("Search preserves View records through live results, dismissal and record B
         await page.keyboard.press("Escape");
         await expect(page.locator("#wireSearchPanel")).toBeHidden();
         const after = await position();
-        assert.ok(Math.abs(after.y - expected.y) < 1, `${width}/${mode} returns to the actual entry page position`);
+        assert.ok(Math.abs(after.y - expected.y) < 1, `${width}/${mode} returns to the actual entry page position: ${JSON.stringify({ expected, after })}`);
         assert.ok(Math.abs(after.title - expected.title) < 1, `${width}/${mode} preserves the reading target`);
         if (mode !== "changed-route") await expect(input).toBeFocused();
         if (mode === "late") {
             await page.mouse.move(width - 30, 700);
-            await page.mouse.wheel(0, 100);
-            await expect.poll(async () => (await position()).y).toBeGreaterThan(after.y);
+            await page.mouse.wheel(0, -100);
+            await expect.poll(async () => (await position()).y).toBeLessThan(after.y);
             const wheelPosition = (await position()).y;
             await input.press("Tab");
-            await page.keyboard.press("PageDown");
-            await expect.poll(async () => (await position()).y).toBeGreaterThan(wheelPosition);
+            await page.keyboard.press("PageUp");
+            await expect.poll(async () => (await position()).y).toBeLessThan(wheelPosition);
             await page.waitForTimeout(250);
             const reading = await position();
             release(); await finished;
@@ -495,7 +492,7 @@ test("compact result scrolling, paging and Back stay inside the list without cha
     const rect = await last.boundingBox();
     assert.ok(rect.y >= bounds.y && rect.y + rect.height <= bounds.y + bounds.height);
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("link", { name: "Back to search", exact: true })).toBeVisible();
+    await expect(page.locator("#closeContextSidebar")).toBeVisible();
     await page.goBack();
     await expect(last).toBeFocused();
     await expect(last).toHaveAttribute("data-search-id", id);
@@ -508,7 +505,7 @@ test("compact result scrolling, paging and Back stay inside the list without cha
     await expect(panel).toBeVisible();
     assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop), "0px");
     await page.keyboard.press("Tab");
-    await expect(page.locator("#wireSearchTroubleshooting")).toBeFocused();
+    await expect(page.locator("#wireSearchResults button").first()).toBeFocused();
     await clickVisible(page, page.getByRole("switch", { name: "Dark theme", exact: true }));
     await expect(panel).toBeHidden();
     await expect(page.getByRole("switch", { name: "Dark theme", exact: true })).toBeFocused();
@@ -520,7 +517,9 @@ test("compact result scrolling, paging and Back stay inside the list without cha
     await page.mouse.move(0, 0);
     await page.getByRole("link", { name: "View records", exact: true }).click();
     const titleY = await page.locator("#activityTitle").evaluate(node => node.getBoundingClientRect().top);
-    assert.ok(titleY >= inset.header && titleY < inset.header + 60, "Ordinary anchor targets remain below the header");
+    const limit = await page.evaluate(() => ({ y: scrollY, max: document.documentElement.scrollHeight - innerHeight, viewport: innerHeight }));
+    assert.ok(titleY >= inset.header && titleY < limit.viewport
+        && (titleY < inset.header + 60 || Math.abs(limit.y - limit.max) < 1), "Anchor targets remain below the header, or at the real short-page scroll limit");
 });
 
 test("native compact Search keeps deep typing stationary and restores the reading inset only on focus departure", { timeout: 60000 }, async t => {
@@ -586,7 +585,9 @@ test("native compact Search keeps deep typing stationary and restores the readin
         assert.ok((await page.locator("#pageTitle").boundingBox()).y >= restored.header);
         await page.getByRole("link", { name: "View records", exact: true }).click();
         const target = await page.locator("#activityTitle").boundingBox();
-        assert.ok(target.y >= restored.header && target.y < restored.header + 60);
+        const limit = await page.evaluate(() => ({ y: scrollY, max: document.documentElement.scrollHeight - innerHeight, viewport: innerHeight }));
+        assert.ok(target.y >= restored.header && target.y < limit.viewport
+            && (target.y < restored.header + 60 || Math.abs(limit.y - limit.max) < 1), JSON.stringify({ target, restored, limit }));
         measurements.push({ theme, width, idle, results, reading, restored, target });
     }
     if (process.env.WIRE_SEARCH_CONTROL_PROOFS) await writeFile(path.join(process.env.WIRE_SEARCH_CONTROL_PROOFS,
@@ -600,11 +601,13 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     const { page, context, runtime } = await setup(t, { records });
     const before = await loadBoardState(context);
     const input = page.locator("#wireSearch");
-    const ids = () => page.locator("#activityList .request-link").evaluateAll(nodes => nodes.map(node =>
+    const ids = () => page.locator("#activityList .request-card-open").evaluateAll(nodes => nodes.map(node =>
         new URLSearchParams(node.hash.split("?")[1]).get("request")).sort());
     const allIds = await ids();
     assert.deepEqual(allIds, records.map(row => row.scenarioId).sort());
-    await page.locator("#activityList .request-row input").first().check();
+    await page.locator("#activityList .request-card-open").first().click();
+    await page.locator("#requestReportToggle").click();
+    await page.locator("#closeContextSidebar").click();
     await setLegacyTimeBucket(page, "day");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     assert.deepEqual(await ids(), allIds);
@@ -613,7 +616,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     await input.fill("physician");
     await selectActivityOption(page, "wireSearchType", "interaction");
     await expect(page.locator("#wireSearchResults button")).toHaveCount(2);
-    await expect(page.locator("#wireSearchCoverage")).toContainText("Word search only.");
+    await expect(page.locator("#wireSearchCoverage")).not.toContainText("Word search only.");
     await expect(page.locator("#wireSearchRelated")).toBeHidden();
     await expect(page.locator("#activityCount")).toHaveText("6");
     assert.deepEqual(await ids(), allIds, "Navigation search never applies a hidden analytical filter");
@@ -636,7 +639,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
         assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes =>
             nodes.reduce((total, node) => total + Number(node.dataset.total), 0)), 2);
         await expect(page.locator("#filterChips")).toBeEmpty();
-        await expect(page.locator("#scopeCount-current")).toHaveText(/^2 /);
+        await expect(page.locator("#scopeCount-current")).toHaveText("1 chat · 2 interactions");
     }
     await page.locator(".time-column").first().click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -650,7 +653,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     await expect.poll(ids).toEqual(matchingIds);
     await page.locator("#pageAction").click();
     await chooseReportScope(page, "current");
-    await expect(page.locator("#scopeCount-current")).toHaveText(/^2 /);
+    await expect(page.locator("#scopeCount-current")).toHaveText("1 chat · 2 interactions");
     await expect(page.locator("#scopeCount-selected")).toHaveText(/^1 /);
     await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
     await page.goBack();

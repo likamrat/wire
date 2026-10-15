@@ -2,22 +2,27 @@
 
 ## Interaction reading
 
-The activity card and interaction reader share a prompt-first reading hierarchy.
-The exact prompt keeps the card's Asta Sans body size and restrained bold-italic
-emphasis. Cards combine the operation and recorded outcome, then show compact
-chat, recorded time and model facts. The reader continues with that same prompt
-and source context, followed by the recorded calls and replies. It uses a bounded
-reading column and simple dividers instead of a second page title, breadcrumb and
-timeline rail. Back and report selection stay above the prompt. A restrained
-neutral surface and leading edge distinguish the exact prompt from ordinary
-metadata without increasing its type size. The semantic page heading remains
-available to assistive technology.
+Analyze cards contain only a regular Asta Sans prompt preview, recorded outcomes
+and recorded time. One native full-card link opens the interaction; no checkbox,
+Copy, Read or duplicate View action is nested inside it. Modified links and text
+selection retain native behavior. Report-picker checkboxes are separate and stay.
 
-The reader's **Hide/Read** and **Copy** text actions retain full subject-specific
-accessible names and 44px targets without competing outlined buttons. Responses
-retain ordinary long-reading text. Metadata uses **bold neutral keys (600)** and
-**ordinary values (400)** across cards and the reader. Compact inline arrangements
-must preserve that weight distinction. Source context appears once for the selected interaction, not again for
+Interaction details occupy one right-edge sidebar beside the unchanged workspace.
+Its width actually reduces the main column, so existing widget container queries,
+legends and filters reflow without scaling. Opening and closing compensate the
+selected card's vertical anchor. The main page and sidebar scroll independently;
+selected-call scrolling belongs only to the sidebar. The header contains a title
+and Close; one fixed bottom group owns report actions. Only the surface glides,
+not the cards or individual text sections. Reduced motion changes state immediately.
+When readable columns cannot fit, the same native dialog becomes modal, including
+at enlarged text sizes; it never opens a second interaction page.
+
+**Hide/Read** and **Copy** are icon-only, with short hover/focus explanations,
+subject-specific accessible names and 44px targets. Prompts are regular, not
+bold-italic; placement and a subtle leading edge provide emphasis. Metadata
+labels and values share Asta Sans, size and regular weight across current screens.
+Headings, chart values and code keep their distinct roles. Source context appears
+once for the selected interaction, not again for
 every linked message. Missing projects remain explicit in technical source
 details rather than repeating a no-project sentence on each card.
 
@@ -69,20 +74,22 @@ failed call or proof that Copilot did not answer. **Reviews** directly shows
 the selected interaction's review state and concise, truthful gaps. For example,
 **Completion could not be verified for 1 call.** does not change a reported
 outcome into a verified completion. Exact check counts, reasons and definitions
-remain in the existing saved-check details and feedback dialog; technical source
+remain in the existing saved-check details and inline feedback region; technical source
 records retain source-specific limits. Broad app-wide coverage stays in Analyze
 and Collection status, reachable through **Collection coverage**, not copied
 into the reader. One short scope note distinguishes missing messages, tool
-outcomes and answer/permission judgments. Report membership stays at the top.
+outcomes and answer/permission judgments. Report membership stays in the fixed footer.
 There is no outer review disclosure to open before reading the review
 state or reaching its controls. The redundant unselected-status
-sentence is replaced by the top-level **Add to report** action; selected and
+sentence is replaced by the footer's **Add to report** action; selected and
 broader-scope membership remain stated. **Continue to report** explicitly opens
 Selected report Activity; Add/Remove never navigates or saves. Both controls use
 the shared canonical-alias selection and write/recovery guards. Existing hidden
 selections, author choices, text/format preferences and Back position stay intact.
 Author/scope exclusions are stated inline, not mistaken for included activity.
-This one compact top action group replaces the reader's bottom selection bar.
+This single bottom action group does not repaint the reading column. A report
+inspection under a wider scope explains membership instead of silently converting
+it to Selected.
 A single call's outcome is
 not duplicated in its review section. Multiple-call and linked-interaction
 summaries retain their useful counts and boundaries. Technical source records
@@ -98,7 +105,7 @@ concise availability/capture statement; it does not claim the requested work was
 completed. Tool input wraps as readable recorded text while exact JSON copying
 remains unchanged.
 
-**Details and feedback** uses one compact definition table with human states and
+**Details and feedback** expands inline and uses one compact definition table with human states and
 explicit reviewed/timed coverage, not a pass percentage or repeated aggregate
 glossary. Identically scoped unsupported local checks share one explanation,
 without combining their counts. Each measure retains its definition and origin;
@@ -111,6 +118,69 @@ Only actual verdicts receive positive/negative judgment colors; absent reviews
 stay neutral and review errors remain errors, not negative answer judgments.
 Aggregate screens, canonical metrics and frozen report output retain their
 existing definitions and values.
+
+Optional personal feedback and contextual Automatic scores stay inline. Their
+existing controllers still own validation, explicit approval and receipts.
+Closing, switching cards, changing Analyze filters/pages or leaving with an unsent
+personal-feedback edit first offers **Discard changes / Keep editing** in the
+sidebar. The requested transition is held until resolved. Collapsing the details
+region keeps its edit while mounted. Submitted or uncertain updates are not
+cancelled or replayed: the original receipt remains recoverable after departure.
+This is not a report-draft discard guard.
+
+The legacy `#request` and exact-call addresses remain compatible. A same-tab open
+creates a history entry; switching interactions replaces it. Back closes and
+Forward reopens the sidebar. Direct/reloaded links close to a safe local origin,
+never blindly back out of WIRE. Search returns use its verified current marker.
+Their page position and result focus return after both navigation and sidebar
+exit have settled, including the narrow modal; newer reading input wins.
+The docked sidebar stays below the header's Search results and category controls.
+The narrow modal retains native top-layer focus and input isolation.
+Reading positions and disclosures are memory-only and scoped to current evidence.
+Departure captures once before private-text cleanup; return waits for current
+authorized reply reads to settle before restoring deep scroll and semantic focus.
+New reading input, another owner or invalidation cancels that restoration.
+Closing removes private DOM and Copy getters. Source/permission/deletion changes
+invalidate those positions and stale forms before a new verified read.
+
+A verified Search action may target a different evidence layer. Its current
+values must be labelled with that applied layer, not the origin's controls.
+Close verifies the origin query against the applied snapshot and rereads it
+when they differ or another snapshot is still pending. A departed layer's late
+response cannot replace the restored origin. Matching origin URLs alone are not
+proof of matching data.
+
+## Shared screen icons and controls
+
+Current screens use the allowlisted individual SVGs from official
+`lucide-static@1.52.0`. Node reads only the used assets and serializes them with
+the shell; no icon font, CDN, full sprite or browser replacement library is used.
+The complete upstream ISC and Feather MIT notices accompany the embedded assets
+in `wireIconLicense`, and the installed package retains its complete LICENSE.
+Official 24-unit, two-unit-stroke geometry is unchanged: utility, navigation and
+compact-state display boxes are 20, 24 and 16 pixels.
+An unchecked multiselect keeps its outlined checkbox affordance but does not
+paint the Lucide check path; selection makes that stroke visible.
+
+Familiar Copy, visibility, Close, Refresh, Reset, search, paging and download
+utilities are icon-only with brief explanations and meaningful accessible names.
+File formats remain visible content beside their download controls. Pending and
+success replace the existing glyph without changing layout. Text-only actions
+do not acquire a decorative pending glyph. Hover never invokes an action.
+
+Explicit text-only workflow exceptions are Save report, Open saved report,
+Add/Remove report, Continue to report/contents, Prepare report, approval and
+receipt-recovery actions, feedback Save/Withdraw/Cancel, destructive confirmation,
+source approval, preference Save/Cancel, recollection and comparison actions.
+These describe consequential or otherwise ambiguous operations, not generic
+utilities. Expanded main navigation is the explicit icon-plus-text exception;
+collapsed navigation is icon-only. Settings category links have no decorative
+glyph. Field labels, evidence qualifiers, radio/checkbox choices and disclosure
+titles remain content. WIRE artwork and favicon remain branding.
+
+Screen token, icon and typography changes do not restyle frozen report content,
+PDFs or saved bytes. Reporting setup/library presentation adopts the shared
+conventions; moving those workflows into the sidebar is a subsequent deliverable.
 
 Reply-availability check errors remain errors, distinct from missing reply
 evidence and zero eligible items. Model-assessed definitions name the actual
@@ -136,6 +206,38 @@ reads and copies prompt and arguments, expands details, toggles report membershi
 and returns to the exact card position and focus. Whole-page before/after renders
 complement control geometry and font-role assertions; matching CSS dimensions
 alone are not visual acceptance.
+
+## Live text Search
+
+Search is deterministic local, case-insensitive partial-text matching over
+authorized saved content. Typing `POWER` can find `PowerPoint` in a report title
+or body, an interaction prompt, retained context or a source name. No embedding,
+model initialization, AI suggestion, semantic Related set or model-missing
+fallback participates in this path. Optional assessment features remain separate.
+
+Actual matching rows appear as the user types in the existing stationary capsule.
+There is no query completion, ghost text, Submit button, field enlargement or
+separate Search screen. Each row names its category and useful source/context.
+A body-only match shows the relevant body excerpt; source-only matches keep
+distinct meaningful record titles. Duplicate title/source excerpts are not
+repeated. Match emphasis uses original server-provided UTF-16 ranges and inert
+text nodes, not browser query matching or injected HTML. Bounds and surrogate
+boundaries are checked before painting a match.
+Body previews keep a short, grapheme-safe context window around that exact
+supplied match, collapse display-only paragraph whitespace, and mark omitted
+context with simple ellipses. Category/source precede the snippet. The complete
+match remains visible without line-clamping, including at 375px/200% text;
+original hit/range metadata and frozen files are unchanged.
+
+The existing keyboard, touch, paging, verified Open, Back and clear controls stay.
+New queries, source invalidation and stale opens cannot restore an older result.
+Partial coverage with zero matches is incomplete or unavailable, not a complete
+no-match conclusion. The client uses the one shared wire contract's version for
+queries and both initial and renewed streaming connections.
+
+Historical semantic/Related examples are not acceptance criteria for this text
+Search. Current lifecycle, authority, geometry and frozen-file compatibility
+proof is retained or explicitly migrated, rather than discarded with inference.
 
 ## Analyze visual summaries
 
@@ -299,9 +401,9 @@ screens. It does not change source collection, stored evidence, report membershi
 or frozen exports. The screen projection adds only distinct validated names to
 the existing model fact; it exposes no additional response linkage.
 
-Interactions add one **Model/Models** row after chat, project and recorded time,
-before matching results. It uses the same stacked semantic key/value structure:
-bold category key, ordinary value, with no badge, control or extra explanation.
+The interaction sidebar includes a **Model/Models** row with chat, project and
+recorded time. Its semantic key/value structure uses equal regular screen
+typography, with no badge, control or extra explanation.
 Calls labels this source-context fact **Interaction model**, not a property of
 the tool or returned API result. The reader shows the same fact beside each
 interaction's own prompt. Filtering calls does not narrow the interaction's model
@@ -318,7 +420,7 @@ metadata only)**. Recorded names and deployment labels are not expanded into
 assumed backing models.
 
 The metadata-only allowlist is independent of response-text capture, evaluator
-models and local search models. It retains bounded, credential-screened labels
+models and local text Search. It retains bounded, credential-screened labels
 and linkage metadata, not response bodies or reasoning. Source collection,
 manual import, requested recollection, restart and deletion use the same
 evidence rules; missing historical fields do not trigger backfill or cursor
@@ -466,8 +568,8 @@ Period A/B date fields and **Compare periods** stay together; the inclusive loca
 timezone is stated once beside them. The existing filter controls and removable
 chips remain the scope authority for both periods, rather than a second inventory
 of every default. Explicit Search uses the same analytical search entry; a retained
-private phrase remains an additional narrowing, never a replacement for semantic
-membership. **Stop comparing** restores ordinary Analyze dates and filters.
+private phrase remains an additional narrowing, never a replacement for the
+receipt-bound text-match population. **Stop comparing** restores ordinary Analyze dates and filters.
 
 Accepted results start with **What differs** and the optional **Create comparison
 report** action, then exact outcomes and matching-call timing. Full-interaction
@@ -626,10 +728,11 @@ treats the live consumer as saved-report authorization. The additive closed
 frozen shape and fixed-author policy are documented in
 [Reporting](reporting.md#report-a-retained-period-comparison).
 
-An optional semantic selection replaces `scenarioIds` with
+The legacy-named search selection replaces `scenarioIds` with
 `semanticSelection: { receipt, withinScenarioIds? }` in the read request. These fields are mutually
-exclusive. The receipt has exactly `panelId`, `epoch`, `requestId`, `generation`,
-`indexId`, `modelId`, `mode`, and `revision`. Only the existing search service's
+exclusive. Its current literal-search receipt follows the closed shared wire
+contract described in [Live Search](live-search.md); it does not accept model
+identity or a Related receipt. Only the existing search service's
 synchronous `membership(owner, receipt, state, layer)` resolves it; supplied
 matches cannot become authority. The resolved internal shape is exactly
 `{ scenarioIds, actionIds, parentScenarioIds }`. Canonical rows match an
@@ -640,7 +743,7 @@ filters and service OR/within-service AND rules still apply.
 The component's `getContext.semanticSearch` is absent for legacy private phrase
 search, or contains `status`, `receipt`, the three membership arrays, and
 `coverage: "whole-retained-corpus"`. Only `ready` is admitted; `pending`, `partial`
-and `stale` block instead of falling back to lexical matching or widening a hit to
+and `stale` block instead of using unverified matches or widening a hit to
 its parent. State preparation sends only the receipt, and acceptance checks the
 resolved response against the complete admitted membership, not a displayed
 result page. The live response uses `selection.semanticMembership` instead of
@@ -674,7 +777,7 @@ and distinct full-interaction metric boundaries.
 The check button and **Source and collection** form one left-aligned action row.
 The result follows below, so long no-change, partial, pending and error messages
 cannot push source help to the far edge. Narrow or enlarged-text containers stack
-the same controls in reading order. Native disclosure, Asta/Fluent, light/navy
+the same controls in reading order. Native disclosure, Asta/Lucide, light/navy
 tokens, visible focus, 44px targets and reduced-motion behavior are retained.
 
 Novelty and coverage are independent. The visible **Chat history** link names
@@ -701,7 +804,7 @@ accessibility/layout guidance and the existing product contract were used.
 Reports uses three stages: **Activity**, **Contents**, **Review & save**. Compact
 numbered navigation identifies the task, without large step cards or repeated
 prerequisite paragraphs. It wraps naturally at narrow/enlarged sizes without
-shrinking text. The left sliding sidebar, Asta Sans, official Fluent icons and
+shrinking text. The left sliding sidebar, Asta Sans, official Lucide icons and
 neutral light/charcoal themes remain. Actions keep 44px hit targets.
 
 Activity starts empty. **Selected interactions**, **All saved sessions** and
@@ -857,7 +960,7 @@ finite `workiq-sign-in-required` signal. Its presentation says **Work IQ sign-in
 was required** for that recorded attempt, not that sign-in is required now.
 Beside the existing coverage-first request Insights, **Recorded execution** and
 **AI quality assessment** explain the retained cause and the independent
-assessment state. They retain the existing Asta/Fluent, light/navy, narrow,
+assessment state. They retain the existing Asta/Lucide, light/navy, narrow,
 enlarged-text and visible-focus behavior. Plain Copilot/MCP sign-in guidance is
 not a retry action, source-configuration action or automatic authentication bridge.
 The timeout signal alone establishes neither an HTTP status nor a downstream
@@ -967,7 +1070,7 @@ descriptions use the existing lifecycle. Popup padding remains the existing
 
 ## Activity category meaning
 
-Activity request-card metadata uses the existing local Fluent service cue and
+Calls-card metadata uses the existing local Lucide service cue and
 semantic color alongside its visible category label. A request spanning categories
 uses the existing multi-service grid cue and retains every recorded category label;
 it does not infer a single service or change call classification. Discovery keeps
@@ -1015,7 +1118,7 @@ use only retained technical metadata; chart-definition and percentage disclosure
 the reasons present in the applied slice. Outcome counts and the result cue stay separate.
 The category uses a neutral information glyph in remaining glossary cues, never a
 new under-column icon row. The known `workiq-ask` operation instead uses the official
-Fluent **chat_sparkle_24_regular** glyph, also in its Services and operations row.
+Lucide **message-circle** glyph, also in its Services and operations row.
 It identifies a **recorded attempt** to ask Copilot or a selected agent, not proof
 that a question reached the remote service. Failed and pre-authentication calls
 can have the same recorded invocation. It does not establish reply success or
@@ -1178,7 +1281,7 @@ omission. Report consumers must freeze its definition and membership before usin
 involvement measures, and withhold deltas for absent/incompatible definitions.
 Existing frozen category reports remain readable and unchanged.
 
-This narrow change reuses Asta/Fluent, current light/navy tokens, accessible help and
+This narrow change reuses Asta/Lucide, current light/navy tokens, accessible help and
 44px controls. Existing chart geometry is unchanged. Local design-search Python was
 unavailable; built-in accessibility guidance and the existing product system were used.
 
@@ -1380,7 +1483,7 @@ unchanged. Collection preferences use short field help; file limits, discovery
 cadence and continued collection after closing the panel live in Collection
 details. The selected values already show the interval and history window.
 
-The shared UI font, 24px dialog corners, Fluent warning glyph and light/navy
+The shared UI font, 24px dialog corners, Lucide warning glyph and light/navy
 tokens are reused. Destructive entries and confirmations share neutral surfaces
 with red text/outlines, alongside the warning rail and irreversible wording.
 The same restrained accent marks saved-object deletion, capture revocation and
@@ -1497,11 +1600,11 @@ display metric. Ordinary values keep Asta's tabular figures, not a monospace
 substitute. Whole-screen glyph inspection covers the actual populated cards,
 reader, selectors, help, report setup and Settings, not just a typography sample.
 
-All app-authored semantic icons use the local official Fluent SVG collection.
+All app-authored semantic icons use the local official Lucide SVG collection.
 Disclosure chevrons and pending indicators use inline SVGs from that
 same registry, with unchanged package geometry (16px disclosure/inline progress,
 20px action progress). Native `details` behavior and accessible labels remain
-intact; generated progress slots reserve space even when idle, and reduced
+intact; icon-only progress replaces the glyph in its existing slot, and reduced
 motion keeps the official progress glyph still. Summary enhancement also handles
 dynamic label changes without rewriting their text or replacing native controls.
 No image source or CSP permission is added. The saved-report Manage cue
@@ -1523,10 +1626,10 @@ The following METROPOLIS description records the earlier screen foundation and
 the retained saved-output typography. Current screens use the contract above.
 
 The user's latest METROPOLIS Intelligent Operations Center reference takes
-priority over the earlier IQ-OS/Asta/Fluent visual treatment: typography, status
+priority over the earlier IQ-OS/Asta/Lucide visual treatment: typography, status
 pills, panels and charts, not only hue changes. Earlier feature histories below
 that mention Asta, navy or larger rounded cards describe the superseded design.
-Fluent icons and native control behavior remain where useful; preserving their
+Lucide icons and native control behavior remain where useful; preserving their
 old appearance is not a goal.
 
 `lib/typeface.mjs` now supplies `Arial,"Helvetica Neue","Segoe UI",sans-serif`.
@@ -1586,9 +1689,9 @@ Noninteractive results have a semantic-colored keyline and faint matching fill w
 compact geometry or acquiring button behavior, hover paint or a tab stop.
 Native form fields, sidebar rows, popups, cards and dialogs retain distinct
 shapes rather than becoming identical capsules. Text-only controls no longer
-reserve invisible leading and trailing spinner gutters: a small pending marker
-fits within the existing inset without moving or widening the label. Controls
-with existing Fluent glyphs replace that glyph with the spinner. Deletion
+reserve invisible leading and trailing spinner gutters: their owners use concise
+pending text and busy semantics. Controls
+with existing Lucide glyphs replace that glyph with the spinner. Deletion
 dialogs keep their red-outline treatment and a 16px helper-to-preview gap.
 Scope captions sit below insights with their own 12px separation, retain
 all-pages/full-interaction meaning, and do not compete with measured values.
@@ -1601,8 +1704,8 @@ even when the evidence revision is unchanged. Mutations are never replayed.
 Only a previously accepted view can be described as retained, and offline
 messaging labels it as the last accepted view rather than current collection.
 
-Fluent System Icons remain local official 20px assets (16px help/chevrons).
-The five main navigation items use regular at rest and filled only on the
+Lucide icons remain local official assets in 20px utility boxes (16px compact cues).
+Main navigation retains its 24px outline at rest and on the
 current page, retaining `aria-current`, a visible boundary and stable row
 geometry. Decorative glyphs are hidden from assistive technology; native
 control names and keyboard behavior remain unchanged. No tooltip timing,
@@ -1630,7 +1733,7 @@ a visible outline. Clicking any part of the wordmark still returns Home.
 Inline artwork is decorative, and only the appropriate
 theme variant is visible; each variant has separate local paint/clip IDs.
 Standalone assets retain accessible titles. This branding does not replace
-Fluent action icons or recolor the application's themes. New reports can embed
+Lucide action icons or recolor the application's themes. New reports can embed
 the light artwork inline, retaining their offline/no-external-resource boundary;
 previously frozen report bytes are not changed by an asset update.
 Technical names, storage keys, paths and historical source attribution keep their
@@ -1647,7 +1750,7 @@ and to newly generated HTML reports. Saved immutable reports and raw captured
 content are not rewritten.
 
 The header has one compact, horizontal appearance switch, not a menu or two
-separate buttons. Both official Fluent glyphs stay visible: sun on the left,
+separate buttons. Both official Lucide glyphs stay visible: sun on the left,
 moon on the right. A contrasting circular thumb sits under the active glyph
 and slides between them in 160ms (no motion with reduced motion enabled).
 The 76px by 36px track sits within a fixed 80px by 44px touch target; neither the
@@ -1676,7 +1779,7 @@ attributes and palette tokens are separate from host-injected defaults.
 The nonce-authorized head script applies the saved choice before body rendering.
 
 `web/tokens.mjs` owns interface colors and radii. The shared visual foundation
-replaces the former blue/navy palette, not the Fluent controls or typography.
+replaces the former blue/navy palette, not the Lucide controls or typography.
 `createDimensionalCharts().servicePalette` in `lib/dimensional-charts.mjs` owns
 all canonical service/category identities and the separate grouped Other presentation;
 `web/dimensional-charts-styles.mjs` consumes it for material and readable ink in
@@ -2140,7 +2243,7 @@ period controls, retaining one route/query model, not a second selector in More 
 All results description and the field's accessible description explain faceted
 counts without adding a redundant full-width scope row above the chat list.
 
-A separate native **Clear recorded result filter** button with the shared Fluent
+A separate native **Clear recorded result filter** button with the shared Lucide
 close glyph sits immediately after the trigger, outside it, in a reserved 44px
 slot. It clears only the result and returns focus to the dropdown (or its label
 when result filtering is unavailable). The unused slot stays empty, not a fake
@@ -2626,7 +2729,7 @@ borders and text baselines already align, so content-sized 44px controls and
 intentional wrapping are preserved rather than applying a cosmetic offset.
 First use shows a short **Review source in Settings** Home entry after the title, not
 a mandatory configuration wall. The dedicated route is reachable in the sidebar
-and the same mobile drawer, with an official Fluent settings glyph, active state,
+and the same mobile drawer, with an official Lucide settings glyph, active state,
 deep links and focus/Back/Forward behavior. Settings has five categories:
 Connection & updates, Privacy & saved data, AI reviews, Display and
 Troubleshooting. Its short
@@ -2951,7 +3054,7 @@ Selecting a chart row or time bucket carries the slice into this list. Each
 request has an ordinary deep-linked page, not a modal-only detail view.
 
 Each request row has one inline recorded-results unit beneath its existing
-metadata. Counts are tabular, 16px and paired with official Fluent icons and
+metadata. Counts are tabular, 16px and paired with official Lucide icons and
 plain text in compact pills, never color-only labels. A mixed request has counts for each recorded
 outcome; there is no fabricated overall success/failure. Long excerpts retain
 ellipsis and the full accessible link label. Canonical row ownership prevents
@@ -3332,11 +3435,11 @@ not restyled by live interface changes.
 
 Action headers center the exact tool title and service identity in one wrapping
 flex row with a 16px group gap. Service glyph and label share one centered cue;
-its adjacent help is a separate 44px target with a 16px Fluent info glyph, not a
+its adjacent help is a separate 44px target with a 16px Lucide info glyph, not a
 nested metadata line box or an offset icon. Header groups wrap naturally while
 timestamps and Technical details remain owned by the same timeline record.
 
-Technical Copy controls retain their bundled MIT Fluent icon, contextual
+Technical Copy controls retain their bundled official Lucide icon, contextual
 accessible label and keyboard/hover tooltip. Prompt/response readers opt into
 visible **Copy prompt**/**Copy response** labels and visible pending/success
 feedback. Success is shown only after the write resolves; permission denial,
@@ -3367,7 +3470,7 @@ the control's other descriptions. Disabled action wrappers expose
 actionable guidance on keyboard focus. Essential privacy instructions and
 limitations remain visible without hovering.
 
-Explanatory help uses a small locally bundled Fluent info button. Hover, keyboard
+Explanatory help uses a small locally bundled Lucide info button. Hover, keyboard
 focus or a tap reveals its text; Escape or an outside tap dismisses it. Category
 help is a sibling of the chart action, never a nested button, and does not change
 the selected slice. Dynamic chart-value tooltips remain separate from definitions.
@@ -3384,16 +3487,15 @@ Filters, result labels, report choices and ambiguous technical fields use the sa
 helper. Copy and appearance icons remain their own affordances, without extra
 info icons.
 
-All app-authored icons use the locally bundled MIT `@fluentui/svg-icons` Regular
-family. `web/ux-icons.mjs` owns asset loading and semantic action keys;
-`web/dimensional-icons.mjs` reuses it. Action/service glyphs are 20px; Info and
-select chevrons use their native 16px assets. Official paths, viewBox and
-currentColor are preserved; selected states use tokens, ARIA and a checkmark,
-not a switch to Filled icons. Decorative SVGs are aria-hidden and not focusable;
+All app-authored icons use the locally bundled official `lucide-static` assets,
+with complete ISC and Feather MIT notices. `web/ux-icons.mjs` owns asset loading
+and semantic action keys; `web/dimensional-icons.mjs` reuses it. Utilities use
+20px boxes, navigation/service cues 24px and compact states 16px. Official
+24-unit paths, viewBox and currentColor strokes are preserved; selected states
+use tokens, ARIA and a checkmark, not filled variants. SVGs are aria-hidden and not focusable;
 icon-only actions retain contextual names and shared tooltips. Help/copy targets
-are 40px on desktop and 44px on narrow/coarse-pointer screens. Inline metadata
-alone uses bounded 24px fine-pointer or 32px coarse-pointer help targets around
-the same 16px Fluent glyph. Labels and symbols align on the same text line;
+are at least 44px on desktop, narrow and coarse-pointer screens, including inline
+metadata help around its 16px Lucide glyph. Labels and symbols align on the same text line;
 separators belong to the following item, and a wrapping label keeps its final
 grapheme with its help control. Copy and chart help targets are unchanged.
 Summary, checkbox and radio affordances and quantitative chart geometry remain
@@ -3408,7 +3510,7 @@ selected evidence, while JSON carries the same structured static descriptions.
 These are safe reading metadata, not source prose or extra metric counts; the
 frozen snapshot, privacy review and hashes cover them with the rest of the report.
 
-Result explanations and service terms pair a compact official Fluent glyph with
+Result explanations and service terms pair a compact official Lucide glyph with
 an accented label; descriptions remain neutral reading text. These are definition
 terms, not pill-shaped controls. Icons align with the first text line and labels
 wrap without losing their glyph. Intrinsic term/definition wrapping also handles
@@ -3502,19 +3604,19 @@ sidebar resizing and accumulated scroll drift in a scrolled Results view. Dense
 plots still scroll horizontally; no page scroll restoration or anchoring override
 is used, so wheel and keyboard reading intent stay with the browser.
 
-Sidebar glyphs use the installed official Fluent 24px regular assets: a trend
+Sidebar glyphs use the installed official Lucide assets in 24px boxes: a trend
 chart for Analyze, a simple document for Reports, a gear for Settings and
 directional panel controls for collapse/expand. They retain their outline in
 selected, hover and keyboard-focus states; existing current-page accents,
 labels and 44px targets remain. Shared colors/fonts and the WIRE artwork are
 unchanged by this navigation treatment.
 
-Application-screen service and Settings-category icons now use the same official
-Fluent regular family at their native 24px optical size. Ordinary actions,
-header controls and status legends stay 20px; compact result badges, help and
-selection checks use true 16px assets rather than scaled-down 20px paths.
-Reset Analyze uses the native 24px `arrow_reset` return-to-start glyph, distinct
-from Refresh's 20px clockwise arrow. Its existing position, label, disabled and
+Application-screen service cues use the same official Lucide family in 24px
+boxes. Settings-category links are text-only. Ordinary actions, header controls
+and status legends use 20px boxes; compact result badges, help and selection
+checks use 16px boxes. Every size preserves the official 24-unit geometry.
+Reset Analyze uses `rotate-ccw`, distinct
+from Refresh's `refresh-cw`. Its existing position, accessible name, disabled and
 keyboard behavior stay unchanged; no date/filter or Refresh semantics change.
 Service identity and outcome keys/labels are unchanged. Unknown uses a question
 mark, Discovery a book/search glyph, and partial, failed and transport outcomes
@@ -3719,7 +3821,7 @@ occurred through Work IQ.
 
 ## Chart label alignment
 
-Each painted front face, numeric value, 24px Fluent service icon box and centered
+Each painted front face, numeric value, 24px Lucide service icon box and centered
 label shares one centerline. Decorative side facets do not move the measured
 center, and capless buttons exclude invisible facet space. Service captions are
 bounded to 184px, with symmetric help slots and a shared final label baseline.

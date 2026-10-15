@@ -22,7 +22,7 @@ export const periodFlowStyles = `
 .secondary-filters {padding-block:4px 8px}
 #filterChips {display:flex;flex-wrap:wrap;gap:4px 8px}
 #filterChips .filter-chip {max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:start}
-#filterChips .filter-chip .fluent-icon {flex:none}
+#filterChips .filter-chip .wire-icon {flex:none}
 .service-focus {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin:8px 0;font-size:var(--type-small)}
 .service-focus p {margin:0;max-width:100%;overflow-wrap:anywhere}
 .service-focus button {min-height:44px;max-width:100%;white-space:normal;text-align:start}

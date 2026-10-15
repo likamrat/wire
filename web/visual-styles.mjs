@@ -6,7 +6,7 @@ export const visualStyles = `
 .theme-trigger:hover:not(:disabled) .theme-track {background:var(--hover)}
 .theme-thumb {position:absolute;top:2px;left:4px;width:32px;height:32px;border-radius:50%;background:var(--accent-fill);transform:translateX(0);transition:transform 160ms ease-out}
 .theme-trigger[aria-checked=true] .theme-thumb {transform:translateX(36px)}
-.theme-control svg {display:block;width:20px;height:20px;fill:currentColor;flex:none}
+.theme-control svg {display:block;width:20px;height:20px;fill:none;flex:none}
 .theme-track svg {position:relative;color:var(--ink)}
 .theme-trigger[aria-checked=false] .theme-sun,.theme-trigger[aria-checked=true] .theme-moon {color:var(--on-accent)}
 @media(prefers-reduced-motion:reduce) {.theme-thumb {transition:none}}

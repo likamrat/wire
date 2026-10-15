@@ -7,9 +7,7 @@ import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { chooseTheme, selectActivityOption } from "./helpers.mjs";
 
 test("compact Search keeps one stationary field and readable live rows without an empty deck", { timeout: 30000 }, async t => {
-    const cleanup = [], app = await searchFixture({ after: fn => cleanup.push(fn) }, {
-        search: { modelDirectory: "missing-presentation-fixture-model" },
-    });
+    const cleanup = [], app = await searchFixture({ after: fn => cleanup.push(fn) });
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1280, height: 950 } });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -108,7 +106,7 @@ test("minimal row accessible names retain recorded outcomes and partial/unavaila
     records[1].userPrompt = { ...records[1].userPrompt, text: "Partially saved workshop request.", status: "partial" };
     records[2].userPrompt = { ...records[2].userPrompt, text: null, status: "unavailable" };
     const cleanup = [], app = await searchFixture({ after: fn => cleanup.push(fn) }, {
-        records, reply: false, search: { modelDirectory: "missing-a11y-fixture-model" },
+        records, reply: false,
     });
     const browser = await chromium.launch(), page = await browser.newPage();
     const errors = [];
@@ -116,13 +114,12 @@ test("minimal row accessible names retain recorded outcomes and partial/unavaila
     t.after(async () => { await browser.close(); for (const fn of cleanup) await fn(); assert.deepEqual(errors, []); });
     await page.goto(app.runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator("#wireSearchRelated > .muted")).toHaveText(
-        "Similar topics, possibly different work. These do not change your charts or report selection.");
+    await expect(page.locator("#wireSearchRelated")).toHaveCount(0);
     for (const [query, type, fact] of [
         ["403", "action", "Failed"],
         ["workiq-fetch", "action", "Partial result"],
         ["Partially saved workshop request", "interaction", "Only part of this text was saved."],
-        ["Recorded request", "interaction", "Saved text is unavailable."],
+        ["Invented local conversation 2", "interaction", "Saved text is unavailable."],
     ]) {
         await page.locator("#wireSearch").fill(query);
         await selectActivityOption(page, "wireSearchType", type);

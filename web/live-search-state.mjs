@@ -1,5 +1,5 @@
 export function createLiveSearchState(contract) {
-    const empty = () => ({ matches: { hits: [], receipt: null, total: 0 }, related: null });
+    const empty = () => ({ matches: { hits: [], receipt: null, total: 0 } });
     let value = { panelId: null, epoch: -1, requestId: -1, purpose: "navigation", types: [], ...empty(), state: "disconnected", status: null };
     function invalid(message) {
         value = { ...value, ...empty(), state: "unavailable", status: null };
@@ -8,12 +8,12 @@ export function createLiveSearchState(contract) {
     return {
         snapshot: () => value,
         query(requestId, purpose, types) {
-            const request = contract.query({ schemaVersion: 2, query: "", requestId, purpose, types });
+            const request = contract.query({ schemaVersion: contract.schemaVersion, query: "", requestId, purpose, types });
             value = { ...value, requestId, purpose, types: request.types, ...empty(), state: "queued" };
         },
         disconnect() { value = { ...value, panelId: null, epoch: -1, ...empty(), status: null, state: "disconnected" }; },
         receive(event) {
-            if (event?.schemaVersion !== 2) invalid("Search protocol changed. Reload this panel before searching again.");
+            if (event?.schemaVersion !== contract.schemaVersion) invalid("Search protocol changed. Reload this panel before searching again.");
             if (event.event === "results" && !contract.validResults(event)) {
                 invalid("Search returned an invalid result set. Reconnect before searching again.");
             }
@@ -27,8 +27,9 @@ export function createLiveSearchState(contract) {
                     || JSON.stringify(event.matches.receipt.queryTypes) !== JSON.stringify(value.types)) {
                     invalid("Search returned an invalid result set. Reconnect before searching again.");
                 }
-                value = { ...value, matches: event.matches, related: event.related ?? null, status: event.status,
-                    state: event.matches.total || event.related?.total ? "ready" : "no-match" };
+                value = { ...value, matches: event.matches, status: event.status,
+                    state: event.matches.total ? "ready"
+                        : contract.completeCoverage(event.status?.corpus, event.matches.receipt.queryTypes) ? "no-match" : "incomplete" };
             }
             else if (event.event === "status" && event.panelId === value.panelId && event.epoch === value.epoch
                 && (event.requestId === value.requestId || event.requestId === undefined && event.state === "unavailable")) {

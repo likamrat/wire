@@ -1,9 +1,18 @@
 # Optional role-bound lexical search
 
+> **Historical research, not an active Search option.** Current
+> [local text search](live-search.md) does not initialize this adjunct, load its
+> resources or interpret intent. The semantic qualification notes below remain
+> evidence of the former contract, not requirements for the current product.
+> Former backend suites are `.historical.mjs` snapshots; their commands below
+> refer to the old source baseline. See [the active coverage map](search-history.md).
+
 This adjunct is **disabled by default and unqualified for activation**. Its
 dictionary-backed matching code remains available for corrective safety testing,
-not as a validated recall improvement. The existing MiniLM, exact and prefix
-matcher remains unchanged.
+not as a validated recall improvement. The existing MiniLM scorer remains;
+the independent [explicit-denial correction](semantic-retrieval.md#retrieval-behavior-and-limitations)
+now guards both baseline admission and this adjunct's additions. It requires
+no linguistic resources and does not qualify or activate this adjunct.
 
 This activation hold is not a choice between local and provider-backed Search.
 Search must remain independent and on-device; an optional Copilot assessment
@@ -130,10 +139,12 @@ same `corpus.deliver` permission/integrity/current-source gate as baseline hits.
 
 The opt-in `SEARCH_LEXICAL_POLICIES` pair binds the optional linguistic rule and
 resource identities. Enabled index identities additionally bind that rule.
-Disabled search keeps the original baseline policy pair. The shared wire
+Disabled search uses the current baseline policy pair. The shared wire
 validator recognizes only the two explicit pairs, rejects mixed pairs, and
 never upgrades one stored receipt into another policy's authority.
-Baseline MiniLM vectors, chunking and cosine thresholds are unchanged.
+Baseline MiniLM vectors, chunking and cosine thresholds are unchanged. The v6
+intent policy names its denial-aware composition, not a different parser or
+dictionary; the resource directory identity is unchanged.
 
 Related retains its original vector floor/band and navigation-only purpose.
 New strictly supported records are removed from Related to keep the sets

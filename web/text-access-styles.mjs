@@ -109,15 +109,10 @@ export const textAccessStyles = `
 .request-link-details {margin-top:16px;padding-top:16px;border-top:1px solid var(--rule);font-size:var(--type-caption)}
 #requestContent {max-inline-size:62rem}
 #requestView>#reportSelectionBar {max-inline-size:62rem;margin-top:8px}
-body:has(#requestView:not([hidden])) .breadcrumbs {display:none}
-body:has(#requestView:not([hidden])) .page-heading {justify-content:flex-start;flex-direction:row;flex-wrap:wrap;gap:12px;margin-bottom:16px;max-inline-size:62rem}
-body:has(#requestView:not([hidden])) .page-heading h1 {font-size:var(--type-body);font-weight:var(--weight-regular);color:var(--muted)}
-body:has(#requestView:not([hidden])) .page-heading>div:first-child {position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 .page-heading #contextBack.reader-back {display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;padding-inline:0}
 .page-heading #contextBack.reader-back::before {content:none}
 .page-heading #contextBack.reader-back:hover {background:var(--hover)}
-.reader-back .fluent-icon {flex:0 0 20px}
+.reader-back .wire-icon {flex:0 0 20px}
 #requestContent .request-intro {gap:4px 20px;margin-bottom:12px}
 #requestContent .request-intro:empty {display:none}
 #requestContent .reader-scope {font-size:var(--type-body);line-height:var(--leading-ui)}
@@ -129,7 +124,7 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 #requestContent .request-context-timeline>.journey-item[data-selected-action=true] {border-inline-start:2px solid var(--accent);padding-inline-start:16px}
 #requestContent .request-context-timeline :is(.full-text-header h2,.full-text-header h3,.interaction-response>h2,.call-heading h3) {font-family:var(--font);font-size:var(--type-body);line-height:var(--leading-reading);font-weight:var(--weight-strong);margin:0}
 #requestContent .request-context-timeline .context-entry-label {font-size:var(--type-body);line-height:var(--leading-ui);margin-bottom:4px;color:var(--ink)}
-#requestContent .context-entry-label strong {font-weight:var(--weight-strong);color:var(--muted)}
+#requestContent .context-entry-label strong {font:inherit;color:var(--muted)}
 #requestContent .request-context-timeline :is(.call-duration,.action-context,.action-fields,.reader-response-note,.reader-empty) {font-size:var(--type-body);line-height:var(--leading-reading)}
 #requestContent .request-context-timeline .call-heading {gap:4px 16px}
 #requestContent .full-text-complete {max-inline-size:100%}
@@ -139,7 +134,7 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 #requestContent .full-text-reader-actions>button {border:0;background:transparent;padding:8px;min-height:44px;color:var(--muted)}
 #requestContent .full-text-reader-actions>button::before {content:none}
 #requestContent .full-text-reader-actions>button:hover {background:var(--hover);color:var(--ink)}
-#requestContent [data-text-subject=request] .full-text-content {max-inline-size:68ch;font-size:var(--type-body);font-weight:var(--weight-strong);font-style:italic}
+#requestContent [data-text-subject=request] .full-text-content {max-inline-size:68ch;font-size:var(--type-body);font-weight:var(--weight-regular);font-style:normal}
 #requestContent [data-text-subject=request]>.full-text-body {padding:12px 16px;background:var(--paper);border-inline-start:3px solid var(--control)}
 #requestContent [data-text-subject=request]:has([data-prompt-actor=user])>.full-text-body {border-inline-start-color:var(--screen-prompt-user)}
 #requestContent .full-text-content-first>.full-text-body {margin-top:4px}
@@ -159,14 +154,14 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 #requestContent .reader-source .card-chat {display:flex;flex-wrap:wrap;gap:4px 8px}
 #requestContent .reader-source .text-link {min-height:24px}
 #requestContent .reader-facts>dl>div {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px}
-#requestContent .reader-facts>dl dt {font-weight:var(--weight-strong);color:var(--muted)}
+#requestContent .reader-facts>dl dt {font:inherit;color:var(--muted)}
 #requestContent .reader-facts>dl dd {margin:0;font-weight:var(--weight-regular);color:var(--ink);overflow-wrap:anywhere}
 #requestContent :is(.facts,.action-fields) {font-size:var(--type-body);line-height:var(--leading-ui);grid-template-columns:minmax(0,10rem) minmax(0,1fr);align-items:baseline;gap:4px 12px;margin-block:8px}
-#requestContent :is(.facts,.action-fields) dt {color:var(--muted);font-weight:var(--weight-strong)}
+#requestContent :is(.facts,.action-fields) dt {color:var(--muted);font:inherit}
 #requestContent :is(.facts,.action-fields) dd {color:var(--ink);font-weight:var(--weight-regular)}
 #requestContent .reader-identifier {font-family:var(--font);font-size:inherit;user-select:text;overflow-wrap:anywhere}
-#requestContent .call-duration strong {font-weight:var(--weight-strong)}
-#requestContent .call-duration-label {font-weight:var(--weight-strong);color:var(--muted)}
+#requestContent .call-duration strong {font-weight:var(--weight-regular)}
+#requestContent .call-duration-label {font-weight:var(--weight-regular);color:var(--muted)}
 #requestContent .call-duration data {color:var(--ink);font-variant-numeric:tabular-nums}
 #requestContent .operation-icon {display:inline-flex;align-self:center;flex:0 0 24px;color:var(--ink)}
 #requestContent .request-context-timeline .context-entry-label.call-started {font-size:var(--type-caption);color:var(--muted);margin:4px 0}
@@ -200,7 +195,7 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 .single-interaction-measures .single-measure-coverage,.single-interaction-measures .single-measure-reason {color:var(--muted)}
 .single-interaction-measures .positive {color:var(--success)}
 .single-interaction-measures :is(.negative,.error) {color:var(--danger)}
-@media(max-width:700px) {
+@container (max-width:44rem) {
  .single-interaction-measures,.single-interaction-measures tbody {display:block}
  .single-interaction-measures thead {position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%)}
  .single-interaction-measures tr {display:grid;grid-template-columns:minmax(0,1fr);border-bottom:1px solid var(--rule);padding-block:12px}
@@ -209,6 +204,33 @@ body:has(#requestView:not([hidden])) #pagePrimaryActions {order:-1}
 @container (max-width:32rem) {
  #requestContent .technical-detail .facts {grid-template-columns:minmax(0,1fr);gap:0}
  #requestContent .technical-detail .facts dd {margin-bottom:8px}
+}
+body {--context-sidebar-width:min(42vw,34rem)}
+body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px) - var(--context-sidebar-width))}
+#contextSidebar {position:fixed;inset:var(--app-header-height,76px) 0 0 auto;margin:0;padding:0;width:var(--context-sidebar-width);max-width:100%;height:calc(100dvh - var(--app-header-height,76px));max-height:none;border:0;border-inline-start:1px solid var(--control);border-radius:0;background:var(--page);color:var(--ink);box-shadow:none;overflow:hidden;z-index:2}
+#contextSidebar[open] {display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
+#contextSidebar[data-mode=overlay] {inset:0 0 0 auto;width:min(100%,40rem);height:100dvh}
+#contextSidebar::backdrop {background:var(--scrim)}
+.context-sidebar-header {grid-row:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 20px;border-bottom:1px solid var(--rule);min-width:0}
+.context-sidebar-header>h2 {font-size:var(--type-body);font-weight:var(--weight-regular)}
+#closeContextSidebar {display:grid;place-items:center;flex:none;width:44px;min-height:44px;padding:10px}
+#contextSidebarBody {grid-row:3;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding:16px;padding:20px;container-type:inline-size}
+#contextSidebarFooter {grid-row:4;padding:8px 20px max(8px,env(safe-area-inset-bottom));border-top:1px solid var(--rule);background:var(--paper);min-width:0}
+#contextSidebarFooter:empty {display:none}
+#contextSidebarFooter .request-actions {display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:flex-end;margin:0;padding:0;border:0}
+#contextSidebarFooter #requestReportTitle {flex-basis:100%;font-size:var(--type-small)}
+#contextSidebarGuard {grid-row:2;padding:12px 20px;border-bottom:1px solid var(--rule)}
+#contextSidebarGuard>p {margin-bottom:8px}
+#contextSidebarGuard>button {margin-inline-end:8px}
+#contextSidebar :is(.request-original,.interaction-response) {min-width:0}
+#contextSidebar :is(.full-text-content,pre) {max-width:100%;overflow-wrap:anywhere;white-space:pre-wrap}
+#contextSidebar .assessment-inline {margin-top:12px;padding-top:12px;border-top:1px solid var(--rule);min-width:0}
+#contextSidebar .assessment-inline>.assessment-dialog-body {padding:0;max-height:none;overflow:visible}
+#contextSidebar .assessment-inline>.dialog-head {position:static;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+#contextSidebar .assessment-inline>.dialog-head h2 {font-size:var(--type-body)}
+@container(max-width:32rem) {
+ #contextSidebar :is(.facts,.action-fields) {grid-template-columns:minmax(0,1fr)}
+ #contextSidebar .automatic-score-limits {grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:600px) {
  .request-original,.interaction-response {padding:16px}

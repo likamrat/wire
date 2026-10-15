@@ -2,6 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createSessionJourney } from "./session-journey.mjs";
 
+test("interaction sidebar keeps its sanitized origin or a safe Analyze deep-link scope", () => {
+    const journey = createSessionJourney();
+    const origin = { view: "analyze", page: "2", authors: "user", search: "invented query" };
+    assert.deepEqual(journey.underlying({ view: "request", request: "a", returnToResults: origin }), origin);
+    assert.deepEqual(journey.underlying({ view: "request", request: "a", call: "b", layer: "tool", service: "Files" }),
+        { view: "analyze", layer: "tool", service: "Files" });
+    assert.deepEqual(journey.underlying({ view: "request", request: "a", returnToResults: { view: "reports", task: "create", receipt: "forbidden" } }),
+        { view: "reports", task: "create" });
+    assert.equal(journey.underlying(origin), origin);
+});
+
 test("Analyze aliases keep the exact filter, private query and paging state", () => {
     const journey = createSessionJourney();
     const scope = { services: "Files", includeMissingService: false, authors: "user", result: "failure",

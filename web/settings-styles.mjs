@@ -49,7 +49,7 @@ export const settingsStyles = `
 .settings-categories>summary {display:none}
 .settings-categories nav {display:flex;flex-direction:column;gap:4px}
 .settings-categories a {position:relative;display:flex;align-items:flex-start;gap:var(--space-sm);min-height:44px;padding:8px 10px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
-.settings-categories a>.fluent-icon {margin-top:calc((1lh - 24px)/2)}
+.settings-categories a>.wire-icon {margin-top:calc((1lh - 24px)/2)}
 .settings-category-label {min-width:0;overflow-wrap:anywhere}
 .settings-categories a:hover {background:var(--hover);color:var(--ink);text-decoration:none}
 .settings-categories a:active {background:var(--pill-pressed);color:var(--ink)}
@@ -119,7 +119,7 @@ export const settingsStyles = `
 .settings-paths dt,.settings-diagnostics dt {color:var(--muted)}
 .settings-paths dd,.settings-diagnostics dd {margin:0;overflow-wrap:anywhere;min-width:0}
 .settings-paths dd {font:var(--weight-regular) var(--type-reading)/var(--leading-reading) var(--font);white-space:break-spaces;min-height:44px}
-.settings-paths dt {align-self:start;font-weight:var(--weight-medium)}
+.settings-paths dt {align-self:start;font:inherit}
 .source-paths-read,.source-editor {margin-top:16px}
 .settings-view :is(.source-paths-read,.source-editor) {padding-block:16px 0;border-top:1px solid var(--rule)}
 .source-paths-read {scroll-margin-block:20px}

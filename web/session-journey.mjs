@@ -26,5 +26,10 @@ export function createSessionJourney() {
         if (!Array.isArray(catalog?.requests) || catalog.requests.some(request => !request.sourceSessionId || !request.scenarioId)) return null;
         return [...new Set(catalog.requests.filter(request => request.sourceSessionId === sessionId).map(request => request.scenarioId))];
     }
-    return { canonical, open, reportIds, returnRoute };
+    function underlying(route) {
+        if (route.view !== "request") return route;
+        return returnRoute(route.returnToResults, true)
+            || returnRoute({ ...route, view: route.origin === "reports" ? "reports" : "analyze" }, true);
+    }
+    return { canonical, open, reportIds, returnRoute, underlying };
 }

@@ -1,7 +1,7 @@
 export const metadataStyles = `
 .inline-metadata {display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-xs);min-width:0}
 .metadata-item {
- --metadata-target:var(--help-target);
+ --metadata-target:max(44px,var(--help-target));
  display:inline-flex;align-items:baseline;gap:var(--space-xs);min-width:0;max-width:100%;
  line-height:max(var(--metadata-target),1.5em);vertical-align:baseline;
 }
@@ -23,5 +23,5 @@ export const metadataStyles = `
 .request-meta .metadata-help-with-label:is(:hover,:active) {color:inherit}
 .request-meta .metadata-help-with-label:is(:hover,:active) .metadata-tail-end>svg {color:var(--ink)}
 .request-meta .service-cue {flex:none;align-self:flex-start;font:inherit;margin-top:calc((1lh - var(--cue-icon-size)) / 2)}
-.request-meta .service-cue .fluent-icon {width:var(--cue-icon-size);height:var(--cue-icon-size);flex-basis:var(--cue-icon-size);margin:0}
+.request-meta .service-cue .wire-icon {width:var(--cue-icon-size);height:var(--cue-icon-size);flex-basis:var(--cue-icon-size);margin:0}
 `;

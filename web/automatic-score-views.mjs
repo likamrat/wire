@@ -35,7 +35,7 @@ export function mountAutomaticScoresRow(root, { onReview }) {
     return { receive, focus: () => review.focus() };
 }
 
-export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck, onClose, ux }) {
+export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck, onClose, ux, inline = false }) {
     const doc = dialog.ownerDocument;
     if (!setup || !Number.isSafeInteger(setup.sourceRevision) || !Number.isSafeInteger(setup.approvalRevision)
         || !setup.source || !Number.isSafeInteger(setup.source.windowDays) || !Array.isArray(setup.chats)
@@ -60,7 +60,10 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
     }
     const title = el("h2", "Automatic scores");
     title.id = "automaticScoreApprovalTitle";
-    const close = button("Close", () => dialog.close());
+    const close = button("Close", closeView);
+    close.setAttribute("aria-label", "Close automatic scores");
+    close.replaceChildren(ux.icon("close"));
+    ux.tooltip(close, "Close scores");
     const head = el("div", undefined, "dialog-head"), body = el("div", undefined, "assessment-dialog-body");
     head.append(title, close);
     dialog.classList.add("assessment-dialog", "automatic-score-dialog");
@@ -118,7 +121,7 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
     status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite"); status.tabIndex = -1; status.hidden = true;
     const actions = el("div", undefined, "assessment-control-actions"), approve = el("button", "Approve automatic scores", "primary");
     approve.type = "submit";
-    const cancel = button("Cancel", () => dialog.close()), check = button("Check approval result", () => onCheck(packet));
+    const cancel = button("Cancel", closeView), check = button("Check approval result", () => onCheck(packet));
     check.hidden = true;
     actions.append(approve, cancel, check);
     form.append(chats, chatLimit, used, limits, budgetHelp, disclosure, consentLabel, status, actions);
@@ -160,15 +163,25 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
         setStatus("Saving your approval. Closing this dialog does not cancel an accepted approval.");
         onSubmit(structuredClone(packet));
     });
-    dialog.onclose = () => {
-        if (dialog.open || closed) return;
+    function didClose() {
+        if (closed) return;
         closed = true;
         onClose?.();
         if (trigger?.isConnected && trigger.checkVisibility()) ux.restoreFocus(trigger);
-    };
+    }
+    function closeView() {
+        if (inline) { dialog.hidden = true; didClose(); }
+        else dialog.close();
+    }
+    dialog.onclose = () => { if (!dialog.open) didClose(); };
     render();
     return {
-        open(from) { trigger = from; dialog.showModal(); close.focus(); },
+        open(from) {
+            trigger = from;
+            if (inline) dialog.hidden = false;
+            else dialog.showModal();
+            close.focus({ preventScroll: true });
+        },
         pending() { pending = true; render(); },
         rejected(message) { pending = false; unknown = false; packet = null; consent.checked = false; setStatus(message, true); },
         uncertain(message) { pending = false; unknown = true; setStatus(message + " Check the original result; no approval will be repeated.", true); },
@@ -177,7 +190,7 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
             else { stale = true; consent.checked = false; }
             setStatus(message + " Close and review the current scope before making another change.", true);
         },
-        complete() { pending = false; unknown = false; dialog.close(); },
+        complete() { pending = false; unknown = false; closeView(); },
     };
 }
 

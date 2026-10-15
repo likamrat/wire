@@ -37,7 +37,7 @@ export const selectStyles = `
 .select-trigger:disabled {color:var(--muted)}
 .select-trigger:disabled::before {background:var(--canvas);border-color:var(--rule)}
 .select-trigger .select-value {display:block;white-space:normal;overflow-wrap:anywhere;min-width:0}
-.select-trigger .select-chevron {display:block;width:16px;height:16px;flex:none;fill:currentColor}
+.select-trigger .select-chevron {display:block;width:16px;height:16px;flex:none;fill:none}
 .select-trigger[aria-expanded=true] .select-chevron {transform:rotate(180deg)}
 .filters .filter-field {flex:0 1 auto;min-width:min(100%,9rem);max-width:100%}
 .filters .filter-field:has(#dateFilter) {width:9.5rem}
@@ -73,15 +73,17 @@ export const selectStyles = `
 .select-option[aria-selected=true] {background:var(--accent-soft);color:var(--accent);font-weight:var(--weight-medium)}
 .select-option[data-active=true] {background:var(--hover);outline:1px solid var(--control);outline-offset:-1px}
 .select-option[aria-selected=true][data-active=true] {background:var(--accent-soft)}
-.select-check {display:block;width:16px;height:16px;justify-self:center;visibility:hidden;fill:currentColor}
+.select-check {display:block;width:16px;height:16px;justify-self:center;visibility:hidden;fill:none}
 .select-option-label {min-width:0;white-space:normal;overflow-wrap:anywhere}
 .select-option-detail {grid-column:1/-1;display:block;margin-top:3px;color:var(--muted);font-size:var(--type-caption);font-weight:var(--weight-regular);line-height:1.45;overflow-wrap:anywhere}
 .select-option[aria-selected=true] .select-check {visibility:visible}
 .select-option[aria-disabled=true] {color:var(--muted);cursor:not-allowed}
 .select-group {padding:6px 10px;color:var(--muted);font-size:var(--type-caption);font-weight:var(--weight-medium)}
 .select-popup-multiple {max-width:min(32em,var(--select-available-width,calc(100vw - 16px)));max-height:calc(100dvh - 16px)}
-.select-popup-multiple .select-check {width:20px;height:20px;visibility:visible;border:0;border-radius:4px;padding:2px;outline:1px solid var(--control);outline-offset:-1px;fill:transparent}
-.select-popup-multiple .select-option[aria-selected=true] .select-check {fill:currentColor;outline-color:currentColor}
+.select-popup-multiple .select-check {width:20px;height:20px;visibility:visible;border:0;border-radius:4px;padding:2px;outline:1px solid var(--control);outline-offset:-1px;fill:none}
+.select-popup-multiple .select-check>* {visibility:hidden}
+.select-popup-multiple .select-option[aria-selected=true] .select-check {outline-color:currentColor}
+.select-popup-multiple .select-option[aria-selected=true] .select-check>* {visibility:visible}
 .select-all {width:100%;justify-content:flex-start;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--rule);border-radius:0;margin-bottom:4px}
 .select-draft-hint {font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:8px 10px}
 .select-footer {display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px;border-top:1px solid var(--rule)}

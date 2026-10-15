@@ -8,9 +8,7 @@ import { chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 test("Search paints only the actual hovered or pressed row, with fixed geometry and exact Open/Back", { timeout: 30000 }, async t => {
-    const cleanup = [], app = await searchFixture({ after: fn => cleanup.push(fn) }, {
-        search: { modelDirectory: "missing-row-paint-fixture-model" },
-    });
+    const cleanup = [], app = await searchFixture({ after: fn => cleanup.push(fn) });
     const browser = await chromium.launch({
         channel: process.platform === "win32" ? "msedge" : undefined,
         headless: !process.env.WIRE_SEARCH_NATIVE_HEADFUL, ignoreDefaultArgs: ["--hide-scrollbars"],
@@ -82,7 +80,7 @@ test("Search paints only the actual hovered or pressed row, with fixed geometry 
         assert.equal(pressed.active, true);
         assert.deepEqual(await input.boundingBox(), fieldBefore);
         await page.mouse.up();
-        await expect(page.getByRole("link", { name: "Back to search", exact: true })).toBeVisible();
+        await expect(page.locator("#closeContextSidebar")).toBeVisible();
         const destination = page.url();
         assert.equal(new URL(destination).hash, "#request?request=search-0");
         await expect(page.locator("#requestContent")).toContainText("The physician treated an injured patient in the hospital.");
