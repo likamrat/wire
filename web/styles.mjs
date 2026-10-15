@@ -586,8 +586,19 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 .request-card-open:hover {background:var(--hover)}
 .request-row[data-detail-active]>.request-card-open {border-inline-start-color:var(--control);background:var(--canvas)}
 .request-card-prompt {font:var(--type-body)/var(--leading-reading) var(--font);max-width:68ch}
-.request-card-summary {display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;font-size:var(--type-small);color:var(--muted)}
-.request-card-outcome[data-outcome=failure],.request-card-outcome[data-outcome=transport] {color:var(--danger)}
+.interaction-summary {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:8px;font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
+.interaction-identity {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;flex-basis:100%;min-width:0;color:var(--ink)}
+.identity-group,.identity-list {min-width:0;max-width:100%;overflow-wrap:anywhere}
+.identity-key,.identity-gap {color:var(--muted)}
+.identity-overflow {font:inherit;color:inherit}
+.identity-list .service-cue {display:inline-block;vertical-align:baseline}
+.identity-list .service-cue .wire-icon {display:inline-block;vertical-align:middle;margin:0 4px 0 0}
+.interaction-summary .recorded-results {margin:0;font:inherit;gap:4px 8px}
+:is(.interaction-summary,.matched-action,.call-heading) .service-cue {--cue-icon-size:20px;font-weight:var(--weight-regular);line-height:inherit}
+:is(.interaction-summary,.matched-action,.call-heading) .recorded-result {font-size:var(--type-small)}
+:is(.interaction-summary,.matched-action,#requestContent) .recorded-result-label {font-weight:var(--weight-regular);text-transform:none;letter-spacing:0}
+:is(.interaction-summary,.matched-action,#requestContent) .result-tone-transport {--cue-color:var(--danger)}
+.interaction-summary .result-unavailable,.interaction-summary .muted {font:inherit}
 #activityList>.request-row .interaction-body {display:grid;gap:12px;min-width:0}
 #activityList>.matched-action {gap:12px}
 #activityList>.activity-card .full-text-preview,#activityList>.activity-card .full-text-body pre {font-family:var(--font);line-height:var(--leading-reading);padding-inline:2px;overflow:visible;max-height:none}
@@ -614,7 +625,7 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #requestContent .interaction-model-fact dt {font:inherit;overflow-wrap:anywhere;max-width:100%}
 #activityList>.activity-card .activity-card-facts dd,#requestContent .interaction-model-fact dd {font:inherit;margin:0;min-width:0;max-width:100%;overflow-wrap:anywhere}
 #activityList>.activity-card .activity-card-facts dd {color:var(--ink)}
-#activityList>.activity-card .activity-card-facts :is(.request-meta,.semantic-cue>span,.card-chat>.text-link,.source-reference,.service-context-label) {color:var(--ink)}
+#activityList>.activity-card .activity-card-facts :is(.request-meta,.card-chat>.text-link,.source-reference,.service-context-label) {color:var(--ink)}
 #activityList>.activity-card .activity-card-facts dd .semantic-cue {font-weight:var(--weight-regular)}
 #activityList>.activity-card :is(.project-context,.request-meta,.recorded-results,.call-duration) {font-size:inherit;line-height:inherit;margin:0}
 #activityList>.activity-card .card-chat {display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;min-width:0}

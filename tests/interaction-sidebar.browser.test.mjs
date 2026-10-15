@@ -273,6 +273,8 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
                     key: getComputedStyle(document.querySelector(".reader-facts dt")).color,
                     icon: getComputedStyle(close).color, focus: getComputedStyle(document.documentElement).getPropertyValue("--focus"),
                     edge: getComputedStyle(panel).borderInlineStartColor },
+                shadow: getComputedStyle(panel).boxShadow,
+                footerFill: getComputedStyle(footer).backgroundColor,
                 facts: [...document.querySelectorAll(".reader-facts dt")].map(dt => {
                     const key = getComputedStyle(dt), value = getComputedStyle(dt.nextElementSibling);
                     return [key.fontFamily === value.fontFamily, key.fontSize === value.fontSize, key.fontWeight === value.fontWeight];
@@ -285,7 +287,9 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
         assert.ok(contrast(measured.colors.key, measured.colors.page) >= 4.5);
         assert.ok(contrast(measured.colors.icon, measured.colors.page) >= 3);
         assert.ok(contrast(measured.colors.focus, measured.colors.page) >= 3);
-        assert.ok(contrast(measured.colors.edge, measured.colors.page) >= 3);
+        assert.equal(measured.colors.edge, "rgba(0, 0, 0, 0)", "The ordinary pane perimeter is decorative, not a control boundary");
+        assert.notEqual(measured.shadow, "none");
+        assert.equal(measured.footerFill, measured.colors.page, "Fixed actions belong to the same pane surface");
         assert.ok(measured.facts.flat().every(Boolean));
         assert.ok(measured.close.width >= 44 && measured.close.height >= 44);
         assert.ok(measured.close.y >= 0 && measured.close.y + measured.close.height <= height);
@@ -544,7 +548,7 @@ test("soft surfaces preserve functional edges, nav states and Search depth in al
         assert.notEqual(paint.active.fill, paint.rail.fill);
         assert.equal(paint.active.weight, "600");
         assert.ok(contrast(paint.active.ink, paint.active.fill) >= 4.5);
-        assert.ok(contrast(paint.rail.edge, paint.rail.fill) > 1 && contrast(paint.rail.edge, paint.rail.fill) < 1.6);
+        assert.equal(paint.rail.edge, "rgba(0, 0, 0, 0)", "Tonal separation replaces the decorative shell frame");
         assert.notEqual(paint.search.shadow, "none", "Search retains its own elevation");
         assert.ok(contrast(paint.search.border, paint.search.fill) >= 3);
         const nav = page.locator('.primary-navigation a[aria-current=page]');
@@ -557,6 +561,38 @@ test("soft surfaces preserve functional edges, nav states and Search depth in al
         const pressed = await page.locator("#navigationCollapse").evaluate(node => getComputedStyle(node).backgroundColor);
         await page.mouse.move(500, 100); await page.mouse.up();
         assert.notEqual(hover, pressed, "Collapse has distinct hover and pressed feedback without a box");
+        await page.locator(".request-card-open").first().click();
+        const pane = await page.locator("#contextSidebar").evaluate(node => {
+            const css = getComputedStyle(node), header = getComputedStyle(node.querySelector("header"));
+            const footer = getComputedStyle(document.querySelector("#contextSidebarFooter"));
+            return { fill: css.backgroundColor, shadow: css.boxShadow, edge: css.borderInlineStartColor,
+                edgeWidth: css.borderInlineStartWidth, headerFill: header.backgroundColor, headerEdge: header.borderBottomColor,
+                footerFill: footer.backgroundColor, footerEdge: footer.borderTopColor };
+        });
+        assert.notEqual(pane.shadow, "none", "The contextual pane has its own directional elevation");
+        assert.equal(pane.fill, paint.rail.fill);
+        assert.equal(pane.edge, "rgba(0, 0, 0, 0)");
+        assert.equal(pane.edgeWidth, "1px", "Changing perimeter paint preserves the existing box metrics");
+        assert.equal(pane.headerFill, "rgba(0, 0, 0, 0)");
+        assert.equal(pane.footerFill, pane.fill);
+        assert.equal(pane.headerEdge, "rgba(0, 0, 0, 0)");
+        assert.equal(pane.footerEdge, "rgba(0, 0, 0, 0)");
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await page.screenshot({ path: path.join(proof, `pane-${theme}-${navigation}.png`) });
+        }
+        await page.emulateMedia({ forcedColors: "active" });
+        const forcedPane = await page.locator("#contextSidebar").evaluate(node => {
+            const css = getComputedStyle(node);
+            return { fill: css.backgroundColor, shadow: css.boxShadow, edge: css.borderInlineStartColor,
+                headerEdge: getComputedStyle(node.querySelector("header")).borderBottomColor,
+                footerEdge: getComputedStyle(document.querySelector("#contextSidebarFooter")).borderTopColor };
+        });
+        assert.equal(forcedPane.shadow, "none");
+        for (const edge of ["edge", "headerEdge", "footerEdge"]) assert.ok(contrast(forcedPane[edge], forcedPane.fill) >= 3);
+        if (proof) await page.screenshot({ path: path.join(proof, `pane-forced-${theme}-${navigation}.png`) });
+        await page.emulateMedia({ forcedColors: "none" });
+        await page.locator("#closeContextSidebar").click();
         await navigateMain(page, "reports");
         assert.equal(await page.locator("#bundles").evaluate(node => getComputedStyle(node).borderTopColor), "rgba(0, 0, 0, 0)");
         await expect(page.locator(".saved-library-row").first()).toBeVisible();
@@ -579,7 +615,7 @@ test("soft surfaces preserve functional edges, nav states and Search depth in al
         assert.equal(highlighted.ink, highlighted.icon);
         assert.ok(contrast(highlighted.ink, highlighted.fill) >= 4.5);
         await page.emulateMedia({ forcedColors: "none" });
-        measurements.push({ theme, navigation, ...paint, highlighted });
+        measurements.push({ theme, navigation, ...paint, pane, forcedPane, highlighted });
     }
     for (const theme of ["light", "dark"]) {
         const expanded = measurements.find(row => row.theme === theme && row.navigation === "expanded");

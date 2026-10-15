@@ -83,6 +83,7 @@ export const textAccessStyles = `
 .action-heading h3 {margin:0;font:inherit;font-weight:var(--weight-strong)}
 .action-heading h3,.action-heading span {overflow-wrap:anywhere;min-width:0;max-width:100%}
 .action-service-heading {display:inline-flex;align-items:center;gap:var(--space-xs)}
+.call-heading .action-service-heading {max-width:100%;min-width:0}
 .action-heading .service-cue {align-items:flex-start;line-height:inherit}
 .journey-item {overflow-wrap:anywhere}
 .journey-item:has(>.call-heading)>.action-fields {margin-block:8px}
@@ -127,6 +128,7 @@ export const textAccessStyles = `
 #requestContent .context-entry-label strong {font:inherit;color:var(--muted)}
 #requestContent .request-context-timeline :is(.call-duration,.action-context,.action-fields,.reader-response-note,.reader-empty) {font-size:var(--type-body);line-height:var(--leading-reading)}
 #requestContent .request-context-timeline .call-heading {gap:4px 16px}
+#requestContent .request-context-timeline .call-heading h3 {font-weight:var(--weight-regular)}
 #requestContent .full-text-complete {max-inline-size:100%}
 #requestContent .full-text-header {gap:4px 16px}
 #requestContent .full-text-reader-actions {gap:0 8px;margin-block:0}
@@ -207,15 +209,15 @@ export const textAccessStyles = `
 }
 body {--context-sidebar-width:min(42vw,34rem)}
 body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px) - var(--context-sidebar-width))}
-#contextSidebar {position:fixed;inset:var(--app-header-height,76px) 0 0 auto;margin:0;padding:0;width:var(--context-sidebar-width);max-width:100%;height:calc(100dvh - var(--app-header-height,76px));max-height:none;border:0;border-inline-start:1px solid var(--control);border-radius:0;background:var(--page);color:var(--ink);box-shadow:none;overflow:hidden;z-index:2}
+#contextSidebar {position:fixed;inset:var(--app-header-height,76px) 0 0 auto;margin:0;padding:0;width:var(--context-sidebar-width);max-width:100%;height:calc(100dvh - var(--app-header-height,76px));max-height:none;border:0;border-inline-start:1px solid transparent;border-radius:0;background:var(--paper);color:var(--ink);box-shadow:var(--context-sidebar-shadow);overflow:hidden;z-index:2}
 #contextSidebar[open] {display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
 #contextSidebar[data-mode=overlay] {inset:0 0 0 auto;width:min(100%,40rem);height:100dvh}
 #contextSidebar::backdrop {background:var(--scrim)}
-.context-sidebar-header {grid-row:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 20px;border-bottom:1px solid color-mix(in srgb,var(--rule) 50%,var(--page));min-width:0}
+.context-sidebar-header {grid-row:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 20px;border-bottom:1px solid transparent;min-width:0}
 .context-sidebar-header>h2 {font-size:var(--type-body);font-weight:var(--weight-regular)}
 #closeContextSidebar {display:grid;place-items:center;flex:none;width:44px;min-height:44px;padding:10px}
 #contextSidebarBody {grid-row:3;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding:16px;padding:20px;container-type:inline-size}
-#contextSidebarFooter {grid-row:4;padding:8px 20px max(8px,env(safe-area-inset-bottom));border-top:1px solid color-mix(in srgb,var(--rule) 50%,var(--paper));background:var(--paper);min-width:0}
+#contextSidebarFooter {grid-row:4;padding:8px 20px max(8px,env(safe-area-inset-bottom));border-top:1px solid transparent;background:var(--paper);min-width:0}
 #contextSidebarFooter:empty {display:none}
 #contextSidebarFooter .request-actions {display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:flex-end;margin:0;padding:0;border:0}
 #contextSidebarFooter #requestReportTitle {flex-basis:100%;font-size:var(--type-small)}
@@ -228,6 +230,11 @@ body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px)
 #contextSidebar .assessment-inline>.assessment-dialog-body {padding:0;max-height:none;overflow:visible}
 #contextSidebar .assessment-inline>.dialog-head {position:static;padding:0;display:flex;flex-wrap:wrap;gap:8px}
 #contextSidebar .assessment-inline>.dialog-head h2 {font-size:var(--type-body)}
+@media(forced-colors:active) {
+ #contextSidebar {border-inline-start-color:CanvasText;box-shadow:none}
+ .context-sidebar-header {border-bottom-color:CanvasText}
+ #contextSidebarFooter {border-top-color:CanvasText}
+}
 @container(max-width:32rem) {
  #contextSidebar :is(.facts,.action-fields) {grid-template-columns:minmax(0,1fr)}
  #contextSidebar .automatic-score-limits {grid-template-columns:minmax(0,1fr)}

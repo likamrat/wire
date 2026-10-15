@@ -883,9 +883,53 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.append(cue);
         return heading;
     }
+    function identityList(items) {
+        const list = el("span", "identity-list");
+        for (const item of items) {
+            if (list.childNodes.length) list.append(document.createTextNode(", "));
+            list.append(item);
+        }
+        return list;
+    }
+    function serviceIdentity(rows, layer, { compact = false } = {}) {
+        if (!Array.isArray(rows)) return el("span", "identity-gap", "Service evidence unavailable");
+        const services = new Set(), activity = new Map();
+        let missing = false;
+        for (const row of rows) {
+            const association = row.serviceAssociation?.layer === layer ? row.serviceAssociation : null;
+            const entry = categoryPresentation(row, layer), operation = layer === "tool" ? categories.operation(row.tool) : null;
+            if (association) {
+                for (const service of association.services) services.add(service);
+                missing ||= association.gaps.length > 0;
+                if (association.status === "not-applicable" && operation) {
+                    activity.set(operation.label, { ...categories.describe("Discovery"), label: operation.label });
+                } else if (entry.icon === "Assistance") activity.set(entry.label, entry);
+            } else if (entry.id === "Discovery") {
+                const label = operation?.label ?? entry.label;
+                activity.set(label, { ...entry, label });
+            } else if (entry.id === "Unknown") {
+                missing = true;
+                if (entry.icon === "Assistance") activity.set(entry.label, entry);
+            } else if (entry.id === "Multiple workloads") activity.set(entry.label, entry);
+            else services.add(entry.id);
+        }
+        const known = categories.entries.filter(entry => services.has(entry.id));
+        const items = known.slice(0, compact ? 2 : undefined).map(entry => serviceCue("span", entry.id));
+        if (compact && known.length > 2) items.push(el("span", "identity-overflow", "More services"));
+        for (const entry of activity.values()) items.push(serviceCue("span", entry.id, entry));
+        if (missing) items.push(el("span", "identity-gap", known.length ? "Service details incomplete" : "Service not shown"));
+        return identityList(items);
+    }
     function actionHeading(title, service, row, layer = "tool", { inlineHelp = true } = {}) {
         const heading = el("div", "action-heading");
         heading.append(el("h3", "", title));
+        if (!inlineHelp) {
+            const identity = el("span", "action-service-heading");
+            identity.append(row ? serviceIdentity([{ ...row, tool: title }], layer)
+                : el("span", "identity-gap", "Service evidence unavailable"));
+            heading.append(identity);
+            return heading;
+        }
         if (service) {
             const entry = categoryPresentation({ ...row, workload: service, tool: title }, layer), identity = el("span", "action-service-heading");
             const operation = categories.operation(title), cue = serviceCue("span", service, entry);
@@ -1601,11 +1645,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }
                 if (!service.childNodes.length) service.textContent = "Service association unavailable in this snapshot.";
             } else {
-                const cue = serviceCue("span", row?.workload, categoryPresentation(row)), scope = categories.requestedSearchScope(call);
-                cue.lastElementChild.textContent = categoryPresentation(row).label;
-                if (scope) cue.lastElementChild.replaceChildren(metadata.item(cue.lastElementChild.textContent,
-                    { help: `${scope.label}. ${scope.description}` }));
-                service.append(cue);
+                const scope = categories.requestedSearchScope(call);
+                const identity = serviceIdentity(row ? [{ ...row, tool: call?.tool || row.tool }] : undefined, "tool");
+                service.append(identity);
+                if (scope) service.append(ux.helpButton(categoryPresentation(row).label, `${scope.label}. ${scope.description}`));
             }
             list.append(el("dt", "", returned ? "Service" : "Activity category"), service);
         }
@@ -3005,11 +3048,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return cardFact(callContext ? "Interaction model" : valid ? model.label : "Model",
             valid ? model.value : model ? "Not verified (invalid model metadata)" : "Not recorded");
     }
-    function cardTools(rows, showCounts = true) {
+    function cardTools(rows, showCounts = true, { compact = false } = {}) {
+        if (!Array.isArray(rows)) return el("span", "identity-gap", "Tool evidence unavailable");
         const tools = new Map();
         for (const row of rows) {
             const name = row.tool || "Tool not recorded";
             tools.set(name, (tools.get(name) || 0) + 1);
+        }
+        if (compact) {
+            const names = [...tools.keys()].filter(name => name !== "Tool not recorded");
+            const items = names.slice(0, 2).map(name => el("span", "card-tool-name", name));
+            if (names.length > 2) items.push(el("span", "identity-overflow", "More tools"));
+            if (tools.has("Tool not recorded")) items.push(el("span", "identity-gap", "Tool not recorded"));
+            return identityList(items);
         }
         const list = el("ul", "interaction-tools");
         for (const [name, total] of tools) {
@@ -3021,6 +3072,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (!tools.size) list.append(el("li", "", "No tool evidence in this view"));
         return list;
+    }
+    function interactionSummary(rows, layer, scope, label) {
+        const summary = el("div", "interaction-summary"), identity = el("div", "interaction-identity");
+        if (!Array.isArray(rows) || rows.length) {
+            // Full canonical context omits tool names; recover only the exact owning call's identity.
+            const identities = rows?.map(row => Object.hasOwn(row, "tool") || !["tool", "reported-api"].includes(layer)
+                ? row : { ...row, tool: sourceCallFor(row)?.tool });
+            const tools = el("span", "identity-group"), services = el("span", "identity-group");
+            tools.append(el("span", "identity-key", "Tools: "), cardTools(identities, false, { compact: true }));
+            services.setAttribute("role", "group");
+            services.setAttribute("aria-label", "Services and recorded activity");
+            services.append(serviceIdentity(identities, layer, { compact: true }));
+            identity.append(tools, services);
+            summary.append(identity);
+        }
+        const outcomes = resultLine(layer, results.summarize(rows), { scope, pillsOnly: true });
+        if (Array.isArray(rows) && !rows.length) outcomes.lastElementChild.textContent = `No recorded ${results.unit(layer, 0)}`;
+        if (label) outcomes.prepend(el("span", "identity-key", label + ": "));
+        summary.append(outcomes);
+        return summary;
     }
     function appendCardSource(list, scenario, options = {}) {
         const source = sessionSource(scenario.sourceSessionId);
@@ -3050,14 +3121,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", String(sidebarIdentity !== null && route.request === scenario.scenarioId));
         const prompt = el("p", "request-card-prompt", textAccess.excerpt(scenario.userPrompt));
-        const facts = el("div", "request-card-summary");
-        const totals = results.summarize(rowsFor(scenario.scenarioId));
-        if (!totals) facts.append(el("span", "", "Outcome unavailable"));
-        else if (totals.count === 0) facts.append(el("span", "", "No recorded calls"));
-        else for (const key of resultKeys) if (totals[key]) {
-            facts.append(el("span", "request-card-outcome", `${count(totals[key])} ${resultLabels[key]}`));
-            facts.lastElementChild.dataset.outcome = key;
-        }
+        const facts = interactionSummary(rowsFor(scenario.scenarioId), applied.layer, "Matching this view");
+        facts.classList.add("request-card-summary");
         facts.append(el("span", "request-card-time", requestTiming.entry(scenario, applied.timeContext).value));
         action.append(prompt, facts);
         action.addEventListener("click", event => {
@@ -3310,13 +3375,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const heading = el("div", "call-heading");
             const operation = categories.operation(tool.tool);
             const actionTitle = actionHeading(tool.tool || "Tool not recorded", row?.workload, row, "tool", { inlineHelp: false });
-            if (tool.tool === "workiq-ask") {
-                const identity = actionTitle.querySelector(".action-service-heading");
-                if (categoryPresentation({ ...row, tool: tool.tool }).icon === "Assistance") identity?.remove();
-                const icon = el("span", "operation-icon");
-                icon.innerHTML = dimensionalIcons.Assistance;
-                actionTitle.prepend(icon);
-            }
             heading.append(actionTitle);
             const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true });
             result.classList.add("journey-result");
@@ -3330,7 +3388,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const serviceEvidence = categories.serviceEvidence(row ? { ...row, tool: tool.tool } : row, "tool");
             const explanation = el("p", "reader-call-evidence", tool.tool === "workiq-ask"
                 ? "Recorded request to Copilot or an agent; delivery and the downstream service are not established."
-                : serviceEvidence?.description ?? operation?.description);
+                : (row ? categories.explainRows([row], "tool") : "") || serviceEvidence?.description || operation?.description);
             const searchScope = categories.requestedSearchScope(sourceCall);
             if (searchScope) explanation.append(" " + searchScope.description);
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
@@ -3808,20 +3866,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             prompt.prepend(heading);
             const identity = el("dl", "report-entry-meta"), chatName = source?.name || scenario.sourceSessionName;
             if (chatName) identity.append(cardFact("Copilot Chat", chatName));
-            const outcomes = results.entries("tool", results.summarize(fullRowsFor(scenario.scenarioId, "tool")));
-            if (outcomes?.length) {
-                const values = el("span");
-                for (const outcome of outcomes) {
-                    if (values.childNodes.length) values.append(document.createTextNode(" · "));
-                    const value = el("span", "request-card-outcome", `${count(outcome.count)} ${outcome.label}`);
-                    value.dataset.outcome = outcome.key;
-                    values.append(value);
-                }
-                identity.append(cardFact("Work IQ calls", values));
-            }
+            const activity = interactionSummary(fullRowsFor(scenario.scenarioId, "tool"), "tool", "Full interaction Work IQ calls", "Work IQ calls");
             const moment = requestTiming.entry(scenario, applied.timeContext);
             if (moment.label !== "Request time") identity.append(cardFact(moment.label === "Message recorded" ? "Recorded" : moment.label, moment.value));
-            text.append(prompt, identity);
+            text.append(prompt, activity, identity);
             if (picking) {
                 const checkbox = selectionCheckbox(scenario, true);
                 checkbox.disabled = reportRequestSelection(scenario.scenarioId).disabled;

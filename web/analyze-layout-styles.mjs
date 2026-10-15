@@ -109,7 +109,7 @@ export const analyzeLayoutStyles = `
 .reader-response-timing dt {font-weight:var(--weight-strong)}
 .reader-response-timing dd {margin:0;font-weight:var(--weight-regular)}
 .response-timing data {font-variant-numeric:tabular-nums}
-#activityView>.section-heading {padding-bottom:8px;border-bottom:1px solid var(--rule);gap:8px 16px}
+#activityView>.section-heading {padding-bottom:8px;border-bottom:1px solid transparent;gap:8px 16px}
 #activityView .analyze-result-actions {margin-block:8px}
 @container analyze-view (min-width:44rem) {
  #percentageCharts [data-breakdown=models] {grid-column:1/-1}

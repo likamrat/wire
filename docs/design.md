@@ -11,11 +11,19 @@ rule adds no meaning; input, permission and action boundaries remain explicit.
 
 The left navigation marks the current destination with a neutral tonal strip,
 not an additional leading stripe. Expanded icon-and-text and collapsed icon-only
-states keep the same targets and alignment. Fine shell seams separate the rail
-and toolbar without a strong continuous frame. In forced colors the current
+states keep the same targets and alignment. Tonal regions separate the rail
+and toolbar without painted shell seams or a strong continuous frame. In forced colors the current
 destination uses system highlight colors. Keyboard focus, fields, errors, chart
 axes, code/data structure and consequential confirmations keep their functional
 boundaries; this is not a global reduction of rule or control contrast.
+
+The contextual sidebar is one paper surface across its header, scrolling body
+and fixed actions, for interaction reading, report setup and saved-item inspection.
+A directional, diffuse shadow separates it from the main workspace in both
+themes instead of a hard perimeter line or separately outlined header/footer.
+The screen-only contextual shadow is independent of Search elevation.
+Transparent decorative borders retain existing box metrics; forced colors
+restore system-color pane and fixed-region edges when shadows are unavailable.
 
 The left rail retains its geometry-based glide and registered brand motion.
 The right sidebar retains its single-surface glide, actual column reflow,
@@ -42,8 +50,20 @@ PDF, JSON and Markdown content are not restyled.
 
 ## Interaction reading
 
-Analyze cards contain only a regular Asta Sans prompt preview, recorded outcomes
-and recorded time. One native full-card link opens the interaction; no checkbox,
+Analyze cards lead with a regular Asta Sans prompt preview, followed by exact
+recorded tool names, supported service or activity cues, outcome pills and recorded
+time. The same Lucide service colors and status-pill vocabulary carries through
+Calls, per-call sidebar details and report-picker inspection. Tools and services
+are separate sets of evidence, not assumed pairs. Compact summaries show up to two
+distinct tool names and two known service names; More tools and More services
+continue their own comma-separated group in the same typography, not as a button,
+badge or separate panel. All outcomes and missing/partial-evidence qualifiers remain
+visible, and details retain every exact identity. Missing service evidence does
+not mean failure; discovery is preparation and hosted assistance does not establish
+a downstream service. Analyze summaries describe the matching active-layer rows;
+report-picker summaries describe the full canonical Work IQ tool rows, so their
+counts need not match a filtered Analyze view. No new counts or metrics are added.
+One native full-card link opens the interaction; no checkbox,
 Copy, Read or duplicate View action is nested inside it. Modified links and text
 selection retain native behavior. Report-picker checkboxes are separate and stay.
 
@@ -94,7 +114,9 @@ removed from this reader. Filter scope is stated once; out-of-view and missing
 API metadata remain in each call's existing technical details instead of
 repeating empty fields down the page. Recorded paths, returned-result summaries
 and actual failures stay in the reading flow. The exact recorded tool name is primary, including `workiq-ask`; an operation
-description never replaces it. Expanded details state service
+description never replaces it. The call heading shows every supported service,
+with a concise qualifier when service details are incomplete; compact summaries
+never select a dominant service. Expanded details state service
 evidence once, keep exact recorded timestamps and selectable identifiers without
 per-ID copy buttons. They do not recite absent parent/parallel linkage or a lack
 of direct HTTP observation for every call: these are recorder limits, not an

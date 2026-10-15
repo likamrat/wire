@@ -1,7 +1,7 @@
 export const sidebarStyles = `
-.app-header {border-bottom-color:color-mix(in srgb,var(--rule) 50%,var(--paper))}
+.app-header {border-bottom-color:transparent}
 .app-header .header-inner {display:grid;grid-template-columns:var(--app-sidebar-width,196px) minmax(0,1fr);min-height:76px;max-width:none;gap:0;padding:0}
-.app-header .brand {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:46px auto;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid color-mix(in srgb,var(--rule) 50%,var(--paper));overflow:hidden}
+.app-header .brand {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:46px auto;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid transparent;overflow:hidden}
 .app-header .brand-home {position:relative;grid-area:1/1;justify-self:start;flex:none;width:148px;height:46px;max-width:none}
 .app-header .brand-logo {width:148px;height:46px;max-width:none}
 .app-header .brand-caption {grid-area:2/1;flex:none;width:148px;font-size:.6875rem;white-space:normal}
@@ -19,7 +19,7 @@ export const sidebarStyles = `
 .workspace-utilities .theme-control {flex:none}
 .header-inner .theme-control {margin-left:0}
 html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
-.app-sidebar {position:fixed;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:196px;padding:16px 12px;background:var(--paper);border-right:1px solid color-mix(in srgb,var(--rule) 50%,var(--paper));overflow-y:auto;overscroll-behavior:contain}
+.app-sidebar {position:fixed;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:196px;padding:16px 12px;background:var(--paper);border-right:1px solid transparent;overflow-y:auto;overscroll-behavior:contain}
 .navigation-content {display:flex;flex-direction:column;gap:24px}
 .navigation-collapse {display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0 0 12px;padding:10px;border:1px solid transparent;border-radius:var(--radius-control);background:var(--paper);color:var(--ink);box-shadow:none}
 .navigation-collapse:hover {background:var(--hover);border-color:transparent}

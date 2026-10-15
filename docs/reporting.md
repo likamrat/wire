@@ -182,8 +182,14 @@ The picker uses the same regular prompt and equal-weight fact conventions as the
 interaction reader. Its bounded prompt surface carries the leading edge; the author
 and View/Read controls stay aligned with selection. Read expands the exact retained
 text, including partial fragments, without reconstructing missing text. Optional facts
-show Copilot Chat, full-interaction Work IQ outcomes and qualified time when known,
-not only the calls matching the current Analyze filter. Missing metadata is omitted;
+show Copilot Chat and qualified time when known. Exact tool names, supported service
+cues and outcome pills share the Analyze/sidebar vocabulary, using full-interaction
+canonical Work IQ rows, not only the calls matching the current Analyze filter.
+Compact identity groups show up to two tool names and two known service names, with
+More tools / More services flowing inline with the same separators and typography.
+All outcome buckets and missing/partial-service qualifiers stay visible; inspection
+retains complete identities. Known zero tool calls and unavailable counts remain
+distinct, and neither implies missing non-tool activity. Missing optional metadata is omitted;
 missing prompt text and unverified authors remain explicit.
 
 Closing setup keeps its memory-only choices without a confirmation. Continue to

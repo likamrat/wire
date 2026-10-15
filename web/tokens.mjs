@@ -67,6 +67,7 @@ export const tokens = `
 const screenLight = `
  --page:#f1f3f7;--paper:#ffffff;--canvas:#ebebeb;--hover:#e3e3e3;
  --surface-shadow:0 2px 4px #26344d0a,0 8px 20px #26344d0a;
+ --context-sidebar-shadow:-2px 0 8px #0000000d,-14px 0 32px #0000001a;
  --ink:#202020;--muted:#565656;--rule:#c9c9c9;--control:#747474;
  --accent:#303030;--accent-soft:#e9e9e9;--accent-fill:#303030;--on-accent:#ffffff;
  --accent-hover:#dedede;--accent-pressed:#d5d5d5;--pill-pressed:#d9d9d9;
@@ -78,6 +79,7 @@ const screenLight = `
 const screenDark = `
  --page:#101010;--paper:#191919;--canvas:#222222;--hover:#2b2b2b;
  --surface-shadow:0 2px 4px #00000029,0 8px 20px #00000029;
+ --context-sidebar-shadow:-3px 0 10px #00000055,-16px 0 36px #00000066;
  --ink:#f2f2f2;--muted:#b8b8b8;--rule:#444444;--control:#888888;
  --accent:#e0e0e0;--accent-soft:#2b2b2b;--accent-fill:#e0e0e0;--on-accent:#191919;
  --accent-hover:#333333;--accent-pressed:#3b3b3b;--pill-pressed:#353535;

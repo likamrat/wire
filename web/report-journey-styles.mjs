@@ -191,6 +191,7 @@ export const reportJourneyStyles = `
 .report-entry-meta>div{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;min-width:0;max-width:100%}
 .report-entry-meta dt{font:inherit}
 .report-entry-meta dd{margin:0;min-width:0;color:var(--ink);font:inherit;overflow-wrap:anywhere}
+#reportList .interaction-summary{font-size:var(--type-body)}
 .report-file-inspection,.report-copy-inspection{min-width:0}
 .report-journey .prompt-comparison{border:0;padding:0;background:transparent}
 .report-journey .prompt-comparison>h4{font-size:var(--type-body);margin:16px 0 8px}
