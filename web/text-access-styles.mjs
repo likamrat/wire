@@ -88,7 +88,7 @@ export const textAccessStyles = `
 .journey-item {overflow-wrap:anywhere}
 .journey-item:has(>.call-heading)>.action-fields {margin-block:8px}
 .journey-item:has(>.call-heading)>.call-api-summary {margin-block:8px}
-.journey-item:has(>.call-heading)>.call-heading .action-heading {gap:8px 16px}
+.journey-item:has(>.call-heading)>.call-heading .action-heading {display:grid;gap:var(--space-xs)}
 .journey-item .ux-inline-code {margin-block:4px}
 .journey-pages>.list-pager:not(:has(button)) {min-height:0;margin:8px 0 12px}
 .request-context-note {flex-basis:100%;font-size:var(--type-caption);line-height:var(--leading-caption);color:var(--muted)}
@@ -127,8 +127,9 @@ export const textAccessStyles = `
 #requestContent .request-context-timeline .context-entry-label {font-size:var(--type-body);line-height:var(--leading-ui);margin-bottom:4px;color:var(--ink)}
 #requestContent .context-entry-label strong {font:inherit;color:var(--muted)}
 #requestContent .request-context-timeline :is(.call-duration,.action-context,.action-fields,.reader-response-note,.reader-empty) {font-size:var(--type-body);line-height:var(--leading-reading)}
-#requestContent .request-context-timeline .call-heading {gap:4px 16px}
-#requestContent .request-context-timeline .call-heading h3 {font-weight:var(--weight-regular)}
+#requestContent .request-context-timeline .call-heading {gap:var(--space-xs);line-height:var(--leading-ui)}
+#requestContent .request-context-timeline .call-heading h3 {font-weight:var(--weight-regular);line-height:inherit}
+#requestContent .request-context-timeline .call-heading .call-duration {line-height:inherit}
 #requestContent .full-text-complete {max-inline-size:100%}
 #requestContent .full-text-header {gap:4px 16px}
 #requestContent .full-text-reader-actions {gap:0 8px;margin-block:0}

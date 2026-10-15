@@ -102,8 +102,55 @@ async function metadata(node) {
     });
 }
 
+async function rowSpacing(node) {
+    const measured = await node.evaluate(node => {
+        const heading = node.matches(".call-heading"), calls = node.matches(".matched-action");
+        const selectors = heading ? [".action-heading>h3", ".action-service-heading", ".call-outcome-row"]
+            : calls ? [".call-identity-facts>div:first-child", ".call-identity-facts>div:nth-child(2)", ".card-outcomes"]
+                : [".interaction-identity>.identity-group:first-child", ".interaction-identity>.identity-group:nth-child(2)", ".interaction-summary>.recorded-results"];
+        const box = element => {
+            const { top, bottom, height, width } = element.getBoundingClientRect();
+            return { top, bottom, height, width };
+        };
+        const rows = selectors.map(selector => {
+            const element = node.querySelector(selector);
+            if (!element) return null;
+            const css = getComputedStyle(element), bands = [];
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) {
+                const text = walker.currentNode;
+                if (!text.textContent.trim() || text.parentElement.closest("svg,.visually-hidden")) continue;
+                const range = document.createRange(); range.selectNodeContents(text);
+                for (const rect of range.getClientRects()) if (rect.width && rect.height && !bands.some(top => Math.abs(top - rect.top) <= 1)) bands.push(rect.top);
+            }
+            return { ...box(element), lineHeight: parseFloat(css.lineHeight), textLines: bands.length,
+                marginTop: parseFloat(css.marginTop), marginBottom: parseFloat(css.marginBottom),
+                icons: [...element.querySelectorAll(".wire-icon")].map(box),
+                controls: [...element.querySelectorAll("button,a,input,[role=button]")].filter(value => value.checkVisibility()).map(box) };
+        });
+        return { rows, gaps: rows.slice(1).map((row, index) => row && rows[index] ? row.top - rows[index].bottom : null) };
+    });
+    assert.ok(measured.rows.every(Boolean), "Tools, services and recorded outcomes each have their own nonempty row");
+    assert.ok(measured.gaps.every(gap => Math.abs(gap - 4) <= 1), `Adjacent metadata rows use only the compact gap: ${JSON.stringify(measured)}`);
+    for (const row of measured.rows.slice(0, 2)) {
+        assert.equal(row.marginTop, 0); assert.equal(row.marginBottom, 0);
+        assert.ok(row.textLines >= 1);
+        if (!row.controls.length) {
+            assert.ok(row.height <= row.textLines * row.lineHeight + (row.textLines - 1) * 2 + 1,
+                `Noninteractive glyphs cannot add baseline slack or reserve a control-height row: ${JSON.stringify(row)}`);
+        } else assert.ok(row.controls.every(control => control.height >= 44 && control.width >= 44));
+        assert.ok(row.icons.every(icon => icon.top >= row.top - 1 && icon.bottom <= row.bottom + 1 && icon.height <= row.lineHeight + 1),
+            `Metadata glyphs fit the actual text row: ${JSON.stringify(row)}`);
+    }
+    const [tools, services] = measured.rows;
+    if (tools.textLines === 1 && services.textLines === 1 && !tools.controls.length && !services.controls.length) {
+        assert.ok(Math.abs(tools.height - services.height) <= 1, "A service icon does not make a single-line row taller than text-only tools");
+    }
+    return measured;
+}
+
 test("one interaction vocabulary connects compact cards, exact calls and report inspection without losing scope or identity", { timeout: 180000 }, async t => {
-    const cleanup = [], evidence = records(), samples = [];
+    const cleanup = [], evidence = records(), samples = [], spacingSamples = [], spacingVariants = {};
     const { context, runtime } = await searchFixture({ after: action => cleanup.push(action) },
         { records: evidence, formats: [], reply: false });
     const before = await loadBoardState(context);
@@ -203,7 +250,7 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
     await page.getByRole("button", { name: "Back to activity", exact: true }).click();
     await expect(picker(page, "calendar").locator("input")).toBeChecked();
 
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 1], [375, 2]]) {
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [1440, 2], [375, 1], [375, 2]]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         await chooseTheme(page, theme);
@@ -219,13 +266,25 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
             assert.ok(Math.abs(overflow.textBox.bottom - overflow.previousTextBox.bottom) <= 1, "Overflow shares its group's text baseline");
         }
         assert.ok(values.pills.every(value => value.font[2] === "400" && value.font[3] === "normal" && value.icon));
+        const spacing = { theme, width, scale, cards: {}, calls: [], detail: [], picker: {}, peek: [] };
+        for (const name of ["calendar", "multiple", "partial", "hosted", "discovery", "missing"]) {
+            spacing.cards[name] = await rowSpacing(card(page, name));
+            await expect(card(page, name).locator(".request-card-time")).toHaveCount(1);
+        }
         await capture(page, `${theme}-${width}-${scale}-analyze`);
+        await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
+        const calls = page.locator("#activityList>.matched-action");
+        for (let index = 0; index < await calls.count(); index++) spacing.calls.push(await rowSpacing(calls.nth(index)));
+        await calls.first().scrollIntoViewIfNeeded();
+        await capture(page, `${theme}-${width}-${scale}-calls`);
+        await page.locator('[data-analyze-mode="interactions"]').click(); await ready(page);
         await multiple.locator(".request-card-open").click();
         const heading = page.locator("#requestContent .call-heading");
         assert.deepEqual((await heading.locator("h3").allTextContents()).sort(),
             ["workiq-fetch", "workiq-ask", "workiq-call_function", "workiq-fetch", "workiq-retrieve"].sort());
         for (const service of ["Mail", "Calendar", "Files"]) await expect(heading.locator(`[data-service="${service}"]`)).toHaveCount(1);
         await expect(heading.filter({ hasText: "Service not shown" })).toHaveCount(2);
+        for (let index = 0; index < await heading.count(); index++) spacing.detail.push(await rowSpacing(heading.nth(index)));
         const dimensions = await page.evaluate(() => {
             const sidebar = document.querySelector("#contextSidebar"), close = document.querySelector("#closeContextSidebar");
             const box = close.getBoundingClientRect(), first = document.querySelector(".call-heading h3");
@@ -239,19 +298,26 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
         assert.ok(contrast(dimensions.ink, dimensions.paper) >= 4.5);
         if (width === 375) assert.equal(dimensions.modal, true);
         await capture(page, `${theme}-${width}-${scale}-detail`);
+        await page.locator("#contextSidebarBody").evaluate(body => {
+            body.scrollTop += body.querySelector(".call-heading").getBoundingClientRect().top - body.getBoundingClientRect().top - 8;
+        });
+        await capture(page, `${theme}-${width}-${scale}-detail-rows`);
         if (await page.locator("#requestReportToggle").textContent() === "Add to report") await page.locator("#requestReportToggle").click();
         await page.locator("#requestReportContinue").click();
         const report = picker(page, "multiple");
         assert.deepEqual((await metadata(report)).tools, values.tools);
         assert.deepEqual((await metadata(report)).services, values.services);
         assert.deepEqual((await metadata(report)).pills, values.pills);
+        for (const name of ["calendar", "multiple", "partial", "hosted"]) spacing.picker[name] = await rowSpacing(picker(page, name));
         await capture(page, `${theme}-${width}-${scale}-picker`);
         await report.locator(".request-link").click();
         await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+        for (let index = 0; index < await heading.count(); index++) spacing.peek.push(await rowSpacing(heading.nth(index)));
         await capture(page, `${theme}-${width}-${scale}-peek`);
         await page.getByRole("button", { name: "Back to activity", exact: true }).click();
         await expect(report.locator("input")).toBeChecked();
         samples.push({ theme, width, scale, values, dimensions });
+        spacingSamples.push(spacing);
     }
 
     await page.setViewportSize({ width: 1440, height: 1000 });
@@ -297,6 +363,7 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
     await page.locator("#reportRequestSearch").fill("empty");
     await expect(picker(page, "empty")).toContainText("No recorded Work IQ tool calls");
     await expect(picker(page, "empty").locator(".recorded-result,.service-cue")).toHaveCount(0);
+    await expect(picker(page, "empty").locator(".interaction-identity")).toHaveCount(0);
     await picker(page, "empty").locator(".request-link").click();
     await expect(page.locator("#requestContent")).toContainText("Execution not observed");
     await page.getByRole("button", { name: "Back to activity", exact: true }).click();
@@ -315,8 +382,10 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
     await page.reload(); await ready(page);
     await expect(card(page, "missing")).toContainText("Tool not recorded");
     await expect(card(page, "missing")).toContainText("1 No result recorded");
+    spacingVariants.missingTool = await rowSpacing(card(page, "missing"));
     await card(page, "missing").locator(".request-card-open").click();
     await expect(page.locator("#requestContent .call-heading h3")).toHaveText("Tool not recorded");
+    spacingVariants.missingToolDetail = await rowSpacing(page.locator("#requestContent .call-heading"));
     await page.locator("#closeContextSidebar").click();
     snapshotCase = "unavailable";
     await page.locator("#pageAction").click();
@@ -325,6 +394,11 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
     await expect(picker(page, "calendar")).toContainText("result counts unavailable");
     await expect(picker(page, "calendar")).not.toContainText("No recorded Work IQ tool calls");
     await expect(picker(page, "calendar").locator(".recorded-result")).toHaveCount(0);
+    spacingVariants.unavailable = await rowSpacing(picker(page, "calendar"));
+    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+    spacingVariants.unavailable200 = await rowSpacing(picker(page, "calendar"));
+    await capture(page, "unavailable-rows-200");
+    await page.evaluate(() => document.documentElement.style.fontSize = "100%");
     await page.unroute("**/api/snapshot");
     await page.reload(); await ready(page);
     await navigateMain(page, "settings"); await ready(page);
@@ -343,5 +417,9 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
     await expect(search).toHaveValue("POWER");
     await expect(hit).toBeFocused();
     await capture(page, "settings-search-return");
-    if (proof) await writeFile(path.join(proof, "continuity-measurements.json"), JSON.stringify(samples, null, 2));
+    if (proof) {
+        await writeFile(path.join(proof, "continuity-measurements.json"), JSON.stringify(samples, null, 2));
+        await writeFile(path.join(proof, "dedicated-row-spacing.json"), JSON.stringify(spacingSamples, null, 2));
+        await writeFile(path.join(proof, "row-gap-variants.json"), JSON.stringify(spacingVariants, null, 2));
+    }
 });

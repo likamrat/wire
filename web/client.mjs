@@ -2981,13 +2981,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }));
         else card.append(el("p", "muted", "Full request details were not retained."));
         const composition = el("div", "card-details"), activity = el("div", "card-activity");
-        const details = el("dl", "activity-card-facts");
-        details.append(cardFact("Tool", cardTools([row], false)));
+        const identities = el("dl", "activity-card-facts call-identity-facts"), details = el("dl", "activity-card-facts");
+        identities.append(cardFact("Tool", cardTools([row], false)));
         let fields;
         if (["tool", "reported-api"].includes(applied.layer)) fields = actionFields(call, row, { includeTool: false, returned: applied.layer === "reported-api" });
         else {
             fields = el("dl", "action-fields");
             fields.append(el("dt", "", "Service"), serviceHeading("dd", row.workload));
+            fields.lastElementChild.classList.add("action-service");
             const graph = scenario?.graphActivities?.find(item => item.activityId === row.activityId);
             const http = scenario?.httpRecords?.find(item => item.recordId === row.recordId);
             pathField(fields, applied.layer === "code-reference" ? "Referenced API path" : "API path",
@@ -2997,7 +2998,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const value = term.nextElementSibling, group = el("div");
             term.textContent = cardKey(term.textContent);
             group.append(term, value);
-            details.append(group);
+            (value.classList.contains("action-service") ? identities : details).append(group);
         }
         const measured = callInvestigation.duration(row, applied.layer);
         details.append(cardFact(applied.layer === "tool" ? "Call duration" : applied.layer === "reported-api" ? "API result duration" : "Record duration",
@@ -3007,7 +3008,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             el("span", "service-context-label", "Missing-service context, not a known match to the selected service.")));
         const outcome = resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), pillsOnly: true });
         outcome.classList.add("card-outcomes");
-        activity.append(details, outcome);
+        activity.append(identities, outcome, details);
         if (["failure", "transport"].includes(row.outcome)) {
             const reason = applied.layer === "http" && row.outcome === "transport" ? "Connection failed; no HTTP response was recorded."
                 : applied.layer === "tool" ? recordedFailure(call, true)
@@ -3380,7 +3381,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             result.classList.add("journey-result");
             const duration = el("p", "call-duration");
             duration.append(el("span", "call-duration-label", "Call: "), durationValue(callInvestigation.duration(tool, "tool")));
-            heading.append(result, duration);
+            const outcomes = el("div", "call-outcome-row");
+            outcomes.append(result, duration);
+            heading.append(outcomes);
             item.append(heading);
             const sourceCall = sourceCallFor(row) || tool;
             const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });

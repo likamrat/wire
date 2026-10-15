@@ -53,10 +53,15 @@ PDF, JSON and Markdown content are not restyled.
 Analyze cards lead with a regular Asta Sans prompt preview, followed by exact
 recorded tool names, supported service or activity cues, outcome pills and recorded
 time. The same Lucide service colors and status-pill vocabulary carries through
-Calls, per-call sidebar details and report-picker inspection. Tools and services
-are separate sets of evidence, not assumed pairs. Compact summaries show up to two
+Calls, per-call sidebar details and report-picker inspection. Tools have a dedicated
+row, services/purpose/evidence gaps a second row, and recorded call outcomes a third.
+Quiet timing appears once with its existing meaning. The rows use compact spacing;
+noninteractive service glyphs fit the text line box instead of adding baseline
+slack or a 44px control-sized row. Wrapped names add real text lines, not empty
+spacers. Tools and services are separate sets of evidence, not assumed pairs.
+Compact summaries show up to two
 distinct tool names and two known service names; More tools and More services
-continue their own comma-separated group in the same typography, not as a button,
+continue within their own row's comma-separated group in the same typography, not as a button,
 badge or separate panel. All outcomes and missing/partial-evidence qualifiers remain
 visible, and details retain every exact identity. Missing service evidence does
 not mean failure; discovery is preparation and hosted assistance does not establish

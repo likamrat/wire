@@ -185,8 +185,12 @@ text, including partial fragments, without reconstructing missing text. Optional
 show Copilot Chat and qualified time when known. Exact tool names, supported service
 cues and outcome pills share the Analyze/sidebar vocabulary, using full-interaction
 canonical Work IQ rows, not only the calls matching the current Analyze filter.
-Compact identity groups show up to two tool names and two known service names, with
-More tools / More services flowing inline with the same separators and typography.
+Tools, services/purpose/gaps and recorded call outcomes occupy separate compact
+rows, matching the interaction sidebar and Analyze cards. Metadata icons stay
+within the text line box without extra blank spacing; real controls keep their
+full targets. Compact identity groups show up to two tool names and two known
+service names, with More tools / More services flowing within their own row using
+the same separators and typography.
 All outcome buckets and missing/partial-service qualifiers stay visible; inspection
 retains complete identities. Known zero tool calls and unavailable counts remain
 distinct, and neither implies missing non-tool activity. Missing optional metadata is omitted;
