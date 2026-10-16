@@ -9,6 +9,7 @@ import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, setLegacyTimeBucket } from "./helpers.mjs";
 import { scopeRecords } from "./analysis-scope-fixture.mjs";
 import { reportContents } from "./report-journey-helpers.mjs";
+import { lucideIcon } from "../web/ux-icons.mjs";
 
 const proofs = process.env.WIRE_SIDEBAR_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -71,26 +72,73 @@ async function setup(t, options = {}, records = scopeRecords(), browserOptions =
 
 test("production shell restores the three destinations in the left sidebar, not the header", async t => {
     const { page } = await setup(t);
+    const destinations = [
+        ["analyze", "Analyze", "chart-column"],
+        ["reports", "Reports", "clipboard-list"],
+        ["settings", "Settings", "settings"],
+    ];
+    const navigation = await page.locator(".primary-navigation").elementHandle();
+    async function inspectNavigation() {
+        for (const [route, name, asset] of destinations) {
+            const link = page.locator(`.primary-navigation a[data-nav="${route}"]`);
+            await expect(link).toHaveAccessibleName(name);
+            await expect(link).toHaveAttribute("href", route === "settings" ? "#settings?section=connection" : `#${route}`);
+            await expect(link.locator(".wire-icon")).toHaveCount(1);
+            const actual = await link.evaluate(node => {
+                const icon = node.querySelector(".wire-icon");
+                const box = icon.getBoundingClientRect(), target = node.getBoundingClientRect();
+                return { asset: icon.dataset.lucideIcon, size: icon.dataset.iconSize, width: box.width, height: box.height,
+                    hidden: icon.getAttribute("aria-hidden"), focusable: icon.getAttribute("focusable"),
+                    targetWidth: target.width, targetHeight: target.height, geometry: icon.innerHTML };
+            });
+            const official = await page.evaluate(svg => new DOMParser().parseFromString(svg, "text/html").querySelector("svg").innerHTML,
+                lucideIcon(asset, 24));
+            assert.equal(actual.asset, asset); assert.equal(actual.size, "24");
+            assert.equal(actual.width, 24); assert.equal(actual.height, 24);
+            assert.equal(actual.hidden, "true"); assert.equal(actual.focusable, "false");
+            assert.equal(actual.geometry, official);
+            assert.ok(actual.targetWidth >= 44 && actual.targetHeight >= 44);
+        }
+        assert.equal(await navigation.evaluate(node => node === document.querySelector(".primary-navigation")), true);
+    }
     await expect(page.locator("#sidebar .primary-navigation a")).toHaveText(["Analyze", "Reports", "Settings"]);
     await expect(page.locator(".app-header nav")).toHaveCount(0);
-    assert.deepEqual(await page.locator(".primary-navigation .fluent-icon").evaluateAll(nodes => nodes.map(node => node.dataset.fluentIcon)),
-        ["data_trending_24_regular", "document_24_regular", "settings_24_regular"]);
     await expect(collapse(page)).toHaveAttribute("aria-expanded", "true");
     assert.equal(await page.locator("#wireSearch").count(), 1);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await workspaceSearch(page);
-        for (const icon of await page.locator(".primary-navigation .fluent-icon").all()) {
-            const box = await icon.boundingBox();
-            assert.equal(box.width, 24); assert.equal(box.height, 24);
-            assert.equal(await icon.getAttribute("aria-hidden"), "true");
-        }
+        await inspectNavigation();
         await capture(page, `desktop-${theme}-expanded`);
         await collapse(page).click(); await settled(page);
         await workspaceSearch(page);
+        await inspectNavigation();
+        for (const [route, name] of destinations) {
+            const link = page.locator(`.primary-navigation a[data-nav="${route}"]`);
+            await link.hover();
+            await expect(page.getByRole("tooltip", { name, exact: true })).toBeVisible();
+            await page.keyboard.press("Escape");
+            await link.focus(); await expect(link).toBeFocused();
+            assert.equal(await link.evaluate(node => node.matches(":focus-visible")), true);
+            await link.press("Enter"); await ready(page);
+            await expect(link).toHaveAttribute("aria-current", "page");
+            await inspectNavigation();
+        }
         await capture(page, `desktop-${theme}-collapsed`);
         await collapse(page).click(); await settled(page);
     }
+    await page.setViewportSize({ width: 375, height: 900 });
+    await page.locator("#navigationToggle").click();
+    await expect(page.locator("#navigationDrawer")).toBeVisible();
+    await inspectNavigation();
+    await capture(page, "narrow-navigation-icons");
+    await page.locator('#navigationDrawer a[data-nav="reports"]').press("Enter"); await ready(page);
+    await expect(page.locator("#navigationDrawer")).toBeHidden();
+    await page.locator("#navigationToggle").click();
+    await expect(page.locator('#navigationDrawer a[data-nav="reports"]')).toHaveAttribute("aria-current", "page");
+    await inspectNavigation();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#navigationToggle")).toBeFocused();
 });
 
 test("collapsed brand centers the painted W in the header cell, not just its transparent image box", async t => {
@@ -228,6 +276,58 @@ test("brand paint follows the eased sidebar through collapse, expansion and reve
     }
 });
 
+test("native browser preference preserves actual frames for both sidebars or settles for reduced motion", async t => {
+    const { page } = await setup(t, { reducedMotion: null }, scopeRecords(), {
+        channel: process.platform === "win32" ? "msedge" : undefined,
+        headless: process.env.WIRE_NATIVE_MOTION_PROBE !== "headed",
+        ignoreDefaultArgs: ["--hide-scrollbars"],
+    });
+    const environment = await page.evaluate(() => ({
+        reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
+        waapi: typeof Element.prototype.animate,
+        visibility: document.visibilityState,
+        scale: devicePixelRatio,
+    }));
+    const traces = [];
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        await page.locator("#resultsLink").click();
+        const trace = await page.evaluate(async () => {
+            const rail = document.querySelector("#sidebar"), panel = document.querySelector("#contextSidebar");
+            const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+            const samples = [];
+            let phase = "initial";
+            const sample = () => samples.push({ phase, at: performance.now(),
+                width: rail.getBoundingClientRect().width, open: panel.open,
+                x: panel.getBoundingClientRect().x, transform: getComputedStyle(panel).transform });
+            async function settle(selector, expectedOpen) {
+                for (let i = 0; i < 120; i++) {
+                    await frame(); sample();
+                    const node = document.querySelector(selector);
+                    if (i > 2 && !node.getAnimations({ subtree: true }).length
+                        && (expectedOpen === undefined || panel.open === expectedOpen)) return;
+                }
+                throw new Error(`${phase} did not settle`);
+            }
+            for (const next of ["collapse", "expand"]) {
+                phase = next; document.querySelector("#navigationCollapse").click(); await settle("#sidebar");
+            }
+            phase = "open"; document.querySelector(".request-card-open").click(); await settle("#contextSidebar", true);
+            phase = "close"; document.querySelector("#closeContextSidebar").click(); await settle("#contextSidebar", false);
+            return samples;
+        });
+        for (const phase of ["collapse", "expand", "open", "close"]) {
+            const frames = trace.filter(frame => frame.phase === phase && (["collapse", "expand"].includes(phase) || frame.open));
+            const positions = new Set(frames.map(frame => Math.round(["collapse", "expand"].includes(phase) ? frame.width : frame.x))).size;
+            t.diagnostic(JSON.stringify({ theme, phase, ...environment, frames: frames.length, positions }));
+            if (environment.reduced) assert.ok(positions <= 1, `${theme}/${phase}: native reduced motion settles`);
+            else assert.ok(positions >= 3, `${theme}/${phase}: actual intermediate frames, not just an animation object`);
+        }
+        traces.push({ theme, environment, trace });
+    }
+    if (proofs) await writeFile(path.join(proofs, "native-sidebar-motion.json"), JSON.stringify(traces, null, 2));
+});
+
 test("header keeps only the theme control beside centered Search, with time zone in Settings", async t => {
     const { page } = await setup(t, {}, scopeRecords(), {
         channel: process.platform === "win32" ? "msedge" : undefined, ignoreDefaultArgs: ["--hide-scrollbars"],
@@ -360,7 +460,16 @@ test("trusted sidebar reversals return the scrolled selected record to its origi
         "Native desktop scrollbar geometry is present, unlike the default headless overlay");
     await page.getByRole("link", { name: "View records", exact: true }).click();
     const selected = page.locator("#activityList .request-row").nth(1);
-    await selected.locator("input[type=checkbox]").check();
+    async function inspectSelection(select = false) {
+        await selected.locator(".request-card-open").click();
+        if (select) await page.locator("#requestReportToggle").click();
+        await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
+        await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
+    }
+    await inspectSelection(true);
+    // Current compact cards need headroom for the later downward wheel gesture.
+    await page.evaluate(() => window.scrollBy(0, -200));
     const selectedKey = await selected.getAttribute("data-view-key");
     await page.evaluate(key => {
         const trace = [], clicks = [];
@@ -394,7 +503,7 @@ test("trusted sidebar reversals return the scrolled selected record to its origi
     assert.ok(checkpoints.every(point => Math.abs(point.cardY - before.card.y) < 1 && Math.abs(point.scrollY - before.scrollY) < 1),
         "The ordinary settled collapse/expand pair preserves the reading position too");
     await expect(collapse(page)).toHaveAttribute("aria-expanded", "true");
-    await expect(selected.locator("input[type=checkbox]")).toBeChecked();
+    await inspectSelection();
     assert.ok(Math.abs(after.card.y - before.card.y) < 1, "The same final expanded state restores the same selected record position");
     assert.ok(Math.abs(after.scrollY - before.scrollY) < 1, "Repeated lateral motion does not accumulate page scroll drift");
     await page.mouse.click(toggle.x + toggle.width / 2, toggle.y + toggle.height / 2);
@@ -415,7 +524,7 @@ test("trusted sidebar reversals return the scrolled selected record to its origi
     await page.keyboard.press("Enter"); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText(count);
     await page.goBack(); await ready(page);
-    await expect(selected.locator("input[type=checkbox]")).toBeChecked();
+    await inspectSelection();
 });
 
 test("Calendar service drilldown and browser Back restore the original interaction order", async t => {

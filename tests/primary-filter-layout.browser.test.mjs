@@ -67,7 +67,7 @@ function aligned(layout) {
 
 test("primary analytical filters wrap readably at desktop, narrow and 200 percent text sizes", { timeout: 45000 }, async t => {
     const { page } = await setup(t), measurements = [];
-    for (const theme of ["dark", "light"]) for (const width of [1200, 375]) for (const scale of [1, 2]) {
+    for (const theme of ["dark", "light"]) for (const width of [1440, 1200, 375]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(scale => {
             document.documentElement.style.fontSize = `${scale * 100}%`;
@@ -75,7 +75,7 @@ test("primary analytical filters wrap readably at desktop, narrow and 200 percen
         }, scale);
         await page.locator("#filters").scrollIntoViewIfNeeded();
         const layout = await geometry(page);
-        if (width >= 1200 && scale === 1) assert.ok(range(layout.fields.map(field => field.control.y)) <= 1, "The five primary defaults share one desktop row");
+        if (width >= 1440 && scale === 1) assert.ok(range(layout.fields.map(field => field.control.y)) <= 1, "The five primary defaults share one desktop row");
         if (proofs) {
             await page.screenshot({ path: path.join(proofs, `context-${theme}-${width}-${scale}.png`), fullPage: true });
             await page.locator("#filters").screenshot({ path: path.join(proofs, `primary-${theme}-${width}-${scale}.png`) });
@@ -113,17 +113,17 @@ test("active clear actions and custom dates keep dropdown geometry and filtering
     const filtered = await geometry(page);
     aligned(filtered);
     assert.ok(Math.abs(filtered.row.y - original.row.y) <= 1, "Active controls keep the row's vertical anchor");
-    for (const id of ["clearResultFilter", "clearPromptAuthorFilter"]) {
-        const clear = page.locator("#" + id), bounds = await clear.boundingBox();
+    for (const [name, id] of [["outcome", "clearResultFilter"], ["author", "clearPromptAuthorFilter"]]) {
+        const clear = page.getByRole("button", { name: new RegExp(`^Remove ${name} filter:`) }), bounds = await clear.boundingBox();
         assert.ok(bounds.width >= 44 && bounds.height >= 44);
-        const field = filtered.fields[id === "clearResultFilter" ? 3 : 4];
-        assert.ok(bounds.y + bounds.height <= field.control.y + 1, "Clear is above its dropdown, not an extra inter-field gap");
-        assert.ok(bounds.x >= field.label.right, "Clear does not overlap its label");
+        assert.equal(await clear.count(), 1, "Applied scope has a single settled removal entry");
+        assert.equal(await page.locator("#" + id).isVisible(), false, "The inline action is only for a first pending change");
+        assert.equal(await clear.evaluate(node => Boolean(node.closest("#appliedFilters"))), true);
     }
     if (proofs) await page.locator("#filters").screenshot({ path: path.join(proofs, "primary-active.png") });
-    await page.getByRole("button", { name: "Clear prompt author filter", exact: true }).click(); await ready(page);
+    await page.getByRole("button", { name: /^Remove author filter:/ }).click(); await ready(page);
     assert.equal(await page.locator("#activityCount").textContent(), "2");
-    await page.getByRole("button", { name: "Clear recorded result filter", exact: true }).click(); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.equal(await page.locator("#activityCount").textContent(), "8");
     await selectActivityOption(page, "dateFilter", "custom"); await ready(page);
     aligned(await geometry(page));
@@ -184,11 +184,14 @@ test("filter help explains actual categories and all six honest activity units w
             const glyph = node.querySelector("svg").getBoundingClientRect(), target = node.getBoundingClientRect();
             const text = document.createRange(); text.selectNodeContents(node.previousElementSibling);
             const label = text.getBoundingClientRect(), tip = document.querySelector("[role=tooltip]").getBoundingClientRect();
-            return { gap: glyph.left - label.right, anchorGap: tip.top >= glyph.bottom ? tip.top - glyph.bottom : glyph.top - tip.bottom,
+            return { gap: target.left - node.previousElementSibling.getBoundingClientRect().right,
+                opticalOffset: Math.abs(glyph.top + glyph.height / 2 - label.top - label.height / 2),
+                anchorGap: tip.top >= glyph.bottom ? tip.top - glyph.bottom : glyph.top - tip.bottom,
                 target: { width: target.width, height: target.height }, tip: { left: tip.left, right: tip.right, top: tip.top, bottom: tip.bottom },
                 width: innerWidth, height: innerHeight, hoverFill: getComputedStyle(node).backgroundColor };
         });
         assert.equal(metrics.gap, 4);
+        assert.ok(metrics.opticalOffset <= 1, "Help glyph follows the text line, not the center of its larger hit target");
         assert.equal(metrics.anchorGap, 8);
         assert.ok(metrics.target.width >= 44 && metrics.target.height >= 44);
         assert.ok(metrics.tip.left >= 8 && metrics.tip.right <= metrics.width - 8 && metrics.tip.top >= 8 && metrics.tip.bottom <= metrics.height - 8);

@@ -41,6 +41,32 @@ async function find(page, query, type = "") {
     return page.locator("#wireSearchResults button");
 }
 
+test("Search View, Comparison and Report glyphs stay independent of left navigation", { timeout: 30000 }, async t => {
+    const app = await setup(t, { formats: ["json", "html"], reply: false });
+    await saveSearchComparison(app, ["json"]);
+    const before = await loadBoardState(app.context);
+    for (const [type, query, asset, size] of [
+        ["view", "Recorded timing", "chart-no-axes-combined", "24"],
+        ["comparison", "Saved comparison", "chart-no-axes-combined", "24"],
+        ["report", "physician", "file-text", "20"],
+    ]) {
+        const rows = await find(app.page, query, type);
+        await expect(rows.first()).toBeVisible();
+        for (const row of await rows.all()) {
+            const icon = row.locator(".wire-search-type-icon .wire-icon");
+            await expect(icon).toHaveAttribute("data-lucide-icon", asset);
+            await expect(icon).toHaveAttribute("data-icon-size", size);
+            await expect(icon).toHaveAttribute("aria-hidden", "true");
+            const box = await icon.boundingBox();
+            assert.equal(box.width, 16); assert.equal(box.height, 16);
+        }
+    }
+    assert.deepEqual(app.errors, []);
+    assert.ok(app.requests.every(request => new URL(request.url).origin === new URL(app.runtime.url).origin));
+    const after = await loadBoardState(app.context);
+    for (const key of ["evidence", "exports", "cards", "personalEvaluation"]) assert.deepEqual(after[key], before[key]);
+});
+
 test("normal literal fragments and exact anchors open all types and restore Back", { timeout: 120000 }, async t => {
     const app = await setup(t, { formats: ["html", "json", "markdown", "pdf"] });
     const { page, bundles, exports, context } = app;

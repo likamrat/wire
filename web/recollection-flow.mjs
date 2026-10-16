@@ -29,17 +29,21 @@ export const recollectionMarkup = `
 </dialog>`;
 
 export const recollectionStyles = `
-#recollectDialog {padding:0}
-#recollectDialog .dialog-head {align-items:flex-start}
+#recollectDialog {padding:0;border-radius:12px}
+#recollectDialog .dialog-head {align-items:flex-start;background:var(--paper);border:0}
 #recollectDialog .dialog-head h2 {min-width:0}
 #recollectClose {flex:none}
-#recollectDialog .dialog-body {padding:clamp(16px,3vw,28px)}
+#recollectDialog .dialog-body {padding:0 24px 24px}
+#recollectDialog #recollectBoundary {color:var(--muted);margin:0 0 20px}
+#recollectDialog #recollectForm {padding-top:16px;border-top:1px solid var(--rule)}
 #recollectDialog .recollect-field {display:grid;gap:8px;margin-top:16px}
 #recollectSources {width:100%;overflow-wrap:anywhere}
 #recollectDialog .recollect-selection {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
 #recollectDialog .recollect-selection p {margin:0}
 #recollectDialog .list-pager {flex-wrap:wrap}
-#recollectSources .delete-choice {padding:4px 0}
+#recollectSources .delete-choice {padding:8px 0;align-items:flex-start}
+#recollectSources .delete-choice input {margin-top:2px}
+#recollectDialog input:is([type=date],[type=search]) {min-width:0;border-radius:10px}
 #recollectDialog .recollect-dates {display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
 #recollectDialog .recollect-dates label {display:grid;gap:6px;flex:1 1 12rem;min-width:0}
 #recollectDialog input[type=checkbox] {appearance:auto;width:20px;height:20px;flex:none;accent-color:var(--accent)}
@@ -48,6 +52,12 @@ export const recollectionStyles = `
 #recollectAvailability {padding-left:20px;overflow-wrap:anywhere}
 #recollectAvailability li {margin-top:12px}
 #recollectStatus:empty {display:none}
+#recollectDialog .delete-actions {justify-content:flex-start;padding-top:16px;border-top:1px solid var(--rule);gap:8px}
+#recollectDialog #recollectConfirmation {padding-top:8px;border-top:1px solid var(--rule)}
+@media(max-width:480px) {
+ #recollectDialog .dialog-body {padding:0 16px 20px}
+ #recollectDialog .dialog-head {flex-wrap:wrap}
+}
 `;
 
 // Serialized into the page; dependencies stay inside the mount function.
@@ -67,6 +77,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     function selectionCount() {
         $("recollectSelected").textContent = `${selectedSources.size} selected`;
         $("recollectShowSelected").disabled = !selectedSources.size && !selectedOnly;
+        $("recollectShowSelected").hidden = !selectedSources.size && !selectedOnly;
         $("recollectShowSelected").textContent = selectedOnly ? "Show all chats" : "Show selected";
         for (const input of $("recollectSources").querySelectorAll("input")) input.disabled = selectedSources.size >= 128 && !input.checked;
     }

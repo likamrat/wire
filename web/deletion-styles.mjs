@@ -19,4 +19,15 @@ export const deletionStyles = `
 :is(#deleteDialog,.deletion-dialog) .delete-actions {display:flex;flex-wrap:wrap;gap:12px;margin-top:24px;justify-content:flex-end}
 :is(#deleteDialog,.deletion-dialog) .delete-irreversible {color:var(--danger);font-weight:600}
 #deleteStatus:empty {display:none}
+#deleteDialog {border-radius:12px;border-color:var(--rule);padding:24px}
+#deleteDialog .delete-heading {align-items:baseline}
+#deleteDialog #deleteWarningIcon {align-self:center;margin:0}
+#deleteDialog #deleteBoundary {color:var(--muted);margin-bottom:24px;max-width:62ch}
+#deleteDialog #deleteScopeForm {padding-top:20px;border-top:1px solid var(--rule)}
+#deleteDialog fieldset {margin:0 0 16px}
+#deleteDialog input[type=date] {border-radius:10px;min-width:0}
+#deleteDialog #deleteConfirmation {border-left:0;padding:20px 0 0;border-top:1px solid var(--danger)}
+#deleteDialog .delete-actions {justify-content:flex-start;padding-top:16px;border-top:1px solid var(--rule);gap:8px}
+#deleteDialog .reading-section {padding:0}
+@media(max-width:480px) {#deleteDialog {padding:20px 16px}}
 `;

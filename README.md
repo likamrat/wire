@@ -366,10 +366,15 @@ recovery only. `freshActivity` exposes its phase and confirmed check ID/revision
 `unconfirmed` is not success or completeness. Source setup remains
 `#settings?section=connection&setting=source`.
 
-Analyze groups the check button with **Source and collection**, with
-the result directly below. Status length cannot push source help to the page edge.
-Connection & updates uses **About Refresh** beside the same control without
-duplicating its already-visible source-navigation links. Moving between these
+Analyze places its sole Refresh utility beside the page heading, separate from
+**Reset Analyze** beside the applied-filter chips. The funnel-labeled filter group
+uses rounded controls; Author and Outcome keep draft selection with Apply/Cancel,
+not immediate switches. All primary and secondary filters retain their existing
+query semantics. Contextual update results stay below the filters; **Update details**
+appears after a check, not as permanent source machinery. Collection administration
+stays in the existing Connection & updates and Privacy & saved data categories.
+The Analyze deletion shortcut and its binding are removed. Connection & updates
+uses **About Refresh** beside the same control. Moving between these
 contexts retains the existing handlers, receipt and safe Retry. A check finishing
 after navigation or a new reading action does not refocus the old control.
 While a current confirmed check waits behind the same frozen report preview,
@@ -382,7 +387,7 @@ changes. The deferred-data state and all review/polling guards are unchanged.
 link names known unavailable, limited, pending or unchecked chat counts and opens
 **Collection status**. The manual result and its completion time stay together
 through polling, rather than borrowing the latest background-check time.
-**Source and collection** uses that receipt's primary reason groups and shared
+**Update details** uses that receipt's primary reason groups and shared
 coverage explanations without fetching a personal issue inventory. Each affected
 chat belongs to one primary group but may have other limits; pending and unfinished
 counts may overlap. Current chat-by-chat issues are fetched only on visiting

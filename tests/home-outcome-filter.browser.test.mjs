@@ -282,7 +282,7 @@ test("multiple results stay a draft until Apply; cancel, Escape and outside leav
     await page.goForward(); await ready(page);
     assert.deepEqual(await selectedResults(page), ["success", "unknown"]);
     await selectActivityOption(page, "serviceFilter", "Calendar"); await ready(page);
-    await page.locator("#clearResultFilter").click(); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.deepEqual(await selectedResults(page), outcomes);
     assert.equal(await page.locator("#serviceFilter").inputValue(), "Calendar");
     assert.equal(await page.locator("#activityCount").innerText(), "2");
@@ -533,7 +533,7 @@ test("supporting disclosure roles keep open content, keyboard focus and navigati
     }
 });
 
-test("one styled Recorded result dropdown replaces pills and detached clearing", async t => {
+test("one styled Outcome dropdown shares the single applied-filter removal entry", async t => {
     const { page, reads } = await setup(t);
     assert.equal(await page.locator("#activityCount").innerText(), "4");
     assert.equal(await page.getByRole("combobox", { name: "Result", exact: true }).count(), 1);
@@ -546,12 +546,13 @@ test("one styled Recorded result dropdown replaces pills and detached clearing",
     assert.equal(await page.locator("#moreFilters #outcomeFilter").count(), 0);
     assert.equal(await page.getByRole("button", { name: /^Remove result filter/ }).count(), 0);
     assert.equal(await page.locator("#resultSummary button button").count(), 0);
-    assert.equal(await page.getByRole("button", { name: "Clear recorded result filter", exact: true }).isVisible(), true);
+    assert.equal(await page.getByRole("button", { name: /^Remove outcome filter:/ }).count(), 1);
+    assert.equal(await page.locator("#clearResultFilter").isVisible(), false);
     await page.locator("#outcomeFilter-control").click();
     assert.equal(await page.getByRole("option").count(), 6);
     assert.equal(await page.getByRole("option", { name: "Worked (1)", exact: true }).getAttribute("aria-selected"), "true");
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Clear recorded result filter", exact: true }).click(); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "4");
     assert.equal(await page.locator("#outcomeFilter-control").evaluate(node => node === document.activeElement), true);
 });
@@ -609,9 +610,9 @@ test("empty selection, synchronized refinements, deep links and Back/Forward kee
     assert.equal(await page.locator("#activityCount").innerText(), "0");
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "failure");
     assert.equal(await facetCount(page, "all"), 2);
-    assert.match(await page.locator("#chart").innerText(), /No matching results in this view.*Use Clear beside Recorded result/s);
+    assert.match(await page.locator("#chart").innerText(), /No matching results in this view.*Remove the Outcome chip/s);
     await reconcileView(page, reads.at(-1).snapshot);
-    await page.locator("#clearResultFilter").click(); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "2");
     assert.equal(await page.locator("#outcomeFilter-control").evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#serviceFilter").inputValue(), "Calendar");
@@ -700,7 +701,7 @@ test("HTTP, returned-result and Graph layers retain their units; code references
     assert.equal(await page.locator("#resultSummary [role=combobox]").count(), 1);
     assert.match(await page.locator("#resultFilterScope").innerText(), /unavailable.*execution is not observed/);
     assert.equal(await page.locator("#outcomeFilter").isDisabled(), true);
-    await page.locator("#clearResultFilter").click(); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     assert.equal(await page.locator("#activityUnit").innerText(), "Graph code reference");
     assert.doesNotMatch(await page.locator("#resultSummary").innerText(), /Worked|Tool failed/);
@@ -809,13 +810,14 @@ test("all-zero facets still offer every canonical outcome and a single local rec
         await selectActivityOption(page, "outcomeFilter", key); await ready(page);
         assert.equal(await page.locator("#outcomeFilter").inputValue(), key);
         assert.equal(await page.locator("#activityCount").innerText(), "0");
-        assert.equal(await page.locator("#resultSummary [aria-label='Clear recorded result filter']").count(), 1);
+        assert.equal(await page.getByRole("button", { name: /^Remove outcome filter:/ }).count(), 1);
+        assert.equal(await page.locator("#clearResultFilter").isVisible(), false);
         assert.equal(await page.locator("#chart button").count(), 0, "Recovery belongs to the filter, not a second reset");
         assert.deepEqual(reads.at(-1).input.filters.outcomes, [key]);
     }
-    await page.locator("#clearResultFilter").press("Enter"); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).press("Enter"); await ready(page);
     assert.deepEqual(await selectedResults(page), outcomes);
-    assert.equal(await page.locator("#clearResultFilter").isVisible(), false);
+    assert.equal(await page.getByRole("button", { name: /^Remove outcome filter:/ }).count(), 0);
 });
 
 test("newer dates and clearing supersede a held selection without losing scope or unsubmitted date edits", async t => {
@@ -842,7 +844,7 @@ test("newer dates and clearing supersede a held selection without losing scope o
     await page.locator("#fromFilter").fill("2026-09-20"); await page.locator("#toFilter").fill("2026-09-20");
     await page.locator("#applyDates").click();
     await page.locator("#fromFilter").fill("2026-09-21");
-    await page.locator("#clearResultFilter").click(); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.deepEqual(await selectedResults(page), outcomes);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     assert.equal(await page.locator("#fromFilter").inputValue(), "2026-09-21", "Unsubmitted draft is not the applied period");
@@ -971,7 +973,7 @@ test("Activity reuses the result field and keeps its private-search clear beside
     await page.locator("#activitySearch").fill("Synthetic shared result 0");
     assert.equal(await page.locator("#clearActivitySearch").getAttribute("aria-label"), "Clear activity search");
     assert.equal(await page.locator("#activitySearch").evaluate(node => node.parentElement.contains(document.querySelector("#clearActivitySearch"))), true);
-    await page.locator("#clearResultFilter").click(); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.equal(await page.locator("#activitySearch").inputValue(), "Synthetic shared result 0");
     assert.deepEqual(await selectedResults(page), outcomes);
     await page.reload(); await ready(page);
@@ -1012,7 +1014,7 @@ test("shared dropdown and trailing clear keep keyboard/touch targets and full la
         assert.equal(await choice.evaluate(node => node === document.activeElement), true);
         assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
         await choice.scrollIntoViewIfNeeded();
-        const sizes = await page.locator("#resultSummary .select-trigger, #clearResultFilter").evaluateAll(nodes => nodes.map(node => {
+        const sizes = await page.locator("#resultSummary .select-trigger, #filterChips [aria-label^='Remove outcome filter:']").evaluateAll(nodes => nodes.map(node => {
             const box = node.getBoundingClientRect(), style = getComputedStyle(node);
             return { width: box.width, height: box.height, right: box.right, scroll: node.scrollWidth - node.clientWidth,
                 outline: style.outlineStyle, text: node.textContent };
@@ -1024,11 +1026,11 @@ test("shared dropdown and trailing clear keep keyboard/touch targets and full la
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         const geometry = await page.locator("#resultSummary").evaluate(node => {
             const trigger = node.querySelector("[role=combobox]").getBoundingClientRect();
-            const clear = node.querySelector("#clearResultFilter").getBoundingClientRect();
-            return { trailing: clear.left >= trigger.right, sameRow: Math.abs(clear.top + clear.height / 2 - trigger.top - trigger.height / 2) < 1,
+            const clear = document.querySelector("#filterChips [aria-label^='Remove outcome filter:']");
+            return { inAppliedScope: Boolean(clear.closest("#appliedFilters")), belowField: clear.getBoundingClientRect().top >= trigger.bottom,
                 selectedFits: node.querySelector(".select-value").scrollWidth <= node.querySelector(".select-value").clientWidth };
         });
-        assert.deepEqual(geometry, { trailing: true, sameRow: true, selectedFits: true });
+        assert.deepEqual(geometry, { inAppliedScope: true, belowField: true, selectedFits: true });
         await choice.press("ArrowDown");
         assert.equal(await page.getByRole("option", { name: "Worked (1)", exact: true }).getAttribute("aria-selected"), "true");
         assert.equal(await page.getByRole("option").count(), 6);
@@ -1039,9 +1041,11 @@ test("shared dropdown and trailing clear keep keyboard/touch targets and full la
             overflow: node.scrollWidth > node.clientWidth, height: node.getBoundingClientRect().height,
         })));
         assert.ok(optionSizes.every(row => !row.overflow && row.height >= 44), `${theme}/${width}/${scale}: ${JSON.stringify(optionSizes)}; coarse=${await page.evaluate(() => matchMedia("(pointer:coarse)").matches)}`);
-        await page.keyboard.press("Escape"); await page.keyboard.press("Tab");
-        assert.equal(await page.locator("#clearResultFilter").evaluate(node => node === document.activeElement), true);
-        assert.equal(await page.locator("#clearResultFilter").evaluate(node => getComputedStyle(node).outlineStyle !== "none"), true);
+        await page.keyboard.press("Escape");
+        const clear = page.getByRole("button", { name: /^Remove outcome filter:/ });
+        await clear.focus(); await clear.press("Tab"); await page.keyboard.press("Shift+Tab");
+        assert.equal(await clear.evaluate(node => node === document.activeElement), true);
+        assert.equal(await clear.evaluate(node => getComputedStyle(node).outlineStyle !== "none"), true);
         measurements.push({ theme, width, scale, sizes });
         if (proofs) {
             await page.keyboard.press("Escape");
@@ -1049,11 +1053,11 @@ test("shared dropdown and trailing clear keep keyboard/touch targets and full la
             await page.evaluate(() => { document.activeElement.blur(); window.scrollTo(0, 0); });
             await page.screenshot({ path: path.join(proofs, `outcome-${theme}-${width}-${scale}.png`) });
         }
-        const clearSlot = await page.locator(".filter-clear-slot").boundingBox();
-        await page.locator("#clearResultFilter").tap(); await ready(page);
+        const controlWidth = (await choice.boundingBox()).width;
+        await clear.tap(); await ready(page);
         assert.deepEqual(await selectedResults(page), outcomes);
-        assert.equal(await page.locator("#clearResultFilter").isVisible(), false);
-        assert.equal((await page.locator(".filter-clear-slot").boundingBox()).width, clearSlot.width);
+        assert.equal(await clear.count(), 0);
+        assert.equal((await choice.boundingBox()).width, controlWidth);
     }
     await page.locator("#outcomeFilter-control").focus(); await page.keyboard.press("Space");
     await page.locator(".select-all").click();
@@ -1061,7 +1065,7 @@ test("shared dropdown and trailing clear keep keyboard/touch targets and full la
     await page.keyboard.press("Tab"); await page.keyboard.press("Enter"); await ready(page);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "unknown");
     assert.equal(await page.locator("#outcomeFilter-control").evaluate(node => node === document.activeElement), true);
-    await page.locator("#clearResultFilter").focus(); await page.keyboard.press("Space"); await ready(page);
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).focus(); await page.keyboard.press("Space"); await ready(page);
     assert.deepEqual(await selectedResults(page), outcomes);
     await page.evaluate(() => { document.querySelector("#main").style.maxWidth = "375px"; });
     await selectActivityOption(page, "outcomeFilter", "unknown"); await ready(page);

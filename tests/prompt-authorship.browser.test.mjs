@@ -17,7 +17,7 @@ const ready = async page => {
     await page.evaluate(() => document.fonts.ready);
 };
 
-test("a mode-free retained user prompt changes from invalid-source to Your through original-event collection and reload", { timeout: 30000 }, async t => {
+test("a mode-free retained user prompt changes from invalid-source to My prompt through original-event collection and reload", { timeout: 30000 }, async t => {
     const app = await promptInstallation(t);
     await app.runtime().collector.collectNow();
     const human = app.cases.find(item => item.name === "human"), current = await loadBoardState(app.context);
@@ -41,7 +41,7 @@ test("a mode-free retained user prompt changes from invalid-source to Your throu
     if (proof) { await mkdir(proof, { recursive: true }); await reader.screenshot({ path: path.join(proof, "retained-human-before.png") }); }
     await app.runtime().collector.collectNow();
     await page.reload(); await ready(page);
-    assert.equal(await reader.getByRole("heading", { name: "Your prompt", exact: true }).count(), 1);
+    assert.equal(await reader.getByRole("heading", { name: "My prompt", exact: true }).count(), 1);
     assert.doesNotMatch(await reader.innerText(), /Author unverified/);
     assert.equal(await reader.locator("pre").textContent(), human.data.content);
     if (proof) await reader.screenshot({ path: path.join(proof, "retained-human-after.png") });
@@ -51,7 +51,7 @@ test("a mode-free retained user prompt changes from invalid-source to Your throu
     if (!await card.count()) {
         await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click(); await ready(page);
     }
-    assert.equal(await card.locator(".full-text-preview-label").textContent(), "Your prompt");
+    assert.equal(await card.locator(".full-text-preview-label").textContent(), "My prompt");
     assert.equal(await card.locator("[data-prompt-actor=user]").count(), 1);
     if (proof) await card.screenshot({ path: path.join(proof, "retained-human-card-after.png") });
     const after = (await loadBoardState(app.context)).evidence.find(record => record.scenarioId === human.scenarioId);
@@ -85,7 +85,7 @@ test("collector -> real server -> Activity, reader and new report preserve truth
         await page.locator("#activitySearch").fill(item.data.content.slice(0, 40)); await ready(page); await openActivitySessions(page);
         const row = page.locator(`.request-row[data-view-key="request:${item.scenarioId}"]`);
         if (item.actor === "unknown") assert.equal(await row.locator(".full-text-preview-label").textContent(), "Prompt", item.name);
-        else assert.equal(await row.locator(".full-text-preview-label").textContent(), item.actor === "user" ? "Your prompt" : "Agent prompt", item.name);
+        else assert.equal(await row.locator(".full-text-preview-label").textContent(), item.actor === "user" ? "My prompt" : "Agent prompt", item.name);
     }
     await page.locator("#activitySearch").fill(""); await ready(page);
     await navigateMain(page, "home"); await ready(page);
@@ -149,7 +149,7 @@ test("collector -> real server -> Activity, reader and new report preserve truth
     await page.setViewportSize({ width: 1200, height: 950 });
     await navigateMain(page, "reports"); await ready(page);
     await page.locator("#reportRequests > summary").click();
-    assert.deepEqual((await page.locator("#reportList .full-text-preview-label").allTextContents()).sort(), ["Agent prompt", "Your prompt"]);
+    assert.deepEqual((await page.locator("#reportList .full-text-preview-label").allTextContents()).sort(), ["Agent prompt", "My prompt"]);
     await reportContents(page);
     await page.locator('[name=promptMode][value=original]').check();
     for (const format of ["json", "markdown"]) await page.locator(`#formatOptions input[value=${format}]`).check();
@@ -160,7 +160,7 @@ test("collector -> real server -> Activity, reader and new report preserve truth
     await frame.locator(".prompt-record > summary").first().click();
     await inspectReportCopies(page);
     assert.ok((await page.locator(".prompt-comparison > summary").allTextContents()).some(text => text.startsWith("Agent prompt")));
-    assert.ok((await page.locator(".prompt-comparison > summary").allTextContents()).some(text => text.startsWith("Your prompt")));
+    assert.ok((await page.locator(".prompt-comparison > summary").allTextContents()).some(text => text.startsWith("My prompt")));
     if (proof) {
         await page.locator(".report-frame").screenshot({ path: path.join(proof, "new-report.png") });
         await frame.locator(".prompt-record > summary").nth(1).click();

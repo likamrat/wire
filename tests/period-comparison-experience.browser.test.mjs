@@ -209,6 +209,14 @@ test("normal-root paired controls validate dates, show only accepted results and
     assert.equal(value.periods.later.dateRange.to, "2026-03-10T04:00:00.000Z");
     assert.equal(value.periods.later.dateRange.toExclusive, true);
     await expect(page.locator("#periodComparisonResultsTitle")).toBeFocused();
+    await page.locator("#outcomeFilter-control").click();
+    const options = await page.locator(".select-popup .select-option").evaluateAll(nodes => nodes.map(node => ({
+        value: node.dataset.value, count: node.querySelector(".select-option-count")?.textContent,
+    })));
+    for (const option of options) assert.equal(option.count,
+        `A: ${value.periods.baseline.analytics.resultFacet.totals[option.value]}; B: ${value.periods.later.analytics.resultFacet.totals[option.value]}`);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#outcomeFilter-control")).toBeFocused();
     await expect(page.locator("#createPeriodReport")).toBeVisible();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#periodComparisonStatus")).toHaveClass("visually-hidden");

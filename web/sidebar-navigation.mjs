@@ -43,11 +43,58 @@ export function initializeNavigationPreference() {
     };
 }
 
+// Serialized before paint, like the other browser-local display preferences.
+export function initializeSidebarMotionPreference() {
+    const key = "workiq-evidence.sidebar-motion", listeners = new Set();
+    const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const valid = value => ["system", "on", "off"].includes(value);
+    let preference = "system", storage, warning = "";
+    function storageFailure(error) {
+        if (!["SecurityError", "QuotaExceededError"].includes(error.name)) throw error;
+        warning = "Sidebar motion could not be saved or read. This choice applies to this panel only until reload.";
+        console.warn(warning);
+    }
+    function accept(value) {
+        preference = valid(value) ? value : "system";
+        warning = value !== null && !valid(value) ? "Saved sidebar motion is invalid. Following the system setting." : "";
+        if (warning) console.warn(warning);
+    }
+    try { storage = window.localStorage; accept(storage.getItem(key)); }
+    catch (error) { storageFailure(error); }
+    const enabled = () => preference === "on" || preference === "system" && !media.matches;
+    const state = () => ({ preference, enabled: enabled(), warning });
+    function apply() {
+        document.documentElement.dataset.sidebarMotion = enabled() ? "on" : "off";
+        for (const listener of listeners) listener(state());
+    }
+    media.addEventListener("change", apply);
+    window.addEventListener("storage", event => {
+        if (event.storageArea !== storage || (event.key !== key && event.key !== null)) return;
+        accept(event.key === null ? null : event.newValue);
+        apply();
+    });
+    apply();
+    return {
+        get enabled() { return enabled(); },
+        subscribe(listener) { listeners.add(listener); listener(state()); },
+        setPreference(value) {
+            if (!valid(value)) throw new Error("Choose Follow system, On or Off for sidebar motion.");
+            preference = value;
+            try {
+                storage = window.localStorage;
+                if (value === "system") storage.removeItem(key);
+                else storage.setItem(key, value);
+                warning = "";
+            } catch (error) { storageFailure(error); }
+            apply();
+        },
+    };
+}
+
 // Move the same navigation nodes into a native modal on narrow screens.
-export function mountSidebarNavigation(ux, preference) {
+export function mountSidebarNavigation(ux, preference, motion) {
     const $ = (id) => document.getElementById(id);
     const media = matchMedia("(max-width: 699px)");
-    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     const trigger = $("navigationToggle"), drawer = $("navigationDrawer");
     const content = $("navigationContent"), rail = $("sidebar");
     const collapse = $("navigationCollapse");
@@ -61,7 +108,7 @@ export function mountSidebarNavigation(ux, preference) {
     headerSize.observe(header);
     headerSize.observe(rail);
     let restoreFocus = true, collapsed = false, navigationFocus = null;
-    let animations = [], motionOrigin = null, drawerExit = null;
+    let animations = [], motionOrigin = null, drawerAnimation = null, drawerClosing = false;
     function captureBrand() {
         const link = brand.querySelector(".brand-home"), bounds = link.getBoundingClientRect();
         return {
@@ -169,7 +216,7 @@ export function mountSidebarNavigation(ux, preference) {
         collapse.setAttribute("aria-label", label());
         collapse.replaceChildren(ux.icon(collapsed ? "navigation-expand" : "navigation-collapse"));
         $("navigationStorageNotice").hidden = !state.storageUnavailable;
-        if (motionOrigin && !media.matches && !reducedMotion.matches) glide(motionOrigin);
+        if (motionOrigin && !media.matches && motion.enabled) glide(motionOrigin);
         measure();
     });
     collapse.addEventListener("click", () => {
@@ -177,20 +224,31 @@ export function mountSidebarNavigation(ux, preference) {
         try { preference.setPreference(collapsed ? "expanded" : "collapsed"); }
         finally { motionOrigin = null; }
     });
-    function close(restore = true) {
-        restoreFocus = restore;
-        if (!drawer.open) return;
-        function finish() {
-            drawerExit?.cancel();
-            drawerExit = null;
+    function finishDrawerMotion() {
+        drawerAnimation?.cancel();
+        drawerAnimation = null;
+        if (drawerClosing) {
+            drawerClosing = false;
             drawer.close();
             trigger.setAttribute("aria-expanded", "false");
         }
-        if (!restore || reducedMotion.matches || !media.matches) { finish(); return; }
-        if (drawerExit) return;
-        drawerExit = drawer.animate([{ transform: getComputedStyle(drawer).transform }, { transform: "translateX(-100%)" }],
-            { duration: 180, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" });
-        drawerExit.addEventListener("finish", finish, { once: true });
+    }
+    function moveDrawer(entering) {
+        const from = drawerAnimation ? getComputedStyle(drawer).transform : entering ? "translateX(-100%)" : "translateX(0)";
+        drawerAnimation?.cancel();
+        drawerAnimation = null;
+        drawerClosing = !entering;
+        if (!motion.enabled) { finishDrawerMotion(); return; }
+        const animation = drawer.animate([{ transform: from }, { transform: entering ? "translateX(0)" : "translateX(-100%)" }],
+            { duration: entering ? 240 : 180, easing: entering ? "cubic-bezier(.2,0,0,1)" : "cubic-bezier(.4,0,1,1)", fill: "both" });
+        drawerAnimation = animation;
+        animation.addEventListener("finish", () => { if (drawerAnimation === animation) finishDrawerMotion(); }, { once: true });
+    }
+    function close(restore = true) {
+        restoreFocus = restore;
+        if (!drawer.open) return;
+        if (!restore || !media.matches) { drawerClosing = true; finishDrawerMotion(); return; }
+        if (!drawerClosing) moveDrawer(false);
     }
     function layout() {
         const active = document.activeElement === document.body && navigationFocus ? navigationFocus : document.activeElement;
@@ -215,8 +273,10 @@ export function mountSidebarNavigation(ux, preference) {
     trigger.addEventListener("click", () => {
         restoreFocus = true;
         ux.hideTooltip();
+        const entering = !drawer.open || drawerClosing;
         drawer.showModal();
         trigger.setAttribute("aria-expanded", "true");
+        if (entering) moveDrawer(true);
         content.querySelector("[aria-current=page]")?.focus();
     });
     $("closeNavigation").addEventListener("click", () => close());
@@ -239,14 +299,14 @@ export function mountSidebarNavigation(ux, preference) {
         if (restoreFocus && media.matches) ux.restoreFocus(trigger);
         restoreFocus = true;
     });
-    window.addEventListener("resize", finishMotion);
-    reducedMotion.addEventListener("change", () => {
-        if (!reducedMotion.matches) return;
+    function settleMotion() {
         finishMotion();
-        if (drawerExit) drawerExit.finish();
-    });
-    document.addEventListener("visibilitychange", () => { if (document.hidden) finishMotion(); });
+        finishDrawerMotion();
+    }
+    window.addEventListener("resize", settleMotion);
+    motion.subscribe(state => { if (!state.enabled) settleMotion(); });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) settleMotion(); });
     media.addEventListener("change", layout);
     layout();
-    return { close };
+    return { close, motion };
 }

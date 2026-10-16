@@ -10,27 +10,37 @@ export const analyzeLayoutStyles = `
 #workspace>#analyzePopulation {padding:16px 20px;margin-block:0 20px;max-width:none;min-width:0}
 #analyzePopulation:not(:has(#filters:not([hidden]),#filterChips:not([hidden]):not(:empty),#freshActivity:not([hidden]),#collectionNotice:not([hidden]))) {display:none}
 #analyzePopulation #filters {padding:0;background:none;border:0}
+.filter-heading {display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:var(--type-control);font-weight:var(--weight-regular)}
+.filter-heading>.wire-icon {width:20px;height:20px}
+#analyzeRefresh {display:inline-flex;align-items:center}
+#analyzeRefresh:empty {display:none}
+#workspace>.page-heading:has(#analyzeRefresh:not([hidden])) {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}
+#analyzePopulation .applied-filters {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;min-width:0}
+#analyzePopulation .applied-filters>#filterChips {flex:0 1 auto;min-width:0;margin:0}
+#analyzePopulation .applied-filters:has(#filterChips:empty):has(#resetView:disabled) {display:none}
+#analyzePopulation .applied-filters:has(#filterChips:empty)>#filterChips {display:none}
+#analyzePopulation .filter-tools {flex:none}
 #analyzePopulation .filter-scroll {padding:0}
-#analyzePopulation .period-controls {grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))}
+#analyzePopulation .period-controls {grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr))}
 #analyzePopulation .filter-utilities {display:flex;flex-wrap:wrap;align-items:start;gap:0 var(--space-md);margin-top:4px}
 #analyzePopulation .more-filters {margin:0;min-width:0;max-width:100%}
 #analyzePopulation .more-filters[open] {flex-basis:100%}
-#analyzePopulation .more-filters>summary {padding-inline:0}
+#analyzePopulation .more-filters>summary {padding-inline:8px;border-radius:12px}
+#analyzePopulation .more-filters>summary:hover {background:var(--hover)}
 #analyzePopulation .filter-tools>.reset-view {margin:0}
 #analyzePopulation #filterChips:empty {display:none}
 #analyzePopulation #filterChips:not(:empty) {margin:8px 0}
 #analyzePopulation .filter-tools:has(>[hidden]) {display:none}
-#analyzePopulation .fresh-activity {margin:8px 0 0;padding-top:8px;border-top:1px solid transparent}
+#analyzePopulation .fresh-activity {margin:4px 0 0;padding:0;border:0}
+#analyzePopulation .fresh-activity:has(.fresh-details[hidden]):has(.fresh-result[hidden]) {display:none}
 #analyzePopulation .fresh-controls {display:flex;flex-wrap:wrap;align-items:start;gap:0 16px}
 #analyzePopulation .fresh-controls>.ux-disabled-help {flex:none}
 #analyzePopulation .fresh-details {display:block;min-width:0;flex:1 1 16rem}
-#analyzePopulation .fresh-result {flex:0 1 100%;padding-block:12px}
+#analyzePopulation .fresh-result {flex:0 1 100%;padding-block:4px}
 #analyzePopulation .fresh-result p {font-size:var(--type-small);font-weight:var(--weight-regular)}
 #analyzePopulation #freshHelp {width:100%}
 #analyzePopulation .fresh-help-body {max-width:none;padding:12px 16px;background:var(--canvas);border:1px solid transparent;border-radius:var(--radius-small)}
 #analyzePopulation .fresh-help-body>p {max-width:80ch}
-#analyzePopulation #activityCollectionLink {margin:12px 0 0;padding-top:8px;border-top:1px solid var(--rule)}
-#analyzePopulation #activityCollectionLink a {display:inline-flex;align-items:center;min-height:44px;margin-right:16px}
 #analyzePopulation #collectionNotice {margin:0;padding:0;gap:4px 12px;background:none;border:0}
 #analyzePopulation #collectionNotice p {font-size:var(--type-small)}
 #workspace>#periodFeedback.home-period-summary {margin:0 0 16px;gap:8px 24px;justify-content:space-between;max-width:none}

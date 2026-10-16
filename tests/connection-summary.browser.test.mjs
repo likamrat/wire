@@ -215,7 +215,7 @@ test("dropdown proportions retain long lists and multiselect drafts in the produ
         await zone.press("Escape");
         await selectActivityOption(page, "displayTimeZone", "");
         await navigateMain(page, "analyze"); await ready(page);
-        for (const [id, clear] of [["promptAuthorFilter", "clearPromptAuthorFilter"], ["outcomeFilter", "clearResultFilter"]]) {
+        for (const [id, name] of [["promptAuthorFilter", "author"], ["outcomeFilter", "outcome"]]) {
             const trigger = page.locator("#" + id + "-control"), popup = page.locator(".select-popup");
             await trigger.click();
             const reads = requests.filter(path => path === "/api/snapshot").length;
@@ -236,7 +236,7 @@ test("dropdown proportions retain long lists and multiselect drafts in the produ
             await trigger.press("Tab"); await expect(apply).toBeFocused();
             await page.keyboard.press("Enter"); await ready(page);
             assert.deepEqual(await page.locator("#" + id).evaluate(node => [...node.selectedOptions].map(option => option.value)), [value]);
-            await page.locator("#" + clear).click(); await ready(page);
+            await page.getByRole("button", { name: new RegExp(`^Remove ${name} filter:`) }).click(); await ready(page);
             assert.equal(await page.locator("#" + id).evaluate(node => node.selectedOptions.length === node.options.length), true);
             measurements.push({ context, id, multiple });
         }

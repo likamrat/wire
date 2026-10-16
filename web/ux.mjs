@@ -69,10 +69,27 @@ export function createEvidenceUX(icons) {
             return;
         }
         const above = box.top - tip.height - gap;
-        const top = options.placement === "top" && above >= gap ? above
+        let top = options.placement === "top" && above >= gap ? above
             : box.bottom + gap + tip.height <= height - gap ? box.bottom + gap : above;
-        bubble.style.left = Math.max(gap, Math.min(width - tip.width - gap, box.left + (box.width - tip.width) / 2)) + "px";
-        bubble.style.top = Math.max(gap, Math.min(height - tip.height - gap, top)) + "px";
+        const left = Math.max(gap, Math.min(width - tip.width - gap, box.left + (box.width - tip.width) / 2));
+        top = Math.max(gap, Math.min(height - tip.height - gap, top));
+        // Hoverable help must not intercept neighboring actions when their group wraps.
+        const owner = options.owner || active;
+        const group = (owner.closest(".ux-disabled-help") || owner).parentElement;
+        const neighbors = [...(group?.querySelectorAll("button,a[href],input,select,textarea,summary,[role=button],[role=combobox]") || [])]
+            .filter(node => node !== owner && !node.contains(owner) && !owner.contains(node) && node.checkVisibility({ visibilityProperty: true }))
+            .map(node => node.getBoundingClientRect())
+            .filter(rect => rect.width && rect.height && rect.left < left + tip.width && rect.right > left);
+        const intersects = (y, rect) => y < rect.bottom && y + tip.height > rect.top;
+        if (neighbors.some(rect => intersects(top, rect))) {
+            const candidates = neighbors.flatMap(rect => [rect.top - tip.height - gap, rect.bottom + gap])
+                .filter(y => y >= gap && y + tip.height <= height - gap && !intersects(y, box)
+                    && neighbors.every(rect => !intersects(y, rect)));
+            candidates.sort((a, b) => Math.abs(a - top) - Math.abs(b - top));
+            if (candidates.length) top = candidates[0];
+        }
+        bubble.style.left = left + "px";
+        bubble.style.top = top + "px";
     }
     function clearTooltip() {
         tooltipResize.disconnect();

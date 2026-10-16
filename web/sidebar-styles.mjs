@@ -59,9 +59,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 .navigation-drawer .brand-caption {font-size:.6875rem}
 .navigation-drawer::backdrop {background:var(--scrim)}
 @media(prefers-reduced-motion:no-preference) {
- .navigation-drawer[open] {animation:navigation-enter 240ms cubic-bezier(.2,0,0,1)}
- .navigation-drawer[open]::backdrop {animation:navigation-scrim 180ms ease-out}
- @keyframes navigation-enter {from {transform:translateX(-100%)} to {transform:translateX(0)}}
+ :root[data-sidebar-motion=on] .navigation-drawer[open]::backdrop {animation:navigation-scrim 180ms ease-out}
  @keyframes navigation-scrim {from {opacity:0} to {opacity:1}}
 }
 .export-scope {border:0;margin:0 0 24px;padding:0}

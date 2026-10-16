@@ -185,7 +185,7 @@ test("expanded result and every service definition retain readable cues when tex
         await expand(page);
         const value = await measure(page); assertReadable(value);
         const outcomeCues = value.cues.filter(c => c.outcome);
-        assert.equal(new Set(outcomeCues.map(c => c.color)).size, 6, "Six distinct rendered outcome inks");
+        assert.equal(new Set(outcomeCues.map(c => c.color)).size, 5, "Failures and connection failures share red screen ink, with distinct glyphs and labels");
         assert.equal(new Set(outcomeCues.map(c => c.icon)).size, 6, "Six distinct canonical glyphs, including partial");
         assert.equal(value.glossaryColumns, width > 700 ? 2 : 1);
         assert.deepEqual(value.cues.filter(c => c.service).map(c => c.service), expectedServices.map(c => c.id));
@@ -197,7 +197,7 @@ test("expanded result and every service definition retain readable cues when tex
                 const color = getComputedStyle(probe).color; probe.remove(); return color;
             }, entry.tone);
             assert.equal(cue.color, canonical);
-            assert.deepEqual(rgb(cue.color), rgb(charts.servicePalette[entry.id][theme].label));
+            assert.deepEqual(rgb(cue.color), rgb(entry.id === "Files" && theme === "light" ? "#007357" : charts.servicePalette[entry.id][theme].label));
         }
         const serviceColors = Object.fromEntries(value.cues.filter(cue => cue.service).map(cue => [cue.service, cue.color]));
         assert.equal(new Set(Object.values(serviceColors)).size, expectedServices.length);

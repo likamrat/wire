@@ -131,7 +131,7 @@ test("Home date/result apply, clear, Back and failed reads keep one accepted cha
     await expect.poll(() => overviews.at(-1)?.metrics.find(metric => metric.definitionId === "tool-duration")?.coverage)
         .toEqual({ eligible: 5, covered: 5 });
     await expect(page.locator("#homeInsights")).toContainText("5 / 5 timed");
-    await page.locator("#clearResultFilter").click(); await ready(page); await reconcile();
+    await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page); await reconcile();
     await page.locator("#clearDates").click(); await ready(page); await reconcile();
     assert.equal(snapshots.at(-1).analytics.totals.count, 126);
     await page.goBack(); await ready(page); await reconcile();

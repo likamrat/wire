@@ -25,6 +25,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
     function optionsFor(select) {
         return [...select.options].filter((option) => !option.hidden && !option.parentElement.hidden).map((option) => ({
             node: option, value: option.value, label: option.label,
+            displayLabel: option.dataset.optionLabel || option.label, count: option.dataset.count,
             disabled: option.disabled || option.parentElement.matches("optgroup:disabled"),
             group: option.parentElement.matches("optgroup") ? option.parentElement.label : "",
             detail: [option.dataset.detail,
@@ -70,6 +71,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         // Measuring the CSS height limit can temporarily clamp a scrolled list.
         const scrollTop = popup.scrollTop;
         popup.style.setProperty("--select-available-width", Math.max(0, width - edge * 2) + "px");
+        popup.style.setProperty("--select-anchor-width", box.width + "px");
         popup.style.maxHeight = "";
         const availableBelow = top + height - box.bottom - gap - edge;
         const availableAbove = box.top - top - gap - edge;
@@ -118,6 +120,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         entry.draft = entry.multiple ? new Set(selectedValues(entry)) : null;
         attribute(list, "aria-multiselectable", entry.multiple ? "true" : null);
         popup.classList.toggle("select-popup-multiple", entry.multiple);
+        popup.classList.toggle("select-popup-filter", entry.filter);
         let lastGroup = "";
         entry.options.forEach((option, index) => {
             if (option.group && option.group !== lastGroup) {
@@ -139,12 +142,21 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
             const label = document.createElement("span");
             label.className = "select-option-label";
             label.id = row.id + "-label";
-            label.textContent = option.label;
-            decorateOption(label, { id: entry.select.id, value: option.value, label: option.label });
+            label.textContent = option.displayLabel;
+            decorateOption(label, { id: entry.select.id, value: option.value, label: option.displayLabel });
             row.setAttribute("aria-labelledby", label.id);
-            const check = ux.icon("select-check");
-            check.classList.add("select-check");
+            const check = entry.filter && entry.multiple ? document.createElement("span") : ux.icon("select-check");
+            check.classList.add(entry.filter && entry.multiple ? "select-toggle" : "select-check");
+            check.setAttribute("aria-hidden", "true");
             row.append(label, check);
+            if (option.count !== undefined) {
+                const count = document.createElement("span");
+                count.id = row.id + "-count";
+                count.className = "select-option-count";
+                count.textContent = option.count;
+                row.insertBefore(count, check);
+                row.setAttribute("aria-labelledby", label.id + " " + count.id);
+            }
             if (option.detail) {
                 const detail = document.createElement("span");
                 detail.id = row.id + "-detail";
@@ -298,7 +310,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
     function syncEntry(entry) {
         const { select, trigger, value } = entry;
         const options = optionsFor(select);
-        const signature = JSON.stringify(options.map((option) => [option.value, option.label, option.disabled, option.group, option.detail]));
+        const signature = JSON.stringify(options.map((option) => [option.value, option.label, option.displayLabel, option.count, option.disabled, option.group, option.detail]));
         const replaced = options.some((option, index) => option.node !== entry.options[index]?.node);
         if (entry.sizer && signature !== entry.signature) {
             entry.sizer.replaceChildren(...options.map(option => {
@@ -327,6 +339,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         attribute(trigger, "aria-busy", state === "loading" ? "true" : null);
         attribute(trigger, "aria-invalid", select.getAttribute("aria-invalid"));
         attribute(trigger, "aria-required", select.required ? "true" : null);
+        attribute(trigger, "data-filter-active", entry.filter && (entry.multiple ? selected.length < options.length : selected[0]?.value !== options[0]?.value) ? "true" : null);
         const activeDescription = active === entry ? popup.querySelector(`[data-option-index="${entry.index}"]`)?.getAttribute("aria-describedby") : null;
         const tooltipDescriptions = (trigger.getAttribute("aria-describedby") || "").split(/\s+/)
             .filter(id => document.getElementById(id)?.getAttribute("role") === "tooltip");
@@ -379,7 +392,8 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
             sizer.setAttribute("aria-hidden", "true");
             trigger.append(sizer);
         }
-        const entry = { select, trigger, wrapper, value, sizer, labelIds, labels, labelContainers, multiple: select.multiple, options: [], signature: "", selectedValue: null };
+        const entry = { select, trigger, wrapper, value, sizer, labelIds, labels, labelContainers, multiple: select.multiple,
+            filter: Boolean(select.closest("#filters")), options: [], signature: "", selectedValue: null };
         controls.set(select, entry);
         select.replaceWith(wrapper);
         wrapper.append(select, trigger);
@@ -450,7 +464,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
     listen(document, "reset", () => queueMicrotask(sync));
     const observer = new MutationObserver(sync);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true,
-        attributeFilter: ["disabled", "hidden", "selected", "label", "value", "class", "aria-label", "aria-labelledby", "aria-describedby", "aria-invalid", "required", "data-select-state", "data-all-label", "data-detail", "data-disabled-reason", "open"] });
+        attributeFilter: ["disabled", "hidden", "selected", "label", "value", "class", "aria-label", "aria-labelledby", "aria-describedby", "aria-invalid", "required", "data-select-state", "data-all-label", "data-detail", "data-disabled-reason", "data-option-label", "data-count", "open"] });
     sync();
     return { sync, close, destroy() {
         close();

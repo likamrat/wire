@@ -2,13 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
-import { contract, samples } from "./assessment-ui-fixtures.mjs";
-import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
+import { contract, samples, retainedResponse, openPersonalFeedback } from "./assessment-ui-fixtures.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { promptRecord, promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { recordedInteractionModels } from "../lib/interaction-model.mjs";
@@ -17,25 +16,6 @@ import { recordedResponseTiming } from "../lib/response-timing.mjs";
 const proof = process.env.WIRE_DETAIL_PROOFS;
 const ready = page => page.locator('#workspace[aria-busy="false"]').waitFor();
 const exact = "SYNTHETIC original prompt\n  Preserve these spaces.  \nJapanese: \u65e5\u672c\u8a9e; Hebrew: \u05e9\u05dc\u05d5\u05dd; emoji: \ud83d\udc69\u200d\ud83d\udcbb; e\u0301\n";
-
-function retainedResponse(text, record) {
-    const model = buildAssessmentModel({ revision: 1, pseudonymKey: "a".repeat(64), evidence: [record], exports: [] });
-    const view = [...model.details.values()][0], consent = { ...samples.enabledConsent(), categories: ["answer"] };
-    view.basis.consentRevision = 1;
-    for (const item of [view.interaction, ...view.observations, ...view.assessments, ...view.metrics]) item.basis = { ...view.basis };
-    Object.assign(view.interaction, { sourceConfigRef: consent.sourceConfigRef, sourceConfigRevision: consent.sourceConfigRevision });
-    view.consent = consent;
-    view.observations.push({
-        schemaVersion: 1, interactionRef: view.interaction.interactionRef, basis: { ...view.basis },
-        createdAt: samples.at, evidenceRefs: [samples.id("evidence", 80)], observationRef: samples.id("observation", 80),
-        memberRef: null, adapter: "copilot-local-events-v1", kind: "answer", origin: "optional-capture",
-        availability: "available", reason: null, occurredAt: samples.at, sourceEventRefs: [samples.id("event", 80)],
-        deletionKeys: [...new Set(view.interaction.members.flatMap(member => member.deletionKeys))],
-        payload: { textRef: samples.id("text", 80), utf8Bytes: Buffer.byteLength(text), completeness: "bounded-fragment", finality: "unverified", credentialScreenVersion: 1, credentialScreen: "passed" },
-        captureContext: { consentRevision: 1, sourceConfigRef: consent.sourceConfigRef, sourceConfigRevision: consent.sourceConfigRevision },
-    });
-    return contract.validateInteractionView(view);
-}
 
 async function setup(t, { text = "Find the synthetic planning note.", status = "full", actor = "unknown", calls = true, responseText, responseMode = "success", detailError = false, chatOrigin = true, sourceEvent, entry = "reader", modelTiming = false } = {}) {
     const record = fixture("detail-reading");
@@ -107,6 +87,11 @@ async function setup(t, { text = "Find the synthetic planning note.", status = "
             await route.fulfill({ response, json: value });
         });
         await page.route("**/api/assessment/detail", route => route.fulfill({ json: envelope(view) }));
+        await page.route("**/api/collection/status", async route => {
+            const response = await route.fetch(), value = await response.json();
+            value.assessment = { ...value.assessment, basis: view.basis };
+            await route.fulfill({ response, json: value });
+        });
         await page.route("**/api/assessment/overview", route => route.fulfill({ json: envelope({ interactionRefs: [view.interaction.interactionRef], metrics: view.metrics }) }));
         await page.route("**/api/assessment/evidence", async route => {
             const input = route.request().postDataJSON();
@@ -134,20 +119,22 @@ async function setup(t, { text = "Find the synthetic planning note.", status = "
     });
     await page.goto(runtime.url + (entry === "card" ? "" : "#request?request=detail-reading")); await ready(page);
     await page.evaluate(() => document.fonts.ready);
+    if (entry !== "card") await expect(page.locator(".interaction-insights[aria-busy=true]")).toHaveCount(0);
     return { page, record, requests, runtime, responseState };
 }
 async function capture(page, name, contextSelector = ".request-intro") {
     if (!proof) return;
     await mkdir(proof, { recursive: true });
     await page.mouse.move(0, 0);
-    await page.evaluate(() => { document.activeElement?.blur(); scrollTo(0, 0); });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.screenshot({ path: path.join(proof, `${name}.png`), fullPage: true });
     await page.screenshot({ path: path.join(proof, `${name}-viewport.png`) });
     const context = page.locator(contextSelector + ":visible").first();
     if (await context.count()) {
-        await context.evaluate(node => scrollTo(0, scrollY + node.getBoundingClientRect().top
-            - document.querySelector(".app-header").getBoundingClientRect().height - 16));
+        await context.evaluate(node => {
+            const body = document.querySelector("#contextSidebarBody");
+            if (body.contains(node)) body.scrollTop += node.getBoundingClientRect().top - body.getBoundingClientRect().top - 16;
+        });
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
         await page.screenshot({ path: path.join(proof, `${name}-reading-context.png`) });
     }
@@ -155,27 +142,37 @@ async function capture(page, name, contextSelector = ".request-intro") {
 function contentReads(requests) {
     return requests.filter(request => ["/api/snapshot", "/api/assessment/detail", "/api/assessment/evidence"].includes(new URL(request.url).pathname)).length;
 }
+const section = (page, name) => page.locator(`[data-reader-section="${name}"]`);
+async function readerTheme(page, theme, width, scale) {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => document.documentElement.style.fontSize = "100%");
+    await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "docked");
+    await chooseTheme(page, theme);
+    await page.setViewportSize({ width, height: 1000 });
+    await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+    await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", width < 700 ? "overlay" : "docked");
+}
 
 test("normal-entry Copy feedback never moves the prompt or adds a status row", { timeout: 30000 }, async t => {
     const { page } = await setup(t, { actor: "user", text: exact, entry: "card" });
     await page.locator("#resultsLink").click();
-    await page.locator("#activityList>.request-row").getByRole("link", { name: "View interaction", exact: true }).click();
+    await page.locator("#activityList .request-card-open").click();
     await ready(page);
     await page.locator(".interaction-response .reader-empty").waitFor();
     const copy = page.getByRole("button", { name: "Copy prompt", exact: true });
-    const geometry = () => page.locator(".request-original").evaluate(root => {
+    const geometry = () => section(page, "prompt").evaluate(root => {
         const box = selector => {
             const { x, y, width, height } = root.querySelector(selector).getBoundingClientRect();
             return { x, y, width, height };
         };
         return { prompt: box(".full-text-content"), header: box(".full-text-header"),
-            actions: box(".full-text-reader-actions"), facts: box(".reader-facts"),
-            scrollY, pageHeight: document.documentElement.scrollHeight };
+            actions: box(".reader-section-actions"), facts: box(".reader-facts"),
+            scrollY, paneScroll: document.querySelector("#contextSidebarBody").scrollTop,
+            paneHeight: document.querySelector("#contextSidebarBody").scrollHeight, pageHeight: document.documentElement.scrollHeight };
     });
     const measurements = [];
     for (const [theme, width, scale] of [["dark", 1440, 1], ["light", 1440, 1], ["dark", 375, 2], ["light", 375, 2]]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await readerTheme(page, theme, width, scale);
         await copy.focus();
         const before = await geometry();
         await page.evaluate(() => { window.clipboardProof.mode = "pending"; });
@@ -183,12 +180,12 @@ test("normal-entry Copy feedback never moves the prompt or adds a status row", {
         assert.equal(await copy.getAttribute("aria-busy"), "true");
         assert.deepEqual(await geometry(), before, "Pending copy uses the existing button, not a new line");
         await page.evaluate(() => window.finishClipboardProof());
-        await page.waitForFunction(() => document.querySelector(".request-original .ux-copy").dataset.copyState === "success");
+        await expect(copy).toHaveAttribute("data-copy-state", "success");
         const after = await geometry();
         measurements.push({ theme, width, scale, before, after });
         assert.equal(await copy.evaluate(node => node === document.activeElement), true);
         assert.deepEqual(after, before, "Copy success must not insert a line, move the prompt/facts, scroll, or change page height");
-        const status = page.locator(".request-original .ux-copy-status");
+        const status = section(page, "prompt").locator(".ux-copy-status");
         assert.equal(await status.getAttribute("role"), "status");
         assert.equal(await status.getAttribute("aria-live"), "polite");
         assert.equal(await status.textContent(), "Copied to clipboard.");
@@ -210,7 +207,7 @@ test("reader exposes exact operations and useful evidence without identifier but
         parentInvocationEvidence: "source-field-absent", parallelGroupEvidence: "adapter-not-supported",
     }] });
     await page.locator("#resultsLink").click();
-    await page.locator("#activityList>.request-row").getByRole("link", { name: "View interaction", exact: true }).click();
+    await page.locator("#activityList .request-card-open").click();
     await ready(page);
     await page.locator(".interaction-response .reader-empty").waitFor();
     const reader = page.locator("#requestContent"), call = reader.locator("[data-tool-call-id]");
@@ -218,17 +215,20 @@ test("reader exposes exact operations and useful evidence without identifier but
     assert.match(await call.locator(".interaction-response").innerText(), /No saved response\. Capture is off\./);
     assert.equal(await reader.locator(".request-context-summaries>summary").count(), 0);
     assert.equal(await reader.getByRole("heading", { name: "Reviews", exact: true }).isVisible(), true);
-    const pick = reader.getByRole("button", { name: "Add to report", exact: true });
-    assert.ok((await pick.boundingBox()).y < (await reader.locator(".full-text-content").boundingBox()).y);
+    const pick = page.locator("#contextSidebarFooter").getByRole("button", { name: "Add to report", exact: true });
+    assert.ok((await pick.boundingBox()).y >= (await page.locator("#contextSidebarBody").boundingBox()).y
+        + (await page.locator("#contextSidebarBody").boundingBox()).height);
+    const originalRoute = page.url();
     await pick.click();
-    assert.equal(await reader.getByRole("button", { name: "Remove from report", exact: true }).isVisible(), true);
-    await reader.getByRole("button", { name: "Remove from report", exact: true }).click();
-    const details = call.locator(":scope > details");
-    await details.locator("summary").focus(); await page.keyboard.press("Enter");
-    assert.equal(await details.evaluate(node => node.open), true);
-    assert.equal(await details.locator(".reader-identifier").textContent(), record.toolCalls[0].toolCallId);
-    assert.equal(await details.getByRole("button", { name: /^Copy .*id$/i }).count(), 0);
-    assert.doesNotMatch(await details.innerText(), /HTTP not|parent invocation|parallel group|independent or serial/i,
+    assert.equal(await page.locator("#requestReportToggle").textContent(), "Remove from report");
+    assert.equal(page.url(), originalRoute);
+    await page.locator("#requestReportToggle").click();
+    const details = call.locator(".technical-detail"), source = section(page, "source");
+    await expect(details).toBeVisible();
+    await expect(call.locator(":scope > details")).toHaveCount(0);
+    await expect(source.locator(".reader-fields>div").filter({ has: page.getByText("Call 1 ID", { exact: true }) }).locator("dd")).toHaveText(record.toolCalls[0].toolCallId);
+    assert.equal(await source.getByRole("button", { name: /^Copy .*id$/i }).count(), 0);
+    assert.doesNotMatch(await source.innerText(), /HTTP not|parent invocation|parallel group|independent or serial/i,
         "Absent adapter fields are not a problem or next step for the reader; no routine machinery recital");
     const args = call.getByRole("button", { name: "Copy recorded arguments", exact: true });
     await args.click();
@@ -240,27 +240,31 @@ test("reader exposes exact operations and useful evidence without identifier but
     await args.click();
     assert.equal(await call.locator("[role=alert]").count(), 0, "Retry clears the prior failure");
     await capture(page, "reader-tool-evidence", "[data-tool-call-id]");
-    await details.locator("summary").click();
     const saved = reader.locator(".assessment-saved-details");
-    await saved.locator("summary").click();
+    await expect(saved).toBeVisible();
     assert.match(await saved.innerText(), /Saved execution checks|Completion/);
-    await saved.locator("summary").click();
-    const source = reader.locator(".request-support>details");
-    await source.locator("summary").click();
+    await expect(saved.locator("summary")).toHaveCount(0);
     assert.match(await source.innerText(), /synthetic-prompt/);
     assert.equal(await source.locator(".ux-copy").count(), 0);
-    await source.locator("summary").click();
-    const feedback = reader.getByRole("button", { name: "Details and feedback", exact: true });
-    await feedback.click();
-    assert.equal(await page.getByRole("dialog").isVisible(), true);
-    await page.getByRole("dialog").getByText("Recorded measures and definitions", { exact: true }).click();
-    assert.ok(await page.getByRole("dialog").locator(".single-interaction-measures").isVisible());
-    await page.keyboard.press("Escape");
+    await expect(section(page, "timing").locator('.reader-timing-table data[value="73728"]')).toHaveCount(1);
+    const localTiming = section(page, "timing").locator('[data-definition-id="tool-duration"]');
+    await expect(localTiming.locator('data[value="73728"]')).toHaveCount(1);
+    await expect(localTiming).toHaveAttribute("data-measurement-basis", "retained-event-timestamps");
+    await expect(localTiming).toContainText("Call duration (local measure)");
+    await expect(localTiming).toContainText("1 of 1 call timed");
+    await expect(section(page, "timing").locator('data[value="108640"]')).toHaveCount(1);
+    await expect(saved).toContainText("retained completion event reference");
+    const feedback = reader.getByRole("button", { name: "Personal feedback", exact: true });
+    const form = await openPersonalFeedback(page);
+    await expect(form.getByRole("button", { name: "Save feedback", exact: true })).toBeDisabled();
+    await form.getByRole("button", { name: "Cancel", exact: true }).click();
     assert.equal(await feedback.evaluate(node => node === document.activeElement), true);
     const automatic = reader.getByRole("button", { name: "Automatic scores", exact: true });
     await automatic.click();
-    assert.equal(await page.getByRole("dialog", { name: "Automatic scores", exact: true }).isVisible(), true);
-    await page.getByRole("dialog", { name: "Automatic scores", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
+    const automaticForm = reader.locator(".automatic-score-dialog");
+    assert.equal(await automaticForm.isVisible(), true);
+    assert.equal(await page.locator("dialog[open]").count(), 1);
+    await automaticForm.getByRole("button", { name: "Close automatic scores", exact: true }).click();
     assert.equal(await automatic.evaluate(node => node === document.activeElement), true);
     const readerUrl = page.url();
     await reader.getByRole("link", { name: "Collection coverage", exact: true }).click(); await ready(page);
@@ -273,8 +277,7 @@ test("reader exposes exact operations and useful evidence without identifier but
     assert.equal(page.url(), readerUrl);
     const measure = [];
     for (const [theme, width, scale] of [["dark", 1440, 1], ["light", 1440, 1], ["dark", 375, 2], ["light", 375, 2]]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await readerTheme(page, theme, width, scale);
         const style = await reader.locator(".full-text-body").evaluate(node => ({
             fill: getComputedStyle(node).backgroundColor, edge: getComputedStyle(node).borderInlineStartColor,
             ink: getComputedStyle(node.querySelector("pre")).color,
@@ -309,11 +312,12 @@ test("card-to-reader continuity includes aligned actions, compact expanded facts
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         await page.locator("#resultsLink").click();
-        const card = page.locator("#activityList>.request-row"), open = card.getByRole("link", { name: "View interaction", exact: true });
-        assert.match(await card.innerText(), /synthetic-model/);
-        assert.equal(await card.locator(".response-timing data").getAttribute("value"), "108640");
+        const card = page.locator("#activityList>.request-row"), open = card.locator(".request-card-open");
+        await expect(card.locator(".request-card-prompt")).toContainText(text);
+        await expect(card).toContainText("workiq-ask");
+        await expect(card.locator("input,button")).toHaveCount(0);
         await open.scrollIntoViewIfNeeded();
-        const cardType = await card.locator(".full-text-preview").evaluate(node => {
+        const cardType = await card.locator(".request-card-prompt").evaluate(node => {
             const style = getComputedStyle(node);
             return { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, style: style.fontStyle };
         });
@@ -324,10 +328,10 @@ test("card-to-reader continuity includes aligned actions, compact expanded facts
         const origin = page.url(), position = await open.boundingBox();
         await page.mouse.click(position.x + position.width / 2, position.y + position.height / 2); await ready(page);
         await page.locator(".interaction-response .reader-empty").waitFor();
-        const prompt = page.locator(".request-original"), call = page.locator('[data-tool-call-id="synthetic-reading-call-0"]');
+        const prompt = section(page, "prompt"), call = page.locator('[data-tool-call-id="synthetic-reading-call-0"]');
         assert.match(await prompt.locator(".interaction-model-fact").innerText(), /synthetic-model/);
-        assert.equal(await prompt.locator(".response-timing data").getAttribute("value"), "108640");
-        const read = prompt.locator(".full-text-toggle"), copy = prompt.getByRole("button", { name: "Copy prompt", exact: true });
+        assert.equal(await section(page, "timing").locator(".response-timing data").getAttribute("value"), "108640");
+        const read = prompt.locator(".reader-section-toggle"), copy = prompt.getByRole("button", { name: "Copy prompt", exact: true });
         if (await read.getAttribute("aria-expanded") === "false") await read.click();
         await capture(page, `continuity-${theme}-${width}-${scale}-reader`);
         const measures = await prompt.evaluate(node => {
@@ -335,14 +339,16 @@ test("card-to-reader continuity includes aligned actions, compact expanded facts
                 const r = element.getBoundingClientRect();
                 return { x: r.x, y: r.y, width: r.width, height: r.height, center: r.y + r.height / 2 };
             };
-            const controls = [...node.querySelectorAll(".full-text-reader-actions>button")];
+            const controls = [...node.querySelectorAll(":scope>.reader-section-heading button")];
             const style = getComputedStyle(node.querySelector(".full-text-content"));
             return {
                 promptType: { font: style.fontFamily, size: style.fontSize, weight: style.fontWeight, style: style.fontStyle },
                 controls: controls.map(control => ({ ...box(control), marginTop: getComputedStyle(control).marginTop })),
                 content: box(node.querySelector(".full-text-content")),
                 keys: [...node.querySelectorAll("dt")].map(key => ({ weight: getComputedStyle(key).fontWeight, color: getComputedStyle(key).color })),
-                values: [...node.querySelectorAll("dd")].map(value => ({ weight: getComputedStyle(value).fontWeight, color: getComputedStyle(value).color })),
+                values: [...node.querySelectorAll("dd")].map(value => ({ weight: getComputedStyle(value).fontWeight, color: getComputedStyle(value).color,
+                    left: value.getBoundingClientRect().left - value.previousElementSibling.getBoundingClientRect().left,
+                    gap: value.getBoundingClientRect().top - value.previousElementSibling.getBoundingClientRect().bottom })),
             };
         });
         await copy.click();
@@ -352,8 +358,9 @@ test("card-to-reader continuity includes aligned actions, compact expanded facts
         assert.equal(await read.evaluate(node => node === document.activeElement), true);
         await page.keyboard.press("Space");
         assert.equal(await prompt.locator(".full-text-content").textContent(), text);
-        const details = call.locator(":scope > details");
-        if (!await details.evaluate(node => node.open)) await details.locator(":scope > summary").click();
+        const details = call.locator(".technical-detail");
+        await expect(details).toBeVisible();
+        await expect(call.locator(":scope>details")).toHaveCount(0);
         await call.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
         assert.equal(await page.evaluate(() => window.clipboardProof.writes.at(-1)), JSON.stringify(record.toolCalls[0].requestArgs, null, 2));
         await capture(page, `continuity-${theme}-${width}-${scale}-expanded`, '[data-tool-call-id="synthetic-reading-call-0"]');
@@ -366,30 +373,34 @@ test("card-to-reader continuity includes aligned actions, compact expanded facts
             keyWeights: [...node.querySelectorAll("dt")].map(key => getComputedStyle(key).fontWeight),
         }));
         metrics.push({ theme, width, scale, cardType, ...measures, technical, expanded });
-        await details.locator(":scope > summary").click();
         await page.getByRole("button", { name: "Add to report", exact: true }).click();
         assert.equal(await page.locator("#requestReportToggle").textContent(), "Remove from report");
         await page.locator("#requestReportToggle").click();
-        await page.getByRole("link", { name: "Back to results", exact: true }).click(); await ready(page);
+        await page.goBack(); await ready(page);
+        await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
         assert.equal(page.url(), origin);
         assert.equal(await open.evaluate(node => node === document.activeElement), true);
         assert.ok(Math.abs((await open.boundingBox()).y - position.y) < 3, "Back restores the card entry position");
-        assert.equal(await card.getByRole("checkbox").isChecked(), false);
+        await expect(card.getByRole("checkbox")).toHaveCount(0);
     }
     if (proof) await writeFile(path.join(proof, "continuity-metrics.json"), JSON.stringify(metrics, null, 2));
     for (const measurement of metrics) {
         const { cardType, promptType, controls, keys, values, expanded, width, scale } = measurement;
-        assert.deepEqual(promptType, cardType, "The full prompt keeps the card's exact font role and bold-italic emphasis");
+        assert.deepEqual(promptType, cardType, "The full prompt keeps the card's exact regular text role");
+        assert.equal(promptType.weight, "400");
+        assert.equal(promptType.style, "normal");
+        assert.equal(controls.length, 2);
         assert.ok(controls.every(control => control.height >= 44 && control.width >= 44));
         if (width === 1440) {
-            assert.ok(Math.abs(controls[0].center - controls[1].center) <= 1, "Hide and Copy are optically centered on one row");
-            assert.ok(Math.abs(controls[0].height - controls[1].height) <= 1, "Hide and Copy have equal visible and hit-target heights");
+            assert.ok(Math.abs(controls[0].center - controls[1].center) <= 1, "Section visibility and Copy are centered in the same header");
+            assert.ok(Math.abs(controls[0].height - controls[1].height) <= 1, "Desktop section visibility and Copy retain equal target heights");
         }
-        assert.ok(keys.every(key => Number(key.weight) >= 500 && values.every(value => Number(value.weight) < Number(key.weight) && value.color !== key.color)));
+        assert.ok(keys.every(key => key.weight === "400" && values.every(value => value.weight === key.weight && value.color !== key.color)));
+        assert.ok(values.every(value => Math.abs(value.left) <= 1 && value.gap >= 0 && value.gap <= 4));
         assert.equal(expanded.emptyRows, 0, "Missing technical fields are consolidated, not repeated as empty rows");
         assert.equal(expanded.helpButtons, 0, "Expanded facts explain necessary limits directly, not through a tooltip per fact");
         assert.ok(expanded.overflow <= 1, `${width}/${scale}: expanded technical details fit`);
-        assert.ok(expanded.keyWeights.every(weight => Number(weight) >= 500));
+        assert.ok(expanded.keyWeights.every(weight => weight === "400"));
         if (width === 1440) assert.ok(expanded.height < 600, "One simple call's expanded detail fits a readable group, rather than a page of empty fields");
     }
 });
@@ -408,19 +419,20 @@ test("reader distillation keeps a legible story without repeated empty fields or
     assert.equal(await timeline.locator(".reader-details").count(), 0, "No repeated About prompt/response disclosures");
     assert.equal(await timeline.locator(":scope > li[data-context-kind=action]").count(), 7);
     const visible = await timeline.innerText();
-    assert.doesNotMatch(visible, /API path\s+Not recorded|API metadata: None recorded|Outside current view/);
-    assert.match(visible, /Failure cause unavailable/);
+    assert.doesNotMatch(visible, /API path\s+Not recorded|API metadata: None recorded/);
+    await expect(timeline.getByText("Outside current view", { exact: true })).toHaveCount(6);
+    await expect(timeline.getByText("Matches current view", { exact: true })).toHaveCount(1);
+    assert.match(visible, /No error details recorded/);
     assert.doesNotMatch(visible, /Historical call evidence only/);
     assert.match(visible, /No saved response\. Capture is off\./);
     assert.match(await page.locator(".reader-scope").innerText(), /1 of 7.*match/);
     assert.equal(await timeline.locator(".context-selected-label").count(), 0, "A direct interaction entry needs no Selected prompt badge");
     const action = timeline.locator("[data-tool-call-id=synthetic-reading-call-0]");
-    await action.locator("details > summary").click();
-    assert.match(await action.innerText(), /No API result metadata recorded/);
-    await action.locator("details > summary").click();
+    await expect(action.locator(".technical-detail")).toBeVisible();
+    await expect(action.locator("details,.call-api-summary,.returned-api-entries")).toHaveCount(0);
+    await expect(action.locator(".recorded-arguments pre")).toHaveText("{}");
     for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 1200, 1], ["dark", 375, 2], ["light", 375, 2]]) {
-        await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await readerTheme(page, theme, width, scale);
         const styles = await page.locator("#requestContent").evaluate(root => {
             const nodes = [...root.querySelectorAll(".full-text-header h2, .interaction-response > h2, .call-heading h3")];
             return {
@@ -430,8 +442,8 @@ test("reader distillation keeps a legible story without repeated empty fields or
                 keyWeights: [...root.querySelectorAll(".reader-facts dt")].map(node => getComputedStyle(node).fontWeight),
                 values: [...root.querySelectorAll(".reader-facts dd")].map(node => ({
                     x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y,
-                    keyEnd: node.previousElementSibling.getBoundingClientRect().right,
-                    keyY: node.previousElementSibling.getBoundingClientRect().y,
+                    keyX: node.previousElementSibling.getBoundingClientRect().left,
+                    keyBottom: node.previousElementSibling.getBoundingClientRect().bottom,
                 })),
             };
         });
@@ -440,8 +452,8 @@ test("reader distillation keeps a legible story without repeated empty fields or
         assert.ok(styles.overflow <= 1, `${theme}/${width}/${scale} does not overflow`);
         assert.ok(styles.facts.every(x => x >= 0 && x < width), "Compact metadata wraps within the reading column");
         assert.equal(new Set(styles.keyWeights).size, 1, "Metadata keys share one weight");
-        assert.ok(styles.values.every(value => Math.abs(value.x - value.keyEnd - 8) < 1 || value.y > value.keyY),
-            "Each ordinary value follows its own bold key, wrapping below only when needed");
+        assert.ok(styles.values.every(value => Math.abs(value.x - value.keyX) <= 1 && value.y - value.keyBottom >= 0 && value.y - value.keyBottom <= 4),
+            "Each value sits just below its own regular label on the same text edge");
         await capture(page, `distilled-multicall-${theme}-${width}-${scale}`, '[data-tool-call-id="synthetic-reading-call-5"]');
     }
 });
@@ -462,30 +474,32 @@ test("reader failure copy is concise while sign-in signals and unknown outcomes 
     if (proof) {
         await mkdir(proof, { recursive: true });
         for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 375, 2]]) {
-            await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-            await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+            await readerTheme(page, theme, width, scale);
             for (const [index, name] of ["missing-cause", "sign-in-required", "access-denial", "unknown-outcome"].entries()) {
                 await calls.nth(index).screenshot({ path: path.join(proof, `failure-${name}-${theme}-${width}-${scale}.png`) });
             }
         }
     }
     assert.deepEqual(await calls.locator(":scope > .action-error").allTextContents(),
-        ["Failure cause unavailable.", "Work IQ sign-in was required", "Tool error mentions access denial"]);
+        ["No error details recorded.", "Work IQ sign-in was required", "Tool error mentions access denial"]);
     assert.equal(await calls.locator(":scope > .context-help-note").count(), 0, "No repeated historical-access lecture between calls");
     for (const [index, call] of (await calls.all()).entries()) {
         const visible = await call.innerText();
-        assert.doesNotMatch(visible, /WIRE cannot establish|Historical call evidence only|HTTP 401|HTTP 403|Sign in now/);
+        assert.doesNotMatch(visible, /WIRE cannot establish|HTTP 401|HTTP 403|Sign in now/);
         if (index === 3) {
-            assert.doesNotMatch(visible, /Tool failed|sign-in|access denial|Failure cause/);
+            assert.doesNotMatch(visible, /Tool failed|sign-in|access denial|Failure cause|No error details/);
             continue;
         }
         assert.equal(await call.getByRole("button", { name: /sign in|retry|authenticate/i }).count(), 0, "Historical signals never add a sign-in or retry action");
-        const details = call.locator(":scope > details");
-        await details.locator("summary").click();
-        assert.match(await details.innerText(), /does not establish current sign-in or permission state/);
-        if (index === 0) assert.match(await details.innerText(), /whether the source omitted it or earlier collection excluded it/);
-        else assert.match(await details.innerText(), /not a verified cause, access policy, authorization or observed HTTP response/);
-        await details.locator("summary").click();
+        await expect(call.locator(":scope > details")).toHaveCount(0);
+        const details = call.locator(".technical-detail");
+        if (index === 0) {
+            assert.doesNotMatch(visible, /source omitted|collection excluded|sign-in|access denial|Historical call evidence only/,
+                "The retained-record gap must not invent an omission/exclusion cause or historical access signal");
+        } else {
+            assert.match(await details.innerText(), /does not establish current sign-in or permission state/);
+            assert.match(await details.innerText(), /not a verified cause, access policy, authorization or observed HTTP response/);
+        }
     }
 });
 
@@ -497,16 +511,18 @@ test("expanded details retain contradictory completion, real linkage and exact d
         observedGraphHttp: true, apiResults: [{ index: 0, statusCode: 403, errorCode: "SyntheticAccessDenied", evidenceLevel: "intermediary-reported" }],
     }, { requestArgs: {}, requestedApiPath: null, apiResults: [], reportedOutcome: undefined, toolSucceeded: undefined }] });
     const calls = page.locator(".request-context-timeline > li[data-context-kind=action]");
-    const details = calls.first().locator(":scope > details");
-    await details.locator(":scope > summary").click();
+    const details = calls.first().locator(".technical-detail");
+    await expect(details).toBeVisible();
+    await expect(calls.first().locator(":scope > details")).toHaveCount(0);
     assert.match(await details.innerText(), /Reported outcome\s+succeeded\s+Execution success\s+false/);
-    assert.match(await details.innerText(), /synthetic-parent/);
-    assert.match(await details.innerText(), /synthetic-group/);
+    const source = section(page, "source");
+    await expect(source.locator(".reader-fields>div").filter({ has: page.getByText("Call 1 parent invocation", { exact: true }) }).locator("dd")).toHaveText("synthetic-parent");
+    await expect(source.locator(".reader-fields>div").filter({ has: page.getByText("Call 1 parallel group", { exact: true }) }).locator("dd")).toHaveText("synthetic-group");
     assert.match(await details.innerText(), /HTTP directly observed/);
     assert.match(await details.innerText(), /intermediary-reported/);
     assert.match(await details.innerText(), /403/);
     assert.match(await details.innerText(), /SyntheticAccessDenied/);
-    assert.doesNotMatch(await details.innerText(), /Missing linkage|No parent|does not collect parallel/);
+    assert.doesNotMatch(await source.innerText(), /Missing linkage|No parent|does not collect parallel/);
     assert.equal(await calls.first().locator(":scope > .action-fields code").textContent(), "/me/messages");
     await details.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
     assert.equal(await page.evaluate(() => window.clipboardProof.writes.at(-1)), JSON.stringify(args, null, 2));
@@ -519,26 +535,27 @@ test("expanded details retain contradictory completion, real linkage and exact d
 test("normal request page leads with readable content and explicit, scoped reader actions", { timeout: 60000 }, async t => {
     const { page, requests } = await setup(t), failures = [];
     for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 2 }]) {
-        await page.setViewportSize({ width, height: 1000 });
-        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-        await chooseTheme(page, theme);
+        await readerTheme(page, theme, width, scale);
         await capture(page, `whole-page-${theme}-${width}-${scale}`);
         const prompt = page.locator(".request-original");
         assert.equal(await prompt.locator(".full-text-content").textContent(), "Find the synthetic planning note.");
-        const copy = prompt.getByRole("button", { name: "Copy prompt", exact: true });
-        if ((await copy.textContent()).trim() !== "Copy") failures.push(`${theme}/${width}: Copy needs a visible label beside its subject`);
-        const hide = prompt.getByRole("button", { name: "Hide prompt", exact: true });
-        if (await hide.textContent() !== "Hide") failures.push(`${theme}/${width}: Hide needs a visible label beside its subject`);
-        assert.ok(await page.locator(".request-intro").evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-original")) & Node.DOCUMENT_POSITION_FOLLOWING)));
+        const owner = section(page, "prompt"), copy = owner.getByRole("button", { name: "Copy prompt", exact: true });
+        assert.equal((await copy.textContent()).trim(), "");
+        await expect(copy.locator('svg[aria-hidden="true"]')).toHaveCount(1);
+        const hide = owner.locator(".reader-section-toggle");
+        await expect(hide).toHaveAttribute("aria-expanded", "true");
+        await expect(prompt.locator(".full-text-toggle")).toHaveCount(0);
+        assert.ok(await prompt.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-intro")) & Node.DOCUMENT_POSITION_FOLLOWING)));
         if (!await prompt.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".interaction-insights")) & Node.DOCUMENT_POSITION_FOLLOWING))) failures.push(`${theme}/${width}: Derived insights precede actual prompt`);
         if (await prompt.getByText("This older record has no sender details", { exact: true }).count() !== 1) failures.push(`${theme}/${width}: Missing sender details are not explained once`);
         if (await prompt.locator(".reader-details").count() !== 0) failures.push(`${theme}/${width}: Redundant About disclosure remains`);
         if (!(await page.locator("#reader-copy-notice").innerText()).includes("unmasked")) failures.push(`${theme}/${width}: Copy privacy is not concise and explicit`);
         const route = page.url(), selection = await page.locator("#activitySelectionSummary").textContent(), reads = contentReads(requests);
         await hide.focus(); await page.keyboard.press("Enter");
-        assert.equal(await prompt.locator(".full-text-content,.ux-copy").count(), 0, "Hide removes only the retained text and its copy action");
-        assert.equal(await prompt.locator("h2").count(), 1, "Reader orientation remains");
-        await prompt.getByRole("button", { name: "Read prompt", exact: true }).press("Space");
+        assert.equal(await owner.locator(".full-text-content,.ux-copy").count(), 0, "Folding removes the retained body and its external Copy subject");
+        await expect(hide).toBeVisible();
+        await expect(hide).toHaveAttribute("aria-expanded", "false");
+        await hide.press("Space");
         assert.equal(await prompt.locator(".full-text-content").textContent(), "Find the synthetic planning note.");
         assert.equal(page.url(), route);
         assert.equal(await page.locator("#activitySelectionSummary").textContent(), selection);
@@ -553,18 +570,18 @@ test("normal-page Copy writes only the full exact retained prompt and reports re
     const { page, requests } = await setup(t, { text: body, status: "partial" });
     const prompt = page.locator(".request-original");
     assert.equal(await prompt.locator(".full-text-content").textContent(), body, "Opening an interaction immediately shows even a long retained prompt");
-    const copy = prompt.getByRole("button", { name: "Copy prompt", exact: true });
+    const owner = section(page, "prompt"), copy = owner.getByRole("button", { name: "Copy prompt", exact: true });
     const reads = contentReads(requests);
     await copy.focus(); await page.keyboard.press("Enter");
     await page.waitForFunction(() => window.clipboardProof.writes.length === 1);
     assert.deepEqual(await page.evaluate(() => window.clipboardProof.writes), [body]);
     assert.equal(await copy.evaluate(node => node === document.activeElement), true);
-    const status = prompt.locator(".ux-copy-status");
+    const status = owner.locator(".ux-copy-status");
     assert.equal(await status.textContent(), "Copied to clipboard.");
     assert.equal(await status.evaluate(node => node.classList.contains("visually-hidden")), true, "Success is announced without inserting a line; the local check icon confirms visually");
     await page.evaluate(() => { window.clipboardProof.mode = "denied"; });
     await copy.click();
-    await page.locator(".request-original .ux-copy-status[role=alert]").waitFor();
+    await owner.locator(".ux-copy-status[role=alert]").waitFor();
     assert.match(await status.textContent(), /Couldn't copy.*permission was denied/);
     assert.equal(await copy.getAttribute("data-copy-state"), "error");
     assert.deepEqual(await page.evaluate(() => window.clipboardProof.writes), [body]);
@@ -582,11 +599,11 @@ test("normal-page Copy writes only the full exact retained prompt and reports re
     await page.waitForFunction(() => window.clipboardProof.writes.length === 2);
     assert.deepEqual(await page.evaluate(() => window.clipboardProof.writes), [body, body]);
     await copy.click();
-    await prompt.getByRole("button", { name: "Hide prompt", exact: true }).click();
+    await owner.locator(".reader-section-toggle").click();
     await page.evaluate(() => window.finishClipboardProof());
     await page.waitForFunction(() => window.clipboardProof.writes.length === 3);
-    assert.equal(await prompt.locator(".full-text-content,.ux-copy-status").count(), 0, "Late clipboard completion does not reopen hidden text or restore stale feedback");
-    await prompt.getByRole("button", { name: "Read prompt", exact: true }).click();
+    assert.equal(await owner.locator(".full-text-content,.ux-copy,.ux-copy-status").count(), 0, "Late clipboard completion does not reopen hidden text or restore external stale feedback");
+    await owner.locator(".reader-section-toggle").click();
     assert.equal(await prompt.locator(".full-text-content").textContent(), body);
     assert.equal(await page.evaluate(() => window.clipboardProof.reads), 0);
     assert.equal(contentReads(requests), reads, "Copy never requests source/evidence, metadata, response or report data");
@@ -609,12 +626,12 @@ test("unavailable and zero-action requests stay honest; partial/full prompt copi
         assert.equal(await prompt.locator("h2").getAttribute("data-prompt-actor"), actor);
         await page.getByText("No individual action details were retained.", { exact: true }).waitFor();
         if (!text || status === "unavailable") {
-            assert.equal(await prompt.locator(".full-text-toggle,.ux-copy,.full-text-content").count(), 0);
+            assert.equal(await section(page, "prompt").locator(".full-text-toggle,.ux-copy,.full-text-content").count(), 0);
             assert.match(await prompt.innerText(), /Prompt not available/);
             assert.doesNotMatch(await prompt.innerText(), /UNAVAILABLE_TEXT_MUST_NOT_BE_COPIED/);
         } else {
             const reads = contentReads(requests);
-            await prompt.getByRole("button", { name: "Copy prompt", exact: true }).click();
+            await section(page, "prompt").getByRole("button", { name: "Copy prompt", exact: true }).click();
             await page.waitForFunction(() => window.clipboardProof.writes.length === 1);
             assert.deepEqual(await page.evaluate(() => window.clipboardProof.writes), [text]);
             assert.equal(contentReads(requests), reads);
@@ -631,7 +648,7 @@ test("normal response reader opens retained text immediately with explicit Retry
     const responseText = "SYNTHETIC RESPONSE ONLY\r\n  exact response spaces  \n"
         + exact.replace("SYNTHETIC original prompt", "A retained response fragment") + "END OF RESPONSE";
     const { page, requests, responseState } = await setup(t, { responseText, responseMode: "pending" });
-    const host = page.locator(".interaction-response:visible");
+    const owner = section(page, "response"), host = owner.locator(".interaction-response");
     const evidenceReads = () => requests.filter(request => new URL(request.url).pathname === "/api/assessment/evidence").length;
     const read = host.getByRole("button", { name: "Read response", exact: true });
     await read.waitFor();
@@ -644,29 +661,33 @@ test("normal response reader opens retained text immediately with explicit Retry
     assert.equal(await host.locator(".error").getAttribute("role"), "alert");
     assert.match(await host.innerText(), /Synthetic retained-text read failed/);
     assert.equal(await host.locator(".ux-copy").count(), 0);
-    assert.equal(await read.isDisabled(), false);
+    const retry = host.getByRole("button", { name: "Retry response", exact: true });
+    assert.equal(await retry.isDisabled(), false);
     assert.equal(evidenceReads(), 1, "An eager-read failure is not automatically retried");
     await capture(page, "response-error", ".interaction-response");
     responseState.mode = "success";
-    await read.click();
-    const copy = host.getByRole("button", { name: "Copy response", exact: true });
+    await retry.click();
+    const copy = owner.getByRole("button", { name: "Copy response", exact: true });
     await copy.waitFor();
-    assert.equal(await host.getByRole("button", { name: "Hide response", exact: true }).evaluate(node => node === document.activeElement), true, "Reading response restores focus to its reader action");
+    await expect(host.locator(".full-text-content")).toBeFocused();
+    await expect(owner.getByRole("button", { name: "Hide response", exact: true })).toHaveCount(0);
     assert.equal((await copy.textContent()).trim(), "");
     assert.equal(await copy.getAttribute("aria-label"), "Copy response");
     assert.equal(await host.locator(".full-text-content").textContent(), responseText);
     assert.equal(await host.locator(".reader-details:visible").count(), 0, "Response qualifications and copy privacy stay visible without another disclosure");
-    assert.equal(await host.getByRole("heading").count(), 1, "The retained response has one heading, not a second nested title");
+    assert.equal(await owner.getByRole("heading").count(), 1, "One visible Response section heading orients the retained text");
     assert.match(await host.innerText(), /Final-answer status unverified/);
     const reads = evidenceReads();
     await copy.click();
     await page.waitForFunction(() => window.clipboardProof.writes.length === 1);
     assert.deepEqual(await page.evaluate(() => window.clipboardProof.writes), [responseText]);
-    await host.getByRole("button", { name: "Hide response", exact: true }).press("Enter");
-    assert.equal(await host.locator(".full-text-content,.ux-copy").count(), 0);
-    await host.getByRole("button", { name: "Read response", exact: true }).press("Space");
+    assert.equal(evidenceReads(), reads, "Copy does not request any evidence");
+    await owner.locator(".reader-section-toggle").press("Enter");
+    assert.equal(await owner.locator(".full-text-content,.ux-copy").count(), 0);
+    await owner.locator(".reader-section-toggle").press("Space");
+    await expect(host.locator(".full-text-content")).toHaveText(responseText);
     assert.equal(await host.locator(".full-text-content").textContent(), responseText);
-    assert.equal(evidenceReads(), reads, "Copy/Hide/reopen use only this authorized in-memory response");
+    assert.equal(evidenceReads(), reads + 1, "Reopening makes exactly one authorized already-retained evidence read, never a source/provider operation");
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), "Find the synthetic planning note.");
     for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 2 }]) {
         await page.locator("#closeContextSidebar").click();
@@ -698,15 +719,16 @@ test("an insight read error cannot leave the response section falsely busy", { t
 
 test("composed author helpers give truthful readable source and actor cues on the normal detail page", { timeout: 60000 }, async t => {
     const colors = {};
-    for (const [actor, label] of [["user", "Your prompt"], ["agent", "Agent prompt"], ["unknown", "Copilot chat prompt"]]) {
+    for (const [actor, label] of [["user", "My prompt"], ["agent", "Agent prompt"], ["unknown", "Author unverified"]]) {
         const { page } = await setup(t, { actor });
         const heading = page.locator(".request-original h2");
         assert.equal(await heading.textContent(), label);
-        assert.match(await page.locator(".reader-source").textContent(), /Chat:Synthetic planning chat/);
+        await expect(heading).toHaveAttribute("data-prompt-actor", actor);
+        await expect(page.locator(".reader-source dt")).toHaveText("Copilot Chat");
+        await expect(page.locator(".reader-source dd")).toHaveText("Synthetic planning chat");
+        if (actor === "unknown") await expect(page.locator(".request-original").getByText("This older record has no sender details", { exact: true })).toHaveCount(1);
         for (const theme of ["light", "dark"]) for (const { width, scale } of [{ width: 1200, scale: 1 }, { width: 375, scale: 2 }]) {
-            await page.setViewportSize({ width, height: 1000 });
-            await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
-            await chooseTheme(page, theme);
+            await readerTheme(page, theme, width, scale);
             const paint = await heading.evaluate(node => {
                 let background = node;
                 while (background.parentElement && ["rgba(0, 0, 0, 0)", "transparent"].includes(getComputedStyle(background).backgroundColor)) background = background.parentElement;
@@ -717,18 +739,17 @@ test("composed author helpers give truthful readable source and actor cues on th
             assert.equal(paint.clipped, false);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
             colors[theme] ??= {};
-            colors[theme][actor] = paint.color;
+            colors[theme][actor] = { color: paint.color, label: await heading.textContent() };
             await capture(page, `author-${actor}-${theme}-${width}-${scale}`);
         }
     }
-    for (const [theme, values] of Object.entries(colors)) assert.equal(new Set(Object.values(values)).size, 3, `${theme}: user, agent and unknown cues stay distinct`);
+    for (const [theme, values] of Object.entries(colors)) assert.equal(new Set(Object.values(values).map(value => value.label)).size, 3, `${theme}: explicit role words distinguish user, agent and unknown without inventing color meaning`);
     const { page } = await setup(t, { chatOrigin: false });
-    assert.equal(await page.locator(".request-original h2").textContent(), "Prompt");
-    await page.locator(".request-support>details>summary").click();
+    assert.equal(await page.locator(".request-original h2").textContent(), "Author unverified");
     assert.match(await page.locator(".request-support").innerText(), /No project associated/);
 });
 
-test("canonical host-envelope normalization reaches Your prompt without copying wrapper metadata", { timeout: 30000 }, async t => {
+test("canonical host-envelope normalization reaches My prompt without copying wrapper metadata", { timeout: 30000 }, async t => {
     const body = "COPIED_BODY_ONLY\r\nCheck the synthetic MCP guide.\n";
     const timestamp = "2026-09-30T12:00:00.000Z";
     const sourceEvent = {
@@ -739,8 +760,9 @@ test("canonical host-envelope normalization reaches Your prompt without copying 
     const { page, record, requests } = await setup(t, { sourceEvent });
     assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
     assert.equal(record.userPrompt.authorshipVersion, promptAuthorship.version);
-    assert.equal(await page.locator(".request-original h2").textContent(), "Your prompt");
-    assert.match(await page.locator(".reader-source").textContent(), /Chat:Synthetic coordinator chat/);
+    assert.equal(await page.locator(".request-original h2").textContent(), "My prompt");
+    await expect(page.locator(".reader-source dt")).toHaveText("Copilot Chat");
+    await expect(page.locator(".reader-source dd")).toHaveText("Synthetic coordinator chat");
     assert.equal(await page.locator(".request-original .reader-state").count(), 0, "Supported host metadata does not retain an unverified-author warning");
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), body);
     const reads = contentReads(requests);

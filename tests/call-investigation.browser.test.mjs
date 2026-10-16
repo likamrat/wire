@@ -131,18 +131,19 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     assert.equal(requests.filter(req => req.path === "/api/snapshot").length, beforeReads);
     await expect(page.locator(".request-context-timeline [data-context-kind=action]")).toHaveCount(20);
     await expect(page.locator(".request-context-timeline")).toContainText(records[0].userPrompt.text);
-    await expect(page.locator(".request-context-timeline")).toContainText(records[1].userPrompt.text.trim());
+    await expect(page.locator('[data-reader-section="prompt"]')).toContainText(records[1].userPrompt.text.trim());
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /UNRELATED_CALL_CONTEXT/);
-    await expect(page.locator("#selectedCall .call-heading")).toContainText("0.9 s");
-    await expect(page.locator("#selectedCall .call-heading data")).toHaveAttribute("value", "900");
+    const timing = page.locator(".reader-timing-table tr").filter({ has: page.locator('data[value="900"]') });
+    await expect(timing).toHaveAttribute("data-action-id", target.id);
+    await expect(timing).toContainText("0.9 s");
     await expect(page.locator("#selectedCall>.action-context")).toHaveCount(0);
     await expect(page.locator("#selectedCall .call-heading [data-result-layer=tool]")).toHaveAttribute("aria-label", "Tool completion: 1 Work IQ tool call");
     await expect(page.locator(".request-context-summaries .request-recorded")).toHaveCount(2);
     assert.deepEqual(await page.locator(".request-context-summaries .request-recorded").evaluateAll(nodes =>
         nodes.map(node => node.dataset.contextGroup)), records.slice(0, 2).map(record => record.scenarioId));
     await capture(page, "exact-call-context-light");
-    await page.locator("#selectedCall").getByText("Technical details", { exact: true }).click();
-    await expect(page.locator("#selectedCall .technical-detail .ux-code-label").first()).toHaveText("Tool input (recorded)");
+    await expect(page.locator("#selectedCall .technical-detail")).toBeVisible();
+    await expect(page.locator("#selectedCall .reader-input-label")).toHaveText("Target paths");
     await expect(page.locator("#selectedCall .technical-detail details")).toHaveCount(0);
     await page.locator("#selectedCall").getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.callClipboard), [JSON.stringify(records[1].toolCalls[9].requestArgs, null, 2)]);
@@ -163,7 +164,7 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     await row(page, failed.id).locator(".request-link").click(); await ready(page);
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-tool-call-id", "investigate-08");
     await expect(page.locator("#requestContent")).toContainText("Outside current view");
-    await expect(page.locator("#requestContent")).toContainText("Completion is not correctness");
+    await expect(page.locator("#requestContent")).toContainText("Tool outcomes do not establish answer correctness");
     await page.goBack(); await ready(page);
     await expect(page.locator("#outcomeFilter")).toHaveValues(["failure"]);
     assert.doesNotMatch(page.url(), /synthetic.documents/);
@@ -191,8 +192,9 @@ test("selected API result beyond the first details page opens its exact retained
     await expect(page.locator('[data-selected-action="true"]')).toHaveAttribute("data-tool-call-id", "investigate-09");
     await expect(page.locator("#selectedCall")).toContainText("1 Error result");
     await capture(page, "exact-api-entry-context");
-    await page.getByText("Other returned API results", { exact: true }).click();
     const others = page.locator(".selected-api-result .returned-api-entries");
+    await expect(others).toBeVisible();
+    await expect(page.locator(".selected-api-result details")).toHaveCount(0);
     await expect(others.locator(".api-result-entry")).toHaveCount(6);
     await others.getByRole("button", { name: "Next returned results", exact: true }).click();
     await expect(others.locator(".api-result-entry")).toHaveCount(2);
@@ -229,7 +231,7 @@ test("selected API result beyond the first details page opens its exact retained
     await expect.poll(() => app.snapshot()?.analytics.layer).toBe("tool");
     const parent = app.snapshot().analytics.rows.find(row => row.id === api.parentCallId);
     await expect(row(page, parent.id).locator(".activity-card-facts dt")).toContainText(["Activity category"]);
-    await expect(row(page, parent.id).locator(".action-service")).toHaveText("More than one service");
+    await expect(row(page, parent.id).locator(".action-service .service-cue")).toHaveText(["Mail", "Files"]);
 });
 
 test("Graph, code references and transport retain distinct units; native links and narrow 200% controls work", { timeout: 45000 }, async t => {
@@ -372,6 +374,7 @@ test("Graph, code references and transport retain distinct units; native links a
 test("a removed call never navigates to another action or initiates a source read", { timeout: 20000 }, async t => {
     const app = await setup(t), { page, runtime, records, context } = app;
     await page.goto(runtime.url + "#analyze?mode=calls"); await ready(page);
+    await expect.poll(() => app.snapshot()?.analytics.layer).toBe("tool");
     const target = app.snapshot().analytics.rows.find(row => row.toolCallId === "investigate-09");
     const href = await row(page, target.id).locator(".request-link").getAttribute("href");
     await row(page, target.id).locator(".request-link").click(); await ready(page);

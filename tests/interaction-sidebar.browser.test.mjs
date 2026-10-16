@@ -8,10 +8,34 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain, navigateSettings, restoreLegacySearch } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
+import { reportContents } from "./report-journey-helpers.mjs";
+import { openPersonalFeedback } from "./assessment-ui-fixtures.mjs";
 
 const proof = process.env.WIRE_SIDEBAR_PROOFS;
 
-async function setup(t, { savedReport = false, touch = false, beforeNavigate } = {}) {
+function sidebarGeometryCurrent() {
+    const root = document.documentElement, narrow = matchMedia("(max-width:699px)").matches;
+    return Boolean(document.querySelector("#navigationContent").closest(narrow ? "#navigationDrawer" : "#sidebar"))
+        && Boolean(document.querySelector("#shellBrand").closest(narrow ? "#navigationDrawer" : ".app-header"))
+        && document.querySelector("#navigationToggle").hidden === !narrow
+        && parseFloat(root.style.getPropertyValue("--app-header-height")) === Math.ceil(document.querySelector(".app-header").getBoundingClientRect().height)
+        && (narrow || parseFloat(root.style.getPropertyValue("--app-sidebar-width")) === document.querySelector("#sidebar").getBoundingClientRect().width);
+}
+
+function sidebarMotionSettled({ selector, pause = false }) {
+    const surface = document.querySelector(selector);
+    const owners = selector === "#sidebar" ? [surface, document.querySelector("#shellBrand")] : [surface];
+    // Sidebar controllers create WAAPI animations; control CSS feedback has a separate lifetime.
+    const animations = owners.flatMap(node => node.getAnimations({ subtree: selector === "#sidebar" }))
+        .filter(animation => animation.constructor === Animation);
+    if (pause) {
+        if (!animations.some(animation => animation.effect.target === surface)) throw new Error("The preference change must interrupt actual sidebar motion");
+        for (const animation of animations) animation.pause();
+    }
+    return animations.length === 0;
+}
+
+async function setup(t, { savedReport = false, touch = false, beforeNavigate, motion = "reduce", sidebarMotion, browserOptions = {} } = {}) {
     const records = Array.from({ length: 18 }, (_, index) => {
         const record = fixture(`sidebar-${index}`);
         record.sourceSessionName = `Invented planning chat ${index}`;
@@ -32,8 +56,9 @@ async function setup(t, { savedReport = false, touch = false, beforeNavigate } =
         await reports.confirm("synthetic-sidebar-report", preview.previewId, true);
     }
     const runtime = await startServer(context, reports, { port: 0, collector: { timers: false } });
-    const browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: touch ? 375 : 1440, height: 1000 }, hasTouch: touch, reducedMotion: "reduce" });
+    const browser = await chromium.launch(browserOptions);
+    const browserContext = await browser.newContext({ viewport: { width: touch ? 375 : 1440, height: 1000 }, hasTouch: touch, reducedMotion: motion });
+    const page = await browserContext.newPage();
     const errors = [], requests = [];
     page.setDefaultTimeout(8000);
     page.on("pageerror", error => errors.push(error.message));
@@ -56,12 +81,538 @@ async function setup(t, { savedReport = false, touch = false, beforeNavigate } =
         assert.deepEqual(errors, []);
         assert.ok(requests.every(url => url.origin === new URL(runtime.url).origin), "No off-device requests");
     });
+    if (sidebarMotion) await page.addInitScript(value => localStorage.setItem("workiq-evidence.sidebar-motion", value), sidebarMotion);
     await beforeNavigate?.(page);
     await page.goto(runtime.url);
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
     return { page, runtime, records, requests, context, errors };
 }
+
+test("WIRE On glides both sidebars under native reduced motion without changing the host policy", async t => {
+    const { page } = await setup(t, { motion: null,
+        browserOptions: { channel: process.platform === "win32" ? "msedge" : undefined },
+        beforeNavigate: page => page.addInitScript(() => localStorage.setItem("workiq-evidence.sidebar-motion", "on")),
+    });
+    const nativeReduced = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+    await page.locator("#resultsLink").click();
+    const frames = await page.evaluate(async () => {
+        const rail = document.querySelector("#sidebar"), panel = document.querySelector("#contextSidebar"), trace = [];
+        const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+        async function sample(phase, node, expectedOpen) {
+            for (let i = 0; i < 120; i++) {
+                await frame();
+                trace.push({ phase, open: panel.open, width: rail.getBoundingClientRect().width,
+                    x: panel.getBoundingClientRect().x, transform: getComputedStyle(panel).transform });
+                if (i > 2 && !node.getAnimations({ subtree: true }).length
+                    && (expectedOpen === undefined || panel.open === expectedOpen)) return;
+            }
+            throw new Error(`${phase} did not settle`);
+        }
+        for (const phase of ["collapse", "expand"]) {
+            document.querySelector("#navigationCollapse").click(); await sample(phase, rail);
+        }
+        document.querySelector(".request-card-open").click(); await sample("open", panel, true);
+        document.querySelector("#closeContextSidebar").click(); await sample("close", panel, false);
+        return trace;
+    });
+    for (const phase of ["collapse", "expand", "open", "close"]) {
+        const rail = ["collapse", "expand"].includes(phase);
+        const positions = new Set(frames.filter(frame => frame.phase === phase && (rail || frame.open))
+            .map(frame => Math.round(rail ? frame.width : frame.x))).size;
+        t.diagnostic(JSON.stringify({ phase, nativeReduced, positions }));
+        assert.ok(positions >= 3, `${phase}: WIRE On must paint at least 3 distinct positions, including when the host requests reduce`);
+    }
+    assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), nativeReduced);
+});
+
+test("Display sidebar motion persists and controls every sidebar role, drawer and interrupted owner", { timeout: 45000 }, async t => {
+    const { page, runtime, requests, context } = await setup(t, { savedReport: true, motion: null,
+        browserOptions: { channel: process.platform === "win32" ? "msedge" : undefined },
+    });
+    const beforeState = await loadBoardState(context);
+    const nativeReduced = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+    await navigateMain(page, "settings"); await navigateSettings(page, "display");
+    await expect(page.locator("#sidebarMotionPreference")).toHaveValue("system");
+    await selectActivityOption(page, "sidebarMotionPreference", "on");
+    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.sidebar-motion")), "on");
+    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#cancelPreferences")).toBeDisabled();
+    await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await expect(page.locator("#sidebarMotionPreference")).toHaveValue("on");
+    const evidence = [];
+    async function trace(selector, action, expectedOpen) {
+        await page.evaluate(selector => {
+            const node = document.querySelector(selector);
+            window.preferenceMotion = { running: true, frames: [] };
+            const state = window.preferenceMotion;
+            function sample() {
+                const rect = node.getBoundingClientRect();
+                state.frames.push({ x: rect.x, width: rect.width, open: node.open,
+                    moving: node.getAnimations().length > 0,
+                    transform: getComputedStyle(node).transform, opacity: getComputedStyle(node).opacity });
+                if (state.running) requestAnimationFrame(sample);
+            }
+            requestAnimationFrame(sample);
+        }, selector);
+        await action();
+        if (expectedOpen !== undefined) await expect(page.locator(selector)).toHaveJSProperty("open", expectedOpen);
+        await page.waitForFunction(selector => !document.querySelector(selector).getAnimations().length, selector);
+        return page.evaluate(() => { window.preferenceMotion.running = false; return window.preferenceMotion.frames; });
+    }
+    async function glide(selector, action, expectedOpen, label) {
+        const frames = await trace(selector, action, expectedOpen);
+        const positions = new Set(frames.filter(frame => frame.moving).map(frame => Math.round(selector === "#sidebar" ? frame.width : frame.x))).size;
+        evidence.push({ label, nativeReduced, positions, frames });
+        assert.ok(positions >= 3, `${label}: at least 3 painted intermediate positions`);
+        assert.ok(frames.filter(frame => frame.moving).every(frame => frame.width > 0 && frame.opacity === "1"), "The moving surface stays painted");
+        t.diagnostic(JSON.stringify({ label, nativeReduced, positions }));
+    }
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        await navigateMain(page, "analyze");
+        for (const direction of ["collapse", "expand"]) await glide("#sidebar",
+            () => page.locator("#navigationCollapse").click(), undefined, `${theme}/left/${direction}`);
+        const link = page.locator(".request-card-open").first();
+        await link.scrollIntoViewIfNeeded();
+        const before = await link.boundingBox(), width = await page.locator("#main").evaluate(node => node.clientWidth);
+        await glide("#contextSidebar", () => link.click(), true, `${theme}/interaction/open`);
+        assert.ok(Math.abs((await link.boundingBox()).y - before.y) < 3, "Entrance retains its current card anchor");
+        assert.ok(await page.locator("#main").evaluate(node => node.clientWidth) < width - 250);
+        await page.locator(".request-card-open").nth(1).click();
+        assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length), 0, "Replacement does not replay entrance");
+        await link.click();
+        // Clicking an off-screen replacement can scroll; Close must keep that newer reading position.
+        const returnAnchor = await link.boundingBox();
+        await glide("#contextSidebar", () => page.locator("#closeContextSidebar").click(), false, `${theme}/interaction/close`);
+        await expect(link).toBeFocused();
+        assert.ok(Math.abs((await link.boundingBox()).y - returnAnchor.y) < 3, "Exit retains the latest card anchor");
+        await navigateMain(page, "reports");
+        await glide("#contextSidebar", () => page.locator(".saved-report-summary").first().click(), true, `${theme}/saved/open`);
+        await glide("#contextSidebar", () => page.locator("#closeContextSidebar").click(), false, `${theme}/saved/close`);
+        await page.locator("#reportCreateLink").click();
+        await page.locator("#reportList input").first().check();
+        await glide("#contextSidebar", () => reportContents(page), true, `${theme}/setup/open`);
+        await expect(page.locator("#contextSidebarFooter #exportBtn")).toBeVisible();
+        await glide("#contextSidebar", () => page.locator("#closeContextSidebar").click(), false, `${theme}/setup/close`);
+        await navigateMain(page, "analyze");
+        await page.setViewportSize({ width: 375, height: 900 });
+        await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+        await glide("#navigationDrawer", () => page.locator("#navigationToggle").click(), true, `${theme}/drawer/open`);
+        assert.ok((await page.locator("#closeNavigation").boundingBox()).height >= 44);
+        await glide("#navigationDrawer", () => page.keyboard.press("Escape"), false, `${theme}/drawer/close`);
+        await expect(page.locator("#navigationToggle")).toBeFocused();
+        await page.evaluate(() => document.documentElement.style.fontSize = "");
+        await page.setViewportSize({ width: 1440, height: 1000 });
+    }
+    const settings = await page.context().newPage();
+    await settings.goto(runtime.url + "#settings?section=display&setting=sidebar-motion");
+    await settings.locator('#workspace[aria-busy="false"]').waitFor();
+    await expect(settings.locator("#sidebarMotionPreference")).toHaveValue("on");
+    for (const selector of ["#sidebar", "#contextSidebar", "#navigationDrawer"]) {
+        if (selector === "#sidebar") await page.locator("#navigationCollapse").click();
+        else if (selector === "#contextSidebar") {
+            await page.locator(".request-card-open").first().click();
+            await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
+            await page.locator("#closeContextSidebar").click();
+        } else {
+            await page.setViewportSize({ width: 375, height: 900 });
+            await page.locator("#navigationToggle").click();
+        }
+        await page.evaluate(sidebarMotionSettled, { selector, pause: true });
+        await selectActivityOption(settings, "sidebarMotionPreference", "off");
+        await page.waitForFunction(sidebarMotionSettled, { selector });
+        await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
+        if (selector === "#contextSidebar") await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
+        if (selector === "#navigationDrawer") {
+            await page.keyboard.press("Escape");
+            await expect(page.locator("#navigationDrawer")).not.toHaveAttribute("open", "");
+            await page.setViewportSize({ width: 1440, height: 1000 });
+        }
+        await selectActivityOption(settings, "sidebarMotionPreference", "on");
+        await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "on");
+    }
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.locator(".request-card-open").first().click();
+    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+    await selectActivityOption(settings, "sidebarMotionPreference", "system");
+    await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
+    await expect(page.locator("#contextSidebar")).toHaveJSProperty("open", true);
+    await expect(settings.locator("#sidebarMotionPreference-control")).toBeFocused();
+    await page.locator("#closeContextSidebar").click();
+    await selectActivityOption(settings, "sidebarMotionPreference", "off");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
+    for (const [selector, action, open] of [
+        ["#sidebar", () => page.locator("#navigationCollapse").click(), undefined],
+        ["#contextSidebar", () => page.locator(".request-card-open").first().click(), true],
+        ["#contextSidebar", () => page.locator("#closeContextSidebar").click(), false],
+    ]) assert.equal((await trace(selector, action, open)).some(frame => frame.moving), false, "WIRE Off wins even when the host allows motion");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await selectActivityOption(settings, "sidebarMotionPreference", "system");
+    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
+    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.sidebar-motion")), null);
+    await page.locator("#navigationCollapse").click();
+    assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
+    await page.locator(".request-card-open").first().click();
+    assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length), 0);
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
+    await page.setViewportSize({ width: 375, height: 900 });
+    await page.locator("#navigationToggle").click();
+    assert.equal(await page.locator("#navigationDrawer").evaluate(node => node.getAnimations().length), 0);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#navigationDrawer")).not.toHaveAttribute("open", "");
+    assert.equal(requests.some(url => /\/api\/(?:preview|export|privacy-review|assessment\/feedback|collection\/configure|evaluation\/run)$/.test(url.pathname)), false);
+    assert.deepEqual(await loadBoardState(context), beforeState, "Motion choices and inspection never change persisted evidence or authority");
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        await writeFile(path.join(proof, "sidebar-preference-frames.json"), JSON.stringify(evidence, null, 2));
+        await settings.setViewportSize({ width: 375, height: 900 });
+        await settings.evaluate(() => document.documentElement.style.fontSize = "200%");
+        await settings.screenshot({ path: path.join(proof, "sidebar-motion-display.png"), fullPage: true });
+    }
+});
+
+for (const motion of ["no-preference", "reduce"]) test(`sidebar interruption settles its owned motion without canceling control feedback (${motion})`, async t => {
+    const { page, runtime } = await setup(t, { motion, sidebarMotion: "on" });
+    const settings = await page.context().newPage();
+    await settings.goto(runtime.url + "#settings?section=display&setting=sidebar-motion");
+    await settings.locator('#workspace[aria-busy="false"]').waitFor();
+    const width = await page.locator("#sidebar").evaluate(node => node.getBoundingClientRect().width);
+    await page.locator("#navigationCollapse").evaluate(node => node.addEventListener("click", () => {
+        window.sidebarControlFeedback = node.getAnimations().filter(animation => animation instanceof CSSTransition);
+        window.sidebarFeedbackStarted = window.sidebarControlFeedback.map(animation => ({
+            property: animation.transitionProperty, state: animation.playState }));
+        // Hold one real transition as an ownership sentinel; the others must keep playing.
+        window.sidebarControlFeedback[0]?.pause();
+    }, { once: true }));
+    await page.locator("#navigationCollapse").click();
+    await page.evaluate(sidebarMotionSettled, { selector: "#sidebar", pause: true });
+    const feedback = await page.evaluate(() => window.sidebarFeedbackStarted);
+    assert.ok(feedback.every(animation => animation.state !== "paused"), "Real control feedback starts unpaused");
+    if (motion === "no-preference") assert.ok(feedback.length > 0, "Exercise real CSS feedback, not a newly manufactured animation");
+    else assert.deepEqual(feedback, []);
+    assert.ok(await page.evaluate(() => window.sidebarControlFeedback.slice(1).every(animation => animation.playState !== "paused")),
+        "Pausing owned motion leaves the other feedback transitions running or naturally finished");
+    await selectActivityOption(settings, "sidebarMotionPreference", "off");
+    await page.waitForFunction(sidebarMotionSettled, { selector: "#sidebar" });
+    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
+    await expect(page.locator("#sidebar")).not.toHaveAttribute("data-navigation-moving", "");
+    await expect(page.locator("#navigationCollapse")).toHaveAttribute("aria-expanded", "false");
+    const remaining = await page.evaluate(() => {
+        const rail = document.querySelector("#sidebar").getBoundingClientRect();
+        return { width: rail.width, mainX: document.querySelector("#main").getBoundingClientRect().x,
+            feedback: window.sidebarControlFeedback.map(animation => ({ property: animation.transitionProperty, state: animation.playState })) };
+    });
+    assert.ok(remaining.width < width - 100, "Off settles the requested collapsed state");
+    assert.ok(Math.abs(remaining.mainX - remaining.width) < 1.1, "The actual main column follows the settled rail");
+    if (remaining.feedback.length) assert.equal(remaining.feedback[0].state, "paused", "Sidebar settlement cannot cancel unrelated feedback");
+    assert.ok(remaining.feedback.slice(1).every(animation => animation.state !== "paused"));
+    t.diagnostic(JSON.stringify({ motion, feedback, remaining }));
+    await page.evaluate(async () => {
+        const sentinel = window.sidebarControlFeedback[0];
+        if (sentinel) { sentinel.play(); await sentinel.finished; }
+    });
+});
+
+test("Display sidebar motion reports storage denial without pretending the choice persisted", async t => {
+    const { page } = await setup(t, { beforeNavigate: page => page.addInitScript(() => {
+        const save = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === "workiq-evidence.sidebar-motion") throw new DOMException("Synthetic storage denial", "SecurityError");
+            return save.call(this, key, value);
+        };
+    }) });
+    await navigateMain(page, "settings"); await navigateSettings(page, "display");
+    await selectActivityOption(page, "sidebarMotionPreference", "on");
+    await expect(page.locator("#sidebarMotionNotice")).toContainText("panel only until reload");
+    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "on");
+    await page.setViewportSize({ width: 375, height: 900 });
+    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+    const control = page.getByRole("combobox", { name: "Sidebar motion", exact: true });
+    await expect(control).toHaveText("On");
+    const box = await control.boundingBox();
+    assert.ok(box.width >= 44 && box.height >= 44);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await expect(page.locator("#sidebarMotionPreference")).toHaveValue("system");
+    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
+});
+
+for (const replace of [false, true]) test(`sidebar close preserves the current anchor ${replace ? "after an off-screen replacement scroll" : "without a replacement scroll"}`, async t => {
+    const { page } = await setup(t, { sidebarMotion: "on" });
+    const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
+    await a.evaluate(node => {
+        const box = node.getBoundingClientRect();
+        window.scrollBy(0, box.bottom - innerHeight);
+    });
+    const before = await a.boundingBox();
+    await a.click();
+    await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
+    const opened = await a.boundingBox(), beforeReplaceScroll = await page.evaluate(() => scrollY);
+    assert.ok(Math.abs(opened.y - before.y) < 3, "Opening preserves the entry anchor");
+    if (replace) await b.click();
+    await a.click();
+    const beforeClose = await a.boundingBox(), afterReplaceScroll = await page.evaluate(() => scrollY);
+    assert.ok(Math.abs(opened.y - beforeClose.y - (afterReplaceScroll - beforeReplaceScroll)) < 3,
+        "Any moved card position comes from the actual replacement scroll, not sidebar drift");
+    if (replace) assert.ok(afterReplaceScroll > beforeReplaceScroll + 100, "The off-screen action exercises newer reading intent");
+    else assert.equal(afterReplaceScroll, beforeReplaceScroll);
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
+    const closed = await a.boundingBox();
+    t.diagnostic(JSON.stringify({ replace, beforeY: before.y, openedY: opened.y,
+        beforeCloseY: beforeClose.y, closedY: closed.y, beforeReplaceScroll, afterReplaceScroll }));
+    assert.ok(Math.abs(closed.y - beforeClose.y) < 3, "Closing preserves the latest pre-exit anchor");
+    if (replace) assert.ok(Math.abs(closed.y - before.y) > 100, "Close must not restore the stale pre-scroll anchor");
+    else assert.ok(Math.abs(closed.y - before.y) < 3, "Without new reading intent the original anchor is retained");
+    await expect(a).toBeFocused();
+});
+
+test("sidebar geometry waits for actual header publication before its baseline", async t => {
+    const { page } = await setup(t, { beforeNavigate: page => page.addInitScript(() => {
+        const NativeResizeObserver = ResizeObserver;
+        window.headerSizeGate = { held: false, pending: [] };
+        window.ResizeObserver = class extends NativeResizeObserver {
+            constructor(callback) {
+                super((entries, observer) => {
+                    if (window.headerSizeGate.held && entries.some(entry => entry.target.matches(".app-header,#sidebar"))) {
+                        window.headerSizeGate.pending.push(() => callback(entries, observer));
+                    } else callback(entries, observer);
+                });
+            }
+        };
+    }) });
+    await chooseTheme(page, "dark");
+    await page.waitForFunction(sidebarGeometryCurrent);
+    await page.evaluate(() => {
+        window.headerSizeGate.held = true;
+        document.documentElement.style.fontSize = "200%";
+    });
+    await page.waitForFunction(() => window.headerSizeGate.pending.length > 0);
+    const sample = () => page.evaluate(() => ({
+        published: document.documentElement.style.getPropertyValue("--app-header-height"),
+        actual: Math.ceil(document.querySelector(".app-header").getBoundingClientRect().height),
+        control: document.querySelector("#navigationCollapse").getBoundingClientRect().toJSON(),
+        hovered: document.querySelector("#navigationCollapse").matches(":hover"),
+    }));
+    const unpublished = await sample();
+    assert.notEqual(parseFloat(unpublished.published), unpublished.actual, "The real producer has not yet published the enlarged header");
+    assert.equal(await page.evaluate(sidebarGeometryCurrent), false, "The baseline readiness signal must reject unpublished geometry");
+    assert.equal(unpublished.hovered, false);
+    await page.evaluate(() => {
+        window.headerSizeGate.held = false;
+        for (const deliver of window.headerSizeGate.pending.splice(0)) deliver();
+    });
+    await page.waitForFunction(sidebarGeometryCurrent);
+    const before = await sample();
+    assert.equal(parseFloat(before.published), before.actual);
+    assert.equal(before.hovered, false);
+    assert.equal(before.control.y - unpublished.control.y, before.actual - parseFloat(unpublished.published),
+        "The observed movement comes from header publication, without hover");
+    assert.notDeepEqual(before.control, unpublished.control);
+    await page.locator("#navigationCollapse").hover();
+    const hovered = await sample();
+    assert.deepEqual(hovered.control, before.control, "Hover preserves the complete current rectangle, including position");
+    await page.locator("#navigationCollapse").focus(); await page.keyboard.press("Shift");
+    const focused = await sample();
+    assert.deepEqual(focused.control, before.control, "Focus preserves the complete current rectangle, including position");
+    t.diagnostic(JSON.stringify({ unpublished, before, hovered, focused }));
+});
+
+test("sidebar command icons keep separate glyph, target and text geometry across all roles", { timeout: 45000 }, async t => {
+    const { page } = await setup(t, { savedReport: true });
+    const directory = process.env.WIRE_SIDEBAR_ICON_PROOFS, evidence = [];
+    await page.evaluate(() => {
+        window.sidebarCommandClicks = {};
+        for (const id of ["navigationCollapse", "navigationToggle", "closeNavigation", "closeContextSidebar"]) {
+            document.getElementById(id).addEventListener("click", event => {
+                if (event.isTrusted) window.sidebarCommandClicks[id] = (window.sidebarCommandClicks[id] || 0) + 1;
+            });
+        }
+    });
+    async function control(selector, label, navigation = false) {
+        const node = page.locator(selector);
+        const before = await node.boundingBox();
+        await node.hover();
+        assert.deepEqual(await node.boundingBox(), before, `${label}: hover cannot change command geometry`);
+        await node.focus(); await page.keyboard.press("Shift");
+        const metrics = await node.evaluate(node => {
+            const rect = node.getBoundingClientRect(), svg = node.querySelector("svg"), box = svg.getBoundingClientRect();
+            const style = getComputedStyle(node), svgStyle = getComputedStyle(svg), path = svg.getBBox(), matrix = svg.getScreenCTM();
+            const point = (x, y) => new DOMPoint(x, y).matrixTransform(matrix);
+            const start = point(path.x, path.y), end = point(path.x + path.width, path.y + path.height);
+            const contains = target => target === node || node.contains(target);
+            const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+            const clips = [];
+            for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+                const css = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+                if (/(auto|scroll|hidden|clip)/.test(css.overflowX)) clips.push(rect.left - ring >= bounds.left && rect.right + ring <= bounds.right);
+                if (/(auto|scroll|hidden|clip)/.test(css.overflowY)) clips.push(rect.top - ring >= bounds.top && rect.bottom + ring <= bounds.bottom);
+            }
+            return { target: rect.toJSON(), svg: box.toJSON(),
+                iconOnly: node.matches(".icon-only,.navigation-collapse,#closeContextSidebar"),
+                glyphPath: { x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y, strokeWidth: svgStyle.strokeWidth },
+                padding: style.padding, lineHeight: style.lineHeight, name: node.getAttribute("aria-label") || node.textContent.trim(),
+                focus: node.matches(":focus-visible"), outline: style.outlineStyle, outlineWidth: parseFloat(style.outlineWidth), focusUnclipped: clips.every(Boolean),
+                edgeHits: [[rect.left + 1, rect.top + rect.height / 2], [rect.right - 1, rect.top + rect.height / 2],
+                    [rect.left + rect.width / 2, rect.top + 1], [rect.left + rect.width / 2, rect.bottom - 1]].every(([x, y]) => contains(document.elementFromPoint(x, y))),
+                outsideHits: [[rect.left - 1, rect.top + rect.height / 2], [rect.right + 1, rect.top + rect.height / 2]]
+                    .filter(([x]) => x >= 0 && x < innerWidth).some(([x, y]) => contains(document.elementFromPoint(x, y))),
+            };
+        });
+        assert.deepEqual(metrics.target, { ...metrics.target, ...before }, `${label}: focus cannot change geometry`);
+        assert.ok(metrics.target.width >= 44 && metrics.target.height >= 44, `${label}: 44px target`);
+        if (metrics.iconOnly) assert.equal(metrics.target.height, 44, `${label}: textless utilities do not inherit a text-line minimum`);
+        assert.ok(metrics.svg.x >= metrics.target.x && metrics.svg.right <= metrics.target.right
+            && metrics.svg.y >= metrics.target.y && metrics.svg.bottom <= metrics.target.bottom, `${label}: display box stays inside its target`);
+        if (navigation) { assert.equal(metrics.svg.width, 24); assert.equal(metrics.svg.height, 24); }
+        assert.ok(metrics.name && metrics.focus && metrics.outline !== "none" && metrics.outlineWidth >= 2 && metrics.focusUnclipped,
+            `${label}: named keyboard control with unclipped focus`);
+        assert.ok(metrics.edgeHits && !metrics.outsideHits, `${label}: the target owns its edges, not its neighbors`);
+        evidence.push({ label, ...metrics });
+        return metrics;
+    }
+    async function edgeClick(id) {
+        const before = await page.evaluate(id => window.sidebarCommandClicks[id] || 0, id);
+        const box = await page.locator("#" + id).boundingBox();
+        await page.mouse.click(box.x + 1, box.y + box.height / 2);
+        assert.equal(await page.evaluate(id => window.sidebarCommandClicks[id], id), before + 1, `${id}: one edge activation`);
+    }
+    async function navigation(label) {
+        const rows = page.locator(".primary-navigation a");
+        const before = await rows.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
+        for (const destination of ["analyze", "reports", "settings"]) await control(`.primary-navigation [data-nav="${destination}"]`, `${label}/${destination}`, true);
+        assert.deepEqual(await rows.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON())), before,
+            `${label}: focusing one row cannot move its neighbors`);
+        const metrics = await page.locator(".primary-navigation").evaluate(nav => [...nav.querySelectorAll("a")].map(node => {
+            const label = node.querySelector(".navigation-label"), range = document.createRange();
+            range.selectNodeContents(label);
+            return { target: node.getBoundingClientRect().toJSON(), label: range.getBoundingClientRect().toJSON(),
+                labelOpacity: getComputedStyle(label).opacity, gap: getComputedStyle(node).columnGap, lineHeight: getComputedStyle(node).lineHeight };
+        }));
+        evidence.push({ label, rows: metrics });
+    }
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [1440, 200], [375, 100], [375, 200]]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, scale);
+        await chooseTheme(page, theme);
+        await page.waitForFunction(sidebarGeometryCurrent);
+        const label = `${theme}/${width}/${scale}`;
+        if (width >= 700) {
+            for (const state of ["expanded", "collapsed"]) {
+                if (await page.locator("html").getAttribute("data-navigation") !== state) await edgeClick("navigationCollapse");
+                await control("#navigationCollapse", `${label}/${state}/toggle`, true);
+                await navigation(`${label}/${state}`);
+                const gap = await page.evaluate(() => document.querySelector(".primary-navigation").getBoundingClientRect().top
+                    - document.querySelector("#navigationCollapse").getBoundingClientRect().bottom);
+                assert.equal(gap, 12, "The collapse toolbar keeps its deliberate 12px separation");
+            }
+            await edgeClick("navigationCollapse");
+        } else {
+            await control("#navigationToggle", `${label}/drawer-trigger`);
+            await edgeClick("navigationToggle");
+            await control("#closeNavigation", `${label}/drawer-close`);
+            await navigation(`${label}/drawer`);
+            const heading = await page.locator(".drawer-heading").evaluate(node => {
+                const range = document.createRange(); range.selectNodeContents(node.querySelector("h2"));
+                return { bounds: node.getBoundingClientRect().toJSON(), title: range.getBoundingClientRect().toJSON(),
+                    close: node.querySelector("button").getBoundingClientRect().toJSON(), gap: getComputedStyle(node).gap };
+            });
+            assert.ok(heading.title.x >= heading.bounds.x && heading.title.right <= heading.bounds.right, "Drawer heading remains intact");
+            assert.ok(heading.title.right <= heading.close.x || heading.title.bottom <= heading.close.y, "Wrapped close never overlaps its title");
+            evidence.push({ label: `${label}/drawer-heading`, ...heading });
+            await edgeClick("closeNavigation");
+            await expect(page.locator("#navigationToggle")).toBeFocused();
+        }
+        for (const role of ["interaction", "saved", "setup"]) {
+            if (role === "interaction") {
+                await navigateMain(page, "analyze"); await page.locator(".request-card-open").first().click();
+            } else {
+                await navigateMain(page, "reports");
+                if (role === "saved") await page.locator(".saved-report-summary").first().click();
+                else {
+                    await page.locator("#reportCreateLink").click();
+                    await page.locator("#reportList input").first().check();
+                    await reportContents(page);
+                }
+            }
+            await control("#closeContextSidebar", `${label}/${role}/close`);
+            const header = await page.locator(".context-sidebar-header").evaluate(node => {
+                const title = node.querySelector("h2"), button = node.querySelector("button"), css = getComputedStyle(node);
+                const range = document.createRange(); range.selectNodeContents(title);
+                const text = range.getBoundingClientRect(), target = button.getBoundingClientRect(), bounds = node.getBoundingClientRect();
+                return { bounds: bounds.toJSON(), title: title.getBoundingClientRect().toJSON(), text: text.toJSON(), target: target.toJSON(),
+                    paddingTop: parseFloat(css.paddingTop), paddingBottom: parseFloat(css.paddingBottom), border: parseFloat(css.borderBottomWidth),
+                    bodyY: document.querySelector("#contextSidebarBody").getBoundingClientRect().y, gap: parseFloat(css.columnGap),
+                    titleOwnsText: title.contains(document.elementFromPoint(text.x + 2, text.y + text.height / 2)),
+                    pageOverflow: document.documentElement.scrollWidth > innerWidth + 1 };
+            });
+            assert.ok(header.title.right + header.gap <= header.target.x + 1, `${label}/${role}: reserved title/utility separation`);
+            assert.ok(Math.abs(header.bounds.height - Math.max(header.title.height, header.target.height)
+                - header.paddingTop - header.paddingBottom - header.border) < 1, `${label}/${role}: header height comes only from its command row and intentional padding`);
+            assert.ok(Math.abs(header.bodyY - header.bounds.bottom) < 1, `${label}/${role}: no phantom row between header and body`);
+            assert.ok(header.titleOwnsText && !header.pageOverflow, `${label}/${role}: utility target does not steal text or cause overflow`);
+            evidence.push({ label: `${label}/${role}/header`, ...header });
+            if (directory && width === 375 && scale === 200) {
+                await mkdir(directory, { recursive: true });
+                await page.locator(".context-sidebar-header").screenshot({ path: path.join(directory, `${theme}-${role}-header.png`) });
+            }
+            await edgeClick("closeContextSidebar");
+            await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
+        }
+    }
+    if (directory) {
+        await mkdir(directory, { recursive: true });
+        await writeFile(path.join(directory, "sidebar-command-geometry.json"), JSON.stringify(evidence, null, 2));
+    }
+    const headers = evidence.filter(entry => entry.label.endsWith("/header"));
+    t.diagnostic(JSON.stringify({ measuredControls: evidence.filter(entry => entry.target && entry.svg).length,
+        headers: headers.map(({ label, bounds, title, target, paddingTop, paddingBottom, gap }) => ({
+            label, rowHeight: bounds.height, titleHeight: title.height, target: [target.width, target.height], paddingTop, paddingBottom, gap })) }));
+});
+
+test("sidebar icon-only targets do not inherit text-line height", async t => {
+    const { page } = await setup(t, { touch: true });
+    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+    const evidence = [];
+    async function probe(selector, row, neighbor) {
+        evidence.push(await page.locator(selector).evaluate(async (node, { row, neighbor }) => {
+            const css = node.getAttribute("style");
+            const sample = () => ({ target: node.getBoundingClientRect().toJSON(),
+                glyph: node.querySelector("svg").getBoundingClientRect().toJSON(),
+                minimumHeight: getComputedStyle(node).minHeight, lineHeight: getComputedStyle(node).lineHeight,
+                row: document.querySelector(row).getBoundingClientRect().toJSON(),
+                neighbor: document.querySelector(neighbor).getBoundingClientRect().toJSON() });
+            const before = sample();
+            node.style.minHeight = "44px";
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            const isolated = sample();
+            if (css === null) node.removeAttribute("style"); else node.setAttribute("style", css);
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            return { id: node.id, before, isolated, restored: sample() };
+        }, { row, neighbor }));
+    }
+    await probe("#navigationToggle", ".workspace-toolbar-inner", ".wire-search-entry");
+    await page.locator("#navigationToggle").click();
+    await probe("#closeNavigation", ".drawer-heading", "#drawerBrand");
+    await page.locator("#closeNavigation").click();
+    for (const row of evidence) {
+        assert.equal(row.before.target.height, 44, `${row.id}: no text-line height on the real icon-only target`);
+        assert.equal(row.before.target.width, 44);
+        assert.equal(row.before.target.height, row.restored.target.height, "The isolated fixture probe restores the real control");
+        assert.deepEqual(row.before.row, row.isolated.row, "A 44px minimum adds no phantom toolbar or heading space");
+        assert.equal(row.before.glyph.width, row.isolated.glyph.width);
+        assert.equal(row.before.glyph.height, row.isolated.glyph.height);
+    }
+    t.diagnostic(JSON.stringify(evidence));
+    const directory = process.env.WIRE_SIDEBAR_ICON_PROOFS;
+    if (directory) {
+        await mkdir(directory, { recursive: true });
+        await writeFile(path.join(directory, "sidebar-text-action-probe.json"), JSON.stringify(evidence, null, 2));
+    }
+});
 
 test("opening during an actual pending overview resumes the retained Analyze summary without recursion", { timeout: 20000 }, async t => {
     let release, arrived;
@@ -208,15 +759,13 @@ test("minimal native card opens an anchored sidebar without replacing the Analyz
     await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
 });
 
-test("personal feedback stays inline and holds a dirty card switch until discarded", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
+for (const sidebarMotion of ["system", "on"]) test(`personal feedback stays inline and holds a dirty card switch until discarded (${sidebarMotion})`, { timeout: 30000 }, async t => {
+    const { page } = await setup(t, { sidebarMotion });
     await page.locator("#resultsLink").click();
     const first = page.locator(".request-card-open").first(), second = page.locator(".request-card-open").nth(1);
     await first.click();
-    await page.locator("#requestContent [data-insight-details]").first().click();
+    await openPersonalFeedback(page);
     assert.equal(await page.locator("dialog[open]").count(), 1, "Only the shared sidebar is open");
-    const inline = page.locator("#requestContent .assessment-inline");
-    await inline.getByRole("button", { name: "Give personal feedback" }).click();
     await page.locator("#requestContent .assessment-feedback-dialog").getByRole("combobox", { name: "Your assessment", exact: true }).click();
     await page.locator('.select-option[data-value="fail"]').click();
     const original = page.url();
@@ -256,7 +805,7 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
         const entry = await link.boundingBox();
         await page.mouse.click(entry.x + entry.width / 2, Math.max(90, entry.y + 20));
         await page.locator("#contextSidebar[open]").waitFor();
-        const copy = page.locator(".request-original .ux-copy");
+        const copy = page.locator('[data-reader-section="prompt"] .ux-copy');
         await copy.click();
         await expect(copy).toHaveAttribute("data-copy-state", "success");
         const measured = await page.evaluate(() => {
@@ -306,8 +855,8 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
             await page.screenshot({ path: path.join(proof, name + "-page.png"), fullPage: true });
             await page.screenshot({ path: path.join(proof, name + "-viewport.png") });
         }
-        await page.locator("#requestContent .detail-disclosure>summary").first().click();
-        await page.locator("#requestContent [data-insight-details]").first().click();
+        await expect(page.locator('[data-reader-section="activity"] .technical-detail').first()).toBeVisible();
+        await openPersonalFeedback(page);
         const beforeScroll = await page.evaluate(() => scrollY);
         await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = node.scrollHeight);
         assert.equal(await page.evaluate(() => scrollY), beforeScroll, "Panel scrolling cannot move the document");
@@ -325,8 +874,8 @@ test("switching restores current disclosure and scroll state while filters dismi
     const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
     await a.click();
     const first = page.url();
-    const disclosure = page.locator("#requestContent .detail-disclosure").first();
-    await disclosure.locator("summary").click();
+    const disclosure = page.locator('[data-reader-section="activity"]>.reader-section-heading>.reader-section-toggle');
+    await disclosure.click();
     await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = 220);
     const scroll = await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop);
     const reads = requests.filter(url => url.pathname === "/api/snapshot").length;
@@ -335,7 +884,7 @@ test("switching restores current disclosure and scroll state while filters dismi
     await b.click(); assert.notEqual(page.url(), first);
     await a.click();
     assert.equal(page.url(), first);
-    await expect(disclosure).toHaveAttribute("open", "");
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
     assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), scroll);
     assert.equal(requests.filter(url => url.pathname === "/api/snapshot").length, reads, "Switching does not collect or reread the source");
     await selectActivityOption(page, "dateFilter", "7");
@@ -355,13 +904,15 @@ test("inline feedback recovers an uncertain committed write without replay after
 
     await page.locator("#resultsLink").click();
     await page.locator(".request-card-open").first().click();
-    await page.locator("#requestContent [data-insight-details]").first().click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
+    await openPersonalFeedback(page);
     const feedback = page.locator("#requestContent .assessment-feedback-dialog");
     await feedback.getByRole("combobox", { name: "Your assessment", exact: true }).click();
     await page.locator('.select-option[data-value=pass]').click();
     await feedback.getByRole("button", { name: "Save feedback", exact: true }).click();
     await expect(feedback.getByRole("button", { name: "Check update result", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
+    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
+    await expect(page.locator('[data-reader-section="reviews"] .reader-section-notice')).toContainText("check the feedback update");
     await page.locator(".request-card-open").nth(1).click();
     await expect(page.locator("#contextSidebarGuard")).toBeHidden();
     assert.equal(writes, 1);
@@ -379,18 +930,15 @@ test("all personal-feedback dimensions save and withdraw inline, with explicit u
     await page.locator(".request-card-open").first().click();
     let count = 0;
     async function openFeedback(check) {
-        await page.locator("#requestContent [data-insight-details]").first().click();
-        const details = page.locator("#inline-insight-details");
-        await details.getByRole("combobox", { name: "Personal feedback (optional)", exact: true }).click();
-        await page.locator(`.select-option[data-value="${check}"]`).click();
-        await details.getByRole("button", { name: "Give personal feedback", exact: true }).click();
-        return page.locator("#requestContent .assessment-feedback-dialog");
+        return openPersonalFeedback(page, check);
     }
     async function saved() {
         await expect.poll(async () => (await loadBoardState(context)).personalEvaluation.feedback.records.length).toBe(++count);
         await expect(page.locator("#requestContent .assessment-feedback-dialog:visible")).toHaveCount(0);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await expect(page.locator("#requestContent .interaction-insights[aria-busy=true]")).toHaveCount(0);
+        if (count % 2 === 1) await expect(page.locator('#requestContent .single-interaction-measures tr[data-origin="user-personal"]')).toHaveCount(1);
+        await expect(page.locator('#requestContent .single-interaction-measures [data-origin="automatic-local"]')).toHaveCount(0);
     }
     for (const [check, verdict] of [["semantic-answer-correctness", "pass"], ["answer-support-validity", "fail"], ["action-authorization-compliance", "unassessed"]]) {
         let form = await openFeedback(check);
@@ -399,7 +947,7 @@ test("all personal-feedback dimensions save and withdraw inline, with explicit u
         if (count === 0) {
             await form.getByRole("button", { name: "Cancel", exact: true }).click();
             await page.getByRole("button", { name: "Discard changes", exact: true }).click();
-            await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
+            await openPersonalFeedback(page, check);
             await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
             await page.locator(`.select-option[data-value="${verdict}"]`).click();
         }
@@ -425,6 +973,9 @@ test("contextual automatic-score setup is inline and never grants approval on en
     await page.locator(".request-card-open").first().click();
     await page.locator("#requestContent [data-automatic-scores]").first().click();
     await expect(page.locator("#requestContent .automatic-score-dialog")).toContainText("Connect a supported local Copilot source");
+    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
+    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
+    await expect(page.locator('[data-reader-section="reviews"] .reader-section-notice')).toContainText("Close Automatic scores");
     assert.equal(await page.locator("dialog[open]").count(), 1);
     assert.equal(requests.filter(url => /\/(?:approve|revoke|consent\/set|evaluation\/run)$/.test(url.pathname)).length, 0);
     await page.locator("#requestContent .automatic-score-dialog").getByRole("button", { name: "Close automatic scores", exact: true }).click();
@@ -457,6 +1008,12 @@ test("inline automatic approval keeps explicit scope and consent fields without 
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     assert.equal(await page.locator("dialog[open]").count(), 1);
     if (proof) await page.screenshot({ path: path.join(proof, "inline-approval-375-200.png") });
+    await page.locator('[data-reader-section="reviews"] .reader-section-toggle').click();
+    await expect(page.locator('[data-reader-section="reviews"] .reader-section-toggle')).toHaveAttribute("aria-expanded", "true");
+    await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
+    await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
+    await expect(form.getByLabel("Total assessment allowance", { exact: true })).toHaveValue("2");
+    await expect(approve).toBeEnabled();
     await form.getByRole("button", { name: "Cancel", exact: true }).click();
     assert.equal(requests.filter(url => url.pathname.endsWith("/automatic/approve")).length, 0);
 });
@@ -465,7 +1022,7 @@ test("touch Copy activates once, uses a 44px target and reports clipboard denial
     const { page, records } = await setup(t, { touch: true });
     await page.locator("#resultsLink").tap();
     await page.locator(".request-card-open").first().tap();
-    const copy = page.locator(".request-original .ux-copy");
+    const copy = page.locator('[data-reader-section="prompt"] .ux-copy');
     const before = await copy.boundingBox();
     assert.ok(before.width >= 44 && before.height >= 44);
     await copy.tap();
@@ -474,7 +1031,7 @@ test("touch Copy activates once, uses a 44px target and reports clipboard denial
     assert.deepEqual(await page.evaluate(() => window.sidebarCopies), [records[0].userPrompt.text]);
     await page.evaluate(() => window.sidebarCopyMode = "denied");
     await copy.tap();
-    await expect(page.locator(".request-original .ux-copy-status.error")).toContainText("permission was denied");
+    await expect(page.locator('[data-reader-section="prompt"] .ux-copy-status.error')).toContainText("permission was denied");
     assert.equal(await page.evaluate(() => window.sidebarCopies.length), 1);
     assert.equal(await page.locator("dialog[open]").count(), 1);
 });
@@ -863,8 +1420,8 @@ test("resizing during entry or exit settles the latest layout without a stale ov
     await expect(page.locator(".request-card-open").first()).toBeFocused();
 });
 
-test("leaving during a pending feedback receipt neither retains an interactive form nor replays the write", { timeout: 30000 }, async t => {
-    const { page, context } = await setup(t);
+for (const sidebarMotion of ["system", "on"]) test(`leaving during a pending feedback receipt neither retains an interactive form nor replays the write (${sidebarMotion})`, { timeout: 30000 }, async t => {
+    const { page, context } = await setup(t, { sidebarMotion });
     let release, arrived, writes = 0;
     const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
     const deliveries = [];
@@ -879,13 +1436,15 @@ test("leaving during a pending feedback receipt neither retains an interactive f
     try {
         await page.locator("#resultsLink").click();
         await page.locator(".request-card-open").first().click();
-        await page.locator("#requestContent [data-insight-details]").first().click();
-        await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
+        await openPersonalFeedback(page);
         const form = page.locator("#requestContent .assessment-feedback-dialog");
         await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
         await page.locator(".select-option[data-value=pass]").click();
         await form.getByRole("button", { name: "Save feedback", exact: true }).click();
         await pending;
+        await page.getByRole("button", { name: "Collapse all sections", exact: true }).click();
+        await expect(page.locator(".reader-section-toggle[aria-expanded=false]")).toHaveCount(0);
+        await expect(page.locator('[data-reader-section="reviews"] .reader-section-notice')).toContainText("Finish or check");
         await page.emulateMedia({ reducedMotion: "no-preference" });
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
@@ -922,13 +1481,12 @@ test("report continuation retains choices and returns to the original sidebar wi
     await expect(card).toBeFocused();
 });
 
-test("source invalidation scrubs the old prompt, copy getter and held unsent-feedback transition", { timeout: 30000 }, async t => {
-    const { page, context, records } = await setup(t);
+for (const sidebarMotion of ["system", "on"]) test(`source invalidation scrubs the old prompt, copy getter and held unsent-feedback transition (${sidebarMotion})`, { timeout: 30000 }, async t => {
+    const { page, context, records } = await setup(t, { sidebarMotion });
     await page.locator("#resultsLink").click();
     await page.locator(".request-card-open").first().click();
-    const copy = await page.locator(".request-original .ux-copy").elementHandle();
-    await page.locator("#requestContent [data-insight-details]").first().click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
+    const copy = await page.locator('[data-reader-section="prompt"] .ux-copy').elementHandle();
+    await openPersonalFeedback(page);
     await page.locator("#requestContent .assessment-feedback-dialog").getByRole("combobox", { name: "Your assessment", exact: true }).click();
     await page.locator('.select-option[data-value=fail]').click();
     await page.locator("#closeContextSidebar").click();
@@ -944,8 +1502,8 @@ test("source invalidation scrubs the old prompt, copy getter and held unsent-fee
     assert.equal(await page.evaluate(() => window.sidebarCopies.length), 0, "Detached private getters cannot copy old evidence");
 });
 
-test("a delayed interaction read cannot repaint or focus its successor", { timeout: 30000 }, async t => {
-    const { page } = await setup(t);
+for (const sidebarMotion of ["system", "on"]) test(`a delayed interaction read cannot repaint or focus its successor (${sidebarMotion})`, { timeout: 30000 }, async t => {
+    const { page } = await setup(t, { sidebarMotion });
     let release, arrived, heldOnce = false;
     const pending = new Promise(resolve => { arrived = resolve; }), held = new Promise(resolve => { release = resolve; });
     const deliveries = [];

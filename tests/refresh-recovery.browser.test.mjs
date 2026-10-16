@@ -2,15 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { evaluationFixture, materializeEvaluationSource } from "./evaluation-fixture.mjs";
-import { chooseTheme } from "./helpers.mjs";
+import { chooseTheme, navigateMain, navigateSettings } from "./helpers.mjs";
 
 const ready = page => page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-async function fixture(t, problem, { clock = false } = {}) {
+async function fixture(t, problem, { clock = false, decodeResponse = response => response.json() } = {}) {
     const denied = [], errors = [], requests = [], responses = [], cleanups = [], sourceBytes = [];
     let runtime, browser, configFile, configBefore;
     t.after(async () => {
@@ -58,8 +58,11 @@ async function fixture(t, problem, { clock = false } = {}) {
     });
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => { if (request.method() === "POST") requests.push(new URL(request.url()).pathname); });
-    page.on("response", async response => {
-        if (response.url().endsWith("/api/collection/now")) responses.push({ status: response.status(), body: await response.json() });
+    page.on("response", response => {
+        if (response.url().endsWith("/api/collection/now")) {
+            const status = response.status();
+            responses.push(decodeResponse(response).then(body => ({ status, body })));
+        }
     });
     await page.goto(runtime.url); await ready(page); await page.evaluate(() => document.fonts.ready);
     return { ...app, runtime, page, requests, responses, before,
@@ -93,6 +96,91 @@ async function capture(page, name, observations = {}) {
     }, null, 2));
 }
 
+async function refreshTooltip(page) {
+    const control = page.locator("#checkActivity");
+    await expect(control).toBeEnabled();
+    await page.keyboard.press("Tab");
+    await control.focus();
+    const tooltip = page.getByRole("tooltip");
+    await expect(tooltip).toBeVisible();
+    const text = (await tooltip.textContent()).trim();
+    await page.keyboard.press("Escape");
+    await expect(tooltip).not.toBeVisible();
+    return text;
+}
+
+for (const [problem, code] of [["paths", "source_paths_invalid"], ["missing", "source_metadata_unavailable"]]) {
+    test(`Settings ${code} help describes the actual stored read without replaying the rejected source check`, { timeout: 30000 }, async t => {
+        const app = await fixture(t, problem), { page } = app;
+        await page.locator("#checkActivity").focus();
+        await page.keyboard.press("Enter");
+        await page.waitForFunction(() => document.getElementById("freshActivity").dataset.phase === "error");
+        const [rejection] = await Promise.all(app.responses);
+        assert.equal(rejection.body.code, code, "This is a real collector rejection, not an injected UI state");
+        await navigateMain(page, "settings");
+        await navigateSettings(page, "connection");
+        const tooltip = await refreshTooltip(page);
+        const effect = {
+            visible: await page.locator("#settingsRefreshContext").isVisible(),
+            text: await page.locator("#settingsRefreshContext").textContent(),
+        };
+        const sourceChecks = app.requests.filter(value => value === "/api/collection/now").length;
+        const snapshotReads = app.requests.filter(value => value === "/api/snapshot").length;
+        await capture(page, `settings-help-${code}`, { code, tooltip, effect, sourceChecks, snapshotReads });
+        const storedResponse = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
+        await page.locator("#checkActivity").focus();
+        await page.keyboard.press("Enter");
+        assert.equal((await storedResponse).status(), 200);
+        await ready(page);
+        await expect(page.locator("#freshContextMessage")).toContainText("Stored activity refreshed");
+        assert.equal(app.requests.filter(value => value === "/api/collection/now").length, sourceChecks);
+        assert.equal(sourceChecks, 1);
+        assert.equal(app.requests.filter(value => value === "/api/snapshot").length, snapshotReads + 1);
+        assert.deepEqual(await loadBoardState(app.context), app.before);
+        t.diagnostic(JSON.stringify({ code, tooltip, effect, sourceChecks, storedReadsAdded: 1 }));
+        assert.equal(tooltip, "Read stored activity. No source check will be repeated.");
+        assert.equal(effect.visible, true);
+        assert.equal(effect.text, "Read stored activity only. No new history check will be sent.");
+    });
+
+    test(`Settings exit preserves dynamic Refresh help after ${code} recovery and return to normal intent`, { timeout: 30000 }, async t => {
+        const app = await fixture(t, problem), { page } = app;
+        const normalHelp = "Refresh approved local history. Paused collection stays paused.";
+        assert.equal(await refreshTooltip(page), normalHelp);
+        await page.locator("#checkActivity").focus();
+        await page.keyboard.press("Enter");
+        await page.waitForFunction(() => document.getElementById("freshActivity").dataset.phase === "error");
+        const [rejection] = await Promise.all(app.responses);
+        assert.equal(rejection.body.code, code);
+        await navigateMain(page, "settings");
+        await navigateSettings(page, "connection");
+        await navigateMain(page, "analyze");
+        const analyzeRecovery = await refreshTooltip(page);
+        await navigateMain(page, "collection-status");
+        await expect(page.locator("#collectionStatusView")).toBeVisible();
+        const statusRecovery = await refreshTooltip(page);
+        const sourceChecks = app.requests.filter(value => value === "/api/collection/now").length;
+        const snapshotReads = app.requests.filter(value => value === "/api/snapshot").length;
+        const storedResponse = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
+        await page.locator("#checkActivity").focus();
+        await page.keyboard.press("Enter");
+        assert.equal((await storedResponse).status(), 200);
+        await ready(page);
+        await expect(page.locator("#freshContextMessage")).toContainText("Stored activity refreshed");
+        await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "complete");
+        const statusNormal = await refreshTooltip(page);
+        await navigateMain(page, "analyze");
+        const analyzeNormal = await refreshTooltip(page);
+        assert.equal(app.requests.filter(value => value === "/api/collection/now").length, sourceChecks);
+        assert.equal(sourceChecks, 1);
+        assert.equal(app.requests.filter(value => value === "/api/snapshot").length, snapshotReads + 1);
+        assert.deepEqual(await loadBoardState(app.context), app.before);
+        t.diagnostic(JSON.stringify({ code, analyzeRecovery, statusRecovery, statusNormal, analyzeNormal, sourceChecks, storedReadsAdded: 1 }));
+        for (const text of [analyzeRecovery, statusRecovery]) assert.equal(text, "Read stored activity. No source check will be repeated.");
+        for (const text of [statusNormal, analyzeNormal]) assert.equal(text, normalHelp);
+    });
+}
+
 test("a real rejected source path offers one source repair, not an uncertain check or stored-read retry", { timeout: 60000 }, async t => {
     const app = await fixture(t, "paths"), { page } = app;
     const activity = await page.locator("#activityView").textContent();
@@ -102,18 +190,21 @@ test("a real rejected source path offers one source repair, not an uncertain che
     assert.deepEqual(await page.locator("#checkActivity").boundingBox(), initial);
     assert.equal(await page.evaluate(() => scrollY), 0);
     const help = await page.locator("#freshHelp > summary").boundingBox();
-    assert.ok(Math.abs(help.x - initial.x - initial.width - 16) < 0.02);
+    assert.ok(help.y > initial.y + initial.height, "Recovery details stay with filter status, below the page-header Refresh");
+    assert.equal(await page.locator("#analyzeRefresh #checkActivity").count(), 1);
     const live = page.locator("#freshResult [role=status]");
     assert.equal(await live.getAttribute("aria-live"), "polite");
     assert.equal(await live.getAttribute("aria-atomic"), "true");
+    const responses = await Promise.all(app.responses);
+    assert.equal(responses.length, 1);
     for (const [theme, width] of [["light", 1440], ["dark", 1440], ["light", 375], ["dark", 375]]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(() => scrollTo(0, 0));
-        await capture(page, `paths-${theme}-${width}`, { responses: app.responses, requests: app.requests });
+        await capture(page, `paths-${theme}-${width}`, { responses, requests: app.requests });
     }
-    assert.equal(app.responses[0].status, 422);
-    assert.match(app.responses[0].body.error, /absolute data.db path and CLI session-state directory/);
-    assert.equal(app.responses[0].body.code, "source_paths_invalid");
+    assert.equal(responses[0].status, 422);
+    assert.match(responses[0].body.error, /absolute data.db path and CLI session-state directory/);
+    assert.equal(responses[0].body.code, "source_paths_invalid");
     assert.equal(await page.locator("#freshStatus").innerText(), "Source paths need attention.");
     assert.match(await page.locator("#freshContextMessage").innerText(), /Previous view kept.*data.db.*session-state.*Collection is paused/s);
     assert.equal(await page.locator("#collectionNotice").isVisible(), false, "Paused fact belongs to this recovery, not a duplicate banner");
@@ -124,8 +215,7 @@ test("a real rejected source path offers one source repair, not an uncertain che
     assert.deepEqual(await loadBoardState(app.context), app.before);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("workiq-evidence.source-check.v1")), null);
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.locator("#checkActivity").focus();
-    await page.keyboard.press("Tab");
+    await page.locator("#freshHelp > summary").focus();
     assert.equal(await page.locator("#freshHelp > summary").evaluate(node => node === document.activeElement), true);
     await page.keyboard.press("Enter");
     assert.equal(await page.locator("#freshHelp").evaluate(node => node.open), true);
@@ -202,7 +292,8 @@ test("a stored-read failure after an unknown check has one owned recovery and ne
     await page.route("**/api/snapshot", route => route.abort("connectionreset"), { times: 1 });
     await page.getByRole("button", { name: "Read stored activity", exact: true }).focus();
     await page.keyboard.press("Enter"); await ready(page);
-    await page.waitForFunction(() => document.querySelector("#freshStatus").textContent === "Stored view not updated.");
+    await page.waitForFunction(() => document.querySelector("#freshStatus").textContent.trim() === "Stored view not updated.");
+    assert.equal(await page.locator("#checkActivity").isVisible(), false, "Only the read-only recovery owns Refresh during this failure");
     assert.equal(await page.locator("#message").isVisible(), false);
     assert.equal(await page.locator("#collectionNotice").isVisible(), false);
     assert.equal(await page.getByRole("button", { name: "Read stored activity", exact: true }).count(), 1);
@@ -217,13 +308,40 @@ test("a stored-read failure after an unknown check has one owned recovery and ne
     await capture(page, "unknown-stored-read-recovered", { requests: app.requests });
 });
 
+test("missing-metadata status observation awaits its real response when Node decoding trails the browser error", { timeout: 20000 }, async t => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
+    const app = await fixture(t, "missing", { decodeResponse: async response => { await gate; return response.json(); } });
+    const { page } = app, failedRequests = [];
+    page.on("requestfailed", request => failedRequests.push(request.url()));
+    const response = page.waitForResponse(value => value.request().method() === "POST" && value.url().endsWith("/api/collection/now"));
+    await pointer(page, "#checkActivity");
+    const received = await response;
+    assert.equal(received.status(), 503, "The real source response arrived; this is not absent transport");
+    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
+    assert.equal(await page.locator("#freshStatus").innerText(), "Local history could not be read.");
+    const observation = Promise.all(app.responses);
+    release();
+    const [observed] = await observation;
+    assert.equal(observed.status, 503);
+    assert.equal(observed.body.code, "source_metadata_unavailable");
+    assert.deepEqual(failedRequests, []);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem("workiq-evidence.source-check.v1")), null);
+    assert.equal((await app.runtime.collector.status()).config.enabled, false);
+    assert.deepEqual(await loadBoardState(app.context), app.before);
+    assert.equal(app.requests.filter(value => value === "/api/collection/now").length, 1);
+});
+
 test("a missing approved metadata file is a known source failure without a replay latch", { timeout: 20000 }, async t => {
     const app = await fixture(t, "missing"), { page } = app;
     await pointer(page, "#checkActivity");
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
-    await capture(page, "missing-metadata", { responses: app.responses, requests: app.requests });
-    assert.equal(app.responses[0].status, 503);
-    assert.equal(app.responses[0].body.code, "source_metadata_unavailable");
+    const responses = await Promise.all(app.responses);
+    assert.equal(responses.length, 1);
+    await capture(page, "missing-metadata", { responses, requests: app.requests });
+    assert.equal(responses[0].status, 503);
+    assert.equal(responses[0].body.code, "source_metadata_unavailable");
     assert.equal(await page.locator("#freshStatus").innerText(), "Local history could not be read.");
     assert.equal(await page.locator("#refreshBtn").isVisible(), false);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("workiq-evidence.source-check.v1")), null);

@@ -1,7 +1,14 @@
 import * as contract from "../lib/assessment-contract.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { fixture } from "./helpers.mjs";
+import { fixture, selectActivityOption } from "./helpers.mjs";
 export { contract };
+export async function openPersonalFeedback(page, check = "semantic-answer-correctness") {
+    const reviews = page.locator('[data-reader-section="reviews"]');
+    await reviews.getByRole("button", { name: "Personal feedback", exact: true }).click();
+    const select = reviews.locator("select[data-feedback-dimension]");
+    await selectActivityOption(page, await select.getAttribute("id"), check);
+    return reviews.locator(".assessment-feedback-dialog");
+}
 const at = "2026-10-06T12:00:00.000Z";
 const id = (kind, n = 1) => `${kind}-${n.toString(16).padStart(32, "0")}`;
 const basis = () => ({ sourceRevision: 7, membershipRevision: 2, consentRevision: 0, overrideRevision: 0, deletionEpoch: 1 });
@@ -64,6 +71,24 @@ function enabledConsent() {
     };
 }
 export const samples = { id, at, basis, metricBase, makeRatio, makeDuration, makeCost, makeAssessment, enabledConsent };
+export function retainedResponse(text, record) {
+    const model = buildAssessmentModel({ revision: 1, pseudonymKey: "a".repeat(64), evidence: [record], exports: [] });
+    const view = [...model.details.values()][0], consent = { ...enabledConsent(), categories: ["answer"] };
+    view.basis.consentRevision = 1;
+    for (const item of [view.interaction, ...view.observations, ...view.assessments, ...view.metrics]) item.basis = { ...view.basis };
+    Object.assign(view.interaction, { sourceConfigRef: consent.sourceConfigRef, sourceConfigRevision: consent.sourceConfigRevision });
+    view.consent = consent;
+    view.observations.push({
+        schemaVersion: 1, interactionRef: view.interaction.interactionRef, basis: { ...view.basis },
+        createdAt: at, evidenceRefs: [id("evidence", 80)], observationRef: id("observation", 80),
+        memberRef: null, adapter: "copilot-local-events-v1", kind: "answer", origin: "optional-capture",
+        availability: "available", reason: null, occurredAt: at, sourceEventRefs: [id("event", 80)],
+        deletionKeys: [...new Set(view.interaction.members.flatMap(member => member.deletionKeys))],
+        payload: { textRef: id("text", 80), utf8Bytes: Buffer.byteLength(text), completeness: "bounded-fragment", finality: "unverified", credentialScreenVersion: 1, credentialScreen: "passed" },
+        captureContext: { consentRevision: 1, sourceConfigRef: consent.sourceConfigRef, sourceConfigRevision: consent.sourceConfigRevision },
+    });
+    return contract.validateInteractionView(view);
+}
 export function quality(dimension, { pass = 0, fail = 0, unassessed = 1, personal = false, offset = 0 } = {}) {
     const metric = makeRatio(pass, fail, unassessed, 0, offset);
     metric.dimension = dimension;

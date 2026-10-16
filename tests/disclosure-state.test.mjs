@@ -27,3 +27,16 @@ test("live arrival keeps existing identity order without omissions or duplicate 
     assert.deepEqual(state.ordered("different-filter", next, id), next);
     assert.deepEqual(state.ordered("scope", [next[0]], id), [next[0]]);
 });
+
+test("section availability derives from present owners without a separate bulk visibility state", () => {
+    const state = createDisclosureState(), keys = ["text:request:a", "reader:a:activity", "reader:a:source"];
+    assert.deepEqual(state.openSummary(keys, true), { total: 3, open: 3, canExpand: false, canCollapse: true });
+    state.setOpen(keys[0], false);
+    assert.deepEqual(state.openSummary(keys, true), { total: 3, open: 2, canExpand: true, canCollapse: true });
+    for (const key of keys) state.setOpen(key, false);
+    assert.deepEqual(state.openSummary(keys, true), { total: 3, open: 0, canExpand: true, canCollapse: false });
+    assert.deepEqual(state.openSummary([], true), { total: 0, open: 0, canExpand: false, canCollapse: false });
+    assert.deepEqual(state.openSummary(["reader:b:activity"], true), { total: 1, open: 1, canExpand: false, canCollapse: true });
+    state.forget(keys[0]);
+    assert.deepEqual(state.openSummary(keys, true), { total: 3, open: 1, canExpand: true, canCollapse: true });
+});

@@ -1,8 +1,13 @@
 // Panel-local presentation only. No evidence, draft, consent or storage access.
 export function createDisclosureState() {
     const opened = new Map(), pages = new Map(), orders = new Map();
+    const isOpen = (key, initial = false) => opened.has(key) ? opened.get(key) : initial;
     return {
-        isOpen: (key, initial = false) => opened.has(key) ? opened.get(key) : initial,
+        isOpen,
+        openSummary(keys, initial = false) {
+            const open = keys.filter(key => isOpen(key, initial)).length;
+            return { total: keys.length, open, canExpand: open < keys.length, canCollapse: open > 0 };
+        },
         setOpen: (key, value) => opened.set(key, Boolean(value)),
         forget(key) { opened.delete(key); pages.delete(key); orders.delete(key); },
         page(key, total, size) {

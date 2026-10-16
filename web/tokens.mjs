@@ -72,7 +72,9 @@ const screenLight = `
  --accent:#303030;--accent-soft:#e9e9e9;--accent-fill:#303030;--on-accent:#ffffff;
  --accent-hover:#dedede;--accent-pressed:#d5d5d5;--pill-pressed:#d9d9d9;
  --danger:#b3261e;--delete-fill:#b3261e;--delete-ink:#ffffff;--performance-red:#b3261e;
+ --chart-success:#286336;--screen-success-high:#397c46;--screen-success-low:#286336;
  --chart-failure:#b3261e;--screen-failure-high:#c23c32;--screen-failure-low:#9f2922;
+ --screen-service-files:#007357;
  --screen-prompt-user:#365f7a;
  --focus:#303030;--scrim:#000000a6;
 `;
@@ -84,7 +86,9 @@ const screenDark = `
  --accent:#e0e0e0;--accent-soft:#2b2b2b;--accent-fill:#e0e0e0;--on-accent:#191919;
  --accent-hover:#333333;--accent-pressed:#3b3b3b;--pill-pressed:#353535;
  --danger:#f28b82;--delete-fill:#f28b82;--delete-ink:#281210;--performance-red:#f28b82;
+ --chart-success:#83d494;--screen-success-high:#83d494;--screen-success-low:#528d5e;
  --chart-failure:#f28b82;--screen-failure-high:#f28b82;--screen-failure-low:#be635c;
+ --screen-service-files:#10b981;
  --chart-fade-strength:70%;
  --screen-prompt-user:#95b9d2;
  --focus:#e0e0e0;--scrim:#000000bd;

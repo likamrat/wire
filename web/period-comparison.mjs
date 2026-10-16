@@ -336,7 +336,13 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const control = doc.getElementById("outcomeFilter"), labels = results.labels(getContext().options.layer);
         if (doc.getElementById("outcomeFilter-control")?.getAttribute("aria-expanded") === "true") return;
         const a = value?.periods.baseline.analytics.resultFacet.totals, b = value?.periods.later.analytics.resultFacet.totals;
-        for (const option of control.options) option.textContent = labels[option.value] + (a && b ? ` (A: ${number(a[option.value])}; B: ${number(b[option.value])})` : "");
+        for (const option of control.options) {
+            const count = a && b ? `A: ${number(a[option.value])}; B: ${number(b[option.value])}` : null;
+            option.textContent = labels[option.value] + (count ? ` (${count})` : "");
+            option.dataset.optionLabel = labels[option.value];
+            if (count) option.dataset.count = count;
+            else delete option.dataset.count;
+        }
         control.dataset.allLabel = a && b ? `All results (A: ${number(a.count)}; B: ${number(b.count)})` : "All results";
         // Ordinary renderControls must rebuild its own date-scoped labels on exit.
         delete control.dataset.optionsSignature;

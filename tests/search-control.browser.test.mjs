@@ -165,11 +165,7 @@ test("search control: native editing, long query, state feedback and keyboard Op
     assert.ok(narrow.radius >= narrow.input.height / 2);
     assert.equal(await input.evaluate(node => node.selectionStart), longQuery.length);
     await screenshot(page, "search-control-long-query-375-200");
-    const clearPosition = await input.evaluate(node => {
-        const box = node.getBoundingClientRect();
-        return { x: box.width - parseFloat(getComputedStyle(node).paddingRight) - 7, y: box.height / 2 };
-    });
-    await input.click({ position: clearPosition });
+    await page.getByRole("button", { name: "Clear search", exact: true }).click();
     await expect(input).toHaveValue("");
     await expect(input).toBeFocused();
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -505,6 +501,8 @@ test("compact result scrolling, paging and Back stay inside the list without cha
     await expect(panel).toBeVisible();
     assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop), "0px");
     await page.keyboard.press("Tab");
+    await expect(page.locator("#wireSearchClear")).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(page.locator("#wireSearchResults button").first()).toBeFocused();
     await clickVisible(page, page.getByRole("switch", { name: "Dark theme", exact: true }));
     await expect(panel).toBeHidden();
@@ -570,6 +568,10 @@ test("native compact Search keeps deep typing stationary and restores the readin
         assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop), "0px",
             "Escape does not relinquish Search focus");
         assert.equal(await page.evaluate(() => scrollY), reading);
+        await page.keyboard.press("Tab");
+        await expect(page.locator("#wireSearchClear")).toBeFocused();
+        assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop), "0px",
+            "Query-clear focus remains within Search");
         await page.keyboard.press("Tab");
         await expect(page.getByRole("switch", { name: "Dark theme", exact: true })).toBeFocused();
         const restored = await page.evaluate(() => ({
@@ -664,7 +666,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     await expect(page.locator("#activityCount")).toHaveText("6");
     for (const [query, title, setting, destination] of [
         ["Time zone", "Time zone", "time-zone", "#displayTimeZone-control"],
-        ["History window", "Initial history window", "history-window", "#collectionWindow-control"],
+        ["History window", "History to include", "history-window", "#collectionWindow-control"],
     ]) {
         await input.fill(query);
         await selectActivityOption(page, "wireSearchType", "setting");

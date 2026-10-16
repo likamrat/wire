@@ -131,7 +131,7 @@ test("wired Activity and detail readers use Prompt without inventing author iden
         await page.goto(`https://wire.invalid/#request?request=${source.scenarioId}`); await ready(page);
         const reader = page.locator(".request-original");
         assert.equal(await reader.getByRole("heading", { name: "Copilot chat prompt", exact: true }).count(), 1);
-        assert.doesNotMatch(await reader.innerText(), /Your prompt|User prompt|Agent prompt|Request text/);
+        assert.doesNotMatch(await reader.innerText(), /My prompt|User prompt|Agent prompt|Request text/);
         if (source.userPrompt.status === "unavailable") {
             assert.match(await reader.innerText(), /Prompt not available/);
             assert.equal(await reader.locator("button").count(), 0);

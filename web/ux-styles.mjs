@@ -137,7 +137,7 @@ legend>.ux-help,dt>.ux-help {margin-inline-start:var(--help-gap)}
 .format-choices .field-help-choice>label {width:auto}
 .ux-disabled-help {display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%;border-radius:var(--radius-pill)}
 .ux-disabled-help:focus-visible,[data-ux-tooltip][tabindex="0"]:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
-.ux-disabled-help>button:not(.ux-help) {flex:1;min-width:0}
+.ux-disabled-help>button:not(.ux-help,.icon-only) {flex:1;min-width:0}
 .report-start>.ux-disabled-help {flex:0 0 auto}
 @media(max-width:760px) {
  .header-inner {min-height:0}

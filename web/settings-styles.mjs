@@ -1,12 +1,12 @@
 export const settingsStyles = `
 :is(.settings-view,#workspace:has(>#settingsView:not([hidden]))) {
  --settings-title-size:2rem;--settings-title-leading:1.25;--settings-title-tracking:-.025em;
- --settings-field-radius:4px;--settings-nav-radius:6px;--settings-action-radius:8px;
+ --settings-field-radius:10px;--settings-nav-radius:8px;--settings-action-radius:10px;
 }
 #workspace:has(>#settingsView:not([hidden]))>.page-heading #pageTitle {font-size:var(--settings-title-size);line-height:var(--settings-title-leading);letter-spacing:var(--settings-title-tracking)}
-.settings-view {max-width:1384px;container:settings / inline-size}
+.settings-view {max-width:70rem;container:settings / inline-size}
 .settings-status-link {margin:8px 0 0;color:var(--muted)}
-.settings-status-link a,#activityCollectionLink a {display:inline-flex;align-items:center;min-height:44px}
+.settings-status-link a {display:inline-flex;align-items:center;min-height:44px}
 #workspace>#collectionStatusView {max-width:64rem}
 .collection-status-view {min-width:0;container:collection-status / inline-size}
 .collection-status-view,.collection-status-view p,.collection-status-view summary {font-size:var(--type-reading);line-height:var(--leading-reading)}
@@ -40,20 +40,19 @@ export const settingsStyles = `
  .collection-status-view .facts,.collection-status-view .settings-diagnostics {grid-template-columns:minmax(0,1fr);gap:4px}
  .collection-status-view .facts dd,.collection-status-view .settings-diagnostics dd {margin-bottom:12px}
 }
-#activityCollectionLink {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-bottom:16px}
-.settings-layout {display:grid;grid-template-columns:minmax(0,15rem) minmax(0,1fr);gap:var(--space-3xl);align-items:start}
+.settings-layout {display:grid;grid-template-columns:minmax(0,14rem) minmax(0,1fr);gap:var(--space-2xl);align-items:start}
 .settings-content,.settings-rail,.settings-categories,.settings-search {min-width:0}
 .settings-rail {position:sticky;top:calc(var(--app-header-height,80px) + var(--space-lg));max-height:calc(100dvh - var(--app-header-height,80px) - 32px);overflow:auto;padding:8px;margin:-8px}
-.settings-content {max-width:52rem;container:settings-pane / inline-size}
-.settings-categories {padding:4px var(--space-lg) 4px 0;border-inline-end:1px solid transparent}
+.settings-content {max-width:48rem;padding:24px 28px;background:var(--paper);border-radius:12px;container:settings-pane / inline-size}
+.settings-categories {padding:0}
 .settings-categories>summary {display:none}
 .settings-categories nav {display:flex;flex-direction:column;gap:4px}
-.settings-categories a {position:relative;display:flex;align-items:flex-start;gap:var(--space-sm);min-height:44px;padding:8px 10px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
+.settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:12px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
 .settings-categories a>.wire-icon {margin-top:calc((1lh - 24px)/2)}
 .settings-category-label {min-width:0;overflow-wrap:anywhere}
 .settings-categories a:hover {background:var(--hover);color:var(--ink);text-decoration:none}
 .settings-categories a:active {background:var(--pill-pressed);color:var(--ink)}
-.settings-categories a[aria-current=page] {background:var(--paper);color:var(--ink);font-weight:var(--weight-strong)}
+.settings-categories a[aria-current=page] {background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-strong)}
 .settings-categories a[aria-current=page]:hover {background:var(--hover)}
 .settings-categories a[aria-current=page]:active {background:var(--pill-pressed)}
 .settings-categories>summary {padding:10px 12px;background:var(--canvas);color:var(--ink);border:0;border-radius:var(--settings-nav-radius);cursor:pointer;min-height:44px;overflow-wrap:anywhere}
@@ -65,7 +64,7 @@ export const settingsStyles = `
 .settings-search .search-input-row input:focus-visible {outline:none}
 .settings-search .search-input-row button {padding:8px var(--pill-inset);border:0;background:transparent;min-width:44px}
 .settings-search .search-input-row button:focus-visible {outline-offset:0}
-.settings-rail .settings-status-link {display:flex;flex-direction:column;align-items:flex-start;font-size:var(--type-caption);line-height:var(--leading-caption)}
+.settings-rail .settings-status-link {display:flex;flex-direction:column;align-items:flex-start;padding:12px;font-size:var(--type-small);line-height:var(--leading-ui)}
 .scoped-search {margin-block:16px;min-width:0}
 .scoped-search>label {display:block;font-weight:600;margin-bottom:6px}
 .search-input-row {display:flex;align-items:center;gap:8px}
@@ -74,7 +73,7 @@ export const settingsStyles = `
 .scoped-search p {margin-top:6px;color:var(--muted)}
 .search-count {font-size:var(--type-body)}
 .settings-search-results {list-style:none;padding:0;margin:12px 0 0;display:grid;gap:4px}
-.settings-search-results a {display:grid;gap:2px;padding:12px 16px;background:var(--paper);border-radius:var(--radius-small);text-decoration:none!important;min-height:44px}
+.settings-search-results a {display:grid;gap:6px;padding:12px;background:var(--paper);border-radius:var(--settings-nav-radius);text-decoration:none!important;min-height:44px;overflow-wrap:anywhere}
 .settings-search-results a:hover {background:var(--hover)}
 .settings-search-results .search-category,.settings-search-results .search-context {color:var(--muted);font-weight:400}
 .settings-search-results .search-category {font-size:.875rem}
@@ -82,12 +81,13 @@ export const settingsStyles = `
 .settings-target {scroll-margin-block:20px}
 .settings-target:where(:focus) {outline:2px solid var(--focus);outline-offset:4px}
 @container settings (max-width:52rem) {
- .settings-layout {grid-template-columns:minmax(0,1fr);gap:16px}
+ .settings-layout {grid-template-columns:minmax(0,1fr);gap:20px}
  .settings-rail {position:static;max-height:none;overflow:visible;padding:0;margin:0}
  .settings-categories {padding:0;border-inline-end:0}
  .settings-categories>summary {display:list-item;list-style-position:inside}
  .settings-categories nav {margin-top:8px}
- .settings-content {max-width:none}
+ .settings-content {max-width:none;padding:24px}
+ .settings-rail .settings-status-link {padding:0;margin:0}
  .settings-section-heading {flex-wrap:wrap}
 }
 .settings-view,.settings-view p,.settings-view summary {font-size:var(--type-body);line-height:var(--leading-ui)}
@@ -99,14 +99,18 @@ export const settingsStyles = `
 .settings-section h2 {font-size:var(--type-section);line-height:var(--leading-section)}
 .settings-section h3 {font-size:var(--type-body);line-height:var(--leading-ui)}
 .settings-view .settings-section {padding:0;background:transparent;border:0;border-radius:0;margin:0}
-.settings-view .settings-section>h2 {margin-bottom:16px}
-.settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:var(--settings-title-size);line-height:var(--settings-title-leading);letter-spacing:var(--settings-title-tracking)}
+.settings-view .settings-section>h2 {margin:0}
+.settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group) {margin-bottom:24px}
+.settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.5rem;line-height:var(--leading-heading);letter-spacing:-.015em}
+.settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
 .settings-section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:24px}
 .settings-section-heading p,.settings-help {color:var(--muted)}
 .settings-section p {margin-top:8px;max-width:70ch}
 .settings-section .settings-help {font-size:var(--type-small);line-height:var(--leading-ui)}
 .settings-view .settings-section-heading p {font-size:var(--type-reading);line-height:var(--leading-reading)}
-.connection-status {flex:none;font-weight:600;color:var(--accent)}
+.connection-status {font-weight:var(--weight-medium);color:var(--ink);overflow-wrap:anywhere}
+.settings-source-state {display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}
+.settings-value-label {color:var(--muted);font-size:var(--type-small);font-weight:var(--weight-regular)}
 .approved-label {color:var(--success);margin-left:12px}
 .settings-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;align-items:center}
 .settings-view :is(.settings-actions,.assessment-control-actions) {justify-content:flex-start}
@@ -115,81 +119,94 @@ export const settingsStyles = `
 .settings-advanced {margin-top:16px;border-top:1px solid var(--rule)}
 .settings-advanced>summary {padding-block:12px;color:var(--muted)}
 .settings-paths,.settings-diagnostics {display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,3fr);gap:8px 20px;margin:8px 0 16px}
+.settings-view .settings-paths {grid-template-columns:minmax(0,1fr);gap:4px}
+.settings-view .settings-paths dd {margin-bottom:12px;min-height:0}
 .settings-paths dt,.settings-diagnostics dt {color:var(--muted)}
 .settings-paths dd,.settings-diagnostics dd {margin:0;overflow-wrap:anywhere;min-width:0}
 .settings-paths dd {font:var(--weight-regular) var(--type-reading)/var(--leading-reading) var(--font);white-space:break-spaces;min-height:44px}
 .settings-paths dt {align-self:start;font:inherit}
 .source-paths-read,.source-editor {margin-top:16px}
-.settings-view :is(.source-paths-read,.source-editor) {padding-block:16px 0;border-top:1px solid var(--rule)}
+.settings-view :is(.source-paths-read,.source-editor) {padding-block:20px 0;border-top:1px solid var(--rule)}
 .source-paths-read {scroll-margin-block:20px}
 .source-paths-read h4 {width:fit-content;max-width:100%}
 .source-paths-read h4,.source-editor h4 {font:var(--weight-strong) var(--type-body)/var(--leading-ui) var(--font)}
 .settings-field {display:flex;flex-direction:column;gap:6px;min-width:0}
 .source-editor .settings-field {margin-top:16px}
+.source-editor .settings-preferences .settings-field {margin-top:0}
 .source-editor .settings-field p {margin-top:0}
 .source-editor input[type=text] {box-sizing:border-box;width:100%;min-height:44px;padding:8px 14px;border:1px solid var(--control);border-radius:var(--settings-field-radius,var(--radius-small));font-family:var(--font);font-size:var(--type-control);line-height:var(--leading-control)}
 .source-editor input[type=text]:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
 .settings-field input {width:100%}
-.display-time-field {margin-top:0}
-.display-time-field>.select-control,.settings-preferences .select-control {align-self:flex-start;width:max-content;max-width:min(100%,36rem)}
-.display-time-field .select-trigger,.settings-preferences .select-trigger {font-size:var(--type-control);line-height:var(--leading-control);min-height:max(44px,calc(1lh + 16px))}
-.settings-preferences {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px}
-.settings-view .settings-subheading {font-size:var(--type-reading);margin-top:var(--space-xl)}
-.settings-view .settings-subheading+.settings-preferences {margin-top:var(--space-md)}
+.settings-view .select-control {max-width:100%}
+.settings-preferences {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:20px}
+.settings-preferences .select-control {width:100%}
+.settings-view .settings-subheading {font-size:var(--type-reading)}
 .settings-view p,.settings-view summary {overflow-wrap:anywhere}
-.settings-view :is(.settings-preferences .settings-field,.display-time-field,.settings-task-row) {display:grid;grid-template-columns:minmax(0,18rem) minmax(0,1fr);align-items:start;gap:4px var(--space-lg);padding-block:16px;border-top:1px solid transparent}
-.settings-preferences .settings-field>label {grid-column:1;grid-row:1;padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
-.display-time-field>h3 {grid-column:1;grid-row:1;margin:0}
-.display-time-field>h3>label {padding:0;font-size:var(--type-reading);font-weight:var(--weight-strong)}
-.settings-preferences .settings-field>.select-control,.display-time-field>.select-control {grid-column:2;grid-row:1;justify-self:start;align-self:start;width:fit-content;max-width:100%}
-.display-time-field>.settings-help {grid-column:2;margin:0}
+.settings-view :is(.settings-display-field,.settings-task-row) {display:grid;grid-template-columns:minmax(0,1fr) fit-content(45%);align-items:baseline;gap:8px 24px;padding-block:24px;border-top:1px solid var(--rule)}
+.settings-preferences .settings-field>label {padding:0;font-size:var(--type-small);font-weight:var(--weight-medium)}
+.settings-display-field>.select-control {align-self:baseline;justify-self:end;max-width:100%}
+.settings-display-field>:is(.settings-help,.notice) {grid-column:1/-1;margin:0}
 .settings-task-row {margin-top:0}
-.settings-row-copy {display:contents}
-.settings-row-copy h3 {grid-column:1;grid-row:1;align-self:center;font-size:var(--type-reading);line-height:var(--leading-ui)}
-.settings-row-copy p {grid-column:1/-1;grid-row:2;color:var(--muted);margin:0}
-.settings-task-row>:is(button,.button-link) {grid-column:2;grid-row:1;justify-self:start;max-width:100%}
+.settings-row-copy {min-width:0}
+.settings-row-copy h3,.settings-row-copy h3 label {margin:0;font-size:var(--type-reading);line-height:var(--leading-ui);font-weight:var(--weight-strong)}
+.settings-row-copy p,.settings-row-copy .settings-help {color:var(--muted);margin:6px 0 0;max-width:52ch}
+.settings-task-row>:is(button,.button-link,.ux-disabled-help) {justify-self:end;max-width:100%}
 #approvedConnection>p {margin:0}
 #approvedConnection>.settings-actions {margin-top:8px}
 #unapprovedConnection>p {margin:0}
-.settings-group,.settings-view .fresh-activity {margin:0;padding-block:16px;border-top:1px solid transparent}
-.settings-group-heading {display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
-.settings-view :is(.settings-group h3,.fresh-activity>h3) {font-size:var(--type-reading);font-weight:var(--weight-strong);margin:0 0 12px}
-.settings-view #connectionSource {display:grid;grid-template-columns:minmax(0,18rem) minmax(0,1fr);gap:0 var(--space-lg)}
-.settings-view #connectionSource>.settings-group-heading {align-content:start;align-items:baseline;gap:4px 12px}
-.settings-view #connectionSource>.settings-group-heading h3 {margin:0}
-.settings-view #connectionSource>:is(.source-editor,.source-paths-read) {grid-column:1/-1}
-.settings-view .fresh-activity {display:grid;grid-template-columns:minmax(0,18rem) minmax(0,1fr);gap:8px var(--space-lg)}
-.settings-view .fresh-activity>h3 {margin:0}
-.settings-view .fresh-controls {min-width:0;grid-template-columns:auto minmax(0,1fr);gap:8px 12px}
-.settings-view .fresh-details {grid-column:2;grid-row:1}
-.settings-view .fresh-controls:has(#freshHelp[open]) {grid-template-columns:minmax(0,1fr)}
-.settings-view .fresh-controls:has(#freshHelp[open]) .fresh-details {grid-column:1;grid-row:auto}
+.settings-group {margin:0;padding-block:20px;border-top:1px solid transparent}
+.settings-view .settings-group {padding-block:24px;border-top-color:var(--rule)}
+.settings-group-heading {display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px;margin-bottom:12px}
+.settings-view :is(.settings-group h3,.fresh-activity>h3) {font-size:var(--type-reading);font-weight:var(--weight-strong);margin:0}
+.settings-view #connectionSource {padding-top:0;border-top:0}
+.settings-view .fresh-activity {display:block;margin:0;padding-block:24px;border-top:1px solid var(--rule)}
+.settings-view .fresh-activity>h3 {margin:0 0 12px}
+.settings-view .fresh-controls {min-width:0;grid-template-columns:44px minmax(0,1fr);align-items:baseline;gap:8px 12px}
+.settings-view .fresh-controls>:is(#checkActivity,.ux-disabled-help) {grid-column:1;grid-row:1}
+.settings-view .fresh-details {display:none}
+.settings-view .settings-refresh-context {grid-column:2;grid-row:1;margin:0;color:var(--muted)}
+.settings-view .fresh-result {grid-column:2;grid-row:1}
+.settings-view .fresh-controls:has(.settings-refresh-context:not([hidden])) .fresh-result {grid-row:2}
+.settings-view .fresh-controls:not(:has(>#checkActivity:not([hidden]),>.ux-disabled-help:not([hidden]))) {grid-template-columns:minmax(0,1fr)}
+.settings-view .fresh-controls:not(:has(>#checkActivity:not([hidden]),>.ux-disabled-help:not([hidden])))>:is(.settings-refresh-context,.fresh-result) {grid-column:1}
+.settings-view .settings-refresh-details {margin-top:12px;color:var(--muted)}
+.settings-view .settings-refresh-details p {font-size:var(--type-small)}
+.settings-view .settings-refresh-details ul {margin:8px 0;padding-inline-start:20px}
+.settings-view .settings-refresh-details li {margin-block:4px}
 .settings-group-heading .connection-status {font-size:var(--type-small)}
 #approvedConnection,#unapprovedConnection {padding:0;border:0}
 #connectionSource:has(#approvedConnection[hidden]) .source-editor {margin-top:0;padding-block:0;border-top:0}
 #connectionPreferences .settings-preferences .settings-field {padding-block:0;border:0}
-#connectionPreferences #preferenceActions {margin-top:16px;padding-top:12px;border-top:1px solid var(--rule)}
+#connectionPreferences #preferenceActions {margin-top:20px;padding-top:12px}
+.settings-view #connectionPreferences {padding-bottom:0}
 .settings-view .settings-group>.settings-task-row {padding:0;border:0;margin:0}
 .settings-view .settings-group>.settings-task-row h3 {margin:0}
 .settings-group>.collection-status-actions {margin-top:8px}
-.settings-reply-row {display:grid;grid-template-columns:minmax(0,18rem) minmax(0,1fr);gap:8px var(--space-lg);padding-block:16px;margin-top:0;border-top:1px solid var(--rule)}
+.settings-reply-row {display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding-block:0 24px;margin:0}
 .settings-reply-row>h3 {font-size:var(--type-reading);line-height:var(--leading-ui);font-weight:var(--weight-strong)}
 .settings-view #assessmentSetup {min-width:0}
-.settings-view #assessmentSetup .settings-choice-row {display:flex;align-items:center;gap:var(--space-sm);width:fit-content;max-width:100%;min-height:44px;margin-top:0;cursor:pointer}
+.settings-view #assessmentSetup .settings-choice-row {display:flex;align-items:center;gap:var(--space-sm);width:fit-content;max-width:100%;min-height:44px;margin-top:0;padding:8px 0;cursor:pointer}
 .settings-view #assessmentSetup .settings-choice-row>input {margin:0;min-height:0}
-.settings-view #assessmentSetup .assessment-control-actions {justify-content:flex-start}
+.settings-view #assessmentSetup .settings-choice-row>span {min-width:0}
+.settings-view #assessmentSetup .assessment-control-actions {justify-content:flex-start;margin:12px 0 0}
 .settings-view #assessmentSetup .assessment-control-actions:not(:has(>button:not([hidden]))) {display:none}
-.settings-view #assessmentSetup .assessment-capture-details {margin-block:8px;color:var(--muted)}
+.settings-view #assessmentSetup .assessment-capture-details {margin-block:8px;padding:12px 0;border-block:1px solid var(--rule);color:var(--muted)}
+.settings-view #assessmentSetup .settings-help {margin-top:0}
 .settings-view #assessmentSetup>section>p {max-width:70ch}
-.settings-view .settings-automatic-row {display:grid;grid-template-columns:minmax(0,18rem) minmax(0,1fr);align-items:start;gap:4px var(--space-lg);padding-block:16px;margin-top:0}
-.settings-view .settings-automatic-row>h3 {grid-column:1;grid-row:1;align-self:center;min-width:0}
-.settings-view .settings-automatic-row>p {grid-column:1/-1;grid-row:2;margin:0}
-.settings-view .settings-automatic-actions {grid-column:2;grid-row:1;display:flex;flex-wrap:wrap;align-items:start;gap:8px;min-width:0}
+.settings-view .settings-automatic-row {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:0;margin:0;border:0}
+.settings-view .settings-automatic-row>h3,.settings-view .settings-automatic-row>p {margin:0}
+.settings-view .settings-automatic-actions {display:flex;flex-wrap:wrap;align-items:start;gap:8px;min-width:0}
+.settings-view .settings-automatic-row[data-scoring-state=paused]>p {border-inline-start:3px solid var(--warning);padding-inline-start:12px}
 .settings-view .settings-content a:not(.button-link),.settings-status-link a {text-decoration:underline;text-underline-offset:3px}
 .settings-view .settings-content a:not(.button-link) {display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
 .settings-view .settings-advanced {margin-top:0}
 .settings-view .settings-advanced>summary {padding-block:12px;cursor:pointer}
 .settings-view .settings-advanced[open] {padding-bottom:12px}
+.settings-view .settings-advanced>summary {color:var(--ink);font-weight:var(--weight-medium)}
+.settings-view .settings-advanced>p {margin:0 0 8px;color:var(--muted)}
+.settings-view [data-settings-section=troubleshooting]>.settings-group {padding-top:0;border:0}
+.settings-view [data-settings-section=display]>.settings-theme-row {padding-top:0;border:0}
+.settings-view .settings-section>:last-child {padding-bottom:0}
 .display-time-field p {overflow-wrap:anywhere}
 .permission-boundary {margin-top:20px!important;padding-top:16px;border-top:1px solid var(--rule)}
 #unapprovedConnection>.ux-disabled-help {margin-top:16px}
@@ -201,26 +218,23 @@ export const settingsStyles = `
 .settings-draft-notice {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-bottom:16px}
 .settings-draft-notice a {min-height:44px;align-content:center}
 @container settings (max-width:52rem) {
- .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:var(--type-title);line-height:var(--leading-heading)}
+ .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.375rem;line-height:var(--leading-heading)}
  .settings-paths {grid-template-columns:minmax(0,1fr);gap:4px}
  .settings-paths dd {margin-bottom:12px}
 }
-@container settings-pane (max-width:36rem) {
- .settings-view :is(.settings-preferences .settings-field,.display-time-field,.settings-task-row) {grid-template-columns:minmax(0,1fr);gap:8px}
- .settings-preferences .settings-field>label,.settings-preferences .settings-field>.settings-help,.settings-preferences .settings-field>.select-control,
- .display-time-field>h3,.display-time-field>.select-control,.display-time-field>.settings-help {grid-column:1;grid-row:auto}
- .settings-preferences .settings-field>.select-control,.display-time-field>.select-control {justify-self:start;width:max-content;max-width:100%}
- .settings-task-row>:is(button,.button-link),#unapprovedConnection>button {justify-self:start}
- .settings-task-row>.settings-row-copy>:is(h3,p),.settings-task-row>:is(button,.button-link) {grid-column:1;grid-row:auto}
- .settings-view .settings-automatic-row {grid-template-columns:minmax(0,1fr)}
- .settings-view .settings-automatic-row>:is(h3,p,.settings-automatic-actions) {grid-column:1;grid-row:auto}
- .settings-view #connectionSource,.settings-view .fresh-activity,.settings-reply-row {grid-template-columns:minmax(0,1fr);gap:8px}
+@container settings-pane (max-width:34rem) {
+ .settings-view :is(.settings-display-field,.settings-task-row) {grid-template-columns:minmax(0,1fr);gap:12px}
+ .settings-view .settings-preferences {grid-template-columns:minmax(0,1fr)}
+ .settings-view .settings-task-row>:is(button,.button-link,.ux-disabled-help),.settings-display-field>.select-control {justify-self:start}
+ .settings-display-field>.select-control {width:100%}
+ .settings-view .fresh-controls {justify-self:start;max-width:100%}
  .settings-view :is(.settings-actions,.assessment-control-actions) {justify-content:flex-start}
 }
 @media(max-width:699px) {
  .settings-section {padding:20px 16px}
  #workspace:has(>#settingsView:not([hidden]))>.page-heading #pageTitle {font-size:var(--type-title);line-height:var(--leading-heading)}
  .settings-view .settings-section {padding:0}
+ .settings-content {padding:20px 16px}
  .settings-section-heading {flex-direction:column;gap:8px}
  .settings-preferences {grid-template-columns:minmax(0,1fr)}
  .settings-paths,.settings-diagnostics {grid-template-columns:minmax(0,1fr);gap:4px}

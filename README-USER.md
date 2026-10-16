@@ -32,9 +32,14 @@ results and services. Tool failures use red, not the amber used for partial
 results and warnings. Saved report styling is unchanged.
 
 In **Settings > Connection & updates**, the approved source and collection state
-come before **History and frequency**. **View source** opens the exact approved
-database and history-folder paths; **Change source** is available there.
-Opening either view grants no permission and does not resume paused collection.
+come before **History and frequency**. **Review source** opens the exact paths
+and history choices together, without an intermediate read-only menu or links
+between forms. Its decision is **Save preferences** when only history/frequency
+changes, or **Approve and switch source** when a path changes. **Cancel** discards
+the whole draft. Ordinary history/frequency edits are still directly available
+on the main Connection page; they do not require opening source review.
+Opening the review grants no permission and does not resume paused collection.
+Existing source-path links and Settings search still reveal the read-only paths.
 If status cannot be read, Settings marks the displayed connection as **Last known**
 and blocks collection changes. **Read current connection** checks status without
 repeating a save or source check; unsaved preferences are kept.
@@ -44,13 +49,13 @@ repeating a save or source check; unsaved preferences are kept.
 **Refresh** checks approved local histories and reads the latest stored activity
 without rerunning Work IQ or Graph queries. Automatic collection keeps its current
 configuration; paused collection stays paused. Before source approval, Refresh
-only reads stored activity. **Review source & connect**, inside **Source and
-collection**, remains a separate action.
+only reads stored activity. The Refresh icon sits beside the Analyze heading.
+**Review source & connect**, in **Settings > Connection & updates**, remains a separate action.
 
 Accepted results, filters and report selections stay while updating. Finish an
 open report review or save/cancel Settings edits before refreshing. A failed
 source-path or metadata check offers **Review source**. Reading stored activity
-does not repair that source. **Read stored activity** appears beside Refresh for
+does not repair that source. **Read stored activity** replaces the Refresh action for
 a failed stored read or an unconfirmed check; it never repeats a source check or save. If a
 source-check response is lost, its outcome stays unconfirmed even when newer
 stored activity is available; Refresh and recovery remain read-only in this tab,
@@ -60,7 +65,7 @@ checks explicitly. This protection does not correlate operations across tabs.
 **No new recorded activity** means that manual check added no records or updates;
 it does not mean every history is available. **Chat history** shows the known
 unavailable, limited or still-reading chat counts from that check. Open
-**Source and collection**, beside Refresh, for its recorded primary
+**Update details**, below the filters after a check, for its recorded primary
 reasons, reading limits and possible next steps. **View current history issues**
 opens the existing chat-by-chat details; later background checks may have changed
 that list.
@@ -87,10 +92,14 @@ diagnostic does not check collection and is not a required next step.
 
 The main filter row shows **Dates, Tool, Service, Outcome, Author**. **Dates** sets one shared date range for every Analyze widget and its underlying records. **More filters** keeps **Category, Project, Chat, Activity, Collection** available. Applied choices stay visible below, even when More filters is closed, and can be removed individually. The same controls work throughout Analyze, including a scoped chat. On smaller screens or with larger text, fields and selected values wrap rather than disappearing offscreen; Tab reaches each control.
 
-The filters share one area with Refresh and collection status.
-**Source and collection** also contains history-gap details and the optional
-**Delete collected activity** action; deletion still requires its separate review
-and confirmation. Below the filters, the matching total sits beside **View records**
+The funnel icon identifies **Filters**. Rounded controls keep selected values visible;
+Author and Outcome use toggle-like selection marks, but changes wait for **Apply**.
+The **Reset Analyze** icon sits with the applied filters and clears browsing state only, not
+report selections, evidence or preferences. Refresh is separate, beside the page heading.
+Relevant collection notices link to the existing Settings or Collection status page.
+Source permissions, pause/resume and history/frequency stay in **Settings > Connection & updates**.
+Deletion and recollection belong in **Settings > Privacy & saved data**, not the filter area;
+both keep their separate review and confirmation. Below the filters, the matching total sits beside **View records**
 and **Compare periods**. Recorded outcomes and the time/category/path view share
 one chart row, followed by **Work IQ tool calls** and **Services**. All use the same
 applied filters. **Chart data and definitions** is the single place for exact
@@ -106,7 +115,14 @@ grow for more dates or groups, but switching views does not rearrange those pane
 Long desktop lists scroll within the chart; **Show all** still includes every group,
 and keyboard focus scrolls each selected group into view.
 
-Choose **Dates > Custom dates**, enter **From/To**, then **Apply dates**. Dates are inclusive; **All dates** means all retained dates in the chosen collection, not a new scan. In **Outcome**, tick one or more statuses, then **Apply**. The view stays unchanged while you choose; **Cancel**, Escape or clicking outside discards your draft. **Clear** beside the label restores all results without clearing other filters. An empty draft cannot be applied. Choices within Author or Outcome combine with OR; different filters combine with AND. The chart's time-scale control is available in **Over time** only.
+Choose **Dates > Custom dates**, enter **From/To**, then **Apply dates**. Dates are inclusive; **All dates** means all retained dates in the chosen collection, not a new scan. In **Outcome**, tick one or more statuses, then **Apply**. The view stays unchanged while you choose; **Cancel**, Escape or clicking outside discards your draft. Remove the applied **Outcome** chip to restore all results without clearing other filters. An empty draft cannot be applied. Choices within Author or Outcome combine with OR; different filters combine with AND. The chart's time-scale control is available in **Over time** only.
+
+Outcome and Author each have one settled removal entry: their applied chip.
+Removing it also cancels an in-flight replacement for that field. If a first
+restriction is still loading and there is no applied chip, an inline **Cancel
+pending outcome filter** or **Cancel pending author filter** action keeps All.
+Neither changes report selection. Menu **All** still changes only the draft;
+**Reset Analyze** retains its separate, broader browsing reset.
 
 **Activity over time** uses flat, linear columns: twice as many matching records
 means twice the height. Daily, Weekly and Monthly follow the display time zone;
@@ -125,13 +141,13 @@ their existing choices and denominators.
 
 **Service** matches recorded service associations, including calls with multiple targets. Choosing Files declares **Files + calls with missing service details**: known matches and separately counted context, with no duplicate calls. Remove the **Calls with missing service details (context)** chip for Files-only matching; the scope then offers an explicit way to include context again. Discovery stays preparation, not missing-service context. **Category** still provides the original exclusive category breakdown, including Discovery, multi-service calls and Service not shown; existing category links keep their meaning.
 
-Use **Author** to choose **Your prompts**, **Agent prompts**, or both, then **Apply**. **All authors** also includes **Author unverified**; choosing just Your + Agent leaves unverified authors out. The same choice works inside a conversation and combines with dates, results, services and projects. Cancel, Escape or clicking outside keeps the previous view. Clear restores all authors without changing the other filters.
+Use **Author** to choose **My prompts**, **Agent prompts**, or both, then **Apply**. **All authors** also includes **Author unverified**; choosing just My + Agent leaves unverified authors out. The same choice works inside a conversation and combines with dates, results, services and projects. Cancel, Escape or clicking outside keeps the previous view. Removing the **Author** chip restores all authors without changing the other filters.
 
 The information buttons explain the current choices. **Category** distinguishes Discovery (finding APIs, schemas or agents), search, service targets, multi-service calls and **Service not shown**. In **Activity**, **Graph API call sites** are recorded invocation sites, not measured network calls; **Graph statuses** are the subset with visible HTTP statuses. **Returned API entries** are tool-returned results, not additional calls. **HTTP recorder** is a separate diagnostic source; **Graph code references** do not prove execution. These views overlap, so do not add their counts.
 
 Choosing **Service not shown** explains the matching tools and why their service cannot be identified. For example, **Copilot assistance** identifies an `ask` call even when its record has no downstream API path. The call's technical details show which path, method and version are missing from that record; a question or attached file does not establish which service was used. Missing details do not prove that no service was used or that the call failed.
 
-**Your prompt** is the user-input side of your connected Copilot collection. **Agent prompt** is recorded agent-originated input. Their muted blue and violet labels distinguish sources, not quality. An unverified author stays neutral; **Copilot chat prompt** describes a known chat source without guessing who wrote it. Calls made by an agent stay with the originating interaction.
+**My prompt** is the user-input side of your connected Copilot collection. **Agent prompt** is recorded agent-originated input. Each compact interaction card starts its prompt with one of these brief labels, or **Author unverified** when sender evidence is missing or conflicting. Their muted blue and violet labels distinguish prompt sources, not quality or who executed the calls. An unverified author stays neutral; **Copilot chat prompt** in the reader describes a known chat source without guessing who wrote it. Calls made by an agent stay with the originating interaction.
 
 Each status has its own icon and color. **Tool failed** is different from **Connection failed**; **No result recorded** means missing evidence, while **Other HTTP status** means a recorded informational or redirect status. **Chart data and definitions** explains these distinctions. **Worked** means tool completion, not answer correctness.
 
@@ -291,7 +307,7 @@ are not failed scores. HTML, PDF, Markdown and JSON use the same frozen facts.
 Review masked copies too. Detected credentials are removed even in Original mode. Saving uploads nothing.
 Author membership and prompt text are separate: **No prompts** hides text, not interactions.
 Changing report authors requires a fresh preview and disclosure review. Saved files use neutral
-**User prompt** wording for the cohort called **Your prompts** in the app; they do not identify a named person.
+**User prompt** wording for the cohort called **My prompts** in the app; they do not identify a named person.
 
 ## Compare or delete
 
@@ -313,13 +329,13 @@ Deletion is permanent; interrupted cleanup can leave files behind. Use
 **Check deletion result**, including after reopening the panel, rather than
 repeating confirmation. New reports saved after the preview are not included.
 
-For collected records, use **Settings > Privacy & saved data > Delete collected activity**. Opening it deletes nothing. Choose **All collected activity** or dates, then **Preview deletion**. Review counts before **Delete N records**. **Cancel** changes nothing; **Change scope** requires another preview. Copilot sources and saved reports remain. Red outlines identify destructive entries and confirmations, not ordinary previews or cancellation.
+For collected records, use **Settings > Privacy & saved data > Collected activity > Review deletion**. Opening it deletes nothing. Choose **All collected activity** or dates, then **Preview deletion**. Review counts before **Delete N records**. **Cancel** changes nothing; **Change scope** requires another preview. Copilot sources and saved reports remain. Red outlines identify destructive entries and confirmations, not ordinary previews or cancellation. Settings search still finds **Delete collected activity**.
 
 ## Recollect activity
 
 After deletion, ordinary refresh and collection checks do not bring deleted records back.
 
-1. Open **Settings > Privacy & saved data > Recollect from approved sources**.
+1. Open **Settings > Privacy & saved data > Read history again > Choose chats**. Settings search still finds **Recollect activity**.
 2. Use **Find a chat** or the paged list, then enter **From/To** dates. Choices stay selected across searches and pages; **Show selected** reviews them. Only the already-approved source and history window can be read.
 3. If wanted, select **Also restore original prompts for these requests**. This is off by default. Deleted response captures and personal feedback are not restored.
 4. Select **Preview available evidence**. Review the exact records, prompt choice and **Source availability and limits**. Missing history cannot be recovered. **Cancel**, Escape or **Change scope** makes no stored change.

@@ -31,6 +31,12 @@ test("Search paints only the actual hovered or pressed row, with fixed geometry 
                 before: { content: before.content, background: before.backgroundColor, border: before.borderTopColor,
                     shadow: before.boxShadow, width: before.width, height: before.height, pointerEvents: before.pointerEvents },
                 rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+                content: [...node.querySelectorAll(".wire-search-title,.wire-search-kind,.wire-search-source,.wire-search-excerpt,.wire-search-outcome,mark,.wire-icon")].map(part => {
+                    const css = getComputedStyle(part);
+                    return { role: part.localName === "mark" ? "mark" : part.className.baseVal || part.className,
+                        color: css.color, background: css.backgroundColor, underline: css.textDecorationLine };
+                }),
+                paper: getComputedStyle(document.querySelector("#wireSearchPanel")).backgroundColor,
             };
         });
     }
@@ -130,5 +136,13 @@ test("Search paints only the actual hovered or pressed row, with fixed geometry 
         }
         assert.ok(contrast(value.hover.ink, fill(value.hover)) >= 4.5);
         assert.ok(contrast(value.pressed.ink, fill(value.pressed)) >= 4.5);
+        for (const state of [value.idle, value.hover, value.pressed, value.keyboard]) {
+            const surface = transparent(fill(state)) ? state.paper : fill(state);
+            for (const part of state.content) {
+                assert.ok(contrast(part.color, transparent(part.background) ? surface : part.background)
+                    >= (part.role === "wire-icon" ? 3 : 4.5), `${value.theme}/${value.width}: ${part.role} contrast`);
+                if (part.role === "mark") assert.ok(part.underline.includes("underline"), "Match meaning is not color alone");
+            }
+        }
     }
 });

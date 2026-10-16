@@ -11,7 +11,7 @@ import { BoardError } from "../lib/store.mjs";
 test("known Both stays distinct from All including unverified", () => {
     assert.deepEqual(promptAuthorship.selection(), ["user", "agent", "unknown"]);
     assert.deepEqual(promptAuthorship.selection(["agent", "user"]), ["user", "agent"]);
-    assert.equal(promptAuthorship.selectionLabel(["user", "agent"]), "Your and agent prompts");
+    assert.equal(promptAuthorship.selectionLabel(["user", "agent"]), "My and agent prompts");
     assert.equal(promptAuthorship.selectionLabel(), "All prompts (including unverified)");
     assert.equal(promptAuthorship.filterValue(["unknown", "agent", "user"]), undefined);
     assert.equal(promptAuthorship.filterValue(["agent", "user"]), "user,agent");
@@ -56,8 +56,13 @@ test("owner wording and chat-origin wording do not change author classification"
     const own = { authorship: { actor: "user", basis: "source-user" } };
     const unknown = { text: "Agent-looking words", sourceEventId: "invented-message" };
     const chat = { sourceHost: "copilot-app", sourceSessionId: "invented-chat", userPrompt: unknown };
-    assert.equal(promptAuthorship.label(own), "Your prompt");
+    assert.equal(promptAuthorship.label(own), "My prompt");
     assert.equal(promptAuthorship.label(own, { ownerVoice: false }), "User prompt");
+    assert.equal(promptAuthorship.selectionLabel(["user"]), "My prompts");
+    assert.equal(promptAuthorship.selectionLabel(["user", "unknown"]), "My and unverified prompts");
+    assert.equal(promptAuthorship.selectionLabel(["user"], { ownerVoice: false }), "User prompts");
+    assert.equal(promptAuthorship.selectionLabel(["user", "agent"], { ownerVoice: false }), "User and agent prompts");
+    assert.equal(promptAuthorship.selectionLabel(["user", "unknown"], { ownerVoice: false }), "User and unverified prompts");
     assert.equal(promptAuthorship.label(unknown, { originKind: promptAuthorship.originKind(chat) }), "Copilot chat prompt");
     assert.equal(promptAuthorship.read(unknown).actor, "unknown");
     assert.equal(promptAuthorship.label(unknown, { originKind: promptAuthorship.originKind({ ...chat, sourceHost: "unverified" }) }), "Prompt");

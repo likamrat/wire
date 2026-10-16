@@ -251,7 +251,8 @@ export function createAutomaticScoreExperience({ root, api, ux, mountRow, mountA
     }
     renderRow();
     return {
-        observe, open,
+        observe, open, isOpen,
+        isOpenIn: host => isOpen() && host.contains(dialog),
         invalidatePendingViewReads() { generation++; },
         invalidate(message) { view?.invalidate(message); },
         leave() {

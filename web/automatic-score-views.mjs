@@ -68,8 +68,9 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
     head.append(title, close);
     dialog.classList.add("assessment-dialog", "automatic-score-dialog");
     dialog.setAttribute("aria-labelledby", title.id);
-    const destination = el("p", `GitHub Copilot - ${scope.method.model}`);
-    const purpose = el("p", "AI reviews the answer, its support, and whether tool use matched the request; not permission.");
+    const destination = el(inline ? "p" : "dd", `GitHub Copilot - ${scope.method.model}`);
+    const purpose = el("p", inline ? "AI reviews the answer, its support, and whether tool use matched the request; not permission."
+        : "AI reviews the answer, its support and whether tool use matched your request. A review does not grant permission.");
     const summary = el("p", scope.interactionRefs
         ? `Only the ${scope.interactionRefs.length} fixed retained requests under review, within the ${scope.source.windowDays}-day window. New requests are not included.`
         : `Existing and new completed requests in the chats you approve, within the ${scope.source.windowDays}-day collection window.`);
@@ -108,9 +109,9 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
     used.hidden = !used.textContent;
     const chatLimit = el("p", "Choose no more than 6 chats.", "error");
     chatLimit.hidden = true;
-    const disclosure = el("details", undefined, "reading-section");
-    disclosure.append(el("summary", "What is sent and retained"),
-        el("p", "The model shown above receives recorded prompts, final replies, returned tool evidence and inputs sent to tools. Credentials are excluded. No request is replayed and no new source is added."),
+    const disclosure = el(inline ? "details" : "div", undefined, inline ? "reading-section" : "reading-section settings-score-disclosure");
+    if (inline) disclosure.append(el("summary", "What is sent and retained"));
+    disclosure.append(el("p", "The model shown above receives recorded prompts, final replies, returned tool evidence and inputs sent to tools. Credentials are excluded. No request is replayed and no new source is added."),
         el("p", "Temporary evaluation text is removed after processing. Model assessments and evaluator billing are retained locally. The allowance covers evaluator spending only."),
         el("p", "This approval is separate from saving Copilot replies locally. Collection is never resumed by scoring."),
         el("p", `Scoring method: ${scope.method.rubricId}, version ${scope.method.rubricVersion}.`));
@@ -124,8 +125,23 @@ export function mountAutomaticScoresApproval(dialog, { setup, onSubmit, onCheck,
     const cancel = button("Cancel", closeView), check = button("Check approval result", () => onCheck(packet));
     check.hidden = true;
     actions.append(approve, cancel, check);
-    form.append(chats, chatLimit, used, limits, budgetHelp, disclosure, consentLabel, status, actions);
-    body.append(purpose, destination, summary, form);
+    if (inline) {
+        form.append(chats, chatLimit, used, limits, budgetHelp, disclosure, consentLabel, status, actions);
+        body.append(purpose, destination, summary, form);
+    } else {
+        const method = el("section", undefined, "settings-dialog-group");
+        const model = el("dl", undefined, "settings-model-fact");
+        model.append(el("dt", "Model"), destination);
+        method.append(purpose, model);
+        const chatScope = el("section", undefined, "settings-dialog-group");
+        chatScope.append(chats, chatLimit, summary);
+        const budget = el("section", undefined, "settings-dialog-group");
+        budget.append(el("h3", "Spending allowance"), used, limits, budgetHelp);
+        const permission = el("section", undefined, "settings-dialog-group");
+        permission.append(disclosure, consentLabel);
+        form.append(chatScope, budget, permission, status, actions);
+        body.append(method, form);
+    }
     dialog.replaceChildren(head, body);
     function render() {
         const selected = choices.filter(input => input.checked).length;
@@ -208,10 +224,31 @@ export const automaticScoreStyles = `
 .automatic-score-choice small {display:block}
 .automatic-score-limits {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-lg)}
 .automatic-score-limits label,.automatic-score-limits input {min-width:0;max-width:100%}
+.automatic-score-dialog:modal {border-radius:12px}
+.automatic-score-dialog:modal>.dialog-head {background:var(--paper);border:0;padding:20px 24px 12px}
+.automatic-score-dialog:modal>.assessment-dialog-body {background:var(--paper);padding:0 24px 24px}
+.automatic-score-dialog:modal>.assessment-dialog-body>button {margin-inline-end:8px}
+.automatic-score-dialog:modal .settings-dialog-group {padding-block:20px;border-top:1px solid var(--rule)}
+.automatic-score-dialog:modal .settings-dialog-group h3,.automatic-score-dialog:modal legend {font-size:var(--type-reading);font-weight:var(--weight-strong);margin:0}
+.automatic-score-dialog:modal .settings-dialog-group p {max-width:65ch}
+.automatic-score-dialog:modal .settings-model-fact {display:grid;gap:4px;margin:16px 0 0}
+.automatic-score-dialog:modal .settings-model-fact dt {font-size:var(--type-small);color:var(--muted)}
+.automatic-score-dialog:modal .settings-model-fact dd {margin:0;font-size:var(--type-reading);overflow-wrap:anywhere}
+.automatic-score-dialog:modal .automatic-score-limits label {margin-block:12px 0}
+.automatic-score-dialog:modal .automatic-score-chats label {padding:8px 0;margin:0;gap:12px}
+.automatic-score-dialog:modal .automatic-score-choice small {margin-top:4px}
+.automatic-score-dialog:modal .automatic-score-chats legend {margin-bottom:8px}
+.automatic-score-dialog:modal .settings-dialog-group>.reading-section {margin:0;border:0;padding:0}
+.automatic-score-dialog:modal .settings-dialog-group>.automatic-score-choice {margin:12px 0 0;align-items:flex-start}
+.automatic-score-dialog:modal .settings-dialog-group>.automatic-score-choice input {margin-top:4px}
+.automatic-score-dialog:modal .assessment-control-actions {margin:0;padding-top:12px;border-top:1px solid var(--rule)}
+.automatic-score-dialog:modal input[type=number] {border-radius:10px}
 @media(max-width:480px) {
  .automatic-score-limits {grid-template-columns:1fr;gap:0}
  .automatic-score-dialog>.dialog-head {display:grid;grid-template-columns:minmax(0,1fr)}
  .automatic-score-dialog>.dialog-head h2 {grid-row:2}
  .automatic-score-dialog>.dialog-head button {grid-row:1;justify-self:end}
+ .automatic-score-dialog:modal>.dialog-head {padding:16px}
+ .automatic-score-dialog:modal>.assessment-dialog-body {padding:0 16px 20px}
 }
 `;

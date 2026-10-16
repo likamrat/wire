@@ -5,6 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { chooseTheme, openSearchFilters, selectActivityOption, navigateMain } from "./helpers.mjs";
+import { openPersonalFeedback } from "./assessment-ui-fixtures.mjs";
 import { replaceEvidence } from "../lib/store.mjs";
 
 const proof = process.env.WIRE_TEXT_SEARCH_PROOFS;
@@ -63,9 +64,7 @@ async function openInteraction(page, exactCall = false) {
 }
 
 async function editFeedback(page) {
-    await page.locator("#requestContent [data-insight-details]").first().click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
-    const form = page.locator("#requestContent .assessment-feedback-dialog");
+    const form = await openPersonalFeedback(page);
     await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
     await page.locator('.select-option[data-value=pass]').click();
     return form;
@@ -120,9 +119,11 @@ test("typing POWER shows actual categorized title/body/source matches without co
     await interaction.focus();
     await interaction.press("Enter");
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    if (proof) await page.screenshot({ path: path.join(proof, "interaction-keyboard-open.png") });
     await page.locator("#closeContextSidebar").click();
     await expect(input).toHaveValue("POWER");
     await expect(interaction).toBeFocused();
+    if (proof) await page.screenshot({ path: path.join(proof, "interaction-keyboard-return.png") });
     await openSearchFilters(page);
     await page.locator("#wireSearchClear").click();
     await expect(input).toHaveValue("");
@@ -163,9 +164,11 @@ test("formatted report body hits show compact marked context before opening unch
         if (proof) await page.screenshot({ path: path.join(proof, `compact-report-${width}-${scale}.png`) });
         await row.tap();
         await expect(page.frameLocator("#savedReportReader iframe").locator("body")).toContainText("Invented closing notes");
+        if (proof) await page.screenshot({ path: path.join(proof, `report-open-${width}-${scale}.png`) });
         await page.getByRole("button", { name: "Back to search", exact: true }).click();
         await expect(page.locator("#wireSearch")).toHaveValue("POWER");
         await expect(row).toBeFocused();
+        if (proof) await page.screenshot({ path: path.join(proof, `report-return-${width}-${scale}.png`) });
         assert.deepEqual(await readFile(file), bytes);
         await page.locator("#wireSearch").press("Escape");
     }
@@ -250,7 +253,7 @@ test("late literal queries and opens cannot replace new typing or cleared result
         try {
             const origin = page.url();
             await page.locator(".wire-search-hit").first().click(); await openPending;
-            await page.locator("#wireSearch").fill("");
+            await page.locator("#wireSearchClear").click();
             const lateOpen = page.waitForResponse(response => response.url().endsWith("/api/search/open"));
             releaseOpen();
             await (await lateOpen).finished();

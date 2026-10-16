@@ -114,7 +114,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     return { render, focus: () => input.focus() };
 }
 
-export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel, onSubmit, onCheck, onClose, requestClose = action => action(), inline = false, wording = createAssessmentWording() }) {
+export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel, onSubmit, onCheck, onClose, onStateChange, requestClose = action => action(), inline = false, wording = createAssessmentWording() }) {
     const doc = dialog.ownerDocument;
     dialog.classList.add("assessment-feedback-dialog");
     const dimensions = {
@@ -178,6 +178,7 @@ export function mountPersonalFeedback(dialog, { control, checkId, automaticLabel
         status.hidden = !status.textContent;
         status.setAttribute("role", localError || ["error", "unknown", "stale"].includes(snapshot.phase) ? "alert" : "status");
         form.setAttribute("aria-busy", String(["pending", "checking"].includes(snapshot.phase)));
+        onStateChange?.();
     }
     function submit() {
         let packet;

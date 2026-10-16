@@ -19,7 +19,7 @@ import { promptAuthorStyles } from "./prompt-author-styles.mjs";
 import { analyzeLayoutStyles } from "./analyze-layout-styles.mjs";
 
 // These components already own their painted surface independently of their hit target.
-const textAction = ":is(button,a.button-link):not(.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.filter-chip,.report-step,.comparison-pattern-title,.time-column,.chart-row,.chart-data-action)";
+const textAction = ":is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.filter-chip,.report-step,.comparison-pattern-title,.time-column,.chart-row,.chart-data-action)";
 
 export const styles = `
 /* Shared screen presentation; saved output uses its own tokens. */
@@ -506,7 +506,7 @@ ${selectStyles}
 .matched-action {display:grid;gap:8px;padding:16px 0;border-top:1px solid var(--rule);font-size:var(--type-reading);overflow-wrap:anywhere}
 .matched-action h3 {margin:0}
 .matched-action>:is(p,.action-fields) {margin:0}
-.call-heading {display:grid;gap:var(--space-xs);min-width:0}
+.call-heading {display:grid;gap:var(--space-sm);min-width:0}
 .call-heading>.action-heading,.call-heading h3,.call-outcome-row>:is(.recorded-results,.call-duration) {margin:0}
 .call-outcome-row {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-xs) var(--space-lg);min-width:0}
 .call-outcome-row>.call-duration {min-width:0;overflow-wrap:anywhere}
@@ -587,18 +587,17 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 .request-card-open:hover {background:var(--hover)}
 .request-row[data-detail-active]>.request-card-open {border-inline-start-color:var(--control);background:var(--canvas)}
 .request-card-prompt {font:var(--type-body)/var(--leading-reading) var(--font);max-width:68ch}
-.interaction-summary {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-xs) var(--space-lg);margin-top:var(--space-sm);font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
+.interaction-summary {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm) var(--space-lg);margin-top:var(--space-sm);font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
 .interaction-identity {display:grid;gap:var(--space-xs);flex-basis:100%;min-width:0;color:var(--ink)}
 .identity-group,.identity-list {min-width:0;max-width:100%;overflow-wrap:anywhere}
 .identity-key,.identity-gap {color:var(--muted)}
 .identity-overflow {font:inherit;color:inherit}
 .identity-list .service-cue {display:inline-block;position:relative;vertical-align:baseline;padding-inline-start:calc(var(--cue-icon-size,20px) + var(--space-sm))}
 .identity-list .service-cue .wire-icon {position:absolute;inset-inline-start:0;inset-block-start:calc((1lh - var(--cue-icon-size,20px)) / 2);margin:0}
-.interaction-summary .recorded-results {margin:0;font:inherit;gap:4px 8px}
+.interaction-summary .recorded-results {align-items:center;margin:0;font:inherit;gap:4px 8px}
 :is(.interaction-summary,.matched-action,.call-heading) .service-cue {--cue-icon-size:20px;font-weight:var(--weight-regular);line-height:inherit}
 :is(.interaction-summary,.matched-action,.call-heading) .recorded-result {font-size:var(--type-small)}
 :is(.interaction-summary,.matched-action,#requestContent) .recorded-result-label {font-weight:var(--weight-regular);text-transform:none;letter-spacing:0}
-:is(.interaction-summary,.matched-action,#requestContent) .result-tone-transport {--cue-color:var(--danger)}
 .interaction-summary .result-unavailable,.interaction-summary .muted {font:inherit}
 #activityList>.request-row .interaction-body {display:grid;gap:12px;min-width:0}
 #activityList>.matched-action {gap:12px}
@@ -619,7 +618,7 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityList>.activity-card .full-text-availability {margin:4px 0 0}
 #activityList>.activity-card .card-details {display:grid;gap:12px 32px;min-width:0}
 #activityList>.activity-card .card-activity {display:grid;align-content:start;gap:8px;min-width:0}
-#activityList>.matched-action .card-activity {gap:var(--space-xs)}
+#activityList>.matched-action .card-activity {gap:var(--space-sm)}
 #activityList>.activity-card .activity-card-facts {display:grid;align-content:start;gap:4px;margin:0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
 #requestContent .interaction-model-fact {display:grid;gap:6px;margin:4px 0 0;min-width:0;font-size:var(--type-small);line-height:var(--leading-ui)}
 #activityList>.activity-card .activity-card-facts>div,#requestContent .interaction-model-fact>div {display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0}
@@ -671,27 +670,27 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 ${analyzeLayoutStyles}
 /* Screen-only semantic aliases follow shared chart CSS; saved output keeps its own palette. */
 :root[data-evidence-theme],:root:not([data-evidence-theme]) {
+ --chart-teal-top:var(--screen-success-high);--chart-teal-mid:var(--chart-success);
+ --chart-teal-base:var(--screen-success-low);--chart-teal-side:var(--chart-success);
+ --chart-teal-cap:var(--chart-success);--chart-teal-label:var(--chart-success);
  --chart-pink-top:var(--screen-failure-high);--chart-pink-mid:var(--chart-failure);
  --chart-pink-base:var(--screen-failure-low);--chart-pink-side:var(--chart-failure);
  --chart-pink-cap:var(--chart-failure);--chart-pink-label:var(--chart-failure);
+ --chart-cyan-top:var(--screen-failure-high);--chart-cyan-mid:var(--chart-failure);
+ --chart-cyan-base:var(--screen-failure-low);--chart-cyan-side:var(--chart-failure);
+ --chart-cyan-cap:var(--chart-failure);--chart-cyan-label:var(--chart-failure);
+ --chart-service-files-label:var(--screen-service-files);--chart-service-files-mid:var(--screen-service-files);
  --prompt-author-user:var(--screen-prompt-user);
 }
 .settings-search-results mark,body .comparison-reading summary {font-weight:var(--weight-medium)}
-.result-tone-failure,.recorded-result.result-tone-failure:is(:hover,:active) {color:var(--chart-failure)}
-.percentage-card[data-breakdown=outcomes] [data-category=failure] .percentage-label,
-.select-option[data-value=failure] .result-option-label,
-.select-trigger:has(.result-tone-failure) .result-option-label {color:var(--chart-failure)}
-/* The shared frozen-comparison renderer historically uses pink for transport, too. */
-.comparison-outcome-transport {
- --column-top:var(--chart-cyan-top);--column-mid:var(--chart-cyan-mid);--column-base:var(--chart-cyan-base);
- --column-side:var(--chart-cyan-side);--column-cap:var(--chart-cyan-cap);--column-label:var(--chart-cyan-label);
-}
+.percentage-card[data-breakdown=outcomes] .percentage-legend-row .percentage-label {color:var(--column-label)}
+.select-option:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label,
+.select-trigger:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label {color:var(--chart-failure)}
 @media(forced-colors:active) {
  :is(.primary-navigation,.settings-categories) a[aria-current=page] {background:Highlight;color:HighlightText;forced-color-adjust:none}
  .primary-navigation a[aria-current=page]>.wire-icon {color:HighlightText}
- .result-tone-failure,.recorded-result.result-tone-failure:is(:hover,:active),
- .percentage-card[data-breakdown=outcomes] [data-category=failure] .percentage-label,
- .select-option[data-value=failure] .result-option-label,
- .select-trigger:has(.result-tone-failure) .result-option-label {color:CanvasText}
+ .percentage-card[data-breakdown=outcomes] .percentage-legend-row .percentage-label,
+ .select-option:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label,
+ .select-trigger:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label {color:CanvasText}
 }
 `;

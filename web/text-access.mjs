@@ -1,5 +1,6 @@
 // Presentation only: callers supply the authorized text, never a lookup for hidden originals.
 export function createTextAccess(ux, presentation, authorship, metadata) {
+    const bindings = new WeakMap();
     const caption = (source, options) => authorship?.label(source, options) ?? "Prompt";
     function retained(source) {
         return source?.status !== "unavailable" && typeof source?.text === "string" && source.text.trim() ? source.text : null;
@@ -19,7 +20,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }
         return end < compact.length ? compact.slice(0, end).trimEnd() + "..." : compact;
     }
-    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false }) {
+    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
@@ -41,6 +42,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }[authorship?.read(source).basis] || "Recorded sender details could not be verified";
         const root = document.createElement("div");
         root.className = "full-text" + (complete ? " full-text-complete" : "") + (complete && contentFirst ? " full-text-content-first" : "");
+        if (visibility) root.classList.add("reader-owned-text");
         root.dataset.textSubject = subject;
         root.dataset.viewKey = "text:" + key;
         const header = document.createElement("div");
@@ -49,13 +51,20 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         readerActions.className = "full-text-reader-actions";
         const qualifiers = document.createElement("div");
         qualifiers.className = "full-text-qualifiers";
-        const heading = document.createElement(subject === "response" && !contentFirst ? "h3" : "h2");
+        const heading = document.createElement(visibility && subject === "response" && actionsHost ? "span"
+            : subject === "response" && !contentFirst ? "h3" : "h2");
         heading.id = "text-heading-" + encodeURIComponent(key);
-        heading.textContent = subject === "response" ? contentFirst ? "Recorded response" : "Retained response text" : promptLabel;
+        heading.textContent = headingLabel ?? (subject === "response" ? contentFirst ? "Recorded response" : "Retained response text" : promptLabel);
+        if (visibility && subject === "request" && authorship?.read(source).actor === "unknown") heading.textContent = "Author unverified";
+        if (visibility && subject === "response" && actionsHost) heading.classList.add("visually-hidden");
         if (subject === "request") heading.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
         if (complete) {
             header.append(heading);
-            if (contentFirst) header.append(readerActions, qualifiers);
+            if (contentFirst) {
+                if (actionsHost) actionsHost.append(readerActions);
+                else header.append(readerActions);
+                header.append(qualifiers);
+            }
             root.append(header);
         }
         if (complete && subject === "request" && (authorship?.read(source).actor ?? "unknown") === "unknown") {
@@ -138,14 +147,16 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         control.id = "text-toggle-" + encodeURIComponent(key);
         const bodyId = "text-body-" + encodeURIComponent(key), stateKey = "text:" + key;
         control.setAttribute("aria-controls", bodyId);
-        if (complete) readerActions.append(control);
+        if (complete) {
+            if (!visibility) readerActions.append(control);
+        }
         else if (inline) passage.append(document.createTextNode(" "), control);
         else {
             actions.append(control);
             if (!actions.parentNode) root.append(actions);
         }
         function paint() {
-            const open = presentation.isOpen(stateKey, initiallyOpen);
+            const open = visibility ? visibility.isOpen() : presentation.isOpen(stateKey, initiallyOpen);
             control.setAttribute("aria-expanded", String(open));
             const actionLabel = inline ? open ? "Read less" : "Read more" : open ? "Hide " + noun : label;
             ux.utility(control, open ? "hide" : "read", actionLabel, open ? "Hide " + noun : "Read " + noun);
@@ -177,7 +188,9 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                     pre.tabIndex = 0;
                     pre.setAttribute("aria-label", "Exact recorded " + noun + " text");
                     pre.textContent = text;
-                    const copy = ux.copyButton({ label: copyLabel, getText: () => pre.isConnected ? pre.textContent : null, tooltip: "Copy " + noun });
+                    const copy = ux.copyButton({ label: copyLabel,
+                        getText: () => pre.isConnected && (!visibility || visibility.isCurrent() && visibility.isOpen()) ? pre.textContent : null,
+                        tooltip: "Copy " + noun });
                     const scope = document.createElement("span");
                     scope.id = noticeId;
                     scope.className = "reader-copy-scope";
@@ -202,10 +215,18 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             presentation.setOpen(stateKey, !presentation.isOpen(stateKey, initiallyOpen));
             paint();
         });
+        const unsubscribe = visibility?.subscribe(() => { if (root.isConnected) paint(); });
+        bindings.set(root, () => {
+            unsubscribe?.();
+            root.querySelector(".full-text-body")?.remove();
+            if (actionsHost) readerActions.remove();
+            else readerActions.replaceChildren();
+        });
         paint();
         return root;
     }
     return { excerpt, render, caption,
+        release(root) { bindings.get(root)?.(); bindings.delete(root); },
         isOpen: (key, initial = true) => presentation.isOpen("text:" + key, initial),
         setOpen: (key, open) => presentation.setOpen("text:" + key, open) };
 }

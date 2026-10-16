@@ -238,7 +238,7 @@ Markdown share those facts and denominators. Source-neutral reports call the app
   today's evaluator; a partly saved rubric labels its missing ID or version.
 - The manifest retains privacy-projected evaluation facts even when JSON is not a chosen presentation format.
 - Evaluation facts contain no answer excerpts or raw prompt text. Prompt copies follow the separately chosen None, Masked or Original mode.
-- New readable reports label attributable originating text **User prompt** or **Agent prompt**, using the same retained author evidence as the app's **Your prompt** and **Agent prompt**. Known chat origin with an unverified author is **Copilot chat prompt**; genuinely unverified/non-chat origin remains **Prompt**. Captured question/query/filter fields are **Recorded tool argument**, not assumed to be human-authored. The prompt's author does not establish who initiated or authorized subsequent calls.
+- New readable reports label attributable originating text **User prompt** or **Agent prompt**, using the same retained author evidence as the app's **My prompt** and **Agent prompt**. Known chat origin with an unverified author is **Copilot chat prompt**; genuinely unverified/non-chat origin remains **Prompt**. Compact app cards say **Author unverified** without repeating source explanations. This owner-facing vocabulary does not change report output or rewrite frozen artifacts. Captured question/query/filter fields are **Recorded tool argument**, not assumed to be human-authored. The prompt's author does not establish who initiated or authorized subsequent calls.
 - New readable reports embed the approved WIRE mark, font and presentation rules. They do not fetch live styling or assets that could change their appearance later.
 - Changes to selected evidence, relevant captured evidence, feedback or permission state can invalidate a draft. Unrelated activity does not change a report whose exact selected evidence remains unchanged.
 
@@ -785,7 +785,7 @@ attributes, duplicate wrappers and extra suffixes are rejected. This does not
 relax the message ID, timestamp, mode, delivery or agent-created-first-message checks.
 An eligible standalone chat need not have a workspace creation row; missing fields
 alone never qualify it without the complete supported input envelope.
-That combination is **Your prompt** in the app, not an assertion that a named person was authenticated.
+That combination is **My prompt** in the app, not an assertion that a named person was authenticated.
 A host-added `cross_session_message` envelope with valid sender fields is **Agent prompt**.
 The parser never inspects tags inside the displayed content as provenance: a user copying an agent
 message still has the direct-input envelope. Malformed, unsupported or conflicting envelopes stay

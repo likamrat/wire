@@ -1,5 +1,5 @@
 // Serialized into the shell. Reads only versioned local projections and explicit retained text.
-export function createAssessmentExperience({ api, createPresentation, renderSummary, createControls, mountConsent, mountFeedback, ux, glossary, textAccess, bindDetails, refresh, onChanged, onNotice, onSaved, onAutomaticSetup, onInvalidated, requestDeparture = action => action() }) {
+export function createAssessmentExperience({ api, createPresentation, renderSummary, createControls, mountConsent, mountFeedback, ux, glossary, textAccess, bindDetails, refresh, onChanged, onNotice, onSaved, onAutomaticSetup, onInvalidated, onFeedbackStateChanged, requestDeparture = action => action() }) {
     let snapshot = null, contract, contractPromise, presentation, controls, generation = 0;
     let consentView, consentControl, consentSignature = "", activeFeedback, feedbackView, activeDetail, focusInteractionRef = null;
     const detailCache = new Map(), overviewCache = new Map(), pending = new Map(), readers = new Map(), hosts = new Set();
@@ -182,6 +182,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         detailTrigger = null; detailOrigin = null; activeDetail = null; focusInteractionRef = null;
         const previousFeedback = activeFeedback;
         activeFeedback = null; feedbackView = null;
+        onFeedbackStateChanged?.();
         clearPrivateText(); readers.clear();
         feedbackDialog.onclose = null;
         feedbackDialog.oncancel = null;
@@ -393,7 +394,72 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 const model = presentation.summarize(data.metrics, { membershipStatus: data.interaction.membershipStatus,
                     singleInteraction: true, reviewStatus: data.reviewStatus ?? null });
                 renderSummary(host, model, { findingsHost, bindDetails, showTiming: false, disclosureKey: "assessment:interaction:" + mapping.interactionRef,
-                    helpButton: measureHelp, onDetails: trigger => showDetails(model, data, trigger) });
+                    helpButton: measureHelp, detailsLabel: responseOptions.directFeedback ? "Personal feedback" : "Details and feedback",
+                    onDetails: trigger => responseOptions.directFeedback ? openPersonalFeedback(data, trigger) : showDetails(model, data, trigger) });
+                if (responseOptions.directFeedback) {
+                    host.querySelector("[data-insight-details]")?.removeAttribute("aria-haspopup");
+                    const saved = host.querySelector(".assessment-saved-details");
+                    if (saved) {
+                        const visible = el("section", undefined, "assessment-saved-details reader-saved-checks");
+                        saved.querySelector(":scope > summary")?.remove();
+                        for (const limit of saved.querySelectorAll(":scope > .assessment-finding-limit")) limit.remove();
+                        if (saved.querySelector(".assessment-secondary-findings")?.textContent.trim()) {
+                            findingsHost?.querySelector('[data-finding-kind="execution-gap"]')?.remove();
+                        }
+                        saved.querySelector(".assessment-execution > h3")?.remove();
+                        for (const counts of saved.querySelectorAll(".assessment-count-strip")) {
+                            counts.classList.add("reader-fields", "reader-check-counts");
+                            for (const fact of counts.children) fact.prepend(fact.querySelector("dt"));
+                        }
+                        visible.append(...saved.childNodes);
+                        saved.replaceWith(visible);
+                    }
+                    const reviewMetrics = data.metrics.filter(metric => ["user-personal", "model-assessed"].includes(metric.origin));
+                    if (reviewMetrics.length) {
+                        for (const group of findingsHost?.querySelectorAll("[data-finding-origin]") ?? []) {
+                            if (reviewMetrics.some(metric => metric.origin === group.dataset.findingOrigin)) group.remove();
+                        }
+                        host.append(measureDetails(model, { ...data, metrics: reviewMetrics }, true));
+                    }
+                    const unsupported = data.metrics.filter(metric => metric.origin === "automatic-local"
+                        && ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension)
+                        && metric.status === "unassessed" && metric.reason === "unsupported-check");
+                    if (unsupported.length) host.append(el("p",
+                        "Local checks do not assess " + unsupported.map(metric => presentation.singleDetail(metric).label.toLowerCase()).join(", ") + ".",
+                        "reader-local-quality reader-response-note"));
+                    if (responseOptions.timingHost?.isConnected) {
+                        const timingHost = responseOptions.timingHost, fields = el("dl", undefined, "reader-fields");
+                        timingHost.replaceChildren();
+                        for (const metric of data.metrics.filter(metric => metric.origin === "automatic-local" && metric.dimension === "speed")) {
+                            const shown = presentation.singleDetail(metric), formatted = presentation.format(metric);
+                            if (metric.definitionId === "recorded-response-duration" && responseOptions.recordedTimingHome) {
+                                const home = responseOptions.recordedTimingHome.querySelector("dd");
+                                home.querySelector(".reader-timing-reason")?.remove();
+                                if (metric.reason && metric.reason !== "missing-evidence") {
+                                    home.append(el("p", formatted.qualification, "reader-timing-reason reader-response-note"));
+                                }
+                                continue;
+                            }
+                            const field = el("div"), value = el("dd"), result = el(metric.value === null ? "span" : "data",
+                                metric.value === null ? shown.value : formatted.evidence.resultLabel);
+                            if (metric.value !== null) result.value = String(metric.value);
+                            field.dataset.definitionId = metric.definitionId;
+                            field.dataset.metricStatus = metric.status;
+                            field.dataset.measurementBasis = metric.measurementBasis;
+                            value.append(result);
+                            const verifiedBoundaryMissing = metric.definitionId === "interaction-latency" && metric.reason === "unverified-association";
+                            value.append(el("p", formatted.evidence.boundaryLabel + (verifiedBoundaryMissing ? "" : ". "
+                                + (metric.value === null ? formatted.qualification : formatted.evidence.coverageLabel)),
+                                "reader-response-note"));
+                            field.append(el("dt", shown.label + (metric.definitionId === "interaction-latency" ? "" : " (local measure)")), value);
+                            fields.append(field);
+                        }
+                        if (fields.childElementCount) {
+                            if (responseOptions.timingScope) timingHost.append(el("h3", responseOptions.timingScope, "reader-source-heading"));
+                            timingHost.append(fields);
+                        }
+                    }
+                }
                 automaticEntry(host);
                 showResponse(responseHost, data, responseOptions);
                 if (focusInteractionRef === data.interaction.interactionRef && host.checkVisibility()) {
@@ -433,7 +499,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         host.replaceChildren(el("h2", "Response"), state);
         if (host.dataset.contentFirst !== "true" || failed) responseDetails(host, reason);
     }
-    function showResponse(host, view, { eager = false, placeResponse, contentFirst = false, copyNoticeId } = {}) {
+    function showResponse(host, view, { eager = false, placeResponse, contentFirst = false, copyNoticeId, visibility, actionsHost, copyLabel, headingLabel } = {}) {
         if (contentFirst) host.dataset.contentFirst = "true";
         host.style.minHeight = "";
         host.removeAttribute("aria-busy");
@@ -441,21 +507,37 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         const answers = view.consent.state === "enabled"
             ? view.observations.filter(item => item.kind === "answer" && item.availability === "available") : [];
         if (!answers.length) {
-            responseUnavailable(host, "No response text retained.", view.consent.state !== "enabled"
+            const availability = view.metrics.find(metric => metric.origin === "automatic-local" && metric.checkId === "answer-evidence-present");
+            const recordedAvailable = availability?.value !== null && availability?.counts?.pass > 0;
+            responseUnavailable(host, contentFirst && recordedAvailable ? "Response text is not available to read." : "No response text retained.", view.consent.state !== "enabled"
                 ? "Optional response capture is off. The available evidence contains no readable response text."
                 : "No attributable response text was retained.");
             if (contentFirst && view.consent.state !== "enabled") host.querySelector(".reader-empty").append(" Capture is off.");
+            if (contentFirst && availability) {
+                if (availability.reason && availability.reason !== "missing-evidence") {
+                    const note = el("p", presentation.format(availability).qualification, "reader-response-note");
+                    note.dataset.checkId = availability.checkId;
+                    note.dataset.reason = availability.reason;
+                    note.dataset.metricStatus = availability.status;
+                    host.append(note);
+                }
+                for (const reason of availability.unassessedReasons ?? []) {
+                    if (reason.reason === availability.reason) continue;
+                    host.append(el("p", `Recorded reply availability: ${reason.count} ${reason.reason ?? "reason not retained"}.`, "reader-response-note"));
+                }
+            }
             return;
         }
         if (eager && (placeResponse || answers.length > 1)) {
             host.replaceChildren();
             host.hidden = Boolean(placeResponse);
-            for (const answer of answers) {
+            for (const [index, answer] of answers.entries()) {
                 const entry = el("section", undefined, "interaction-response");
                 hosts.add(entry);
-                if (placeResponse) placeResponse(entry, answer);
-                else host.append(entry);
-                showResponse(entry, { ...view, observations: [answer] }, { eager: true, contentFirst, copyNoticeId });
+                const placement = placeResponse ? placeResponse(entry, answer, { index, total: answers.length }) : null;
+                if (!placeResponse) host.append(entry);
+                if (!entry.isConnected) continue;
+                showResponse(entry, { ...view, observations: [answer] }, { eager: true, contentFirst, copyNoticeId, ...placement });
             }
             return;
         }
@@ -469,12 +551,16 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             }
             label.append(select); host.append(label);
         }
-        let readGeneration = 0;
+        let readGeneration = 0, liveText = null, readError = null;
         const reader = el("div"), load = button("Read response", event => readResponse(event));
         async function readResponse(event) {
+            if (visibility && (!visibility.isCurrent() || !visibility.isOpen())) return;
             const started = generation;
             const responseRead = ++readGeneration;
             const restoreFocus = document.activeElement === load;
+            readError = null;
+            if (liveText) textAccess.release(liveText);
+            liveText = null;
             load.disabled = true; reader.setAttribute("aria-busy", "true");
             reader.replaceChildren(el("p", "Reading already-retained response..."));
             try {
@@ -483,14 +569,16 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 const data = await read("get_interaction_evidence", {
                     schemaVersion: 1, interactionRef: view.interaction.interactionRef, observationRef: observation.observationRef, expectedBasis: view.basis,
                 }, view.basis);
-                if (started !== generation || responseRead !== readGeneration || !reader.isConnected) return;
+                if (started !== generation || responseRead !== readGeneration || !reader.isConnected
+                    || visibility && (!visibility.isCurrent() || !visibility.isOpen())) return;
                 if (data.observationRef !== observation.observationRef || typeof data.text !== "string" || !sameBasis(data.basis, view.basis)
                     || !["full-record", "bounded-fragment"].includes(data.completeness) || data.finality !== "unverified") throw new Error("The response does not match this evidence context.");
-                if (event) textAccess.setOpen(key, true);
-                reader.replaceChildren(textAccess.render({ text: data.text, status: data.completeness === "bounded-fragment" ? "partial" : "available" }, {
-                    key, mode: "complete", subject: "response", contentFirst, copyNoticeId,
+                if (event && !visibility) textAccess.setOpen(key, true);
+                liveText = textAccess.render({ text: data.text, status: data.completeness === "bounded-fragment" ? "partial" : "available" }, {
+                    key, mode: "complete", subject: "response", contentFirst, copyNoticeId, visibility, actionsHost, copyLabel, headingLabel,
                     notice: "Copy includes the complete retained response body only, not the prompt or page metadata. It is original, unmasked text and is not included in reports. Other apps and clipboard history may access your system clipboard. This is recorded response text, not a verified final answer. Reading uses only already-retained local evidence.",
-                }));
+                });
+                reader.replaceChildren(liveText);
                 if (contentFirst) {
                     host.querySelector(":scope > h2")?.remove();
                     host.querySelector(":scope > .reader-empty")?.remove();
@@ -498,38 +586,145 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 }
                 load.hidden = true;
                 about.hidden = true;
-                if (restoreFocus && (document.activeElement === load || document.activeElement === document.body)) ux.restoreFocus(reader.querySelector(".full-text-toggle"));
+                if (restoreFocus && (document.activeElement === load || document.activeElement === document.body)) {
+                    ux.restoreFocus(reader.querySelector(".full-text-toggle") || liveText.querySelector("pre"));
+                }
             } catch (error) {
                 if (started === generation && responseRead === readGeneration && reader.isConnected) {
+                    readError = error.message;
                     const failure = el("p", error.message, "error");
                     failure.setAttribute("role", "alert");
                     reader.replaceChildren(failure);
+                    if (visibility) load.textContent = "Retry response";
+                    load.hidden = false;
                 }
             }
             finally {
                 if (started === generation && responseRead === readGeneration) {
                     load.disabled = false; reader.removeAttribute("aria-busy");
-                    if (restoreFocus && !load.hidden && (document.activeElement === load || document.activeElement === document.body)) ux.restoreFocus(load);
+                    if (restoreFocus && !load.hidden && reader.isConnected && (!visibility || visibility.isCurrent())
+                        && (document.activeElement === load || document.activeElement === document.body)) ux.restoreFocus(load);
                 }
             }
         }
         load.classList.remove("quiet");
         for (const existing of readers.keys()) if (!existing.isConnected) readers.delete(existing);
-        readers.set(reader, () => {
+        function clearResponse(message = "Response text was hidden. Read again to check current access.", preserveError = false) {
             readGeneration++;
-            reader.replaceChildren(el("p", "Response text was hidden. Read again to check current access."));
+            if (!preserveError) readError = null;
+            if (liveText) textAccess.release(liveText);
+            liveText = null;
+            reader.replaceChildren(...message ? [el("p", message)] : []);
             reader.removeAttribute("aria-busy");
-            load.hidden = false; load.disabled = false;
-            about.hidden = false;
-        });
+            load.hidden = !message; load.disabled = false;
+            about.hidden = !message;
+        }
+        readers.set(reader, () => clearResponse());
         select.addEventListener("change", () => { readGeneration++; reader.replaceChildren(); reader.removeAttribute("aria-busy"); load.disabled = false; load.hidden = false; about.hidden = false; });
         host.append(load, reader);
         const about = responseDetails(host, "This is recorded response text, not a verified final answer. Reading opens only the already-retained local evidence; it does not run Work IQ or retrieve new source content.");
+        visibility?.subscribe(open => {
+            if (!reader.isConnected || !visibility.isCurrent()) return;
+            if (open && readError !== null) {
+                const failure = el("p", readError, "error");
+                failure.setAttribute("role", "alert");
+                reader.replaceChildren(failure);
+                load.hidden = false;
+                about.hidden = false;
+            } else if (open) void readResponse();
+            else clearResponse("", true);
+        });
         if (eager) {
             const key = "response:" + answers[0].observationRef + ":" + basisKey(view.basis);
-            if (textAccess.isOpen(key)) void readResponse();
+            if (visibility ? visibility.isOpen() : textAccess.isOpen(key)) void readResponse();
             else reader.append(el("p", "Response text is hidden.", "reader-empty"));
         }
+    }
+    function mountFeedbackEditor(view, checkId, feedbackTrigger, host) {
+        if (!activeDetail || !sameBasis(activeDetail.basis, snapshot?.basis)) {
+            onNotice("Recorded evidence changed. Reopen personal feedback.");
+            return;
+        }
+        const personal = view.assessments.filter(item => item.origin === "user-personal" && item.checkId === checkId).sort((a, b) => b.revision - a.revision)[0] ?? null;
+        const local = view.metrics.find(item => item.origin === "automatic-local" && item.checkId === checkId);
+        const localTerm = local ? presentation.wording.resolve(local) : null;
+        const automaticLabel = localTerm?.kind === "permission" && local.reason === "unsupported-check" && local.value === null
+            ? "Permission is not checked automatically."
+            : "Automatic local check: " + (local ? presentation.format(local).value : "No saved local check");
+        const feedbackControl = controls.feedback({ interactionRef: view.interaction.interactionRef, basis: view.basis, checkId, latestPersonal: personal });
+        activeFeedback = feedbackControl;
+        if (feedbackDialog !== feedbackModal && feedbackDialog !== host) feedbackDialog.remove();
+        feedbackDialog = host;
+        const mountedView = mountFeedback(feedbackDialog, {
+            control: feedbackControl, checkId, wording: presentation.wording, inline: host !== feedbackModal, requestClose: requestDeparture,
+            automaticLabel,
+            onStateChange: () => { if (activeFeedback === feedbackControl) onFeedbackStateChanged?.(); },
+            onSubmit: packet => mutate(feedbackControl, mountedView, packet),
+            onCheck: packet => checkMutation(feedbackControl, mountedView, packet),
+            onClose: () => {
+                if (activeFeedback !== feedbackControl) return;
+                activeFeedback = null; feedbackView = null;
+                onFeedbackStateChanged?.();
+                if (host === details) detailTrigger?.setAttribute("aria-expanded", "false");
+                if (recovery) showRecovery(pendingRequest
+                    ? "An assessment update is still in progress. Closing its panel did not cancel it."
+                    : "The earlier assessment update needs checking. It will not be repeated.");
+            },
+        });
+        feedbackView = mountedView;
+        mountedView.open(feedbackTrigger);
+    }
+    function openPersonalFeedback(view, trigger) {
+        if (!trigger.isConnected || !trigger.checkVisibility()) return;
+        if (trigger === detailTrigger && details !== detailsModal && details.isConnected && !details.hidden) {
+            if (feedbackView) feedbackView.focus();
+            else details.querySelector("select")?.focus({ preventScroll: true });
+            return;
+        }
+        if (activeFeedback && ["pending", "checking", "unknown", "stale"].includes(activeFeedback.snapshot().phase)) {
+            onNotice("Finish or check the current feedback update before starting another.");
+            feedbackView?.focus();
+            return;
+        }
+        requestDeparture(() => {
+            if (!trigger.isConnected || !sameBasis(view.basis, snapshot?.basis)) return;
+            ux.hideTooltip();
+            if (details !== detailsModal) details.remove();
+            details = el("section", undefined, "assessment-inline");
+            const chooser = details;
+            details.id = "inline-personal-feedback";
+            trigger.closest(".interaction-insights").append(details);
+            trigger.setAttribute("aria-expanded", "true");
+            trigger.setAttribute("aria-controls", details.id);
+            detailTrigger = trigger; detailOrigin = trigger.closest("[data-insight-key]")?.dataset.insightKey;
+            activeDetail = view;
+            const header = el("div", undefined, "dialog-head"), heading = el("h2", "Personal feedback");
+            heading.id = "personal-feedback-title";
+            details.setAttribute("aria-labelledby", heading.id);
+            const close = button("Cancel", () => {
+                if (!chooser.isConnected || details !== chooser) return;
+                chooser.hidden = true;
+                trigger.setAttribute("aria-expanded", "false");
+                ux.restoreFocus(trigger);
+            });
+            header.append(heading, close);
+            const label = el("label", "Feedback about"), select = el("select");
+            select.id = "feedback-dimension-" + view.interaction.interactionRef;
+            select.dataset.feedbackDimension = "";
+            const placeholder = el("option", "Choose what to review"); placeholder.value = ""; select.append(placeholder);
+            for (const [value, dimension] of [["semantic-answer-correctness", "accuracy"], ["answer-support-validity", "answer-trust"], ["action-authorization-compliance", "action-trust"]]) {
+                const term = presentation.wording.resolve({ dimension, checkId: value, checkVersion: 1, origin: "user-personal" });
+                const option = el("option", term.label); option.value = value; select.append(option);
+            }
+            label.append(select);
+            details.append(header, label);
+            select.addEventListener("change", () => {
+                if (!select.value || !select.isConnected) return;
+                const checkId = select.value;
+                requestDeparture(() => { if (select.isConnected && details === chooser) mountFeedbackEditor(view, checkId, trigger, chooser); });
+            });
+            close.focus({ preventScroll: true });
+        });
     }
     function showDetails(model, view, trigger) {
         if (!trigger.isConnected || !trigger.checkVisibility()) return;
@@ -567,31 +762,10 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             body.append(label, button("Give personal feedback", event => {
                 const feedbackTrigger = event.currentTarget;
                 requestDeparture(() => {
-                if (!activeDetail || !sameBasis(activeDetail.basis, snapshot?.basis)) return;
                 const checkId = select.value;
-                const personal = view.assessments.filter(item => item.origin === "user-personal" && item.checkId === checkId).sort((a, b) => b.revision - a.revision)[0] ?? null;
-                const local = view.metrics.find(item => item.origin === "automatic-local" && item.checkId === checkId);
-                const localTerm = local ? presentation.wording.resolve(local) : null;
-                const automaticLabel = localTerm?.kind === "permission" && local.reason === "unsupported-check" && local.value === null
-                    ? "Permission is not checked automatically."
-                    : "Automatic local check: " + (local ? presentation.format(local).value : "No saved local check");
-                activeFeedback = controls.feedback({ interactionRef: view.interaction.interactionRef, basis: view.basis, checkId, latestPersonal: personal });
-                if (feedbackDialog !== feedbackModal) feedbackDialog.remove();
-                feedbackDialog = inline ? el("section", undefined, "assessment-inline") : feedbackModal;
-                if (inline) body.append(feedbackDialog);
-                feedbackView = mountFeedback(feedbackDialog, {
-                    control: activeFeedback, checkId, wording: presentation.wording, inline, requestClose: requestDeparture,
-                    automaticLabel,
-                    onSubmit: packet => mutate(activeFeedback, feedbackView, packet),
-                    onCheck: packet => checkMutation(activeFeedback, feedbackView, packet),
-                    onClose: () => {
-                        activeFeedback = null; feedbackView = null;
-                        if (recovery) showRecovery(pendingRequest
-                            ? "An assessment update is still in progress. Closing its panel did not cancel it."
-                            : "The earlier assessment update needs checking. It will not be repeated.");
-                    },
-                });
-                feedbackView.open(feedbackTrigger);
+                const host = inline ? el("section", undefined, "assessment-inline") : feedbackModal;
+                if (inline) body.append(host);
+                mountFeedbackEditor(view, checkId, feedbackTrigger, host);
                 });
             }));
         } else body.append(el("p", "What these results mean and which requests they cover. Open a single request to add optional personal feedback."));
@@ -613,8 +787,14 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         }
         body.append(terms);
         }
-        const measures = el("details", undefined, "reading-section");
-        measures.append(el("summary", "Recorded measures and definitions"));
+        body.append(measureDetails(model, view));
+        if (!inline && !details.open) details.showModal();
+        if (!inline) details.querySelector("button").focus({ preventScroll: true });
+    }
+    function measureDetails(model, view, inline = false) {
+        const measures = el(inline ? "section" : "details", undefined, inline ? "reader-measure-details" : "reading-section");
+        measures.setAttribute("aria-label", "Recorded measures and definitions");
+        if (!inline) measures.append(el("summary", "Recorded measures and definitions"));
         if (view) {
             const table = el("table", undefined, "single-interaction-measures"), head = el("tr"), tbody = el("tbody");
             table.dataset.interactionRef = view.interaction.interactionRef;
@@ -689,9 +869,7 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             measures.append(section);
         }
         if (!view) measures.append(el("p", "Pass-share colors are visual bands (v1): below 50% red, 50 to below 75% orange, 75 to below 90% gold, and 90 to 100% teal. They are not quality guarantees. Duration does not use these bands.", "assessment-band-note"));
-        body.append(measures);
-        if (!inline && !details.open) details.showModal();
-        if (!inline) details.querySelector("button").focus({ preventScroll: true });
+        return measures;
     }
     function receipt(result, packet) {
         if (!result || result.schemaVersion !== 1 || result.mutationRef !== packet.input.mutationRef) throw new Error("The update receipt does not match this operation.");
@@ -794,7 +972,16 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
     return { receive, observe, overview, detail, setup, leave, invalidate, clearPrivateText, scoringStatus,
         invalidatePendingViewReads() { generation++; },
         hasUnsentFeedback: () => activeFeedback?.hasUnsentDraft() === true,
-        discardFeedback() { if (activeFeedback?.hasUnsentDraft()) activeFeedback.cancel(); },
+        captureFeedbackOwner() {
+            const control = activeFeedback, host = feedbackDialog, detail = activeDetail;
+            return () => Boolean(control && control === activeFeedback && host === feedbackDialog && detail === activeDetail
+                && host.isConnected && !host.hidden && sameBasis(detail?.basis, snapshot?.basis));
+        },
+        feedbackPhase: () => activeFeedback?.snapshot().phase ?? null,
+        feedbackWithin: host => feedbackDialog !== feedbackModal && !feedbackDialog.hidden && host.contains(feedbackDialog),
+        discardFeedback() {
+            if (activeFeedback?.hasUnsentDraft()) { activeFeedback.cancel(); feedbackView?.render(); }
+        },
         focusFeedback() { details.hidden = false; detailTrigger?.setAttribute("aria-expanded", "true"); feedbackView?.focus?.(); },
         isOpen: () => details.open || feedbackDialog.open || details !== detailsModal && !details.hidden };
 }

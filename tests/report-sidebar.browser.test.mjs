@@ -9,6 +9,7 @@ import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture, selectActivityOption, chooseTheme } from "./helpers.mjs";
 import { reportContents, scanReport, findReportCopy, chooseReportScope } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
+import { openPersonalFeedback } from "./assessment-ui-fixtures.mjs";
 
 async function capture(page, name) {
     const directory = process.env.WIRE_REPORT_SETUP_PROOFS;
@@ -93,7 +94,7 @@ test("Activity stays interactive beside one mounted setup; peek, return and clos
     await expect(page.getByRole("button", { name: "Back to report setup", exact: true })).toBeVisible();
     await expect(page.locator("#reportStage1")).toBeVisible();
     await capture(page, "normal-entry-interaction-peek");
-    await page.locator("#requestContent .detail-disclosure").first().locator("summary").click();
+    await page.locator('[data-reader-section="activity"] .reader-section-toggle').click();
     const peekTop = await page.locator("#contextSidebarBody").evaluate(node => { node.scrollTop = 200; return node.scrollTop; });
     await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Report setup");
@@ -105,7 +106,7 @@ test("Activity stays interactive beside one mounted setup; peek, return and clos
     await expect(page.locator('[name=promptMode][value=original]')).toBeChecked();
     await expect(page.locator('#formatOptions input[value=json]')).toBeChecked();
     await inspection.click();
-    await expect(page.locator("#requestContent .detail-disclosure").first()).toHaveAttribute("open", "");
+    await expect(page.locator('[data-reader-section="activity"] .reader-section-toggle')).toHaveAttribute("aria-expanded", "false");
     await expect.poll(() => page.locator("#contextSidebarBody").evaluate(node => node.scrollTop)).toBe(peekTop);
     await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
     await page.getByRole("button", { name: "Next report requests", exact: true }).click();
@@ -194,8 +195,7 @@ test("setup close keeps its mounted controls, and interaction feedback guards ev
     await page.getByRole("button", { name: "Back to activity", exact: true }).click();
     await reportContents(page);
     await page.locator("#reportList .request-link").first().click();
-    await page.locator("#requestContent [data-insight-details]").first().click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
+    await openPersonalFeedback(page);
     const form = page.locator("#requestContent .assessment-feedback-dialog");
     await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
     await page.locator('.select-option[data-value=pass]').click();
@@ -348,8 +348,7 @@ test("source invalidation scrubs a dirty peek and keeps a safe route back to the
     await reportContents(page);
     await page.locator('[name=promptMode][value=original]').check();
     await page.locator("#reportList .request-link").first().click();
-    await page.locator("#requestContent [data-insight-details]").first().click();
-    await page.getByRole("button", { name: "Give personal feedback", exact: true }).click();
+    await openPersonalFeedback(page);
     const form = page.locator("#requestContent .assessment-feedback-dialog");
     await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
     await page.locator('.select-option[data-value=pass]').click();
@@ -449,7 +448,7 @@ test("reopening setup during an interaction exit cannot inherit the old inert ow
         await reportContents(page);
         await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
         await page.locator("#reportList .request-link").first().click();
-        const oldCopy = await page.locator(".request-original .ux-copy").elementHandle();
+        const oldCopy = await page.locator('[data-reader-section="prompt"] .ux-copy').elementHandle();
         await page.getByRole("button", { name: "Continue to contents", exact: true }).evaluate(node => {
             node.addEventListener("click", () => {
                 window.reportReopenedDuringExit = document.querySelector("#contextSidebar").getAnimations().some(animation => animation.playState === "running");

@@ -87,6 +87,71 @@ async function visibleTooltip(page, label) {
     assert.equal(await page.locator('[aria-describedby~="evidence-tooltip"]').count(), 1, label);
 }
 
+test("wrapped adjacent actions receive one native click without losing hoverable or keyboard help", async t => {
+    const page = await fixture(t, { hasTouch: true }), measurements = [];
+    await page.evaluate(() => {
+        const group = document.createElement("div");
+        group.id = "adjacent-actions";
+        group.className = "page-actions";
+        group.style.cssText = "position:fixed;bottom:8px;right:20px;left:20px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px";
+        const target = document.createElement("button"), source = document.createElement("button");
+        target.id = "adjacent-target"; target.textContent = "Remove from report";
+        source.id = "adjacent-source"; source.textContent = "Continue to report";
+        group.append(target, source); document.body.append(group);
+        window.adjacentActivations = 0;
+        target.addEventListener("click", () => {
+            window.adjacentActivations++;
+            target.textContent = target.textContent === "Remove from report" ? "Add to report" : "Remove from report";
+        });
+        window.ux.tooltip(source, "Review selected activity and the report's author choices.");
+        window.ux.tooltip(target, "Change this interaction's report selection.");
+        window.ux.explainDisabled(target, "No reportable activity.", { compact: true });
+        window.ux.explainDisabled(source, "Select activity before continuing.", { compact: true });
+    });
+    await controlledClock(page);
+    const target = page.locator("#adjacent-target"), source = page.locator("#adjacent-source");
+    const center = async node => {
+        const rect = await node.boundingBox();
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    };
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(({ theme, scale }) => {
+            document.documentElement.dataset.evidenceTheme = theme;
+            document.documentElement.style.fontSize = `${scale * 100}%`;
+        }, { theme, scale });
+        await page.mouse.move(1, 1); await page.clock.runFor(120);
+        const from = await center(source);
+        await page.mouse.move(from.x, from.y); await page.clock.runFor(180); await visibleTooltip(page);
+        const tip = await page.getByRole("tooltip").boundingBox(), to = await center(target);
+        const initial = await target.textContent(), clicks = await page.evaluate(() => window.adjacentActivations);
+        await page.mouse.move(to.x, to.y);
+        await page.mouse.click(to.x, to.y);
+        const pointer = { label: await target.textContent(), clicks: await page.evaluate(() => window.adjacentActivations),
+            focused: await target.evaluate(node => node === document.activeElement) };
+        measurements.push({ theme, width, scale, tip, to, initial, pointer });
+        if (proofDir) {
+            await mkdir(proofDir, { recursive: true });
+            await writeFile(path.join(proofDir, "adjacent-native-actions.json"), JSON.stringify(measurements, null, 2));
+        }
+        assert.equal(pointer.clicks, clicks + 1, JSON.stringify(measurements.at(-1)));
+        assert.notEqual(pointer.label, initial); assert.equal(pointer.focused, true);
+        await noTooltip(page);
+        await page.mouse.move(1, 1); await page.clock.runFor(120);
+        await page.mouse.move(from.x, from.y); await page.clock.runFor(180);
+        const help = await center(page.getByRole("tooltip"));
+        await page.mouse.move(help.x, help.y, { steps: 10 }); await page.clock.runFor(1000); await visibleTooltip(page);
+        assert.equal(await page.getByRole("tooltip").innerText(), "Review selected activity and the report's author choices.");
+        await page.keyboard.press("Escape"); await noTooltip(page);
+        await target.focus(); await page.keyboard.press("Tab"); await visibleTooltip(page);
+        await page.keyboard.press("Shift+Tab");
+        assert.equal(await target.evaluate(node => node === document.activeElement && node.matches(":focus-visible")), true);
+        await page.keyboard.press("Enter"); await noTooltip(page);
+        assert.equal(await page.evaluate(() => window.adjacentActivations), clicks + 2);
+        assert.equal(await target.textContent(), initial);
+    }
+});
+
 for (const retainedFocus of [false, true]) test(`pointer departure clears the portal within 150ms (retained pointer focus: ${retainedFocus})`, async t => {
     const page = await fixture(t, { reducedMotion: retainedFocus ? "no-preference" : "reduce" }), action = page.locator("#action");
     if (retainedFocus) {
@@ -580,7 +645,7 @@ test("real shell action, result, chart, source and report help clears without al
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     await page.locator("#outcomeFilter-control").click();
     await page.keyboard.press("w"); await page.keyboard.press("Enter"); await ready(page);
-    await leave("#clearResultFilter");
+    await leave("#filterChips [aria-label^='Remove outcome filter:']");
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
     await navigateMain(page, "settings");
     await leave("#editSource");
@@ -675,7 +740,7 @@ test("real shell result dropdown, chart actions, legend info and Settings naviga
     await page.waitForTimeout(250); await noTooltip(page);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
     assert.equal(await result.evaluate(node => node === document.activeElement), true);
-    const clear = page.locator("#clearResultFilter");
+    const clear = page.getByRole("button", { name: /^Remove outcome filter:/ });
     await clear.hover(); await page.getByRole("tooltip").waitFor({ state: "visible" });
     await clear.click(); await ready(page); await page.waitForTimeout(250); await noTooltip(page);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "all");

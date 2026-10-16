@@ -205,12 +205,12 @@ test("component family hover matrix uses mounted routes and their effective pain
             await selectActivityOption(page, "outcomeFilter", tone); await ready();
             await inspect("#outcomeFilter-control", `${tone} result filter`);
         }
-        await inspect("#clearResultFilter", "result clear tooltip trigger");
-        await page.mouse.move(0, 0); await page.locator("#clearResultFilter").hover();
+        await inspect("#filterChips [aria-label^='Remove outcome filter:']", "result clear tooltip trigger");
+        await page.mouse.move(0, 0); await page.getByRole("button", { name: /^Remove outcome filter:/ }).hover();
         await page.getByRole("tooltip").waitFor();
         matrix.push({ theme, family: "tooltip portal", state: "hover", painted: await measure(page.getByRole("tooltip")) });
         await page.keyboard.press("Escape");
-        await page.locator("#clearResultFilter").click(); await ready();
+        await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready();
         await inspect("#tableDisclosure>summary", "exact table disclosure");
         if (!await page.locator("#tableDisclosure").evaluate(node => node.open)) await page.locator("#tableDisclosure>summary").click();
         await inspect(".exact-data-table .chart-data-action", "exact table drilldown");

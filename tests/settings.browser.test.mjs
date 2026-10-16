@@ -120,7 +120,7 @@ test("deliberate setup, existing approval, paused preference save and cancelled/
     await openSourceEditor(page);
     await page.locator("#sourceDatabase").fill(b.appDbPath);
     await page.locator("#sourceSessions").fill(b.sessionRoot);
-    assert.match(await page.locator("#sourceChangeImpact").innerText(), /stays paused/);
+    assert.match(await page.locator("#approvalScope").innerText(), /stays paused/);
     await page.locator("#cancelSource").click();
     assert.equal((await runtime.collector.status()).config.appDbPath, a.appDbPath);
     assert.equal(posts.filter(row => row.path === "/api/collection/configure").length, 2);
@@ -385,7 +385,8 @@ test("source read/edit targets retain drafts across search, categories, time zon
     assert.equal(await page.locator("#approvedDatabase").isVisible(), false);
     assert.equal(await page.locator("#connectionApproval").isVisible(), true);
     assert.equal(await page.locator("#connectCollection").isDisabled(), true);
-    assert.match(await page.locator("#sourceChangeImpact").innerText(), /Paths unchanged/);
+    assert.equal(await page.locator("#sourceChangeImpact").isVisible(), false);
+    assert.equal(await page.locator("#connectCollection").innerText(), "Save preferences");
     await page.keyboard.press("Tab");
     assert.equal(await page.getByRole("textbox", { name: "Chat history folder", exact: true }).evaluate(node => node === document.activeElement), true);
     await page.locator("#sourceDatabase").fill(b.appDbPath);

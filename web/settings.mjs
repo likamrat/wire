@@ -10,7 +10,7 @@ export const settingsMarkup = `
     <ul id="settingsSearchResults" class="settings-search-results" hidden></ul>
   </div>
   <details id="settingsCategories" class="settings-categories" open><summary id="settingsCategorySummary">Category: Connection &amp; updates</summary><nav id="settingsCategoryNav" aria-label="Settings categories"></nav></details>
-  <p class="settings-status-link"><a href="#collection-status" data-settings-link>Collection status</a></p>
+  <p id="settingsStatusLink" class="settings-status-link"><a href="#collection-status" data-settings-link>Collection status</a></p>
   </aside>
   <div class="settings-content">
   <p id="settingsMessage" class="notice" role="status" tabindex="-1" hidden></p>
@@ -23,28 +23,36 @@ export const settingsMarkup = `
       <div id="assessmentSetup"><p>Loading response-saving settings.</p></div>
     </section>
     <div class="settings-task-row"><div class="settings-row-copy">
-    <h3>Delete collected activity</h3>
-    <p id="deleteActivityHelp">Preview permanent local deletion.</p>
+    <h3>Collected activity</h3>
+    <p id="deleteActivityHelp">Review a date range or all activity before permanent local deletion. Copilot chats and saved reports stay unchanged.</p>
     </div>
-    <button id="deleteActivity" type="button" class="danger" aria-describedby="deleteActivityHelp">Delete collected activity</button>
+    <button id="deleteActivity" type="button" class="danger" aria-describedby="deleteActivityHelp">Review deletion</button>
     </div>
     <div class="settings-task-row"><div class="settings-row-copy">
-    <h3>Recollect activity</h3>
-    <p id="recollectActivityHelp">Missing history stays unavailable.</p>
-    </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Recollect from approved sources</button></div>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3></div><a class="button-link" href="#reports" data-settings-link>Open saved reports</a></div>
+    <h3>Read history again</h3>
+    <p id="recollectActivityHelp">Preview available history from approved chats. Missing history, deleted replies and feedback cannot be restored.</p>
+    </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Choose chats</button></div>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3><p>Open or manage reports in the report library.</p></div><a class="button-link" href="#reports" data-settings-link>Open saved reports</a></div>
   </section>
   <section class="settings-section" data-settings-section="ai" aria-labelledby="aiReviewsTitle" hidden>
     <h2 id="aiReviewsTitle" tabindex="-1">AI reviews</h2>
+    <p class="settings-intro">Review answers and tool use with AI. You choose the chats, evidence and spending allowance before anything is sent.</p>
     <div id="automaticScoreSetup"></div>
   </section>
   <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
     <h2 id="displayTitle" tabindex="-1">Display</h2>
+    <p class="settings-intro">Changes apply immediately in this browser. Saved reports stay unchanged.</p>
     <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
       <h3>Theme</h3>
     </div><button id="settingsThemePreference" type="button" aria-describedby="themeStorageNotice">Change theme</button></div>
-    <div class="settings-field display-time-field">
-      <h3><label for="displayTimeZone">Time zone</label></h3>
+    <div class="settings-field settings-display-field">
+      <div class="settings-row-copy"><h3><label for="sidebarMotionPreference">Sidebar motion</label></h3>
+      <p id="sidebarMotionHelp" class="settings-help">Controls both WIRE sidebars. On glides even with reduced system motion. Windows settings stay unchanged.</p></div>
+      <select id="sidebarMotionPreference" aria-describedby="sidebarMotionHelp sidebarMotionNotice"><option value="system">Follow system</option><option value="on">On</option><option value="off">Off</option></select>
+      <p id="sidebarMotionNotice" class="notice" role="status" hidden></p>
+    </div>
+    <div class="settings-field settings-display-field display-time-field">
+      <div class="settings-row-copy"><h3><label for="displayTimeZone">Time zone</label></h3></div>
       <select id="displayTimeZone" aria-describedby="displayTimeEffective displayTimeHelp timeZoneNotice"></select>
       <p id="displayTimeHelp" class="settings-help" hidden></p>
       <p id="displayTimeEffective" class="settings-help" role="status" hidden></p>
@@ -54,10 +62,10 @@ export const settingsMarkup = `
     <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
       <h2 id="connectionTitle" tabindex="-1">Connection &amp; updates</h2>
       <section id="connectionSource" class="settings-group" aria-labelledby="connectionSourceTitle">
-      <div class="settings-group-heading"><h3 id="connectionSourceTitle">Source</h3><span id="connectionStatus" class="connection-status">Checking connection</span></div>
+      <div class="settings-group-heading"><h3 id="connectionSourceTitle">Local Copilot chats</h3><div class="settings-source-state"><span class="settings-value-label">Collection</span><span id="connectionStatus" class="connection-status">Checking connection</span></div></div>
       <div id="approvedConnection" hidden>
-        <p><strong>Local Copilot chats</strong> <span id="connectionApproval" class="approved-label">Approved</span></p>
-        <div class="settings-actions"><a id="viewApprovedSource" class="button-link" href="#settings?section=connection&setting=source-paths" data-settings-link>View source</a><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button></div>
+        <p><span class="settings-value-label">Source permission</span> <span id="connectionApproval" class="approved-label">Approved</span></p>
+        <div class="settings-actions"><span id="sourceEditAction"><button id="editSource" type="button">Review source</button></span><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button><a id="viewApprovedSource" href="#settings?section=connection&setting=source-paths" data-settings-link hidden>View source</a></div>
       </div>
       <div id="unapprovedConnection" hidden>
         <p>Collect local Copilot activity, including original prompts. Review the source paths before connecting.</p>
@@ -66,40 +74,40 @@ export const settingsMarkup = `
       <div id="approvedSourceDetails" class="source-paths-read" hidden>
         <h4 id="approvedSourceTitle" tabindex="-1">Approved source paths</h4>
         <dl class="settings-paths"><dt>Copilot metadata database</dt><dd id="approvedDatabase"></dd><dt>Chat history folder</dt><dd id="approvedSessions"></dd></dl>
-        <div class="settings-actions"><span id="sourceEditAction"><button id="editSource" type="button">Change source</button></span></div>
       </div>
       <div id="sourceEditor" class="source-editor" hidden>
-        <h4 id="sourceEditorTitle">Review this source</h4>
+        <h4 id="sourceEditorTitle" class="visually-hidden">Review this source</h4>
         <p id="sourceChangeImpact" class="settings-help"></p>
         <p id="sourceSuggestion" class="settings-help" hidden></p>
         <div class="settings-field"><label for="sourceDatabase">Copilot metadata database</label><input id="sourceDatabase" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
+        <div id="sourcePreferenceSlot"></div>
         <p id="approvalScope"></p>
-        <a href="#settings?section=connection&setting=history-window" data-settings-link class="text-link">Review history and frequency</a>
+        <div id="sourceDraftStatusSlot"></div>
         <div class="settings-actions"><button id="connectCollection" type="button" class="primary">Approve source and start collection</button><button id="cancelSource" type="button" class="quiet">Cancel</button></div>
       </div>
       </section>
       <section id="connectionPreferences" class="settings-group" aria-labelledby="preferencesTitle">
       <h3 id="preferencesTitle" class="settings-subheading" tabindex="-1">History and frequency</h3>
-      <div class="settings-preferences">
-        <div class="settings-field"><label for="collectionWindow">Initial history window</label><select id="collectionWindow"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select></div>
+      <p class="settings-help">Previously collected activity stays available. These preferences do not change your source or pause state.</p>
+      <div id="collectionPreferenceFields" class="settings-preferences">
+        <div class="settings-field"><label for="collectionWindow">History to include</label><select id="collectionWindow"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select></div>
         <div class="settings-field"><label for="collectionCadence">Check frequency</label><select id="collectionCadence"><option value="5" selected>Every 5 seconds</option><option value="15">Every 15 seconds</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option></select></div>
       </div>
       <div id="preferenceActions" class="settings-actions"><button id="saveCollection" type="button" class="primary" disabled>Save preferences</button><button id="cancelPreferences" type="button" class="quiet" disabled>Cancel changes</button></div>
       <p id="settingsDraftStatus" class="settings-help" role="status"></p>
-      <a id="returnToSourceReview" href="#settings?section=connection&setting=source" data-settings-link class="text-link" hidden>Return to source review</a>
       </section>
     </section>
   </div>
   <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
     <h2 id="troubleshootingTitle" tabindex="-1">Troubleshooting</h2>
     <section class="settings-group" aria-labelledby="historyHelpTitle">
-      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">History gaps</h3></div><a class="button-link" href="#collection-status?setting=issues" data-settings-link>Review chat history</a></div>
-      <div class="collection-status-actions"><a href="#collection-status?setting=collection-details" data-settings-link>Collection technical details</a><a href="#collection-status?setting=network-diagnostic" data-settings-link>Optional network diagnostic</a></div>
+      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">Missing history</h3><p>Find chats with gaps and the collection details that explain them.</p></div><a class="button-link" href="#collection-status" data-settings-link>Open collection status</a></div>
     </section>
-    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>Service details</summary><p>Services come from recorded targets, not prompts or citations. Discovery does not prove a service ran.</p><a href="#analyze?mode=calls" data-settings-link>Open Calls in Analyze</a></details>
-    <details id="authorProvenanceHelp" class="settings-advanced"><summary>Prompt authors</summary><p>The prompt author comes from sender metadata, not message wording or who executed a tool.</p><a href="#analyze?mode=interactions" data-settings-link>Open interactions in Analyze</a></details>
-    <details id="settingsSearchDetails" class="settings-advanced"><summary>Search troubleshooting</summary><p>Search matches text in saved activity and reports. A partial collection may leave results out; refresh the stored view and retry.</p></details>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3><p>Inspect the recorder, not collection. Sending a public test request needs a separate confirmation.</p></div><a class="button-link" href="#collection-status?setting=network-diagnostic" data-settings-link>View diagnostic</a></div>
+    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="#analyze?mode=calls" data-settings-link>Open Calls in Analyze</a></details>
+    <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="#analyze?mode=interactions" data-settings-link>Open interactions in Analyze</a></details>
+    <details id="settingsSearchDetails" class="settings-advanced"><summary>Missing search results</summary><p>Search matches text in saved activity and reports. Missing history may leave results out. Refresh the stored view, then try again.</p></details>
   </section>
   </div>
   </div>
@@ -144,8 +152,14 @@ export const settingsMarkup = `
 </section>`;
 
 // Display preferences are browser-local and never enter collection configuration.
-export function mountDisplayTimeSettings({ time, onChange }) {
+export function mountDisplayTimeSettings({ time, sidebarMotion, onChange }) {
     const $ = id => document.getElementById(id), key = "workiq-evidence.time-zone";
+    sidebarMotion.subscribe(state => {
+        $("sidebarMotionPreference").value = state.preference;
+        $("sidebarMotionNotice").textContent = state.warning;
+        $("sidebarMotionNotice").hidden = !state.warning;
+    });
+    $("sidebarMotionPreference").addEventListener("change", () => sidebarMotion.setPreference($("sidebarMotionPreference").value));
     let preference = null, warning = "", choicesKey = "", current, busy = false, stale = false;
     function accept(value) {
         try {
@@ -263,10 +277,16 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         $("approvedConnection").hidden = !approved;
         $("unapprovedConnection").hidden = approved || editing;
         $("approvedSourceDetails").hidden = !approved || editing || !inspectingSource;
-        $("viewApprovedSource").hidden = editing || inspectingSource;
         $("sourceEditAction").hidden = editing;
         $("sourceEditor").hidden = !editing;
-        $("returnToSourceReview").hidden = !editing;
+        $("connectionPreferences").hidden = editing;
+        const preferenceHome = editing ? $("sourcePreferenceSlot") : $("connectionPreferences");
+        if ($("collectionPreferenceFields").parentElement !== preferenceHome) {
+            if (editing) preferenceHome.append($("collectionPreferenceFields"));
+            else $("preferenceActions").before($("collectionPreferenceFields"));
+        }
+        const draftHome = editing ? $("sourceDraftStatusSlot") : $("connectionPreferences");
+        if ($("settingsDraftStatus").parentElement !== draftHome) draftHome.append($("settingsDraftStatus"));
         const connectionState = !latest ? "Checking connection" : !approved ? "Not connected" : latest.error ? "Connection issue"
             : !latest.config.enabled ? "Paused" : latest.connected ? "Collection on" : "Checking connection";
         setText("connectionStatus", readError ? latest ? `Last known: ${connectionState}` : "Status unavailable" : connectionState);
@@ -280,17 +300,21 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
             ? stale ? "Your draft is kept, but the approved connection changed in another panel. Cancel to load its current paths before approving."
                 : uncertain ? "This draft is not confirmed. Read the current connection before trying again; no action is replayed."
                 : pendingAction === "/api/collection/configure" ? "Validating and saving this draft. The source is replaced only if validation succeeds."
-                : `${sourceChanged ? "Unsaved paths" : "Paths unchanged"}; your approved source stays in use until you approve a replacement. A validated replacement ${latest.config.enabled ? "starts collecting immediately" : "stays paused"}.`
-            : "Review both paths and Collection preferences before granting permission.");
+                : ""
+            : "");
+        $("sourceChangeImpact").hidden = !$("sourceChangeImpact").textContent;
         setText("sourceSuggestion", !approved && latest?.suggestedSource?.error ? latest.suggestedSource.error : "Suggested local paths are not permission to read them.");
         $("sourceSuggestion").hidden = approved;
-        setText("approvalScope", `Approve reading metadata and mapped logs at these paths, keeping original prompts locally, and ${approved && !latest.config.enabled ? "saving the source while collection stays paused" : "collecting while this app's runtime runs"}. Initial window: ${values().windowDays} days; event check: ${values().pollSeconds} seconds.`);
-        setText("connectCollection", approved ? "Approve and switch source" : "Approve source and start collection");
+        setText("approvalScope", approved && !sourceChanged ? ""
+            : `Approve reading these local paths and keeping original prompts on this device. ${approved && !latest.config.enabled ? "Collection stays paused." : "Approval enables collection."} History: ${values().windowDays} days; check every ${values().pollSeconds} seconds.`);
+        $("approvalScope").hidden = !$("approvalScope").textContent;
+        setText("connectCollection", approved ? sourceChanged ? "Approve and switch source" : "Save preferences" : "Approve source and start collection");
+        $("connectCollection").dataset.intent = approved && !sourceChanged ? "save-preferences" : "approve-source";
         setText("pauseCollection", latest?.config?.enabled ? "Pause collection" : "Resume collection");
         for (const id of fields) $(id).disabled = working;
         for (const id of ["collectNow", "pauseCollection", "editSource"]) $(id).disabled = !approved || working || uncertain || readError || stale || changed || editing;
         $("reviewSource").disabled = !latest || working || uncertain || Boolean(readError);
-        $("connectCollection").disabled = !editing || working || uncertain || readError || stale || !values().appDbPath || !values().sessionRoot || (approved && !sourceChanged);
+        $("connectCollection").disabled = !editing || working || uncertain || readError || stale || !values().appDbPath || !values().sessionRoot || (approved && !changed);
         $("saveCollection").disabled = !approved || !changed || editing || working || uncertain || readError || stale;
         $("preferenceActions").hidden = !approved || editing;
         $("cancelPreferences").disabled = (!changed && !stale) || working;
@@ -314,6 +338,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
             collectNow: "Refresh recorded activity without changing source approval or the pause state.",
             reviewSource: "Open the local source paths for review before granting permission.",
             connectCollection: !approved ? "Approve these local paths and start collection with the chosen preferences."
+                : !sourceChanged ? "Save history and frequency, keeping the approved source and collection state."
                 : latest.config.enabled ? "Validate and approve these paths, then collect from the replacement source."
                 : "Validate and approve these paths while keeping collection paused.",
             cancelSource: "Discard these source edits without changing the current connection.",
@@ -330,7 +355,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
                 else if (id === "cancelPreferences") reason = busy ? progress : "There are no preference changes to cancel.";
                 else if (!busy && !uncertain && !readError && !stale && id === "connectCollection") reason = !values().appDbPath || !values().sessionRoot
                     ? "Enter both local source paths before approving."
-                    : "Change a source path before approving a replacement.";
+                    : "Change a source path or preference before saving.";
                 else if (!busy && !uncertain && !readError && !stale && id === "saveCollection" && !changed) reason = "Change a preference before saving.";
             }
             if (id !== "collectNow") {
@@ -339,9 +364,12 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
             }
             explanations.set(id, control.disabled ? "Unavailable: " + reason : consequence);
         }
+        explanations.set("sourceDatabase", working || uncertain || readError || stale ? blocked
+            : "Review the open source draft. Opening this result does not save preferences or approve source changes.");
         setText("settingsDraftStatus", stale ? "Connection settings changed in another panel. Your edits are kept. Cancel changes to load the current connection before saving."
             : working ? progress
-            : editing ? "Nothing changes until you approve this source. Cancel discards these edits."
+            : editing ? !approved || sourceChanged ? "Nothing changes until you approve this source. Cancel discards these edits."
+                : changed ? "Unsaved preferences. Save keeps the approved source and collection state." : ""
             : changed ? approved ? "Unsaved preferences. Save applies only to the approved source and keeps its active or paused state." : "Preferences are not saved until you review and approve a source."
             : approved ? "" : "Review and approve a source to use these preferences.");
         $("settingsDraftStatus").hidden = !$("settingsDraftStatus").textContent;
@@ -367,7 +395,6 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         let target = document.querySelector('[data-settings-section="connection"]:not([hidden])')
             ? $(latest?.config?.approved ? "editSource" : "reviewSource")
             : document.querySelector("[data-settings-section]:not([hidden]) h2");
-        if (target === $("editSource") && !target.checkVisibility()) target = $("viewApprovedSource");
         ux.restoreFocus(target?.disabled ? target.closest(".ux-disabled-help") : target);
     }
     async function act(endpoint, input, success) {
@@ -389,10 +416,12 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
     function guard() {
         return latest?.configVersion !== undefined ? { expectedConfigVersion: baseline.configVersion } : {};
     }
-    function configure(sourceApproval) {
+    function configure(reviewingSource) {
         if (!initialized || busy || stale || uncertain) return;
-        if (sourceApproval ? $("connectCollection").disabled : $("saveCollection").disabled) return;
+        if (reviewingSource ? $("connectCollection").disabled : $("saveCollection").disabled) return;
         const next = values();
+        const sourceApproval = reviewingSource && (baseline?.config?.approved !== true
+            || next.appDbPath !== baseline.config.appDbPath || next.sessionRoot !== baseline.config.sessionRoot);
         if (!sourceApproval && (next.appDbPath !== baseline.config.appDbPath || next.sessionRoot !== baseline.config.sessionRoot)) {
             message("Changed source paths require fresh approval. Review the source before connecting.", true); return;
         }

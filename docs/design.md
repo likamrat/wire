@@ -37,12 +37,44 @@ visibility changes and replacement still scrub immediately. Pending writes
 leave through their existing receipt recovery, not a retained interactive form.
 An action in the still-interactive origin finishes old exit cleanup before
 acquiring shared reading or automatic-score controls.
-Enabling reduced motion or changing the available layout settles the current
-motion immediately without replaying an earlier close or stealing newer focus.
+Disabling effective sidebar motion or changing the available layout settles
+current motion immediately without replaying an earlier close or stealing newer
+focus. System reduced-motion changes apply when the preference follows system.
 Motion must be checked in flight, including reversal and focus restoration,
 not inferred from endpoint screenshots.
 The supplied four-state reference establishes surfaces and collapsed/expanded
 geometry only; it does not establish animation timing or easing.
+
+When both rails appear to snap, first inspect `prefers-reduced-motion` in the
+actual embedding surface without changing its preference. With the default
+**Follow system** choice, both motion owners settle immediately when it requests
+`reduce`; available Web Animations support alone does not override that choice. Browser
+automation defaults can differ from the embedding host. The native-preference
+case in `restored-sidebar.browser.test.mjs` uses `reducedMotion: null` to retain
+the system preference and records intermediate positions for both rails in
+both themes. Set `WIRE_NATIVE_MOTION_PROBE=headed` to run that same case in
+headed Edge on Windows. Keep this environment qualification separate from
+the explicit `no-preference` glide proofs; neither establishes the preference
+of a different or already-open host.
+
+**Settings > Display > Sidebar motion** offers **Follow system** (the default),
+**On** and **Off**. On is an explicit WIRE-only opt-in to gliding even when the
+host reduces motion; Off skips sidebar motion even when the host allows it.
+The one shared effective preference controls the left rail, narrow navigation
+drawer and right interaction, report-setup and saved-item surfaces. It does not
+enable other controls' animations or change Windows/browser settings. Drawer
+entry uses the same owned Web Animations path as its exit so it can honor the
+opt-in without overriding the global reduced-motion stylesheet.
+
+The choice applies immediately, separately from Connection's Save preferences,
+and is read before paint from `workiq-evidence.sidebar-motion` in localStorage.
+Choosing Follow system removes the override. Reload and same-origin pages in
+the same browser storage profile share it through the existing storage-event
+pattern. A different hostname, port or host storage profile has its own choice;
+deployment alone does not opt a user in. Apply On through Display in the WIRE
+surface the user actually uses. Storage failures show a panel-only warning
+instead of claiming persistence. No collection, report or private-evidence
+configuration contains this preference.
 
 These changes are screen-local. Search retains its capsule, result behavior and
 surface shadow. Report-facing tokens, typography, renderers and saved HTML,
@@ -55,8 +87,14 @@ recorded tool names, supported service or activity cues, outcome pills and recor
 time. The same Lucide service colors and status-pill vocabulary carries through
 Calls, per-call sidebar details and report-picker inspection. Tools have a dedicated
 row, services/purpose/evidence gaps a second row, and recorded call outcomes a third.
-Quiet timing appears once with its existing meaning. The rows use compact spacing;
-noninteractive service glyphs fit the text line box instead of adding baseline
+Quiet timing appears once with its existing meaning. Tools to services keep a
+compact 4px gap; services to recorded outcomes use 8px of intentional breathing room.
+Outcome prefixes and pills align at their centers, so the first decorative SVG
+inside a pill does not set the row's baseline or add height in the report picker.
+The Asked Copilot bubble is optically 18px inside the same 20px metadata lane and
+uses secondary ink, not the near-white unknown-category paint. In widget legends
+its 20px bubble stays centered in the unchanged 24px service lane.
+Noninteractive service glyphs fit the text line box instead of adding baseline
 slack or a 44px control-sized row. Wrapped names add real text lines, not empty
 spacers. Tools and services are separate sets of evidence, not assumed pairs.
 Compact summaries show up to two
@@ -76,32 +114,71 @@ Interaction details occupy one right-edge sidebar beside the unchanged workspace
 Its width actually reduces the main column, so existing widget container queries,
 legends and filters reflow without scaling. Opening and closing compensate the
 selected card's vertical anchor. The main page and sidebar scroll independently;
-selected-call scrolling belongs only to the sidebar. The header contains a title
-and Close; one fixed bottom group owns report actions. Only the surface glides,
-not the cards or individual text sections. Reduced motion changes state immediately.
+selected-call scrolling belongs only to the sidebar. The header contains a title,
+Collapse all, Expand all and Close; one fixed bottom group owns report actions.
+The sidebar surface and the reader's major sections use the existing effective
+WIRE motion policy. Off changes state immediately; System follows reduced
+motion; On permits a reversible section-height glide. Cards do not animate.
 When readable columns cannot fit, the same native dialog becomes modal, including
 at enlarged text sizes; it never opens a second interaction page.
 
-**Hide/Read** and **Copy** are icon-only, with short hover/focus explanations,
-subject-specific accessible names and 44px targets. Prompts are regular, not
+The approved interaction reading order is **Prompt, Timing, Recorded activity,
+Response (when retained text exists), Reviews, Source**. Useful major sections
+start open. Their section controls are the only reading visibility owners;
+Collapse all and Expand all derive their availability from those same keyed
+states. Mixed states do not create a separate global mode. The selected prompt
+starts at its section header; an exact-call link opens its owning section and
+focuses the exact record instead.
+
+**Copy** is icon-only, with a short hover/focus explanation,
+a subject-specific accessible name and a 44px target. The reader does not also
+offer a duplicate prompt/response Hide button; other text-access consumers keep
+their existing Read/Hide defaults. Prompts are regular, not
 bold-italic; placement and a subtle leading edge provide emphasis. Metadata
 labels and values share Asta Sans, size and regular weight across current screens.
 Headings, chart values and code keep their distinct roles. Source context appears
 once for the selected interaction, not again for
 every linked message. Missing projects remain explicit in technical source
-details rather than repeating a no-project sentence on each card.
+details rather than repeating a no-project sentence on each card. Labels sit
+above their values on one text edge, including Source event and selectable IDs.
+Quiet section capsules and existing author/service/result cues provide hierarchy,
+not new confidence or severity colors. A Copy utility beside input reserves its
+own column across the label/value group without inflating the label line.
 
 **Final response** means the existing recorded-request-to-final-response timing,
 not the call's duration. The screen-only timing option renders 114090 ms as
 **1:54 min**, 104000 ms as **1:44 min**, and 84892 ms as **1:25 min**.
 Minutes round to whole seconds with carry; hours use **h:mm:ss h**. Existing
 subminute hundredths, tiny-positive and true-zero displays remain distinct.
-Exact milliseconds stay in data elements and technical details. Native report
+Exact milliseconds stay in data elements and exact timestamps in time elements.
+The reader's leading Timing group uses the current viewer's time context, not a
+new UTC preference. Request time, each call's start/end/recorded duration, response
+observation time and request-to-final-response duration keep distinct names and
+scopes. Concurrent intervals are never summed; unavailable durations are never
+reconstructed from endpoints. Graph references/request sites do not acquire an
+execution duration. Internal group timestamps and repeated card times are omitted
+from this screen, not deleted from the record. Native report
 formatting retains its default precise duration presentation; stored facts,
 timestamps, sorting and frozen output do not change.
 
+Local timing measurements keep their own scoped home in Timing. A retained
+duration field is not silently substituted for a timestamp-qualified sample:
+for example, a recorded duration can be present while its completion timestamp
+is missing and the local measurement remains **Not measured**. The existing
+sample/median presentation and timed coverage are reused without summing calls.
+Each scoped local measure keeps its existing explicit measurement boundary
+beside the result and coverage, once: for example, dispatch to response headers
+is distinct from dispatch to transport error. Neither boundary is inferred from
+an endpoint or substituted for the other.
+Verified request-to-answer timing remains a distinct **Boundary not verified**
+state when appropriate. The same recorded-final-response metric is not shown
+twice; any specific unavailable reason accompanies its existing timing fact.
+
 Source-author qualifiers, partial text, missing responses, failed calls and read
-errors remain visible. Copy names its subject, copies only that exact retained
+errors remain visible. Retained prompt text with missing or unsupported
+completeness status says **Text completeness not verified** once beside the
+prompt, using the existing coverage semantics; it is not presented as complete.
+Copy names its subject, copies only that exact retained
 body and warns that clipboard text is unmasked and accessible to other apps.
 One visible footer clipboard notice serves the prompt and retained replies; each Copy
 control references it and still names its exact subject. Pending and successful
@@ -116,13 +193,20 @@ verdict. A request with no retained individual actions says so beside the prompt
 
 Repeated About-prompt/response disclosures and the Selected prompt badge are
 removed from this reader. Filter scope is stated once; out-of-view and missing
-API metadata remain in each call's existing technical details instead of
+API metadata remain beside the affected call instead of
 repeating empty fields down the page. Recorded paths, returned-result summaries
 and actual failures stay in the reading flow. The exact recorded tool name is primary, including `workiq-ask`; an operation
-description never replaces it. The call heading shows every supported service,
-with a concise qualifier when service details are incomplete; compact summaries
-never select a dominant service. Expanded details state service
-evidence once, keep exact recorded timestamps and selectable identifiers without
+description never replaces it. Tool and Result are the primary call fields;
+all supported services are subordinate, separate values. A concise qualifier
+explains incomplete service details; compact summaries never select a dominant
+service. Known input shapes show one request/target list and requested sources
+as intent, not proof of returned services. Unknown keys, unusual shapes and code
+retain the exact existing JSON/script fallback and subject-specific copying.
+When that recognized Requested sources presentation already carries the intent,
+the reader omits only the generic returned-source disclaimer. Unsupported shapes
+and genuinely different missing/attribution warnings retain their explanations.
+Read-only call and returned-result details have no nested opening gate.
+Source states service/evidence limits once and retains selectable identifiers without
 per-ID copy buttons. They do not recite absent parent/parallel linkage or a lack
 of direct HTTP observation for every call: these are recorder limits, not an
 error or an action for the user. Actual linkage values and observed HTTP evidence
@@ -135,19 +219,26 @@ unrepresented raw completion evidence remains visible. Exact arguments, scripts,
 result attribution and source limits remain readable and copyable without a new
 accordion layer or a help button on every fact.
 
-A missing response follows its group's calls, before their technical details:
+A missing response follows its group's calls without an empty Response controller:
 **No saved response. Capture is off.** when that state is known. It is not a
 failed call or proof that Copilot did not answer. **Reviews** directly shows
 the selected interaction's review state and concise, truthful gaps. For example,
-**Completion could not be verified for 1 call.** does not change a reported
+**1 reported outcome lacks a completion-qualified result.** does not change a reported
 outcome into a verified completion. Exact check counts, reasons and definitions
-remain in the existing saved-check details and inline feedback region; technical source
+remain visible in the saved-check details and inline review region; technical source
 records retain source-specific limits. Broad app-wide coverage stays in Analyze
 and Collection status, reachable through **Collection coverage**, not copied
 into the reader. One short scope note distinguishes missing messages, tool
 outcomes and answer/permission judgments. Report membership stays in the fixed footer.
-There is no outer review disclosure to open before reading the review
-state or reaching its controls. The redundant unselected-status
+
+Recorded response-availability reasons such as credential screening and capture
+limits remain visible beside the unavailable response, independently of the
+current capture setting. They come from the validated local availability metric,
+not an inference from current preferences, and do not create an empty Response
+controller. Unsupported local quality checks are identified once in Reviews;
+they are not confused with saved personal or model verdicts.
+Reviews starts open like the other major sections; there is no additional
+read-only details gate before its state or controls. The redundant unselected-status
 sentence is replaced by the footer's **Add to report** action; selected and
 broader-scope membership remain stated. **Continue to report** explicitly opens
 Selected report Activity; Add/Remove never navigates or saves. Both controls use
@@ -172,9 +263,13 @@ concise availability/capture statement; it does not claim the requested work was
 completed. Tool input wraps as readable recorded text while exact JSON copying
 remains unchanged.
 
-**Details and feedback** expands inline and uses one compact definition table with human states and
+Saved review details use one compact definition table with human states and
 explicit reviewed/timed coverage, not a pass percentage or repeated aggregate
-glossary. Identically scoped unsupported local checks share one explanation,
+glossary. That table contains personal/model review metrics, not a second copy
+of local execution checks or call timing. It replaces the corresponding compact
+verdict recap; review rationale/permission qualifications appear once. Local
+completion gaps retain their precise reason and label-above-value counts.
+Identically scoped unsupported local checks share one explanation,
 without combining their counts. Each measure retains its definition and origin;
 machine-readable row data preserves its raw status, numeric value, numerator,
 denominator and coverage. Reasons remain visible. Genuine zero duration,
@@ -186,12 +281,27 @@ stay neutral and review errors remain errors, not negative answer judgments.
 Aggregate screens, canonical metrics and frozen report output retain their
 existing definitions and values.
 
+**Personal feedback** opens the existing dimension chooser directly, followed
+by the existing form, without a second Give feedback step. Save, Cancel,
+withdrawal and uncertain-receipt recovery retain their owners. No autosave,
+approval or evaluation is implied by reading or folding.
 Optional personal feedback and contextual Automatic scores stay inline. Their
 existing controllers still own validation, explicit approval and receipts.
 Closing, switching cards, changing Analyze filters/pages or leaving with an unsent
 personal-feedback edit first offers **Discard changes / Keep editing** in the
-sidebar. The requested transition is held until resolved. Collapsing the details
-region keeps its edit while mounted. Submitted or uncertain updates are not
+sidebar. The requested transition is held until resolved. Closing Reviews or
+Collapse all uses the same unsent-edit guard, before any section changes.
+Pending/checking/uncertain feedback and open Automatic scores block folding
+Reviews with an explicit explanation; they are not silently hidden or submitted.
+The deferred fold rechecks these guards when Discard is acted on, not just when
+folding was requested. A Save that became pending or an automatic setup opened
+while confirmation was visible therefore cannot be folded away by the old callback.
+The confirmation is also bound to its original editor instance, reader and
+evidence scope before any discard mutation. Clearing or replacing that editor
+clears the obsolete confirmation; a still-connected old control cannot discard
+a newer interaction's draft. Pending operations retain their same-owner guards,
+and terminal Save/Close removes only the obsolete confirmation, not the receipt.
+Submitted or uncertain updates are not
 cancelled or replayed: the original receipt remains recoverable after departure.
 This is not a report-draft discard guard.
 
@@ -207,8 +317,18 @@ Reading positions and disclosures are memory-only and scoped to current evidence
 Departure captures once before private-text cleanup; return waits for current
 authorized reply reads to settle before restoring deep scroll and semantic focus.
 New reading input, another owner or invalidation cancels that restoration.
-Closing removes private DOM and Copy getters. Source/permission/deletion changes
+Folding a private-text section removes its body and Copy subject immediately,
+not merely through CSS. Reopening retained response text performs a fresh
+authorized local read; a failed read still requires explicit Retry. Late reads
+cannot repaint a folded, replaced or revoked owner. Closing removes private DOM
+and Copy getters. Source/permission/deletion changes
 invalidate those positions and stale forms before a new verified read.
+Page suspension also invalidates the request render key and old read generation,
+removes the private reader DOM and disposes section owners. Persisted-page
+restoration rebuilds them only after an accepted recovery snapshot, even when
+its evidence version is unchanged. A failed read, revoked source or late
+pre-suspension snapshot cannot revive the old owner. This does not change browser
+cache policy, cancel writes or replay pending consequential operations.
 
 A verified Search action may target a different evidence layer. Its current
 values must be labelled with that applied layer, not the origin's controls.
@@ -229,11 +349,34 @@ compact-state display boxes are 20, 24 and 16 pixels.
 An unchecked multiselect keeps its outlined checkbox affordance but does not
 paint the Lucide check path; selection makes that stroke visible.
 
+Understand a control's user task, state, effect and feedback before choosing its
+presentation. Consolidate redundant controls, menus and disclosure steps that
+fragment the same task in the same context; a cleaner wrapper around the old
+fragmentation is not simplification. Existing control counts and nesting are
+not requirements. Preserve capabilities and necessary decisions, including
+distinct scopes, draft application, permissions, cost and destructive-action
+confirmation. Verify the complete normal and recovery journeys, not only the
+appearance of their controls.
+
 Familiar Copy, visibility, Close, Refresh, Reset, search, paging and download
 utilities are icon-only with brief explanations and meaningful accessible names.
 File formats remain visible content beside their download controls. Pending and
 success replace the existing glyph without changing layout. Text-only actions
 do not acquire a decorative pending glyph. Hover never invokes an action.
+
+Glyph paint, SVG boxes, text layout and interaction targets are separate
+concerns. Preserve established accessible target sizes without allowing their
+padding or minimum height to create phantom blank lines, cramped values or
+unintended gaps between sections. Decorative glyphs have no artificial hit area
+and stay within the intended text line. A utility beside metadata may occupy a
+reserved column or span related label/value rows; it must not inflate a label
+row merely to accommodate its target. Intentional toolbar/control-row heights
+and grouping gaps remain intentional, not subject to blanket compaction.
+Targets and focus indicators must remain usable without overlapping adjacent
+actions or intercepting native text selection. Verify rendered text edges,
+SVG/control rectangles and ancestor spacing together, including wrapped values,
+hover/focus/disabled states, both themes and narrow/enlarged text. A zero margin
+or correct icon size alone does not prove correct spacing.
 
 Explicit text-only workflow exceptions are Save report, Open saved report,
 Add/Remove report, Continue to report/contents, Prepare report, approval and
@@ -616,6 +759,15 @@ bounds say **From** or **Through**. Draft, pending and failed dates never relabe
 accepted counts. Reset, Back and calendar rollover keep the caption and cohort
 together.
 
+Outcome and Author use applied-chip removal as the single settled clear entry.
+Their inline action exists only while accepted scope is All and a first
+restriction is pending, with the explicit name Cancel pending outcome/author
+filter. Clearing an existing applied chip also cancels its in-flight replacement;
+late responses remain fenced by the existing load generation. Removing a disabled
+Outcome chip focuses its surviving label, not the unavailable combobox.
+Reset retains its broader browsing/search/scope effect; menu All, Apply and Cancel
+retain their separate draft semantics. No application or query policy changes.
+
 Time columns aggregate automatically: day bins for calendar presets and bounded
 ranges up to 31 days, week bins for longer ranges up to a year, and month bins
 for longer bounded ranges. Unbounded history keeps week bins. Existing explicit
@@ -864,11 +1016,17 @@ and distinct full-interaction metric boundaries.
 
 ## Fresh activity and history coverage
 
-The check button and **Source and collection** form one left-aligned action row.
-The result follows below, so long no-change, partial, pending and error messages
-cannot push source help to the far edge. Narrow or enlarged-text containers stack
-the same controls in reading order. Native disclosure, Asta/Lucide, light/navy
-tokens, visible focus, 44px targets and reduced-motion behavior are retained.
+Analyze's one Refresh utility sits beside the page heading, separate from Reset
+Analyze's icon-only utility beside applied-filter chips. The funnel-labeled filter group keeps Dates,
+Tool, Service, Outcome and Author visible; More filters retains Category, Project,
+Chat, Activity and Collection. Rounded triggers and aligned count/selection columns
+use the existing listbox controller. Multi-selection marks are toggle-like but
+remain draft options, committed only by Apply; single choices retain single-select
+semantics. Custom dates still require Apply. Menus have no entrance animation.
+Source/update status and transient Update details remain below the filters.
+Source configuration and deletion are not filter controls: their existing Settings
+destinations retain all guards and confirmation flows. Native disclosure, Asta/Lucide,
+light/dark tokens, visible focus and 44px targets remain.
 
 Novelty and coverage are independent. The visible **Chat history** link names
 known unavailable, limited, pending, unfinished or unchecked chat counts from the
@@ -1222,8 +1380,11 @@ service details in that call's record without guessing from private text or chan
 Remaining `Unknown` activity is displayed as **Service not shown**, not a service failure.
 For a targetless `workiq-ask` with the existing `hosted-routing` evidence reason,
 Interactions and Calls cards instead name the known operation **Asked Copilot**,
-as the reader does. Existing category help explains that its service or API path
-is not recorded. Mixed interactions retain both assistance and real missing-service
+as the reader does. Existing category help and the sidebar's Technical details
+explain that the recorded tool output does not identify a downstream service or
+API path. That is
+an evidence gap, not a service failure or a check of the current connection.
+Mixed interactions retain both assistance and real missing-service
 labels; known, partial and unsupported targets keep their existing categories.
 This presentation leaves the canonical `Unknown` identity and filter unchanged.
 The detail reader keeps **Asked Copilot** as a known operation and names its data service
@@ -1405,7 +1566,7 @@ unavailable; built-in accessibility guidance and the existing product system wer
 The shared filter row places **Author** beside Dates, Tool, Service and Outcome, including inside
 a conversation. It reuses the opt-in checkbox multiselect: draft choices do not change results,
 Apply commits once, and Cancel/Escape/outside discard. All includes unverified authors; known
-Your + Agent does not. Applied counts, charts, groups and Insights use the same author scope before
+My + Agent does not. Applied counts, charts, groups and Insights use the same author scope before
 pagination and alongside existing filters. Pending and failed reads keep the last accepted selection
 with its existing counts; a late response cannot replace a newer choice.
 
@@ -1414,13 +1575,19 @@ Clear actions sit in their field headers, without shrinking the dropdown or
 leaving inactive clear-button gutters. Custom dates occupy a separate row.
 Constrained widths and enlarged text use the wrapping behavior above.
 
-The single author helper supplies **Your prompt**, **Agent prompt**, or a neutral source-qualified
+The single author helper supplies **My prompt**, **Agent prompt**, or a neutral source-qualified
 **Copilot chat prompt**. Non-chat/unknown-source text retains the generic Prompt fallback.
 `data-prompt-actor` carries only the normalized user/agent/unknown category for compact cyan/violet/neutral
-cues rather than success/failure colors. Your prompt uses a dedicated cyan token: darker
+cues rather than success/failure colors. My prompt uses a dedicated cyan token: darker
 on light surfaces and brighter on navy, distinct from ordinary blue links and violet Agent.
 The list marker and detail heading share that token; prompt bodies retain normal reading colors.
 Labels remain visible.
+Compact interaction cards place **My prompt**, **Agent prompt**, or **Author unverified** inline
+before the regular-weight prompt excerpt. This is prompt-origin text, not a badge, extra heading,
+control or tool-executor claim. It reuses the existing author ink without extra margins or icons;
+the whole card stays one native link. Detailed source qualifications remain in the reader.
+Owner-facing filters, reader, report picker/peek and technical source explanations use **My**;
+non-owner report output keeps **User** and historical report bytes remain unchanged.
 Report Activity has its own explicit author membership choice; it narrows the chosen base
 scope without deleting hidden selections. Complete interactions, not agent-executed individual calls,
 are the membership unit. Prompt-text disclosure remains a separate choice in Contents.
@@ -1681,14 +1848,57 @@ its live result list, and the existing Analyze outer cards, with a charcoal coun
 in dark mode. It does not change card geometry, the general `--shadow` token,
 other controls, or saved/printed report styling.
 
-Failures use red (`#b3261e` light / `#f28b82` dark) in text, icons, pills and
-chart paint. Amber partial results/warnings, unknown, other-status and transport
-cues remain distinct. Service palettes and their IDs do not change. Screen
-failure aliases follow the shared chart declarations in `web/styles.mjs`;
-the shared comparison renderer's historical pink transport class receives its
-separate transport paint, not failure red. Dark service fades keep 70% of their
+Recorded success uses green (`#286336` light / `#83d494` dark); failed calls and
+connection failures use red (`#b3261e` / `#f28b82`) in pills, outcome legends and
+chart paint. The check, circle-X and unplug glyphs, explicit labels and counts
+preserve the difference between completion, tool/API failure and transport failure.
+Green means the recorded outcome, never answer correctness or a quality grade.
+Partial results remain amber, unknown slate and other HTTP status violet.
+These screen aliases follow the shared chart declarations in `web/styles.mjs`;
+the saved-report chart factory and historical colors are unchanged.
+Service IDs, order and filter meanings do not change. Files' light screen ink is
+`#007357` (formerly `#007458`) so it clears 4.5:1 on the accepted hover surface
+without rounding the old 4.49648:1 up to a pass. Dark service fades keep 70% of their
 semantic color so even the low stop clears 3:1 against its track. Gradient
 direction, path geometry, counts, percentages and filter identities are unchanged.
+
+Service/category label inks remain independent of recorded-outcome roles:
+
+| Recorded outcome | Light | Dark | Visible cue |
+|---|---|---|---|
+| Success / HTTP 2xx | `#286336` | `#83d494` | Check |
+| Tool/API failure | `#b3261e` | `#f28b82` | Circle-X |
+| Connection failure | `#b3261e` | `#f28b82` | Unplug |
+| Partial | `#95552a` | `#e59b76` | Dashed circle |
+| Unknown / not observed | `#586071` | `#a2a9b9` | Question circle |
+| Other HTTP status | `#694b9c` | `#b69bdf` | Information |
+
+| Service or category | Light | Dark |
+|---|---|---|
+| Mail | `#91460e` | `#e98d4a` |
+| Calendar | `#215bd1` | `#5792fa` |
+| Files | `#007357` | `#10b981` |
+| Teams | `#6842ba` | `#ad88f0` |
+| People | `#006b86` | `#06b6d4` |
+| Tasks | `#526600` | `#b8c847` |
+| Notes | `#532a75` | `#d1a8e6` |
+| Directory | `#234618` | `#91ba77` |
+| Search and retrieval | `#003e59` | `#86d2ec` |
+| Discovery | `#133890` | `#cbd4fe` |
+| More than one service | `#565c78` | `#9ba8d0` |
+| Platform diagnostics | `#344844` | `#82a6a1` |
+| Service not shown (category) | `#292a32` | `#e5e7ee` |
+| Grouped Other | `#69604b` | `#c3ba95` |
+| Asked Copilot (operation), evidence-gap text | `#565656` | `#b8b8b8` |
+
+People cyan is distinct from green Worked. Closest service/outcome pairs still
+include Mail/partial, Teams/other status and multi-service/unknown; Files and
+Directory also sit near green success. Color alone is not a category key: service
+names and pictograms identify the service, while labeled, outlined pills and
+outcome glyphs identify recorded results. Analyze separates its Services and
+Recorded outcomes widgets, preserves their labels/counts and exact-data tables,
+and uses matching paints for outcome glyphs, legends and marks. Forced colors
+retain names, counts, glyphs and system focus instead of relying on hue.
 
 `screenTokens` and `screenFontStack` in `web/tokens.mjs` own screen appearance.
 Screens use Asta Sans first, followed by Segoe UI and system fallbacks.
@@ -1972,18 +2182,31 @@ measurements; no proof artifacts belong in source control.
 Counts, labels and exact tables retain the meaning independently of color.
 Chart tooltips, accessible exact-data tables and form controls follow the resolved color scheme.
 
-Stacked filter fields keep the title/help row and dropdown in one wrapping field.
+Analyze filter fields keep the label and dropdown in one wrapping field.
 The title's text edge and selected-value text edge share `--select-value-inset`
-(12px from the painted pill edge, 16px at 200% root text). Settings uses the
-separate label/help/action row described below. Help remains a separate sibling button, not part of the associated
-label; its 40px/44px target centers on the final label line without changing the
-value inset. Wrapped peers align their final label baselines and controls, with
-a shared 4px field gap. Labels use a readable, unitless line height; controls
-grow for enlarged text while retaining 36px paint inside 44px targets at normal
-size. The rem-based minimum field width also applies on mobile, so enlarged
-text wraps complete fields onto their own rows instead of squeezing labels.
+(12px from the painted pill edge, 16px at 200% root text). The label occupies its
+actual line height, followed by the existing 4px field gap. Help remains a separate
+sibling button in a real utility column spanning the label/value group; its glyph
+aligns to the label line while its target stays at least 44px. The first-pending
+cancellation has its own adjacent 44px value-row region; settled removal lives in
+the applied chip, not a duplicate inline control. Neither needs an inflated label
+row or an overlapping transparent target. Primary widths are budgeted by field:
+Dates and Service have their value/help region, Tool allows its longer recorded
+names, and only Outcome/Author allow the real first-pending cancellation. Two
+layout-only groups keep the three single-choice fields and the draft-selection
+pair together when space requires wrapping; they add no controls or semantics.
+The normal 1440px context fits all five, while narrower contexts wrap instead of
+budgeting nonexistent cancel controls or clipping values. Long values wrap within their dropdown;
+adding Clear must not squeeze a short selection into clipped text or move the
+filter anchor. Settings and the generic help/select primitives are unchanged.
+Labels use readable unitless line heights; hover and keyboard focus retain the
+same text/target geometry. The rem-based value budget also applies on mobile.
 `tests/select-control.browser.test.mjs` measures text, painted edges,
 help targets and popup anchors at 375/820/1200/1466px in both themes and 200% text.
+The filter-local geometry case in `tests/filter-experience.browser.test.mjs`
+also compares ink/SVG/target boxes, target non-overlap, real long metadata,
+decorative option marks, disabled states, single-entry settled removal and pending
+cancellation without duplicate dispatch or late-response repaint.
 
 Secondary navigation actions, secondary buttons, format choices and filter chips
 use the shared 6px control corners; fields use 4px corners and result badges capsules.
@@ -2046,37 +2269,67 @@ outer focus ring. Neither transient state replaces the location marker.
 Quiet reload/disclosure/help controls and the chart
 time-scale picker remain intentional non-pill exceptions.
 
-### Settings reference composition
+### Settings task structure
 
-The user's second Settings reference supersedes the earlier boxed category/card
-composition. Read-only IQ-OS `web/index.html:2472-2517` verifies 32/40 page and
-pane headings, a 240px category column with a 48px gap, search inside that column,
-quiet 6px navigation rows and a thin vertical divider. Its setting rows pair
-label/help with a right-side action (`2520-2557`). `kit/theme.css:212-223` uses
-8px button corners; `287-294` uses 4px field corners. These are source facts,
-not dimensions inferred from screenshots with unknown zoom.
+The Settings overhaul replaces the disconnected fixed label/action columns.
+The earlier reference composition is no longer the target: the user's screenshot
+identified its competing headings, loose controls and missing task hierarchy.
+The five existing categories and outer application navigation stay unchanged.
+Search, the native narrow category disclosure and Collection status remain in
+one quiet rail. A bounded paper surface contains the active category, with a
+24px section heading below the 32px page title, concise context and distinct
+task groups. There are no nested decorative cards or category icons.
 
-WIRE retains its outer navigation and five Settings categories. The Settings
-rail contains search, the native category disclosure and the Collection status
-link. Search stays available when categories collapse. The right pane is flat,
-with 24px row insets and single hairline boundaries; wide rows place label/help
-left and a bounded control right, while narrow or enlarged-text layouts stack
-them. Header and pane titles use the scoped 32/40 role and -.025em tracking;
-compact titles reuse 24/32. Body/help and controls keep the shared Asta 14/20
-roles, with readable 16px row labels. Source paths retain their separate
-regular reading role. No palette, outer navigation, form state or controller
-contract changes with this presentation.
+Source approval and collection state remain distinct. **Review source** goes
+directly to one review containing the paths and existing history/frequency
+controls, rather than View source, Change source and navigation between forms.
+The one decision uses explicit current intent: **Save preferences** for
+same-source history/frequency changes, **Approve and switch source** for changed
+paths. Cancel discards the whole draft. The existing fields keep their identity,
+guards and values when moved; no duplicate form or new backend authority exists.
+Ordinary history/frequency edits remain directly available on the main page,
+above their existing explicit Save/Cancel footer. Old source-path links still
+reveal selectable read-only values, and Save preferences resolves to the actual
+same-source action, never to source approval. Display and privacy
+task rows keep each explanation attached to its label, with a bounded action or
+control alongside; narrow/enlarged layouts stack them in that reading order.
+Recorded replies retain the checkbox draft and separate confirmation. **Review
+deletion** previews collected-activity removal; **Read history again > Choose
+chats** starts the separate recollection review. Old setting IDs, aliases and
+search phrases remain valid and only locate controls, never approve actions.
 
-Settings fields, navigation and ordinary actions use distinct 4/6/8px corners,
-not universal capsules. Their native targets remain at least 44px. The search
-input itself is 44px high; its containing border is not counted as hit area.
-Its wrapper supplies the input's visible focus ring, and the rail reserves
-space for outward keyboard outlines. Existing help/icon exceptions and
-red-outline confirmation dialogs keep their existing geometry. Steady deletion
-and recollection entry labels have no authored continuation dots; the adjacent
-help explains scope preview and separate confirmation. Tests measure real text,
-row/control centers, divider spacing, long option disclosure, private search,
-Back/focus, grants and source-edit behavior in both themes and enlarged layouts.
+Asta Sans, pinned Lucide and the neutral light/dark tokens are unchanged.
+Settings uses 10px fields/actions, 8px category rows and one 12px content surface.
+Targets remain at least 44px, including the search input itself. Inputs retain
+visible focus; long paths, status explanations and options wrap. No shared select
+behavior or new motion policy is introduced.
+Rows align the actual label and control text baselines, not merely their outer
+44px boxes. Read-only path and model labels sit directly above their values;
+they do not inherit a utility-sized empty line. The Refresh action and concise effect/current result form one task, without a
+parallel About Refresh gate. Partial checks lead with incompleteness and checked
+scope; canonical limits/reasons appear once beside one current-history action.
+The full model and non-Settings detail presentation remain unchanged.
+Visible effects and hover/focus help share the action's stored-recovery guard,
+including recognized source failures in the error phase. The source-repair
+category does not determine the next action. One dynamic tooltip callback stays
+registered across Settings, Analyze and Collection status.
+
+Troubleshooting combines history gaps and collection details into one Collection
+status task. The HTTP recorder remains a separate diagnostic task because it
+does not test collection and a new public request requires confirmation; sharing
+a destination page is not a reason to merge those different effects. The rail's
+Collection status shortcut is not repeated in that section. Recollection exposes
+Show selected only when there is a selection to inspect (or a selected-only list
+to leave); search, paging and all selected chats remain available.
+
+Privacy previews keep the exact consequences, counts, cancellation and receipts.
+The modal AI approval groups the model, chats, spending allowance and disclosure,
+without changing the separate inline reader. Minimum credit balance, post-paid
+soft limits, the evidence sent/retained and explicit consent remain visible
+without an extra help gate; an unknown charge stays paused.
+Browser-local Display settings still apply immediately and separately from
+Connection's explicit save. No collection, billing, stored-schema or frozen
+HTML/PDF/JSON/Markdown output behavior changes with this presentation.
 
 Painted text controls retain at least the shared 12px horizontal inset, including
 both Read/Hide request-text labels and chat disclosures. Quiet controls remain
@@ -2103,15 +2356,11 @@ beside analytical filters/scope; Clear selection keeps its draft/preview-only sc
 Neither changes retained evidence or saved reports. Full labels wrap naturally
 with 44px targets and the shared 8px pill gap.
 
-Home's Source and Collection settings are native secondary links within
-the closed **Source and collection** disclosure beside the primary check.
-Its row allocation does not depend on whether it is open: the same summary
-stays beside the action on wide layouts and consistently below it on narrow
-or enlarged layouts. Opening reveals native details below that stable trigger;
-only downstream content moves. Focus, the 44px target and both Settings links
-remain intact, and toggling does not run collection or change capture permission.
-Their group uses intrinsic width with an 8px gap beside or immediately below
-the source/window summary when expanded.
+Analyze no longer repeats Source/Collection settings links or deletion under its
+filters. Relevant health, missing-history and uncertainty notices use the existing
+Settings and Collection status routes. Update details is contextual to an update;
+opening it never runs collection or changes permission. The old Settings section
+aliases and fixed navigation registry remain supported.
 The primary stays first and content-sized; a container query stacks the result
 beneath it in narrow panels or with enlarged text. These
 presentation changes add no collection action, permission or freshness claim.
@@ -2422,10 +2671,10 @@ controls, filters and overview follow; report selection and creation sit with
 the results. No routine collector card precedes the task, even during loading.
 There is no chat chooser or new wizard.
 
-The fresh-data control pairs the primary action with a concise result after a check,
-not an always-on health card or a repeated idle instruction. **Source and collection**
-contains local Copilot history, the intake window and direct
-**Source** and **Collection settings** links to the existing Settings categories.
+The fresh-data control has a concise result after a check,
+not an always-on health card or a repeated idle instruction. **Update details**
+contains local Copilot history and the intake window without duplicate configuration
+or deletion controls. Relevant notices link to the existing Settings categories.
 It keeps the background-paused state explicit and never enables it as a side
 effect. Unapproved sources route to review. A failed source-path or metadata
 check names the failure and offers **Review source**, keeping the displayed
@@ -2439,10 +2688,11 @@ invalid source configuration or confirm a lost source receipt. Duplicate
 collection errors are consolidated only for the same source configuration,
 revision, last receipt and error; unrelated or unavailable status remains visible.
 Routine paused notices remain outside recovery and are not treated as errors.
-The global header has no duplicate refresh action.
-On unapproved Analyze, the fresh control is the sole source-review action.
-The generic connection notice adds only retained-evidence availability when
-applicable, not another setup link. Other views keep their connection action;
+The global header has no duplicate refresh action. During read-only recovery,
+the ordinary Refresh control and its disabled-help wrapper are hidden together;
+the existing recovery entry is the sole visible update action.
+On unapproved Analyze, the connection notice is the sole source-review link.
+It opens Connection & updates without dispatching. Other views keep their connection action;
 blocking errors, paused collection and initial-import guidance remain visible.
 
 An explicit check has owned checking, applying, complete/no-change, partial and
@@ -2451,7 +2701,7 @@ poll. Novelty and coverage are separate facts: **No new recorded activity** can
 appear with **Some history unavailable or incomplete**, linked to Collection
 status. Both facts are announced; the manual completion time stays outside the
 live region and is never replaced by an unrelated background timestamp.
-**Source and collection** also holds source counts, elapsed milliseconds and limits,
+**Update details** also holds source counts, elapsed milliseconds and limits,
 plus the local-history boundary: use Work IQ in Copilot, then check its recorded
 calls and results here. Checking does not create remote traffic. A file-stamp
 check may finish immediately; the app adds no minimum delay or invented stages.
@@ -2614,7 +2864,7 @@ repeat source-setting or historical-coverage caveats.
 Interactions and Calls share one card grammar. The actual prompt leads in bold
 italic Asta, for user, agent and unverified authors alike. Unknown authors show
 **Prompt**, retaining the truthful actor state and existing author-reason help;
-known **Your prompt** and **Agent prompt** labels are unchanged.
+known **My prompt** and **Agent prompt** labels use the shared owner-facing vocabulary.
 The emphasis uses the existing strong 600 weight rather than a heavier 700,
 with the body-size preview and reading line-height unchanged. This keeps the
 request distinct without turning a wrapped prompt into a display heading.
@@ -3216,7 +3466,7 @@ The focused matching-action list does not add another chat title/project,
 source toggle or one-chat pager under the existing analysis header. A distinct
 matching summary remains when it differs from the source's pre-result totals.
 
-There is one **Your prompt**, **Agent prompt**, or neutral source-appropriate reader per retained message in the recorded chronology, before
+There is one **My prompt**, **Agent prompt**, or neutral source-appropriate reader per retained message in the recorded chronology, before
 interaction insights, never another excerpt on the detail
 page. Its single header aligns explicit **Read prompt**/**Hide prompt** and
 **Copy prompt** controls; response readers use the equivalent response labels.
@@ -3568,7 +3818,12 @@ success from denied or unavailable clipboard access.
 One dismissible, hoverable tooltip uses the popover top layer, including dialogs,
 preserving focus and existing descriptions. Activating an ordinary enabled action
 or navigation link dismisses its tooltip before the action runs and cancels pending
-hover help. Escape does the same without activating anything. Retained focus,
+hover help. When a vertically placed tooltip would cover a neighboring control
+in the same group, use the nearest clear vertical position that fits the viewport.
+Disabled-help wrappers share their control's group. This keeps wrapped actions
+reachable with one native click while leaving tooltip content hoverable; it does
+not shrink targets, disable tooltip pointer events or forward clicks.
+Escape does the same without activating anything. Retained focus,
 stationary pointers, polling, replaced controls and restored views do not reopen it:
 a new pointer visit or deliberate keyboard-focus visit is required. Browser reload
 starts without an open tooltip; no tooltip preference or open state is saved.
@@ -3696,7 +3951,7 @@ The wordmark targets Analyze. `mountSidebarNavigation` preserves the stored
 expanded/collapsed choice and glides the rail and content together. At the
 699px breakpoint the same navigation nodes move into the keyboard-accessible
 modal drawer; closing restores focus without changing the desktop preference.
-Reduced motion skips the glide. Navigation changes do not remount the page,
+The shared sidebar-motion preference decides whether to glide. Navigation changes do not remount the page,
 discard filters/report drafts or add a route-history entry.
 
 Header branding reserves the wordmark's 148x46 layout and a 148px caption row,
@@ -3706,7 +3961,7 @@ invisible caption. The two unchanged SVGs share artwork coordinates during the
 existing 320ms eased rail glide: uniform transforms register their W paths while
 their paint fades together. There is no separate logo clock, stretched artwork,
 manual glyph offset or whole-page animation. Reversal starts from the current
-painted geometry; reduced motion and breakpoint changes cancel the same owned
+painted geometry; disabling effective motion and breakpoint changes cancel the same owned
 animations. The fixed caption width prevents temporary wrapping and page bounce.
 The header remains content-sized, not a fixed-height crop. Its measured height
 still sets the rail and scroll offsets. `restored-sidebar.browser.test.mjs` checks
@@ -3719,12 +3974,14 @@ sidebar resizing and accumulated scroll drift in a scrolled Results view. Dense
 plots still scroll horizontally; no page scroll restoration or anchoring override
 is used, so wheel and keyboard reading intent stay with the browser.
 
-Sidebar glyphs use the installed official Lucide assets in 24px boxes: a trend
-chart for Analyze, a simple document for Reports, a gear for Settings and
+Sidebar glyphs use the installed official Lucide assets in 24px boxes:
+`chart-column` for Analyze, `clipboard-list` for Reports, a gear for Settings and
 directional panel controls for collapse/expand. They retain their outline in
 selected, hover and keyboard-focus states; existing current-page accents,
 labels and 44px targets remain. Shared colors/fonts and the WIRE artwork are
-unchanged by this navigation treatment.
+unchanged by this navigation treatment. Search View/Comparison metadata uses
+the separate `search-analysis` role to retain `chart-no-axes-combined`; Search
+Report metadata keeps the existing `reports` role and `file-text` glyph.
 
 Application-screen service cues use the same official Lucide family in 24px
 boxes. Settings-category links are text-only. Ordinary actions, header controls

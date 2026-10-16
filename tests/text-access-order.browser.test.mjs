@@ -22,7 +22,7 @@ test("complete reader actions stay beside their subject without changing default
         const access = window.createTextAccess(ux, {
             isOpen: (key, initial) => open.has(key) ? open.get(key) : initial,
             setOpen: (key, value) => open.set(key, value),
-        }, { label: () => "Your prompt", read: () => ({ actor: "user", basis: "source-user" }), reason: () => "Recorded user source." });
+        }, { label: () => "My prompt", read: () => ({ actor: "user", basis: "source-user" }), reason: () => "Recorded user source." });
         const source = { status: "full", text: "Keep the original text.\n  Including these spaces.  " };
         const ordinary = access.render(source, { key: "default", mode: "complete", initialOpen: true });
         const explicitDefault = access.render(source, { key: "default", mode: "complete", initialOpen: true, contentFirst: false });

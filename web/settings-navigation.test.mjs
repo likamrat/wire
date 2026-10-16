@@ -29,7 +29,7 @@ test("operational destinations leave Settings and preserve named legacy targets"
 
 test("settings search finds control descriptions and synonyms across categories without private paths", () => {
     const model = createSettingsNavigation(createLocalSearch());
-    for (const [query, id] of [["TIME-zone", "time-zone"], ["city", "time-zone"], ["pause", "collection-state"], ["resume", "collection-state"], ["permission", "source"], ["cadence", "cadence"], ["window", "history-window"], ["missing history", "issues"]]) {
+    for (const [query, id] of [["glide", "sidebar-motion"], ["TIME-zone", "time-zone"], ["city", "time-zone"], ["pause", "collection-state"], ["resume", "collection-state"], ["permission", "source"], ["cadence", "cadence"], ["window", "history-window"], ["missing history", "issues"]]) {
         assert.ok(model.find(query).some(entry => entry.id === id), query);
     }
     assert.equal(model.find("").length, 0);
@@ -73,5 +73,20 @@ test("all fourteen old setting IDs and explicit category aliases keep their actu
     for (const entry of model.entries) {
         assert.ok(entry.view === "collection-status" || model.categories.some(row => row.id === entry.section));
         assert.ok(model.find(entry.title).some(row => row.id === entry.id), entry.id);
+    }
+});
+
+test("humanized Settings names retain previous search phrases and destination IDs", () => {
+    const model = createSettingsNavigation(createLocalSearch());
+    for (const [id, queries] of [
+        ["delete-activity", ["Delete collected activity", "Review deletion"]],
+        ["recollect-activity", ["Recollect activity", "Recollect from approved sources", "Read history again", "Choose chats"]],
+        ["history-window", ["Initial history window", "History to include"]],
+        ["service-provenance", ["Service details", "How services are identified"]],
+        ["author-provenance", ["Prompt authors", "How prompt authors are identified"]],
+        ["settings-search", ["Search troubleshooting", "Missing search results"]],
+    ]) for (const query of queries) {
+        assert.ok(model.find(query).some(entry => entry.id === id), `${query} finds ${id}`);
+        assert.equal(model.resolve({ setting: id }).setting, id);
     }
 });

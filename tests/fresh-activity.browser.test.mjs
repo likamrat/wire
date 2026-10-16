@@ -54,7 +54,7 @@ async function fixture(t, approved = true, timers = false, pageOptions = {}, met
         return { id, file };
     }
     async function check() {
-        await page.locator("#checkActivity").click();
+        await (await revealStoredRefresh(page)).click();
         await page.waitForFunction(() => ["complete", "partial", "error", "unconfirmed"].includes(document.querySelector("#freshActivity").dataset.phase));
         await ready(page);
     }
@@ -285,7 +285,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter"); await check.pending;
     await proof("checking", "#checkActivity", true);
     await proof("checking-status", "#freshStatus", true);
-    assert.equal(await page.locator("#checkActivity").innerText(), "Refresh");
+    assert.equal(await page.locator("#checkActivity").getAttribute("aria-label"), "Refresh");
     assert.equal(await page.locator("#checkActivity").evaluate(node => getComputedStyle(node).fontWeight), beforeWeight, "Pending state preserves the control's font weight.");
     assert.equal((await page.locator("#checkActivity").boundingBox()).width, buttonBox.width);
     assert.equal(await page.locator("#chart").innerHTML(), beforeChart);
@@ -935,14 +935,13 @@ test("unapproved Refresh reads retained activity and leaves source review as a s
         const app = await fixture(t, false), { page } = app;
         await app.source([event("user.message", { content: "Synthetic unapproved activity" }), call("not-approved")]);
         await page.goto(app.runtime().url); await ready(page);
-        assert.equal(await page.locator("#checkActivity").innerText(), "Refresh");
+        assert.equal(await page.locator("#checkActivity").getAttribute("aria-label"), "Refresh");
         await app.check();
         assert.match(page.url(), /#analyze/);
         assert.equal(await page.locator("#freshStatus").innerText(), "Stored activity refreshed.");
         assert.match(await page.locator("#freshContextMessage").innerText(), /No source history was checked/);
         assert.equal(await page.locator("#refreshBtn").isVisible(), false);
-        await page.locator("#freshHelp > summary").click();
-        await page.locator("#freshSourceSetup").click();
+        await page.locator("#collectionNoticeAction").click();
         assert.match(page.url(), /#settings.*section=connection.*setting=source/);
         assert.equal(await page.locator("#reviewSource").isVisible(), true);
         assert.deepEqual(app.writes, []);

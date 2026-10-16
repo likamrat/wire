@@ -80,7 +80,6 @@ export const liveSearchPanel = `
     <div class="wire-search-filters">
       <label>Search scope<select id="wireSearchScope"><option value="everywhere">Everywhere</option><option value="analysis">Current Analyze scope</option></select></label>
       <label>Result type<select id="wireSearchType"><option value="">All types</option><option value="interaction">Interactions</option><option value="context">Conversation context</option><option value="reply">Retained replies</option><option value="action">Recorded actions</option><option value="tool">Tools</option><option value="service">Services</option><option value="report">Saved reports</option><option value="comparison">Saved comparisons</option><option value="view">Views</option><option value="setting">Settings</option></select></label>
-      <button id="wireSearchClear" type="button" class="quiet">Clear search</button>
     </div>
   </details>
 </section>`;
@@ -90,6 +89,7 @@ export const liveSearchMarkup = `
   <label for="wireSearch" class="visually-hidden">Search</label>
   <span class="wire-search-icon">${uxIcons.search}</span>
   <input id="wireSearch" type="search" placeholder="Search" autocomplete="off" spellcheck="false" aria-controls="wireSearchPanel" aria-expanded="false">
+  <button id="wireSearchClear" type="button" class="quiet" hidden>Clear search</button>
   ${liveSearchPanel}
 </div>`;
 
@@ -100,28 +100,40 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-entry>label {font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);white-space:nowrap}
 .wire-search-icon {position:absolute;inset-inline-start:14px;top:50%;transform:translateY(-50%);display:flex;pointer-events:none;color:var(--muted)}
 .wire-search-icon .wire-icon {width:20px;height:20px}
-#wireSearch {width:100%;min-width:0;min-height:var(--pill-height);border-radius:var(--radius-pill);padding-inline:42px var(--pill-inset);background:var(--paper);box-shadow:var(--surface-shadow)}
-.wire-search-panel {position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--surface-shadow);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
+#wireSearch {grid-area:1/1;width:100%;min-width:0;min-height:var(--pill-height);border-radius:var(--radius-pill);padding-inline:42px calc(var(--pill-height) + 12px);background:var(--paper);box-shadow:var(--surface-shadow)}
+#wireSearch::-webkit-search-cancel-button {display:none}
+#wireSearchClear {grid-area:1/1;align-self:center;justify-self:end;margin-inline-end:2px;border-radius:var(--radius-pill);z-index:1}
+.wire-search-panel {--wire-search-match:#006580;position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--surface-shadow);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
+@media(prefers-color-scheme:dark) {
+ :root:not([data-evidence-theme]) .wire-search-panel {--wire-search-match:#67c9df}
+}
+:root[data-evidence-theme=dark] .wire-search-panel {--wire-search-match:#67c9df}
 .wire-search-options {border-top:1px solid var(--rule);margin-top:4px;padding-inline:8px}
 .wire-search-options>summary {min-height:44px;padding-block:12px;cursor:pointer;overflow-wrap:anywhere;font-size:var(--type-caption);color:var(--muted)}
 .wire-search-filters,.wire-search-paging {display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 .wire-search-filters label {display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:4px;font-size:var(--type-caption)}
 .wire-search-filters .select-trigger .select-value {white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
 .wire-search-panel > p:not(.visually-hidden):not(:empty) {margin:8px}
-.wire-search-health {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;padding-inline:8px;font-size:var(--type-caption)}
-.wire-search-health p {margin:8px 0}
+.wire-search-health {font-size:var(--type-caption);line-height:var(--leading-ui)}
+.wire-search-health p:not(:empty):not([hidden]) {margin:4px 4px 8px;padding:10px 12px;border-radius:var(--radius-small);background:var(--canvas);color:var(--muted)}
 .wire-search-set {margin:0;min-width:0}
 .wire-search-set>h3:not(.visually-hidden),.wire-search-set>p:not(.visually-hidden) {margin:8px;font-size:var(--type-caption)}
 .wire-search-results {padding:4px;margin:0;list-style:none}
-.wire-search-results .wire-search-hit {display:grid;grid-template-columns:minmax(0,1fr);gap:4px;width:100%;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);padding:10px 8px}
+.wire-search-results>li+li {border-top:1px solid var(--rule);margin-top:6px;padding-top:6px}
+.wire-search-results .wire-search-hit {display:grid;grid-template-columns:minmax(0,1fr);gap:6px;width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);padding:14px 12px}
 #wireSearchPanel .wire-search-hit::before {content:none}
 #wireSearchPanel .wire-search-hit:is(:hover,:active):not(:disabled)::before {content:"";inset:0;border:0}
-.wire-search-hit strong {font-size:var(--type-body);font-weight:var(--weight-regular);min-width:0;overflow-wrap:anywhere}
-.wire-search-hit mark {background:var(--accent-soft);color:inherit;text-decoration:underline;text-underline-offset:.15em}
-.wire-search-excerpt {white-space:normal;overflow-wrap:anywhere;font-weight:var(--weight-regular);line-height:var(--leading-ui)}
-.wire-search-meta,.wire-search-limitation {font-size:var(--type-caption);font-weight:var(--weight-regular);color:var(--muted);overflow-wrap:anywhere}
-.wire-search-meta {display:flex;gap:4px 6px;flex-wrap:wrap;align-items:center}
-.wire-search-kind {color:var(--ink)}
+#wireSearchPanel .wire-search-hit:focus-visible {background:var(--canvas)}
+.wire-search-title {font-size:var(--type-reading);line-height:var(--leading-ui);font-weight:var(--weight-regular);min-width:0;overflow-wrap:anywhere}
+.wire-search-hit mark {background:var(--accent-soft);color:var(--wire-search-match);text-decoration:underline;text-underline-offset:.15em}
+.wire-search-excerpt {margin-top:4px;padding-inline-start:10px;border-inline-start:2px solid var(--rule);white-space:normal;overflow-wrap:anywhere;font-size:var(--type-body);font-weight:var(--weight-regular);line-height:var(--leading-reading)}
+.wire-search-meta,.wire-search-source,.wire-search-limitation {font-size:var(--type-caption);line-height:var(--leading-ui);font-weight:var(--weight-regular);color:var(--muted);min-width:0;overflow-wrap:anywhere}
+.wire-search-meta {display:flex;gap:4px 12px;flex-wrap:wrap;align-items:center}
+.wire-search-type {display:inline-flex;align-items:center;gap:6px;min-width:0}
+.wire-search-type-icon {display:flex;align-items:center;flex:none}
+.wire-search-type-icon .wire-icon {width:16px;height:16px;margin:0}
+.wire-search-outcome {border-inline-start:1px solid var(--rule);padding-inline-start:12px}
+.wire-search-source {display:block}
 .wire-search-paging:not(:empty) {padding:8px;font-size:var(--type-caption)}
 @media(max-width:600px) {
  .wire-search-entry {flex-basis:100%;max-width:none}
@@ -130,6 +142,9 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 }
 @media(forced-colors:active) {
  .wire-search-panel,#wireSearch {box-shadow:none;border-color:CanvasText}
+ .wire-search-results>li+li,.wire-search-excerpt {border-color:CanvasText}
+ .wire-search-hit mark {color:HighlightText;background:Highlight;forced-color-adjust:none}
+ #wireSearchPanel .wire-search-hit:focus-visible {outline-color:Highlight}
 }
 `;
 
@@ -207,6 +222,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         return error.message;
     }
     function show() {
+        $("wireSearchClear").hidden = !input.value;
         panel.hidden = !input.value.trim();
         input.setAttribute("aria-expanded", String(!panel.hidden));
     }
@@ -305,15 +321,27 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 for (const part of parts) node.append(part.match ? el("mark", part.text) : document.createTextNode(part.text));
                 return node;
             };
-            target.append(textParts(el("strong"), shown.title));
             const outcome = ({ success: "Succeeded", failure: "Failed", partial: "Partial result", transport: "No response" })[hit.coverage?.outcome];
             const categoryLabel = ({ interaction: "Interaction", context: "Prompt context", reply: "Reply", action: "Recorded action",
                 tool: "Tool", service: "Service", report: "Report", comparison: "Comparison", view: "View", setting: "Setting" })[hit.type];
-            meta.append(el("span", categoryLabel, "wire-search-kind"));
-            if (shown.source.length) meta.append(el("span", "·"), textParts(el("span", undefined, "wire-search-source"), shown.source));
-            if (outcome) meta.append(el("span", "·"), el("span", outcome));
-            target.append(meta);
-            if (shown.excerpt.length) target.append(textParts(el("span", undefined, "wire-search-excerpt"), shown.excerpt));
+            const type = el("span", undefined, "wire-search-type");
+            const iconRole = ({ interaction: "activity", context: "activity", reply: "activity", action: "activity",
+                tool: "connection", service: "connection", report: "reports", comparison: "search-analysis",
+                view: "search-analysis", setting: "settings" })[hit.type];
+            const icon = ux?.icon?.(iconRole);
+            if (icon) {
+                const slot = el("span", undefined, "wire-search-type-icon");
+                slot.setAttribute("aria-hidden", "true"); slot.append(icon); type.append(slot);
+            }
+            type.append(el("span", categoryLabel, "wire-search-kind")); meta.append(type);
+            if (outcome) meta.append(el("span", outcome, "wire-search-outcome"));
+            const title = textParts(el("strong", undefined, "wire-search-title"), shown.title);
+            title.dir = "auto";
+            target.append(meta, title);
+            for (const field of ["source", "excerpt"]) if (shown[field].length) {
+                const text = textParts(el("span", undefined, "wire-search-" + field), shown[field]);
+                text.dir = "auto"; target.append(text);
+            }
             const call = hit.target.kind === "route" && hit.target.href.startsWith("#request?")
                 && new URLSearchParams(hit.target.href.split("?")[1]).has("call") && hit.coverage?.layer !== "code-reference";
             const destination = ["interaction", "context", "reply"].includes(hit.type) ? "Open interaction" : ["action", "tool", "service"].includes(hit.type)
@@ -469,7 +497,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         return true;
     }
     window.addEventListener("popstate", () => restoreSearch(history.state?.wireSearchReturn));
-    panel.addEventListener("keydown", event => {
+    home.addEventListener("keydown", event => {
         if (event.key === "Escape" && !event.isComposing) {
             event.preventDefault(); input.focus({ preventScroll: true }); hide();
         }
@@ -480,7 +508,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
     for (const type of ["pointerdown", "keydown", "wheel", "touchmove"]) {
         document.addEventListener(type, event => { if (event.isTrusted) restore = null; }, { capture: true, passive: true });
     }
-    window.addEventListener("pagehide", () => { disposed = true; returns.clear(); input.value = ""; fail(); });
+    window.addEventListener("pagehide", () => { disposed = true; returns.clear(); input.value = ""; show(); fail(); });
     window.addEventListener("pageshow", () => { disposed = false; });
     document.addEventListener("visibilitychange", () => {
         if (disposed || hidden === document.hidden) return;

@@ -132,10 +132,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const operation = recordedCategories.operation(tool);
         return tool === "workiq-ask" ? { ...operation, label: "Asked Copilot",
             description: "Recorded attempt to ask Copilot or an agent, not confirmation of delivery." } : operation;
-    }, serviceEvidence(row, layer) {
+    }, serviceEvidence(row, layer = "tool") {
         const evidence = recordedCategories.serviceEvidence(row, layer);
         return evidence?.reason === "hosted-routing" ? { ...evidence,
-            description: categories.operation("workiq-ask").description + " Its record does not identify a service or API path." } : evidence;
+            description: "The recorded tool output does not identify a downstream service or API path. This is an evidence gap, not a service failure or a check of your current connection." }
+            : layer === "tool" && evidence?.reason === "missing-target" ? { ...evidence,
+                description: "No downstream service target is available in the recorded tool output. This is an evidence gap, not a service failure or a check of your current connection." } : evidence;
     } };
     const help = createControlHelp(categories, assessmentFactories.wording);
     const dimensional = createDimensionalCharts();
@@ -151,8 +153,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     : kind === "service-preparation" ? link("", "activity", { service: "Discovery", page: undefined })
                         : kind === "service-operation" ? link("", "activity", { tool: "workiq-ask", endpoint: row.endpointId, page: undefined })
                 : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined }) : null });
-    $("analyzePopulation").append($("filters"), $("filterChips"), $("serviceFocus"), $("freshActivity"), $("collectionNotice"));
-    $("freshHelpBody").append($("activityCollectionLink"));
+    $("analyzePopulation").append($("filters"), $("appliedFilters"), $("serviceFocus"), $("freshActivity"), $("collectionNotice"));
     $("periodActions").prepend($("resultsLink"));
     $("resultsLink").textContent = "View records";
     const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData"), includeModels: true });
@@ -183,11 +184,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const sidebarPositions = new Map();
     let sidebarIdentity = null, sidebarOrigin = null, sidebarAnimation = null, sidebarAnimationFinish = null, sidebarExit = null, requestRenderKey = null, heldDeparture = null, requestInvalidated = false, contextOwner = null;
     let sidebarReadingFocus = null, cancelSidebarReading = null;
+    let readerSections = null, readerHeaderActions = null;
+    function clearReaderSections() {
+        readerSections?.dispose();
+        readerSections = null;
+        readerHeaderActions?.remove();
+        readerHeaderActions = null;
+    }
     let reportSetupReturn = null;
     const savedEntries = new Map();
     let savedInspector = null;
     const contextSidebar = $("contextSidebar"), contextBody = $("contextSidebarBody");
-    const sidebarReducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     let sidebarHistoryMode = null;
     function restoreSidebarHistoryMode() {
         const previous = sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration;
@@ -225,6 +232,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.utility($(id), icon, $(id).getAttribute("aria-label") || $(id).textContent);
     }
     for (const [id, text] of Object.entries(help.actions)) if ($(id)) ux.tooltip($(id), $(id).classList.contains("icon-only") ? $(id).getAttribute("aria-label") : text);
+    ux.tooltip($("resetView"), "Reset Analyze filters and browsing state. Keep report selections, evidence and preferences.");
+    function refreshUsesStoredRecovery(model = fresh.snapshot()) {
+        return Boolean(model.sourceUnknown || model.sourceBlocked || model.phase === "error" || collectionReadError || isStale);
+    }
+    ux.tooltip($("checkActivity"), () => refreshUsesStoredRecovery()
+        ? "Read stored activity. No source check will be repeated."
+        : collection?.config?.approved ? "Refresh approved local history. Paused collection stays paused." : "Refresh stored activity. No source is approved.");
+    ux.tooltip($("refreshBtn"), "Read stored activity. No source check will be repeated.");
     for (const [id, label] of Object.entries({ clearSettingsSearch: "Clear settings search", clearIssueSearch: "Clear history search",
         clearSavedReportSearch: "Clear report search", clearReportRequestSearch: "Clear interaction search", clearDates: "Clear dates",
         clearActivitySearch: "Clear legacy search", wireSearchClear: "Clear search" })) ux.utility($(id), "close", label);
@@ -333,13 +348,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const from = sidebarAnimation ? getComputedStyle(contextSidebar).transform : entering ? "translateX(100%)" : "translateX(0)";
         sidebarAnimation?.cancel();
         sidebarAnimation = null; sidebarAnimationFinish = null;
-        if (sidebarReducedMotion.matches) { finish(); return; }
+        if (!sidebar.motion.enabled) { finish(); return; }
         const animation = contextSidebar.animate([{ transform: from }, { transform: entering ? "translateX(0)" : "translateX(100%)" }],
             { duration: entering ? 240 : 180, easing: "cubic-bezier(.2,0,0,1)" });
         sidebarAnimation = animation; sidebarAnimationFinish = finish;
         animation.onfinish = () => { if (sidebarAnimation === animation) finishSidebarMotion(); };
     }
-    sidebarReducedMotion.addEventListener("change", () => { if (sidebarReducedMotion.matches) finishSidebarMotion(); });
+    sidebar.motion.subscribe(state => { if (!state.enabled) { finishSidebarMotion(); readerSections?.settle(); } });
     function clearSidebarExit() {
         const exit = sidebarExit;
         if (!exit) return;
@@ -366,6 +381,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (contextOwner?.identity === "report-setup") reportSetupReturn = { ...reportSetupReturn, focus: target };
     });
     function showContextSidebar({ identity, title, body, footer, anchor, requestClose, closeLabel = "Close interaction" }) {
+        if (body !== $("requestView")) clearReaderSections();
         const entering = !sidebarIdentity;
         if (entering) {
             sidebarOrigin = { anchor, top: anchor?.getBoundingClientRect().top };
@@ -509,7 +525,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             restore();
             return;
         }
-        const anchor = $("selectedCall") || $("unavailableCall") || $("selectedContext");
+        const anchor = $("selectedCall") || $("unavailableCall") || $("selectedContext")?.closest("[data-reader-section]") || $("selectedContext");
+        readerSections?.reveal(anchor);
         contextBody.scrollTop = anchor ? contextBody.scrollTop + anchor.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - 16 : 0;
         const target = route.call ? $("selectedCall") || $("unavailableCall") : $("contextSidebarTitle");
         (target || $("contextSidebarTitle")).focus({ preventScroll: true });
@@ -549,10 +566,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!assessmentUI.hasUnsentFeedback()) return false;
         syncControls();
         clearHeldDeparture();
-        heldDeparture = { transition, cancel, isCurrent };
+        const feedbackOwner = assessmentUI.captureFeedbackOwner(), reader = requestRenderKey, panel = sidebarIdentity;
+        const ownsFeedback = () => feedbackOwner() && reader === requestRenderKey && panel === sidebarIdentity;
+        const pending = { transition, cancel, isCurrent, ownsFeedback };
+        heldDeparture = pending;
         const host = $("contextSidebarGuard");
         host.hidden = false;
         const discard = button("Discard changes", () => {
+            if (!discard.isConnected || heldDeparture !== pending) return;
+            if (!pending.ownsFeedback()) { clearHeldDeparture(); return; }
             const next = heldDeparture;
             heldDeparture = null; host.hidden = true; host.replaceChildren();
             if (next?.isCurrent && !next.isCurrent()) {
@@ -564,6 +586,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             next?.transition();
         });
         const keep = button("Keep editing", () => {
+            if (!keep.isConnected || heldDeparture !== pending) return;
+            if (!pending.ownsFeedback()) { clearHeldDeparture(); return; }
             clearHeldDeparture();
             assessmentUI.focusFeedback();
         });
@@ -782,10 +806,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function settingsTarget(entry) {
         const approved = collection?.config?.approved;
+        if (entry.id === "collect-now") return [$("storedViewRetry"), $("refreshBtn"), $("collectionRetry"), $("checkActivity")]
+            .find(control => control?.checkVisibility())?.id || entry.target;
         if (entry.id === "source") return !$("sourceEditor").hidden ? "sourceDatabase" : approved ? "editSource" : "reviewSource";
         if (entry.id === "source-paths") return !$("sourceEditor").hidden ? "sourceDatabase" : approved ? "approvedSourceTitle" : "reviewSource";
         if (!approved && ["source-paths", "collection-state"].includes(entry.id)) return "reviewSource";
-        if (entry.id === "save-preferences" && $("preferenceActions").hidden) return "settingsDraftStatus";
+        if (entry.id === "save-preferences" && $("preferenceActions").hidden) {
+            return $("connectCollection").checkVisibility() && $("connectCollection").dataset.intent === "save-preferences"
+                ? "connectCollection" : "settingsDraftStatus";
+        }
         return entry.target;
     }
     function renderSettingsSearch() {
@@ -796,7 +825,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!collection?.config?.approved && ["source-paths", "collection-state"].includes(entry.id)) return "Requires an approved source. Open Connection to review permission; nothing is started.";
             if (entry.id === "source") return collectionSettings?.explain(id) || "Read the current connection before reviewing a source.";
             if (control?.disabled) return collectionSettings?.explain(id) || "Unavailable while the current update finishes.";
-            if (entry.id === "save-preferences" && $("preferenceActions").hidden) return $("settingsDraftStatus").textContent;
+            if (entry.id === "save-preferences" && $("preferenceActions").hidden && id === "settingsDraftStatus") return $("settingsDraftStatus").textContent;
             return entry.context;
         });
         const signature = JSON.stringify([query, contexts]);
@@ -807,7 +836,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         list.replaceChildren();
         list.hidden = !query.trim();
         status.hidden = !query.trim();
-        setText(status, entries.length ? `${entries.length} setting${entries.length === 1 ? "" : "s"} found. Choose a result to locate it, not apply it.` : "No settings match. Try a setting name or purpose, such as time zone or history.");
+        setText(status, entries.length ? `${entries.length} setting${entries.length === 1 ? "" : "s"} found. Opening a result changes nothing.` : "No settings match. Try time zone or history.");
         entries.forEach((entry, index) => {
             const item = el("li"), anchor = link("", entry.view || "settings", { section: entry.section, setting: entry.id });
             anchor.dataset.setting = entry.id;
@@ -827,9 +856,89 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             anchor.href = routeUrl(routeFor("settings", { section: anchor.dataset.category, setting: undefined, issues: undefined }));
         }
         setText($("settingsCategorySummary"), "Category: " + settingsNavigation.categories.find(category => category.id === section).title);
+        $("settingsStatusLink").hidden = section === "troubleshooting";
         setText($("settingsRouteNotice"), route.settingsWarning || "");
         $("settingsRouteNotice").hidden = !route.settingsWarning;
         renderSettingsSearch();
+    }
+    let refreshHelpVisibility = null;
+    function renderSettingsRefresh(connection, model) {
+        const host = $("freshActivity"), help = $("freshHelp");
+        function checkedScope(check) {
+            const checked = Number.isSafeInteger(check.sourcesChecked) && check.sourcesChecked >= 0;
+            const eligible = Number.isSafeInteger(check.eligibleSources) && check.eligibleSources >= 0;
+            if (checked && eligible) return `Checked ${check.sourcesChecked.toLocaleString()} of ${check.eligibleSources.toLocaleString()} ${check.eligibleSources === 1 ? "chat" : "chats"}.`;
+            if (checked) return `Checked ${check.sourcesChecked.toLocaleString()} ${check.sourcesChecked === 1 ? "chat" : "chats"}; eligible count is unavailable.`;
+            if (eligible) return `${check.eligibleSources.toLocaleString()} eligible ${check.eligibleSources === 1 ? "chat" : "chats"}; checked count is unavailable.`;
+            return "Checked chat counts are unavailable.";
+        }
+        let context = $("settingsRefreshContext"), details = $("settingsRefreshDetails");
+        if (connection && !context) {
+            context = el("p", "settings-refresh-context");
+            context.id = "settingsRefreshContext";
+            $("freshResult").before(context);
+            details = el("div", "settings-refresh-details");
+            details.id = "settingsRefreshDetails";
+            host.append(details);
+        }
+        if (connection) {
+            if (refreshHelpVisibility === null) refreshHelpVisibility = help.hidden;
+            help.hidden = true;
+            const storedOnly = refreshUsesStoredRecovery(model);
+            const approved = collection?.config?.approved;
+            const explanation = storedOnly
+                ? "Read stored activity only. No new history check will be sent."
+                : model.phase === "idle"
+                    ? approved ? "Check approved Copilot history for new activity." + (collection.config.enabled ? "" : " Collection stays paused.")
+                        : "Read stored activity only. Approve a source above to check history."
+                    : "";
+            setText(context, explanation);
+            context.hidden = !explanation;
+            if (model.phase === "partial" && model.check) {
+                setText($("freshStatus"), `History check incomplete. ${checkedScope(model.check)}`);
+                setText($("freshIssues"), "Review current history issues");
+            }
+        } else {
+            if (refreshHelpVisibility !== null) {
+                help.hidden = refreshHelpVisibility;
+                refreshHelpVisibility = null;
+            }
+            if (context) context.hidden = true;
+        }
+        const check = model.check, partial = model.phase === "partial";
+        if (details) details.hidden = !connection || !check || !["complete", "partial"].includes(model.phase);
+        if (details && !details.hidden) {
+            const signature = JSON.stringify([check, partial]);
+            if (details.dataset.checkKey === signature) return;
+            details.dataset.checkKey = signature;
+            const facts = [];
+            if (partial) {
+                const { added, updated } = check.changes;
+                facts.push(el("p", "", added || updated
+                    ? `${added.toLocaleString()} new and ${updated.toLocaleString()} updated activity records.`
+                    : "No new or updated activity was recorded."));
+                const limits = el("ul", "settings-refresh-limits");
+                for (const [count, label] of [
+                    [check.coverage?.unavailable, "with unavailable history"],
+                    [check.coverage?.limited, "with reading limits"],
+                    [check.pendingSources, "still being read"],
+                    [check.partialSources, "waiting for a saved entry"],
+                    [check.skippedSources, "outside the discovery limit"],
+                ]) if (count > 0) limits.append(el("li", "", `${chatCopy.count(count)} ${label}.`));
+                if (limits.children.length) facts.push(limits);
+                const reasons = el("ul", "settings-refresh-reasons");
+                for (const [code, count] of Object.entries(check.coverage?.groups ?? {})) {
+                    if (count > 0) reasons.append(el("li", "", `${chatCopy.count(count)}: ${historyStatus.checkSummaries[code] ?? "Reason unavailable."}`));
+                }
+                if (reasons.children.length) facts.push(reasons);
+                else facts.push(el("p", "", "No reason breakdown is available for this check."));
+                facts.push(el("p", "", "These details describe this check; current history may differ. Limits can overlap."));
+            } else {
+                facts.push(el("p", "", checkedScope(check)
+                    + (check.changes.added || check.changes.updated ? "" : " No new records does not establish complete history.")));
+            }
+            details.replaceChildren(...facts);
+        }
     }
     function revealSetting() {
         document.querySelector(".settings-target")?.classList.remove("settings-target");
@@ -872,6 +981,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function serviceCue(tag, value, presentation) {
         const entry = presentation ?? categories.describe(value), node = el(tag, `semantic-cue service-cue dimensional-tone-${dimensional.tone(entry.id)}`);
         node.dataset.service = entry.id;
+        if (entry.icon) node.dataset.serviceIcon = entry.icon;
         node.innerHTML = dimensionalIcons[entry.icon ?? entry.id];
         node.append(el("span", "", entry.label));
         return node;
@@ -979,7 +1089,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     const authorHeading = el("div", "help-heading result-filter-heading"), authorLabel = $("promptAuthorFilterLabel");
     authorLabel.replaceWith(authorHeading);
-    authorHeading.append(authorLabel, ux.helpButton("Prompt author", "Choose Your prompts, Agent prompts, or both, then Apply. All also includes unverified authors. This filters whole originating interactions, not which actor executed their calls."));
+    authorHeading.append(authorLabel, ux.helpButton("Prompt author", "Choose My prompts, Agent prompts, or both, then Apply. All also includes unverified authors. This filters whole originating interactions, not which actor executed their calls."));
     const resultHeading = el("div", "help-heading result-filter-heading"), resultLabel = $("resultFilterLabel");
     resultLabel.replaceWith(resultHeading);
     resultHeading.append(resultLabel, ux.helpButton("Recorded result", () => {
@@ -994,9 +1104,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("clearActivitySearch").textContent = "Clear";
     $("clearActivitySearch").setAttribute("aria-label", "Clear activity search");
     $("clearResultFilter").append(ux.icon("close"));
-    ux.tooltip($("clearResultFilter"), "Clear recorded result filter. Other filters stay applied.");
+    ux.tooltip($("clearResultFilter"), "Cancel the pending Outcome change and keep all recorded results. Other filters stay applied.");
     $("clearPromptAuthorFilter").append(ux.icon("close"));
-    ux.tooltip($("clearPromptAuthorFilter"), "Include all prompt authors, including unverified. Other filters stay applied.");
+    ux.tooltip($("clearPromptAuthorFilter"), "Cancel the pending Author change and keep all authors, including unverified. Other filters stay applied.");
     $("formatOptions").append(el("p", "context-help-note", "Every format contains the same reviewed facts. HTML and PDF are for reading; JSON keeps structured data for other tools."));
     function date(value, full = false) {
         return time.formatDate(value, applied?.timeContext || viewerTime, full);
@@ -1096,6 +1206,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         node.hidden = false;
         if (retry) {
             const control = button("Retry", refreshStoredData, "quiet");
+            control.id = "storedViewRetry";
             control.dataset.storedRefreshRetry = "";
             control.setAttribute("aria-describedby", "storedRefreshHelp");
             node.append(control);
@@ -1213,6 +1324,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     assessmentUI = assessmentFactories.createExperience({
         ...assessmentFactories, api, ux, textAccess, glossary: help.glossary,
         requestDeparture: action => { if (!guardDeparture(action)) action(); },
+        onFeedbackStateChanged: () => {
+            if (heldDeparture && (!heldDeparture.ownsFeedback() || assessmentUI.feedbackPhase() === "view")) clearHeldDeparture();
+        },
         onInvalidated: message => {
             if (sidebarExit) { clearSidebarExit(); finishSidebarMotion(); }
             cancelSidebarReading?.();
@@ -1224,6 +1338,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             requestRenderKey = null;
             if (route.view === "request") {
                 requestInvalidated = true;
+                clearReaderSections();
                 $("requestContent").replaceChildren(el("p", "notice", message));
                 renderReportInspectionReturn();
             }
@@ -1728,10 +1843,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const section = el("section", "selected-api-result");
             section.append(renderEntry(apiRows.find(entry => entry.id === selectedId)),
                 el("p", "context-help-note", "This returned entry belongs to the recorded tool call above. Its status is not a separate observed HTTP execution."));
-            if (otherRows.length) section.append(disclosure("Other returned API results", list, "returned-api-details"));
+            if (otherRows.length) section.append(list);
             return section;
         }
-        return disclosure("Returned API details", list, "returned-api-details");
+        return list;
     }
     function actionContext(item, rows) {
         const matching = rows?.filter(row => rowsFor(route.request).some(match => match.id === row.id)).length;
@@ -1818,7 +1933,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const refreshRead = background && !afterExport ? fresh.snapshot() : null;
         try {
             const next = await api("/api/snapshot", config);
-            if (request !== generation) return false;
+            if (request !== generation || pageInactive) return false;
             const result = next.analytics;
             if (timeChanged()) return load({ background, afterExport, refinement, expectedSource });
             if (!Array.isArray(next.scenarios)) throw new Error("Recorded requests are unavailable.");
@@ -1867,7 +1982,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (next.collection) { clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 5000); }
             return true;
         } catch (error) {
-            if (request !== generation) return false;
+            if (request !== generation || pageInactive) return false;
             liveSearchUI?.invalidate("The stored view could not be verified. Search results were cleared.");
             assessmentUI.clearPrivateText();
             isStale = Boolean(analytics);
@@ -1975,6 +2090,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             returnReading = searchReturn ? readingPositions.get(readingKey(underlyingRoute())) : null;
             const cleanup = () => {
                 assessmentUI.leave(); automaticUI.leave();
+                clearReaderSections();
                 requestRenderKey = null;
                 $("requestContent").replaceChildren(); $("contextSidebarFooter").replaceChildren();
             };
@@ -2039,7 +2155,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 project: "projectFilter", session: "chatFilter", layer: "layerFilter", scope: "scopeFilter", result: "outcomeFilter", authors: "promptAuthorFilter", from: "dateFilter", to: "dateFilter" };
             const changed = Object.keys(controls).find(key => route[key] !== previousRoute[key]);
             const trigger = changed ? $(controls[changed] + "-control") : null;
-            const target = trigger?.checkVisibility() ? trigger : trigger?.closest("#moreFilters") ? $("moreFiltersToggle") : $("dateFilter-control");
+            let target = trigger?.checkVisibility() ? trigger : trigger?.closest("#moreFilters") ? $("moreFiltersToggle") : $("dateFilter-control");
+            if (changed === "result" && trigger?.disabled) {
+                target = $("resultFilterLabel");
+                target.tabIndex = -1;
+            }
             ux.restoreFocus(target);
             target?.scrollIntoView({ block: "nearest", inline: "nearest" });
         }
@@ -2130,7 +2250,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (isLoading) $("outcomeFilter").dataset.pendingValue = JSON.stringify([...$("outcomeFilter").options]
             .filter(option => !requested.length || requested.includes(option.value)).map(option => option.value));
         else delete $("outcomeFilter").dataset.pendingValue;
-        $("clearResultFilter").hidden = !accepted.length && (!isLoading || !requested.length);
+        $("clearResultFilter").hidden = !isLoading || accepted.length > 0 || requested.length === 0;
         const scope = "Analyze";
         const text = applied.layer === "code-reference"
             ? "Result filtering is unavailable: execution is not observed." + (accepted.length ? " Clear the previous result filter to include references." : "")
@@ -2147,7 +2267,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const option of control.options) option.selected = accepted.includes(option.value);
         if (isLoading) control.dataset.pendingValue = JSON.stringify(requested);
         else delete control.dataset.pendingValue;
-        $("clearPromptAuthorFilter").hidden = !authorship.filterValue(accepted) && (!isLoading || !authorship.filterValue(requested));
+        $("clearPromptAuthorFilter").hidden = !isLoading || Boolean(authorship.filterValue(accepted)) || !authorship.filterValue(requested);
         $("promptAuthorSummary").setAttribute("aria-busy", String(isLoading));
         $("promptAuthorSummary").dataset.revision = String(state?.revision ?? "");
         setText($("promptAuthorFilterHelp"), `${authorship.selectionLabel(accepted)}. Calls stay with their originating prompt.${isLoading ? " Updating view..." : ""}`);
@@ -2201,6 +2321,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const needsRecovery = localRecovery || collectionReadError || isStale && !isLoading;
         $("storedRefresh").hidden = Boolean(globalRecovery) || !needsRecovery || !localRecovery && Boolean(collectionRecovery);
         $("collectionRetry").hidden = !collectionReadError || Boolean(globalRecovery) || !$("storedRefresh").hidden;
+        $("checkActivity").hidden = Boolean(globalRecovery) || !$("storedRefresh").hidden
+            || !$("collectionRetry").hidden && $("collectionRetry").parentElement.checkVisibility();
+        $("checkActivity").closest(".ux-disabled-help").hidden = $("checkActivity").hidden;
         setText($("storedRefreshHelp"), reviewing
             ? "Finish this report, or change its choices in Setup, before refreshing."
             : editing ? "Save or cancel your Settings edits before refreshing."
@@ -2267,11 +2390,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         $("resultsLink").hidden = route.view !== "analyze" || semanticQuery !== null && !semanticBound;
         $("filters").hidden = configurationOrStatus || route.view === "request" || route.view === "reports";
+        $("filterHeading").hidden = $("filters").hidden;
+        $("appliedFilters").hidden = $("filters").hidden;
+        $("analyzeRefresh").hidden = route.view !== "analyze";
         $("projectContextHelp").hidden = configurationOrStatus || route.view === "reports";
         $("filterChips").hidden = configurationOrStatus || route.view === "reports" || route.view === "request";
         $("coverage").hidden = configurationOrStatus || route.view === "request";
         $("coverageNotice").hidden = configurationOrStatus;
-        $("activityCollectionLink").hidden = !["analyze", "request"].includes(route.view);
         $("settingsDraftNotice").hidden = settings || !collectionSettings?.hasDraft();
         renderSettingsNavigation();
         syncLocalSearchFields();
@@ -2399,8 +2524,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderViewingContext() {
         const host = $("viewingContext");
-        const collectionLink = $("activityCollectionLink");
-        if (host.contains(collectionLink)) $("freshHelpBody").append(collectionLink);
         host.hidden = route.view !== "request" || semanticQuery !== null && !semanticBound;
         const rows = selectionRows();
         const evidenceHost = $("serviceEvidenceSummary");
@@ -2570,7 +2693,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("outcomeFilter").dataset.allLabel = countsAvailable ? `All results (${count(totals.count)})` : "All results (counts unavailable)";
         const signature = JSON.stringify([applied.layer, resultOptions]);
         if ($("outcomeFilter").dataset.optionsSignature !== signature) {
-            $("outcomeFilter").replaceChildren(...resultOptions.map(([key, label, total]) => option(key, `${label} (${total === null ? "count unavailable" : count(total)})`)));
+            $("outcomeFilter").replaceChildren(...resultOptions.map(([key, label, total]) => {
+                const node = option(key, `${label} (${total === null ? "count unavailable" : count(total)})`);
+                node.dataset.optionLabel = label;
+                node.dataset.count = total === null ? "count unavailable" : count(total);
+                return node;
+            }));
             $("outcomeFilter").dataset.optionsSignature = signature;
         }
         $("outcomeFilter").disabled = applied.layer === "code-reference";
@@ -2645,7 +2773,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const selectedResults = resultSelection(applied.filters.outcomes);
         if (!analytics.totals.count && selectedResults.length) {
             $("chart").replaceChildren(empty(layer === "code-reference" ? "No references match the previous result filter" : "No matching results in this view",
-                "Use Clear beside Recorded result to show all results. Other filters stay applied."));
+                "Remove the Outcome chip to show all results. Other filters stay applied."));
         }
         const definitions = categories.used((analytics.workloadGroups || []).map((group) => group.label)), glossary = el("dl", "service-glossary");
         for (const entry of definitions) {
@@ -3108,10 +3236,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const project = source || scenario;
         const projectLabel = project.projectType === "folder" ? "Copilot folder project"
             : project.projectType === "repository" ? "Copilot repository project" : "Copilot project";
-        if (!options.compact || project.projectId) list.append(cardFact(projectLabel, el("span", "project-context", project.projectId
+        if (options.includeProject !== false && (!options.compact || project.projectId)) list.append(cardFact(projectLabel, el("span", "project-context", project.projectId
             ? project.project || project.projectId : project.sessionId || project.sourceSessionId ? "No project associated" : "Not recorded")));
-        const moment = requestTiming.entry(scenario, applied.timeContext);
-        list.append(cardFact(options.compact && moment.label === "Message recorded" ? "Recorded" : moment.label, moment.value));
+        if (options.includeTime !== false) {
+            const moment = requestTiming.entry(scenario, applied.timeContext);
+            list.append(cardFact(options.compact && moment.label === "Message recorded" ? "Recorded" : moment.label, moment.value));
+        }
         if (options.includeModel !== false) list.append(originalModelFact(scenario, options));
     }
     function requestCard(scenario) {
@@ -3122,6 +3252,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", String(sidebarIdentity !== null && route.request === scenario.scenarioId));
         const prompt = el("p", "request-card-prompt", textAccess.excerpt(scenario.userPrompt));
+        const actor = authorship.read(scenario.userPrompt).actor;
+        const author = el("span", "request-card-author", actor === "unknown" ? "Author unverified" : authorship.label(scenario.userPrompt));
+        author.dataset.promptActor = actor;
+        prompt.prepend(author, document.createTextNode(": "));
         const facts = interactionSummary(rowsFor(scenario.scenarioId), applied.layer, "Matching this view");
         facts.classList.add("request-card-summary");
         facts.append(el("span", "request-card-time", requestTiming.entry(scenario, applied.timeContext).value));
@@ -3159,12 +3293,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderRequest() {
         if (route.view !== "request") return;
+        if (pageInactive) return;
         if (requestInvalidated) return;
         if (searchTargetInvalid && route.request === searchOpenedRequest) return;
         const renderKey = JSON.stringify([requestIdentity(), state.revision, state.assessment?.basis, applied, route.withinServices]);
         if (requestRenderKey === renderKey) { updateRequestReportActions(); return; }
+        clearHeldDeparture();
         requestRenderKey = renderKey;
         captureReading();
+        clearReaderSections();
         const context = requestContext.select(state.scenarios, route.request);
         const target = callInvestigation.resolve(state.requestActivity, state.scenarios, route, state.revision);
         const body = $("requestContent");
@@ -3189,19 +3326,181 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? `Nearby messages are context, not additional matches.${applied.layer === "tool" ? " Tool completion is not answer correctness." : ""}`
             : context.groups.length > 1 || context.messages.some(message => message.kind === "follow-up") ? "Linked messages may be separate work; this is not the whole chat."
                 : "Saved messages only; unsaved parts of the conversation may be missing.");
+        const currentReader = () => route.view === "request" && requestRenderKey === renderKey && !requestInvalidated;
+        const headerActions = el("div", "reader-header-actions");
+        headerActions.setAttribute("role", "group");
+        headerActions.setAttribute("aria-label", "Section visibility");
+        let sections;
+        const collapse = button("", () => sections.setAll(false)), expand = button("", () => sections.setAll(true));
+        ux.utility(collapse, "collapse-sections", "Collapse all sections", "Collapse all");
+        ux.utility(expand, "expand-sections", "Expand all sections", "Expand all");
+        headerActions.append(collapse, expand);
+        $("closeContextSidebar").before(headerActions);
+        readerHeaderActions = headerActions;
+        ux.explainDisabled(collapse, "All sections are collapsed.", { compact: true });
+        ux.explainDisabled(expand, "All sections are expanded.", { compact: true });
+        sections = assessmentFactories.readerSections({
+            root: body, presentation, ux, motion: sidebar.motion, isCurrent: currentReader,
+            onChange: value => {
+                const focused = document.activeElement;
+                collapse.disabled = !value.canCollapse;
+                expand.disabled = !value.canExpand;
+                if (focused === collapse && collapse.disabled && !expand.disabled) ux.restoreFocus(expand);
+                else if (focused === expand && expand.disabled && !collapse.disabled) ux.restoreFocus(collapse);
+            },
+            requestClose: function requestClose(targets, commit) {
+                if (!currentReader()) return;
+                const reviews = targets.find(view => view.name === "reviews");
+                if (reviews) {
+                    const feedbackHere = assessmentUI.feedbackWithin(reviews.element);
+                    const pending = feedbackHere && ["pending", "checking", "unknown", "stale"].includes(assessmentUI.feedbackPhase());
+                    if (pending || automaticUI.isOpenIn(reviews.element)) {
+                        reviews.showNotice(pending ? "Finish or check the feedback update before collapsing Reviews."
+                            : "Close Automatic scores before collapsing Reviews.");
+                        reviews.toggle.focus({ preventScroll: true });
+                        contextBody.scrollTop += reviews.element.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - 16;
+                        return;
+                    }
+                    if (feedbackHere && guardDeparture(() => requestClose(targets, commit))) return;
+                }
+                commit();
+            },
+        });
+        readerSections = sections;
+        const sectionKey = name => JSON.stringify(["reader", route.request, name]);
+        const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + route.request });
+        const timingSection = sections.add("timing", "Timing", { key: sectionKey("timing"), metadata: time.label(applied.timeContext) });
+        const activitySection = sections.add("activity", "Recorded activity", { key: sectionKey("activity") });
+        const reviewSection = sections.add("reviews", "Reviews", { key: sectionKey("reviews") });
+        const sourceSection = sections.add("source", "Source", { key: sectionKey("source") });
+        let responseSection, responseList;
+        body.append(promptSection.element, timingSection.element, activitySection.element, reviewSection.element, sourceSection.element);
+        const promptList = el("ol", "journey reader-prompt-list");
+        promptSection.body.append(promptList);
         const journey = el("ol", "journey request-context-timeline");
         journey.setAttribute("aria-label", "Recorded prompts, calls and replies");
+        activitySection.body.append(journey);
         const summaryContents = el("div", "request-summary-content");
         const summaries = el("section", "request-context-summaries");
-        const reviewHeading = el("h2", "", "Reviews");
-        reviewHeading.id = "readerReviewsTitle";
-        summaries.setAttribute("aria-labelledby", reviewHeading.id);
-        summaries.append(reviewHeading, summaryContents);
-        const footer = el("div", "reader-footer");
-        footer.append(summaries);
-        body.append(journey, footer);
+        summaries.append(summaryContents);
+        reviewSection.body.append(summaries);
         const copyNoticeId = "reader-copy-notice";
-        const entries = [], seen = new Set(), rendered = [], responseHosts = [];
+        const entries = [], seen = new Set(), rendered = [], responseHosts = [], timingHosts = [], sourceHomes = new Map(), entryLabels = new Map();
+        const timeContext = applied.timeContext, selectedScenario = context.groups.find(group => group.relation === "selected").scenario;
+        function field(label, value) {
+            const node = cardFact(label, value ?? "Not recorded");
+            node.firstElementChild.textContent = label;
+            return node;
+        }
+        function fields(pairs) {
+            const node = el("dl", "reader-fields");
+            for (const [label, value] of pairs) if (value !== undefined && value !== null && value !== "") node.append(field(label, value));
+            return node;
+        }
+        function moment(value, compact = false) {
+            if (value === null || value === undefined || value === "") return el("span", "muted", "Not recorded");
+            try { time.instant(value); }
+            catch (error) {
+                if (!(error instanceof RangeError)) throw error;
+                return el("span", "reader-time-unverified", "Time not verified: " + (typeof value === "string" ? value : JSON.stringify(value)));
+            }
+            let sameDay = false;
+            if (compact && typeof selectedScenario.userPrompt?.sourceTimestamp === "string") {
+                try { sameDay = time.day(value, timeContext.timeZone) === time.day(selectedScenario.userPrompt.sourceTimestamp, timeContext.timeZone); }
+                catch (error) { if (!(error instanceof RangeError)) throw error; }
+            }
+            const node = el("time");
+            node.dateTime = value;
+            node.title = value;
+            const formatter = new Intl.DateTimeFormat(timeContext.locale, {
+                timeZone: timeContext.timeZone, ...sameDay ? {} : { year: "numeric", month: "short", day: "numeric" },
+                hour: "numeric", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3,
+                ...timeContext.timeZone === "UTC" ? {} : { timeZoneName: "shortOffset" },
+            });
+            for (const part of formatter.formatToParts(new Date(value))) {
+                node.append(part.type === "timeZoneName" ? el("span", "reader-time-offset", part.value) : document.createTextNode(part.value));
+            }
+            return node;
+        }
+        function identifier(value) { return el("code", "reader-identifier", String(value)); }
+        function readerText(source, options) {
+            const node = textAccess.render(source, options), coverage = requestTiming.coverage(source);
+            if (coverage === "Text completeness not verified") node.querySelector(".full-text-qualifiers")
+                .append(el("span", "reader-state", coverage));
+            return node;
+        }
+        function identityValues(rows, layer) {
+            const identities = serviceIdentity(rows?.length ? rows : undefined, layer), values = el("ul", "reader-values");
+            for (const identity of identities.children.length ? [...identities.children] : [identities]) {
+                const item = el("li"); item.append(identity); values.append(item);
+            }
+            return values;
+        }
+        function recordedBlock(text, options) {
+            const pre = el("pre", "", text);
+            return ux.attachCopy(pre, { ...options,
+                getText: () => pre.isConnected && currentReader() && activitySection.visibility.isOpen() ? pre.textContent : null });
+        }
+        function recordedInput(tool) {
+            const args = tool.requestArgs;
+            const capabilityNames = {
+                Email: ["Email", "Mail"], TeamsMessages: ["Teams messages", "Teams"],
+                OneDriveAndSharePoint: ["OneDrive and SharePoint", "Files"], People: ["People", "People"],
+                Meetings: ["Meetings", "Calendar"], Dataverse: ["Dataverse", null], GraphConnectors: ["Connected sources", null],
+            };
+            const known = args && typeof args === "object" && !Array.isArray(args) && Object.keys(args).length
+                && Object.keys(args).every(key => ["question", "query", "entityUrls", "capabilities", "timeZone"].includes(key))
+                && !(Object.hasOwn(args, "question") && Object.hasOwn(args, "query"))
+                && ["question", "query", "timeZone"].every(key => !Object.hasOwn(args, key) || typeof args[key] === "string" && args[key].length > 0)
+                && (!Object.hasOwn(args, "entityUrls") || Array.isArray(args.entityUrls) && args.entityUrls.length > 0
+                    && args.entityUrls.every(value => typeof value === "string" && value.length > 0))
+                && (!Object.hasOwn(args, "capabilities") || Array.isArray(args.capabilities) && args.capabilities.length > 0
+                    && args.capabilities.every(value => value && typeof value === "object" && Object.keys(value).length === 1
+                        && Object.hasOwn(capabilityNames, value.name)));
+            const raw = JSON.stringify(args, null, 2) ?? "[Arguments unavailable]";
+            if (!known) {
+                const block = recordedBlock(raw, { label: "Recorded input", copyLabel: "Copy recorded arguments" });
+                block.classList.add("recorded-arguments");
+                return { node: block, targets: false };
+            }
+            const input = el("section", "reader-input recorded-arguments");
+            const prose = args.question ?? args.query;
+            const copy = ux.copyButton({ label: "Copy recorded arguments", tooltip: "Copy recorded input",
+                getText: () => input.isConnected && currentReader() && activitySection.visibility.isOpen() ? raw : null });
+            input.append(el("span", "reader-input-label", prose !== undefined ? "Request" : args.entityUrls ? "Target paths" : "Recorded input"), copy);
+            const values = el("div", "reader-input-value");
+            const remaining = [];
+            if (prose !== undefined) values.append(el("pre", "reader-request-text", prose));
+            if (args.entityUrls) {
+                const list = el("ul", "reader-values");
+                for (const path of args.entityUrls) { const item = el("li"); item.append(identifier(path)); list.append(item); }
+                if (prose !== undefined) remaining.push(["Target paths", list]);
+                else values.append(list);
+            }
+            if (args.capabilities) {
+                const list = el("ul", "reader-values");
+                for (const capability of args.capabilities) {
+                    const [label, service] = capabilityNames[capability.name], item = el("li");
+                    item.append(service ? serviceCue("span", service, { ...categories.describe(service), label }) : el("span", "", label));
+                    list.append(item);
+                }
+                if (prose === undefined && !args.entityUrls) values.append(fields([["Requested sources", list]]));
+                else remaining.push(["Requested sources", list]);
+            }
+            if (args.timeZone !== undefined) remaining.push(["Time zone", args.timeZone]);
+            input.append(values);
+            if (remaining.length) input.append(fields(remaining));
+            return { node: input, targets: Boolean(args.entityUrls), requestedSources: Boolean(args.capabilities) };
+        }
+        const timingSummary = fields([["Prompt recorded", moment(selectedScenario.userPrompt?.sourceTimestamp)]]);
+        timingSummary.classList.add("reader-timing-summary");
+        const responseTime = responseTimingFact(selectedScenario);
+        responseTime.firstElementChild.textContent = "Time to final response";
+        timingSummary.append(responseTime);
+        timingSection.body.append(timingSummary);
+        const linkedTimes = fields(context.messages.filter(message => message.kind !== "prompt" || message.relation !== "selected")
+            .map(message => [message.relation === "preceding" ? "Earlier message recorded" : message.kind === "follow-up" ? "Follow-up recorded" : "Following message recorded", moment(message.at)]));
+        if (linkedTimes.children.length) timingSection.body.append(linkedTimes);
         const relationLabel = relation => relation === "selected" ? "Selected interaction"
             : relation === "preceding" ? "Earlier linked context" : "Following linked context";
         function insertEntry(entry) {
@@ -3211,22 +3510,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             item.dataset.contextKind = entry.kind ?? "action";
             if (entry.actionId) item.dataset.actionId = entry.actionId;
             viewKey(item, entry.key);
-            const moment = typeof entry.at === "string" && Number.isFinite(Date.parse(entry.at))
-                ? `${entry.kind === "response" ? "Response recorded" : entry.kind === "prompt" || entry.kind === "follow-up" ? "Message recorded" : entry.timeLabel || "Action started"}: ${timestamp(entry.at)}`
-                : "Time not recorded; position in the chronology is unknown.";
             const labelText = entry.kind === "prompt" && entry.relation === "selected" ? "Selected prompt"
-                : entry.kind === "prompt" ? `${entry.relation === "preceding" ? "Earlier linked message" : "Next linked message"} / ${typeof entry.at === "string" && Number.isFinite(Date.parse(entry.at)) ? timestamp(entry.at) : moment}` : moment;
+                : entry.kind === "prompt" ? entry.relation === "preceding" ? "Earlier linked message" : "Next linked message"
+                : entry.kind === "follow-up" ? "Follow-up message" : entryLabels.get(entry.key) ?? "Recorded response";
             const label = el("p", "context-entry-label"), separator = labelText.indexOf(":");
             if (separator >= 0) label.append(el("strong", "", labelText.slice(0, separator + 1)), document.createTextNode(labelText.slice(separator + 1)));
             else label.textContent = labelText;
             item.prepend(label);
-            if (entry.kind === "action" && item.querySelector(".call-heading")) {
-                label.classList.add("call-started");
-                item.querySelector(".call-heading").after(label);
-                if (typeof entry.at === "string" && Number.isFinite(Date.parse(entry.at))) {
-                    label.textContent = "Started " + time.formatMoment(entry.at, applied.timeContext);
-                }
-            }
+            if (entry.hideLabel) label.remove();
+            if (entry.kind === "action") label.classList.add("reader-entry-label");
             if (entry.kind === "prompt" && entry.relation === "selected") {
                 item.id = "selectedContext";
                 if (target.status !== "available") item.setAttribute("aria-current", "true");
@@ -3242,8 +3534,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     item.setAttribute("aria-current", "true");
                 }
             }
+            const host = entry.kind === "prompt" && entry.relation === "selected" ? promptList
+                : entry.kind === "response" && entry.relation === "selected" ? responseList : journey;
+            const next = rendered.find(other => other.node.parentElement === host && requestContext.compare(entry, other) < 0);
+            host.insertBefore(item, next?.node ?? null);
             const index = rendered.findIndex(other => requestContext.compare(entry, other) < 0);
-            journey.insertBefore(item, index < 0 ? null : rendered[index].node);
             if (index < 0) rendered.push({ ...entry, node: item });
             else rendered.splice(index, 0, { ...entry, node: item });
             detailOwner = "request:" + route.request;
@@ -3272,29 +3567,33 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? `${count(rows.length)} of ${count(full.length)} ${results.unit(applied.layer, full.length)} match the current view. The full recorded interaction follows.`
             : "Matching context unavailable. The retained interaction follows."));
         const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
-        requestText.append(textAccess.render(scenario.userPrompt, {
+        requestText.append(readerText(scenario.userPrompt, {
             key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true, copyNoticeId,
-            originKind,
+            originKind, visibility: isSelected ? promptSection.visibility : activitySection.visibility,
+            actionsHost: isSelected ? promptSection.actions : undefined,
             notice: "Copy includes the complete retained prompt body only, without export masking. It does not include chat details, warnings, the response or the rest of this page. Other apps and clipboard history may access your system clipboard.",
         }));
-        const responseTime = el("dl", "reader-response-timing");
-        responseTime.append(responseTimingFact(scenario));
-        const modelFact = el("dl", "activity-card-facts interaction-model-fact");
-        modelFact.append(originalModelFact(scenario));
+        const modelFact = el("dl", "reader-fields interaction-model-fact"), model = originalModelFact(scenario);
+        model.firstElementChild.textContent = model.firstElementChild.textContent.replace(/:$/, "");
+        modelFact.append(model);
         const readerFacts = el("div", "reader-facts");
-        const sourceFacts = el("dl", "activity-card-facts reader-source");
-        appendCardSource(sourceFacts, scenario, { compact: true, includeModel: false });
+        const sourceFacts = el("dl", "reader-fields reader-source");
+        appendCardSource(sourceFacts, scenario, { compact: true, includeModel: false, includeTime: false, includeProject: false });
+        for (const term of sourceFacts.querySelectorAll("dt")) term.textContent = term.textContent.replace(/:$/, "");
         if (isSelected) readerFacts.append(sourceFacts);
-        readerFacts.append(modelFact, responseTime);
+        readerFacts.append(modelFact);
         requestText.append(readerFacts);
         const insightHost = el("div", "interaction-insights"), responseHost = el("section", "interaction-response");
+        const timingHost = el("section", "reader-local-timing");
+        timingHost.dataset.contextGroup = scenario.scenarioId;
+        timingHosts.push(timingHost);
         const findingsHost = el("div", "interaction-findings");
         findingsHost.dataset.presentation = "reader";
         insightHost.dataset.contextGroup = scenario.scenarioId;
         findingsHost.dataset.contextGroup = scenario.scenarioId;
         if (isSelected) {
             for (const gap of context.gaps) intro.append(el("p", "reader-empty", gap));
-            body.prepend(intro);
+            activitySection.body.prepend(intro);
         }
         entries.push({ key: "prompt:" + scenario.scenarioId, at: scenario.userPrompt?.sourceTimestamp,
             scenarioId: scenario.scenarioId, relation: group.relation, kind: "prompt", render: () => {
@@ -3303,27 +3602,54 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 return item;
             } });
         responseHosts.push({ scenarioId: scenario.scenarioId, host: responseHost });
-        assessmentUI.detail(insightHost, responseHost, scenario.scenarioId, { eager: true, contentFirst: true, copyNoticeId, findingsHost, placeResponse: (node, observation) => {
-            if (!journey.isConnected) return;
+        assessmentUI.detail(insightHost, responseHost, scenario.scenarioId, { eager: true, contentFirst: true, copyNoticeId, findingsHost, directFeedback: true,
+            timingHost, timingScope: context.groups.length > 1 ? relationLabel(group.relation) : null, recordedTimingHome: isSelected ? responseTime : null,
+            placeResponse: (node, observation, position) => {
+            if (!journey.isConnected || !currentReader()) return;
+            if (isSelected && !responseSection) {
+                responseSection = sections.add("response", "Response", { key: sectionKey("response") });
+                responseList = el("ol", "journey reader-response-list");
+                responseSection.body.append(responseList);
+                reviewSection.element.before(responseSection.element);
+            }
+            const responseName = (isSelected ? "Response" : group.relation === "preceding" ? "Earlier linked response" : "Following linked response")
+                + (position?.total > 1 ? " " + (position.index + 1) : "");
+            timingSection.body.append(fields([[responseName + " recorded", moment(observation.occurredAt)]]));
             insertEntry({ key: "response:" + observation.observationRef, at: observation.occurredAt,
-                scenarioId: scenario.scenarioId, relation: group.relation, kind: "response", render: () => node });
+                scenarioId: scenario.scenarioId, relation: group.relation, kind: "response", hideLabel: true, render: () => node });
+            sections.refresh();
+            return { visibility: isSelected ? responseSection.visibility : activitySection.visibility,
+                actionsHost: isSelected && position?.total === 1 ? responseSection.actions : undefined,
+                copyLabel: isSelected && position?.total === 1 ? undefined : "Copy " + responseName.toLowerCase(),
+                headingLabel: responseName };
         } });
         const original = scenario.userPrompt;
         const support = el("div", "request-support");
-        const provenance = el("div");
-        provenance.append(facts([
-            ["Prompt author", requestTiming.origin(original)], ["Text retained", requestTiming.coverage(original)], ["Message timestamp", original?.sourceTimestamp],
-            ["Group timestamp", scenario.capturedAt], ["Source event", original?.sourceEventId],
-            ["Provenance", authorship.read(original).basis],
-            ["Copilot chat ID", scenario.sourceSessionId], ["Prompt association", scenario.promptAssociation],
+        const provenance = el("div", "reader-source-record");
+        provenance.dataset.contextGroup = scenario.scenarioId;
+        if (context.groups.length > 1) provenance.append(el("h3", "reader-source-heading", relationLabel(group.relation)));
+        const association = scenario.promptAssociation === "Nearest preceding recorded user.message; association is inferred, not a proven causal link. Follow-ups remain separate prompt-group scenarios."
+            ? "Message links follow the order of saved records; they don't prove what triggered a call. Follow-up messages stay separate." : scenario.promptAssociation;
+        const coverage = scenario.coverageNote === "Recorded Work IQ invocation, not observed Graph HTTP. Result entity/body content excluded. Missing completions and truncated logs are disclosed in the source roster."
+            && !scenario.toolCalls?.some(tool => tool.observedGraphHttp)
+            ? "Work IQ call records exclude Graph network traffic and returned item contents. Collection coverage lists missing call endings and cut-off logs." : scenario.coverageNote;
+        provenance.append(fields([
+            ["Source event", original?.sourceEventId != null ? identifier(original.sourceEventId) : "Not recorded"],
+            ["Chat ID", isSelected ? scenario.sourceSessionId != null ? identifier(scenario.sourceSessionId) : "Not recorded" : null],
             ["Project", sourceProject.projectId ? sourceProject.project || sourceProject.projectId
                 : sourceProject.sessionId || sourceProject.sourceSessionId ? "No project associated" : "Not recorded"],
-            ["Coverage", scenario.coverageNote], ["Assessment", scenario.assessedFinding],
-        ], { inlineHelp: false, omitMissing: true, copyIdentifiers: false }));
-        support.append(disclosure("Technical source record", provenance));
+            ["Assessment", scenario.assessedFinding],
+        ]));
+        const limits = el("div", "reader-record-limits");
+        if (association) limits.append(el("p", "", association));
+        if (coverage) limits.append(el("p", "", coverage));
+        provenance.append(limits);
+        support.append(provenance);
+        sourceHomes.set(scenario.scenarioId, { provenance, limits });
+        sourceSection.body.append(support);
         for (const message of context.messages.filter(message => message.scenarioId === scenario.scenarioId && message.kind === "follow-up")) {
             const followup = el("section", "request-context-prompt");
-            followup.append(textAccess.render(message.source, { key: message.key, mode: "complete", initialOpen: true, contentFirst: true, copyNoticeId, originKind }));
+            followup.append(readerText(message.source, { key: message.key, mode: "complete", initialOpen: true, contentFirst: true, copyNoticeId, originKind, visibility: activitySection.visibility }));
             if (message.source.association) provenance.append(el("p", "context-help-note", message.source.association));
             entries.push({ ...message, relation: group.relation, render: () => followup });
         }
@@ -3368,39 +3694,49 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (row && (seen.has(row.id) || row.id === target.actionId && !isSelected)) continue;
             if (row) seen.add(row.id);
             const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || tool]);
-            entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, render: () => {
+            entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool",
+                timing: { start: tool.startedAt, end: tool.completedAt ?? tool.endedAt, duration: callInvestigation.duration(tool, "tool") },
+                identifiers: [["ID", tool.toolCallId], ["parent invocation", tool.parentToolCallId], ["parallel group", tool.parallelGroup]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
             const expert = el("div", "technical-detail");
             item.dataset.toolCallId = tool.toolCallId || "";
-            const heading = el("div", "call-heading");
+            const heading = el("dl", "call-heading reader-fields reader-call-summary");
             const operation = categories.operation(tool.tool);
-            const actionTitle = actionHeading(tool.tool || "Tool not recorded", row?.workload, row, "tool", { inlineHelp: false });
-            heading.append(actionTitle);
+            heading.append(field("Tool", el("h3", "", tool.tool || "Tool not recorded")));
             const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true });
             result.classList.add("journey-result");
-            const duration = el("p", "call-duration");
-            duration.append(el("span", "call-duration-label", "Call: "), durationValue(callInvestigation.duration(tool, "tool")));
-            const outcomes = el("div", "call-outcome-row");
-            outcomes.append(result, duration);
-            heading.append(outcomes);
+            for (const value of result.querySelectorAll(".recorded-result")) {
+                if (value.dataset.count === "1") value.querySelector(".recorded-result-label").textContent = results.labels("tool")[value.dataset.outcome];
+            }
+            heading.append(field("Result", result));
             item.append(heading);
             const sourceCall = sourceCallFor(row) || tool;
-            const fields = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });
-            if (fields.childElementCount) item.append(fields);
+            const association = row?.serviceAssociation?.layer === "tool" ? row.serviceAssociation : null;
+            const serviceValues = identityValues(row ? [{ ...row, tool: tool.tool }] : undefined, "tool");
+            item.append(fields([[association?.basis === "tool-purpose" || association?.status === "not-applicable"
+                || !association?.services.length && operation ? "Purpose" : "Services", serviceValues]]));
+            const input = recordedInput(tool);
+            if (!input.targets) {
+                const targets = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });
+                if (targets.childElementCount) item.append(targets);
+            }
             const serviceEvidence = categories.serviceEvidence(row ? { ...row, tool: tool.tool } : row, "tool");
-            const explanation = el("p", "reader-call-evidence", tool.tool === "workiq-ask"
-                ? "Recorded request to Copilot or an agent; delivery and the downstream service are not established."
+            const explanation = el("p", "reader-call-evidence", serviceEvidence?.reason === "hosted-routing" || serviceEvidence?.reason === "missing-target"
+                ? serviceEvidence.description
+                : tool.tool === "workiq-ask" ? categories.operation(tool.tool).description
                 : (row ? categories.explainRows([row], "tool") : "") || serviceEvidence?.description || operation?.description);
             const searchScope = categories.requestedSearchScope(sourceCall);
-            if (searchScope) explanation.append(" " + searchScope.description);
+            if (searchScope && !(input.requestedSources && searchScope.description === "This does not show which sources returned results.")) {
+                explanation.append(" " + searchScope.description);
+            }
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
             if (apiRows?.length) {
                 const apiSummary = resultLine("reported-api", results.summarize(apiRows));
                 apiSummary.classList.add("call-api-summary");
                 item.append(apiSummary);
             }
-            else if (row?.workload !== "Discovery") explanation.append(apiRows ? " No API result metadata recorded." : " API result metadata is unavailable.");
+            else if (!apiRows && row?.workload !== "Discovery") explanation.append(" API result metadata is unavailable.");
             if (explanation.textContent.trim()) expert.prepend(explanation);
             if (!sameScope) {
                 actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
@@ -3411,9 +3747,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const failure = recordedFailure(tool, ["failure", "transport"].includes(row?.outcome));
             if (failure) {
                 const missingCause = Object.values(help.failureEvidence).includes(failure);
-                item.append(el("p", "action-error", missingCause ? "Failure cause unavailable." : failure));
-                if (missingCause) expert.append(el("p", "context-help-note", failure));
-                expert.append(el("p", "context-help-note", "Historical call evidence only; it does not establish current sign-in or permission state."));
+                item.append(el("p", "action-error", missingCause ? "No error details recorded." : failure));
+                if (!missingCause) expert.append(el("p", "context-help-note", "Historical call evidence only; it does not establish current sign-in or permission state."));
             }
             if (row) {
                 const returned = returnedDetails(sourceCall, row, apiRows,
@@ -3422,25 +3757,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
                 || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
-            expert.append(facts([
-                ["Recorded start", tool.startedAt], ["Recorded end", tool.completedAt ?? tool.endedAt],
-                ["Call duration (ms)", callInvestigation.duration(tool, "tool")],
+            const completion = fields([
                 ...consistentCompletion ? [] : [["Reported outcome", tool.reportedOutcome], ["Execution success", tool.toolSucceeded]],
-                ["Tool call ID", tool.toolCallId], ["Parent invocation", tool.parentToolCallId], ["Parallel group", tool.parallelGroup],
-            ], { inlineHelp: false, omitMissing: true, copyIdentifiers: false }));
+            ]);
+            if (completion.childElementCount) expert.append(completion);
             if (tool.observedGraphHttp) expert.append(el("p", "reader-record-limits", "HTTP directly observed."));
             if (tool.failureEvidence?.version === 1) {
                 const evidence = tool.failureEvidence;
                 const reason = help.failureMessageStatus[evidence.messageStatus] ?? "Error messages, stack traces and response bodies are excluded from collection.";
                 expert.append(el("p", "context-help-note", reason));
             }
-            const argumentsBlock = ux.codeBlock(JSON.stringify(tool.requestArgs, null, 2) ?? "[Arguments unavailable]",
-                { label: "Tool input (recorded)", copyLabel: "Copy recorded arguments" });
-            argumentsBlock.classList.add("recorded-arguments");
-            expert.append(argumentsBlock);
-            for (const key of ["command", "code", "script"]) if (typeof tool.requestArgs?.[key] === "string") expert.append(ux.codeBlock(tool.requestArgs[key], { label: "Recorded " + key, copyLabel: "Copy " + key }));
+            expert.append(input.node);
+            for (const key of ["command", "code", "script"]) if (typeof tool.requestArgs?.[key] === "string") expert.append(recordedBlock(tool.requestArgs[key], { label: "Recorded " + key, copyLabel: "Copy " + key }));
             for (const result of tool.apiResults || []) expert.append(facts([["Result attribution", result.evidenceLevel], ["Reported status", result.statusCode], ["Reported error", result.errorCode]], { inlineHelp: false, omitMissing: true }));
-            item.append(disclosure("Technical details", expert));
+            item.append(expert);
             return item;
             } });
         }
@@ -3450,21 +3780,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (graphRows?.[0] && (seen.has(graphRows[0].id) || graphRows[0].id === target.actionId && !isSelected)) continue;
             if (graphRows?.[0]) seen.add(graphRows[0].id);
             const key = JSON.stringify([scenario.scenarioId, "graph", graph.activityId || graph]);
-            entries.push({ key, actionId: graphRows?.[0]?.id, startedAt: graph.startedAt,
+            entries.push({ key, actionId: graphRows?.[0]?.id, startedAt: graph.startedAt, recordKind: layer === "code-reference" ? "reference" : "graph",
+                timing: { start: graph.startedAt, applicable: false }, identifiers: [["ID", graph.activityId]],
                 timeLabel: layer === "code-reference" ? "Reference recorded" : "Request site recorded", render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
-            item.append(actionHeading(layer === "code-reference" ? "Graph code reference" : "Direct Graph request site", graphRows?.[0]?.workload || graph.workload || "Unknown", graphRows?.[0], layer));
+            const heading = fields([
+                ["Record", el("h3", "", layer === "code-reference" ? "Graph code reference" : "Direct Graph request site")],
+                ["Result", resultLine(layer, graphRows?.length ? results.summarize(graphRows) : null)],
+            ]);
+            heading.classList.add("call-heading", "reader-call-summary");
+            item.append(heading, fields([[layer === "code-reference" ? "Referenced service" : "Service", identityValues(graphRows, layer)]]));
             const path = el("dl", "action-fields");
             pathField(path, layer === "code-reference" ? "Referenced API path" : "API path", results.pathText(graph.endpoint));
             item.append(path);
-            item.append(resultLine(layer, graphRows?.length ? results.summarize(graphRows) : null));
             actionContext(item, ["direct-request", "recorded-http", "code-reference"].includes(applied.layer) ? graphRows : []);
             const status = graph.evidenceLevel === "output-visible-http" ? graph.httpStatus : null;
             item.append(el("p", "", status != null ? "Visible HTTP status: " + status : graph.evidenceLevel === "code-reference" ? "Code reference only; execution is not established." : "No HTTP status observed in this record."));
             const expert = el("div");
-            expert.append(facts([["Recorded", timestamp(graph.startedAt)]]), ux.codeBlock(JSON.stringify(graph, null, 2), { label: "Recorded Graph evidence / local only", copyLabel: "Copy recorded Graph evidence" }));
-            item.append(disclosure("Technical details", expert));
+            expert.append(recordedBlock(JSON.stringify(graph, null, 2), { label: "Recorded Graph evidence / local only", copyLabel: "Copy recorded Graph evidence" }));
+            item.append(expert);
             return item;
             } });
         }
@@ -3473,19 +3808,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (httpRows?.[0] && (seen.has(httpRows[0].id) || httpRows[0].id === target.actionId && !isSelected)) continue;
             if (httpRows?.[0]) seen.add(httpRows[0].id);
             const key = JSON.stringify([scenario.scenarioId, "http", record.recordId || record]);
-            entries.push({ key, actionId: httpRows?.[0]?.id, startedAt: record.startedAt, render: () => {
+            entries.push({ key, actionId: httpRows?.[0]?.id, startedAt: record.startedAt, recordKind: "http",
+                timing: { start: record.startedAt, end: record.completedAt ?? record.endedAt, duration: callInvestigation.duration(record, "http") },
+                identifiers: [["ID", record.recordId]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
-            item.append(actionHeading("Explicit HTTP recorder", httpRows?.[0]?.workload, httpRows?.[0], "http"), el("p", "", record.status == null ? "No HTTP response recorded." : "Recorded HTTP status " + record.status));
-            item.append(resultLine("http", httpRows?.length ? results.summarize(httpRows) : null));
+            const heading = fields([
+                ["Record", el("h3", "", "Explicit HTTP recorder")],
+                ["Result", resultLine("http", httpRows?.length ? results.summarize(httpRows) : null)],
+            ]);
+            heading.classList.add("call-heading", "reader-call-summary");
+            item.append(heading, fields([["Service", identityValues(httpRows, "http")]]),
+                el("p", "", record.status == null ? "No HTTP response recorded." : "Recorded HTTP status " + record.status));
             actionContext(item, applied.layer === "http" ? httpRows : []);
             const path = el("dl", "action-fields");
             pathField(path, "API path", results.pathText(record.responsePath ?? record.path ?? record.requestedPath ?? record.requestShape?.path));
             item.append(path);
             const expert = el("div");
-            expert.append(facts([["Started", timestamp(record.startedAt)], ["Ended", timestamp(record.completedAt ?? record.endedAt)], ["Duration", record.durationMs == null ? null : record.durationMs + " ms"]]),
-                ux.codeBlock(JSON.stringify(record, null, 2), { label: "Recorder details / local only", copyLabel: "Copy recorder details" }));
-            item.append(disclosure("Technical details", expert));
+            expert.append(recordedBlock(JSON.stringify(record, null, 2), { label: "Recorder details / local only", copyLabel: "Copy recorder details" }));
+            item.append(expert);
             return item;
             } });
         }
@@ -3501,17 +3842,52 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             provenance.append(el("p", "context-help-note", relation + " This is sequence evidence; it does not prove why the assistant chose Graph."));
         }
         detailOwner = "request:" + scenario.scenarioId;
-        recorded.append(support);
         }
         entries.sort(requestContext.compare);
+        const actionsInOrder = entries.filter(entry => entry.kind === "action");
+        const timingTable = el("table", "reader-timing-table"), timingHead = el("thead"), timingBody = el("tbody"), columns = el("tr");
+        timingTable.setAttribute("aria-label", "Recorded activity timing");
+        timingTable.setAttribute("aria-describedby", "reader-context-" + encodeURIComponent(sectionKey("timing")));
+        const onlyTools = actionsInOrder.every(entry => entry.recordKind === "tool");
+        for (const label of [onlyTools ? "Call" : "Entry", onlyTools ? "Started" : "Recorded / started", "Finished", "Duration"]) {
+            const cell = el("th", "", label); cell.scope = "col"; columns.append(cell);
+        }
+        timingHead.append(columns);
+        actionsInOrder.forEach((entry, index) => {
+            const label = ({ tool: "Call", reference: "Reference", graph: "Request site", http: "HTTP record" })[entry.recordKind] + " " + (index + 1);
+            entryLabels.set(entry.key, label);
+            const row = el("tr"), name = el("th", "", label);
+            if (entry.actionId) row.dataset.actionId = entry.actionId;
+            name.scope = "row";
+            if (entry.relation !== "selected") name.append(el("span", "reader-time-scope", relationLabel(entry.relation)));
+            row.append(name);
+            for (const [title, value] of [[onlyTools ? "Started" : "Recorded / started", moment(entry.timing.start, true)],
+                ["Finished", entry.timing.applicable === false ? "Not applicable" : moment(entry.timing.end, true)],
+                ["Duration", entry.timing.applicable === false ? "Not applicable" : durationValue(entry.timing.duration)]]) {
+                const cell = el("td");
+                cell.dataset.label = title;
+                cell.append(value);
+                row.append(cell);
+            }
+            timingBody.append(row);
+            const home = sourceHomes.get(entry.scenarioId);
+            const ids = fields((entry.identifiers ?? []).filter(([, value]) => value != null && value !== "")
+                .map(([kind, value]) => [label + " " + kind, identifier(value)]));
+            if (ids.children.length) home.limits.before(ids);
+        });
+        if (actionsInOrder.length) {
+            timingTable.append(timingHead, timingBody);
+            timingSection.body.append(timingTable);
+        }
+        timingSection.body.append(...timingHosts);
         for (const entry of entries) insertEntry(entry);
         for (const { scenarioId, host } of responseHosts) {
             const last = rendered.filter(entry => entry.scenarioId === scenarioId && ["prompt", "action"].includes(entry.kind)).at(-1);
-            if (last) last.node.insertBefore(host, last.node.querySelector(":scope > .detail-disclosure"));
+            if (last) last.node.append(host);
         }
         const copyNotice = el("p", "reader-copy-scope", "Copy uses unmasked text. Other apps and clipboard history may access it.");
         copyNotice.id = copyNoticeId;
-        journey.after(copyNotice);
+        body.append(copyNotice);
         const firstLinkedMessage = rendered.find(entry => entry.kind === "prompt" && entry.relation !== "selected" || entry.kind === "follow-up")?.node;
         const selectedRecord = target.status === "available" ? body.querySelector("#selectedCall") : null;
         if (selectedRecord) selectedRecord.prepend(contextNote);
@@ -3521,8 +3897,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (context.groups.length > 1 || context.messages.some(message => message.kind === "follow-up")) summaryContents.append(boundary);
         const evidenceScope = el("p", "reader-evidence-scope", "Saved messages can have gaps. Tool outcomes do not establish answer correctness or permission. ");
         evidenceScope.append(link("Collection coverage", "collection-status", { setting: "collection-details" }, "text-link"));
-        summaryContents.append(evidenceScope);
+        sourceSection.body.append(evidenceScope);
         detailOwner = "request:" + route.request;
+        sections.refresh();
         updateRequestReportActions();
     }
     function updateRequestReportActions() {
@@ -4451,7 +4828,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function renderCollectionNotice() {
         const hasEvidence = Boolean(state?.scenarios.length);
         const notice = historyStatus.entry(collection, { hasEvidence, unavailable: Boolean(collectionReadError), reason: collectionReadReason });
-        const setupHandled = route.view === "analyze" && !collection?.config?.approved && !collection?.error && notice?.severity === "normal";
         const host = $("collectionNotice");
         const model = fresh.snapshot(), recovery = !$("freshActivity").hidden && model.recovery;
         const sameSourceFailure = recovery && !collectionReadError && collection?.error
@@ -4461,7 +4837,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && collection.revision === model.sourceFailure.revision
             && collection.lastCheck?.id === model.sourceFailure.lastCheckId
             && collection.error === model.sourceFailure.error;
-        host.hidden = ["settings", "collection-status"].includes(route.view) || !notice || setupHandled
+        host.hidden = ["settings", "collection-status"].includes(route.view) || !notice
             || ["reports", "request"].includes(route.view) && notice?.severity === "normal"
             || !$("message").hidden && $("message").dataset.connectionFailure === "true"
             || Boolean(collectionReadError) && refreshOwnsReadFailure()
@@ -4474,11 +4850,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("collectionRetry").disabled = isLoading;
         if (!notice) return;
         host.dataset.severity = notice.severity;
-        setText($("collectionNoticeText"), setupHandled ? "Retained evidence is still available." : notice.text);
-        $("collectionNoticeAction").hidden = setupHandled;
+        setText($("collectionNoticeText"), notice.text);
+        $("collectionNoticeAction").hidden = false;
         setText($("collectionNoticeAction"), notice.action);
         $("collectionNoticeAction").href = notice.issues ? "#collection-status?setting=issues"
-            : notice.severity === "error" || notice.action === "View collection details" ? "#collection-status" : "#settings?section=connection";
+            : notice.severity === "error" || notice.action === "View collection details" ? "#collection-status"
+                : !collection?.config?.approved ? "#settings?section=connection&setting=source" : "#settings?section=connection";
     }
     function collectionUnavailable(error, reason = "") {
         liveSearchUI?.invalidate("Current collection status could not be verified. Search results were cleared.");
@@ -4509,9 +4886,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const anchor = route.view === "analyze" ? $("collectionNotice")
             : route.view === "collection-status" ? $("collectionCoverageCounts") : $("connectionPreferences");
         if (host.nextElementSibling !== anchor) anchor.before(host);
-        const details = host.querySelector(".fresh-details"), links = $("freshHelp").querySelector(".fresh-links");
-        const sourceHost = route.view === "analyze" ? links : details;
-        if ($("freshSourceSetup").parentElement !== sourceHost) sourceHost.prepend($("freshSourceSetup"));
+        const details = host.querySelector(".fresh-details");
+        const refresh = $("checkActivity").closest(".ux-disabled-help") || $("checkActivity");
+        const refreshHost = route.view === "analyze" ? $("analyzeRefresh") : host.querySelector(".fresh-controls");
+        if (refresh.parentElement !== refreshHost) refreshHost.prepend(refresh);
         if (host.querySelector(".fresh-controls").lastElementChild !== $("freshResult")) {
             host.querySelector(".fresh-controls").append($("freshResult"));
         }
@@ -4534,9 +4912,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const text = "Refresh";
         if (control.lastChild?.nodeType === Node.TEXT_NODE) control.lastChild.textContent = text;
         ux.pending(control, ["checking", "applying"].includes(model.phase));
-        $("freshSourceSetup").hidden = Boolean(approved) || connection;
-        setText($("freshHelp").querySelector("summary"), connection ? "About Refresh" : "Source and collection");
-        $("freshHelp").querySelector(".fresh-links").hidden = connection;
+        setText($("freshHelp").querySelector("summary"), connection ? "About Refresh" : "Update details");
+        details.hidden = route.view === "analyze" && model.phase === "idle" && !model.sourceWarning;
         setText($("freshScope"), approved
             ? `Local Copilot history · ${collection.config.windowDays}-day window`
             : "Choose which local Copilot history this app can read.");
@@ -4545,7 +4922,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("freshChecked").hidden = !completed;
         setText($("freshStatus"), model.message || (approved ? "Refresh recorded activity." : "Stored activity only. No source is approved."));
         ux.pending($("freshStatus"), ["checking", "applying"].includes(model.phase));
-        $("freshStatus").hidden = approved && model.phase === "idle";
+        $("freshStatus").hidden = model.phase === "idle";
         const paused = model.recovery && !collectionReadError && approved && collection?.config?.enabled === false;
         setText($("freshContextMessage"), [model.context, model.sourceWarning, paused ? "Collection is paused." : ""].filter(Boolean).join(" "));
         $("freshContextMessage").hidden = !model.context && !model.sourceWarning;
@@ -4578,6 +4955,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         renderCollectionNotice();
         renderStoredRefresh();
+        renderSettingsRefresh(connection, model);
     }
     function clearSourceCheckMarker() {
         try {
@@ -4590,7 +4968,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function checkActivity(event) {
         renderFreshActivity();
         if ($("checkActivity").disabled) return null;
-        if (fresh.snapshot().sourceUnknown || fresh.snapshot().sourceBlocked || fresh.snapshot().phase === "error" || collectionReadError || isStale) return refreshStoredData(event);
+        if (refreshUsesStoredRecovery()) return refreshStoredData(event);
         const initiatingControl = document.activeElement;
         const initiatingNavigation = navigationGeneration, initiatingIntent = readingIntent;
         const checkSource = collection?.config?.approved === true;
@@ -4631,7 +5009,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             collectionSettings?.setChecking(false);
             renderFreshActivity();
             if (initiatingControl === $("checkActivity") && navigationGeneration === initiatingNavigation && readingIntent === initiatingIntent
-                && initiatingControl.checkVisibility() && document.activeElement === document.body) ux.restoreFocus(initiatingControl);
+                && document.activeElement === document.body) {
+                const recovery = [$("refreshBtn"), $("collectionRetry"), ...document.querySelectorAll("[data-stored-refresh-retry]")]
+                    .find(control => control.checkVisibility() && !control.disabled);
+                ux.restoreFocus(initiatingControl.checkVisibility() ? initiatingControl : recovery);
+            }
             clearTimeout(pollTimer);
             pollTimer = setTimeout(pollCollection, 5000);
         }
@@ -5234,7 +5616,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         invalidatePreview();
         invalidateDialog("The panel reconnected. Close and prepare a new report preview before continuing.");
         if (analytics) { isStale = true; updateSelection(); }
-        load();
+        return load();
     }
     function handleVisibilityChange() {
         draft.clearContext({ writing: exportWriting });
@@ -5487,12 +5869,31 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         historyPosition = Number.isSafeInteger(position) ? position : historyPosition + 1;
         applyRoute(next, { restorePosition: true });
     });
-    window.addEventListener("pageshow", (event) => { if (event.persisted) recoverRead(); });
+    window.addEventListener("pageshow", (event) => {
+        if (!event.persisted) return;
+        pageInactive = false;
+        const identity = sidebarIdentity, intent = readingIntent;
+        void recoverRead()?.then(accepted => {
+            if (accepted && identity === sidebarIdentity && intent === readingIntent && route.view === "request") focusSidebar();
+        });
+    });
     window.addEventListener("online", recoverRead);
     window.addEventListener("focus", () => { if (!exportWriting) ensureCurrentTime(); });
     window.addEventListener("languagechange", () => { if (!exportWriting) ensureCurrentTime(); });
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("pagehide", () => { pageInactive = true; clearSavedReader(); savedEntries.clear(); clearSidebarExit(); finishSidebarMotion(); restoreSidebarHistoryMode(); preparedReportReader?.dispose(); preparedReportReader = null; assessmentUI.leave(); automaticUI.leave(); savedArtifactUI?.leave(); clearTimeout(pollTimer); });
+    window.addEventListener("pagehide", () => {
+        pageInactive = true;
+        generation++;
+        if (route.view === "request") {
+            if (!requestInvalidated) saveSidebarPosition();
+            requestRenderKey = null;
+            requestInvalidated = true;
+            $("requestContent").replaceChildren(el("p", "notice", "Read current evidence before reopening this interaction."));
+        }
+        clearHeldDeparture(); clearReaderSections(); clearSavedReader(); savedEntries.clear(); clearSidebarExit(); finishSidebarMotion();
+        restoreSidebarHistoryMode(); preparedReportReader?.dispose(); preparedReportReader = null;
+        assessmentUI.leave(); automaticUI.leave(); savedArtifactUI?.leave(); clearTimeout(pollTimer);
+    });
     window.addEventListener("pageshow", () => { pageInactive = false; clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); });
     document.addEventListener("visibilitychange", () => { if (sidebarExit) { clearSidebarExit(); finishSidebarMotion(); } assessmentUI.clearPrivateText(); if (!document.hidden) { clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); } });
     for (const node of document.querySelectorAll("details[id]")) {
@@ -5541,7 +5942,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return load({ background: true });
         },
     });
-    displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
+    displayTimeSettings = mountDisplayTimeSettings({ time, sidebarMotion: sidebar.motion, onChange: () => { if (!exportWriting) load(); } });
     $("callSort").addEventListener("change", () => {
         if (!restoring) navigate(routeFor("analyze", { callSort: $("callSort").value, page: undefined }), false, { keepFocus: true });
     });

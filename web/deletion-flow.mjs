@@ -226,7 +226,6 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         if (trigger?.isConnected) ux.restoreFocus(trigger);
     });
     $("deleteActivity").addEventListener("click", open);
-    $("activityDeleteShortcut").addEventListener("click", open);
     $("deleteWarningIcon").append(ux.icon("warning"));
     return { open, isOpen: () => dialog.open,
         invalidate() {

@@ -12,6 +12,7 @@ import { uxIcons } from "../web/ux-icons.mjs";
 import { dimensionalIcons } from "../web/dimensional-icons.mjs";
 import { styles } from "../web/styles.mjs";
 import { chooseTheme } from "./helpers.mjs";
+import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WORKIQ_ICON_PROOF_DIR;
 const scenarios = ["/me/messages", "/me/events", "/me/drive/root/children"].map((endpoint, index) => ({
@@ -234,6 +235,115 @@ test("disabled explanations keep a visible Lucide info target without enabling t
     assert.equal(await wrapper.getAttribute("role"), null);
 }));
 
+test("actual utility roles retain their own 44px paint and states without shrinking text actions", { timeout: 30000 }, async () => fixture(async ({ context, origin }) => {
+    const page = await context.newPage(), evidence = [];
+    await page.setViewportSize({ width: 1200, height: 1000 });
+    await page.goto(origin + "/primitives");
+    await page.evaluate(() => {
+        const row = document.createElement("section");
+        row.id = "utilityProof";
+        row.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0;padding:6px";
+        for (const role of ["menu", "close", "refresh", "reset", "previous", "next", "search", "download", "back", "read", "hide"]) {
+            const control = document.createElement(role === "download" ? "a" : "button");
+            control.id = "utility-" + role;
+            control.className = ["menu", "close", "previous", "next", "back"].includes(role) ? "quiet" : "";
+            if (control.tagName === "A") { control.href = "#synthetic-download"; control.classList.add("button-link"); }
+            window.syntheticUX.utility(control, role, "Synthetic " + role);
+            if (role === "refresh") {
+                const hidden = document.createElement("span");
+                hidden.className = "visually-hidden"; hidden.textContent = "Hidden refresh label";
+                control.append(hidden);
+            }
+            row.append(control);
+            if (role === "refresh") window.syntheticUX.explainDisabled(control, "Wait for the synthetic refresh.", { compact: true });
+        }
+        const ordinary = document.createElement("button");
+        ordinary.id = "ordinaryTextAction";
+        ordinary.textContent = "Ordinary text action";
+        row.append(ordinary);
+        const labeled = document.createElement("button");
+        labeled.id = "labeledIconAction"; labeled.className = "icon-action";
+        labeled.append(window.syntheticUX.icon("refresh"), "Refresh with visible label");
+        row.append(labeled);
+        document.querySelector("main").prepend(row);
+    });
+    async function measure() {
+        return page.locator("#utilityProof .icon-only").evaluateAll(nodes => nodes.map(node => {
+            const style = getComputedStyle(node), svg = node.querySelector("svg"), glyph = svg.getBoundingClientRect();
+            let surface = node, background;
+            do {
+                background = getComputedStyle(surface).backgroundColor;
+                surface = surface.parentElement;
+            } while (surface && background === "rgba(0, 0, 0, 0)");
+            return { id: node.id, rect: node.getBoundingClientRect().toJSON(), glyph: { width: glyph.width, height: glyph.height },
+                asset: svg.dataset.lucideIcon, ink: getComputedStyle(svg).color, background,
+                fill: style.backgroundColor, border: style.borderColor, borderWidth: style.borderWidth, radius: style.borderRadius,
+                padding: style.padding, pseudo: getComputedStyle(node, "::before").content,
+                disabled: Boolean(node.disabled), busy: node.getAttribute("aria-busy"),
+                label: node.getAttribute("aria-label"), focus: node.matches(":focus-visible"),
+                outline: style.outlineStyle, outlineWidth: parseFloat(style.outlineWidth) };
+        }));
+    }
+    for (const theme of ["light", "dark"]) for (const scale of [100, 200]) {
+        await page.evaluate(({ theme, scale }) => {
+            document.documentElement.dataset.evidenceTheme = theme;
+            document.documentElement.style.fontSize = `${scale}%`;
+        }, { theme, scale });
+        await page.mouse.move(0, 0);
+        const baseline = await measure();
+        for (const metric of baseline) {
+            assert.equal(metric.rect.width, 44, metric.id);
+            assert.equal(metric.rect.height, 44, `${metric.id}: icon-only targets cannot grow with text line height`);
+            assert.deepEqual(metric.glyph, { width: 20, height: 20 });
+            assert.ok(metric.label);
+            assert.equal(metric.pseudo, "none", "Icon-only controls use their existing own surface, not an inset text-action pill");
+            assert.ok(contrast(metric.ink, metric.background) >= 3, `${metric.id}: visible normal glyph`);
+        }
+        for (const selector of ["#ordinaryTextAction", "#labeledIconAction"]) {
+            const text = await page.locator(selector).evaluate(node => ({
+                height: node.getBoundingClientRect().height, line: parseFloat(getComputedStyle(node).lineHeight),
+                pseudo: getComputedStyle(node, "::before").content, content: node.textContent,
+            }));
+            assert.equal(text.height, Math.max(44, text.line + 24), "Real text actions retain their own text-sized layout");
+            assert.notEqual(text.pseudo, "none"); assert.ok(text.content);
+        }
+        evidence.push({ theme, scale, state: "normal", controls: baseline });
+        if (proofDir && scale === 100) await page.locator("#utilityProof").screenshot({ path: path.join(proofDir, `utilities-${theme}-normal.png`) });
+        const reset = page.locator("#utility-reset");
+        for (const state of ["hover", "focus", "disabled", "pending"]) {
+            if (state === "hover") await reset.hover();
+            else if (state === "focus") { await reset.focus(); await page.keyboard.press("Shift"); }
+            else await page.locator("#utility-reset,#utility-refresh").evaluateAll((nodes, state) => {
+                for (const node of nodes) {
+                    node.disabled = true;
+                    window.syntheticUX.pending(node, state === "pending");
+                }
+            }, state);
+            const current = await measure(), metric = current.find(node => node.id === "utility-reset");
+            assert.deepEqual(current.map(node => node.rect), baseline.map(node => node.rect), `${theme}/${scale}/${state}: state changes cannot move neighboring targets`);
+            assert.deepEqual(metric.glyph, { width: 20, height: 20 });
+            if (state === "focus") assert.ok(metric.focus && metric.outline !== "none" && metric.outlineWidth >= 2);
+            if (["hover", "focus"].includes(state)) assert.ok(contrast(metric.ink, metric.background) >= 3);
+            if (state === "disabled") assert.equal(metric.disabled, true);
+            if (state === "pending") {
+                assert.equal(metric.busy, "true"); assert.equal(metric.disabled, true);
+                assert.notEqual(metric.asset, baseline.find(node => node.id === metric.id).asset);
+                const wrapped = current.find(node => node.id === "utility-refresh");
+                assert.equal(wrapped.busy, "true"); assert.equal(wrapped.disabled, true);
+                assert.equal(await page.locator("#utility-refresh").evaluate(node => node.parentElement.tabIndex), 0);
+            }
+            evidence.push({ theme, scale, state, controls: current });
+            if (proofDir && scale === 100) await page.locator("#utilityProof").screenshot({ path: path.join(proofDir, `utilities-${theme}-${state}.png`) });
+        }
+        await page.locator("#utility-reset,#utility-refresh").evaluateAll(nodes => {
+            for (const node of nodes) { window.syntheticUX.pending(node, false); node.disabled = false; node.blur(); }
+        });
+        const restored = await measure();
+        assert.deepEqual(restored.map(node => [node.rect.width, node.rect.height, node.asset]), baseline.map(node => [node.rect.width, node.rect.height, node.asset]));
+    }
+    if (proofDir) await writeFile(path.join(proofDir, "utility-role-states.json"), JSON.stringify(evidence, null, 2));
+}));
+
 test("icon hover, focus, disabled help and copy success/error retain contrast in Light and Dark", { timeout: 30000 }, async () => fixture(async ({ context, origin }) => {
     for (const theme of ["light", "dark"]) {
         const page = await context.newPage();
@@ -285,8 +395,8 @@ test("integrated navigation, charts, filters, formats and downloads use clean Lu
                 assert.deepEqual(await page.locator("#navigationDrawer .primary-navigation a").evaluateAll(nodes => nodes.map(node => ({
                     route: node.dataset.nav, label: node.querySelector(".navigation-label").textContent, icon: node.querySelector("[data-lucide-icon]")?.dataset.lucideIcon,
                 }))), [
-                    { route: "analyze", label: "Analyze", icon: "chart-no-axes-combined" },
-                    { route: "reports", label: "Reports", icon: "file-text" },
+                    { route: "analyze", label: "Analyze", icon: "chart-column" },
+                    { route: "reports", label: "Reports", icon: "clipboard-list" },
                     { route: "settings", label: "Settings", icon: "settings" },
                 ]);
                 await inspectIcons(page, width);

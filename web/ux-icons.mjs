@@ -26,17 +26,19 @@ export const uxIconSources = Object.freeze({
     home: "house", activity: "rotate-ccw-clock", reports: "file-text", settings: "settings", "collection-status": "file-search",
     "home-selected": "house", "activity-selected": "rotate-ccw-clock", "reports-selected": "file-text",
     "settings-selected": "settings", "collection-status-selected": "file-search",
-    export: "file-output", menu: "menu", "navigation-home": "house", "navigation-analyze": "chart-no-axes-combined",
-    "navigation-reports": "file-text", "navigation-settings": "settings",
+    export: "file-output", menu: "menu", "navigation-home": "house", "navigation-analyze": "chart-column",
+    "navigation-reports": "clipboard-list", "navigation-settings": "settings",
     "navigation-collapse": "panel-left-close", "navigation-expand": "panel-left-open",
+    "search-analysis": "chart-no-axes-combined",
     "settings-connection": "plug", "settings-privacy": "shield", "settings-ai": "clipboard-check",
     "settings-display": "monitor", "settings-troubleshooting": "wrench",
     close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download",
-    search: "search", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
+    search: "search", filter: "funnel", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
     read: "eye", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
+    "collapse-sections": "fold-vertical", "expand-sections": "unfold-vertical",
 });
 
 export const uxIcons = Object.freeze(Object.fromEntries(Object.entries(uxIconSources).map(([role, asset]) => [
-    role, lucideIcon(asset, role.startsWith("navigation-") || role.startsWith("settings-") ? 24
+    role, lucideIcon(asset, role.startsWith("navigation-") || role.startsWith("settings-") || role === "search-analysis" ? 24
         : role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small"].includes(role) ? 16 : 20),
 ])));

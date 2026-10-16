@@ -278,7 +278,7 @@ test("Outcome status glyphs and selection checks align independently without cha
         await checkPaint(rows.first(), false);
         await popup.getByRole("button", { name: "Apply", exact: true }).tap(); await ready(page);
         await expect(page.locator("#activityCount")).toHaveText("5");
-        await page.locator("#clearResultFilter").click(); await ready(page);
+        await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
         await expect(page.locator("#activityCount")).toHaveText("12");
         if (proofs) await writeFile(path.join(proofs, `outcome-${theme}-${width}.json`), JSON.stringify(metrics, null, 2));
     }

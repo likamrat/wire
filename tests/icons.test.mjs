@@ -33,7 +33,10 @@ test("every authored icon preserves local official Lucide geometry and qualified
     }
     assert.ok(Object.isFrozen(uxIcons));
     assert.ok(Object.isFrozen(dimensionalIcons));
-    assert.equal(assets.size, 54);
+    assert.equal(assets.size, 59);
+    assert.equal(uxIconSources["collapse-sections"], "fold-vertical");
+    assert.equal(uxIconSources["expand-sections"], "unfold-vertical");
+    assert.equal(uxIconSources.filter, "funnel");
     assert.equal(uxIconSources.export, "file-output");
     assert.equal(uxIconSources.reset, "rotate-ccw");
     assert.equal(uxIconSources.refresh, "refresh-cw");
@@ -47,12 +50,16 @@ test("every authored icon preserves local official Lucide geometry and qualified
     assert.match(dimensionalIcons.Discovery, /book-open/);
     assert.deepEqual(Object.fromEntries(Object.entries(uxIconSources).filter(([name]) => name.startsWith("navigation-"))), {
         "navigation-home": "house",
-        "navigation-analyze": "chart-no-axes-combined",
-        "navigation-reports": "file-text",
+        "navigation-analyze": "chart-column",
+        "navigation-reports": "clipboard-list",
         "navigation-settings": "settings",
         "navigation-collapse": "panel-left-close",
         "navigation-expand": "panel-left-open",
     });
+    assert.equal(uxIcons["navigation-analyze"], lucideIcon("chart-column", 24));
+    assert.equal(uxIcons["navigation-reports"], lucideIcon("clipboard-list", 24));
+    assert.equal(uxIcons["search-analysis"], lucideIcon("chart-no-axes-combined", 24));
+    assert.equal(uxIcons.reports, lucideIcon("file-text", 20));
 });
 
 test("missing Lucide assets and unsupported sizes fail instead of rendering a blank fallback", () => {

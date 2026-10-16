@@ -119,6 +119,51 @@ not expand into another mode, fill in queries or add a Submit button. Results sh
 their category/source and matching original title/snippet; verified Open/Back,
 keyboard access, category filters and paging retain their existing behavior.
 
+### Result presentation
+
+Each result is one native button, with a compact Lucide/type lead-in, a larger
+regular Asta Sans original title, a separate readable source line when present,
+and match-centered original text below it when the match is in content. A
+recorded outcome stays beside the type, not mixed into the source or mistaken
+for a category. Type is entry metadata, not inferred prompt authorship.
+Absent optional fields create no empty slots; identical title/source/excerpt
+text retains the existing deduplication and the visible supplied match.
+
+Flat rows use whitespace and a single separating rule rather than nested cards.
+Body evidence has an inset reading edge. The scoped blue/teal match color marks
+only the server-supplied original range, with an underline and semantic `mark`;
+it does not indicate a service, outcome, confidence or generated relevance.
+All other text uses existing neutral screen roles. Partial-corpus coverage has
+its own contextual tonal notice, separate from result content. Pending, error,
+reconnect, incomplete and complete no-match messages retain their existing
+state meanings.
+
+Titles, sources and excerpts wrap independently, including bidirectional text
+and unbroken tokens. No CSS line clamp hides a match. The existing excerpt
+window preserves the full marked text and indicates omitted context; it is not
+labelled as complete saved content. Search keeps its fixed capsule and popup
+placement, full-result membership, 20-item paging, single whole-row action,
+keyboard focus and native Open/Back history. Hover, pressed and keyboard-active
+paint stay within the row without shifting it. Forced colors retain system
+highlight and focus paint. These styles do not alter saved report output or
+global service, outcome, authorship or theme tokens.
+
+One WIRE-owned **Clear search** action belongs to the query capsule, not Filters.
+It clears the query and current result/receipt work, resets paging and returns
+field focus; it preserves Search scope and result type. Escape and outside
+dismissal still hide the popup without clearing the query. Paging still changes
+only the displayed slice. Filters therefore contains only the scope and type
+choices, not another query-clear entry or an invented filter-reset operation.
+
+The clear action is visible for any nonempty query, including whitespace, and
+uses the shared 44px icon target with an official 20px glyph. A reserved trailing
+region keeps it away from long editable text, with no capsule geometry change.
+Only this input's native pointer-cancel decoration is suppressed to avoid a
+duplicate action; `type=search`, editing, selection, composition and keyboard
+behavior remain native. Decorative type glyphs stay inside their text lines
+without separate hit areas. Search does not override the shared icon-only
+sizing rule for Clear or paging.
+
 ## Focused proof and retired research
 
 ```powershell
@@ -131,6 +176,23 @@ They trap inference/helper/model-asset/provider paths, cover Unicode ranges,
 all supported types, 63-ID pages, latest-query replacement, privacy/source and
 deletion fences, both periods and in-memory frozen scope. PDF parsing is non-AI.
 Browser proof belongs to the coordinated v3 UI integration, not these core tests.
+
+Focused presentation and connected browser proof:
+
+```powershell
+node --test --test-concurrency=1 web\live-search-presentation.test.mjs tests\search-result-design.browser.test.mjs tests\search-row-paint.browser.test.mjs tests\search-text-ui.browser.test.mjs tests\search-control.browser.test.mjs
+```
+
+The design case measures full normal-root result hierarchy, text/icon alignment,
+contrast, repeated titles with distinct targets, title/body/source marks,
+multilingual and long unbroken text, both themes, intermediate and 375px widths,
+200% text and forced colors. The paint case checks idle/hover/pressed/keyboard
+contrast and exact Open/Back. Existing text/control cases retain real saved
+report and interaction opening, touch, paging, query replacement, clear,
+partial/error states, receipt fences and held-feedback protection. Optional
+`WIRE_SEARCH_DESIGN_PROOFS`, `WIRE_SEARCH_ROW_PROOFS` and
+`WIRE_TEXT_SEARCH_PROOFS` directories receive local synthetic screenshots and
+measurements only; these are not live/private-data captures.
 
 The old meaning-oriented MUST/ALLOWED fixture and model/linguistic/Related/denial
 experiments are **historical**, not passing gates for text Search. Their semantics

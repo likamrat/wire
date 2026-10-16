@@ -309,7 +309,7 @@ test("category help remains a nonmutating help action for hover, keyboard, touch
         href: await card.locator(".request-link").getAttribute("href"),
     });
     const original = await controls();
-    assert.match(original.author, /Your prompt/);
+    assert.match(original.author, /My prompt/);
     const readonlyCount = requests.length;
     await help.hover();
     await page.getByRole("tooltip").waitFor();

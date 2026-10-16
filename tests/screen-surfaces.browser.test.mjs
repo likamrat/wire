@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { tokens, typographyTokens, screenTokens, screenFontStack } from "../web/tokens.mjs";
+import { dimensionalColumnStyles } from "../web/dimensional-charts-styles.mjs";
 import { uiFontStack, fontFaceStyles } from "../lib/typeface.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { startServer } from "../lib/server.mjs";
@@ -56,8 +57,9 @@ test("screen surfaces leave report-facing tokens, typography and embedded font e
         typographyTokens: "0647f3f7c10ec869b55c08c783ab7e2b5a9585f219218564f4002386d3c1edfc",
         uiFontStack: "dcb6924f7ae20eaf3ec5d91e22aef8b2d56c256217ce24d2ac446465dbf1094c",
         fontFaceStyles: "0ab1b95c57a5e174e0f445aa734e50d5d4654056d0c451bb69312ababcb99beb",
+        dimensionalColumnStyles: "35ca34cf435141877bac1e6d295abca78481cd47f6016ed7cf124a07ff71548d",
     };
-    for (const [name, value] of Object.entries({ tokens, typographyTokens, uiFontStack, fontFaceStyles })) {
+    for (const [name, value] of Object.entries({ tokens, typographyTokens, uiFontStack, fontFaceStyles, dimensionalColumnStyles })) {
         assert.equal(createHash("sha256").update(value).digest("hex"), expected[name], name);
     }
     assert.ok(renderHtmlShell("a".repeat(64), "screen-surfaces").includes(screenTokens));
@@ -147,7 +149,7 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
             assert.equal(measured.borderWidth, "1px");
             assert.equal(measured.shadow, "none", "Widgets use tonal grouping, not stacked shadows");
             assert.equal(measured.font, screenFontStack);
-            assert.equal(measured.success, theme === "light" ? "#086d7c" : "#48bfd2");
+            assert.equal(measured.success, theme === "light" ? "#286336" : "#83d494");
             assert.equal(measured.failure, theme === "light" ? "#b3261e" : "#f28b82");
             measured.ratios = ratios;
         }
@@ -269,12 +271,33 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
         await page.locator("#outcomeFilter-control").click();
         await inspect("outcome-menu", theme);
         fontPaint.push(await paintedFont(".select-popup .result-option-label"));
-        const statusColors = await page.locator(".select-popup .result-legend-icon").evaluateAll(nodes =>
-            nodes.map(node => ({ tone: node.className, color: getComputedStyle(node).color })));
-        assert.equal(new Set(statusColors.map(status => status.color)).size, 6, "Six outcome identities stay distinct");
-        const failure = statusColors.find(status => status.tone.includes("result-tone-failure"));
+        const statusColors = await page.locator(".select-popup .select-option").evaluateAll(nodes =>
+            nodes.map(node => {
+                const cue = node.querySelector(".result-legend-icon"), icon = cue.querySelector("svg"), label = node.querySelector(".result-option-label");
+                return { id: node.dataset.value, label: label.textContent, icon: icon.dataset.lucideIcon,
+                    visible: label.checkVisibility({ visibilityProperty: true }) && icon.checkVisibility({ visibilityProperty: true }),
+                    color: getComputedStyle(cue).color };
+            }));
+        assert.deepEqual(statusColors.map(({ id, label, icon }) => ({ id, label, icon })), [
+            { id: "success", label: "Worked", icon: "check" },
+            { id: "failure", label: "Tool failed", icon: "circle-x" },
+            { id: "unknown", label: "No result recorded", icon: "circle-question-mark" },
+            { id: "partial", label: "Partly worked", icon: "circle-dashed" },
+            { id: "other", label: "Other HTTP status", icon: "info" },
+            { id: "transport", label: "Connection failed", icon: "unplug" },
+        ], "All six outcome identities retain their exact labels and distinct official glyphs");
+        assert.ok(statusColors.every(status => status.visible), "Every outcome label and glyph is visible in the open menu");
+        screenPaint.push({ name: "outcome-identities", theme, statuses: statusColors });
+        const failure = statusColors.find(status => status.id === "failure");
+        const transport = statusColors.find(status => status.id === "transport");
+        assert.equal(transport.color, failure.color, "Tool and connection failures intentionally share the red failure role");
+        assert.equal(new Set(statusColors.filter(status => status.id !== "transport").map(status => status.color)).size, 5,
+            "Success, failure, unknown, partial and other status retain distinct paint roles");
         assert.ok(hue(failure.color) < 15);
+        const successHue = hue(statusColors.find(status => status.id === "success").color);
+        assert.ok(successHue > 100 && successHue < 150, "Recorded success stays green, not a service cyan");
         assert.equal(await page.locator('.select-option[data-value=failure] .result-option-label').evaluate(node => getComputedStyle(node).color), failure.color);
+        assert.equal(await page.locator('.select-option[data-value=transport] .result-option-label').evaluate(node => getComputedStyle(node).color), transport.color);
         if (proofs) await page.screenshot({ path: path.join(proofs, `${theme}-open-outcome-menu.png`) });
         await expect(page.locator(".select-popup")).toBeVisible();
         await page.keyboard.press("Escape");
