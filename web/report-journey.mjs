@@ -95,9 +95,10 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, doc = do
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.
 export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, showSourceIssues, downloadFile, openSavedReport, icon, utility, onStateChange, presentStep, requestStep } = {}) {
     const labels = ["Activity", "Contents", "Review & save"];
-    const questions = ["Choose activity", "Choose contents", "Review and save your report"];
+    const questions = ["Activity to include", "Choose contents", "Review and save your report"];
+    const number = new Intl.NumberFormat();
     let step = 1, reached = 1, phase = "draft", preview, bundle, failure = "";
-    let saveUnconfirmed = false;
+    let saveUnconfirmed = false, contentsPresented = false;
     let model = { requestCount: 0, scope: "selected", scopeReady: false, scopeIssue: "", promptMode: "masked", formats: ["html"], timeLabel: "", entry: null };
     let nodes;
     const positions = new Map();
@@ -146,18 +147,25 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
             else control.removeAttribute("aria-current");
         });
         text(nodes.progress, phase === "saved" ? "Report saved" : phase === "unavailable" ? "Saved report unavailable" : `Step ${step} of 3`);
-        text(nodes.scopeName, ({ selected: "Selected interactions", current: "Current Analyze view", all: "All saved sessions", period: "Paired periods" })[model.scope]
+        text(nodes.scopeName, ({ selected: "Selected interactions", current: "Current Analyze view", all: "All collected activity", period: "Paired periods" })[model.scope]
             + (model.authorFiltered ? ` · ${model.authorLabel}` : ""));
+        const chats = Number.isSafeInteger(model.sourceSessionCount) && model.sourceSessionCount >= 0
+            ? `${number.format(model.sourceSessionCount)} ${model.sourceSessionCount === 1 ? "chat" : "chats"}` : "Chat count unavailable";
+        text(nodes.activityCount, model.scope === "period"
+            ? `${number.format(model.requestCount)} supporting ${model.requestCount === 1 ? "interaction" : "interactions"}`
+            : `${chats} · ${number.format(model.requestCount)} ${model.requestCount === 1 ? "interaction" : "interactions"} included`);
+        nodes.activityCount.hidden = !model.scopeReady;
         const activityVisible = step === 1 || Boolean(presentStep && step === 2);
         nodes.start.hidden = !activityVisible;
         text(nodes.context, model.entry
             ? `${model.entry.sessionName || "Copilot chat name not recorded"} · Saved activity across all retained dates and services. New interactions are not added automatically.`
             : "");
         nodes.context.hidden = !nodes.context.textContent || !activityVisible;
-        text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable interactions in this chat. Check source issues or choose another scope." : "Select interactions below, or choose another scope."));
+        text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable interactions in this chat. Check source issues or choose another scope." : "Choose an interaction or another scope to continue."));
         nodes.gap.hidden = ready();
         nodes.issues.hidden = ready() || !model.entry || !showSourceIssues;
         nodes.next.disabled = !ready() || isWriting() || saveUnconfirmed;
+        nodes.next.hidden = contentsPresented;
         nodes.backButtons.forEach(control => {
             control.disabled = isWriting() || saveUnconfirmed;
         });
@@ -167,6 +175,8 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         nodes.reviewHost.hidden = ["saved", "unavailable"].includes(phase);
         nodes.saveHost.hidden = !["saved", "unavailable"].includes(phase) && !saveUnconfirmed;
         text(nodes.scan, preview ? "Return to review" : "Prepare report");
+        text(nodes.prepareIssue, model.prepareIssue || "");
+        nodes.prepareIssue.hidden = Boolean(preview) || !model.prepareIssue;
         nodes.error.hidden = !failure;
         nodes.retry.hidden = !failure || saveUnconfirmed || !readCurrent || isWriting();
         text(nodes.error, failure);
@@ -340,11 +350,12 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         retry.dataset.storedRefreshRetry = "";
         shell.append(retry);
         const gap = el("p", "report-scope-gap"), next = button("Continue to contents", () => go(2), "primary");
+        next.id = "reportContinue";
         gap.id = "reportScopeGap";
         const issues = button("View source issues", () => showSourceIssues?.(), "quiet");
         const scope = root.querySelector(".export-scope"), choices = scope.querySelector(".scope-choices");
         const selectedChoice = choices.querySelector('[value="selected"]').closest("label");
-        choices.prepend(selectedChoice);
+        choices.append(selectedChoice, choices.querySelector('[value="current"]').closest("label"), choices.querySelector('[value="all"]').closest("label"));
         const scopeDetails = byId("scopeDetails");
         scopeDetails.append(byId("scopeSummary"), byId("reportMatchingContext"), byId("reportTimeContext"));
         // Keep detailed units/exclusions available without making them the first task.
@@ -353,16 +364,32 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         }
         const scopeLayout = el("div", "report-scope-layout");
         const authorChoice = root.querySelector(".report-author-choice");
-        scopeLayout.append(scope, authorChoice);
+        const authorControl = el("div", "report-author-control");
+        if (icon) authorControl.append(icon("filter"));
+        authorControl.append(byId("reportPromptAuthorFilter"));
+        authorChoice.querySelector("label").after(authorControl);
+        const requests = byId("reportRequests"), pickerTools = el("div", "report-picker-tools");
+        pickerTools.append(requests.querySelector(".scoped-search"), authorChoice);
+        requests.prepend(pickerTools);
+        scopeLayout.append(scope);
         panels[0].append(scopeLayout);
-        const firstFooter = el("div", "report-stage-actions");
-        firstFooter.append(gap, issues, existingStart, next);
+        const firstFooter = el("div", "report-stage-actions report-activity-actions"), firstActions = el("div", "report-next-actions");
+        firstFooter.id = "reportActivityActions";
+        const activitySummary = el("div", "report-activity-summary"), activityCount = el("p");
+        activityCount.id = "reportActivitySummary"; activityCount.setAttribute("role", "status");
+        const outsidePage = el("p", "context-help-note");
+        outsidePage.id = "reportPageSelectionSummary"; outsidePage.setAttribute("role", "status");
+        activitySummary.append(activityCount, outsidePage, byId("reportPopulationNote"));
+        firstActions.append(existingStart, next);
+        firstFooter.append(gap, issues, activitySummary, firstActions);
         root.querySelector(".report-text-options").append(byId("additionalMasking"));
-        panels[0].append(firstFooter, byId("reportRequests"), scopeDetails);
+        panels[0].append(requests, firstFooter, scopeDetails);
         const contentFooter = el("div", "report-stage-actions"), activityBack = button("Back to activity", () => go(1));
         contentFooter.id = "reportContentsActions";
+        const prepareIssue = el("p", "report-scope-gap");
+        prepareIssue.id = "reportPrepareIssue"; prepareIssue.setAttribute("role", "status");
         backButtons.push(activityBack);
-        contentFooter.append(activityBack, scanWrapper);
+        contentFooter.append(prepareIssue, activityBack, scanWrapper);
         panels[1].append(summary, root.querySelector(".report-options"), contentFooter);
         // Revisiting unchanged choices returns to the same frozen review; it never records approval.
         scan.addEventListener("click", event => {
@@ -384,11 +411,16 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         panels[2].append(reviewFooter);
         root.insertBefore(shell, byId("savedReportsPanel"));
         shell.append(...panels);
-        nodes = { panels, steps, stepHints, headings, backButtons, progress, scopeName, context, gap, next, issues, scan, error, retry, reviewHost, saveHost, reviewActions, saveActions, contentFooter, el, button, start: existingStart };
+        nodes = { panels, steps, stepHints, headings, backButtons, progress, scopeName, context, gap, next, issues, scan, error, retry, reviewHost, saveHost, reviewActions, saveActions, contentFooter, prepareIssue, activityCount, el, button, start: existingStart };
         paint();
     }
     return {
         snapshot, reason, go, invalidate, clear,
+        setContentsPresented(presented) {
+            if (contentsPresented === presented) return;
+            contentsPresented = presented;
+            if (nodes) nodes.next.hidden = presented;
+        },
         get reviewHost() { return nodes?.reviewHost; },
         get saveHost() { return nodes?.saveHost; },
         isReviewOpen: () => !saveUnconfirmed && (Boolean(preview) || phase === "scanning") && (!root || !root.hidden),
@@ -417,8 +449,6 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
             failure = "";
             if (nodes) {
                 const body = nodes.reviewHost, { el } = nodes;
-                body.querySelector(".privacy-steps")?.remove();
-                body.querySelector(".report-snapshot-details")?.remove();
                 if (confirm) nodes.saveActions.append(confirm.closest(".ux-disabled-help") || confirm);
                 nodes.feedback = feedback;
                 const review = body.querySelector("button[data-review-control]");

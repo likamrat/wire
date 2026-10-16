@@ -13,7 +13,7 @@ import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 import { privateFixture, chooseTheme, restoreLegacySearch } from "./helpers.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { assessmentSource } from "../lib/assessment-read-model.mjs";
-import { reportContents } from "./report-journey-helpers.mjs";
+import { reportContents, reportActivityActionGeometry } from "./report-journey-helpers.mjs";
 
 for (const lostSaveResponse of [false, true]) test(`normal paired report, all formats and frozen reopen${lostSaveResponse ? " after lost save response" : ""}`, { timeout: 120000 }, async t => {
     const fixture = periodFixture();
@@ -75,8 +75,55 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     await expect(page.locator("#reportStage1")).toBeVisible();
     await expect(page.locator("#periodReportScope")).toContainText("Authors and matching records are fixed");
     await expect(page.locator("#reportPromptAuthorFilter")).toBeDisabled();
+    await expect(page.locator("#reportPromptAuthorFilter-control")).toBeHidden();
+    await expect(page.locator("#reportsView .scope-choices")).toBeHidden();
+    await expect(page.locator('[data-period-report-side="baseline"]')).toContainText("Mar 7, 2026");
+    await expect(page.locator('[data-period-report-side="baseline"]')).toContainText("3 matching Work IQ tool calls");
+    await expect(page.locator('[data-period-report-side="later"]')).toContainText("Mar 8, 2026 to Mar 9, 2026");
+    await expect(page.locator('[data-period-report-side="later"]')).toContainText("4 matching Work IQ tool calls");
     assert.ok((await page.getByRole("button", { name: "Change comparison in Analyze", exact: true }).boundingBox()).height >= 44);
-    await expect(page.locator("#reportPopulationNote")).toContainText("Period A: 3 matching records; Period B: 4");
+    await expect(page.locator("#reportPopulationNote")).toHaveText("Copy text does not combine the measured activity in the two periods.");
+    const footerMeasurements = [];
+    for (const theme of ["light", "dark"]) for (const [width, text] of [[1365, 100], [375, 200]]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(text => { document.documentElement.style.fontSize = text + "%"; }, text);
+        await page.evaluate(() => document.fonts.ready);
+        const footer = await reportActivityActionGeometry(page);
+        footerMeasurements.push({ theme, width, text, ...footer });
+        if (process.env.WIRE_REPORT_FOOTER_PROOFS) {
+            await mkdir(process.env.WIRE_REPORT_FOOTER_PROOFS, { recursive: true });
+            await writeFile(path.join(process.env.WIRE_REPORT_FOOTER_PROOFS, "period-footer.json"), JSON.stringify(footerMeasurements, null, 2));
+            await page.locator("#reportActivityActions").screenshot({ path: path.join(process.env.WIRE_REPORT_FOOTER_PROOFS, `period-${theme}-${width}-${text}.png`) });
+        }
+        for (const control of footer.controls) {
+            assert.ok(control.box.height >= 44);
+            assert.ok(control.box.x >= footer.box.x - 1 && control.box.right <= footer.box.right + 1);
+            assert.equal(control.fontSize, 14 * text / 100);
+            for (const word of control.words) {
+                assert.equal(word.rects.length, 1, `${theme}/${width}/${text}: ${control.label} splits ${word.word}: ${JSON.stringify(control)}`);
+                assert.ok(word.rects[0].x >= control.box.x - 1 && word.rects[0].right <= control.box.right + 1);
+            }
+        }
+        for (const [index, control] of footer.controls.entries()) for (const other of footer.controls.slice(index + 1)) {
+            assert.ok(Math.min(control.box.right, other.box.right) - Math.max(control.box.x, other.box.x) <= 1
+                || Math.min(control.box.bottom, other.box.bottom) - Math.max(control.box.y, other.box.y) <= 1,
+            `${theme}/${width}/${text}: footer actions cannot overlap`);
+        }
+        const measured = await page.locator("#periodReportScope").evaluate(node => ({
+            overflow: document.documentElement.scrollWidth > innerWidth + 1,
+            right: node.getBoundingClientRect().right, width: innerWidth,
+            target: node.querySelector("button").getBoundingClientRect().height,
+        }));
+        assert.equal(measured.overflow, false);
+        assert.ok(measured.right <= measured.width + 1 && measured.target >= 44);
+        if (process.env.WIRE_PERIOD_REPORT_PROOFS) {
+            await mkdir(process.env.WIRE_PERIOD_REPORT_PROOFS, { recursive: true });
+            await page.screenshot({ path: path.join(process.env.WIRE_PERIOD_REPORT_PROOFS, `activity-${theme}-${width}-${text}.png`), fullPage: true });
+        }
+    }
+    await page.setViewportSize({ width: 1365, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await reportContents(page);
     await expect(page.locator("#contextSidebarBody #reportStage2")).toBeVisible();
     await expect(page.locator("#reportList input")).toHaveCount(0);
@@ -85,7 +132,8 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     await expect(page.locator("#requestReportTitle")).toContainText("fixed paired periods");
     await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
     await expect(page.locator("#contextSidebarBody #reportStage2")).toBeVisible();
-    await expect(page.locator("#reportPopulationNote")).toContainText("Period A: 3 matching records; Period B: 4");
+    await expect(page.locator('[data-period-report-side="baseline"]')).toContainText("3 matching Work IQ tool calls");
+    await expect(page.locator('[data-period-report-side="later"]')).toContainText("4 matching Work IQ tool calls");
     await page.locator("#formatOptions input[value=json]").check();
     await page.locator("#formatOptions input[value=markdown]").check();
     await page.locator("#formatOptions input[value=pdf]").check();
@@ -97,12 +145,13 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     assert.equal(preview.error, undefined, preview.error);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
     assert.deepEqual(preview.snapshot.periodComparison.comparison, live.comparison);
-    assert.ok(live.comparison.metrics.some(item => (item.baseline ?? item.later).basis === "model-assessment"), "real fixture lanes remain qualified");
+    assert.equal(live.definitions.metricProjectionVersion, 4);
+    assert.ok(live.comparison.metrics.every(item => (item.baseline ?? item.later).metric === "speed"), "Current reports retain timing, not historical feedback lanes");
     assert.equal(preview.snapshot.evaluationFacts, undefined);
     const frame = page.frameLocator(".report-frame");
     await expect(frame.getByRole("heading", { name: "What differs", exact: true })).toBeVisible();
-    await expect(frame.locator("#baseline")).toContainText("Work IQ sign-in was required");
-    await expect(frame.locator("#baseline")).toContainText("synthetic-quality-fixture");
+    await expect(frame.locator("#baseline")).not.toContainText("Work IQ sign-in was required");
+    await expect(frame.locator("#baseline")).not.toContainText("synthetic-quality-fixture");
     assert.ok(preview.records.every(record => !record.toolCalls.length));
     const outputPage = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
     await outputPage.route("**/*", route => { denied.push(route.request().url()); return route.abort(); });

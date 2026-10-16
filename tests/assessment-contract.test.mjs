@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-    BASIS_KEYS, RULES, ContractError, defaultConsent, validateInteraction, validateObservation,
+    BASIS_KEYS, CURRENT_DIMENSIONS, RULES, ContractError, defaultConsent, validateInteraction, validateObservation,
     validateObservationForInteraction, validateConsent, captureDecision, validateAssessment,
     evaluateCheck, appendPersonalRevision, activeAssessment, validateMetric, poolMetrics,
     assertCurrent, affectedDerivedRefs, validateReportFacts, freezeReportFacts, validateRequest,
@@ -13,6 +13,10 @@ import {
 } from "./assessment-contract-fixtures.mjs";
 
 const rejects = (fn, code) => assert.throws(fn, error => error instanceof ContractError && (!code || error.code === code));
+
+test("current assessment-derived dimensions expose only recorded timing", () => {
+    assert.deepEqual(CURRENT_DIMENSIONS, ["speed"]);
+});
 
 test("synthetic: mixed retained interaction preserves five separate evidence units and unverified message origin", () => {
     const interaction = makeInteraction(), before = structuredClone(interaction);
@@ -443,12 +447,13 @@ test("synthetic: safe technical display requires a trusted normalizer adapter be
 
 test("synthetic: versioned mutations require exact revisions; caller cannot submit raw facts or set an owner", () => {
     const request = {
-        schemaVersion: 1, mutationRef: id("mutation"), interactionRef: id("interaction"), expectedBasis: basis(),
-        checkId: "semantic-answer-correctness", verdict: "fail", withdraw: false,
+        schemaVersion: 1, mutationRef: id("mutation"), expectedSourceRevision: 7, expectedConsentRevision: 0,
+        policyVersion: 1, enabled: true, categories: ["answer"], sourceConfigRef: id("config"), sourceConfigRevision: 1, confirmed: true,
     };
-    validateRequest("set_personal_assessment", request);
+    validateRequest("set_assessment_consent", request);
     request.owner = "spoofed";
-    rejects(() => validateRequest("set_personal_assessment", request), "unexpected-or-missing-field");
+    rejects(() => validateRequest("set_assessment_consent", request), "unexpected-or-missing-field");
+    rejects(() => validateRequest("set_personal_assessment", {}), "unknown-action");
     rejects(() => validateRequest("write_observation", {}), "unknown-action");
 });
 

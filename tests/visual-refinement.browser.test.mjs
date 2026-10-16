@@ -326,9 +326,9 @@ test("Copilot project context and equal report controls stay readable at narrow 
         await page.goto(origin + "/#activity");
         await ready(page);
         await chooseTheme(page, theme);
-        assert.match(await page.locator("#projectContextHelp").textContent(), /Copilot project context, not necessarily a GitHub repository/);
-        assert.match(await page.locator("#projectFilter-control").ariaSnapshot(), /combobox "GitHub Copilot project"/);
-        assert.equal(await page.locator("#projectFilter-control").getAttribute("aria-describedby"), "projectContextHelp");
+        assert.equal(await page.locator("#projectContextHelp").count(), 0);
+        assert.match(await page.locator("#projectFilter-control").ariaSnapshot(), /combobox "Copilot project"/);
+        assert.equal(await page.locator("#projectFilter-control").getAttribute("aria-describedby"), null);
         assert.deepEqual((await page.locator(".session-meta .project-context strong").allTextContents()).sort(), ["IQ-OS", "skills"]);
         assert.equal(await page.locator("#activityList .project-context.unscoped").innerText(), "Copilot chat without a project");
         assert.equal(await page.locator(".session-meta").count(), 3);
@@ -349,7 +349,7 @@ test("Copilot project context and equal report controls stay readable at narrow 
         await page.locator("#activityList input").check();
         await navigateMain(page, "reports");
         await reportContents(page);
-        assert.equal(await page.locator("#projectContextHelp").isVisible(), false, "Reports omit unrelated context prose");
+        assert.equal(await page.locator("#projectContextHelp").count(), 0, "No redundant project helper is retained in any view");
         const modes = await dimensions(page, ".prompt-choice");
         const formats = await dimensions(page, ".format-choices label");
         assert.equal(modes.length, 3);

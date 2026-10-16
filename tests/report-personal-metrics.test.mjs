@@ -6,16 +6,14 @@ import { createReportComparison } from "../web/report-comparison.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { fixture } from "./helpers.mjs";
 
-test("readable reports explain unsupported checks and timing instead of exposing reason codes", () => {
+test("current readable reports retain timing without unsupported review placeholders", () => {
     const records = [fixture("readable-reasons")];
     const { facts } = buildReportFacts(records, { revision: 1, pseudonymKey: "a".repeat(64), evidence: records, exports: [] });
     const snapshot = { evaluationFacts: facts }, model = nativeReportEvidence(snapshot);
     for (const text of [nativeQualityHtml(snapshot, model) + nativeTimingHtml(model),
         [...nativeQualityMarkdown(snapshot, model), ...nativeTimingMarkdown(model)].join("\n")]) {
-        assert.match(text, /Tool outcomes cannot establish these judgments/);
         assert.match(text, /Not measured/);
-        assert.match(text, /0 of 1 assessed/);
-        assert.doesNotMatch(text, /Unavailable: unverified-association|unsupported-check|no-assessed-units/);
+        assert.doesNotMatch(text, /judgments|assessed|Unavailable: unverified-association|unsupported-check|no-assessed-units/);
     }
 });
 

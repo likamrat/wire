@@ -206,7 +206,7 @@ test("component family hover matrix uses mounted routes and their effective pain
             await inspect("#outcomeFilter-control", `${tone} result filter`);
         }
         await inspect("#filterChips [aria-label^='Remove outcome filter:']", "result clear tooltip trigger");
-        await page.mouse.move(0, 0); await page.getByRole("button", { name: /^Remove outcome filter:/ }).hover();
+        await page.mouse.move(0, 0); await page.locator("#resetView").hover();
         await page.getByRole("tooltip").waitFor();
         matrix.push({ theme, family: "tooltip portal", state: "hover", painted: await measure(page.getByRole("tooltip")) });
         await page.keyboard.press("Escape");

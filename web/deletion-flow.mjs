@@ -83,7 +83,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             $("deleteChangeScope").hidden = true;
             $("deleteCancel").textContent = "Close";
             $("deleteTitle").textContent = "Collected activity deleted";
-            setStatus(`Deleted ${result.counts.records} records${result.linkedInsights?.interactions ? " and linked insights" : ""}. Saved reports and comparisons, source files and collection preferences are unchanged. New activity can still be collected.`);
+            setStatus(`Deleted ${result.counts.records} records${result.linkedInsights?.interactions ? " and dependent local data" : ""}. Saved reports and comparisons, source files and collection preferences are unchanged. New activity can still be collected.`);
             update();
             $("deleteCancel").focus();
             if (!await onCommitted()) setStatus(`Deleted ${result.counts.records} records. The view could not refresh; use Retry. Do not repeat deletion. Saved reports are unchanged.`, true);
@@ -138,12 +138,12 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             if ($("deleteLinkedInsights")) {
                 $("deleteLinkedInsights").hidden = !linked?.interactions;
                 $("deleteLinkedInsights").textContent = linked?.interactions
-                    ? `Linked insights for ${linked.interactions} interaction${linked.interactions === 1 ? "" : "s"} will be cleared or recomputed.` : "";
+                    ? `Dependent local data for ${linked.interactions} interaction${linked.interactions === 1 ? "" : "s"} will be cleared or recomputed.` : "";
             }
             if ($("deleteLinkedDetails")) {
                 $("deleteLinkedDetails").hidden = !linked?.interactions;
                 $("deleteLinkedDetails").textContent = linked?.interactions
-                    ? `Linked cleanup: ${linked.capturedItems} captured items and ${linked.feedbackRevisions} personal feedback revisions. These are not additional source records.` : "";
+                    ? `Linked cleanup: ${linked.capturedItems} captured items and ${linked.feedbackRevisions} historical annotation revisions. These are not additional source records.` : "";
             }
             $("deleteConfirm").textContent = c.records ? `Delete ${c.records} record${c.records === 1 ? "" : "s"}` : "Delete supporting copies";
             $("deleteConfirmation").hidden = !c.records && !c.localCopies;

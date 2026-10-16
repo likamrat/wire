@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAssessmentControls } from "../web/assessment-controls.mjs";
+import { mountPersonalFeedback } from "../web/assessment-control-views.mjs";
 import { contract, samples } from "./assessment-ui-fixtures.mjs";
 
 const controls = createAssessmentControls(contract);
@@ -10,14 +11,11 @@ const source = () => ({
     sourceConfigRef: samples.id("config"), sourceConfigRevision: 1,
 });
 const consent = () => controls.consent(contract.defaultConsent(), source());
-const feedback = () => controls.feedback({
-    interactionRef: samples.id("interaction"), basis: samples.basis(), checkId: "semantic-answer-correctness",
-});
 const answerConsent = () => ({ ...samples.enabledConsent(), categories: ["answer"] });
-test("departure guards only unsent edits, never pending, uncertain or invalidated feedback", () => {
-    const edit = feedback();
+test("response-saving controls distinguish unsent choices from pending, uncertain and invalidated operations", () => {
+    const edit = consent();
     assert.equal(edit.hasUnsentDraft(), false);
-    edit.edit({ verdict: "fail", withdraw: false });
+    edit.edit({ enabled: true, categories: ["answer"] });
     assert.equal(edit.hasUnsentDraft(), true);
     const packet = edit.begin(mutation(91));
     assert.equal(edit.hasUnsentDraft(), false);
@@ -103,8 +101,8 @@ test("uncertain transport locks mutations; recovery reads only the original opaq
     assert.equal(edit.snapshot().applied.state, "enabled");
 });
 test("failed status read stays unknown without authorizing replay", () => {
-    const edit = feedback();
-    edit.edit({ verdict: "pass", withdraw: false });
+    const edit = consent();
+    edit.edit({ enabled: true, categories: ["answer"] });
     const packet = edit.begin(mutation(1));
     edit.uncertain(packet.token, "Update result unavailable.");
     const check = edit.check();
@@ -133,49 +131,24 @@ test("revoke keeps enabled as last applied until exact revised result is confirm
     edit.accept(packet.token, revoked);
     assert.equal(edit.snapshot().applied.state, "revoked");
 });
-test("feedback is optional and has no default verdict or required review step", () => {
-    const edit = feedback();
-    assert.equal(edit.snapshot().applied, null);
-    assert.equal(edit.snapshot().draft, null);
-    assert.throws(() => edit.begin(mutation(1)), /explicit draft/);
+test("retired personal control and view factories reject before constructing any editor or packet", () => {
+    const original = samples.makeAssessment(true), before = structuredClone(original);
+    for (const input of [undefined, {}, { interactionRef: original.interactionRef, basis: original.basis, checkId: original.checkId, latestPersonal: original }]) {
+        assert.throws(() => controls.feedback(input), error => error.code === "PERSONAL_FEEDBACK_RETIRED");
+    }
+    let accessed = false;
+    assert.throws(() => mountPersonalFeedback({ get ownerDocument() { accessed = true; return null; } }, {}),
+        error => error.code === "PERSONAL_FEEDBACK_RETIRED");
+    assert.equal(accessed, false);
+    assert.deepEqual(original, before);
 });
-test("personal feedback preserves exact context and append-only revision chain", () => {
-    const edit = feedback();
-    edit.edit({ verdict: "pass", withdraw: false });
-    const packet = edit.begin(mutation(1));
-    contract.validateRequest(packet.action, packet.input);
-    const first = samples.makeAssessment(true);
-    edit.accept(packet.token, first);
-    edit.edit({ verdict: "fail", withdraw: false });
-    const secondPacket = edit.begin(mutation(2));
-    const second = { ...first, assessmentRef: samples.id("assessment", 3), revision: 2, supersedes: first.assessmentRef, verdict: "fail" };
-    edit.accept(secondPacket.token, second);
-    assert.equal(first.verdict, "pass");
-    assert.equal(edit.snapshot().applied.verdict, "fail");
-    assert.equal(edit.snapshot().applied.revision, 2);
-});
-test("feedback withdrawal never edits the original evidence or automatic verdict", () => {
-    const first = samples.makeAssessment(true);
-    const edit = controls.feedback({ interactionRef: first.interactionRef, basis: first.basis, checkId: first.checkId, latestPersonal: first });
-    edit.edit({ verdict: "unassessed", withdraw: true });
-    const packet = edit.begin(mutation(1));
-    const withdrawn = { ...first, assessmentRef: samples.id("assessment", 3), revision: 2, supersedes: first.assessmentRef, verdict: "unassessed", withdrawn: true, reason: "user-withdrawn" };
-    edit.accept(packet.token, withdrawn);
-    assert.equal(edit.snapshot().applied.withdrawn, true);
-    assert.equal(first.withdrawn, false);
-});
-test("automatic execution checks are not optional personal-feedback targets", () => {
-    const edit = controls.feedback({ interactionRef: samples.id("interaction"), basis: samples.basis(), checkId: "recorded-tool-success" });
-    edit.edit({ verdict: "pass", withdraw: false });
-    assert.throws(() => edit.begin(mutation(1)), /invalid-enum/);
-});
-test("old async result cannot repopulate feedback after deletion/source/consent invalidation", () => {
+test("old async result cannot repopulate consent after deletion/source/consent invalidation", () => {
     for (const reason of ["Collected activity was deleted.", "Evidence permission changed.", "The source changed."]) {
-        const edit = feedback();
-        edit.edit({ verdict: "pass", withdraw: false });
+        const edit = consent();
+        edit.edit({ enabled: true, categories: ["answer"] });
         const packet = edit.begin(mutation(1));
         edit.invalidate(reason);
-        assert.equal(edit.accept(packet.token, samples.makeAssessment(true)), false);
+        assert.equal(edit.accept(packet.token, answerConsent()), false);
         assert.equal(edit.snapshot().applied, null);
         assert.equal(edit.snapshot().draft, null);
         assert.equal(edit.snapshot().phase, "stale");
@@ -191,29 +164,13 @@ test("snapshot and returned packet mutations do not alter internal pending scope
     edit.accept(packet.token, answerConsent());
     assert.deepEqual(edit.snapshot().applied.categories, ["answer"]);
 });
-test("unrelated, automatic or stale personal feedback cannot initialize the editor", () => {
-    const setup = { interactionRef: samples.id("interaction"), basis: samples.basis(), checkId: "semantic-answer-correctness" };
-    for (const latestPersonal of [
-        samples.makeAssessment(false),
-        { ...samples.makeAssessment(true), interactionRef: samples.id("interaction", 2), unitRef: samples.id("interaction", 2) },
-        { ...samples.makeAssessment(true), basis: { ...samples.basis(), consentRevision: 1 } },
-    ]) assert.throws(() => controls.feedback({ ...setup, latestPersonal }), /current interaction context/);
-});
 test("cancelling a known rejected draft clears its obsolete operation identity", () => {
-    const edit = feedback();
-    edit.edit({ verdict: "pass", withdraw: false });
+    const edit = consent();
+    edit.edit({ enabled: true, categories: ["answer"] });
     const packet = edit.begin(mutation(1));
     edit.rejected(packet.token, "Validation rejected the request before dispatch.");
     edit.cancel();
     edit.invalidate("This interaction changed.");
     assert.equal(edit.snapshot().mutationRef, null);
     assert.doesNotMatch(edit.snapshot().message, /may still have completed/);
-});
-test("feedback after an unexposed withdrawn revision accepts the backend's next revision", () => {
-    const edit = feedback();
-    edit.edit({ verdict: "pass", withdraw: false });
-    const packet = edit.begin(mutation(3));
-    const next = { ...samples.makeAssessment(true), revision: 3, supersedes: samples.id("assessment", 3), assessmentRef: samples.id("assessment", 4) };
-    assert.equal(edit.accept(packet.token, next), true);
-    assert.equal(edit.snapshot().applied.revision, 3);
 });

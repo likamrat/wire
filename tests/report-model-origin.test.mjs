@@ -10,14 +10,16 @@ import { renderComparisonHtml, renderComparisonMarkdown } from "../lib/report-pr
 import { nativeQualityHtml, nativeQualityMarkdown } from "../lib/native-report-output.mjs";
 import { createReportComparison } from "../web/report-comparison.mjs";
 import { fixture } from "./helpers.mjs";
+import { makeRatio } from "./report-comparison-fixtures.mjs";
 
 function modelFacts(model, rubricVersion) {
     const record = fixture("model-origin"), state = { revision: 1, pseudonymKey: "a".repeat(64), evidence: [record] };
     const facts = structuredClone(buildReportFacts(state.evidence, state).facts);
+    facts.metricProjectionVersion = 2;
     const interactionRef = facts.memberships[0].interactionRef;
     const checks = { accuracy: "request-requirements-corroborated", "answer-trust": "recorded-answer-support", "action-trust": "action-intent-alignment" };
     for (const [index, [dimension, checkId]] of Object.entries(checks).entries()) {
-        const base = facts.metrics.find(metric => metric.dimension === dimension);
+        const base = { ...makeRatio(), basis: facts.basis, dimension, eligibleUnitRefs: [interactionRef] };
         facts.metrics.push({ ...base, metricRef: "metric-" + (900 + index).toString(16).padStart(32, "0"),
             checkId, origin: "model-assessed", evaluator: { provider: "github-copilot", model,
                 rubricId: "wire-recorded-interaction-review", rubricVersion },
@@ -25,12 +27,12 @@ function modelFacts(model, rubricVersion) {
             coverage: { covered: 1, eligible: 1 }, counts: { pass: 1, fail: 0, unassessed: 0, evaluatorError: 0 },
             unassessedReasons: [],
             coveredUnitRefs: [interactionRef],
-            evidenceRefs: [...facts.metrics.find(metric => metric.checkId === "recorded-tool-success").evidenceRefs] });
+            evidenceRefs: ["evidence-" + "a".repeat(32)] });
     }
     return { record, facts };
 }
 
-test("new readable report summaries show each frozen model and rubric version rather than current defaults", () => {
+test("historical readable report summaries show each frozen model and rubric version rather than current defaults", () => {
     for (const [model, version] of [["fixture-model-a", 1], ["archived-model-b", 7]]) {
         const { facts } = modelFacts(model, version), before = JSON.stringify(facts);
         for (const text of [nativeQualityHtml({ evaluationFacts: facts }), nativeQualityMarkdown({ evaluationFacts: facts }).join("\n")]) {
@@ -44,7 +46,7 @@ test("new readable report summaries show each frozen model and rubric version ra
     }
 });
 
-test("new readable formats share plain reading notes without changing frozen facts", () => {
+test("historical readable formats share their recorded reading notes without changing frozen facts", () => {
     const { facts } = modelFacts("fixture-model", 1), before = JSON.stringify(facts);
     const formatter = createReportComparison();
     const a = comparisonFact({ evaluatorModel: "fixture-model", rubricId: "fixture-rules", rubricVersion: 1 });
@@ -79,7 +81,7 @@ async function pdfText(bytes) {
     } finally { await task.destroy(); }
 }
 for (const [model, version] of [["fixture-model-a", 1], ["archived-model-b", 7]]) {
-    test(`new HTML, PDF and Markdown retain stored ${model}/rubric v${version} with exact JSON facts`, { timeout: 30000 }, async () => {
+    test(`new formats omit historical ${model}/rubric v${version} without changing the supplied frozen facts`, { timeout: 30000 }, async () => {
         const { record, facts } = modelFacts(model, version), original = JSON.stringify(facts);
         const bundle = await buildSanitizedBundle([record], "a".repeat(64),
             { promptMode: "none", formats: ["html", "pdf", "json", "markdown"] }, undefined, undefined, facts);
@@ -88,17 +90,14 @@ for (const [model, version] of [["fixture-model-a", 1], ["archived-model-b", 7]]
         for (const [format, text] of Object.entries(texts)) {
             // PDF layout can wrap an identifier at its hyphens.
             const compact = text.replace(/\s+/g, "");
-            assert.ok(compact.includes(model), `${format}: stored model missing`);
-            assert.ok(compact.includes(`rubricwire-recorded-interaction-reviewv${version}`));
-            assert.match(text, /1 of 1 passed/);
-            assert.match(text, /1 of 1 assessed/);
-            assert.match(text, /request matching, not permission/);
+            assert.equal(compact.includes(model), false, `${format}: retired model leaked into a new report`);
+            assert.equal(compact.includes(`rubricwire-recorded-interaction-reviewv${version}`), false);
+            assert.doesNotMatch(text, /1 of 1 passed|1 of 1 assessed|request matching, not permission/);
         }
         const json = JSON.parse(bundle.files["product-report.json"]), manifest = JSON.parse(bundle.files["coverage-and-redaction-manifest.json"]);
         assert.deepEqual(json.evaluationFacts, manifest.evaluationFacts);
-        assert.ok(json.evaluationFacts.metrics.filter(metric => metric.origin === "model-assessed")
-            .every(metric => metric.evaluator.model === model && metric.evaluator.rubricVersion === version
-                && metric.numerator === 1 && metric.denominator === 1 && metric.coverage.covered === 1 && metric.coverage.eligible === 1));
+        assert.equal(json.evaluationFacts.metricProjectionVersion, 4);
+        assert.equal(json.evaluationFacts.metrics.some(metric => metric.origin === "model-assessed"), false);
         const different = modelFacts("another-model", version + 1);
         nativeQualityHtml({ evaluationFacts: different.facts });
         nativeQualityMarkdown({ evaluationFacts: different.facts });

@@ -16,7 +16,7 @@ export const homeResultFilterStyles = `
 .select-trigger .select-value.result-option-value,.result-option-value {display:flex;align-items:flex-start;gap:8px;white-space:normal;overflow:visible}
 .result-option-label {min-width:0;overflow-wrap:anywhere}
 .result-option-value .result-legend-icon {margin-block:calc((1lh - 20px)/2) 0}
-#outcomeFilter-control {padding-block:8px;border-radius:var(--radius-field)}
+#outcomeFilter-control {padding-block:8px}
 .section-heading>.filter-field:has(#activitySearch) {width:min(100%,20rem)}
 .section-heading .search-input-row #activitySearch {width:100%}
 `;

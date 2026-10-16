@@ -166,15 +166,15 @@ test("shared filters preserve exact service cohorts, drafts, history, report mem
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await navigateMain(page, "reports"); await ready(page);
     await page.locator("#reportCreateLink").click(); await ready(page);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 interactions/);
     await choose("reportPromptAuthorFilter", ["user"]);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 interactions/);
     await navigateMain(page, "home"); await ready(page);
     await page.locator("#resetView").click(); await ready(page);
     assert.equal(snapshot.analytics.totals.count, 15);
     await navigateMain(page, "reports"); await ready(page);
     await page.locator("#reportCreateLink").click(); await ready(page);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 request groups/, "Reset preserves explicit report-author membership and hidden selection");
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 interactions/, "Reset preserves explicit report-author membership and hidden selection");
 
     for (const alias of ["home", "overview", "activity", "calls"]) {
         await page.goto(app.runtime.url + `#${alias}?services=Files&tool=workiq-fetch`); await ready(page);

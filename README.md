@@ -39,7 +39,8 @@ The repository transfers **source only**. A new machine has its own empty privat
 store and requires its own source approval in **Settings > Connection &
 permission**. Do not copy histories, prompts, responses, exports, credentials or
 the previous machine's private configuration into the checkout. Response saving
-and automatic scoring remain off until separately approved on the new machine.
+remains off until separately approved on the new machine. AI review and automatic
+scoring have been removed; no installation or stored approval enables them.
 Connecting local history requires the supported local Copilot app metadata and
 history files described below; starting WIRE alone does not connect them.
 
@@ -108,25 +109,29 @@ atomic review state. Exact original prompts and follow-ups are available locally
 when an interaction is opened. An adjacent follow-up is an inferred association, not proof of causal
 intent. API response entity bodies and credential-shaped captures are excluded.
 
-### Personal interaction insights
+### Recorded interaction evidence
 
-**View interaction** opens automatically derived facts for the retained request,
-with separate accuracy, speed, answer-trust and action-trust results.
-Successful execution is not correctness or authorization. Missing evidence is
-unassessed/not measured, never a fabricated zero or failure. Personal feedback is
-optional and revisioned; it does not edit recorded outcomes or saved reports.
+**View interaction** opens retained prompts, replies, recorded calls, timing and
+source facts. Successful execution is not correctness or authorization.
 
-Real Accuracy, answer-trust and action-trust measurement remains incomplete.
-Synthetic evaluator tests do not establish real answer quality; approved model
-assessments have a separate origin and do not prove human authorization.
-The original Cost metric is retired, not zero; evaluator allowance, observed
-spending and unknown-billing guards remain in score-processing controls.
-Optional scoring requires a separately configured local Copilot SDK/executable,
-Copilot authentication and explicit evidence/spending approval; cloning and
-starting WIRE do not perform those steps.
+AI review, automatic scoring, personal feedback and their editors, ratings and
+setup/status/check recitals are removed.
+The runtime never initializes an evaluator, schedules reviews, resumes old work
+or replays approval receipts. Stale execution requests return an authenticated
+`410 AI_REVIEW_RETIRED`; exact historical receipt reads remain owner-protected
+and read-only. Stored approvals, unknown charges and pending outcomes are
+preserved, not interpreted as settled, revoked, zero or successful.
+
+New reports use metric projection v4: recorded outcomes, service/source facts and
+observed timing, without AI or personal rating lanes or attempt recaps. Historical
+reports retain their original definitions and every saved file byte.
+Historical personal records and receipt identities are retained, not erased or
+withdrawn by retirement. Stale personal writes fail with
+`410 PERSONAL_FEEDBACK_RETIRED`. Response saving and its permission/recovery flow
+remain independent.
 
 Additional response evidence is off until explicit setup consent. In
-**Settings > Collection preferences > Recorded replies**, **Save Copilot replies
+**Settings > Privacy & saved data > Recorded replies**, **Save Copilot replies
 locally** and **Turn on response saving** permit bounded,
 credential-screened, already-recorded assistant text from the same approved source.
 No new source discovery, API replay, citation fetch or remote judge is introduced.
@@ -134,7 +139,7 @@ No new source discovery, API replay, citation fetch or remote judge is introduce
 cleanup without deleting base activity. Usage/authorization categories remain
 unavailable where the supported adapter has no typed evidence.
 Older `#settings?section=evidence` links still open the Recorded replies row in
-Collection preferences. They do not create a separate category or grant consent.
+Privacy & saved data. They do not create a separate category or grant consent.
 
 The [personal evaluation contract](docs/personal-evaluation.md) documents the
 measurement definitions, evidence-only revision, capture bounds, read-only receipt
@@ -260,7 +265,7 @@ context-call guards are **not cleared**. Prompt opt-in adds hash-only grants
 pairing an original prompt event with the selected record aliases, so unrelated
 records cannot restore that text. Deleting the authorized units again revokes
 their grants and cleans their copies through the existing sealed deletion flow.
-Optional response captures and personal feedback remain deleted; their separate
+Optional response captures and historical annotations remain deleted; their separate
 guards are unchanged. Current counts/insights/report eligibility are recomputed.
 Saved reports, saved comparisons, source files, collector offsets and settings
 are unchanged. Create a **new** reviewed report from the resulting evidence.
@@ -308,7 +313,7 @@ that no activity occurred. Older retained evidence is not removed.
 **Refresh** reads the currently approved local Copilot metadata and histories,
 then applies the stored view. Its one control and result stay with the activity
 task: in Analyze, inside Settings **Connection & updates** below the source
-summary, or within **Collection status**. Display, Privacy, AI reviews,
+summary, or within **Collection status**. Display, Privacy,
 Troubleshooting, request reading and Reports do not show the collection toolbar
 or its routine completion message. If an update still needs attention after
 navigation, a labeled **Recorded activity update** notice opens the existing
@@ -502,7 +507,7 @@ Full labels provide 44px keyboard targets even when data paint is too small to
 click. Panels sit side by side at usable widths and stack at narrow/enlarged text.
 Existing typography, Fluent glyphs and semantic theme roles remain.
 New HTML/PDF reports use exact linear bars and visible counts/shares, with
-supported findings first and quality/timing detail kept separate. The unused
+recorded outcomes first and distinct timing boundaries kept separate. The unused
 projected/glass generators are removed; previously saved bytes are read as
 immutable files, never regenerated by a chart helper.
 General history/hosted-Graph limits live once in **About this evidence**, not an

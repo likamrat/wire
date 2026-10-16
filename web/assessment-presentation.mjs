@@ -726,7 +726,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
     return { format, singleDetail, summarize, band, bandVersion, wording };
 }
 
-// DOM-only; this renderer cannot fetch, assess, save feedback, or enable capture.
+// Historical presentation compatibility; not serialized into the current product shell.
 export function renderAssessmentSummary(root, model, { onDetails, helpButton, detailsLabel = "Details and feedback", renderTiming = renderRecordedTiming, showTiming = true, findingsHost, matchedCallCount = null, bindDetails, disclosureKey, wording = createAssessmentWording() } = {}) {
     if (typeof onDetails !== "function") throw new TypeError("A details path is required for definitions and unavailable reasons.");
     if (model.evidence?.version !== 1) throw new TypeError("A current quality evidence projection is required.");

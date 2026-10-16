@@ -32,8 +32,9 @@ test("title, body and source duplicates collapse without losing the provided vis
     for (const field of ["title", "content", "source"]) {
         const hit = { title: "PowerPoint", excerpt: "PowerPoint", source: { label: "PowerPoint" },
             textMatch: { field, start: 0, end: 5, excerptStart: 0 } };
+        const marked = [{ text: "Power", match: true }, { text: "Point", match: false }];
         assert.deepEqual(search.searchHitPresentation(hit), {
-            title: [{ text: "Power", match: true }, { text: "Point", match: false }], excerpt: [], source: [],
+            title: field === "source" ? [] : marked, excerpt: [], source: field === "source" ? marked : [],
         });
     }
     const title = "<img src=x onerror=alert(1)>";
@@ -101,4 +102,42 @@ test("body context stays bounded and grapheme-safe but never truncates a supplie
     const context = shown.excerpt.filter(part => !part.match).map(part => part.text).join("");
     assert.ok([...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(context)].length <= 100);
     assert.doesNotMatch(context.replaceAll(cluster, "").replaceAll("e\u0301", ""), /[\u200d\u0301]|\p{Extended_Pictographic}/u);
+});
+
+test("unmatched retained captions omit only full-value whitespace and terminal-punctuation recitals", () => {
+    const title = "Who can review the dashboard layout for NOVA?";
+    const start = title.indexOf("NOVA");
+    const hit = { type: "interaction", title, excerpt: title,
+        source: { kind: "retained-activity", label: "Who can review the dashboard layout for NOVA" },
+        textMatch: { field: "title", start, end: start + 4, excerptStart: 0 } };
+    const original = structuredClone(hit);
+    const shown = search.searchHitPresentation(hit);
+    assert.deepEqual(shown.source, []);
+    assert.equal(shown.title.map(part => part.text).join(""), title);
+    assert.equal(shown.title.find(part => part.match).text, "NOVA");
+    assert.deepEqual(hit, original);
+    assert.deepEqual(search.searchHitPresentation({ ...hit, source: { ...hit.source, label: " Who can review the\ndashboard layout for NOVA! " } }).source, []);
+    for (const label of ["", " \n "]) {
+        assert.deepEqual(search.searchHitPresentation({ ...hit, source: { ...hit.source, label } }).source, [], "No empty optional-source slot");
+    }
+    for (const label of [
+        "Who can review the dashboard layout for NOVA after approval",
+        "Who can review the dashboard layout for NOVA - not yet approved",
+        "Who can review the dashboard layout for nova",
+        "Who can review the dashboard layout for NOVA: draft",
+    ]) assert.equal(search.searchHitPresentation({ ...hit, source: { ...hit.source, label } }).source.map(part => part.text).join(""), label);
+    const saved = { ...hit, source: { ...hit.source, kind: "saved-report" } };
+    assert.equal(search.searchHitPresentation(saved).source.map(part => part.text).join(""), hit.source.label);
+});
+
+test("matched sources remain source evidence even when an original title is identical or near-identical", () => {
+    for (const title of ["NOVA", "NOVA?"]) {
+        const hit = { type: "interaction", title, excerpt: "NOVA",
+            source: { kind: "retained-activity", label: "NOVA" },
+            textMatch: { field: "source", start: 0, end: 4, excerptStart: 0 } };
+        const original = structuredClone(hit), shown = search.searchHitPresentation(hit);
+        assert.deepEqual(shown.source, [{ text: "NOVA", match: true }]);
+        assert.deepEqual(shown.title, title === "NOVA" ? [] : [{ text: title, match: false }]);
+        assert.deepEqual(hit, original);
+    }
 });

@@ -122,8 +122,11 @@ motion; On permits a reversible section-height glide. Cards do not animate.
 When readable columns cannot fit, the same native dialog becomes modal, including
 at enlarged text sizes; it never opens a second interaction page.
 
-The approved interaction reading order is **Prompt, Timing, Recorded activity,
-Response (when retained text exists), Reviews, Source**. Useful major sections
+The EC92 reader replaces pill/diagnostic-first presentation with the recorded
+interaction itself. Its reading order is **My/Agent prompt (or Author unverified),
+Recorded activity, Recorded response (when retained text exists), Source details**.
+There is no separate Timing, Reviews, personal editor or replacement score panel.
+Useful major sections
 start open. Their section controls are the only reading visibility owners;
 Collapse all and Expand all derive their availability from those same keyed
 states. Mixed states do not create a separate global mode. The selected prompt
@@ -139,40 +142,54 @@ labels and values share Asta Sans, size and regular weight across current screen
 Headings, chart values and code keep their distinct roles. Source context appears
 once for the selected interaction, not again for
 every linked message. Missing projects remain explicit in technical source
-details rather than repeating a no-project sentence on each card. Labels sit
-above their values on one text edge, including Source event and selectable IDs.
-Quiet section capsules and existing author/service/result cues provide hierarchy,
-not new confidence or severity colors. A Copy utility beside input reserves its
-own column across the label/value group without inflating the label line.
+details rather than repeating a no-project sentence on each card. Long metadata
+retains an aligned label/value structure, including Source event and selectable
+IDs. Plain section headings replace filter-like capsules; focus rings and 44px
+targets remain. The selected prompt's existing authored role is the section
+heading, not a second neutral badge. My/Agent cues use exactly the shared card
+tokens, including the corresponding prompt edge; unverified stays neutral.
+Chat/model context uses compact regular label/value rows that wrap below the
+label when necessary. Source identifiers retain their single aligned text edge.
+At enlarged text sizes a long section heading wraps within its own target,
+keeping Copy beside it rather than on a separate utility row.
+Only substantive requests or raw/unknown inputs reserve a Copy column. A known
+target-based input with no question/query has no Copy control or empty column;
+its paths and any known parameters remain selectable and complete.
 
-**Final response** means the existing recorded-request-to-final-response timing,
+**Prompt to final response** means the existing recorded-request-to-final-response timing,
 not the call's duration. The screen-only timing option renders 114090 ms as
 **1:54 min**, 104000 ms as **1:44 min**, and 84892 ms as **1:25 min**.
 Minutes round to whole seconds with carry; hours use **h:mm:ss h**. Existing
 subminute hundredths, tiny-positive and true-zero displays remain distinct.
 Exact milliseconds stay in data elements and exact timestamps in time elements.
-The reader's leading Timing group uses the current viewer's time context, not a
-new UTC preference. Request time, each call's start/end/recorded duration, response
-observation time and request-to-final-response duration keep distinct names and
-scopes. Concurrent intervals are never summed; unavailable durations are never
-reconstructed from endpoints. Graph references/request sites do not acquire an
-execution duration. Internal group timestamps and repeated card times are omitted
-from this screen, not deleted from the record. Native report
+Reader-formatted absolute timestamps display whole seconds while retaining the
+unaltered raw value in `datetime` and title; raw payload copying keeps precision.
+Each actual tool call has an explicit **Call duration** beside its recorded
+outcome, using the existing admitted duration value. Below one second that
+summary shows milliseconds, so **7 ms** never becomes **0 ms**. Missing duration
+stays Not recorded. Owned HTTP uses Recorded duration; code references and
+request-site evidence do not acquire an execution duration.
+The prompt's recorded timestamp sits below its context, followed by the
+prompt-to-final-response value when available. An invalid timing projection
+remains an explicit read error, not a guessed value. Missing prompt time says
+Recorded time not available. Each retained reply's own recorded timestamp follows
+that reply, including plural or linked replies; it is not presented as a verified
+final answer. Dates and offsets use the actual viewer time context, not a new
+UTC preference. Concurrent intervals are never summed; unavailable durations
+are never reconstructed from endpoints. Repeated call start/end tables and
+internal group timestamps are omitted from this screen, not deleted from the
+record. Native report
 formatting retains its default precise duration presentation; stored facts,
 timestamps, sorting and frozen output do not change.
 
-Local timing measurements keep their own scoped home in Timing. A retained
-duration field is not silently substituted for a timestamp-qualified sample:
-for example, a recorded duration can be present while its completion timestamp
-is missing and the local measurement remains **Not measured**. The existing
-sample/median presentation and timed coverage are reused without summing calls.
-Each scoped local measure keeps its existing explicit measurement boundary
-beside the result and coverage, once: for example, dispatch to response headers
-is distinct from dispatch to transport error. Neither boundary is inferred from
-an endpoint or substituted for the other.
-Verified request-to-answer timing remains a distinct **Boundary not verified**
-state when appropriate. The same recorded-final-response metric is not shown
-twice; any specific unavailable reason accompanies its existing timing fact.
+The primary reader does not recite local metric definitions, medians, percentiles
+or unsupported-quality diagnostics. A recorded call duration can still be
+present when its completion timestamp is missing; displaying it does not
+invent that completion or qualify a different measurement. HTTP records retain
+their exact original boundary and payload through the existing raw-record
+reader/Copy. No endpoint-derived boundary, new metric or aggregate is introduced.
+Any qualification needed by a displayed recorded-final-response timing remains
+with that fact, independently of the removed Timing host.
 
 Source-author qualifiers, partial text, missing responses, failed calls and read
 errors remain visible. Retained prompt text with missing or unsupported
@@ -196,8 +213,11 @@ removed from this reader. Filter scope is stated once; out-of-view and missing
 API metadata remain beside the affected call instead of
 repeating empty fields down the page. Recorded paths, returned-result summaries
 and actual failures stay in the reading flow. The exact recorded tool name is primary, including `workiq-ask`; an operation
-description never replaces it. Tool and Result are the primary call fields;
-all supported services are subordinate, separate values. A concise qualifier
+description never replaces it. **Call 1 · Tool: workiq-fetch** is one compact
+identity heading; the self-explanatory outcome needs no redundant Result label
+or decorative status box. Outcome and explicit duration form one summary row.
+All supported services/purposes are subordinate values in the request/target
+area, not adjacent to an unlabeled time. A concise qualifier
 explains incomplete service details; compact summaries never select a dominant
 service. Known input shapes show one request/target list and requested sources
 as intent, not proof of returned services. Unknown keys, unusual shapes and code
@@ -218,27 +238,33 @@ consistent completion flags; conflicting or otherwise
 unrepresented raw completion evidence remains visible. Exact arguments, scripts,
 result attribution and source limits remain readable and copyable without a new
 accordion layer or a help button on every fact.
+Recognized error wording is presented intrinsically as a **Recorded error
+signal** (for example, sign-in required), not a current sign-in instruction or
+verified cause. Compound retained errors keep their complete recorded wording.
+Routine historical/error-prose disclaimer paragraphs are not repeated for each
+signal; distinct size, credential-screening and unsupported-format exclusions
+retain their existing scoped explanation.
+The existing Service not shown/details incomplete value already identifies a
+missing service target; the reader does not repeat its generic absence
+paragraph. Hosted routing, unsupported attribution and unavailable API metadata
+keep their distinct qualifications.
 
 A missing response follows its group's calls without an empty Response controller:
 **No saved response. Capture is off.** when that state is known. It is not a
-failed call or proof that Copilot did not answer. **Reviews** directly shows
-the selected interaction's review state and concise, truthful gaps. For example,
-**1 reported outcome lacks a completion-qualified result.** does not change a reported
-outcome into a verified completion. Exact check counts, reasons and definitions
-remain visible in the saved-check details and inline review region; technical source
-records retain source-specific limits. Broad app-wide coverage stays in Analyze
+failed call or proof that Copilot did not answer. A selected interaction with no
+individual actions says so in Recorded activity, beside its response availability;
+no empty diagnostic panel replaces removed features. Contradictory raw completion
+flags and source-specific limits remain in their scoped evidence. Broad coverage stays in Analyze
 and Collection status, reachable through **Collection coverage**, not copied
 into the reader. One short scope note distinguishes missing messages, tool
 outcomes and answer/permission judgments. Report membership stays in the fixed footer.
 
 Recorded response-availability reasons such as credential screening and capture
 limits remain visible beside the unavailable response, independently of the
-current capture setting. They come from the validated local availability metric,
-not an inference from current preferences, and do not create an empty Response
-controller. Unsupported local quality checks are identified once in Reviews;
-they are not confused with saved personal or model verdicts.
-Reviews starts open like the other major sections; there is no additional
-read-only details gate before its state or controls. The redundant unselected-status
+current capture setting. They come from validated response observations or a
+qualified single-interaction historical availability record, not an inference
+from current preferences, and do not create an empty Response controller.
+The redundant unselected-status
 sentence is replaced by the footer's **Add to report** action; selected and
 broader-scope membership remain stated. **Continue to report** explicitly opens
 Selected report Activity; Add/Remove never navigates or saves. Both controls use
@@ -248,62 +274,25 @@ Author/scope exclusions are stated inline, not mistaken for included activity.
 This single bottom action group does not repaint the reading column. A report
 inspection under a wider scope explains membership instead of silently converting
 it to Selected.
-A single call's outcome is
-not duplicated in its review section. Multiple-call and linked-interaction
-summaries retain their useful counts and boundaries. Technical source records
+A single call's outcome appears beside that call, not in a second diagnostic
+summary. Multiple-call and linked-interaction scopes retain their useful counts
+and boundaries. Technical source records
 omit empty rows; linked-message explanations appear when there are linked
 messages to explain.
 
-Single-interaction reading does not use aggregate scorecards for unrun checks.
-For example, **0 of 1 assessed** is coverage (no review for one eligible request),
-not a failed answer or a score of zero. Three unsupported local quality rules
-collapse into the actual saved-review state instead of three empty meters and
-repeated missing-data columns. A completed call without a saved reply has one
-concise availability/capture statement; it does not claim the requested work was
-completed. Tool input wraps as readable recorded text while exact JSON copying
-remains unchanged.
+Automatic reviews and Personal feedback are retired, including entry actions,
+editors, saved-check tables, definition/count recitals and personal-only
+departure/fold guards. Historical records, receipts and frozen files are not
+deleted or rewritten. The reader consumes the qualified response-only experience;
+it does not recreate an evaluator, writer or compatibility placeholder.
+Reading and folding cannot dispatch or replay retired operations.
 
-Saved review details use one compact definition table with human states and
-explicit reviewed/timed coverage, not a pass percentage or repeated aggregate
-glossary. That table contains personal/model review metrics, not a second copy
-of local execution checks or call timing. It replaces the corresponding compact
-verdict recap; review rationale/permission qualifications appear once. Local
-completion gaps retain their precise reason and label-above-value counts.
-Identically scoped unsupported local checks share one explanation,
-without combining their counts. Each measure retains its definition and origin;
-machine-readable row data preserves its raw status, numeric value, numerator,
-denominator and coverage. Reasons remain visible. Genuine zero duration,
-a failed verdict, a failed review and an unreviewed item have different states.
-Verified request-to-answer time remains separate from measured recorded-final-
-response time: an unverified task boundary does not erase a recorded timestamp.
-Only actual verdicts receive positive/negative judgment colors; absent reviews
-stay neutral and review errors remain errors, not negative answer judgments.
-Aggregate screens, canonical metrics and frozen report output retain their
-existing definitions and values.
-
-**Personal feedback** opens the existing dimension chooser directly, followed
-by the existing form, without a second Give feedback step. Save, Cancel,
-withdrawal and uncertain-receipt recovery retain their owners. No autosave,
-approval or evaluation is implied by reading or folding.
-Optional personal feedback and contextual Automatic scores stay inline. Their
-existing controllers still own validation, explicit approval and receipts.
-Closing, switching cards, changing Analyze filters/pages or leaving with an unsent
-personal-feedback edit first offers **Discard changes / Keep editing** in the
-sidebar. The requested transition is held until resolved. Closing Reviews or
-Collapse all uses the same unsent-edit guard, before any section changes.
-Pending/checking/uncertain feedback and open Automatic scores block folding
-Reviews with an explicit explanation; they are not silently hidden or submitted.
-The deferred fold rechecks these guards when Discard is acted on, not just when
-folding was requested. A Save that became pending or an automatic setup opened
-while confirmation was visible therefore cannot be folded away by the old callback.
-The confirmation is also bound to its original editor instance, reader and
-evidence scope before any discard mutation. Clearing or replacing that editor
-clears the obsolete confirmation; a still-connected old control cannot discard
-a newer interaction's draft. Pending operations retain their same-owner guards,
-and terminal Save/Close removes only the obsolete confirmation, not the receipt.
-Submitted or uncertain updates are not
-cancelled or replayed: the original receipt remains recoverable after departure.
-This is not a report-draft discard guard.
+Existing source/consent/report/Save guards retain their owners. Folding acts
+only on the current reader's keyed sections, never on report setup or a pending
+receipt. Old controls cannot fold, copy from or steal focus from a successor
+interaction. A legacy personal receipt stays untouched; response-saving recovery
+keeps its distinct current/legacy consent ownership. No reading action approves,
+saves, cancels or replays a consequential operation.
 
 The legacy `#request` and exact-call addresses remain compatible. A same-tab open
 creates a history entry; switching interactions replaces it. Back closes and
@@ -380,7 +369,7 @@ or correct icon size alone does not prove correct spacing.
 
 Explicit text-only workflow exceptions are Save report, Open saved report,
 Add/Remove report, Continue to report/contents, Prepare report, approval and
-receipt-recovery actions, feedback Save/Withdraw/Cancel, destructive confirmation,
+receipt-recovery actions, destructive confirmation,
 source approval, preference Save/Cancel, recollection and comparison actions.
 These describe consequential or otherwise ambiguous operations, not generic
 utilities. Expanded main navigation is the explicit icon-plus-text exception;
@@ -506,6 +495,11 @@ completed save, Create starts a new empty selection rather than reopening the
 old result. Activity's explicit create action goes
 straight to creation. `#reports?task=create` and the legacy `#report` creation
 link remain direct entries; the main Reports navigation opens the library.
+The page header owns these task links rather than a separate blank navigation
+band. **Compare saved reports** opens `#reports?task=compare` as its own main
+workspace, not a wizard appended below the library. It is also reachable with
+an empty library, where the two-report prerequisite is explicit; an unresolved
+comparison save keeps its recovery action even when its sources disappear.
 
 A verified empty library shows one empty message and emphasizes that existing
 Create / Continue entry. Search, help and bulk management stay mounted but hidden
@@ -537,15 +531,22 @@ report's scope, interaction count, preparation identity, prompt mode, format
 availability and direct **Open**. The rest of the row is a native inspection button,
 with controlled/expanded state and a quiet selected edge. It supplies indexed
 metadata to the one shared right sidebar, not an in-row disclosure or file read.
-Its body holds downloads, full identity, comparison and individual deletion controls.
+Its body holds downloads, full identity and individual deletion controls.
+Comparison starts from the explicit Reports task, not a redundant inspector action.
 The footer opens the saved report. Frozen-copy
 and search details stay in **About saved reports**. Missing HTML offers an available
 PDF/Markdown/JSON download instead of an inert Open action; absent metadata stays unknown.
 The frozen reader uses the full Reports main width, not a floating dialog. Opening
 closes the contextual pane and focuses the reader heading. Its short preparation
-caption and Back utility restore the precise library origin and prior inspector
+caption and Back utility restore the precise library or comparison origin and prior inspector
 only when one was open. Its opaque sandbox and old bytes are unchanged; no height
 measurement privilege is added. Prepared report measurement remains separate.
+An unchanged comparison return retains its pair, prepared frame and approval
+without another read or preparation. A changed saved inventory refreshes choices
+on task entry; read failures stay explicit and cannot be mistaken for no reports.
+Deletion reconciliation cannot mark an inventory with newly added reports current.
+A saved-inventory change during a choice-list read fences that late reply and
+offers an explicit return/reopen path; it does not invalidate disclosure or prepare.
 
 **Manage saved reports** follows the results as a separate, collapsed disclosure.
 It contains **Delete all saved reports**, never interpreted as deleting only
@@ -570,6 +571,17 @@ narrow widths and 200% text without truncating labels. Comparison marks use the
 shared restrained fades with the screen's red failed-call identity. Frozen
 comparison files retain their original typography and palette.
 
+Saved-report comparison uses explicit Earlier report / Later report choices,
+with the shared select presentation opted in before enhancement. Inspecting a
+source is separate from choosing it. The comparison task has one next action:
+Compare reports, then Prepare comparison copy, then disclosure approval and a
+separate Save comparison. Prepared review has flat Report / Files tabs with
+keyboard navigation and one level of exact-file disclosure. Back to comparison
+choices preserves the same prepared copy and approval unless an input changes;
+returning to review never repeats preparation or approval. A dispatched,
+unconfirmed save keeps its original identity and recovery controls, independently
+of changing source availability.
+
 Both **Report** and **Comparison** Open actions read actual verified frozen HTML
 inside the same inert main reader. Back returns focus to the library entry without
 changing report or comparison drafts. A **Period comparison report** remains one
@@ -584,9 +596,9 @@ its own receipt/current-source/visibility fence. It never borrows library author
 after invalidation, reload or a late response. Library copies remain independently
 readable when live evidence permission changes. No hidden copy of a closed or revoked
 reader is kept for presentation restoration.
-Search document entry from an interaction uses the same inline unsaved-feedback
-guard. A held destination is not a rejected read: it remains pending until Discard,
-Keep editing, replacement or invalidation resolves it. Back preserves the exact
+Search document entry from an interaction retains the current reader's
+authorization and navigation ownership, without a retired personal-edit guard.
+Back preserves the exact
 interaction/call context and permitted Search return. A closing saved inspector
 releases its inert exit owner before a subsequent interaction acquires the panel.
 
@@ -739,9 +751,10 @@ separate local Save remain required. Saved file contents and export rules do not
 
 ## Analytical filter row
 
-Home, Activity and scoped chats share the primary **Dates, Tool, Service, Outcome,
-Author** controls. **More filters** contains the separate exclusive **Category**
-control plus **Project, Chat, Activity, Collection**; its summary indicates active
+Home, Activity and scoped chats share the primary **Dates, Tool, Service involved,
+Outcome, Prompt author** controls. **More filters** contains the separate exclusive
+**Activity category** control plus **Copilot project, Copilot chat, Evidence layer,
+Collection**; its summary indicates active
 secondary fields. Applied values remain visible as individually removable chips,
 including dates, evidence layer and chat. **Dates** is the single visible time
 authority for every Analyze widget, the tool-call/interaction/chat headline,
@@ -767,6 +780,27 @@ late responses remain fenced by the existing load generation. Removing a disable
 Outcome chip focuses its surviving label, not the unavailable combobox.
 Reset retains its broader browsing/search/scope effect; menu All, Apply and Cancel
 retain their separate draft semantics. No application or query policy changes.
+
+Filter presentation uses paper-white surfaces in light mode and the existing
+dark paper/ink counterparts, not filled selected-row slabs. Selection is carried
+by the existing check/selection marks and restrained hover/keyboard focus.
+Routine info targets and valid-draft instructions are absent; empty-draft
+validation, dynamic busy/unavailable descriptions, inclusive custom-date/time-zone
+qualification and real service/context scope stay. Self-explanatory names include
+Prompt author, Service involved, Activity category and Evidence layer; recorder
+views explicitly name the source selector Recorder source.
+
+`createSelectControls` applies this presentation automatically inside `#filters`.
+Other native selects may opt in before enhancement with
+`data-select-presentation="filter"`. The adapter emits `.select-trigger-filter`
+and the existing `.select-popup-filter` portal skin. This is one presentation
+contract, not a second controller: native single-selects remain single listboxes;
+explicit multi-selects retain draft All/Apply/Cancel and empty validation.
+Triggers, option labels and menu actions use the regular 400 weight; triggers
+retain the shared control text size (14px at the normal root text size).
+Search scope/type can use the hook without copying CSS or styling result rows as
+filter options. Non-opted selects and shared text-action/icon/status primitives
+are unchanged.
 
 Time columns aggregate automatically: day bins for calendar presets and bounded
 ranges up to 31 days, week bins for longer ranges up to a year, and month bins
@@ -1055,22 +1089,28 @@ prerequisite paragraphs. It wraps naturally at narrow/enlarged sizes without
 shrinking text. The left sliding sidebar, Asta Sans, official Lucide icons and
 neutral light/charcoal themes remain. Actions keep 44px hit targets.
 
-Activity starts empty. **Selected interactions**, **All saved sessions** and
-**Current Analyze view** show distinct chat/interaction counts. The all-session
+Activity starts empty. **Selected interactions**, **Current Analyze view** and
+**All collected activity** show distinct chat/interaction counts above the picker. The all-activity
 choice explicitly ignores Analyze dates, filters and search, without collecting
-new history. Authors remain a separate membership choice. The existing canonical
+new history. **Authors in report** remains a separate membership choice, aligned
+with Find an interaction and opted into the shared filter primitive. The existing canonical
 selection now has a plain, paginated in-task picker; changing its local search
 does not change membership. Hidden selections stay included. Scope details are
-available below the task, while unrelated classification actions remain in Analyze.
+available below the task. One action area follows the picker with the included
+chat/interaction count, a truthful outside-page count when needed, Clear selection
+and the continuation. Counts use canonical membership, not visible checkboxes.
 
-Picker rows place the regular retained prompt on a subtle bounded surface with its
-leading edge on the text, not on the author label. The checkbox aligns with the author
-and View/Read actions; narrow or enlarged layouts give the prompt the full row width.
-Full-text access, exact copying, partial/missing text and unverified-author explanations
-remain with the existing text-access controls. Compact equal-weight facts use
+Picker rows place the regular retained prompt on the paper surface with a restrained
+leading edge on the text, not on the author label. My/Agent labels and edges use the
+same blue/purple cues; unverified is neutral. The checkbox aligns with the author.
+View/Read targets span the related reading rows in their own utility column rather
+than enlarging the author line; narrow or enlarged layouts give the prompt the full row width.
+Full-text access, exact copying and partial/missing text remain with the existing
+text-access controls. Unverified authors have a compact neutral label; the recorded
+reason remains available in the interaction reader. Compact equal-weight facts use
 **Copilot Chat**, full-interaction Work IQ outcomes and qualified recorded/first-action
 time when known; they do not add Model/Final response or empty-fact recitals.
-**Find an interaction** is the visible list label, **Prompt authors** is the short
+**Find an interaction** is the visible list label, **Authors in report** is the
 membership label, and empty selection has one clear instruction.
 
 **Continue to contents** opens Report setup in the existing right sidebar while
@@ -1086,7 +1126,11 @@ setup** restores its fields, scroll and focus without tabs, cloned forms or anot
 report controller. Checkboxes select; inspection never selects. Current/All and
 paired-period membership remain fixed by their scope rather than silently becoming
 Selected. Close keeps the memory-only draft, and picker search/page changes do not
-dismiss setup. Only unsaved personal feedback in a peek needs Discard / Keep editing.
+dismiss setup. There is no competing main Continue while the setup flow owns
+Prepare or its temporary peek return. Native Close restores the single continuation.
+An idempotent report-presentation notification follows the existing show/close/
+return ownership; it cannot approve a report, reopen setup, or override a newer
+owner's focus. No observer or second sidebar controller is involved.
 Fields and footer remain painted through an exit, then main-workspace focus returns.
 Browser Back from creation restores the original interaction's main-workspace anchor;
 narrow/doubled-text adaptation preserves it without suppressing deliberate page scrolling.
@@ -1594,10 +1638,14 @@ are the membership unit. Prompt-text disclosure remains a separate choice in Con
 
 ## Interaction insights
 
+Review/editor presentation described below is historical, not a current UI
+requirement. The EC92 reader contract above supersedes it; recorded timing,
+identity validation and historical-data compatibility are not deleted.
+
 One **View interaction** link opens the exact recorded prompt, available
-response, compact insights and attributable actions. Prompt authorship uses
+response and attributable actions. Prompt authorship uses
 supported host provenance; inferred call association remains a separate fact. The
-existing reader keeps its read/hide/copy controls and report selection stays
+reader uses keyed section visibility and exact Copy; report selection stays
 separate from reading.
 
 Saved assessment details name Answer correctness, Answer support, Tool use vs.
@@ -1685,14 +1733,11 @@ read**, distinct from missing evidence. Filters select displayed interactions,
 not a new request interval; no full-interaction value is computed from filtered
 call durations.
 
-The detached `#recordedTiming` and its redundant Calls link are removed. The
-existing **Saved reviews** disclosure retains independent state, asynchronous
-loading, scope, feedback and recovery controls. Screen assessment composition
-sets `showTiming: false`; the shared renderer's default, underlying aggregates,
-optional exact definitions and saved report output remain unchanged.
-The reader's secondary section is **Reviews**, not a timing
-destination. Neither surface averages medians, sums concurrent calls or treats
-a duration as a quality percentage. The Search timing shortcut opens existing
+The detached `#recordedTiming` and its redundant Calls link are removed.
+Saved reviews and the reader's former Reviews section are also retired. Current
+reader timing stays with its subject rather than in a separate metric panel.
+It never averages medians, sums concurrent calls or treats a duration as a
+quality percentage. The Search timing shortcut opens existing
 Calls instead of a removed widget. No new accordion or timing chart is added.
 **How to read these results** explains AI limitations and review origins
 once. Automatic-score processing status stays visible after the results, rather
@@ -2185,24 +2230,25 @@ Chart tooltips, accessible exact-data tables and form controls follow the resolv
 Analyze filter fields keep the label and dropdown in one wrapping field.
 The title's text edge and selected-value text edge share `--select-value-inset`
 (12px from the painted pill edge, 16px at 200% root text). The label occupies its
-actual line height, followed by the existing 4px field gap. Help remains a separate
-sibling button in a real utility column spanning the label/value group; its glyph
-aligns to the label line while its target stays at least 44px. The first-pending
+actual line height, followed by the existing 4px field gap. Routine help buttons
+and their wrappers/columns are removed, so the value uses the complete field.
+The first-pending
 cancellation has its own adjacent 44px value-row region; settled removal lives in
 the applied chip, not a duplicate inline control. Neither needs an inflated label
 row or an overlapping transparent target. Primary widths are budgeted by field:
-Dates and Service have their value/help region, Tool allows its longer recorded
+Dates and Service involved have their value region, Tool allows its longer recorded
 names, and only Outcome/Author allow the real first-pending cancellation. Two
 layout-only groups keep the three single-choice fields and the draft-selection
 pair together when space requires wrapping; they add no controls or semantics.
 The normal 1440px context fits all five, while narrower contexts wrap instead of
 budgeting nonexistent cancel controls or clipping values. Long values wrap within their dropdown;
 adding Clear must not squeeze a short selection into clipped text or move the
-filter anchor. Settings and the generic help/select primitives are unchanged.
+filter anchor. The shared select presentation is explicitly filter-gated; other
+select modes and their behavior remain unchanged.
 Labels use readable unitless line heights; hover and keyboard focus retain the
 same text/target geometry. The rem-based value budget also applies on mobile.
 `tests/select-control.browser.test.mjs` measures text, painted edges,
-help targets and popup anchors at 375/820/1200/1466px in both themes and 200% text.
+control targets and popup anchors at 375/820/1200/1466px in both themes and 200% text.
 The filter-local geometry case in `tests/filter-experience.browser.test.mjs`
 also compares ink/SVG/target boxes, target non-overlap, real long metadata,
 decorative option marks, disabled states, single-entry settled removal and pending

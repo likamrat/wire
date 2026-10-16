@@ -170,15 +170,23 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         if (entry.multiple) {
             const all = document.createElement("button"), footer = document.createElement("div");
             const apply = document.createElement("button"), cancel = document.createElement("button"), hint = document.createElement("p");
+            const allCaption = entry.filter ? document.createElement("span") : all;
             all.type = apply.type = cancel.type = "button";
             all.className = "select-all";
             all.setAttribute("role", "checkbox");
-            all.textContent = entry.select.dataset.allLabel || "All results";
+            if (entry.filter) {
+                const marker = document.createElement("span");
+                marker.className = "select-toggle";
+                marker.setAttribute("aria-hidden", "true");
+                allCaption.className = "select-all-label";
+                all.append(allCaption, marker);
+            }
+            allCaption.textContent = entry.select.dataset.allLabel || "All results";
             footer.className = "select-footer";
             apply.textContent = "Apply";
-            apply.className = "primary select-apply";
+            apply.className = entry.filter ? "select-apply" : "primary select-apply";
             cancel.textContent = "Cancel";
-            hint.className = "select-draft-hint";
+            hint.className = entry.filter ? "select-validation" : "select-draft-hint";
             hint.id = entry.trigger.id + "-draft-hint";
             hint.setAttribute("role", "status");
             apply.setAttribute("aria-describedby", hint.id);
@@ -189,9 +197,12 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
                 const eligible = entry.options.filter(option => !option.disabled);
                 const count = eligible.filter(option => entry.draft.has(option.value)).length;
                 all.setAttribute("aria-checked", count === eligible.length ? "true" : count ? "mixed" : "false");
-                all.textContent = `${count === eligible.length ? "Deselect" : "Select"} ${entry.select.dataset.allLabel?.toLowerCase() || "all results"}`;
+                allCaption.textContent = entry.filter ? entry.select.dataset.allLabel || "All results"
+                    : `${count === eligible.length ? "Deselect" : "Select"} ${entry.select.dataset.allLabel?.toLowerCase() || "all results"}`;
                 apply.disabled = entry.draft.size === 0;
-                hint.textContent = entry.draft.size ? entry.select.dataset.draftHint || "Choose statuses, then Apply."
+                hint.hidden = entry.filter && entry.draft.size > 0;
+                attribute(apply, "aria-describedby", hint.hidden ? null : hint.id);
+                hint.textContent = entry.draft.size ? entry.filter ? "" : entry.select.dataset.draftHint || "Choose statuses, then Apply."
                     : entry.select.dataset.emptyHint || "Select at least one result.";
                 for (const row of list.querySelectorAll(".select-option")) row.setAttribute("aria-selected", String(entry.draft.has(row.dataset.value)));
                 if (!popup.hidden) position(false);
@@ -350,6 +361,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
     }
     function enhance(select) {
         if (select.multiple && select.dataset.selectMode !== "multiple" || !select.multiple && select.size > 1) throw new TypeError("Multiple selection requires an explicit select mode.");
+        const filter = Boolean(select.closest("#filters")) || select.dataset.selectPresentation === "filter";
         const trigger = document.createElement("button"), wrapper = document.createElement("span"), value = document.createElement("span");
         const id = select.id || "evidence-select-" + ++sequence;
         const labels = [...select.labels];
@@ -367,7 +379,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         }
         trigger.id = id + "-control";
         trigger.type = "button";
-        trigger.className = "select-trigger";
+        trigger.className = "select-trigger" + (filter ? " select-trigger-filter" : "");
         trigger.dataset.selectId = id;
         trigger.setAttribute("role", "combobox");
         trigger.setAttribute("aria-haspopup", "listbox");
@@ -393,7 +405,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
             trigger.append(sizer);
         }
         const entry = { select, trigger, wrapper, value, sizer, labelIds, labels, labelContainers, multiple: select.multiple,
-            filter: Boolean(select.closest("#filters")), options: [], signature: "", selectedValue: null };
+            filter, options: [], signature: "", selectedValue: null };
         controls.set(select, entry);
         select.replaceWith(wrapper);
         wrapper.append(select, trigger);

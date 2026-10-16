@@ -11,7 +11,7 @@ import { navigateSettings, chooseTheme, selectActivityOption } from "./helpers.m
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_COMPACT_SETTINGS_PROOFS;
-const categories = ["connection", "privacy", "ai", "display", "troubleshooting"];
+const categories = ["connection", "privacy", "display", "troubleshooting"];
 
 async function setup(t, { unknownBilling = false } = {}) {
     const cleanups = [], denied = [], errors = [], posts = [];
@@ -92,7 +92,7 @@ async function geometry(page) {
     });
 }
 
-test("compact Settings keeps five real categories readable, bounded and actionable without shrinking type", { timeout: 60000 }, async t => {
+test("compact Settings keeps four current categories readable, bounded and actionable without shrinking type", { timeout: 60000 }, async t => {
     const { page } = await setup(t), measures = [];
     await page.emulateMedia({ reducedMotion: "reduce" });
     for (const theme of ["light", "dark"]) for (const width of [1440, 820, 375]) {
@@ -211,34 +211,19 @@ test("consequences appear before independent confirmation; cancel never changes 
         await capture(page, `recollection-preview-${width}-${theme}`);
         await page.locator("#recollectClose").click();
         await expect(page.locator("#recollectActivity")).toBeFocused();
-        await navigateSettings(page, "ai");
-        await page.locator("#automaticScoreReview").click();
-        const approval = page.getByRole("dialog", { name: "Automatic scores", exact: true });
-        await expect(approval.getByLabel("Total budget (AI credits)", { exact: true })).toBeVisible();
-        await expect(approval).toContainText("Charges are post-paid and the limit is soft");
-        await expect(approval.getByRole("checkbox", { name: /Allow this evidence/ })).not.toBeChecked();
-        await expect(approval.getByRole("button", { name: "Approve automatic scores", exact: true })).toBeDisabled();
-        await capture(page, `ai-approval-${width}-${theme}`);
-        await approval.getByRole("button", { name: "Cancel", exact: true }).click();
-        await expect(page.locator("#automaticScoreReview")).toBeFocused();
+        await expect(page.locator("#automaticScoreSetup,[data-category=ai]")).toHaveCount(0);
     }
     assert.equal(posts.some(route => /\/(?:confirm|set|approve|revoke|now|configure)$/.test(route)), false);
 });
 
-test("unknown billing keeps both scoring actions separate and wraps long reasons instead of hiding them", { timeout: 30000 }, async t => {
+test("retirement does not restore scoring controls for a stale unknown-billing client", { timeout: 30000 }, async t => {
     const { page } = await setup(t, { unknownBilling: true });
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await navigateSettings(page, "ai");
-    await expect(page.locator("#automaticScoreState")).toContainText("An earlier charge is still unknown");
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1000 });
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        const review = page.locator("#automaticScoreReview"), stop = page.getByRole("button", { name: "Stop automatic scores", exact: true });
-        const a = await review.boundingBox(), b = await stop.boundingBox();
-        assert.ok(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y,
-            "Review and Stop cannot occupy the same grid cell");
-        assert.ok(a.height >= 44 && b.height >= 44);
+        await expect(page.locator("#automaticScoreReview,#automaticScoreSetup,[data-category=ai]")).toHaveCount(0);
         assert.deepEqual((await geometry(page)).clipped, []);
         assert.equal((await geometry(page)).overflow, false);
         if (scale === 1) await capture(page, `unknown-billing-${width}-${theme}`);
@@ -272,7 +257,7 @@ test("category motion measurement executes with zero screenshot captures", { tim
         await expect(page.locator(`[data-settings-section=${category}]`)).toBeVisible();
     }
     assert.equal(screenshots, 0, "Executed zero-capture path, not a CRLF-sensitive source rewrite");
-    t.diagnostic("Motion measurement executed: 5 category clicks, screenshot calls = 0.");
+    t.diagnostic("Motion measurement executed: 4 category clicks, screenshot calls = 0.");
 });
 
 test("a failed connection status read labels last-known settings and recovers by reading, never writing", { timeout: 30000 }, async t => {

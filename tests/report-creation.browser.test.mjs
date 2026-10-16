@@ -54,7 +54,7 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
     await page.getByRole("link", { name: "Create a report", exact: true }).click();
     assert.equal(await page.getByRole("button", { name: "Continue to contents", exact: true }).isDisabled(), true);
     assert.equal(await page.locator("#promptOptions").isVisible(), false);
-    await page.getByRole("radio", { name: /All saved sessions/ }).check();
+    await page.getByRole("radio", { name: /All collected activity/ }).check();
     assert.match(await page.locator("#previewSelectionSummary").innerText(), /2 chats · 2 interactions/);
     assert.match(await page.locator("#reportScopeChoiceHelp").innerText(), /dates.*filters.*search/i);
     await capture("02-activity");

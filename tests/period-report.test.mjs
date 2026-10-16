@@ -4,12 +4,17 @@ import { readFile } from "node:fs/promises";
 import { privateFixture } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
-import { acceptPeriodReport, freezePeriodReport, validatePeriodReport } from "../lib/period-report.mjs";
-import { createExportController } from "../lib/export.mjs";
+import { acceptPeriodReport, freezePeriodReport, validatePeriodReport, periodReportComparison, PERIOD_POPULATION } from "../lib/period-report.mjs";
+import { renderPeriodReportHtml } from "../lib/period-report-output.mjs";
+import { buildSanitizedBundle, createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState, replaceEvidence } from "../lib/store.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { buildAssessmentModel, buildReportFacts } from "../lib/assessment-read-model.mjs";
+import { readSavedReportFile } from "../lib/report-artifacts.mjs";
+import { extractReportFile } from "../lib/search-corpus-report-content.mjs";
+import { makeRatio } from "./report-comparison-fixtures.mjs";
+import { metricSlotKey } from "../lib/assessment-contract.mjs";
 
 async function setup(t) {
     const fixture = periodFixture();
@@ -39,17 +44,20 @@ test("authoritative paired admission rejects numeric, membership, scope and stal
     }
     const frozen = freezePeriodReport(state, acceptPeriodReport(state, value), "2026-10-11T10:00:00.000Z").frozen;
     assert.deepEqual(frozen.comparison, value.comparison);
-    assert.ok(frozen.comparison.metrics.some(item => (item.baseline ?? item.later).basis === "model-assessment"));
+    assert.equal(frozen.definitions.metricProjectionVersion, 4);
+    assert.ok(frozen.comparison.metrics.every(item => (item.baseline ?? item.later).basis === "observed"));
     assert.equal(frozen.periods.baseline.rows.length, 3);
     assert.equal(frozen.periods.baseline.facts.metrics[0].coverage.eligible, 4, "full interaction checks are separate from 3 matching calls");
     for (const mutate of [
         copy => { copy.periods.baseline.totals.count++; },
         copy => { copy.periods.later.rows[0].scenarioRef = "raw-private-id"; },
-        copy => { copy.periods.baseline.facts.metrics[0].counts.pass++; },
+        copy => { copy.periods.baseline.facts.metrics[0].samples[0].value++; },
         copy => { copy.periods.baseline.range.to = "2026-03-09"; },
         copy => { copy.selection.promptAuthors = ["user"]; },
         copy => { copy.source.path = "private"; },
         copy => { copy.comparison.metrics[0].result = null; },
+        copy => { copy.periods.baseline.facts.metricProjectionVersion = 2; },
+        copy => { copy.periods.baseline.facts.metricProjectionVersion = 3; },
     ]) {
         const copy = structuredClone(frozen); mutate(copy);
         assert.throws(() => validatePeriodReport(copy));
@@ -66,11 +74,82 @@ test("successive authoritative builds differ only in valid pooled preparation in
     assert.equal(frozen.periods.baseline.facts.metrics[0].createdAt, first.periods.baseline.assessment.metrics[0].createdAt);
 });
 
-test("current-source qualification freezes exact model lanes despite a divergent persisted source; ordinary defaults are unchanged", () => {
+test("legacy period definitions remain readable but cannot generate a new bundle through the imported builder", async t => {
+    const { state, value } = await setup(t);
+    const accepted = acceptPeriodReport(state, value);
+    const current = freezePeriodReport(state, accepted, "2026-10-11T10:00:00.000Z").frozen;
+    const selected = [...new Set(Object.values(value.periods).flatMap(side => side.interactionRefs))]
+        .map(ref => accepted.model.internals.get(ref).record);
+    for (const version of [2, 3]) {
+        const legacy = structuredClone(current);
+        legacy.definitions.metricProjectionVersion = version;
+        for (const side of Object.values(legacy.periods)) {
+            side.facts.metricProjectionVersion = version;
+            const interactionRef = side.facts.memberships[0].interactionRef;
+            const rating = {
+                ...makeRatio(1), metricRef: "metric-" + String(version).repeat(32), basis: { ...side.facts.basis },
+                dimension: "accuracy", checkId: "semantic-answer-correctness", origin: "user-personal",
+                eligibleUnitRefs: [interactionRef], coveredUnitRefs: [interactionRef],
+            };
+            side.facts.metrics.push(rating);
+            side.interactionCoverage.push({ metricRef: rating.metricRef, slot: metricSlotKey(rating),
+                eligibleUnitRefs: [interactionRef], coveredUnitRefs: [interactionRef] });
+        }
+        legacy.scope.population = PERIOD_POPULATION;
+        legacy.scope.findings = "Full retained interactions selected by matching records; calls outside the period or filters can remain in these interaction findings and metrics.";
+        legacy.scope.interpretation = "Observed differences only. Unequal periods, shared records, different activity and assessment coverage do not establish causal improvement.";
+        legacy.comparison = periodReportComparison(legacy);
+        const before = JSON.stringify(legacy);
+        validatePeriodReport(legacy);
+        const records = [...new Set(Object.values(legacy.periods).flatMap(side => side.scenarioRefs))]
+            .map(scenarioId => ({ scenarioId, toolCalls: [], graphActivities: [], httpRecords: [], prompts: [] }));
+        const html = renderPeriodReportHtml({ periodComparison: legacy, records, preparedAtDisplay: "Oct 11, 2026" });
+        assert.match(html, /Assessment coverage/);
+        assert.match(html, version === 2 ? /Full-interaction checks and timing/ : /Personal feedback and recorded timing/);
+        assert.equal(JSON.stringify(legacy), before);
+        const mislabeled = structuredClone(legacy);
+        mislabeled.definitions.metricProjectionVersion = 4;
+        assert.throws(() => validatePeriodReport(mislabeled), /unsupported population meaning/);
+        await assert.rejects(buildSanitizedBundle(selected, state.pseudonymKey,
+            { promptMode: "none", formats: ["json"], timeContext: value.timeContext },
+            undefined, undefined, undefined, undefined, legacy),
+        error => error.status === 422 && /current metric projection/.test(error.message));
+        assert.equal(JSON.stringify(legacy), before, "Rejecting generation cannot normalize historical facts.");
+        assert.equal(renderPeriodReportHtml({ periodComparison: legacy, records, preparedAtDisplay: "Oct 11, 2026" }), html);
+    }
+});
+
+test("imported period generation requires current outer and both inner projections plus valid frozen contents", async t => {
+    const { state, value, options } = await setup(t), accepted = acceptPeriodReport(state, value);
+    const current = freezePeriodReport(state, accepted, "2026-10-11T10:00:00.000Z").frozen;
+    const selected = [...new Set(Object.values(value.periods).flatMap(side => side.interactionRefs))]
+        .map(ref => accepted.model.internals.get(ref).record);
+    const build = comparison => buildSanitizedBundle(selected, state.pseudonymKey,
+        { ...options, promptMode: "none", formats: ["json"] }, undefined, undefined, undefined, undefined, comparison);
+    const before = JSON.stringify(current), bundle = await build(current);
+    assert.equal(bundle.snapshot.schemaVersion, 3);
+    assert.deepEqual(bundle.snapshot.periodComparison, current);
+    assert.doesNotMatch(bundle.files["product-report.json"], /user-personal|model-assessed|assessmentAttempts|reviewStatuses/);
+    const absent = structuredClone(current);
+    delete absent.definitions.metricProjectionVersion;
+    await assert.rejects(build(absent), error => error.status === 422 && /current metric projection/.test(error.message));
+    for (const side of ["baseline", "later"]) for (const version of [undefined, 2, 3]) {
+        const mixed = structuredClone(current);
+        if (version === undefined) delete mixed.periods[side].facts.metricProjectionVersion;
+        else mixed.periods[side].facts.metricProjectionVersion = version;
+        await assert.rejects(build(mixed), error => error.status === 422 && /current metric projection/.test(error.message));
+    }
+    const malformed = structuredClone(current);
+    malformed.periods.baseline.totals.count++;
+    await assert.rejects(build(malformed), error => error.status === 422 && /canonical totals differ/.test(error.message));
+    assert.equal(JSON.stringify(current), before);
+});
+
+test("current-source qualification preserves source guards without reviving historical model lanes", () => {
     const { state, input } = periodFixture(), source = structuredClone(state.personalEvaluation.source);
     state.personalEvaluation.source = { available: false, sourceConfigRef: null, sourceConfigRevision: 0 };
     const value = buildPeriodComparison(state, input, { model: buildAssessmentModel(state, { source }) });
-    assert.ok(value.comparison.metrics.some(item => (item.baseline ?? item.later).basis === "model-assessment"));
+    assert.ok(value.comparison.metrics.every(item => (item.baseline ?? item.later).basis !== "model-assessment"));
     const frozen = freezePeriodReport(state, acceptPeriodReport(state, value, { source }), "2026-10-11T10:00:00.000Z").frozen;
     assert.deepEqual(frozen.comparison, value.comparison);
     assert.throws(() => acceptPeriodReport(state, value), /differs from the accepted/);
@@ -97,6 +176,17 @@ test("one paired report uses existing actual disclosure and separate local save"
     const snapshot = JSON.parse(await readFile(saved.bundle.files["product-report.json"], "utf8"));
     assert.deepEqual(snapshot.periodComparison, frozen);
     assert.equal(saved.bundle.reportType, "period-comparison");
+    const document = await readSavedReportFile(context, saved.state, saved.bundle.bundleId, "json");
+    const searchable = await extractReportFile(document);
+    assert.match(searchable.content, /Period|period/);
+    for (const reviewStatuses of [null, []]) {
+        const malformed = structuredClone(document);
+        malformed.snapshot.periodComparison.periods.baseline.facts.reviewStatuses = reviewStatuses;
+        await assert.rejects(extractReportFile(malformed), error => error.code === "report-period-invalid");
+    }
+    const wrongHash = structuredClone(document);
+    wrongHash.manifest.periodComparisonHash = "0".repeat(64);
+    await assert.rejects(extractReportFile(wrongHash), error => error.code === "report-period-integrity");
     assert.match(preview.previewHtml, /What differs/);
     assert.match(preview.files["product-report.md"], /No calls|Full-interaction|full retained/);
     await assert.rejects(controller.confirm("owner", preview.previewId, true, value.timeContext), /Preview not found/);

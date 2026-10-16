@@ -133,20 +133,28 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     await expect(page.locator(".request-context-timeline")).toContainText(records[0].userPrompt.text);
     await expect(page.locator('[data-reader-section="prompt"]')).toContainText(records[1].userPrompt.text.trim());
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /UNRELATED_CALL_CONTEXT/);
-    const timing = page.locator(".reader-timing-table tr").filter({ has: page.locator('data[value="900"]') });
+    const timing = page.locator(".journey-item[data-context-kind=action]").filter({ has: page.locator('.reader-call-duration data[value="900"]') });
     await expect(timing).toHaveAttribute("data-action-id", target.id);
-    await expect(timing).toContainText("0.9 s");
+    await expect(timing.locator(".reader-call-duration")).toHaveText("Call duration: 900 ms");
     await expect(page.locator("#selectedCall>.action-context")).toHaveCount(0);
     await expect(page.locator("#selectedCall .call-heading [data-result-layer=tool]")).toHaveAttribute("aria-label", "Tool completion: 1 Work IQ tool call");
-    await expect(page.locator(".request-context-summaries .request-recorded")).toHaveCount(2);
-    assert.deepEqual(await page.locator(".request-context-summaries .request-recorded").evaluateAll(nodes =>
+    await expect(page.locator('[data-reader-section="source"] .reader-source-record')).toHaveCount(2);
+    assert.deepEqual(await page.locator('[data-reader-section="source"] .reader-source-record').evaluateAll(nodes =>
         nodes.map(node => node.dataset.contextGroup)), records.slice(0, 2).map(record => record.scenarioId));
     await capture(page, "exact-call-context-light");
     await expect(page.locator("#selectedCall .technical-detail")).toBeVisible();
-    await expect(page.locator("#selectedCall .reader-input-label")).toHaveText("Target paths");
+    await expect(page.locator("#selectedCall .reader-input-label")).toHaveText("Targets");
     await expect(page.locator("#selectedCall .technical-detail details")).toHaveCount(0);
-    await page.locator("#selectedCall").getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
-    assert.deepEqual(await page.evaluate(() => window.callClipboard), [JSON.stringify(records[1].toolCalls[9].requestArgs, null, 2)]);
+    await expect(page.locator("#selectedCall").getByRole("button", { name: "Copy recorded arguments", exact: true })).toHaveCount(0);
+    const targets = page.locator("#selectedCall .reader-input-value code");
+    await expect(targets).toHaveText(records[1].toolCalls[9].requestArgs.entityUrls);
+    assert.equal(await targets.first().evaluate(node => {
+        const range = document.createRange(); range.selectNodeContents(node);
+        getSelection().removeAllRanges(); getSelection().addRange(range);
+        const exact = getSelection().toString() === node.textContent;
+        getSelection().removeAllRanges(); return exact;
+    }), true);
+    assert.deepEqual(await page.evaluate(() => window.callClipboard), []);
     await page.locator("#closeContextSidebar").click(); await ready(page); await frames(page);
     assert.equal(page.url(), origin);
     await expect(open).toBeFocused();

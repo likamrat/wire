@@ -127,7 +127,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
     assert.equal(await page.locator(".settings-layout>.settings-content").count(), 1);
     assert.equal(await page.locator("#settingsSearch").getAttribute("placeholder"), "Search settings");
     assert.equal(await page.locator(".settings-search-icon").getAttribute("aria-hidden"), "true");
-    for (const value of ["connection", "ai", "display", "troubleshooting", "privacy"]) {
+    for (const value of ["connection", "display", "troubleshooting", "privacy"]) {
         await category(page, value);
         const row = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
         assert.equal(await row.getAttribute("aria-current"), "page");
@@ -161,7 +161,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
         await mkdir(process.env.WIRE_SETTINGS_REFERENCE_PROOFS, { recursive: true });
         for (const theme of ["light", "dark"]) for (const width of [375, 1200]) {
             await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
-            for (const value of ["connection", "privacy", "ai", "display", "troubleshooting"]) {
+            for (const value of ["connection", "privacy", "display", "troubleshooting"]) {
                 await category(page, value);
                 if (value === "privacy") await page.locator("#assessmentSetup input[type=checkbox]").waitFor();
                 await page.evaluate(() => document.fonts.ready);
@@ -241,7 +241,8 @@ test("every registered setting and old route opens its exact live destination wi
         assert.ok(page.url().startsWith(origin));
     }
     await route("#settings?section=collection&setting=automatic-scores");
-    await expect(page.locator("#automaticScoreReview")).toBeFocused();
+    await expect(page.locator("#automaticScoreReview")).toHaveCount(0);
+    await expect(page.locator("#settingsRouteNotice")).toContainText("Unknown setting");
     await route("#settings?section=collection&setting=assessment-evidence");
     await expect(page.locator("#assessmentSetupTitle")).toBeFocused();
     await route("#settings?issues=1");
@@ -267,23 +268,23 @@ test("category navigation preserves source and reply drafts, local search, cance
     await category(page, "privacy");
     const choice = page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
     await choice.check();
-    await page.locator("#settingsSearch").fill("budget");
-    await page.locator('#settingsSearchResults a[data-setting="automatic-scores"]').click();
-    await expect(page.locator("#automaticScoreReview")).toBeFocused();
+    await page.locator("#settingsSearch").fill("Theme");
+    await page.locator('#settingsSearchResults a[data-setting="theme"]').click();
+    await expect(page.locator("#settingsThemePreference")).toBeFocused();
     assert.equal(await page.locator("dialog[open]").count(), 0);
     await page.goBack();
     await expect(choice).toBeChecked();
-    assert.equal(await page.locator("#settingsSearch").inputValue(), "budget");
+    assert.equal(await page.locator("#settingsSearch").inputValue(), "Theme");
     await page.getByRole("button", { name: "Discard change", exact: true }).click();
     await expect(choice).not.toBeChecked();
     await expect(choice).toBeFocused();
     await category(page, "connection");
     assert.equal(await sourceNode.evaluate(node => node === document.getElementById("sourceDatabase")), true);
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\invented-unsaved\\data.db");
-    await expect(page.locator("#approvalScope")).toContainText("7 days; event check: 15 seconds");
+    await expect(page.locator("#approvalScope")).toContainText("7 days; check every 15 seconds");
     await page.locator("#cancelSource").click();
     await expect(page.locator("#sourceDatabase")).toHaveValue("C:\\artificial\\data.db");
-    await expect(page.locator("#viewApprovedSource")).toBeFocused();
+    await expect(page.locator("#editSource")).toBeFocused();
     await selectActivityOption(page, "collectionCadence", "30");
     await category(page, "display");
     await category(page, "connection");
@@ -315,7 +316,7 @@ test("pending and uncertain settings results survive categories and only explici
     await expect(page.locator("#reloadSettings")).toBeVisible();
     await expect(page.locator("#settingsMessage")).toContainText("No success is assumed");
     await category(page, "privacy");
-    await category(page, "ai");
+    await category(page, "display");
     await expect(page.locator("#settingsMessage")).toBeVisible();
     await expect(page.locator("#checkActivity")).toBeDisabled();
     await category(page, "connection");
@@ -371,8 +372,7 @@ test("source preferences, pause and replacement keep their own explicit save gat
     assert.equal(writes[2].input.appDbPath, "C:\\invented-new\\data.db");
     await category(page, "privacy");
     await expect(page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true })).not.toBeChecked();
-    await category(page, "ai");
-    await expect(page.locator("#automaticScoreState")).toHaveText("Off");
+    await expect(page.locator("#automaticScoreState,[data-category=ai]")).toHaveCount(0);
 });
 
 test("reply-saving pending and uncertain state survives the rail without repeating permission", { timeout: 30000 }, async t => {
@@ -389,7 +389,7 @@ test("reply-saving pending and uncertain state survives the rail without repeati
     await choice.check();
     await page.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     await expect(choice).toBeDisabled();
-    await category(page, "ai");
+    await category(page, "display");
     release();
     await category(page, "privacy");
     await expect(page.locator("#assessmentSetup [role=alert]")).toContainText("do not repeat the update");
@@ -402,11 +402,11 @@ test("reply-saving pending and uncertain state survives the rail without repeati
     assert.equal(await page.locator("dialog[open]").count(), 0);
 });
 
-test("unapproved source search stays read-only and AI errors do not become answer failures", { timeout: 30000 }, async t => {
+test("unapproved source search stays read-only and stale AI status cannot restore retired controls", { timeout: 30000 }, async t => {
     const { page, automatic } = await setup(t, { approved: false });
     await category(page, "connection");
     await expect(page.locator("#reviewSource")).toBeEnabled();
-    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
+    await expect(page.locator("#checkActivity")).toHaveAccessibleName("Refresh");
     for (const query of ["source", "pause", "Refresh"]) {
         await page.locator("#settingsSearch").fill(query);
         const id = query === "pause" ? "collection-state" : query === "Refresh" ? "collect-now" : "source";
@@ -419,13 +419,12 @@ test("unapproved source search stays read-only and AI errors do not become answe
     await expect(page.locator("#assessmentSetup")).toContainText("Connect a supported local Copilot source");
     automatic.snapshot.state = "paused";
     automatic.snapshot.reason = "evaluation-failed";
-    await category(page, "ai");
-    await expect(page.locator("#automaticScoreState")).toHaveText("Paused - The evaluator could not finish.");
-    await expect(page.locator("#automaticScoreReview")).toHaveText("Review automatic scores");
+    await category(page, "display");
+    await expect(page.locator("#automaticScoreState,#automaticScoreReview,[data-category=ai]")).toHaveCount(0);
     assert.equal(await page.locator("dialog[open]").count(), 0);
 });
 
-test("five groups retain keyboard focus and readable geometry at 375 and 200 percent in both themes", { timeout: 60000 }, async t => {
+test("four current groups retain keyboard focus and readable geometry at 375 and 200 percent in both themes", { timeout: 60000 }, async t => {
     const { page } = await setup(t);
     const evidence = [], proofs = process.env.WIRE_SETTINGS_ORGANIZATION_PROOFS;
     if (proofs) await mkdir(proofs, { recursive: true });

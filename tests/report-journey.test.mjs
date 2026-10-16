@@ -7,6 +7,19 @@ function chosen(journey, count = 2) {
     journey.update({ requestCount: count, scopeReady: true, formats: ["html", "pdf", "json", "markdown"] });
 }
 
+test("setup presentation notifications are idempotent and cannot reopen or approve a report", () => {
+    const presentations = [];
+    const journey = createReportJourney({ presentStep: value => presentations.push(value) });
+    chosen(journey);
+    journey.go(2);
+    const before = journey.snapshot(), count = presentations.length;
+    journey.setContentsPresented(true);
+    journey.setContentsPresented(true);
+    journey.setContentsPresented(false);
+    assert.equal(presentations.length, count, "Visibility notification does not recurse through presentStep");
+    assert.deepEqual(journey.snapshot(), before, "Presentation ownership does not change report authority or stage");
+});
+
 test("contextual hosting follows deliberate journey entry without granting preview or save authority", () => {
     const presentations = [];
     const journey = createReportJourney({ presentStep: value => presentations.push(value) });

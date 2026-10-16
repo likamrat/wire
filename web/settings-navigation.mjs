@@ -3,7 +3,6 @@ export function createSettingsNavigation(search) {
     const categories = [
         { id: "connection", title: "Connection & updates", heading: "connectionTitle" },
         { id: "privacy", title: "Privacy & saved data", heading: "dataManagementTitle" },
-        { id: "ai", title: "AI reviews", heading: "aiReviewsTitle" },
         { id: "display", title: "Display", heading: "displayTitle" },
         { id: "troubleshooting", title: "Troubleshooting", heading: "troubleshootingTitle" },
     ];
@@ -15,8 +14,7 @@ export function createSettingsNavigation(search) {
     };
     const settingAliases = { advanced: "collection-details" };
     const entries = [
-        { id: "automatic-scores", section: "ai", title: "Automatic scores", context: "Review model disclosure, approved chats, assessment allowance and AI-credit budget. Reply saving is a separate permission.", synonyms: "accuracy trust evaluation scoring model budget credits automatic scope permissions paused error stop", target: "automaticScoreReview" },
-        { id: "assessment-evidence", section: "privacy", title: "Save Copilot replies locally", context: "Keep recorded replies with your activity. Turning this off deletes optional text and linked unsaved insights, not saved reports.", synonyms: "optional evidence answer response assessment insights capture consent permission revoke", target: "assessmentSetupTitle" },
+        { id: "assessment-evidence", section: "privacy", title: "Save Copilot replies locally", context: "Keep recorded replies with your activity. Turning this off deletes saved response text and dependent retained annotations, not saved reports.", synonyms: "optional evidence answer response capture consent permission revoke", target: "assessmentSetupTitle" },
         { id: "delete-activity", section: "privacy", title: "Review deletion", context: "Preview and permanently delete all collected records or a date range. Saved reports and Copilot sources stay unchanged.", synonyms: "delete collected activity clear remove reset purge records data", target: "deleteActivity" },
         { id: "recollect-activity", section: "privacy", title: "Read history again", context: "Choose chats to preview available history from approved sources. Only explicit confirmation starts recollection.", synonyms: "recollect activity regenerate reread restore deleted history records recovery", target: "recollectActivity" },
         { id: "theme", section: "display", title: "Theme", context: "Choose Light or Dark for this browser. No collection or report content changes.", synonyms: "appearance color light dark contrast", target: "settingsThemePreference" },

@@ -83,22 +83,23 @@ test("Search separates original title, type, source and evidence without clippin
         }));
         for (const [index, item] of geometry.entries()) {
             assert.ok(item.row.height >= 44 && item.row.width >= 44);
-            assert.ok(item.meta.bottom <= item.title.y - 3, "Type is a separate compact lead-in, not title prose");
+            assert.ok(item.title.bottom <= item.meta.y - 3, "The original title leads, with type below it");
             assert.ok(Math.abs(item.title.x - item.meta.x) < 1, "Shared text edge");
             assert.ok(item.icon.height <= item.kind.lineHeight, "No SVG baseline slack");
-            assert.ok(Math.abs(item.icon.y + item.icon.height / 2 - item.kind.y - item.kind.height / 2) < 1);
-            assert.ok(item.title.fontSize > item.kind.fontSize);
+            assert.ok(Math.abs(item.icon.y + item.icon.height / 2 - item.title.y - item.title.lineHeight / 2) < 1);
+            assert.equal(item.title.fontSize, item.kind.fontSize);
+            assert.equal(item.title.fontSize, 14 * scale, "One reading scale matches the query and controls");
             assert.equal(item.title.weight, "400", "Original prompt titles stay regular");
             assert.ok(item.scrollWidth <= item.clientWidth + 1);
             if (index) {
                 assert.ok(parseFloat(item.border) >= 1 && parseFloat(item.margin) >= 4, "Visible separation between distinct results");
             }
             if (item.source) {
-                assert.ok(item.source.y >= item.title.bottom + 3, "Source has its own line");
+                assert.ok(item.source.y >= item.meta.bottom + 3, "Distinct source has its own line");
                 assert.ok(Math.abs(item.source.x - item.title.x) < 1);
             }
             if (item.excerpt) {
-                assert.ok(item.excerpt.y >= (item.source || item.title).bottom + 7, "Match evidence is grouped below its context");
+                assert.ok(item.excerpt.y >= (item.source || item.meta).bottom + 7, "Match evidence is grouped below its context");
                 assert.equal(item.excerpt.clamp, "none");
                 assert.notEqual(item.excerpt.overflow, "hidden");
             }

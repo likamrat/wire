@@ -115,35 +115,8 @@ export function createAssessmentControls(contract) {
             return next;
         });
     }
-    function feedback({ interactionRef, basis, checkId, latestPersonal = null }) {
-        contract.validateBasis(basis);
-        const context = clone({ interactionRef, basis, checkId });
-        if (latestPersonal !== null) {
-            contract.validateAssessment(latestPersonal);
-            if (latestPersonal.origin !== "user-personal" || latestPersonal.interactionRef !== interactionRef || latestPersonal.checkId !== checkId
-                || Object.keys(basis).some(key => latestPersonal.basis[key] !== basis[key])) {
-                throw new Error("Existing personal feedback does not match the current interaction context.");
-            }
-        }
-        return control(latestPersonal, (draft, mutationRef) => ({
-            action: "set_personal_assessment",
-            input: {
-                schemaVersion: 1, mutationRef, interactionRef: context.interactionRef, expectedBasis: clone(context.basis),
-                checkId: context.checkId, verdict: draft.verdict, withdraw: draft.withdraw,
-            },
-        }), (next, request, previous) => {
-            contract.validateAssessment(next);
-            if (next.origin !== "user-personal" || next.interactionRef !== request.interactionRef || next.checkId !== request.checkId
-                || next.verdict !== request.verdict || next.withdrawn !== request.withdraw
-                || previous && (next.revision !== previous.revision + 1 || next.supersedes !== previous.assessmentRef)
-                || (next.revision === 1) !== (next.supersedes === null)) {
-                throw new Error("The feedback result does not match this requested revision.");
-            }
-            for (const key of ["consentRevision", "deletionEpoch"]) if (next.basis[key] !== request.expectedBasis[key]) throw new Error("Feedback was returned for a changed evidence context.");
-            for (const key of ["sourceRevision", "membershipRevision", "overrideRevision"]) if (next.basis[key] < request.expectedBasis[key]) throw new Error("An older feedback context was returned.");
-            context.basis = clone(next.basis);
-            return next;
-        });
+    function feedback() {
+        throw Object.assign(new Error("Personal feedback is no longer supported."), { code: "PERSONAL_FEEDBACK_RETIRED" });
     }
     return { consent, feedback };
 }

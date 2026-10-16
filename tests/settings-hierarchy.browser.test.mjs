@@ -106,7 +106,7 @@ test("Settings groups contain their own controls with consistent nearby columns 
             && geometry.actions.y >= geometry.cadence.bottom && geometry.actions.bottom <= geometry.root.bottom + 0.0001,
         "Save and Cancel are contained below the fields they govern");
         await capture(page, `connection-${width}-${theme}`);
-        for (const category of ["privacy", "ai", "display", "troubleshooting"]) {
+        for (const category of ["privacy", "display", "troubleshooting"]) {
             await navigateSettings(page, category);
             const pane = page.locator(`[data-settings-section=${category}]`);
             assert.equal(await pane.locator("h2").count(), 1);
@@ -114,16 +114,7 @@ test("Settings groups contain their own controls with consistent nearby columns 
                 nodes.flatMap(node => ["aria-describedby", "aria-labelledby"].flatMap(attribute =>
                     (node.getAttribute(attribute) || "").split(/\s+/).filter(id => id && !document.getElementById(id))))), [],
             "Removed explanations leave no dead accessible descriptions");
-            if (category === "ai") {
-                const order = await page.locator(".settings-automatic-row").evaluate(node => {
-                    const h = node.querySelector("h3").getBoundingClientRect(), status = node.querySelector("p").getBoundingClientRect();
-                    const button = node.querySelector("button").getBoundingClientRect();
-                    return { heading: h.toJSON(), status: status.toJSON(), button: button.toJSON() };
-                });
-                assert.ok(order.status.y >= order.heading.bottom && Math.abs(order.status.x - order.heading.x) <= 1,
-                    "Automatic-score state sits under its title, not after an unrelated action column");
-                assert.ok(order.button.x - order.heading.x <= 320);
-            }
+            assert.equal(await page.locator("#automaticScoreSetup,[data-category=ai]").count(), 0);
             if (category === "display") await expect(pane.getByRole("heading", { name: "Time zone", level: 3 })).toBeVisible();
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
             assert.deepEqual(await pane.locator("button,label,summary").evaluateAll(nodes => nodes.filter(node =>

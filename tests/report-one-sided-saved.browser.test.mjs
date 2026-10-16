@@ -1,15 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { fixture, privateFixture } from "./helpers.mjs";
-import { createExportController, writeBundle } from "../lib/export.mjs";
+import { retirementFixture } from "./ai-review-retirement-fixture.mjs";
+import { buildSanitizedBundle, createExportController, writeBundle } from "../lib/export.mjs";
 import { buildComparisonBundle, inspectComparisonPair } from "../lib/comparison-export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
-import { executeAssessmentAction } from "../lib/assessment.mjs";
+import { buildReportFacts } from "../lib/assessment-read-model.mjs";
+import { freezeEvaluationFacts } from "../lib/report-facts.mjs";
+import { loadSavedReportSource } from "../lib/report-artifacts.mjs";
+import { renderHtmlReport } from "../lib/product-report.mjs";
+import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
+import { renderComparisonHtml, renderComparisonMarkdown, reportPresentation } from "../lib/report-presentation.mjs";
+import { makeRatio } from "./report-comparison-fixtures.mjs";
 import { startServer } from "../lib/server.mjs";
 
 const timeContext = { timeZone: "UTC", locale: "en-US" };
@@ -18,17 +23,66 @@ const personalRow = comparison => comparison.metrics.find(metric => metric.metri
 async function fileHashes(bundle) {
     return Object.fromEntries(await Promise.all(Object.entries(bundle.files).map(async ([name, file]) => [name, hash(await readFile(file))])));
 }
+// Invented archived artifacts only; no retired writer or legacy generation mode.
+async function saveHistoricalReport(context, includeFeedback) {
+    const state = await loadBoardState(context);
+    const bundle = await buildSanitizedBundle(state.evidence, state.pseudonymKey, { promptMode: "none", formats: ["html", "json"], timeContext });
+    const facts = structuredClone(buildReportFacts(state.evidence, state).facts);
+    facts.metricProjectionVersion = 3;
+    if (includeFeedback) {
+        const assessment = { ...state.personalEvaluation.feedback.records[0].assessment, basis: facts.basis,
+            assessmentRef: "assessment-" + "5".repeat(32), verdict: "fail" };
+        facts.assessments.push(assessment);
+        facts.metrics.push({ ...makeRatio(0, 1), metricRef: "metric-" + "5".repeat(32), basis: facts.basis,
+            dimension: assessment.dimension, origin: assessment.origin, checkId: assessment.checkId,
+            eligibleUnitRefs: [assessment.interactionRef], coveredUnitRefs: [assessment.interactionRef],
+            evidenceRefs: [...assessment.evidenceRefs, assessment.assessmentRef] });
+    }
+    bundle.snapshot.evaluationFacts = freezeEvaluationFacts(facts);
+    bundle.snapshot.presentation = reportPresentation;
+    bundle.privacy = { ...bundle.privacy, reviewerConfirmed: true, confirmedAt: new Date().toISOString(), reviewChannel: "synthetic-legacy-fixture" };
+    bundle.previewHtml = renderHtmlReport(bundle.records, { snapshot: bundle.snapshot });
+    bundle.files["product-report.html"] = bundle.previewHtml;
+    bundle.files["product-report.json"] = JSON.stringify(bundle.snapshot, null, 2) + "\n";
+    const manifest = JSON.parse(bundle.files["coverage-and-redaction-manifest.json"]);
+    Object.assign(manifest, { presentation: reportPresentation, privacyReview: bundle.privacy, evaluationFacts: facts,
+        evaluationFactsHash: hash(JSON.stringify(facts)), snapshotHash: hash(JSON.stringify(bundle.snapshot)),
+        files: Object.fromEntries(Object.entries(bundle.files).filter(([name]) => name !== "coverage-and-redaction-manifest.json")
+            .map(([name, bytes]) => [name, { sha256: hash(bytes), bytes: Buffer.byteLength(bytes) }])) });
+    bundle.files["coverage-and-redaction-manifest.json"] = JSON.stringify(manifest, null, 2);
+    let saved;
+    await updateBoardState(context, async state => {
+        saved = await writeBundle(context, bundle, state);
+        state.exports.push(saved);
+    });
+    return saved;
+}
 async function seedLegacyComparison(context, baselineId, laterId, side) {
-    const pair = await inspectComparisonPair(context, await loadBoardState(context), baselineId, laterId);
-    const row = personalRow(pair.comparison);
+    const state = await loadBoardState(context);
+    const pair = await inspectComparisonPair(context, state, baselineId, laterId);
+    const sources = await Promise.all([baselineId, laterId].map(id => loadSavedReportSource(context, state, id)));
+    const comparison = compareFrozenReportFacts(sources[0].envelope, sources[1].envelope, { metricProjectionVersion: 3 });
+    const row = personalRow(comparison);
     assert.equal(row[side].value, 0);
     delete row.baseline;
     delete row.later;
     const bundle = await buildComparisonBundle(pair, { formats: ["html", "json", "markdown"], timeContext });
     // Seed a pre-fix data shape in an isolated test store; this is not a production review.
+    comparison.presentation = reportPresentation;
+    bundle.comparison = comparison;
+    Object.assign(bundle.snapshot, { comparison, presentation: reportPresentation,
+        sourceFacts: sources.map(source => ({ report: source.reference, evaluationFacts: source.facts, legacyFacts: null })) });
+    bundle.previewHtml = renderComparisonHtml(comparison, bundle.snapshot);
+    bundle.files["comparison-report.html"] = bundle.previewHtml;
+    bundle.files["comparison-report.md"] = renderComparisonMarkdown(comparison, bundle.snapshot);
+    bundle.files["comparison-report.json"] = JSON.stringify(bundle.snapshot, null, 2) + "\n";
     bundle.privacy = { ...bundle.privacy, reviewerConfirmed: true, confirmedAt: new Date().toISOString(), reviewChannel: "synthetic-legacy-fixture" };
     const manifest = JSON.parse(bundle.files["coverage-and-redaction-manifest.json"]);
-    manifest.privacyReview = bundle.privacy;
+    Object.assign(manifest, { presentation: reportPresentation, privacyReview: bundle.privacy,
+        comparison, comparisonHash: hash(JSON.stringify(comparison)), sourceFacts: bundle.snapshot.sourceFacts,
+        sourceFactsHash: hash(JSON.stringify(bundle.snapshot.sourceFacts)), snapshotHash: hash(JSON.stringify(bundle.snapshot)),
+        files: Object.fromEntries(Object.entries(bundle.files).filter(([name]) => name !== "coverage-and-redaction-manifest.json")
+            .map(([name, bytes]) => [name, { sha256: hash(bytes), bytes: Buffer.byteLength(bytes) }])) });
     bundle.files["coverage-and-redaction-manifest.json"] = JSON.stringify(manifest, null, 2);
     let saved;
     await updateBoardState(context, async state => {
@@ -40,35 +94,17 @@ async function seedLegacyComparison(context, baselineId, laterId, side) {
     return saved;
 }
 
-test("actual saved pairs retain one-sided feedback in both directions, exports, and read-only legacy views", { timeout: 120000 }, async t => {
+test("historical one-sided facts stay readable in both directions while new comparisons exclude retired feedback", { timeout: 120000 }, async t => {
     const cleanup = [];
-    const source = fixture("one-sided");
-    source.userPrompt.sourceEventId = "one-sided-prompt";
-    const { context } = await privateFixture({ after: action => cleanup.push(action) }, [source]);
+    const { context } = await retirementFixture({ after: action => cleanup.push(action) });
     let runtime, browser;
     t.after(async () => {
         try { await browser?.close(); await runtime?.close(); }
         finally { for (const action of cleanup) await action(); }
     });
     const controller = createExportController(context);
-    async function saveReport() {
-        const state = await loadBoardState(context);
-        const preview = await controller.preview("seed", undefined, { promptMode: "none", formats: ["html", "json"], timeContext },
-            { kind: "selected", revision: state.revision, scenarioIds: [source.scenarioId] });
-        await controller.review("seed", preview.previewId, true, timeContext);
-        return (await controller.confirm("seed", preview.previewId, true, timeContext)).bundle;
-    }
-    async function feedback(verdict) {
-        const state = await loadBoardState(context), model = buildAssessmentModel(state);
-        await executeAssessmentAction(context, "seed", "set_personal_assessment", {
-            schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`,
-            interactionRef: model.overview.interactionRefs[0], expectedBasis: model.basis,
-            checkId: "semantic-answer-correctness", verdict, withdraw: false,
-        });
-    }
-    const withoutFeedback = await saveReport();
-    await feedback("fail");
-    const withFeedback = await saveReport();
+    const withoutFeedback = await saveHistoricalReport(context, false);
+    const withFeedback = await saveHistoricalReport(context, true);
     const sourceHashes = await Promise.all([withoutFeedback, withFeedback].map(fileHashes));
     const directions = [
         { side: "baseline", baseline: withFeedback, later: withoutFeedback },
@@ -78,7 +114,9 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         direction.legacy = await seedLegacyComparison(context, direction.baseline.bundleId, direction.later.bundleId, direction.side);
         direction.legacyHashes = await fileHashes(direction.legacy);
     }
-    await feedback("pass"); // Opening saved results must not use this newer live verdict.
+    const historicalStore = structuredClone((await loadBoardState(context)).personalEvaluation);
+    assert.equal(historicalStore.feedback.records[0].assessment.verdict, "pass",
+        "Retained history disagrees with the frozen fail fact; old reads must use their exact saved source.");
     runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, locale: "en-US", timezoneId: "UTC" });
@@ -93,8 +131,8 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         return route.continue();
     });
     async function showReports(bundleId) {
-        if (page.url().startsWith(runtime.url)) await page.reload();
-        else await page.goto(runtime.url + "#reports");
+        await page.goto(runtime.url + "#reports");
+        await page.reload();
         await page.locator('#workspace[aria-busy="false"]').waitFor();
         if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
         await page.locator("#savedReportSearch").fill(bundleId);
@@ -104,55 +142,48 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         await page.locator("#comparisonWorkspace").getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup .select-option[data-value="${id}"]`).click();
     }
-    async function assertView(side) {
-        const rows = page.locator("#comparisonWorkspace .comparison-metrics tbody tr");
-        const personal = rows.filter({ hasText: "Your feedback" });
-        assert.equal(await personal.count(), 1);
-        assert.match(await personal.locator("th").innerText(), /Answer correctness/);
-        const values = await personal.locator(".comparison-metric-value").allTextContents();
-        assert.deepEqual(values, side === "baseline" ? ["0%", "Not saved"] : ["Not saved", "0%"]);
-        assert.match(await personal.locator("td").last().innerText(), /Not comparable/);
-        assert.equal(await personal.locator(".comparison-delta").count(), 0);
-        const automatic = rows.filter({ hasText: "Local observation (not a model assessment)" }).filter({ hasText: "Answer correctness" });
-        assert.deepEqual(await automatic.locator(".comparison-metric-value").allTextContents(), ["Not checked automatically", "Not checked automatically"]);
+    async function assertView(comparison) {
+        const view = page.locator("#comparisonWorkspace .report-comparison");
+        assert.equal(await view.locator(".comparison-tool-results").isVisible(), true);
+        assert.equal(await view.locator(".comparison-metrics tbody tr").count(), comparison.metrics.length);
+        assert.doesNotMatch(await view.innerText(), /Your feedback|Personal feedback|Answer correctness|Answer support|AI review/);
     }
     for (const direction of directions) {
         await showReports(direction.baseline.bundleId);
-        await item(direction.baseline.bundleId).locator(".saved-report-summary").click();
-        await page.locator("#contextSidebar").getByRole("button", { name: "Compare saved reports", exact: true }).click();
-        await select("Baseline report", direction.baseline.bundleId);
+        await page.locator("#reportCompareLink").click();
+        await select("Earlier report", direction.baseline.bundleId);
         await select("Later report", direction.later.bundleId);
         const inspecting = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/inspect"));
         await page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true }).click();
         const response = await inspecting;
         assert.equal(response.status(), 200, await response.text());
-        const compared = (await response.json()).comparison, row = personalRow(compared);
-        assert.equal(row[direction.side].value, 0);
-        assert.equal(row[direction.side === "baseline" ? "later" : "baseline"], null);
-        assert.equal(row.delta, null);
+        const compared = (await response.json()).comparison;
+        assert.equal(compared.metricProjectionVersion, 4);
+        assert.equal(personalRow(compared), undefined);
+        assert.ok(compared.metrics.length > 0 && compared.metrics.every(row => row.metric === "speed"));
         await page.locator("#comparisonWorkspace .comparison-metrics").first().waitFor();
-        await assertView(direction.side);
+        await assertView(compared);
 
         const preview = await controller.previewComparison("new-copy", direction.baseline.bundleId, direction.later.bundleId,
             { formats: ["html", "pdf", "json", "markdown"], timeContext });
         await controller.reviewComparison("new-copy", preview.previewId, true, timeContext);
         const saved = (await controller.confirmComparison("new-copy", preview.previewId, true, timeContext)).bundle;
         const newHashes = await fileHashes(saved);
-        for (const name of ["comparison-report.html", "comparison-report.md"]) {
+        for (const name of ["comparison-report.html", "comparison-report.md", "comparison-report.json"]) {
             const text = await readFile(saved.files[name], "utf8");
-            assert.match(text, /Your feedback/);
-            assert.match(text, /Not saved/);
-            assert.match(text, /0%/);
+            assert.doesNotMatch(text, /Your feedback|Personal feedback|user-personal|model-assessed/);
+            assert.match(text, /Recorded tool results/);
         }
         const pdf = getDocument({ data: new Uint8Array(await readFile(saved.files["comparison-report.pdf"])), useSystemFonts: true });
         try {
             const doc = await pdf.promise, text = [];
             for (let n = 1; n <= doc.numPages; n++) text.push((await (await doc.getPage(n)).getTextContent()).items.map(part => part.str ?? "").join(""));
-            assert.match(text.join(""), /Your feedback/);
-            assert.match(text.join(""), /Not saved/);
+            assert.doesNotMatch(text.join(""), /Your feedback|Personal feedback/);
+            assert.match(text.join(""), /Recorded tool results/);
         } finally { await pdf.destroy(); }
         const openedNew = await controller.openComparison("new-copy", saved.bundleId);
-        assert.equal(personalRow(openedNew.comparison)[direction.side].value, 0);
+        assert.equal(openedNew.comparison.metricProjectionVersion, 4);
+        assert.equal(personalRow(openedNew.comparison), undefined);
         assert.equal(openedNew.displayCompatibility, undefined);
         assert.deepEqual(await fileHashes(saved), newHashes);
 
@@ -167,7 +198,11 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
         assert.equal(document.format, "html");
         assert.equal(Buffer.from(document.data, "base64").toString(), await readFile(direction.legacy.files["comparison-report.html"], "utf8"));
         const opened = await controller.openComparison("legacy-compatibility", direction.legacy.bundleId);
-        assert.equal(personalRow(opened.comparison)[direction.side].value, 0);
+        const restored = personalRow(opened.comparison), missing = direction.side === "baseline" ? "later" : "baseline";
+        assert.equal(restored[direction.side].value, 0);
+        assert.equal(restored[missing], null);
+        assert.equal(restored.delta, null);
+        assert.equal(restored.reason, `${missing}-metric-not-saved`);
         assert.equal(opened.displayCompatibility.restoredMetricCount, 1);
         assert.equal(opened.displayCompatibility.savedFilesUnchanged, true);
         const manifest = JSON.parse(await readFile(direction.legacy.files["coverage-and-redaction-manifest.json"], "utf8"));
@@ -214,4 +249,5 @@ test("actual saved pairs retain one-sided feedback in both directions, exports, 
     assert.match(await frozen.locator(".report-comparison").innerText(), /Not preserved/);
     assert.deepEqual(errors, []);
     assert.deepEqual(external, []);
+    assert.deepEqual((await loadBoardState(context)).personalEvaluation, historicalStore);
 });

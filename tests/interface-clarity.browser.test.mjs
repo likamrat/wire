@@ -76,11 +76,10 @@ test("screen titles stand alone and existing help keeps keyboard and touch acces
         await summary.tap();
         await expect(page.locator("#freshHelp")).toHaveAttribute("open", "");
         await summary.tap();
-        const dateHelp = page.locator('#dateFilter').locator("xpath=ancestor::div[contains(@class,'filter-field')]").locator(".ux-help");
-        await dateHelp.focus();
-        await expect(page.getByRole("tooltip")).toBeVisible();
-        await page.keyboard.press("Escape");
-        await expect(dateHelp).toBeFocused();
+        const dateControl = page.locator("#dateFilter-control");
+        await dateControl.focus();
+        await expect(page.locator("#filters .ux-help")).toHaveCount(0);
+        await expect(dateControl).toBeFocused();
         await expect(page.getByRole("tooltip")).toBeHidden();
     }
     assert.ok(!writes.some(endpoint => /\/(?:configure|enabled|preview|export|feedback|consent\/set)$/.test(endpoint)));

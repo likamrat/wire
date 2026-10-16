@@ -1,5 +1,20 @@
 # Reports and comparisons in WIRE
 
+**Current projection:** new reports keep report-envelope schema v3 and use the
+independent metric projection **v4**. They contain recorded outcomes, source and
+service facts, canonical membership and observed timing, not AI or personal
+judgments, generated check recitals, unsupported-quality placeholders or attempt
+recaps. There is no personal-feedback section or navigation. New comparisons use
+compatible retained observations and timing, with explicit one-sided/unavailable results.
+New presentation metadata is version 2 and has no assessment grading bands;
+historical version-1 presentation definitions remain unchanged.
+
+Saved reports/comparisons are not migrated. Their HTML, PDF, JSON, Markdown,
+manifests, definitions and hashes stay unchanged; legacy JSON-only reading keeps
+its original interpretation. The historical review terminology below remains a
+reference for those saved formats, not a current scoring feature. Removing AI
+review does not settle unknown billing or rewrite approval/receipt evidence.
+
 WIRE describes your approved, recorded interactions. It does not require a synthetic benchmark or an expected-answer dataset, and it does not replay Work IQ or Graph requests.
 
 ## Reading the measures
@@ -134,10 +149,12 @@ evidence, with model/rubric origin and exact interaction coverage. No result is
 **No saved review**, not zero or tool-success rate. Insufficient evidence and reviewer
 errors remain distinct. Optional personal feedback is not a required grading workflow.
 
-New reports retain metric projection v2 and its exact internal dimensions, with no original
-Cost metric, placeholder, or definition. Historical four-dimension report facts
-remain readable without alteration. Evaluator spending safeguards remain in
-Automatic scores; omitting original Cost never means zero spending or improvement.
+Historical metric projection v2 omitted the original Cost metric, placeholder
+and definition. V3 additionally excluded machine-generated review facts;
+current v4 also excludes personal-rating lanes.
+Supported older facts remain readable without alteration. Retained evaluator
+spending and unknown-billing evidence is unchanged; omission never means zero
+spending or improvement.
 
 Current comparison headings and new HTML, PDF and Markdown use the shared
 check/version/origin-aware wording resolver. Request matching and personal
@@ -160,9 +177,17 @@ Pass-share colors use versioned presentation bands: below 50%, 50% to below 75%,
 ## Saving a report
 
 The **Activity -> Contents -> Review & save** flow stays deliberate and empty-first.
-Activity chooses Selected/Current/All membership and prompt authors, with an in-task
-interaction picker. Counts use the full canonical population across all pages and
-distinguish included chats from interactions. **Continue to contents** opens **Report
+Activity places Selected/Current/All membership above its interaction picker.
+**Authors in report** sits beside **Find an interaction**, using the same shared
+filter presentation as Analyze. Counts use the full canonical population across
+all pages and distinguish included chats from interactions. One action area follows
+the picker, with the included count, outside-page count when needed, Clear selection
+and Continue. An outside-page count is not an outside-Analyze count; browsing never
+changes membership. Detailed evidence units remain in Scope and exclusions.
+Footer actions wrap according to their label widths, including nested Back/Clear
+actions. Enlarged text may wrap between words, not into fragments; targets and
+text are not shrunk to make controls share a row.
+**Continue to contents** opens **Report
 setup** in the same right sidebar used for interaction details. The Activity picker
 stays visible and interactive beside it on desktop. Setup holds the existing prompt
 modes, optional linked text, four formats and additional masking. Reports navigation
@@ -174,13 +199,15 @@ setup** restores the same fields, reading position and focus. In Selected scope,
 Add/Remove uses canonical membership and keeps hidden selections. Current/All and
 paired-period peeks explain inclusion instead of offering a misleading membership
 toggle; return to Activity (or Change comparison in Analyze) to change their scope.
-Author exclusions still apply to all included calls, scores and optional context.
+Author exclusions still apply to all selected activity and optional context.
 These Back actions are creation-specific. Inspecting an interaction from Search
 while browsing the saved library keeps the existing Add/Continue to report actions.
 
 The picker uses the same regular prompt and equal-weight fact conventions as the
-interaction reader. Its bounded prompt surface carries the leading edge; the author
-and View/Read controls stay aligned with selection. Read expands the exact retained
+interaction reader. Its prompt uses the paper surface and a restrained leading edge;
+My/Agent labels and edges share their blue/purple cues, while unverified stays neutral.
+View/Read targets occupy a separate utility column without inflating the author line;
+narrow/enlarged prompts retain the full row width. Read expands the exact retained
 text, including partial fragments, without reconstructing missing text. Optional facts
 show Copilot Chat and qualified time when known. Exact tool names, supported service
 cues and outcome pills share the Analyze/sidebar vocabulary, using full-interaction
@@ -198,8 +225,10 @@ missing prompt text and unverified authors remain explicit.
 
 Closing setup keeps its memory-only choices without a confirmation. Continue to
 contents reopens it; picker search and pagination do not close it or clear selection.
-Only unsaved personal feedback in an interaction peek uses the inline Discard changes /
-Keep editing guard. It is not a report-draft Save/Discard gate. On narrow or enlarged
+The main continuation is absent while the setup flow owns its action area, including
+a temporary interaction peek. Native Close exposes it again and restores focus;
+an interrupted exit cannot hide or focus a newer owner. Closing Contents does not
+add a report-draft Save/Discard gate. On narrow or enlarged
 views the same sidebar is a modal overlay: use Back to activity or Close to reach the
 picker, rather than interacting through the overlay.
 
@@ -211,17 +240,24 @@ Prepare report runs the existing local preview controller. Its loading/error sta
 and the actual prepared document occupy the main workspace, with the sidebar closed
 for reading room. Review presents flat Report/Text/Files views. Text copies
 and privacy findings stay available without nested comparison disclosures.
+**Copy local original** and **Copy report copy** identify distinct subjects;
+Edit/omit belongs to its report-copy column. Copy feedback does not insert a line.
+Both columns use regular screen typography and a restrained leading edge, not
+gray text cards or the frozen document's separate font rules.
+Files shows each exact filename once as its disclosure, without an additional
+heading repeating the selected tab. Retained partial, unavailable and mandatory
+credential-removal notices are not condensed away.
 **Approve for local saving** records disclosure; the text-only **Save report** is a
 separate action in that same reading workspace, not a fourth page repeating scope.
 Back to contents reopens setup and retains an unchanged prepared snapshot. Changing
 membership, options or source authority invalidates that review as before; copy
 edits/omissions require Rebuild preview and a fresh disclosure approval.
 
-**Prompt authors** is an explicit membership choice in Activity, separate from
+**Authors in report** is an explicit membership choice in Activity, separate from
 No prompts / Masked / Original. It intersects the chosen Selected requests, Current view or All
-collected activity base scope. Your-only excludes agent-originated and unverified interactions,
-including their complete calls and scores; select the unverified category explicitly to include it.
-Your + Agent is not All: All includes unverified authors. Human-origin groups keep calls executed
+collected activity base scope. My prompts excludes agent-originated and unverified interactions,
+including their complete calls and optional context; select the unverified category explicitly to include it.
+My + Agent is not All: All includes unverified authors. Human-origin groups keep calls executed
 by agents. Changing browsing filters never discards hidden selected IDs, while a report author
 change invalidates its preview and disclosure approval even if the current matching IDs are unchanged.
 
@@ -435,11 +471,17 @@ footer to the shared presentation host. These nodes are moved, not cloned or reb
 inactive content remains mounted in a hidden parking host so existing field handlers
 and IDs stay authoritative. The client keeps one report-owned setup return context,
 containing only focus/scroll and the interaction-return intent. The shell has no report
-selection, consent or receipt state. `requestStep` admits a transition through the
-existing personal-feedback departure guard before changing the journey. The setup
+selection, consent or receipt state. Transitions retain report-write and
+disclosure guards; there is no personal-feedback departure gate. The setup
 host owns its visibility during the exit glide: fields and footer stay painted
 until it closes, then focus returns to the main journey unless newer user input
 has already moved it.
+`setContentsPresented` is an idempotent presentation notification, not a new stage
+or permission state. It changes only the existing main continuation's visibility
+and does not recurse into `presentStep`. Report-owned show/close/return transitions,
+including the unchanged peek-close fast return, synchronize it from the actual
+host/peek ownership. Selection, preparation, disclosure and save authority stay
+with their existing controllers.
 If setup replaces an interaction that is still exiting, the presenter first settles
 that interaction's cleanup and native-history ownership. The new form must not
 inherit an inert panel or a deferred cleanup that can erase its footer.
@@ -452,6 +494,21 @@ Revisiting an already-opened setup remains possible after its last member is rem
 zero or unavailable membership still blocks preparation. Neither Close nor a field
 change prepares, approves or saves anything. A pending/unknown dispatched save cannot
 be cleared or called cancelled by panel navigation; only its original receipt settles it.
+
+Ordinary reports and saved-report comparisons share one backend preview owner.
+An admitted new Prepare invalidates only the other task's transient preview,
+in-flight preparation generation and approval. Its selection/pair, formats and
+copy edits remain. The late result of replaced preparation cannot restore review
+authority. Reading a comparison, switching tasks or returning to an unchanged
+preview does not invalidate its peer or prepare again.
+Before invalidating anything, each Prepare checks the other controller's actual
+dispatched/unconfirmed save state. The check runs at dispatch as well as in
+button/rebuild availability, with a visible reason. Existing in-flight navigation
+gates remain unchanged; the bridge adds no broad navigation lock, and read-only
+return, verified saved Open and recovery remain available when those gates permit.
+Only exact original-save recovery clears an unresolved-save preparation block.
+Source/consent invalidation still owns revocation; peer preparation is not a new
+permission grant or a reason to retain revoked text.
 
 Prepared frames reuse the existing frozen-document sanitizer and restrictive CSP.
 Only these frames permit `allow-same-origin`, so trusted parent code can measure
@@ -467,11 +524,10 @@ with `createReportDraft`; private search stays browser-only and is represented t
 report APIs by IDs, never query text. Pending/failed reads gate review/save without
 discarding copies. Accepted reads compare selected source content and aliases,
 base/included membership, author/options, time/date basis, source permissions,
-feedback/deletion revisions and assessment mapping. Unrelated source/browsing
-changes can keep verified approval; same-count identity swaps cannot. Global
-feedback/permission invalidations are conservative. When model results exist, the
-snapshot does not expose selected evaluation dependencies, so a revision change
-requires a new review without deleting copy edits. Backend validation is authoritative.
+retained evidence/deletion revisions and interaction mapping. Unrelated source/browsing
+changes can keep verified approval; same-count identity swaps cannot. Permission
+invalidations remain conservative. New v4 inputs contain no rating dependencies;
+historical definitions are not rewritten. Backend validation is authoritative.
 The catalogue's `responseTiming.sourceRevision` is transport freshness, not a
 changed selected timing fact. Its revision alone does not revoke an unchanged
 ordinary selection; timing identity, boundary, status, value, selected source and
@@ -659,8 +715,11 @@ comparison with matching records is accepted. Changing either date, waiting for
 Search, or losing current evidence removes the action until the comparison is
 ready again; one empty side is allowed, but two empty sides cannot create a report.
 Activity names both inclusive local date ranges, the timezone and
-each exact matching-record count. Scope and author membership are fixed for this
-draft: use **Change comparison in Analyze** to change them. Ordinary report
+each exact matching-record count using its validated evidence unit. Two read-only
+Period A / Period B groups replace disabled scope and author forms; calendar dates
+are formatted as civil dates, not shifted through UTC into the viewer's timezone.
+Authors are a read-only value. Scope and author membership are fixed for this
+draft: use the single **Change comparison in Analyze** action to change them. Ordinary report
 scope/author choices are unchanged.
 
 None / Masked / Original, manual terms, copy edits and omission remain independent
@@ -919,10 +978,10 @@ reload or Forward without a current Search payload offers reopening Search, neve
 an automatic library-read fallback. An independently permitted library copy remains
 readable after live-source/capture changes. Late reads/downloads cannot paint or act
 for a different inspector/reader.
-Opening a Search document from an interaction also honors its unsaved-feedback
-guard, including exact-call entries. Keep editing cancels that departure; Discard
-opens only its still-current verified payload. Changing Search or revoking access
-cancels the held payload without borrowing library permission. Back retains the
+Opening a Search document from an interaction still requires its current verified
+payload, including exact-call entries. There is no personal-feedback departure
+gate. Changing Search or revoking access invalidates the payload without borrowing
+library permission. Back retains the
 sanitized interaction/call origin and restores Search focus only while its return
 marker remains valid, including hosts without the Navigation API.
 
@@ -931,9 +990,9 @@ Saving returns the current history search to its first page without clearing its
 ## Comparing two reports
 
 Choose an earlier report and a later report explicitly. Reading the comparison does not create an export or run an assessment against the APIs again.
-Choices lead with preparation date and time, followed by saved request-group counts and prompt mode,
+Choices lead with preparation date and time, followed by saved interaction counts and prompt mode,
 not a long report ID. Formats and the full ID remain available as secondary
-option text and the shared saved-item inspector. Inspect baseline/later report
+option text and the shared saved-item inspector. Inspect earlier/later report
 does not select, swap or complete a pair. Comparing facts and preparing the actual
 copy close that contextual pane and keep the chooser, compatibility explanations,
 wide results and separate disclosure/Save in main. Sidebar Close is not Discard
@@ -976,13 +1035,31 @@ Older reports remain readable. Supported frozen JSON can provide a read-only out
 
 If a measure exists on only one side, that side retains its value, coverage and origin label; the other side says **Not saved**, and no change is calculated. The existing structured comparison API can restore an omitted legacy display summary from validated frozen source facts and labels that compatibility display. Library **Open** does not use that reconstruction: it reads the original saved file, including any **Not preserved** result. Neither path reassesses current activity, replaces explicitly withheld values, recalculates the saved comparison or rewrites saved files.
 
-To save a comparison, select its formats and **Prepare comparison copy**. Review
-the actual formatted frozen preview and **Inspect exact files**; the PDF stays in
-memory until Save. **Confirm disclosure** and **Save comparison** remain separate.
+**Compare saved reports** in the Reports header opens the dedicated
+`task=compare` workspace. Earlier/Later are explicit saved choices, not an
+automatic pair. Library, creation and comparison stay separate; Back preserves
+the exact task and saved-source inspector. Opening a source says **Back to
+comparison** when that is its actual origin. An unchanged task return reuses
+the existing choices/frame/approval without another artifact read.
+
+To save a comparison, select its files and **Prepare comparison copy**.
+The prepared workspace has flat **Report** and **Files** views: read the formatted
+copy or inspect each exact file without an outer file-disclosure gate. The PDF
+stays in memory until Save. **Back to comparison choices** retains an unchanged
+preview; **Return to review** neither prepares it again nor records approval.
+Changed choices require a fresh preview. **Approve for local saving** records
+disclosure; **Save comparison** remains a separate action.
 The saved comparison keeps its own frozen results and projected source facts,
 bound to the exact source report IDs and hashes. It is self-contained. If the Save
 response is lost, **Read saved comparisons** checks the library without repeating
 Save or manufacturing a new disclosure approval.
+The draft keeps the dispatched comparison's exact identity separately from its
+current source choices. A missing, malformed or mismatched save receipt remains
+unconfirmed. Changing the pair, formats, discarding or preparing another copy
+cannot replace that pending save, even if a source report disappears. Reading
+saved copies and returning remain available. Recovery accepts only the original
+comparison ID and artifact kind; an absent entry is not proof that no write
+occurred. Source refreshes and late reads cannot discard the unresolved result.
 
 ## Deletion and retained copies
 

@@ -11,7 +11,7 @@ import { navigateMain, navigateSettings, chooseTheme, selectActivityOption, open
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_SETTINGS_REDESIGN_PROOFS;
-const categories = ["connection", "privacy", "ai", "display", "troubleshooting"];
+const categories = ["connection", "privacy", "display", "troubleshooting"];
 
 async function setup(t, { unknownBilling = false, preferenceSave = false } = {}) {
     if (proofs) await mkdir(proofs, { recursive: true });
@@ -170,7 +170,7 @@ async function geometry(page, selector = "[data-settings-section]:visible") {
     });
 }
 
-test("Settings normal entry presents all five sections with coherent hierarchy at desktop, narrow and doubled text", { timeout: 90000 }, async t => {
+test("Settings normal entry presents all four current sections with coherent hierarchy at desktop, narrow and doubled text", { timeout: 90000 }, async t => {
     const { page } = await setup(t), measures = [];
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1000 });
@@ -265,28 +265,7 @@ test("Settings expanded permission, source, unknown billing and privacy previews
         measures.push({ theme, width, scale, ...await geometry(page, "#recollectDialog") });
         await page.locator("#recollectClose").click();
         await expect(page.locator("#recollectActivity")).toBeFocused();
-        await navigateSettings(page, "ai");
-        await expect(page.locator("#automaticScoreState")).toContainText("An earlier charge is still unknown");
-        await capture(page, `unknown-billing-${width}-${scale}x-${theme}`);
-        await page.locator("#automaticScoreReview").click();
-        const dialog = page.getByRole("dialog", { name: "Automatic scores", exact: true });
-        await expect(dialog.getByLabel("Total budget (AI credits)", { exact: true })).toBeVisible();
-        await expect(dialog).toContainText("Charges are post-paid and the limit is soft");
-        await expect(dialog.getByRole("button", { name: "Approve automatic scores", exact: true })).toBeDisabled();
-        await expect(dialog.locator(".settings-score-disclosure")).toBeVisible();
-        await expect(dialog.locator(".settings-score-disclosure summary")).toHaveCount(0);
-        await capture(page, `ai-approval-${width}-${scale}x-${theme}`);
-        await capture(page, `ai-approval-end-${width}-${scale}x-${theme}`, true);
-        measures.push({ theme, width, scale, ...await geometry(page, ".automatic-score-dialog:visible") });
-        await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-        await expect(page.locator("#automaticScoreReview")).toBeFocused();
-        const stop = page.locator(".settings-automatic-actions").getByRole("button", { name: "Stop automatic scores", exact: true });
-        await stop.click();
-        const stopping = page.getByRole("dialog", { name: "Stop automatic scores", exact: true });
-        await expect(stopping).toContainText("An already submitted assessment may still be charged.");
-        await capture(page, `ai-stop-review-${width}-${scale}x-${theme}`);
-        await stopping.getByRole("button", { name: "Cancel", exact: true }).click();
-        await expect(stop).toBeFocused();
+        await expect(page.locator("#automaticScoreSetup,[data-category=ai]")).toHaveCount(0);
     }
     if (proofs) await writeFile(path.join(proofs, "expanded-geometry.json"), JSON.stringify(measures, null, 2));
     for (const result of measures) {
@@ -469,17 +448,7 @@ test("Settings distinguishes labels, source permission and collection state with
         }
         measurements.push({ theme, paths });
         await capture(page, `source-labels-${theme}`);
-        await navigateSettings(page, "ai");
-        await page.locator("#automaticScoreReview").click();
-        const dialog = page.getByRole("dialog", { name: "Automatic scores", exact: true });
-        await expect(dialog.locator(".settings-model-fact dt")).toHaveText("Model");
-        await expect(dialog.locator(".settings-model-fact dd")).toContainText("GitHub Copilot");
-        await expect(dialog.getByRole("heading", { name: "Review model", exact: true })).toHaveCount(0);
-        const modelGap = await dialog.locator(".settings-model-fact").evaluate(root =>
-            root.querySelector("dd").getBoundingClientRect().top - root.querySelector("dt").getBoundingClientRect().bottom);
-        assert.ok(modelGap >= 0 && modelGap <= 6, "The model value follows its label without a control-sized blank line");
-        measurements.at(-1).modelGap = modelGap;
-        await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+        await expect(page.locator("#automaticScoreSetup,[data-category=ai]")).toHaveCount(0);
         await navigateSettings(page, "connection");
     }
     if (proofs) await writeFile(path.join(proofs, "label-value-geometry.json"), JSON.stringify(measurements, null, 2));

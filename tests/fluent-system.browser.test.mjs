@@ -320,12 +320,10 @@ test("populated saved-report comparison inherits Fluent roles without changing f
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.locator("#savedLibraryTitle").click();
-    const row = page.locator("#bundleList summary").filter({ hasText: bundles[0].bundleId }).locator("..");
-    await row.locator(":scope>summary").click();
-    await row.getByRole("button", { name: "Compare saved reports", exact: true }).click();
+    await page.locator("#reportCompareLink").click();
     const workspace = page.locator("#comparisonWorkspace");
     await workspace.locator("select").first().locator("option").nth(1).waitFor({ state: "attached" });
-    for (const [index, label] of ["Baseline report", "Later report"].entries()) {
+    for (const [index, label] of ["Earlier report", "Later report"].entries()) {
         await workspace.getByRole("combobox", { name: label, exact: true }).click();
         await page.locator(`.select-popup .select-option[data-value="${bundles[index].bundleId}"]`).click();
     }
@@ -338,10 +336,10 @@ test("populated saved-report comparison inherits Fluent roles without changing f
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await page.evaluate(() => document.fonts.ready);
         const result = await workspace.evaluate(root => ({
-            fontLoaded: getComputedStyle(document.body).fontFamily.startsWith("Arial") && document.fonts.check("14px Arial"),
+            fontLoaded: getComputedStyle(document.body).fontFamily.startsWith('"Asta Sans"') && document.fonts.check('14px "Asta Sans"'),
             pageOverflow: document.documentElement.scrollWidth - innerWidth,
             overflow: root.scrollWidth - root.clientWidth,
-            fields: [...root.querySelectorAll(".comparison-selectors>.select-field")].map(field => {
+            fields: [...root.querySelectorAll(".comparison-report-choice>.select-field")].map(field => {
                 const labelNode = field.querySelector(":scope>label");
                 const label = labelNode.getBoundingClientRect();
                 const control = field.querySelector(":scope>.select-control").getBoundingClientRect();
@@ -368,10 +366,10 @@ test("populated saved-report comparison inherits Fluent roles without changing f
             assert.ok(field.labelHeight <= field.textLines * field.lineHeight + 1, `${theme}/${width}/${scale}: label height follows rendered text, not a vertical flex basis ${JSON.stringify(field)}`);
         }
         for (const sample of result.samples) {
-            assert.match(sample.font, sample.className.split(" ").includes("comparison-endpoint") ? /Cascadia Mono/ : /^Arial,/, sample.className);
+            assert.match(sample.font, sample.className.split(" ").includes("comparison-endpoint") ? /Cascadia Mono/ : /^"Asta Sans",/, sample.className);
             assert.equal(sample.clipped, false, `${theme}/${width}/${scale}/${sample.className}: complete text`);
             if (sample.tag === "BUTTON") {
-                assert.equal(sample.size, `${14 * scale}px`, "Comparison actions use the same control role");
+                assert.equal(sample.size, `${14 * scale}px`, "Comparison actions use the same control role: " + JSON.stringify(sample));
                 assert.ok(sample.height >= 44);
             }
         }

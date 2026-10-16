@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain, openActivitySessions, selectActivityOption, revealStoredRefresh } from "./helpers.mjs";
-import { chooseReportScope, reportContents, scanReport, inspectReportCopies, openReportCreation } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, scanReport, inspectReportCopies, openReportCreation, selectAnalyzeRequest, reportActivityActionGeometry } from "./report-journey-helpers.mjs";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { contrast } from "./color-measurements.mjs";
@@ -97,10 +97,20 @@ test("narrow report steps keep whole words and keyboard actions across Setup Rev
     await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
     await capture("save", 3, [false, false, false]);
+    const approvedFrame = await page.locator(".report-frame").elementHandle();
     await page.getByRole("button", { name: "2. Contents", exact: true }).focus(); await page.keyboard.press("Enter");
-    assert.equal(await page.locator("#reportStage2").isVisible(), true);
-    await page.getByRole("button", { name: "3. Review & save", exact: true }).focus(); await page.keyboard.press("Enter");
-    assert.equal(await page.locator("#reportStage3").isVisible(), true);
+    await page.locator("#contextSidebarBody #reportStage2").waitFor();
+    const contentsFocus = await page.locator("#contextSidebar").evaluate(dialog => ({
+        modal: dialog.matches(":modal"), ownsFocus: dialog.contains(document.activeElement),
+        phase: document.querySelector("#reportsView").dataset.reportPhase,
+    }));
+    assert.deepEqual(contentsFocus, { modal: true, ownsFocus: true, phase: "reviewed" },
+        "Narrow Contents owns native modal focus; the main step header is inert, not a return action.");
+    await page.getByRole("button", { name: "Return to review", exact: true }).focus(); await page.keyboard.press("Enter");
+    await page.locator("#reportStage3").waitFor();
+    assert.equal(await page.locator(".report-frame").evaluate((frame, original) => frame === original, approvedFrame), true);
+    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isEnabled(), true);
     await page.route("**/api/export", async route => { await route.fetch(); await route.abort("failed"); }, { times: 1 });
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
@@ -191,9 +201,11 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     const ready = () => page.locator('#workspace[aria-busy="false"]').waitFor();
     async function capture(name, comprehensive = false) {
         for (const theme of ["light", "dark"]) {
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+            await chooseTheme(page, theme);
             for (const [width, text] of comprehensive ? [[1440, 100], [820, 100], [375, 100], [1200, 200], [375, 200]] : [[1440, 100], [375, 200]]) {
                 await page.setViewportSize({ width, height: 1000 });
-                await chooseTheme(page, theme);
                 await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, text);
                 await page.evaluate(() => document.fonts.ready);
                 const measured = await page.evaluate(() => {
@@ -228,6 +240,30 @@ test("normal report journey remains readable through scope, pending, dirty, reco
                 assert.equal(measured.overflow, false, `${name}/${theme}/${width}/${text}: page fits`);
                 assert.deepEqual(measured.overlaps, [], `${name}/${theme}/${width}/${text}: independent controls do not overlap`);
                 assert.deepEqual(measured.controls.filter(control => control.height < 44 || control.clipped), [], `${name}/${theme}/${width}/${text}: readable 44px targets`);
+                if (["empty", "selected"].includes(name)) {
+                    const footer = await reportActivityActionGeometry(page);
+                    measured.footer = footer;
+                    if (process.env.WIRE_REPORT_FOOTER_PROOFS && width === 375 && text === 200) {
+                        await mkdir(process.env.WIRE_REPORT_FOOTER_PROOFS, { recursive: true });
+                        const target = path.join(process.env.WIRE_REPORT_FOOTER_PROOFS, `${name}-${theme}-${width}-${text}`);
+                        await writeFile(target + ".json", JSON.stringify(footer, null, 2));
+                        await page.locator("#reportActivityActions").screenshot({ path: target + ".png" });
+                    }
+                    for (const control of footer.controls) {
+                        assert.ok(control.box.height >= 44);
+                        assert.ok(control.box.x >= footer.box.x - 1 && control.box.right <= footer.box.right + 1);
+                        assert.equal(control.fontSize, 14 * text / 100);
+                        for (const word of control.words) {
+                            assert.equal(word.rects.length, 1, `${name}/${theme}/${width}/${text}: ${control.label} splits ${word.word}: ${JSON.stringify(control)}`);
+                            assert.ok(word.rects[0].x >= control.box.x - 1 && word.rects[0].right <= control.box.right + 1);
+                        }
+                    }
+                    for (const [index, control] of footer.controls.entries()) for (const other of footer.controls.slice(index + 1)) {
+                        assert.ok(Math.min(control.box.right, other.box.right) - Math.max(control.box.x, other.box.x) <= 1
+                            || Math.min(control.box.bottom, other.box.bottom) - Math.max(control.box.y, other.box.y) <= 1,
+                        `${name}/${theme}/${width}/${text}: footer actions cannot overlap`);
+                    }
+                }
                 for (const color of measured.colors) assert.ok(contrast(color.foreground, color.background) >= 4.5, `${name}/${theme}: contrast for ${color.label}`);
                 measurements.push({ name, theme, width, text, ...measured });
                 if (proofs) {
@@ -260,18 +296,20 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     await capture("empty", true);
     assert.equal(requests.filter(endpoint => endpoint === "/api/preview").length, 0);
     await navigateMain(page, "activity"); await ready(); await openActivitySessions(page);
-    for (const key of ["ownMail", "agentMail", "unverified"]) await page.locator(`.request-row[data-view-key="request:${app.cases[key].scenarioId}"] input`).check();
+    for (const key of ["ownMail", "agentMail", "unverified"]) {
+        await selectAnalyzeRequest(page, page.locator(`.request-row[data-view-key="request:${app.cases[key].scenarioId}"]`));
+    }
     await selectActivityOption(page, "promptAuthorFilter", ["user"]); await ready();
     await navigateMain(page, "reports"); await ready();
     await openReportCreation(page);
     assert.match(await page.locator("#previewSelectionSummary").textContent(), / · 3 interactions$/);
     await selectActivityOption(page, "reportPromptAuthorFilter", ["user", "agent"]);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /2 of 3 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /2 of 3 interactions/);
     await capture("selected", true);
     await chooseReportScope(page, "current");
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /2 of 2 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /2 of 2 interactions/);
     await chooseReportScope(page, "all");
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /5 of 7 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /5 of 7 interactions/);
     await capture("all-known-authors");
     await chooseReportScope(page, "selected");
     await selectActivityOption(page, "reportPromptAuthorFilter", ["user"]);

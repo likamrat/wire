@@ -56,6 +56,18 @@ async function capture(page, name, selector = "#reportCreatePanel") {
 test("Setup keeps every choice with one relevant scope explanation and conditional context consequences", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await capture(page, "setup-default");
+    assert.equal(await page.locator(".report-picker-tools #reportRequestSearch").count(), 1);
+    assert.equal(await page.locator(".report-picker-tools #reportPromptAuthorFilter").count(), 1);
+    assert.equal(await page.locator("#reportPromptAuthorFilter").getAttribute("data-select-presentation"), "filter");
+    assert.equal(await page.locator('[data-select-id="reportPromptAuthorFilter"]').evaluate(node => node.classList.contains("select-trigger-filter")), true);
+    assert.equal(await page.locator("#reportList").evaluate(node =>
+        Boolean(node.compareDocumentPosition(document.querySelector("#reportActivityActions")) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
+    assert.equal(await page.locator("#reportList .report-entry-meta").count(), 0, "Missing optional chat/time fields do not leave placeholder rows");
+    const tools = await page.evaluate(() => ({
+        search: document.querySelector("#reportRequestSearch").getBoundingClientRect().toJSON(),
+        authors: document.querySelector("#reportPromptAuthorFilter-control").getBoundingClientRect().toJSON(),
+    }));
+    assert.ok(Math.abs(tools.search.top - tools.authors.top) <= 1, "The search field and author control share one deliberate control row");
     assert.equal(await page.locator(".scope-choice-help:visible").count(), 1);
     assert.equal(await page.locator('[name="reportScope"]:visible').count(), 3);
     assert.equal(await page.locator('[name="promptMode"]:visible').count(), 0);
@@ -89,7 +101,7 @@ test("Setup keeps every choice with one relevant scope explanation and condition
     await chooseReportScope(page, "all");
     await selectActivityOption(page, "reportPromptAuthorFilter", ["agent"]);
     assert.equal(await page.locator("#reportPromptAuthorSummary").isVisible(), true);
-    assert.match(await page.locator("#reportPromptAuthorSummary").innerText(), /left out/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").innerText(), /excluded by authors/);
     await selectActivityOption(page, "reportPromptAuthorFilter", "all");
     assert.equal(await page.locator("#reportPromptAuthorSummary").isVisible(), false);
     assert.equal(await page.locator("#scopeDetails").evaluate(node => node.contains(document.querySelector("#reportTimeContext"))), true);
@@ -114,6 +126,8 @@ test("Setup remains readable with all controls at desktop and narrow enlarged te
     await chooseReportScope(page, "all");
     await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1600, 100], [375, 100], [375, 200]]) {
+        await page.setViewportSize({ width: 1600, height: 1000 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);

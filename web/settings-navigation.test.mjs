@@ -24,7 +24,10 @@ test("operational destinations leave Settings and preserve named legacy targets"
     assert.equal(model.resolve({ setting: "advanced" }).setting, "collection-details");
     assert.equal(model.find("missing history").find(entry => entry.id === "issues").view, "collection-status");
     assert.equal(model.find("status").find(entry => entry.id === "collection-details").category, "Collection status");
-    assert.deepEqual(model.categories.map(row => row.title), ["Connection & updates", "Privacy & saved data", "AI reviews", "Display", "Troubleshooting"]);
+    assert.deepEqual(model.categories.map(row => row.title), ["Connection & updates", "Privacy & saved data", "Display", "Troubleshooting"]);
+    assert.deepEqual(model.find("automatic scores"), []);
+    assert.equal(model.resolve({ section: "ai", setting: "automatic-scores" }).section, "connection");
+    assert.match(model.resolve({ section: "ai", setting: "automatic-scores" }).warning, /Unknown/);
 });
 
 test("settings search finds control descriptions and synonyms across categories without private paths", () => {
@@ -47,10 +50,10 @@ test("old optional-evidence links resolve to response saving in Privacy and save
     assert.equal(model.categories.some(category => category.id === "evidence"), false);
 });
 
-test("all fourteen old setting IDs and explicit category aliases keep their actual destinations", () => {
+test("retained setting IDs and explicit category aliases keep their actual destinations", () => {
     const model = createSettingsNavigation(createLocalSearch());
     const old = {
-        "automatic-scores": ["ai", "automaticScoreReview"], "assessment-evidence": ["privacy", "assessmentSetupTitle"],
+        "assessment-evidence": ["privacy", "assessmentSetupTitle"],
         "delete-activity": ["privacy", "deleteActivity"], "recollect-activity": ["privacy", "recollectActivity"],
         "time-zone": ["display", "displayTimeZone"], source: ["connection", "reviewSource"],
         "collection-state": ["connection", "pauseCollection"], "collect-now": ["connection", "checkActivity"],

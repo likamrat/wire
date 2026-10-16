@@ -59,7 +59,7 @@ test("filters have one identity, separate refresh/reset jobs, and no collection 
     const before = reads.length;
     await page.locator("#promptAuthorFilter-control").click();
     const popup = page.locator(".select-popup:visible");
-    assert.equal(await popup.locator(".select-toggle").count(), 3);
+    assert.equal(await popup.locator(".select-option .select-toggle").count(), 3);
     assert.equal(await popup.getByRole("switch").count(), 0);
     await popup.locator('[data-value=unknown]').click();
     assert.equal(reads.length, before);
@@ -217,7 +217,7 @@ test("pending filter cancellation preserves All, fences late replies and does no
     }
     await navigateMain(page, "reports"); await ready(page);
     await page.locator("#reportCreateLink").click(); await ready(page);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 1 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 1 interaction/);
 });
 
 test("removing a disabled Outcome chip keeps its activity layer and focuses the surviving label", { timeout: 15000 }, async t => {
@@ -301,7 +301,7 @@ test("all filter kinds retain canonical rows, drafts, counts, Back and report me
     assert.equal((await app.snapshot()).analytics.totals.count, 15);
     await navigateMain(page, "reports"); await ready(page);
     await page.locator("#reportCreateLink").click(); await ready(page);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 1 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 1 interaction/);
     await navigateMain(page, "analyze"); await ready(page);
     await choose("scopeFilter", "legacy"); assert.equal((await app.snapshot()).analytics.totals.count, 0);
     await choose("scopeFilter", "all"); assert.equal((await app.snapshot()).analytics.totals.count, 15);
@@ -516,9 +516,9 @@ test("filter icon layout separates glyphs, text lines and interactive targets", 
                 fields: [...document.querySelectorAll("#filters .filter-field,#filters .result-filter-field")].map(field => {
                     const label = field.querySelector("label"), heading = field.querySelector(".help-heading");
                     const help = field.querySelector(".ux-help"), trigger = field.querySelector(".select-trigger");
-                    const clear = field.querySelector(".filter-clear"), css = getComputedStyle(heading), fieldCss = getComputedStyle(field);
+                    const clear = field.querySelector(".filter-clear"), css = getComputedStyle(label), fieldCss = getComputedStyle(field);
                     return { id: trigger.dataset.selectId, field: box(field), label: textBox(label), labelLine: box(label), heading: box(heading),
-                        help: box(help), helpGlyph: glyph(help.querySelector("svg")), trigger: box(trigger),
+                        help: box(help), helpGlyph: glyph(help?.querySelector("svg")), trigger: box(trigger),
                         value: textBox(trigger.querySelector(".select-value")), valueOverflow: trigger.querySelector(".select-value").scrollWidth - trigger.querySelector(".select-value").clientWidth,
                         clear: box(clear), clearGlyph: glyph(clear?.querySelector("svg")),
                         lineHeight: css.lineHeight, minHeight: css.minHeight, padding: css.padding, margin: css.margin,
@@ -543,22 +543,8 @@ test("filter icon layout separates glyphs, text lines and interactive targets", 
             await document.fonts.ready;
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         });
-        const normal = await measure(), variants = {};
-        if (theme === "light" && width === 1440) {
-            const field = page.locator(".filter-field").filter({ has: page.locator("#dateFilter") });
-            for (const [name, hideHelp, collapseReserve] of [["help-out-of-flow", true, false], ["reserve-only", false, true], ["both", true, true]]) {
-                await field.evaluate((node, { hideHelp, collapseReserve }) => {
-                    node.querySelector(".ux-help").style.display = hideHelp ? "none" : "";
-                    node.querySelector(".help-heading").style.minHeight = collapseReserve ? "0" : "";
-                }, { hideHelp, collapseReserve });
-                variants[name] = (await measure()).fields.find(item => item.id === "dateFilter");
-            }
-            await field.evaluate(node => {
-                node.querySelector(".ux-help").style.removeProperty("display");
-                node.querySelector(".help-heading").style.removeProperty("min-height");
-            });
-        }
-        const observation = { theme, width, scale, normal, variants };
+        const normal = await measure();
+        const observation = { theme, width, scale, normal };
         observations.push(observation);
         if (geometryDir) await page.screenshot({ path: path.join(geometryDir, `filters-${theme}-${width}-${scale}.png`), fullPage: true });
         assert.ok(normal.overflow <= 1);
@@ -569,7 +555,8 @@ test("filter icon layout separates glyphs, text lines and interactive targets", 
             assert.equal(utility.glyph.display.height, 20, utility.id);
         }
         for (const field of normal.fields) {
-            assert.ok(field.help.width >= 44 && field.help.height >= 44, field.id);
+            assert.equal(field.help, null, `${field.id}: no routine help target`);
+            assert.equal(field.heading, null, `${field.id}: no empty help wrapper`);
             assert.ok(field.trigger.height >= 44, field.id);
             assert.ok(field.valueOverflow <= 1, `${field.id}: reserved utilities cannot squeeze text outside the trigger`);
             if (field.clear) assert.ok(field.clear.width >= 44 && field.clear.height >= 44, field.id);
@@ -578,23 +565,25 @@ test("filter icon layout separates glyphs, text lines and interactive targets", 
             for (const [a, b] of [["labelLine", "help"], ["labelLine", "clear"], ["trigger", "help"], ["trigger", "clear"], ["help", "clear"]]) {
                 assert.equal(Boolean(overlaps(field[a], field[b])), false, `${field.id}: ${a}/${b} may not share a hit region`);
             }
-            const adjacent = field.clear || field.help;
-            assert.ok(Math.abs(adjacent.x - field.trigger.right - parseFloat(field.rowGap)) < 1, `${field.id}: no phantom utility-width gap after the control`);
-            assert.ok(Math.abs(field.help.right - field.field.right) < 1, `${field.id}: the utility region ends at its field, not in another action`);
+            assert.equal(field.columns.split(" ").length, field.clear ? 2 : 1, `${field.id}: no invisible help column`);
+            if (field.clear) {
+                assert.ok(Math.abs(field.clear.x - field.trigger.right - parseFloat(field.rowGap)) < 1);
+                assert.ok(Math.abs(field.clear.right - field.field.right) < 1);
+            } else assert.ok(Math.abs(field.trigger.right - field.field.right) < 1, `${field.id}: the value reclaims the old help region`);
         }
         assert.ok(normal.fields.find(field => field.id === "projectFilter").value.height > 30 * scale, "Real long project values wrap instead of clipping");
-        const help = page.locator(".filter-field").filter({ has: page.locator("#dateFilter") }).locator(".ux-help");
+        const dateControl = page.locator("#dateFilter-control");
         const before = reads.length;
-        await help.hover();
+        await dateControl.hover();
         observation.hover = await measure();
         assert.deepEqual(stable(observation.hover), stable(normal), "Hover does not change field layout");
-        await help.focus(); await help.press("Tab"); await page.keyboard.press("Shift+Tab");
+        await dateControl.focus(); await dateControl.press("Tab"); await page.keyboard.press("Shift+Tab");
         observation.focus = await measure();
         assert.deepEqual(stable(observation.focus), stable(normal), "Keyboard focus does not change field layout");
-        assert.equal(await help.evaluate(node => node === document.activeElement && getComputedStyle(node).outlineStyle !== "none"), true);
+        assert.equal(await dateControl.evaluate(node => node === document.activeElement && getComputedStyle(node, "::before").outlineStyle !== "none"), true);
+        assert.equal(await page.getByRole("tooltip").count(), 0, "Readable filter values need no replacement tooltip");
         await page.keyboard.press("Escape");
-        await help.tap(); await page.getByRole("tooltip").waitFor({ state: "visible" }); await page.keyboard.press("Escape");
-        assert.equal(reads.length, before, "Help targets cannot activate a nearby value or query");
+        assert.equal(reads.length, before, "Hover and focus cannot apply a filter");
 
         await page.locator("#outcomeFilter-control").click();
         const popup = page.locator(".select-popup:visible"), popupBox = await popup.boundingBox();
@@ -647,7 +636,8 @@ test("filter icon layout separates glyphs, text lines and interactive targets", 
         assert.equal(Boolean(overlaps(pendingAuthor.clear, pendingAuthor.help) || overlaps(pendingAuthor.clear, pendingAuthor.trigger)
             || overlaps(pendingAuthor.clear, pendingAuthor.labelLine)), false);
         assert.equal(pendingAuthor.clear.x - pendingAuthor.trigger.right, 4);
-        assert.equal(pendingAuthor.help.x - pendingAuthor.clear.right, 4);
+        assert.equal(pendingAuthor.help, null);
+        assert.equal(pendingAuthor.clear.right, pendingAuthor.field.right);
         const cancel = page.getByRole("button", { name: "Cancel pending author filter", exact: true }), pendingReads = reads.length;
         const cancelled = page.waitForResponse(response => response.url().endsWith("/api/snapshot")
             && !response.request().postDataJSON().filters.promptAuthors);
@@ -675,7 +665,7 @@ test("filter icon layout separates glyphs, text lines and interactive targets", 
         theme: item.theme, width: item.width, scale: item.scale,
         fields: item.normal.fields.length,
         inkGap: [...new Set(item.normal.fields.map(field => field.trigger.y - field.label.bottom))],
-        minimumHelpTarget: Math.min(...item.normal.fields.map(field => Math.min(field.help.width, field.help.height))),
+        columns: [...new Set(item.normal.fields.map(field => field.columns.split(" ").length))],
         pendingCancelTarget: item.pending.fields.find(field => field.id === "promptAuthorFilter").clear,
     }))));
 });
@@ -700,13 +690,13 @@ test("primary width budgets match actual single-choice and pending multi-choice 
                 return width;
             };
             return { region: box(root), fields: [...root.querySelectorAll(".select-trigger")].map(trigger => {
-                const field = trigger.closest(".filter-field,.result-filter-field"), help = field.querySelector(".ux-help");
+                const field = trigger.closest(".filter-field,.result-filter-field");
                 const label = field.querySelector("label"), value = trigger.querySelector(".select-value"), css = getComputedStyle(trigger);
                 const cancel = field.querySelector(".filter-clear:not([hidden])"), gap = parseFloat(getComputedStyle(field).columnGap);
                 const requiredControl = Math.max(44, unwrappedWidth(value) + trigger.querySelector(".select-chevron").getBoundingClientRect().width
                     + parseFloat(css.columnGap) + parseFloat(css.paddingLeft) + parseFloat(css.paddingRight));
-                return { id: trigger.dataset.selectId, value: value.textContent, field: box(field), trigger: box(trigger), help: box(help), cancel: cancel ? box(cancel) : null,
-                    requiredControl, requiredField: Math.max(unwrappedWidth(label) + 2 * parseFloat(css.paddingLeft), requiredControl + (cancel ? 44 + gap : 0)) + help.getBoundingClientRect().width + gap,
+                return { id: trigger.dataset.selectId, value: value.textContent, field: box(field), trigger: box(trigger), cancel: cancel ? box(cancel) : null,
+                    requiredControl, requiredField: Math.max(unwrappedWidth(label), requiredControl + (cancel ? 44 + gap : 0)),
                     clipped: value.scrollWidth - value.clientWidth };
             }) };
         });

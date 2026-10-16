@@ -5,7 +5,6 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { chooseTheme, openSearchFilters, selectActivityOption, navigateMain } from "./helpers.mjs";
-import { openPersonalFeedback } from "./assessment-ui-fixtures.mjs";
 import { replaceEvidence } from "../lib/store.mjs";
 
 const proof = process.env.WIRE_TEXT_SEARCH_PROOFS;
@@ -45,8 +44,7 @@ async function setup(t, { touch = false, formatted = false } = {}) {
         for (const action of cleanup) await action();
         assert.deepEqual(errors, []);
         assert.ok(requests.every(request => request.origin === new URL(app.runtime.url).origin));
-        assert.equal(requests.filter(request => /\/api\/(?:evaluation|assessment\/feedback|export|collection\/now)/.test(request.path)
-            && request.path !== "/api/evaluation/automatic/summary").length, 0);
+        assert.equal(requests.filter(request => /\/api\/(?:evaluation|assessment\/feedback|export|collection\/now)/.test(request.path)).length, 0);
     });
     await page.goto(app.runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -61,13 +59,6 @@ async function openInteraction(page, exactCall = false) {
     const call = await page.locator('#requestContent [data-action-id]:not([data-action-id^="http:"])').first().getAttribute("data-action-id");
     await page.evaluate(call => { location.hash += "&call=" + encodeURIComponent(call); }, call);
     await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", call);
-}
-
-async function editFeedback(page) {
-    const form = await openPersonalFeedback(page);
-    await form.getByRole("combobox", { name: "Your assessment", exact: true }).click();
-    await page.locator('.select-option[data-value=pass]').click();
-    return form;
 }
 
 test("typing POWER shows actual categorized title/body/source matches without completing the query", { timeout: 30000 }, async t => {
@@ -286,49 +277,46 @@ test("Search results and category controls stay operable above an open docked si
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
 });
 
-test("saved Search departures guard ordinary and exact-call feedback until the current choice is discarded", { timeout: 30000 }, async t => {
+test("saved Search departures keep exact authority without recreating retired feedback controls", { timeout: 30000 }, async t => {
     for (const exactCall of [false, true]) await t.test(exactCall ? "exact call" : "ordinary interaction", async t => {
         const { page, requests } = await setup(t);
         await openInteraction(page, exactCall);
-        const form = await editFeedback(page);
-        const origin = page.url();
+        await expect(page.locator("#requestContent [data-reader-section=reviews],#requestContent .assessment-feedback-dialog")).toHaveCount(0);
+        assert.doesNotMatch(await page.locator("#requestContent").innerText(), /Automatic scores|Personal feedback|Your feedback/);
         await page.locator("#wireSearch").fill("POWER");
         await selectActivityOption(page, "wireSearchType", "report");
         const result = page.locator(".wire-search-hit");
         await expect(result).toHaveCount(1);
         await result.click();
-        await expect(page.locator("#contextSidebarGuard")).toBeVisible();
-        assert.equal(page.url(), origin);
-        await expect(page.locator("#savedReportReader")).toBeHidden();
-        if (proof) await page.screenshot({ path: path.join(proof, `saved-search-feedback-${exactCall ? "call" : "interaction"}.png`) });
-        await page.getByRole("button", { name: "Keep editing", exact: true }).click();
-        await expect(form.locator("select")).toHaveValue("pass");
-        await expect(form.getByRole("combobox", { name: "Your assessment", exact: true })).toBeFocused();
-        await page.locator("#wireSearch").click();
-        await result.click();
-        await expect(page.locator("#contextSidebarGuard")).toBeVisible();
-        await page.getByRole("button", { name: "Discard changes", exact: true }).click();
         await expect(page.frameLocator("#savedReportReader iframe").locator("body")).toContainText("PowerPoint");
         await expect(page.locator("#contextSidebar")).toBeHidden();
+        await expect(page.getByRole("button", { name: "Keep editing", exact: true })).toHaveCount(0);
+        if (proof) await page.screenshot({ path: path.join(proof, `saved-search-retired-feedback-${exactCall ? "call" : "interaction"}.png`) });
         assert.equal(requests.some(item => ["/api/report/open", "/api/artifact-file"].includes(item.path)), false,
             "The admitted Search payload never borrows library authority");
     });
 });
 
-test("changing Search while its document departure is held cancels that payload without discarding feedback", { timeout: 15000 }, async t => {
+test("changing Search during a pending saved departure keeps the exact current reader", { timeout: 15000 }, async t => {
     const { page, requests } = await setup(t);
-    await openInteraction(page);
-    const form = await editFeedback(page), origin = page.url();
-    await page.locator("#wireSearch").fill("POWER");
-    await selectActivityOption(page, "wireSearchType", "report");
-    await page.locator(".wire-search-hit").click();
-    await expect(page.locator("#contextSidebarGuard")).toBeVisible();
-    await page.locator("#wireSearch").fill("NO_CURRENT_REPORT_MATCH");
-    await expect(page.locator("#contextSidebarGuard")).toBeHidden();
-    await expect(form.locator("select")).toHaveValue("pass");
-    assert.equal(page.url(), origin);
-    await expect(page.locator("#savedReportReader")).toBeHidden();
-    assert.equal(requests.some(item => ["/api/report/open", "/api/artifact-file"].includes(item.path)), false);
+    await openInteraction(page, true);
+    const origin = page.url(), call = await page.locator("#selectedCall").getAttribute("data-action-id");
+    const gate = Promise.withResolvers(), entered = Promise.withResolvers();
+    await page.route("**/api/search/open", async route => { entered.resolve(); await gate.promise; await route.continue(); }, { times: 1 });
+    try {
+        await page.locator("#wireSearch").fill("POWER");
+        await selectActivityOption(page, "wireSearchType", "report");
+        await page.locator(".wire-search-hit").click(); await entered.promise;
+        await page.locator("#wireSearch").fill("NO_CURRENT_REPORT_MATCH");
+        await expect(page.locator(".wire-search-hit")).toHaveCount(0);
+        const late = page.waitForResponse(response => response.url().endsWith("/api/search/open"));
+        gate.resolve(); await (await late).finished();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(page.url(), origin);
+        await expect(page.locator("#selectedCall")).toHaveAttribute("data-action-id", call);
+        await expect(page.locator("#savedReportReader")).toBeHidden();
+        assert.equal(requests.some(item => ["/api/report/open", "/api/artifact-file"].includes(item.path)), false);
+    } finally { gate.resolve(); }
 });
 
 test("saved Search Back restores its exact interaction origin with native history and without the Navigation API", { timeout: 30000 }, async t => {

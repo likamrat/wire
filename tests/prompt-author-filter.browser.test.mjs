@@ -59,9 +59,9 @@ test("shared author menu applies whole interactions, preserves draft/cancel and 
     assert.equal(app.requests.length, before);
     await page.locator('[data-select-id="promptAuthorFilter"]').click();
     const emptyDraft = page.locator(".select-popup:visible");
-    await emptyDraft.getByRole("checkbox", { name: "Deselect all authors", exact: true }).click();
+    await emptyDraft.getByRole("checkbox", { name: "All authors", exact: true }).click();
     assert.equal(await emptyDraft.getByRole("button", { name: "Apply", exact: true }).isDisabled(), true);
-    assert.equal(await emptyDraft.locator(".select-draft-hint").textContent(), "Select at least one prompt author.");
+    assert.equal(await emptyDraft.locator(".select-validation").textContent(), "Select at least one prompt author.");
     assert.equal(app.requests.length, before);
     await emptyDraft.getByRole("button", { name: "Cancel", exact: true }).click();
     await setAuthors(page, ["agent"], "promptAuthorFilter", "Escape");
@@ -108,9 +108,9 @@ test("report author choice narrows selected base membership without losing hidde
     await setAuthors(page, ["user"]);
     await navigateMain(page, "reports"); await ready(page);
     await openReportCreation(page);
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 interactions/);
     await setAuthors(page, ["user"], "reportPromptAuthorFilter");
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /1 of 3 interactions/);
     await reportContents(page);
     await page.locator('[name=promptMode][value=none]').check();
     const preview = await scanReport(page);
@@ -126,7 +126,7 @@ test("report author choice narrows selected base membership without losing hidde
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft");
     assert.equal(await page.getByRole("button", { name: "3. Review & save", exact: true }).isDisabled(), true);
     await setAuthors(page, ["user", "agent", "unknown"], "reportPromptAuthorFilter");
-    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 request groups/);
+    assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /3 of 3 interactions/);
     await navigateMain(page, "activity"); await ready(page);
     await page.getByRole("button", { name: /^Remove author filter:/ }).click(); await ready(page); await openActivitySessions(page);
     for (const key of ["ownMail", "agentMail", "unverified"]) assert.equal(await page.locator(`.request-row[data-view-key="request:${app.cases[key].scenarioId}"] input`).isChecked(), true);
@@ -222,7 +222,7 @@ test("author cues and Apply controls remain readable in light/navy and narrow la
         }
         await page.locator('[data-select-id="promptAuthorFilter"]').click();
         const popup = page.locator(".select-popup:visible");
-        assert.match(await popup.locator(".select-draft-hint").textContent(), /Choose prompt authors/);
+        assert.equal(await popup.locator(".select-draft-hint,.select-validation:visible").count(), 0);
         assert.doesNotMatch(await popup.innerText(), /statuses|one result/);
         const box = await popup.boundingBox();
         assert.ok(box.x >= 0 && box.x + box.width <= width + 1 && box.y >= 0 && box.y + box.height <= 951);
@@ -231,7 +231,7 @@ test("author cues and Apply controls remain readable in light/navy and narrow la
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `author-menu-${theme}-${width}.png`) });
         await popup.getByRole("button", { name: "Cancel", exact: true }).click();
         await page.locator('[data-select-id="outcomeFilter"]').click();
-        assert.equal(await page.locator(".select-popup:visible .select-draft-hint").textContent(), "Choose statuses, then Apply.");
+        assert.equal(await page.locator(".select-popup:visible .select-draft-hint,.select-popup:visible .select-validation:visible").count(), 0);
         await page.locator(".select-popup:visible").getByRole("button", { name: "Cancel", exact: true }).click();
         observations.push({ theme, width, cues, popup: box });
     }

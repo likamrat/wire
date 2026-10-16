@@ -1,40 +1,16 @@
 // Serialized into the shell. Reads only versioned local projections and explicit retained text.
-export function createAssessmentExperience({ api, createPresentation, renderSummary, createControls, mountConsent, mountFeedback, ux, glossary, textAccess, bindDetails, refresh, onChanged, onNotice, onSaved, onAutomaticSetup, onInvalidated, onFeedbackStateChanged, requestDeparture = action => action() }) {
+export function createAssessmentExperience({ api, createPresentation, createControls, mountConsent, ux, textAccess, refresh, onChanged, onNotice, onSaved, onInvalidated }) {
     let snapshot = null, contract, contractPromise, presentation, controls, generation = 0;
-    let consentView, consentControl, consentSignature = "", activeFeedback, feedbackView, activeDetail, focusInteractionRef = null;
-    const detailCache = new Map(), overviewCache = new Map(), pending = new Map(), readers = new Map(), hosts = new Set();
-    const overviewRequests = new WeakMap(), acceptedOverviews = new WeakMap();
-    let scoring = { message: "Automatic-score status is being read. No missing score is treated as zero." };
-    function scoringStatus(status) {
-        const stateLabels = { off: "Off", waiting: "Waiting", assessing: "Assessing", ready: "Ready", paused: "Paused" };
-        const message = status ? `Automatic scores: ${stateLabels[status.state] ?? "Status unavailable"}. ${status.reason || (status.state === "off"
-            ? "Review Automatic scores to approve model assessment. Saving replies alone does not enable scoring."
-            : "The values below cover only this view's included interactions.")}`
-            : "Automatic-score status unavailable. Open Automatic scores to read current status; no assessment was requested.";
-        scoring = { ...status, message };
-        for (const host of hosts) {
-            host.querySelectorAll(".assessment-scoring-status").forEach(node => { node.textContent = message; });
-            updateEmptyReviews(host);
-        }
-    }
-    function updateEmptyReviews(host) {
-        const section = host.querySelector('.assessment-summary[data-empty-reviews="true"]');
-        if (!section) return;
-        const controls = [...section.querySelectorAll(":scope > .assessment-heading > h2, [data-automatic-scores], .assessment-saved-details, .assessment-reading-help, .assessment-scoring-status")];
-        const idle = scoring.state === "off" && scoring.reasonCode === "not-approved" && !scoring.reason
-            && !recovery && !recoveryInvalid && !pendingRequest && !recovering;
-        if (idle && controls.some(node => node.contains(document.activeElement))) return;
-        controls.forEach(node => { node.hidden = idle; });
-        section.querySelector(".assessment-empty-review").hidden = !idle;
-    }
+    let consentView, consentControl, consentSignature = "";
+    const detailCache = new Map(), pending = new Map(), readers = new Map(), hosts = new Set();
     const routes = {
-        get_interaction: "/api/assessment/detail", get_assessment_overview: "/api/assessment/overview",
+        get_interaction: "/api/assessment/detail",
         get_assessment_consent: "/api/assessment/consent", get_interaction_evidence: "/api/assessment/evidence",
-        set_personal_assessment: "/api/assessment/feedback", set_assessment_consent: "/api/assessment/consent/set",
+        set_assessment_consent: "/api/assessment/consent/set",
         get_mutation_status: "/api/assessment/mutation/status",
     };
-    const receiptKey = "wire.assessment.pending";
-    let recovery = null, recoveryInvalid = false, recovering = false, pendingRequest = null;
+    const receiptKey = "wire.responseCapture.pending", legacyReceiptKey = "wire.assessment.pending";
+    let recoveries = [], recoveryInvalid = false, recovering = false, pendingRequest = null;
     function el(tag, text, cls) {
         const node = document.createElement(tag);
         if (text !== undefined) node.textContent = text;
@@ -47,40 +23,56 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         node.addEventListener("click", action);
         return node;
     }
-    const measureHelp = (key, term) => ux.helpButton(term?.label ?? glossary[key].label, term?.explanation ?? glossary[key].definition);
-    function automaticEntry(host) {
-        if (!onAutomaticSetup) return;
-        const heading = host.querySelector(".assessment-heading");
-        if (!heading) return;
-        const actions = el("div", undefined, "assessment-heading-actions"), existing = heading.querySelector("[data-insight-details]");
-        const configure = button("Automatic scores", event => onAutomaticSetup(event.currentTarget));
-        configure.dataset.automaticScores = "";
-        actions.append(configure);
-        if (existing) actions.append(existing);
-        heading.append(actions);
-        if (host.querySelector("[data-review-status]")) return;
-        const status = el("p", scoring.message, "assessment-scoring-status");
-        status.setAttribute("role", "status");
-        host.querySelector(".assessment-summary").append(status);
-        updateEmptyReviews(host);
-    }
     const recoveryHost = el("div", undefined, "notice assessment-recovery");
     recoveryHost.hidden = true;
     document.getElementById("message")?.after(recoveryHost);
-    function showRecovery(message = "An earlier assessment update needs checking. It will not be repeated.") {
+    function readReceipts() {
+        const found = [];
+        recoveryInvalid = false;
+        for (const key of [receiptKey, legacyReceiptKey]) {
+            try {
+                const raw = sessionStorage.getItem(key);
+                if (raw === null) continue;
+                const value = JSON.parse(raw);
+                if (!value || Object.getPrototypeOf(value) !== Object.prototype
+                    || Object.keys(value).some(name => !["mutationRef", "action", "receiptToken"].includes(name))
+                    || typeof value.mutationRef !== "string" || !/^mutation-[a-f0-9]{32}$/.test(value.mutationRef)
+                    || value.receiptToken !== undefined && (typeof value.receiptToken !== "string" || !/^[a-f0-9]{64}$/.test(value.receiptToken))
+                    || !["set_personal_assessment", "set_assessment_consent"].includes(value.action)) {
+                    throw new Error("Unrecognized response-saving receipt.");
+                }
+                if (key === legacyReceiptKey && value.action === "set_personal_assessment") continue;
+                if (value.action !== "set_assessment_consent") throw new Error("Unexpected response-saving receipt.");
+                found.push({ ...value, key, raw });
+            } catch { recoveryInvalid = true; }
+        }
+        recoveries = found;
+    }
+    const recoveryBlocked = () => recoveryInvalid || recoveries.length > 0;
+    function showRecovery(message = recoveryInvalid
+        ? "An earlier response-saving receipt could not be read. New changes are blocked. Reload this panel when its receipt storage is readable."
+        : recoveries.length > 1 ? "Two response-saving updates need checking. Both receipts are kept; no new change will be sent."
+            : "An earlier response-saving update needs checking. It will not be repeated.") {
         recoveryHost.hidden = false;
         recoveryHost.replaceChildren(el("p", message));
-        if (recovery) {
-            const check = button(pendingRequest === "saving" ? "Saving update..." : recovering || pendingRequest === "checking" ? "Checking update..." : "Check earlier update", async () => {
+        for (const recovery of recoveries) {
+            const label = recovery.key === legacyReceiptKey ? "Check earlier response-saving result" : "Check response-saving result";
+            const check = button(pendingRequest === "saving" ? "Saving update..." : recovering || pendingRequest === "checking" ? "Checking update..." : label, async () => {
                 const restoreRecoveryFocus = document.activeElement === check;
                 recovering = true; showRecovery();
                 try {
+                    await ready();
                     const input = { schemaVersion: 1, mutationRef: recovery.mutationRef, ...(recovery.receiptToken ? { receiptToken: recovery.receiptToken } : {}) };
                     const result = receipt(await api(routes.get_mutation_status, input), { input });
                     if (["complete", "not-started", "purged"].includes(result.phase)) {
-                        clearReceipt();
+                        if (result.phase === "complete") {
+                            contract.validateConsent(result.data?.consent);
+                            contract.validateBasis(result.basis);
+                        }
+                        clearReceipt(recovery);
+                        consentSignature = "";
                         onChanged();
-                        showRecovery(result.phase === "complete" ? "The earlier update completed. Reading current facts."
+                        showRecovery(recoveryBlocked() ? undefined : result.phase === "complete" ? "The earlier response-saving update completed. Reading current settings."
                             : result.phase === "purged" ? "The earlier update's evidence was deleted. Its private result will not be restored."
                                 : "No committed update was found. Nothing was repeated.");
                         refresh();
@@ -89,9 +81,9 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                 } catch (error) { showRecovery(error.message + " No update was repeated."); }
                 finally {
                     recovering = false;
-                    if (recovery) showRecovery(recoveryHost.querySelector("p")?.textContent);
+                    if (recoveryBlocked()) showRecovery(recoveryHost.querySelector("p")?.textContent);
                     if (restoreRecoveryFocus && document.activeElement === document.body) {
-                        const target = recovery ? recoveryHost.querySelector("button") : document.getElementById("pageTitle") ?? document.querySelector("main");
+                        const target = recoveries.length ? recoveryHost.querySelector("button") : document.getElementById("pageTitle") ?? document.querySelector("main");
                         if (target?.checkVisibility()) {
                             if (!target.matches("button,[tabindex]")) target.tabIndex = -1;
                             ux.restoreFocus(target);
@@ -102,54 +94,22 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             check.disabled = recovering || pendingRequest !== null; recoveryHost.append(check);
         }
     }
-    function clearReceipt() {
-        recovery = null;
-        recoveryHost.hidden = true;
-        try { sessionStorage.removeItem(receiptKey); }
-        catch { onNotice("The completed update receipt could not be cleared from this panel. A later status read may show it again; no mutation will replay."); }
-    }
-    try {
-        const stored = sessionStorage.getItem(receiptKey);
-        if (stored) {
-            const value = JSON.parse(stored);
-            if (!/^mutation-[a-f0-9]{32}$/.test(value.mutationRef) || !["set_personal_assessment", "set_assessment_consent"].includes(value.action)
-                || value.receiptToken !== undefined && !/^[a-f0-9]{64}$/.test(value.receiptToken)) throw new Error("Invalid saved assessment receipt.");
-            recovery = value; showRecovery();
+    function clearReceipt(recovery) {
+        try {
+            if (!recovery || sessionStorage.getItem(recovery.key) !== recovery.raw) {
+                throw new Error("The response-saving receipt changed while its result was being read. Nothing in storage was removed.");
+            }
+            sessionStorage.removeItem(recovery.key);
+            readReceipts();
+            recoveryHost.hidden = !recoveryBlocked();
+        } catch (error) {
+            recoveryInvalid = true;
+            onNotice(error.message || "The response-saving receipt could not be cleared. No mutation will replay.");
+            showRecovery();
         }
-    } catch { recoveryInvalid = true; showRecovery("The panel cannot read its earlier update receipt. No new update will be sent until the receipt can be checked."); }
-    const detailsModal = el("dialog", undefined, "assessment-dialog"), feedbackModal = el("dialog", undefined, "assessment-dialog");
-    let details = detailsModal, feedbackDialog = feedbackModal;
-    details.setAttribute("aria-label", "Insight details");
-    document.body.append(details, feedbackDialog);
-    let detailTrigger, detailOrigin;
-    details.addEventListener("close", () => {
-        if (details.open || feedbackDialog.open || !detailTrigger && !detailOrigin) return;
-        const currentHost = [...document.querySelectorAll("[data-insight-key]")].find(node =>
-            node.dataset.insightKey === detailOrigin && node.checkVisibility());
-        const target = detailTrigger?.isConnected && detailTrigger.checkVisibility() ? detailTrigger
-            : currentHost?.querySelector("[data-insight-details]") ?? document.getElementById("pageTitle");
-        if (target?.checkVisibility()) {
-            if (!target.matches("button,[tabindex]")) target.tabIndex = -1;
-            ux.restoreFocus(target);
-        }
-    });
-    function detailsBody(title) {
-        const restoreInside = details.contains(document.activeElement);
-        const header = el("div", undefined, "dialog-head");
-        const close = button("Close", () => requestDeparture(closeDetails));
-        close.setAttribute("aria-label", "Close insight details");
-        close.replaceChildren(ux.icon("close"));
-        ux.tooltip(close, "Close details");
-        header.append(el("h2", title), close);
-        const body = el("div", undefined, "assessment-dialog-body");
-        details.replaceChildren(header, body);
-        if (restoreInside) ux.restoreFocus(close);
-        return body;
     }
-    function closeDetails() {
-        if (details === detailsModal) { if (details.open) details.close(); }
-        else { details.hidden = true; detailTrigger?.setAttribute("aria-expanded", "false"); ux.restoreFocus(detailTrigger); }
-    }
+    readReceipts();
+    if (recoveryBlocked()) showRecovery();
     const basisKey = basis => JSON.stringify(contract.BASIS_KEYS.map(key => basis?.[key]));
     const sameBasis = (left, right) => Boolean(left && right) && contract.BASIS_KEYS.every(key => left[key] === right[key]);
     async function ready() {
@@ -163,9 +123,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
     function unavailable(host, message, retry) {
         host.removeAttribute("aria-busy");
         host.replaceChildren(el("p", message, "assessment-unavailable"));
-        if (host.classList.contains("interaction-insights")) host.prepend(el("h2", "Insights"));
         if (host.classList.contains("interaction-response")) host.prepend(el("h2", "Response"));
-        if (retry) host.append(button("Read insights again", retry));
+        if (retry) host.append(button("Read retained evidence again", retry));
     }
     function reserveSpace(host) {
         const height = host.getBoundingClientRect().height;
@@ -179,43 +138,23 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
     }
     function leave() {
         generation++;
-        detailTrigger = null; detailOrigin = null; activeDetail = null; focusInteractionRef = null;
-        const previousFeedback = activeFeedback;
-        activeFeedback = null; feedbackView = null;
-        onFeedbackStateChanged?.();
         clearPrivateText(); readers.clear();
-        feedbackDialog.onclose = null;
-        feedbackDialog.oncancel = null;
-        if (feedbackDialog.open) feedbackDialog.close();
-        if (details.open) details.close();
-        feedbackDialog.replaceChildren(); details.replaceChildren();
-        if (feedbackDialog !== feedbackModal) feedbackDialog.remove();
-        if (details !== detailsModal) details.remove();
-        feedbackDialog = feedbackModal; details = detailsModal;
-        feedbackDialog.removeAttribute("aria-labelledby");
-        if (previousFeedback && recovery) showRecovery(pendingRequest
-            ? "An assessment update is still in progress. Leaving this view did not cancel it."
-            : "The earlier assessment update needs checking. It will not be repeated.");
     }
-    function invalidate(message = "The evidence context changed. Read current insights.") {
+    function invalidate(message = "The recorded evidence changed. Read this interaction again.") {
         generation++;
-        detailCache.clear(); overviewCache.clear(); pending.clear();
+        detailCache.clear(); pending.clear();
         clearPrivateText();
         readers.clear();
         for (const host of hosts) if (host.isConnected) { reserveSpace(host); unavailable(host, message); }
         hosts.clear();
         consentControl?.invalidate(message);
         consentView?.render();
-        activeFeedback?.invalidate(message);
-        feedbackView?.render();
         consentSignature = "";
-        activeDetail = null;
-        if (details.open || details !== detailsModal && details.isConnected) detailsBody("Insights changed").append(el("p", message));
         onInvalidated?.(message);
     }
     function receive(value) {
         if (!value || value.schemaVersion !== 1 || !value.basis || !Array.isArray(value.catalog)) {
-            if (snapshot) invalidate("Interaction insights are unavailable in this snapshot.");
+            if (snapshot) invalidate("Recorded interaction evidence is unavailable in this snapshot.");
             snapshot = null;
             return;
         }
@@ -227,14 +166,14 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         const sourceCleanup = status.pendingCleanup && status.kind !== "artifact-deletion";
         if (sourceCleanup || snapshot && JSON.stringify(snapshot.basis) !== JSON.stringify(status.basis)) {
             const reviewChanged = sourceCleanup || ["consentRevision", "overrideRevision", "deletionEpoch"].some(key => snapshot?.basis[key] !== status.basis[key]);
-            invalidate(sourceCleanup ? "Local evidence cleanup is pending. Private response text and stale insights are unavailable." : "The evidence or its permission changed. Read current insights.");
+            invalidate(sourceCleanup ? "Local evidence cleanup is pending. Private response text and stale timing are unavailable." : "The evidence or its permission changed. Read the current interaction.");
             if (reviewChanged) onChanged();
         }
     }
     function envelope(result, expected) {
-        if (!result || result.schemaVersion !== 1) throw new Error("Insight response has an unsupported version.");
+        if (!result || result.schemaVersion !== 1) throw new Error("Recorded-evidence response has an unsupported version.");
         contract.validateBasis(result.basis);
-        if (!sameBasis(result.basis, expected) || !sameBasis(snapshot?.basis, expected)) throw new Error("Insights changed during this read. Read the current view.");
+        if (!sameBasis(result.basis, expected) || !sameBasis(snapshot?.basis, expected)) throw new Error("Recorded evidence changed during this read. Read the current view.");
         return result.data;
     }
     async function read(action, input, expected) {
@@ -272,101 +211,13 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             onFailure?.(error);
         }
     }
-    function mapped(ids) {
-        const rows = ids.map(id => snapshot.catalog.find(row => row.scenarioId === id));
-        return {
-            refs: [...new Set(rows.filter(row => row?.status === "retained" && row.interactionRef).map(row => row.interactionRef))].sort(),
-            unavailable: rows.filter(row => !row || row.status !== "retained" || !row.interactionRef).length,
-        };
-    }
-    function reviewRevisionFor(refs) {
-        const selected = new Set(refs);
-        return JSON.stringify(snapshot?.catalog.filter(row => selected.has(row.interactionRef))
-            .map(row => [row.scenarioId, row.reviewStatusRevision ?? null]));
-    }
-    async function overview(host, scenarioIds, { scopeNote = "", findingsHost, matchedCallCount = null } = {}) {
-        hosts.add(host);
-        if (findingsHost) hosts.add(findingsHost);
-        const request = {}, started = generation;
-        overviewRequests.set(host, request);
-        if (!snapshot) {
-            unavailable(host, "Interaction insights are unavailable. Recorded activity remains separate.");
-            if (findingsHost) unavailable(findingsHost, "Saved findings are unavailable. Recorded activity remains separate.");
-            return;
-        }
-        const membership = mapped(scenarioIds), expected = snapshot.basis;
-        const reviewRevision = reviewRevisionFor(membership.refs);
-        const isCurrent = () => started === generation && host.isConnected && overviewRequests.get(host) === request
-            && reviewRevision === reviewRevisionFor(membership.refs);
-        const signature = JSON.stringify([started, expected, membership.refs, membership.unavailable, scopeNote, reviewRevision, matchedCallCount]);
-        if (acceptedOverviews.get(host) === signature && host.contains(document.activeElement)) return;
-        acceptedOverviews.delete(host);
-        if (findingsHost) {
-            findingsHost.setAttribute("aria-busy", "true");
-            findingsHost.replaceChildren(el("p", "Reading saved findings...", "assessment-loading"));
-        }
-        reserveSpace(host);
-        host.setAttribute("aria-busy", "true");
-        host.replaceChildren(el("p", "Reading recorded insights for this scope...", "assessment-loading"));
-        try {
-            if (!presentation) await ready();
-            if (!isCurrent()) return;
-            if (!snapshot) { unavailable(host, "Interaction insights are unavailable. Recorded activity remains separate."); return; }
-            if (!sameBasis(snapshot.basis, expected)) throw new Error("Insights changed during this read. Read the current view.");
-            const key = "overview:" + basisKey(expected) + ":" + JSON.stringify(membership.refs) + ":" + reviewRevision;
-            await paint(host, overviewCache, key, async () => {
-                const all = snapshot.overview;
-                const data = all && JSON.stringify([...all.interactionRefs].sort()) === JSON.stringify(membership.refs)
-                    ? all : await read("get_assessment_overview", { schemaVersion: 1, interactionRefs: membership.refs, expectedSourceRevision: expected.sourceRevision }, expected);
-                if (!Array.isArray(data.interactionRefs) || JSON.stringify([...data.interactionRefs].sort()) !== JSON.stringify(membership.refs)) throw new Error("Overview membership does not match this view.");
-                data.metrics.forEach(contract.validateMetric);
-                if (data.metrics.some(metric => !sameBasis(metric.basis, expected))) throw new Error("Overview facts do not share the current evidence version.");
-                return data;
-            }, data => {
-                if (!data.interactionRefs.length) {
-                    host.replaceChildren(el("h2", "Insights"), el("p", scenarioIds.length
-                        ? "No verified interactions are available for these matching request groups."
-                        : "No matching request groups. No interactions to summarize.", "assessment-empty"));
-                    if (findingsHost) findingsHost.replaceChildren(el("p", scenarioIds.length
-                        ? "No verified interaction association. Saved findings are unavailable for these request groups."
-                        : "No matching request groups. No saved findings for this selection.", "assessment-empty"));
-                } else {
-                    const model = presentation.summarize(data.metrics, { membershipStatus: membership.unavailable ? "partial" : "complete-retained",
-                        assessmentAttempts: data.assessmentAttempts, reviewStatuses: data.reviewStatuses ?? null });
-                    renderSummary(host, model, { findingsHost, matchedCallCount, bindDetails, showTiming: false, disclosureKey: "assessment:overview:" + JSON.stringify(membership.refs),
-                        helpButton: measureHelp, detailsLabel: "Measure definitions", onDetails: trigger => showDetails(model, null, trigger) });
-                    automaticEntry(host);
-                }
-                findingsHost?.removeAttribute("aria-busy");
-                if (scopeNote && scenarioIds.length) {
-                    const scope = el("p", scopeNote, "assessment-scope");
-                    if (findingsHost?.dataset.presentation === "compact") host.prepend(scope);
-                    else host.append(scope);
-                }
-                if (membership.unavailable) host.append(el("p", `${membership.unavailable} request groups have no verified interaction association. They are not silently included.`, "assessment-unavailable"));
-                acceptedOverviews.set(host, signature);
-            }, isCurrent, error => {
-                if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
-            });
-        } catch (error) {
-            if (isCurrent()) {
-                unavailable(host, error.message, () => overview(host, scenarioIds, { scopeNote, findingsHost, matchedCallCount }));
-                if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
-            }
-        }
-    }
-    async function detail(host, responseHost, scenarioId, responseOptions = {}) {
+    async function detail(responseHost, scenarioId, responseOptions = {}) {
+        const host = responseHost;
         const detailGeneration = generation;
         if (responseOptions.contentFirst) responseHost.dataset.contentFirst = "true";
-        hosts.add(host); hosts.add(responseHost);
-        const findingsHost = responseOptions.findingsHost;
-        if (findingsHost) {
-            hosts.add(findingsHost);
-            findingsHost.replaceChildren(el("p", "Reading what the record shows...", "assessment-loading"));
-        }
+        hosts.add(responseHost);
+        if (responseOptions.timingHost) hosts.add(responseOptions.timingHost);
         if (!snapshot) {
-            unavailable(host, "Interaction insights are unavailable. Recorded actions remain available below.");
-            if (findingsHost) unavailable(findingsHost, "Saved findings are unavailable. Recorded actions remain separate.");
             responseUnavailable(responseHost, "No response text retained.", "No attributable retained response is available.");
             return;
         }
@@ -377,10 +228,8 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             if (detailGeneration !== generation || !host.isConnected) return;
             const mapping = snapshot?.catalog.find(row => row.scenarioId === scenarioId);
             if (mapping?.status !== "retained" || !mapping.interactionRef) {
-                unavailable(host, mapping?.status === "unverified" ? "Interaction association is unverified. Recorded actions remain available below."
-                    : "No supported interaction summary is available for these retained records.");
-                if (findingsHost) unavailable(findingsHost, "No verified assessment association for this request group.");
-                responseUnavailable(responseHost, "No response text retained.", "No attributable retained response is available.");
+                responseUnavailable(responseHost, "No response text retained.", mapping?.status === "unverified"
+                    ? "The recorded interaction association is unverified." : "No attributable retained response is available.");
                 return;
             }
             const expected = snapshot.basis;
@@ -391,53 +240,21 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             }, expected), data => {
                 contract.validateInteractionView(data);
                 if (!sameBasis(data.basis, expected) || data.interaction.interactionRef !== mapping.interactionRef) throw new Error("Interaction identity or evidence version changed.");
-                const model = presentation.summarize(data.metrics, { membershipStatus: data.interaction.membershipStatus,
-                    singleInteraction: true, reviewStatus: data.reviewStatus ?? null });
-                renderSummary(host, model, { findingsHost, bindDetails, showTiming: false, disclosureKey: "assessment:interaction:" + mapping.interactionRef,
-                    helpButton: measureHelp, detailsLabel: responseOptions.directFeedback ? "Personal feedback" : "Details and feedback",
-                    onDetails: trigger => responseOptions.directFeedback ? openPersonalFeedback(data, trigger) : showDetails(model, data, trigger) });
-                if (responseOptions.directFeedback) {
-                    host.querySelector("[data-insight-details]")?.removeAttribute("aria-haspopup");
-                    const saved = host.querySelector(".assessment-saved-details");
-                    if (saved) {
-                        const visible = el("section", undefined, "assessment-saved-details reader-saved-checks");
-                        saved.querySelector(":scope > summary")?.remove();
-                        for (const limit of saved.querySelectorAll(":scope > .assessment-finding-limit")) limit.remove();
-                        if (saved.querySelector(".assessment-secondary-findings")?.textContent.trim()) {
-                            findingsHost?.querySelector('[data-finding-kind="execution-gap"]')?.remove();
+                    if (responseOptions.recordedTimingHome?.isConnected) {
+                        const home = responseOptions.recordedTimingHome.querySelector("dd");
+                        const metric = data.metrics.find(metric => metric.origin === "automatic-local" && metric.dimension === "speed"
+                            && metric.definitionId === "recorded-response-duration");
+                        home.querySelector(".reader-timing-reason")?.remove();
+                        if (metric?.reason && metric.reason !== "missing-evidence") {
+                            home.append(el("p", presentation.format(metric).qualification, "reader-timing-reason reader-response-note"));
                         }
-                        saved.querySelector(".assessment-execution > h3")?.remove();
-                        for (const counts of saved.querySelectorAll(".assessment-count-strip")) {
-                            counts.classList.add("reader-fields", "reader-check-counts");
-                            for (const fact of counts.children) fact.prepend(fact.querySelector("dt"));
-                        }
-                        visible.append(...saved.childNodes);
-                        saved.replaceWith(visible);
                     }
-                    const reviewMetrics = data.metrics.filter(metric => ["user-personal", "model-assessed"].includes(metric.origin));
-                    if (reviewMetrics.length) {
-                        for (const group of findingsHost?.querySelectorAll("[data-finding-origin]") ?? []) {
-                            if (reviewMetrics.some(metric => metric.origin === group.dataset.findingOrigin)) group.remove();
-                        }
-                        host.append(measureDetails(model, { ...data, metrics: reviewMetrics }, true));
-                    }
-                    const unsupported = data.metrics.filter(metric => metric.origin === "automatic-local"
-                        && ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension)
-                        && metric.status === "unassessed" && metric.reason === "unsupported-check");
-                    if (unsupported.length) host.append(el("p",
-                        "Local checks do not assess " + unsupported.map(metric => presentation.singleDetail(metric).label.toLowerCase()).join(", ") + ".",
-                        "reader-local-quality reader-response-note"));
                     if (responseOptions.timingHost?.isConnected) {
                         const timingHost = responseOptions.timingHost, fields = el("dl", undefined, "reader-fields");
                         timingHost.replaceChildren();
                         for (const metric of data.metrics.filter(metric => metric.origin === "automatic-local" && metric.dimension === "speed")) {
                             const shown = presentation.singleDetail(metric), formatted = presentation.format(metric);
                             if (metric.definitionId === "recorded-response-duration" && responseOptions.recordedTimingHome) {
-                                const home = responseOptions.recordedTimingHome.querySelector("dd");
-                                home.querySelector(".reader-timing-reason")?.remove();
-                                if (metric.reason && metric.reason !== "missing-evidence") {
-                                    home.append(el("p", formatted.qualification, "reader-timing-reason reader-response-note"));
-                                }
                                 continue;
                             }
                             const field = el("div"), value = el("dd"), result = el(metric.value === null ? "span" : "data",
@@ -459,23 +276,16 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
                             timingHost.append(fields);
                         }
                     }
-                }
-                automaticEntry(host);
                 showResponse(responseHost, data, responseOptions);
-                if (focusInteractionRef === data.interaction.interactionRef && host.checkVisibility()) {
-                    ux.restoreFocus(host.querySelector("button"));
-                    focusInteractionRef = null;
-                }
             }, () => snapshot?.catalog.find(row => row.scenarioId === scenarioId)?.reviewStatusRevision === mapping.reviewStatusRevision,
             error => {
-                if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
                 responseUnavailable(responseHost, "Response availability could not be read.", error.message, true);
+                responseHost.append(button("Read retained response again", () => detail(responseHost, scenarioId, responseOptions)));
             });
         } catch (error) {
             if (detailGeneration === generation && host.isConnected) {
-                unavailable(host, error.message, () => detail(host, responseHost, scenarioId, responseOptions));
-                if (findingsHost) unavailable(findingsHost, "Saved findings could not be read. " + error.message);
                 responseUnavailable(responseHost, "Response availability could not be read.", error.message, true);
+                responseHost.append(button("Read retained response again", () => detail(responseHost, scenarioId, responseOptions)));
             }
         }
     }
@@ -507,24 +317,25 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
         const answers = view.consent.state === "enabled"
             ? view.observations.filter(item => item.kind === "answer" && item.availability === "available") : [];
         if (!answers.length) {
-            const availability = view.metrics.find(metric => metric.origin === "automatic-local" && metric.checkId === "answer-evidence-present");
-            const recordedAvailable = availability?.value !== null && availability?.counts?.pass > 0;
+            const observations = view.observations.filter(item => item.kind === "answer");
+            const legacyAvailability = observations.length ? [] : view.metrics.filter(metric =>
+                metric.origin === "automatic-local" && metric.checkId === "answer-evidence-present" && metric.checkVersion === 1
+                && metric.eligibleUnitRefs.length === 1 && metric.eligibleUnitRefs[0] === view.interaction.interactionRef);
+            const recordedAvailable = observations.some(item => item.availability === "available")
+                || legacyAvailability.some(metric => metric.counts?.pass > 0);
             responseUnavailable(host, contentFirst && recordedAvailable ? "Response text is not available to read." : "No response text retained.", view.consent.state !== "enabled"
                 ? "Optional response capture is off. The available evidence contains no readable response text."
                 : "No attributable response text was retained.");
             if (contentFirst && view.consent.state !== "enabled") host.querySelector(".reader-empty").append(" Capture is off.");
-            if (contentFirst && availability) {
-                if (availability.reason && availability.reason !== "missing-evidence") {
-                    const note = el("p", presentation.format(availability).qualification, "reader-response-note");
-                    note.dataset.checkId = availability.checkId;
-                    note.dataset.reason = availability.reason;
-                    note.dataset.metricStatus = availability.status;
-                    host.append(note);
-                }
-                for (const reason of availability.unassessedReasons ?? []) {
-                    if (reason.reason === availability.reason) continue;
-                    host.append(el("p", `Recorded reply availability: ${reason.count} ${reason.reason ?? "reason not retained"}.`, "reader-response-note"));
-                }
+            const reasons = observations.map(item => item.reason).concat(legacyAvailability.flatMap(metric =>
+                [metric.reason, ...(metric.unassessedReasons ?? []).map(item => item.reason)])).filter(Boolean);
+            if (contentFirst) for (const reason of new Set(reasons)) {
+                const labels = { "credential-excluded": "Recorded response was excluded by credential screening.",
+                    "capture-limit": "Recorded response exceeded the capture limit.", "missing-evidence": "No response text was retained.",
+                    "consent-required": "Response saving was not approved for this record." };
+                const note = el("p", labels[reason] ?? `Recorded response unavailable: ${reason}.`, "reader-response-note");
+                note.dataset.reason = reason;
+                host.append(note);
             }
             return;
         }
@@ -640,308 +451,77 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             else reader.append(el("p", "Response text is hidden.", "reader-empty"));
         }
     }
-    function mountFeedbackEditor(view, checkId, feedbackTrigger, host) {
-        if (!activeDetail || !sameBasis(activeDetail.basis, snapshot?.basis)) {
-            onNotice("Recorded evidence changed. Reopen personal feedback.");
-            return;
-        }
-        const personal = view.assessments.filter(item => item.origin === "user-personal" && item.checkId === checkId).sort((a, b) => b.revision - a.revision)[0] ?? null;
-        const local = view.metrics.find(item => item.origin === "automatic-local" && item.checkId === checkId);
-        const localTerm = local ? presentation.wording.resolve(local) : null;
-        const automaticLabel = localTerm?.kind === "permission" && local.reason === "unsupported-check" && local.value === null
-            ? "Permission is not checked automatically."
-            : "Automatic local check: " + (local ? presentation.format(local).value : "No saved local check");
-        const feedbackControl = controls.feedback({ interactionRef: view.interaction.interactionRef, basis: view.basis, checkId, latestPersonal: personal });
-        activeFeedback = feedbackControl;
-        if (feedbackDialog !== feedbackModal && feedbackDialog !== host) feedbackDialog.remove();
-        feedbackDialog = host;
-        const mountedView = mountFeedback(feedbackDialog, {
-            control: feedbackControl, checkId, wording: presentation.wording, inline: host !== feedbackModal, requestClose: requestDeparture,
-            automaticLabel,
-            onStateChange: () => { if (activeFeedback === feedbackControl) onFeedbackStateChanged?.(); },
-            onSubmit: packet => mutate(feedbackControl, mountedView, packet),
-            onCheck: packet => checkMutation(feedbackControl, mountedView, packet),
-            onClose: () => {
-                if (activeFeedback !== feedbackControl) return;
-                activeFeedback = null; feedbackView = null;
-                onFeedbackStateChanged?.();
-                if (host === details) detailTrigger?.setAttribute("aria-expanded", "false");
-                if (recovery) showRecovery(pendingRequest
-                    ? "An assessment update is still in progress. Closing its panel did not cancel it."
-                    : "The earlier assessment update needs checking. It will not be repeated.");
-            },
-        });
-        feedbackView = mountedView;
-        mountedView.open(feedbackTrigger);
-    }
-    function openPersonalFeedback(view, trigger) {
-        if (!trigger.isConnected || !trigger.checkVisibility()) return;
-        if (trigger === detailTrigger && details !== detailsModal && details.isConnected && !details.hidden) {
-            if (feedbackView) feedbackView.focus();
-            else details.querySelector("select")?.focus({ preventScroll: true });
-            return;
-        }
-        if (activeFeedback && ["pending", "checking", "unknown", "stale"].includes(activeFeedback.snapshot().phase)) {
-            onNotice("Finish or check the current feedback update before starting another.");
-            feedbackView?.focus();
-            return;
-        }
-        requestDeparture(() => {
-            if (!trigger.isConnected || !sameBasis(view.basis, snapshot?.basis)) return;
-            ux.hideTooltip();
-            if (details !== detailsModal) details.remove();
-            details = el("section", undefined, "assessment-inline");
-            const chooser = details;
-            details.id = "inline-personal-feedback";
-            trigger.closest(".interaction-insights").append(details);
-            trigger.setAttribute("aria-expanded", "true");
-            trigger.setAttribute("aria-controls", details.id);
-            detailTrigger = trigger; detailOrigin = trigger.closest("[data-insight-key]")?.dataset.insightKey;
-            activeDetail = view;
-            const header = el("div", undefined, "dialog-head"), heading = el("h2", "Personal feedback");
-            heading.id = "personal-feedback-title";
-            details.setAttribute("aria-labelledby", heading.id);
-            const close = button("Cancel", () => {
-                if (!chooser.isConnected || details !== chooser) return;
-                chooser.hidden = true;
-                trigger.setAttribute("aria-expanded", "false");
-                ux.restoreFocus(trigger);
-            });
-            header.append(heading, close);
-            const label = el("label", "Feedback about"), select = el("select");
-            select.id = "feedback-dimension-" + view.interaction.interactionRef;
-            select.dataset.feedbackDimension = "";
-            const placeholder = el("option", "Choose what to review"); placeholder.value = ""; select.append(placeholder);
-            for (const [value, dimension] of [["semantic-answer-correctness", "accuracy"], ["answer-support-validity", "answer-trust"], ["action-authorization-compliance", "action-trust"]]) {
-                const term = presentation.wording.resolve({ dimension, checkId: value, checkVersion: 1, origin: "user-personal" });
-                const option = el("option", term.label); option.value = value; select.append(option);
-            }
-            label.append(select);
-            details.append(header, label);
-            select.addEventListener("change", () => {
-                if (!select.value || !select.isConnected) return;
-                const checkId = select.value;
-                requestDeparture(() => { if (select.isConnected && details === chooser) mountFeedbackEditor(view, checkId, trigger, chooser); });
-            });
-            close.focus({ preventScroll: true });
-        });
-    }
-    function showDetails(model, view, trigger) {
-        if (!trigger.isConnected || !trigger.checkVisibility()) return;
-        if (trigger === detailTrigger && details !== detailsModal && details.isConnected) {
-            details.hidden = !details.hidden;
-            trigger.setAttribute("aria-expanded", String(!details.hidden));
-            return;
-        }
-        if (activeFeedback?.hasUnsentDraft()) {
-            requestDeparture(() => showDetails(model, view, trigger));
-            return;
-        }
-        ux.hideTooltip();
-        if (details !== detailsModal) details.remove();
-        const inline = Boolean(trigger.closest("#requestContent"));
-        details = inline ? el("section", undefined, "assessment-inline") : detailsModal;
-        if (inline) {
-            details.id = "inline-insight-details";
-            trigger.closest(".interaction-insights").append(details);
-            trigger.setAttribute("aria-expanded", "true");
-            trigger.setAttribute("aria-controls", details.id);
-        }
-        detailTrigger = trigger; detailOrigin = trigger.closest("[data-insight-key]")?.dataset.insightKey;
-        activeDetail = view;
-        const body = detailsBody("Insight details");
-        if (!view) body.append(el("p", model.takeaway));
-        if (view) {
-            body.append(el("p", "Your feedback records your judgment; it does not change the recorded call."));
-            const label = el("label", "Personal feedback (optional)"), select = el("select");
-            for (const [value, dimension] of [["semantic-answer-correctness", "accuracy"], ["answer-support-validity", "answer-trust"], ["action-authorization-compliance", "action-trust"]]) {
-                const term = presentation.wording.resolve({ dimension, checkId: value, checkVersion: 1, origin: "user-personal" });
-                const option = el("option", term.label); option.value = value; select.append(option);
-            }
-            label.append(select);
-            body.append(label, button("Give personal feedback", event => {
-                const feedbackTrigger = event.currentTarget;
-                requestDeparture(() => {
-                const checkId = select.value;
-                const host = inline ? el("section", undefined, "assessment-inline") : feedbackModal;
-                if (inline) body.append(host);
-                mountFeedbackEditor(view, checkId, feedbackTrigger, host);
-                });
-            }));
-        } else body.append(el("p", "What these results mean and which requests they cover. Open a single request to add optional personal feedback."));
-        const summary = trigger.closest(".assessment-summary");
-        if (summary?.querySelector(".assessment-empty-review")?.hidden === false) {
-            for (const outcomes of summary.querySelectorAll(".assessment-secondary-findings > .assessment-finding-list")) body.append(outcomes.cloneNode(true));
-            for (const paragraph of summary.querySelectorAll(".assessment-reading-help > p")) body.append(paragraph.cloneNode(true));
-        }
-        if (!view) {
-        const terms = el("details", undefined, "reading-section"), definitions = el("dl", undefined, "measure-glossary");
-        definitions.dataset.measureGlossary = "";
-        terms.append(el("summary", "Glossary"), definitions);
-        for (const [key, term] of Object.entries(glossary)) {
-            const entry = el("div", undefined, "assessment-definition");
-            entry.dataset.glossaryTerm = key;
-            entry.append(el("dt", term.label), el("dd", term.definition));
-            if (term.detail) entry.lastElementChild.append(el("p", term.detail));
-            definitions.append(entry);
-        }
-        body.append(terms);
-        }
-        body.append(measureDetails(model, view));
-        if (!inline && !details.open) details.showModal();
-        if (!inline) details.querySelector("button").focus({ preventScroll: true });
-    }
-    function measureDetails(model, view, inline = false) {
-        const measures = el(inline ? "section" : "details", undefined, inline ? "reader-measure-details" : "reading-section");
-        measures.setAttribute("aria-label", "Recorded measures and definitions");
-        if (!inline) measures.append(el("summary", "Recorded measures and definitions"));
-        if (view) {
-            const table = el("table", undefined, "single-interaction-measures"), head = el("tr"), tbody = el("tbody");
-            table.dataset.interactionRef = view.interaction.interactionRef;
-            for (const label of ["Measure", "Recorded state", "Definition and basis"]) head.append(el("th", label));
-            const thead = el("thead"); thead.append(head); table.append(thead, tbody);
-            const groups = new Map();
-            for (const metric of view.metrics.filter(metric => metric.dimension !== "cost")) {
-                const localPlaceholder = metric.origin === "automatic-local" && metric.status === "unassessed"
-                    && metric.reason === "unsupported-check" && ["accuracy", "answer-trust", "action-trust"].includes(metric.dimension)
-                    && metric.value === null && metric.denominator === 0 && metric.coverage.covered === 0 && metric.counts.evaluatorError === 0;
-                const key = localPlaceholder ? JSON.stringify([metric.definitionId, metric.definitionVersion, metric.boundary,
-                    metric.value, metric.numerator, metric.denominator, metric.coverage, metric.counts, [...metric.eligibleUnitRefs].sort(),
-                    metric.reason, metric.measurementBasis, metric.basis, metric.unassessedReasons ?? null, metric.observedTime,
-                    metric.createdAt, [...metric.coveredUnitRefs].sort(), [...metric.evidenceRefs].sort()])
-                    : metric.metricRef;
-                if (!groups.has(key)) groups.set(key, []);
-                groups.get(key).push(metric);
-            }
-            function bindMetric(node, metric) {
-                for (const key of ["metricRef", "origin", "value", "numerator", "denominator", "definitionId", "checkId", "boundary"]) node.dataset[key] = String(metric[key]);
-                node.dataset.metricStatus = metric.status;
-                node.dataset.covered = String(metric.coverage.covered);
-                node.dataset.eligible = String(metric.coverage.eligible);
-                node.dataset.reason = String(metric.reason);
-                node.dataset.unassessedReasons = JSON.stringify(metric.unassessedReasons ?? null);
-                node.dataset.observedTime = JSON.stringify(metric.observedTime);
-                node.dataset.measurementBasis = metric.measurementBasis;
-                node.dataset.basis = JSON.stringify(metric.basis);
-                if (metric.evaluator) {
-                    node.dataset.evaluatorProvider = metric.evaluator.provider;
-                    node.dataset.evaluatorModel = metric.evaluator.model;
-                    node.dataset.evaluatorRubricId = metric.evaluator.rubricId;
-                    node.dataset.evaluatorRubricVersion = String(metric.evaluator.rubricVersion);
-                }
-                if (metric.counts) for (const [key, value] of Object.entries(metric.counts)) node.dataset[key] = String(value);
-            }
-            for (const metrics of groups.values()) {
-                const metric = metrics[0], shown = presentation.singleDetail(metric), row = el("tr");
-                const name = el("th"), value = el("td"), basis = el("td");
-                name.scope = "row";
-                if (metrics.length === 1) {
-                    bindMetric(row, metric); name.textContent = shown.label;
-                    basis.append(el("p", shown.origin), el("code", shown.definition));
-                } else {
-                    row.dataset.metricGroup = "unreviewed";
-                    const names = el("ul"), definitions = el("ul");
-                    for (const member of metrics) {
-                        names.append(el("li", presentation.singleDetail(member).label));
-                        const definition = el("li");
-                        bindMetric(definition, member);
-                        definition.append(el("code", `${member.checkId} v${member.checkVersion}`));
-                        definitions.append(definition);
-                    }
-                    name.append(names);
-                    basis.append(el("p", shown.origin), el("code", `${metric.definitionId} v${metric.definitionVersion}`), definitions);
-                }
-                value.append(el("span", shown.value, "single-measure-value " + shown.tone),
-                    el("p", `${metrics.length > 1 ? "Each check: " : ""}${shown.coverage.covered} ${shown.coverage.unit}; ${shown.coverage.eligible} eligible`, "single-measure-coverage"));
-                if (metric.dimension === "speed") basis.append(el("p", shown.boundary));
-                if (shown.evaluator) basis.append(el("p", `Review model: ${shown.evaluator.provider} / ${shown.evaluator.model}; rubric ${shown.evaluator.rubricId} v${shown.evaluator.rubricVersion}`, "single-measure-evaluator"));
-                if (shown.reason && !shown.unassessedReasons?.some(item => item.reason === shown.reason)) basis.append(el("p", shown.reason, "single-measure-reason"));
-                if (shown.unassessedReasons?.length) basis.append(el("p", shown.unassessedReasons
-                    .map(item => `${item.count} ${item.reason ?? "reason not recorded"}`).join("; "), "single-measure-reasons"));
-                tbody.append(row); row.append(name, value, basis);
-            }
-            measures.append(table);
-        } else for (const row of [...Object.values(model.groups).flat(), ...model.diagnostics]) {
-            const section = el("section", undefined, "assessment-definition");
-            const facts = el("ul", undefined, "assessment-detail-facts");
-            for (const detail of row.details) facts.append(el("li", detail));
-            section.append(el("h3", row.label), facts);
-            measures.append(section);
-        }
-        if (!view) measures.append(el("p", "Pass-share colors are visual bands (v1): below 50% red, 50 to below 75% orange, 75 to below 90% gold, and 90 to 100% teal. They are not quality guarantees. Duration does not use these bands.", "assessment-band-note"));
-        return measures;
-    }
     function receipt(result, packet) {
         if (!result || result.schemaVersion !== 1 || result.mutationRef !== packet.input.mutationRef) throw new Error("The update receipt does not match this operation.");
         return result;
     }
-    function applyReceipt(control, view, packet, result) {
+    function applyReceipt(control, view, packet, result, recovery) {
         receipt(result, packet);
         if (result.phase === "complete") {
-            const value = result.data?.consent ?? result.data?.assessment;
+            const value = result.data?.consent;
             contract.validateBasis(result.basis);
-            if (result.data?.assessment && !sameBasis(result.data.assessment.basis, result.basis)) throw new Error("The feedback receipt has inconsistent evidence versions.");
-            const accepted = control.accept(packet.token, value);
-            const currentFeedback = control === activeFeedback && view === feedbackView;
-            clearReceipt();
+            contract.validateConsent(value);
+            control.accept(packet.token, value);
+            clearReceipt(recovery);
+            consentSignature = "";
             onChanged();
             view.render();
-            if (result.data?.assessment) {
-                if (accepted && currentFeedback) {
-                    focusInteractionRef = result.data.assessment.interactionRef;
-                    feedbackView?.close();
-                    closeDetails();
-                }
-                onSaved?.(result.data.assessment.withdrawn ? "Personal feedback withdrawn. Recorded evidence is unchanged." : "Personal feedback saved. Recorded evidence is unchanged.");
-            } else onSaved?.("Response saving updated.");
+            onSaved?.("Response saving updated.");
             refresh();
         } else if (result.phase === "purged") {
             control.invalidate("This update's supporting evidence was deleted. Its private result will not be restored.");
-            clearReceipt(); onChanged(); view.render(); refresh();
+            clearReceipt(recovery); consentSignature = ""; onChanged(); view.render(); refresh();
         } else if (result.phase === "not-started") {
-            control.notCommitted(packet.token); clearReceipt(); view.render(); refresh();
+            control.notCommitted(packet.token); clearReceipt(recovery); consentSignature = ""; view.render(); refresh();
         } else if (result.phase === "pending") { control.pending(packet.token); view.render(); }
         else throw new Error("The runtime did not provide a recognized update result.");
     }
     async function mutate(control, view, packet) {
-        if (recovery || recoveryInvalid) {
+        readReceipts();
+        if (recoveryBlocked() || pendingRequest || packet.action !== "set_assessment_consent") {
             control.rejected(packet.token, "Check the earlier update result before making another change. Nothing was sent.");
             view.render(); showRecovery(); return;
         }
+        let recovery;
         try {
-            recovery = { mutationRef: packet.input.mutationRef, action: packet.action, ...(packet.input.receiptToken ? { receiptToken: packet.input.receiptToken } : {}) };
-            sessionStorage.setItem(receiptKey, JSON.stringify(recovery));
+            const value = { mutationRef: packet.input.mutationRef, action: packet.action, ...(packet.input.receiptToken ? { receiptToken: packet.input.receiptToken } : {}) };
+            recovery = { ...value, key: receiptKey, raw: JSON.stringify(value) };
+            sessionStorage.setItem(receiptKey, recovery.raw);
+            readReceipts();
+            if (recoveryInvalid || recoveries.length !== 1 || recoveries[0].key !== receiptKey || recoveries[0].raw !== recovery.raw) {
+                control.rejected(packet.token, "Response-saving receipt storage changed. Nothing was sent. Check the retained results before another change.");
+                view.render(); showRecovery(); return;
+            }
         } catch {
-            recovery = null;
-            control.rejected(packet.token, "The update receipt cannot be retained in this panel. Nothing was sent."); view.render(); return;
+            readReceipts();
+            control.rejected(packet.token, "The update receipt cannot be retained in this panel. Nothing was sent.");
+            view.render(); if (recoveryBlocked()) showRecovery(); return;
         }
-        const feedbackOperation = control === activeFeedback;
         pendingRequest = "saving";
-        try { applyReceipt(control, view, packet, await api(routes[packet.action], packet.input)); }
+        try { applyReceipt(control, view, packet, await api(routes[packet.action], packet.input), recovery); }
         catch (error) {
             if (error.code === "request_rejected") {
-                control.rejected(packet.token, error.message); clearReceipt();
-                if (feedbackOperation && control !== activeFeedback) onNotice(error.message + " No update was repeated.");
+                control.rejected(packet.token, error.message); clearReceipt(recovery);
             } else {
                 control.uncertain(packet.token, error.message + " Check the original result; do not repeat the update.");
-                if (feedbackOperation && control !== activeFeedback) showRecovery(error.message + " Check the original result; do not repeat the update.");
+                showRecovery(error.message + " Check the original result; do not repeat the update.");
             }
             view.render();
         } finally {
             pendingRequest = null;
-            if (feedbackOperation && control !== activeFeedback && recovery) showRecovery(recoveryHost.querySelector("p")?.textContent);
+            if (recoveryBlocked()) showRecovery(recoveryHost.querySelector("p")?.textContent);
         }
     }
     async function checkMutation(control, view, packet) {
-        const feedbackOperation = control === activeFeedback;
+        const recovery = recoveries.find(item => item.key === receiptKey && item.mutationRef === packet.input.mutationRef);
         pendingRequest = "checking";
-        try { applyReceipt(control, view, packet, await api(routes.get_mutation_status, packet.input)); }
+        try { applyReceipt(control, view, packet, await api(routes.get_mutation_status, packet.input), recovery); }
         catch (error) {
             control.uncertain(packet.token, error.message); view.render();
-            if (feedbackOperation && control !== activeFeedback) showRecovery(error.message + " No update was repeated.");
+            showRecovery(error.message + " No update was repeated.");
         } finally {
             pendingRequest = null;
-            if (feedbackOperation && control !== activeFeedback && recovery) showRecovery(recoveryHost.querySelector("p")?.textContent);
+            if (recoveryBlocked()) showRecovery(recoveryHost.querySelector("p")?.textContent);
         }
     }
     async function setup(host) {
@@ -959,6 +539,11 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             if (!data.source?.available && data.consent.state !== "enabled") { unavailable(host, "Connect a supported local Copilot source to save replies."); return; }
             const source = data.source.available ? data.source : { sourceConfigRef: data.consent.sourceConfigRef, sourceConfigRevision: data.consent.sourceConfigRevision };
             consentControl = controls.consent(data.consent, { ...source, capabilities: data.capabilities, sourceRevision: snapshot.basis.sourceRevision });
+            readReceipts();
+            if (recoveryBlocked()) {
+                consentControl.invalidate("Earlier response-saving receipts need checking before another change.");
+                showRecovery();
+            }
             consentView = mountConsent(host, {
                 control: consentControl, currentSource: data.source,
                 sourceLabel: data.source.available ? "Current approved local Copilot source" : "The previously enabled source is no longer approved. Turning off its optional capture remains available.",
@@ -969,19 +554,6 @@ export function createAssessmentExperience({ api, createPresentation, renderSumm
             consentSignature = signature;
         } catch (error) { if (host.isConnected) unavailable(host, error.message, () => setup(host)); }
     }
-    return { receive, observe, overview, detail, setup, leave, invalidate, clearPrivateText, scoringStatus,
-        invalidatePendingViewReads() { generation++; },
-        hasUnsentFeedback: () => activeFeedback?.hasUnsentDraft() === true,
-        captureFeedbackOwner() {
-            const control = activeFeedback, host = feedbackDialog, detail = activeDetail;
-            return () => Boolean(control && control === activeFeedback && host === feedbackDialog && detail === activeDetail
-                && host.isConnected && !host.hidden && sameBasis(detail?.basis, snapshot?.basis));
-        },
-        feedbackPhase: () => activeFeedback?.snapshot().phase ?? null,
-        feedbackWithin: host => feedbackDialog !== feedbackModal && !feedbackDialog.hidden && host.contains(feedbackDialog),
-        discardFeedback() {
-            if (activeFeedback?.hasUnsentDraft()) { activeFeedback.cancel(); feedbackView?.render(); }
-        },
-        focusFeedback() { details.hidden = false; detailTrigger?.setAttribute("aria-expanded", "true"); feedbackView?.focus?.(); },
-        isOpen: () => details.open || feedbackDialog.open || details !== detailsModal && !details.hidden };
+    return { receive, observe, detail, setup, leave, invalidate, clearPrivateText,
+        invalidatePendingViewReads() { generation++; } };
 }

@@ -123,9 +123,8 @@ test("compact cards name the prompt author without inferring from text or replac
     await page.locator('[data-select-id="promptAuthorFilter"]').click();
     await expect(page.locator('.select-popup:visible [data-value="user"]')).toContainText("My prompts");
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.getByRole("button", { name: "About Prompt author", exact: true }).hover();
-    await expect(page.getByRole("tooltip")).toContainText("Choose My prompts, Agent prompts, or both");
-    await page.keyboard.press("Escape");
+    await expect(page.locator('label[for="promptAuthorFilter-control"]')).toHaveText("Prompt author");
+    await expect(page.getByRole("button", { name: "About Prompt author", exact: true })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("Your prompt");
 });
 

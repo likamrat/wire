@@ -4,7 +4,8 @@ Search uses deterministic, case-insensitive literal substrings over the existing
 authorized corpus. It uses **no AI**: no embedding model, inference tokenizer,
 model/linguistic helper, reranker, provider, SDK session or AI-credit budget.
 Missing model assets are irrelevant; text matching is the primary path, not a
-failed-model fallback. Optional WIRE assessments remain separate.
+failed-model fallback. Historical review wording in an authorized saved document
+remains searchable; it does not restore a current review or feedback operation.
 
 `POWER` finds `PowerPoint` in an admitted title, content or source label. `owerp`
 also finds it. `repair the car` finds `did not repair the car`; Search does not
@@ -121,20 +122,37 @@ keyboard access, category filters and paging retain their existing behavior.
 
 ### Result presentation
 
-Each result is one native button, with a compact Lucide/type lead-in, a larger
-regular Asta Sans original title, a separate readable source line when present,
-and match-centered original text below it when the match is in content. A
-recorded outcome stays beside the type, not mixed into the source or mistaken
-for a category. Type is entry metadata, not inferred prompt authorship.
-Absent optional fields create no empty slots; identical title/source/excerpt
-text retains the existing deduplication and the visible supplied match.
+Each result is one native button led by its original title, with a small neutral
+Lucide glyph aligned to that first text line. Type, useful source context and
+original matching evidence share one text edge. Input, result text, metadata
+and filter labels use the same regular Asta Sans reading scale; hierarchy comes
+from order, grouping and contrast, not accidental font sizes or weights.
+Type is entry metadata, not inferred prompt authorship.
+
+An unmatched retained interaction/context caption is omitted only when its
+complete original value equals the complete original title after whitespace
+and terminal-sentence-punctuation handling. Case, interior punctuation and
+distinct qualifications are not discarded. This is display-only comparison,
+not fuzzy corpus deduplication or relationship inference. Matched source text
+is never omitted or rematched: if title and matched source are exactly equal,
+the source supplies the single original primary line. Each hit, order, count,
+identity, Open target and server-supplied range stays unchanged. Related actions
+remain separate results; a source-only action match still shows its original
+source evidence. Absent optional fields create no blank slots.
+
+Action unit, outcome label, applicability and icon come from the existing
+recorded-results helper. A Work IQ tool call can say Worked; an owned HTTP record
+instead says HTTP 2xx or HTTP 4xx/5xx, and code references retain Execution not
+observed. These are not interchangeable statuses or new analytical counts.
+Saved reports also name their supplied file format in the same metadata line;
+absent formats, including comparison formats not supplied by Search, are not guessed.
 
 Flat rows use whitespace and a single separating rule rather than nested cards.
 Body evidence has an inset reading edge. The scoped blue/teal match color marks
 only the server-supplied original range, with an underline and semantic `mark`;
 it does not indicate a service, outcome, confidence or generated relevance.
-All other text uses existing neutral screen roles. Partial-corpus coverage has
-its own contextual tonal notice, separate from result content. Pending, error,
+Other text uses existing neutral roles, with canonical outcome cue colors.
+Partial-corpus coverage is a concise readable line, not a filled card. Pending, error,
 reconnect, incomplete and complete no-match messages retain their existing
 state meanings.
 
@@ -143,10 +161,19 @@ and unbroken tokens. No CSS line clamp hides a match. The existing excerpt
 window preserves the full marked text and indicates omitted context; it is not
 labelled as complete saved content. Search keeps its fixed capsule and popup
 placement, full-result membership, 20-item paging, single whole-row action,
-keyboard focus and native Open/Back history. Hover, pressed and keyboard-active
-paint stay within the row without shifting it. Forced colors retain system
+keyboard focus and native Open/Back history. Hover underlines the actual title;
+press strengthens that underline and keyboard focus keeps its visible outline.
+The whole hit area stays usable without a filled hover slab or geometry shift. Forced colors retain system
 highlight and focus paint. These styles do not alter saved report output or
 global service, outcome, authorship or theme tokens.
+
+The native Filters disclosure uses the same official funnel identity as WIRE.
+Its scope and type selects opt into shared presentation with
+`data-select-presentation="filter"`; the shared adapter supplies
+`.select-trigger-filter` and `.select-popup-filter`. Search owns only disclosure
+composition and local layout, not a copy of shared select styling. These remain
+single-select listboxes with check marks, not multi-select toggles or new
+Apply/Cancel operations. Result rows never opt into filter-menu styling.
 
 One WIRE-owned **Clear search** action belongs to the query capsule, not Filters.
 It clears the query and current result/receipt work, resets paging and returns
@@ -180,7 +207,7 @@ Browser proof belongs to the coordinated v3 UI integration, not these core tests
 Focused presentation and connected browser proof:
 
 ```powershell
-node --test --test-concurrency=1 web\live-search-presentation.test.mjs tests\search-result-design.browser.test.mjs tests\search-row-paint.browser.test.mjs tests\search-text-ui.browser.test.mjs tests\search-control.browser.test.mjs
+node --test --test-concurrency=1 web\live-search-presentation.test.mjs tests\search-coherence.browser.test.mjs tests\search-result-design.browser.test.mjs tests\search-row-paint.browser.test.mjs tests\search-text-ui.browser.test.mjs tests\search-control.browser.test.mjs tests\search-minimal.browser.test.mjs
 ```
 
 The design case measures full normal-root result hierarchy, text/icon alignment,
@@ -189,7 +216,11 @@ multilingual and long unbroken text, both themes, intermediate and 375px widths,
 200% text and forced colors. The paint case checks idle/hover/pressed/keyboard
 contrast and exact Open/Back. Existing text/control cases retain real saved
 report and interaction opening, touch, paging, query replacement, clear,
-partial/error states, receipt fences and held-feedback protection. Optional
+partial/error states, receipt fences and pending-departure cancellation. Retired
+personal-feedback guard cases do not recreate the removed feature; current
+report/source/consent authority remains tested. The coherence case also checks
+current review destinations are absent while approved frozen review wording
+still matches and opens unchanged. Optional
 `WIRE_SEARCH_DESIGN_PROOFS`, `WIRE_SEARCH_ROW_PROOFS` and
 `WIRE_TEXT_SEARCH_PROOFS` directories receive local synthetic screenshots and
 measurements only; these are not live/private-data captures.

@@ -138,27 +138,22 @@ test("service labels, counts and definitions remain readable without per-column 
     }
 }));
 
-test("filter, result, evidence and report explanations have discoverable help without toggling choices", { timeout: 30000 }, async () => fixture(async ({ context, url }) => {
+test("filter naming and existing evidence/report definitions do not toggle choices", { timeout: 30000 }, async () => fixture(async ({ context, url }) => {
     const page = await context.newPage();
     await page.goto(url);
     await ready(page);
-    for (const name of ["When", "Service", "GitHub Copilot project", "Activity"]) {
-        const help = page.locator("#filters").getByRole("button", { name: "About " + name, exact: true });
-        await help.click();
-        await page.getByRole("tooltip").waitFor({ state: "visible" });
-        await page.keyboard.press("Escape");
+    for (const name of ["Dates", "Service involved", "Copilot project", "Evidence layer"]) {
+        assert.equal(await page.locator("#filters").getByRole("combobox", { name, exact: true }).count(), 1);
     }
+    assert.equal(await page.locator("#filters .ux-help").count(), 0);
     const original = page.url();
     await page.locator("#outcomeFilter-control").click();
     await page.keyboard.press("w");
     assert.equal(await page.locator('.select-option[data-value="success"] .select-option-description').count(), 0);
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "About Recorded result", exact: true }).click();
-    await page.getByRole("tooltip").waitFor({ state: "visible" });
-    assert.match(await page.getByRole("tooltip").textContent(), /not.*correct/i);
-    await page.keyboard.press("Escape");
-    assert.equal(page.url(), original, "Reading field help does not apply its filter");
-    assert.equal(await page.locator("#resultSummary .ux-help").count(), 1, "One field-level explanation, not one per option");
+    assert.equal(page.url(), original, "Reading filter options does not apply a choice");
+    assert.equal(await page.locator("#resultSummary .ux-help").count(), 0);
+    assert.match(await page.locator("#resultFilterScope").textContent(), /before result filtering/);
     await page.locator('nav a[data-nav="activity"]').click();
     await ready(page);
     await page.locator("#activityList .ux-help").first().click();

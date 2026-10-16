@@ -243,7 +243,7 @@ test("multiple results stay a draft until Apply; cancel, Escape and outside leav
         assert.equal(await page.getByRole("listbox", { name: "Result", exact: true }).getAttribute("aria-multiselectable"), "true");
         await page.locator(".select-all").click();
         assert.equal(await page.getByRole("button", { name: "Apply", exact: true }).isDisabled(), true);
-        assert.equal(await page.locator(".select-draft-hint").innerText(), "Select at least one result.");
+        assert.equal(await page.locator(".select-validation").innerText(), "Select at least one result.");
         await page.getByRole("option", { name: "Tool failed (1)", exact: true }).click();
         await page.getByRole("option", { name: "Partly worked (1)", exact: true }).click();
         assert.equal(await trigger.getAttribute("aria-expanded"), "true");
@@ -932,14 +932,11 @@ test("every option keeps its canonical Fluent glyph and themed outcome ink with 
     }
 });
 
-test("Recorded result help keeps count scope and correctness limits outside choices", async t => {
+test("Recorded result scope and definitions stay available without routine field help", async t => {
     const { page, reads } = await setup(t);
-    const help = page.getByRole("button", { name: "About Recorded result", exact: true });
     const count = reads.length, url = page.url();
-    await help.focus();
-    await page.getByRole("tooltip").waitFor({ state: "visible" });
-    assert.match(await page.getByRole("tooltip").innerText(), /before result filtering.*other filters.*do not establish whole-task correctness/);
-    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#resultSummary .ux-help").count(), 0);
+    assert.match(await page.locator("#resultFilterScope").textContent(), /before result filtering/);
     assert.equal(reads.length, count);
     assert.equal(page.url(), url);
     await page.locator("#meaning>summary").click();
@@ -948,18 +945,13 @@ test("Recorded result help keeps count scope and correctness limits outside choi
     assert.match(await page.locator("#meaningBody").innerText(), /partial, not complete/);
     await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
     await navigateMain(page, "activity"); await ready(page);
-    await help.click();
-    await page.getByRole("tooltip").waitFor({ state: "visible" });
-    assert.match(await page.getByRole("tooltip").innerText(), /does not establish that your request was answered correctly/);
-    await page.keyboard.press("Escape");
+    assert.match(await page.locator("#resultFilterScope").textContent(), /Worked.*before result filtering/);
     await page.locator("#outcomeFilter-control").click();
     assert.equal(await page.getByRole("tooltip").isVisible(), false);
     await page.keyboard.press("Escape");
     await selectActivityOption(page, "outcomeFilter", "unknown"); await ready(page);
-    await help.focus();
-    await page.getByRole("tooltip").waitFor({ state: "visible" });
-    assert.match(await page.getByRole("tooltip").innerText(), /missing evidence is not success or failure/);
-    await page.keyboard.press("Escape");
+    assert.match(await page.locator("#resultFilterScope").textContent(), /No result recorded/);
+    assert.match(await page.locator("#meaningBody").innerText(), /not evidence of success or failure/);
 });
 
 test("Activity reuses the result field and keeps its private-search clear beside the input", async t => {

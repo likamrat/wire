@@ -93,9 +93,8 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     assert.ok(oldCapture);
     const priorScenario = state.evidence.find(record => record.sourceSessionId === a.sourceId).scenarioId;
     await page.goto(runtime.url + "#request?request=" + encodeURIComponent(priorScenario)); await ready(page);
-    await page.getByRole("button", { name: "Read response", exact: true }).click();
-    await page.locator(".interaction-response pre").waitFor();
-    assert.equal(await page.locator(".interaction-response pre").textContent(), "ARTIFICIAL_OLD_SOURCE_RESPONSE");
+    await page.getByText("ARTIFICIAL_OLD_SOURCE_RESPONSE", { exact: true }).waitFor();
+    assert.equal(await page.getByText("ARTIFICIAL_OLD_SOURCE_RESPONSE", { exact: true }).textContent(), "ARTIFICIAL_OLD_SOURCE_RESPONSE");
     const beforeSave = await loadBoardState(context);
     const preview = await reports.preview("synthetic-retained-copy", undefined, { promptMode: "none", formats: ["json"] }, { kind: "selected", revision: beforeSave.revision, scenarioIds: [priorScenario] });
     await reports.review("synthetic-retained-copy", preview.previewId, true);
@@ -143,7 +142,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     assert.equal(await checkbox.isChecked(), false);
     assert.equal(calls.filter(call => call.path.endsWith("/consent/set")).length, 1);
     await checkbox.check();
-    assert.equal(await pane.getByText(/Enabling capture for this source removes prior optional response evidence/).isVisible(), true);
+    assert.equal(await pane.getByText(/Enabling capture for this source removes prior saved response text/).isVisible(), true);
     const renewalResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
     await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     const renewed = await renewalResponse;
@@ -161,8 +160,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     assert.equal(state.personalEvaluation.captures[0].observation.captureContext.sourceConfigRef, changedSource.sourceConfigRef);
     const nextScenario = state.evidence.find(record => record.sourceSessionId === b.sourceId).scenarioId;
     await page.goto(runtime.url + "#request?request=" + encodeURIComponent(nextScenario)); await ready(page);
-    await page.getByRole("button", { name: "Read response", exact: true }).click();
-    await page.locator(".interaction-response pre").waitFor();
-    assert.equal(await page.locator(".interaction-response pre").textContent(), "ARTIFICIAL_RENEWED_SOURCE_RESPONSE");
+    await page.getByText("ARTIFICIAL_RENEWED_SOURCE_RESPONSE", { exact: true }).waitFor();
+    assert.equal(await page.getByText("ARTIFICIAL_RENEWED_SOURCE_RESPONSE", { exact: true }).textContent(), "ARTIFICIAL_RENEWED_SOURCE_RESPONSE");
     assert.equal(calls.filter(call => call.path.endsWith("/consent/set")).length, 2, "Only the original explicit grant and explicit renewal mutate permission.");
 });

@@ -81,7 +81,7 @@ for (const changed of [
         assert.equal(await pane.getByRole("button", { name: "Turn on response saving", exact: true }).isEnabled(), true);
         assert.equal(await pane.getByRole("button", { name: "Turn on response saving", exact: true }).evaluate(node => node.classList.contains("danger")), true,
             "Renewal purges prior optional evidence, unlike first-time capture");
-        assert.equal(await pane.getByText("Enabling capture for this source removes prior optional response evidence and linked unsaved insights. Ordinary collected activity and saved reports stay available.", { exact: true }).isVisible(), true);
+        assert.equal(await pane.getByText("Enabling capture for this source removes prior saved response text and dependent retained annotations. Ordinary collected activity and saved reports stay available.", { exact: true }).isVisible(), true);
         await pane.getByRole("button", { name: "Discard change", exact: true }).click();
         assert.equal(await check.isChecked(), false);
         assert.equal(await pane.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).evaluate(node => node.classList.contains("danger")), false);

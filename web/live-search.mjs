@@ -27,15 +27,19 @@ export function searchHitPresentation(hit) {
     const shown = {
         title: field === "title" ? marked(hit.title, start, end) : plain(hit.title),
         excerpt: field === "content" ? marked(hit.excerpt, from, to) : [],
-        source: field === "source" ? marked(hit.source.label, start, end) : plain(hit.source.label),
+        source: field === "source" ? marked(hit.source.label, start, end) : hit.source.label.trim() ? plain(hit.source.label) : [],
     };
     if (shown.excerpt.length && hit.excerpt === hit.title) {
         shown.title = shown.excerpt; shown.excerpt = [];
     }
     if (hit.source.label === hit.title) {
-        if (field === "source") shown.title = shown.source;
-        shown.source = [];
+        if (field === "source") shown.title = [];
+        else shown.source = [];
     } else if (shown.excerpt.length && hit.source.label === hit.excerpt) shown.source = [];
+    if (field !== "source" && ["interaction", "context"].includes(hit.type) && hit.source.kind === "retained-activity") {
+        const caption = text => text.trim().replace(/\s+/gu, " ").replace(/[.!?\u3002\uff01\uff1f]+$/u, "").trim();
+        if (caption(hit.title) && caption(hit.title) === caption(hit.source.label)) shown.source = [];
+    }
     if (shown.excerpt.length) {
         const prefix = hit.excerpt.slice(0, from), suffix = hit.excerpt.slice(to);
         const graphemes = new Intl.Segmenter("und", { granularity: "grapheme" });
@@ -76,10 +80,10 @@ export const liveSearchPanel = `
     <div id="wireSearchPaging" class="wire-search-paging"></div>
   </section>
   <details id="wireSearchOptions" class="wire-search-options">
-    <summary id="wireSearchFilterSummary">Filters</summary>
+    <summary id="wireSearchFilterSummary"><span class="wire-search-filter-icon" aria-hidden="true">${uxIcons.filter}</span><span id="wireSearchFilterLabel">Filters</span></summary>
     <div class="wire-search-filters">
-      <label>Search scope<select id="wireSearchScope"><option value="everywhere">Everywhere</option><option value="analysis">Current Analyze scope</option></select></label>
-      <label>Result type<select id="wireSearchType"><option value="">All types</option><option value="interaction">Interactions</option><option value="context">Conversation context</option><option value="reply">Retained replies</option><option value="action">Recorded actions</option><option value="tool">Tools</option><option value="service">Services</option><option value="report">Saved reports</option><option value="comparison">Saved comparisons</option><option value="view">Views</option><option value="setting">Settings</option></select></label>
+      <label>Search scope<select id="wireSearchScope" data-select-presentation="filter"><option value="everywhere">Everywhere</option><option value="analysis">Current Analyze scope</option></select></label>
+      <label>Result type<select id="wireSearchType" data-select-presentation="filter"><option value="">All types</option><option value="interaction">Interactions</option><option value="context">Conversation context</option><option value="reply">Retained replies</option><option value="action">Recorded actions</option><option value="tool">Tools</option><option value="service">Services</option><option value="report">Saved reports</option><option value="comparison">Saved comparisons</option><option value="view">Views</option><option value="setting">Settings</option></select></label>
     </div>
   </details>
 </section>`;
@@ -103,38 +107,44 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 #wireSearch {grid-area:1/1;width:100%;min-width:0;min-height:var(--pill-height);border-radius:var(--radius-pill);padding-inline:42px calc(var(--pill-height) + 12px);background:var(--paper);box-shadow:var(--surface-shadow)}
 #wireSearch::-webkit-search-cancel-button {display:none}
 #wireSearchClear {grid-area:1/1;align-self:center;justify-self:end;margin-inline-end:2px;border-radius:var(--radius-pill);z-index:1}
-.wire-search-panel {--wire-search-match:#006580;position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--surface-shadow);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
+.wire-search-panel {--wire-search-match:#006580;position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--surface-shadow);font:var(--type-body)/var(--leading-ui) var(--font);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
 @media(prefers-color-scheme:dark) {
  :root:not([data-evidence-theme]) .wire-search-panel {--wire-search-match:#67c9df}
 }
 :root[data-evidence-theme=dark] .wire-search-panel {--wire-search-match:#67c9df}
-.wire-search-options {border-top:1px solid var(--rule);margin-top:4px;padding-inline:8px}
-.wire-search-options>summary {min-height:44px;padding-block:12px;cursor:pointer;overflow-wrap:anywhere;font-size:var(--type-caption);color:var(--muted)}
+.wire-search-options {border-top:1px solid var(--rule);margin-top:4px;padding-inline:6px}
+.wire-search-options>summary {display:grid;grid-template-columns:20px minmax(0,1fr) 16px;align-items:center;gap:8px;min-height:44px;padding-block:12px;cursor:pointer;overflow-wrap:anywhere;font:inherit;color:var(--ink)}
+.wire-search-filter-icon {display:flex;grid-column:1;grid-row:1}
+#wireSearchFilterLabel {grid-column:2;grid-row:1}
+.wire-search-options>summary>.disclosure-icon {grid-column:3;grid-row:1;margin:0}
 .wire-search-filters,.wire-search-paging {display:flex;align-items:center;flex-wrap:wrap;gap:12px}
-.wire-search-filters label {display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:4px;font-size:var(--type-caption)}
-.wire-search-filters .select-trigger .select-value {white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+/* Shared selects already inset their labels and values; reserve the rest of the glyph lane. */
+.wire-search-filters {padding-block:4px 12px;padding-inline-start:max(0px,calc(28px - var(--select-value-inset)))}
+.wire-search-filters label {display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:4px;font:inherit}
 .wire-search-panel > p:not(.visually-hidden):not(:empty) {margin:8px}
-.wire-search-health {font-size:var(--type-caption);line-height:var(--leading-ui)}
-.wire-search-health p:not(:empty):not([hidden]) {margin:4px 4px 8px;padding:10px 12px;border-radius:var(--radius-small);background:var(--canvas);color:var(--muted)}
+.wire-search-health {font:inherit}
+.wire-search-health p:not(:empty):not([hidden]) {margin:6px 6px 10px;padding:0;font:inherit;color:var(--muted)}
 .wire-search-set {margin:0;min-width:0}
 .wire-search-set>h3:not(.visually-hidden),.wire-search-set>p:not(.visually-hidden) {margin:8px;font-size:var(--type-caption)}
-.wire-search-results {padding:4px;margin:0;list-style:none}
+.wire-search-results {padding:0;margin:0;list-style:none}
 .wire-search-results>li+li {border-top:1px solid var(--rule);margin-top:6px;padding-top:6px}
-.wire-search-results .wire-search-hit {display:grid;grid-template-columns:minmax(0,1fr);gap:6px;width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);padding:14px 12px}
-#wireSearchPanel .wire-search-hit::before {content:none}
-#wireSearchPanel .wire-search-hit:is(:hover,:active):not(:disabled)::before {content:"";inset:0;border:0}
-#wireSearchPanel .wire-search-hit:focus-visible {background:var(--canvas)}
-.wire-search-title {font-size:var(--type-reading);line-height:var(--leading-ui);font-weight:var(--weight-regular);min-width:0;overflow-wrap:anywhere}
+#wireSearchPanel .wire-search-hit {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:8px;width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font:inherit;padding:12px 6px}
+#wireSearchPanel .wire-search-hit::before {content:none;background:transparent;border:0;box-shadow:none}
+#wireSearchPanel .wire-search-hit:is(:hover,:focus-visible):not(:disabled) .wire-search-title {text-decoration:underline;text-underline-offset:.18em}
+#wireSearchPanel .wire-search-hit:active:not(:disabled) .wire-search-title {text-decoration-thickness:2px}
+.wire-search-body {grid-column:2;display:grid;gap:4px;min-width:0}
+.wire-search-title {font:inherit;min-width:0;overflow-wrap:anywhere}
 .wire-search-hit mark {background:var(--accent-soft);color:var(--wire-search-match);text-decoration:underline;text-underline-offset:.15em}
 .wire-search-excerpt {margin-top:4px;padding-inline-start:10px;border-inline-start:2px solid var(--rule);white-space:normal;overflow-wrap:anywhere;font-size:var(--type-body);font-weight:var(--weight-regular);line-height:var(--leading-reading)}
-.wire-search-meta,.wire-search-source,.wire-search-limitation {font-size:var(--type-caption);line-height:var(--leading-ui);font-weight:var(--weight-regular);color:var(--muted);min-width:0;overflow-wrap:anywhere}
+.wire-search-meta,.wire-search-source,.wire-search-limitation {font:inherit;color:var(--muted);min-width:0;overflow-wrap:anywhere}
 .wire-search-meta {display:flex;gap:4px 12px;flex-wrap:wrap;align-items:center}
-.wire-search-type {display:inline-flex;align-items:center;gap:6px;min-width:0}
-.wire-search-type-icon {display:flex;align-items:center;flex:none}
+.wire-search-type-icon {grid-column:1;grid-row:1;display:flex;align-items:center;justify-content:center;margin-top:calc((1lh - 16px) / 2)}
 .wire-search-type-icon .wire-icon {width:16px;height:16px;margin:0}
-.wire-search-outcome {border-inline-start:1px solid var(--rule);padding-inline-start:12px}
+.wire-search-outcome {display:inline-flex;align-items:center;gap:4px;color:var(--cue-color)}
+.wire-search-outcome .wire-icon {width:16px;height:16px;margin:0}
 .wire-search-source {display:block}
-.wire-search-paging:not(:empty) {padding:8px;font-size:var(--type-caption)}
+.wire-search-title.wire-search-source {color:var(--ink)}
+.wire-search-paging:not(:empty) {padding:8px 10px;font:inherit}
 @media(max-width:600px) {
  .wire-search-entry {flex-basis:100%;max-width:none}
  .wire-search-filters {align-items:stretch}
@@ -181,7 +191,7 @@ export function createFrozenReportFrame(html, doc = document) {
     return frame;
 }
 
-export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, presentHit }) {
+export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, results, presentHit }) {
     const $ = id => document.getElementById(id);
     const input = $("wireSearch"), panel = $("wireSearchPanel"), list = $("wireSearchResults");
     const home = $("wireSearchHome");
@@ -285,7 +295,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 : partial ? labels.incomplete : labels["no-match"]
                 : labels[current.state] || "Ready for a local search.";
         $("wireSearchStatus").classList.toggle("visually-hidden", Boolean(current.matches.total));
-        $("wireSearchFilterSummary").textContent = ["Filters",
+        $("wireSearchFilterLabel").textContent = ["Filters",
             scope.value === "analysis" ? "Current Analyze scope" : "",
             category.value ? category.selectedOptions[0].textContent : "",
         ].filter(Boolean).join(" · ");
@@ -312,7 +322,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             target.className = "wire-search-hit"; target.dataset.searchId = hit.id;
             target.dataset.searchSet = key;
             if (hit.target.bundleId) target.dataset.searchBundle = hit.target.bundleId;
-            const meta = el("span", undefined, "wire-search-meta");
+            const meta = el("span", undefined, "wire-search-meta"), body = el("span", undefined, "wire-search-body");
             const shorten = value => {
                 const chars = Array.from(value.trim());
                 return chars.length > 220 ? chars.slice(0, 220).join("") + "..." : value.trim();
@@ -321,26 +331,34 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 for (const part of parts) node.append(part.match ? el("mark", part.text) : document.createTextNode(part.text));
                 return node;
             };
-            const outcome = ({ success: "Succeeded", failure: "Failed", partial: "Partial result", transport: "No response" })[hit.coverage?.outcome];
+            const layer = hit.type === "action" && results.layers.includes(hit.coverage?.layer) ? hit.coverage.layer : null;
+            const outcome = layer ? results.entries(layer, results.summarize([{ id: hit.id, outcome: hit.coverage.outcome }]))?.[0] : null;
+            const format = hit.type === "report" && ["html", "json", "markdown", "pdf"].includes(hit.coverage?.format)
+                ? hit.coverage.format === "markdown" ? "Markdown" : hit.coverage.format.toUpperCase() : null;
             const categoryLabel = ({ interaction: "Interaction", context: "Prompt context", reply: "Reply", action: "Recorded action",
                 tool: "Tool", service: "Service", report: "Report", comparison: "Comparison", view: "View", setting: "Setting" })[hit.type];
-            const type = el("span", undefined, "wire-search-type");
+            const kindLabel = layer ? results.unit(layer, 1) : categoryLabel;
             const iconRole = ({ interaction: "activity", context: "activity", reply: "activity", action: "activity",
                 tool: "connection", service: "connection", report: "reports", comparison: "search-analysis",
                 view: "search-analysis", setting: "settings" })[hit.type];
             const icon = ux?.icon?.(iconRole);
             if (icon) {
                 const slot = el("span", undefined, "wire-search-type-icon");
-                slot.setAttribute("aria-hidden", "true"); slot.append(icon); type.append(slot);
+                slot.setAttribute("aria-hidden", "true"); slot.append(icon); target.append(slot);
             }
-            type.append(el("span", categoryLabel, "wire-search-kind")); meta.append(type);
-            if (outcome) meta.append(el("span", outcome, "wire-search-outcome"));
-            const title = textParts(el("strong", undefined, "wire-search-title"), shown.title);
+            meta.append(el("span", kindLabel, "wire-search-kind"));
+            if (format) meta.append(el("span", format, "wire-search-format"));
+            if (outcome) {
+                const cue = el("span", undefined, "wire-search-outcome result-tone-" + outcome.key);
+                cue.append(ux.icon(outcome.icon), document.createTextNode(outcome.label)); meta.append(cue);
+            }
+            const sourceTitle = !shown.title.length;
+            const title = textParts(el("strong", undefined, "wire-search-title" + (sourceTitle ? " wire-search-source" : "")), sourceTitle ? shown.source : shown.title);
             title.dir = "auto";
-            target.append(meta, title);
-            for (const field of ["source", "excerpt"]) if (shown[field].length) {
+            body.append(title, meta);
+            for (const field of ["source", "excerpt"]) if (shown[field].length && !(field === "source" && sourceTitle)) {
                 const text = textParts(el("span", undefined, "wire-search-" + field), shown[field]);
-                text.dir = "auto"; target.append(text);
+                text.dir = "auto"; body.append(text);
             }
             const call = hit.target.kind === "route" && hit.target.href.startsWith("#request?")
                 && new URLSearchParams(hit.target.href.split("?")[1]).has("call") && hit.coverage?.layer !== "code-reference";
@@ -349,11 +367,12 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 : ({ report: "Open saved report", comparison: "Open saved comparison", setting: "Open setting", view: "Open view" })[hit.type];
             const limitation = hit.coverage?.completeness === "partial" || hit.coverage?.completeness === "bounded-fragment" ? "Only part of this text was saved."
                 : hit.coverage?.completeness === "unavailable" ? "Saved text is unavailable." : "";
-            target.setAttribute("aria-label", [`${destination}: ${shorten(hit.title)}; ${categoryLabel}`,
-                shown.source.map(part => part.text).join(""),
+            target.setAttribute("aria-label", [`${destination}: ${shorten(hit.title)}; ${kindLabel}`,
+                sourceTitle ? "Source match" : shown.source.map(part => part.text).join(""),
                 shown.excerpt.map(part => part.text).join("").replace(/\s+/gu, " "),
-                outcome, limitation].filter(Boolean).join("; "));
-            if (limitation) target.append(el("span", limitation, "wire-search-limitation"));
+                format, outcome?.label, limitation].filter(Boolean).join("; "));
+            if (limitation) body.append(el("span", limitation, "wire-search-limitation"));
+            target.append(body);
             row.append(target); list.append(row);
         }
         paging.replaceChildren();

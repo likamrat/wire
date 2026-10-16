@@ -269,7 +269,7 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     await restoreLegacySearch(page, privateQuery);
     await navigateMain(page, "reports"); await openReportCreation(page);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
-    assert.match(await page.locator("#reportPopulationNote").textContent(), /Includes 1 request group outside the current browsing filters/);
+    assert.match(await page.locator("#reportPopulationNote").textContent(), /Includes 1 interaction outside the current Analyze view/);
     assert.match(await page.locator("#scopeCount-current").textContent(), / · 1 interaction$/);
     assert.match(await page.locator("#scopeCount-all").textContent(), / · 12 interactions$/);
     assert.equal(requests.filter(item => item.path === "/api/preview").length, 1);
@@ -401,7 +401,7 @@ test("preserved Selected review saves original frozen copies after an unrelated 
     }
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
     assert.match(await page.locator("#reportMatchingContext").textContent(), /0 matching Work IQ tool calls in the current view/);
-    assert.match(await page.locator("#reportPopulationNote").textContent(), /Includes 1 request group outside the current browsing filters/);
+    assert.match(await page.locator("#reportPopulationNote").textContent(), /Includes 1 interaction outside the current Analyze view/);
     assert.equal((await loadBoardState(context)).exports.length, 0);
 
     const exportResponse = page.waitForResponse(response => response.url().endsWith("/api/export"));

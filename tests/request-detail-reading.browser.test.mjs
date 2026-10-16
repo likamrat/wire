@@ -7,7 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
-import { contract, samples, retainedResponse, openPersonalFeedback } from "./assessment-ui-fixtures.mjs";
+import { contract, samples, retainedResponse } from "./assessment-ui-fixtures.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { promptRecord, promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { recordedInteractionModels } from "../lib/interaction-model.mjs";
@@ -112,14 +112,14 @@ async function setup(t, { text = "Find the synthetic planning note.", status = "
             assert.ok(requests.every(request => new URL(request.url).origin === new URL(runtime.url).origin), "No external requests");
             const unexpected = requests.filter(request => request.method === "POST" &&
                 !["/api/snapshot", "/api/connect", "/api/collection/status", "/api/assessment/detail", "/api/assessment/overview",
-                    "/api/assessment/evidence", "/api/evaluation/automatic/summary", "/api/evaluation/automatic/setup"].includes(new URL(request.url).pathname));
+                    "/api/assessment/evidence"].includes(new URL(request.url).pathname));
             assert.deepEqual(unexpected.map(request => new URL(request.url).pathname), [],
                 "Only local synthetic reads; no capture, collection, report, feedback or consent changes");
         } finally { for (const action of cleanup) await action(); }
     });
     await page.goto(runtime.url + (entry === "card" ? "" : "#request?request=detail-reading")); await ready(page);
     await page.evaluate(() => document.fonts.ready);
-    if (entry !== "card") await expect(page.locator(".interaction-insights[aria-busy=true]")).toHaveCount(0);
+    if (entry !== "card") await expect(page.locator(".interaction-response[aria-busy=true]")).toHaveCount(0);
     return { page, record, requests, runtime, responseState };
 }
 async function capture(page, name, contextSelector = ".request-intro") {
@@ -211,10 +211,11 @@ test("reader exposes exact operations and useful evidence without identifier but
     await ready(page);
     await page.locator(".interaction-response .reader-empty").waitFor();
     const reader = page.locator("#requestContent"), call = reader.locator("[data-tool-call-id]");
-    assert.equal(await call.locator(".call-heading h3").innerText(), "workiq-ask");
+    await expect(call.locator(".reader-call-identity")).toHaveText(/Call 1\s*·\s*Tool: workiq-ask/);
+    assert.equal(await call.locator(".reader-tool-name").innerText(), "workiq-ask");
     assert.match(await call.locator(".interaction-response").innerText(), /No saved response\. Capture is off\./);
     assert.equal(await reader.locator(".request-context-summaries>summary").count(), 0);
-    assert.equal(await reader.getByRole("heading", { name: "Reviews", exact: true }).isVisible(), true);
+    await expect(reader.getByRole("heading", { name: "Reviews", exact: true })).toHaveCount(0);
     const pick = page.locator("#contextSidebarFooter").getByRole("button", { name: "Add to report", exact: true });
     assert.ok((await pick.boundingBox()).y >= (await page.locator("#contextSidebarBody").boundingBox()).y
         + (await page.locator("#contextSidebarBody").boundingBox()).height);
@@ -241,31 +242,20 @@ test("reader exposes exact operations and useful evidence without identifier but
     assert.equal(await call.locator("[role=alert]").count(), 0, "Retry clears the prior failure");
     await capture(page, "reader-tool-evidence", "[data-tool-call-id]");
     const saved = reader.locator(".assessment-saved-details");
-    await expect(saved).toBeVisible();
-    assert.match(await saved.innerText(), /Saved execution checks|Completion/);
-    await expect(saved.locator("summary")).toHaveCount(0);
+    await expect(saved).toHaveCount(0);
     assert.match(await source.innerText(), /synthetic-prompt/);
     assert.equal(await source.locator(".ux-copy").count(), 0);
-    await expect(section(page, "timing").locator('.reader-timing-table data[value="73728"]')).toHaveCount(1);
-    const localTiming = section(page, "timing").locator('[data-definition-id="tool-duration"]');
-    await expect(localTiming.locator('data[value="73728"]')).toHaveCount(1);
-    await expect(localTiming).toHaveAttribute("data-measurement-basis", "retained-event-timestamps");
-    await expect(localTiming).toContainText("Call duration (local measure)");
-    await expect(localTiming).toContainText("1 of 1 call timed");
-    await expect(section(page, "timing").locator('data[value="108640"]')).toHaveCount(1);
-    await expect(saved).toContainText("retained completion event reference");
-    const feedback = reader.getByRole("button", { name: "Personal feedback", exact: true });
-    const form = await openPersonalFeedback(page);
-    await expect(form.getByRole("button", { name: "Save feedback", exact: true })).toBeDisabled();
-    await form.getByRole("button", { name: "Cancel", exact: true }).click();
-    assert.equal(await feedback.evaluate(node => node === document.activeElement), true);
-    const automatic = reader.getByRole("button", { name: "Automatic scores", exact: true });
-    await automatic.click();
-    const automaticForm = reader.locator(".automatic-score-dialog");
-    assert.equal(await automaticForm.isVisible(), true);
+    await expect(call.locator('.reader-call-duration data[value="73728"]')).toHaveCount(1);
+    await expect(section(page, "prompt").locator('.response-timing data[value="108640"]')).toHaveCount(1);
+    await expect(section(page, "prompt").locator("time")).toHaveAttribute("datetime", record.userPrompt.sourceTimestamp);
+    await expect(reader.locator(".reader-local-timing,.single-interaction-measures,.automatic-score-dialog")).toHaveCount(0);
+    await expect(reader.getByRole("button", { name: /personal feedback|automatic scores|save feedback/i })).toHaveCount(0);
     assert.equal(await page.locator("dialog[open]").count(), 1);
-    await automaticForm.getByRole("button", { name: "Close automatic scores", exact: true }).click();
-    assert.equal(await automatic.evaluate(node => node === document.activeElement), true);
+    const sourceToggle = source.locator(".reader-section-toggle");
+    await sourceToggle.focus(); await sourceToggle.press("Enter");
+    await expect(sourceToggle).toHaveAttribute("aria-expanded", "false");
+    await sourceToggle.press("Space");
+    await expect(sourceToggle).toBeFocused();
     const readerUrl = page.url();
     await reader.getByRole("link", { name: "Collection coverage", exact: true }).click(); await ready(page);
     assert.equal(await page.locator("#collectionStatusView").isVisible(), true);
@@ -291,10 +281,10 @@ test("reader exposes exact operations and useful evidence without identifier but
     }
     if (proof) await writeFile(path.join(proof, "reader-comprehension.json"), JSON.stringify({
         checks: ["Exact workiq-ask visible without expansion", "Reported call outcome separate from missing reply",
-            "Report selection above prompt; no automatic navigation", "Synthetic exact arguments copied",
+            "Report selection in fixed footer; no automatic navigation", "Synthetic exact arguments copied",
             "Clipboard failure explicit and retry clears it", "Selectable exact IDs without copy buttons",
-            "Review state visible without outer disclosure", "Saved checks and source details independently operable",
-            "Definitions dialog opens, Escape restores focus", "Automatic scores opens and closes without approval",
+            "No retired reviews, editors or replacement panels", "Exact call and final-response duration stay distinct",
+            "Source disclosure retains native keyboard focus",
             "Chat filter and Collection coverage navigate and return"], measure,
     }, null, 2));
 });
@@ -330,7 +320,7 @@ test("card-to-reader continuity includes aligned actions, compact expanded facts
         await page.locator(".interaction-response .reader-empty").waitFor();
         const prompt = section(page, "prompt"), call = page.locator('[data-tool-call-id="synthetic-reading-call-0"]');
         assert.match(await prompt.locator(".interaction-model-fact").innerText(), /synthetic-model/);
-        assert.equal(await section(page, "timing").locator(".response-timing data").getAttribute("value"), "108640");
+        assert.equal(await prompt.locator(".response-timing data").getAttribute("value"), "108640");
         const read = prompt.locator(".reader-section-toggle"), copy = prompt.getByRole("button", { name: "Copy prompt", exact: true });
         if (await read.getAttribute("aria-expanded") === "false") await read.click();
         await capture(page, `continuity-${theme}-${width}-${scale}-reader`);
@@ -348,7 +338,9 @@ test("card-to-reader continuity includes aligned actions, compact expanded facts
                 keys: [...node.querySelectorAll("dt")].map(key => ({ weight: getComputedStyle(key).fontWeight, color: getComputedStyle(key).color })),
                 values: [...node.querySelectorAll("dd")].map(value => ({ weight: getComputedStyle(value).fontWeight, color: getComputedStyle(value).color,
                     left: value.getBoundingClientRect().left - value.previousElementSibling.getBoundingClientRect().left,
-                    gap: value.getBoundingClientRect().top - value.previousElementSibling.getBoundingClientRect().bottom })),
+                    gap: value.getBoundingClientRect().top - value.previousElementSibling.getBoundingClientRect().bottom,
+                    inlineGap: value.getBoundingClientRect().left - value.previousElementSibling.getBoundingClientRect().right,
+                    top: value.getBoundingClientRect().top - value.previousElementSibling.getBoundingClientRect().top })),
             };
         });
         await copy.click();
@@ -396,7 +388,8 @@ test("card-to-reader continuity includes aligned actions, compact expanded facts
             assert.ok(Math.abs(controls[0].height - controls[1].height) <= 1, "Desktop section visibility and Copy retain equal target heights");
         }
         assert.ok(keys.every(key => key.weight === "400" && values.every(value => value.weight === key.weight && value.color !== key.color)));
-        assert.ok(values.every(value => Math.abs(value.left) <= 1 && value.gap >= 0 && value.gap <= 4));
+        assert.ok(values.every(value => Math.abs(value.top) <= 1 && value.inlineGap >= 6 && value.inlineGap <= 10
+            || Math.abs(value.left) <= 1 && value.gap >= 0 && value.gap <= 4), "Context facts stay inline or wrap cleanly to their shared left edge without overlap");
         assert.equal(expanded.emptyRows, 0, "Missing technical fields are consolidated, not repeated as empty rows");
         assert.equal(expanded.helpButtons, 0, "Expanded facts explain necessary limits directly, not through a tooltip per fact");
         assert.ok(expanded.overflow <= 1, `${width}/${scale}: expanded technical details fit`);
@@ -444,6 +437,8 @@ test("reader distillation keeps a legible story without repeated empty fields or
                     x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y,
                     keyX: node.previousElementSibling.getBoundingClientRect().left,
                     keyBottom: node.previousElementSibling.getBoundingClientRect().bottom,
+                    keyY: node.previousElementSibling.getBoundingClientRect().top,
+                    keyRight: node.previousElementSibling.getBoundingClientRect().right,
                 })),
             };
         });
@@ -452,8 +447,9 @@ test("reader distillation keeps a legible story without repeated empty fields or
         assert.ok(styles.overflow <= 1, `${theme}/${width}/${scale} does not overflow`);
         assert.ok(styles.facts.every(x => x >= 0 && x < width), "Compact metadata wraps within the reading column");
         assert.equal(new Set(styles.keyWeights).size, 1, "Metadata keys share one weight");
-        assert.ok(styles.values.every(value => Math.abs(value.x - value.keyX) <= 1 && value.y - value.keyBottom >= 0 && value.y - value.keyBottom <= 4),
-            "Each value sits just below its own regular label on the same text edge");
+        assert.ok(styles.values.every(value => Math.abs(value.y - value.keyY) <= 1 && value.x - value.keyRight >= 6 && value.x - value.keyRight <= 10
+            || Math.abs(value.x - value.keyX) <= 1 && value.y - value.keyBottom >= 0 && value.y - value.keyBottom <= 4),
+            "Context values use a compact inline row or wrap below on the same left edge");
         await capture(page, `distilled-multicall-${theme}-${width}-${scale}`, '[data-tool-call-id="synthetic-reading-call-5"]');
     }
 });
@@ -480,12 +476,13 @@ test("reader failure copy is concise while sign-in signals and unknown outcomes 
             }
         }
     }
-    assert.deepEqual(await calls.locator(":scope > .action-error").allTextContents(),
-        ["No error details recorded.", "Work IQ sign-in was required", "Tool error mentions access denial"]);
+    assert.deepEqual(await calls.locator(":scope > .reader-recorded-signal").allTextContents(),
+        ["No error details recorded.", "Recorded error signal: sign-in required.", "Recorded error signal: access denial."]);
     assert.equal(await calls.locator(":scope > .context-help-note").count(), 0, "No repeated historical-access lecture between calls");
     for (const [index, call] of (await calls.all()).entries()) {
         const visible = await call.innerText();
-        assert.doesNotMatch(visible, /WIRE cannot establish|HTTP 401|HTTP 403|Sign in now/);
+        assert.doesNotMatch(visible, /WIRE cannot establish|HTTP 401|HTTP 403|Sign in now|Historical call evidence only|Error prose is not retained|No downstream service target is available/);
+        await expect(call.locator(".reader-input-identity")).toContainText("Service not shown");
         if (index === 3) {
             assert.doesNotMatch(visible, /Tool failed|sign-in|access denial|Failure cause|No error details/);
             continue;
@@ -497,8 +494,8 @@ test("reader failure copy is concise while sign-in signals and unknown outcomes 
             assert.doesNotMatch(visible, /source omitted|collection excluded|sign-in|access denial|Historical call evidence only/,
                 "The retained-record gap must not invent an omission/exclusion cause or historical access signal");
         } else {
-            assert.match(await details.innerText(), /does not establish current sign-in or permission state/);
-            assert.match(await details.innerText(), /not a verified cause, access policy, authorization or observed HTTP response/);
+            await expect(call.locator(".reader-signal-label")).toHaveText("Recorded error signal: ");
+            await expect(call.locator(".reader-recorded-signal")).toContainText(index === 1 ? "sign-in required." : "access denial.");
         }
     }
 });
@@ -546,7 +543,7 @@ test("normal request page leads with readable content and explicit, scoped reade
         await expect(hide).toHaveAttribute("aria-expanded", "true");
         await expect(prompt.locator(".full-text-toggle")).toHaveCount(0);
         assert.ok(await prompt.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".request-intro")) & Node.DOCUMENT_POSITION_FOLLOWING)));
-        if (!await prompt.evaluate(node => Boolean(node.compareDocumentPosition(document.querySelector(".interaction-insights")) & Node.DOCUMENT_POSITION_FOLLOWING))) failures.push(`${theme}/${width}: Derived insights precede actual prompt`);
+        await expect(page.locator(".interaction-insights,[data-reader-section=reviews]")).toHaveCount(0);
         if (await prompt.getByText("This older record has no sender details", { exact: true }).count() !== 1) failures.push(`${theme}/${width}: Missing sender details are not explained once`);
         if (await prompt.locator(".reader-details").count() !== 0) failures.push(`${theme}/${width}: Redundant About disclosure remains`);
         if (!(await page.locator("#reader-copy-notice").innerText()).includes("unmasked")) failures.push(`${theme}/${width}: Copy privacy is not concise and explicit`);
@@ -623,7 +620,7 @@ test("unavailable and zero-action requests stay honest; partial/full prompt copi
     ]) {
         const { page, requests } = await setup(t, { status, text, actor, calls: false });
         const prompt = page.locator(".request-original");
-        assert.equal(await prompt.locator("h2").getAttribute("data-prompt-actor"), actor);
+        assert.equal(await section(page, "prompt").locator(".reader-section-toggle [data-prompt-actor]").getAttribute("data-prompt-actor"), actor);
         await page.getByText("No individual action details were retained.", { exact: true }).waitFor();
         if (!text || status === "unavailable") {
             assert.equal(await section(page, "prompt").locator(".full-text-toggle,.ux-copy,.full-text-content").count(), 0);
@@ -703,14 +700,14 @@ test("normal response reader opens retained text immediately with explicit Retry
     }
 });
 
-test("an insight read error cannot leave the response section falsely busy", { timeout: 30000 }, async t => {
+test("a retained-evidence detail error cannot leave the response falsely busy or add a retired host", { timeout: 30000 }, async t => {
     const { page } = await setup(t, { detailError: true });
     const response = page.locator(".interaction-response");
     await response.getByText("Response availability could not be read.", { exact: true }).waitFor();
     assert.equal(await response.getByRole("alert").count(), 1);
     assert.equal(await response.getAttribute("aria-busy"), null);
     assert.equal(await response.getByRole("heading", { name: "Response", exact: true }).count(), 1);
-    assert.equal(await page.locator(".interaction-insights").getByRole("heading", { name: "Insights", exact: true }).count(), 1);
+    await expect(page.locator(".interaction-insights")).toHaveCount(0);
     assert.equal(await response.locator(".reader-details").count(), 0);
     assert.match(await response.innerText(), /Synthetic local insight read failed/);
     assert.equal(await page.locator(".request-original .full-text-content").textContent(), "Find the synthetic planning note.");
@@ -721,7 +718,7 @@ test("composed author helpers give truthful readable source and actor cues on th
     const colors = {};
     for (const [actor, label] of [["user", "My prompt"], ["agent", "Agent prompt"], ["unknown", "Author unverified"]]) {
         const { page } = await setup(t, { actor });
-        const heading = page.locator(".request-original h2");
+        const heading = section(page, "prompt").locator(".reader-section-toggle [data-prompt-actor]");
         assert.equal(await heading.textContent(), label);
         await expect(heading).toHaveAttribute("data-prompt-actor", actor);
         await expect(page.locator(".reader-source dt")).toHaveText("Copilot Chat");
@@ -745,7 +742,7 @@ test("composed author helpers give truthful readable source and actor cues on th
     }
     for (const [theme, values] of Object.entries(colors)) assert.equal(new Set(Object.values(values).map(value => value.label)).size, 3, `${theme}: explicit role words distinguish user, agent and unknown without inventing color meaning`);
     const { page } = await setup(t, { chatOrigin: false });
-    assert.equal(await page.locator(".request-original h2").textContent(), "Author unverified");
+    assert.equal(await section(page, "prompt").locator(".reader-section-toggle [data-prompt-actor]").textContent(), "Author unverified");
     assert.match(await page.locator(".request-support").innerText(), /No project associated/);
 });
 
@@ -760,7 +757,7 @@ test("canonical host-envelope normalization reaches My prompt without copying wr
     const { page, record, requests } = await setup(t, { sourceEvent });
     assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
     assert.equal(record.userPrompt.authorshipVersion, promptAuthorship.version);
-    assert.equal(await page.locator(".request-original h2").textContent(), "My prompt");
+    assert.equal(await section(page, "prompt").locator(".reader-section-toggle [data-prompt-actor]").textContent(), "My prompt");
     await expect(page.locator(".reader-source dt")).toHaveText("Copilot Chat");
     await expect(page.locator(".reader-source dd")).toHaveText("Synthetic coordinator chat");
     assert.equal(await page.locator(".request-original .reader-state").count(), 0, "Supported host metadata does not retain an unverified-author warning");

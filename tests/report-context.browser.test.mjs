@@ -42,7 +42,7 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     await selectActivityOption(page, "serviceAssociationFilter", "Mail");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await navigateMain(page, "reports"); await openReportCreation(page);
-    await expect(page.locator("#reportPopulationNote")).toContainText("outside the current browsing filters");
+    await expect(page.locator("#reportPopulationNote")).toContainText("outside the current Analyze view");
     const membership = await page.locator("#previewSelectionSummary").textContent();
     await reportContents(page);
     await page.locator("#reportRecordedContext").check();
@@ -163,7 +163,7 @@ test("normal Setup Review Save includes edited bounded context without changing 
     await navigateMain(page, "reports");
     await openReportCreation(page);
     await expect(page.locator("#previewSelectionSummary")).toContainText("1 interaction");
-    await expect(page.locator("#reportPopulationNote")).toContainText("outside the current browsing filters");
+    await expect(page.locator("#reportPopulationNote")).toContainText("outside the current Analyze view");
     const analyticalScope = await page.locator("#reportPopulationNote").textContent();
     await reportContents(page);
     const contextOption = page.locator("#reportRecordedContext");

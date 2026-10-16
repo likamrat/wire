@@ -13,7 +13,7 @@ const checks = {
 
 // Invented source records and historical assessment records, entirely in memory.
 // No evaluator, capture, approval, collection, or persistence action runs.
-export function qualityDisplayFixture({ requests = 18, calls = 53, judgments = [], timed = calls - 1, finalDuration = 677960, records = null } = {}) {
+export function qualityDisplayFixture({ requests = 18, calls = 53, judgments = [], timed = calls - 1, finalDuration = 677960, records = null, pseudonymKey = "a".repeat(64) } = {}) {
     const evidence = records ?? Array.from({ length: requests }, (_, index) => {
         const record = fixture(`quality-request-${index}`);
         record.sourceSessionName = "Invented quality display";
@@ -36,7 +36,7 @@ export function qualityDisplayFixture({ requests = 18, calls = 53, judgments = [
         return record;
     });
     const state = {
-        revision: 1, evidenceRevision: 1, pseudonymKey: "a".repeat(64), evidence, exports: [],
+        revision: 1, evidenceRevision: 1, pseudonymKey, evidence, exports: [],
         cards: Object.fromEntries(evidence.map(record => [record.scenarioId, { workflowState: "captured", updatedAt: at, history: [] }])),
         personalEvaluation: defaultPersonalEvaluation(),
     };
@@ -65,7 +65,8 @@ export function qualityDisplayFixture({ requests = 18, calls = 53, judgments = [
         const assessments = Object.entries(checks).map(([dimension, checkId], check) => {
             const verdict = typeof judgment === "string" ? judgment : judgment[dimension];
             return {
-                ...view.assessments.find(item => item.dimension === dimension), checkId,
+                schemaVersion: 1, interactionRef, basis: view.basis, createdAt: at, checkId, checkVersion: 1,
+                dimension, unitRef: interactionRef, rubricVersion: 1, revision: 1, supersedes: null, withdrawn: false,
                 assessmentRef: id("assessment", (index + 1) * 10 + check),
                 origin: "model-assessed", verdict, reason: verdict === "unassessed" ? "missing-evidence" : null,
                 evidenceRefs: dependencies.evidenceRefs.slice(0, 1),

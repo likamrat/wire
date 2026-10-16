@@ -31,7 +31,9 @@ test("format-independent facts support comparison without saved source JSON", as
     const inspected = await controller.inspectComparison("panel", earlier.bundleId, later.bundleId);
     assert.equal(inspected.comparison.toolComparison.raw.baseline.success, 1);
     assert.equal(inspected.comparison.toolComparison.raw.later.failure, 1);
-    assert.ok(inspected.comparison.metrics.some(metric => metric.metric === "accuracy" && metric.baseline?.value === null));
+    assert.equal(inspected.comparison.metricProjectionVersion, 4);
+    assert.equal(inspected.comparison.metrics.some(metric => metric.metric === "accuracy"), false,
+        "No retired automatic-quality placeholder replaces missing personal feedback.");
     const before = await readdir(path.join(context.dataDir, "exports"));
     const preview = await controller.previewComparison("panel", earlier.bundleId, later.bundleId, { formats: ["html", "json", "markdown"] });
     assert.deepEqual(await readdir(path.join(context.dataDir, "exports")), before);
@@ -123,8 +125,8 @@ test("all comparison formats share reviewed frozen facts and the real PDF remain
         const doc = await task.promise, text = [];
         for (let n = 1; n <= doc.numPages; n++) text.push((await (await doc.getPage(n)).getTextContent()).items.map(item => item.str ?? "").join(""));
         assert.match(text.join("\n"), /WIRE/);
-        assert.match(text.join("\n"), /Answer correctness/);
-        assert.match(text.join("\n"), /Not checked automatically/);
+        assert.match(text.join("\n"), /Recorded tool results/);
+        assert.doesNotMatch(text.join("\n"), /Answer correctness|Not checked automatically|AI results/);
     } finally { await task.destroy(); }
     assert.equal((await loadBoardState(context)).exports.length, 3);
 });

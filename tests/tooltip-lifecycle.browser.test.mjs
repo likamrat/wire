@@ -645,7 +645,9 @@ test("real shell action, result, chart, source and report help clears without al
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     await page.locator("#outcomeFilter-control").click();
     await page.keyboard.press("w"); await page.keyboard.press("Enter"); await ready(page);
-    await leave("#filterChips [aria-label^='Remove outcome filter:']");
+    const resultChip = page.getByRole("button", { name: /^Remove outcome filter:/ });
+    assert.equal(await resultChip.getAttribute("data-ux-tooltip"), null);
+    await resultChip.hover(); await page.clock.runFor(180); await noTooltip(page);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
     await navigateMain(page, "settings");
     await leave("#editSource");
@@ -741,7 +743,8 @@ test("real shell result dropdown, chart actions, legend info and Settings naviga
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
     assert.equal(await result.evaluate(node => node === document.activeElement), true);
     const clear = page.getByRole("button", { name: /^Remove outcome filter:/ });
-    await clear.hover(); await page.getByRole("tooltip").waitFor({ state: "visible" });
+    await clear.hover(); await noTooltip(page);
+    assert.equal(await clear.getAttribute("data-ux-tooltip"), null);
     await clear.click(); await ready(page); await page.waitForTimeout(250); await noTooltip(page);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "all");
     assert.equal(await result.evaluate(node => node === document.activeElement), true);

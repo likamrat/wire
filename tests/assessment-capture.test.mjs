@@ -6,12 +6,12 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID, randomBytes } from "node:crypto";
 import { createCollector } from "../lib/collector.mjs";
-import { loadBoardState } from "../lib/store.mjs";
+import { loadBoardState, exclusiveBoard } from "../lib/store.mjs";
 import { executeAssessmentAction } from "../lib/assessment.mjs";
-import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
+import { buildAssessmentModel, assessmentBasis, assessmentDependencies, assessmentRef } from "../lib/assessment-read-model.mjs";
 import { assessmentHash } from "../lib/assessment-read-model.mjs";
 import { finalizePersonalEvaluationCleanup } from "../lib/assessment-read-model.mjs";
-import { selectPersonalEvaluationCleanup } from "../lib/personal-evaluation.mjs";
+import { selectPersonalEvaluationCleanup, defaultPersonalEvaluation, validatePersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
@@ -27,7 +27,37 @@ function invalidJsonPaths(value, prefix = "$", parents = new Set()) {
     return paths;
 }
 
-test("synthetic: real collector, consent, feedback, frozen reports and deletion remain consistent", async t => {
+// Invented pre-retirement state, not a current product write path.
+async function seedHistoricalFeedback(context, input) {
+    return exclusiveBoard(context, async (state, save) => {
+        const view = buildAssessmentModel(state).details.get(input.interactionRef);
+        assert.deepEqual(view.basis, input.expectedBasis);
+        state.personalEvaluation ??= defaultPersonalEvaluation();
+        const personal = state.personalEvaluation;
+        const previous = personal.feedback.records.filter(item => item.assessment.interactionRef === input.interactionRef
+            && item.assessment.checkId === input.checkId).at(-1)?.assessment;
+        personal.overrideRevision++; personal.feedback.revision++;
+        const basis = assessmentBasis(state), assessment = {
+            schemaVersion: 1, interactionRef: input.interactionRef, basis, createdAt: new Date().toISOString(),
+            evidenceRefs: [...new Set(view.observations.flatMap(item => item.evidenceRefs))],
+            assessmentRef: assessmentRef(state, "assessment", [input.mutationRef, input.checkId]), checkId: input.checkId, checkVersion: 1,
+            dimension: { "semantic-answer-correctness": "accuracy", "answer-support-validity": "answer-trust",
+                "action-authorization-compliance": "action-trust" }[input.checkId],
+            unitRef: input.interactionRef, origin: "user-personal", rubricVersion: 1, verdict: input.verdict, reason: "user-verdict",
+            revision: (previous?.revision ?? 0) + 1, supersedes: previous?.assessmentRef ?? null, withdrawn: false,
+        };
+        const dependencies = { ...assessmentDependencies(view), basis };
+        personal.feedback.records.push({ schemaVersion: 1, assessment, dependencies });
+        personal.mutations[input.mutationRef] = {
+            ownerHash: assessmentHash(["assessment-owner", "owner"]), inputHash: assessmentHash(["set_personal_assessment", input]), dependencies,
+            receipt: { schemaVersion: 1, mutationRef: input.mutationRef, phase: "complete", basis, data: { assessment } },
+        };
+        validatePersonalEvaluation(personal);
+        state.revision++; await save(state);
+    });
+}
+
+test("synthetic: collector, consent, historical annotations, frozen reports and deletion remain consistent", async t => {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-assessment-synthetic-"));
     const dbPath = path.join(root, "data.db"), sourceRoot = path.join(root, "session-state"), sourceId = randomUUID();
     const db = new DatabaseSync(dbPath);
@@ -50,7 +80,7 @@ test("synthetic: real collector, consent, feedback, frozen reports and deletion 
     assert.equal(state.personalEvaluation, undefined);
     assert.equal(state.evidence.length, 1, "The supported synthetic source must actually be imported before capture setup");
     const baseModel = buildAssessmentModel(state);
-    await executeAssessmentAction(context, "owner", "set_personal_assessment", {
+    await seedHistoricalFeedback(context, {
         schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef: baseModel.overview.interactionRefs[0],
         expectedBasis: baseModel.basis, checkId: "action-authorization-compliance", verdict: "pass", withdraw: false,
     });
@@ -70,7 +100,7 @@ test("synthetic: real collector, consent, feedback, frozen reports and deletion 
     }));
     const capture = state.personalEvaluation.captures[0], model = buildAssessmentModel(state);
     assert.ok(![...model.details.values()][0].assessments.some(value => value.origin === "user-personal"),
-        "A verdict recorded against base-only evidence becomes inactive while additional response evidence changes its scope");
+        "Historical personal verdicts are not exposed in current projections.");
     const answer = await executeAssessmentAction(context, "owner", "get_interaction_evidence", {
         schemaVersion: 1, interactionRef: capture.observation.interactionRef, observationRef: capture.observation.observationRef, expectedBasis: model.basis,
     });
@@ -98,7 +128,7 @@ test("synthetic: real collector, consent, feedback, frozen reports and deletion 
             schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef: view.overview.interactionRefs[0],
             expectedBasis: view.basis, checkId: "semantic-answer-correctness", verdict, withdraw: false,
         };
-        await executeAssessmentAction(context, "owner", "set_personal_assessment", input);
+        await seedHistoricalFeedback(context, input);
         feedbackInputs.push(input);
     }
     const reports = createExportController(context);
@@ -131,13 +161,18 @@ test("synthetic: real collector, consent, feedback, frozen reports and deletion 
     assert.equal(afterRevocation.personalEvaluation.captures.length, 0);
     assert.equal(afterRevocation.personalEvaluation.feedback.records.length, 1);
     const restoredBase = [...buildAssessmentModel(afterRevocation).details.values()][0].assessments.filter(value => value.origin === "user-personal");
-    assert.deepEqual(restoredBase.map(value => [value.checkId, value.verdict]), [["action-authorization-compliance", "pass"]],
-        "Restoring exactly the original base-only scope reactivates its surviving verdict, never a purged response-dependent verdict");
+    assert.deepEqual(restoredBase, [], "Privacy cleanup never reactivates a retired rating lane.");
+    assert.deepEqual(afterRevocation.personalEvaluation.feedback.records.map(item => [item.assessment.checkId, item.assessment.verdict]),
+        [["action-authorization-compliance", "pass"]], "The unrelated historical base-only opinion is still retained.");
     assert.deepEqual(afterRevocation.evidence, state.evidence);
     assert.deepEqual(afterRevocation.deletion.identities, []);
     assert.deepEqual(await Promise.all(frozenFiles.map(async file => assessmentHash(await readFile(file)))), frozenHashes);
     assert.deepEqual(await readFile(file), sourceBytes);
-    assert.equal((await executeAssessmentAction(context, "owner", "set_personal_assessment", feedbackInputs[0])).phase, "purged");
+    await assert.rejects(executeAssessmentAction(context, "owner", "set_personal_assessment", feedbackInputs[0]),
+        error => error.code === "PERSONAL_FEEDBACK_RETIRED");
+    assert.equal((await executeAssessmentAction(context, "owner", "get_mutation_status", {
+        schemaVersion: 1, mutationRef: feedbackInputs[0].mutationRef,
+    })).phase, "purged");
     await collector.close();
     runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     collector = runtime.collector;
@@ -168,11 +203,13 @@ test("synthetic: real collector, consent, feedback, frozen reports and deletion 
     await collector.collectNow();
     const collectedState = await loadBoardState(context), collectedModel = buildAssessmentModel(collectedState);
     const interactionRef = collectedModel.overview.interactionRefs[0];
-    const feedbackResponse = await post("/api/assessment/feedback", {
+    const historicalInput = {
         schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef,
         expectedBasis: collectedModel.basis, checkId: "answer-support-validity", verdict: "fail", withdraw: false,
-    }, capability);
-    assert.equal(feedbackResponse.status, 200, await feedbackResponse.clone().text());
+    };
+    await seedHistoricalFeedback(context, historicalInput);
+    const feedbackResponse = await post("/api/assessment/feedback", historicalInput, capability);
+    assert.equal(feedbackResponse.status, 410, await feedbackResponse.clone().text());
     const beforeAllSource = await readFile(file);
     const deletionPreview = await (await post("/api/deletion/preview", { scope: "all", timeContext: { timeZone: "UTC", locale: "en-US" } }, capability)).json();
     const committed = await post("/api/deletion/confirm", { operationId: deletionPreview.operationId, confirmed: true }, capability);
@@ -200,7 +237,7 @@ test("synthetic: real collector, consent, feedback, frozen reports and deletion 
     assert.equal((await post("/api/assessment/feedback", {
         schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef: freshModel.overview.interactionRefs[0],
         expectedBasis: freshModel.basis, checkId: "semantic-answer-correctness", verdict: "pass", withdraw: false,
-    }, capability)).status, 200);
+    }, capability)).status, 410);
     const stalePreviewResponse = await post("/api/report-comparison/preview", {
         baselineId: baseline.bundleId, laterId: later.bundleId, formats: ["json"],
     }, capability);

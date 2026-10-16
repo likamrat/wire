@@ -374,8 +374,7 @@ test("UX-002 report/comparison labels preserve named actions, chooser eligibilit
     const opened = await controller.openComparison("synthetic-comparison", comparison.bundleId);
     assert.deepEqual(opened.sources.map(source => source.available), [false, true]);
     await page.locator("#savedReportSearch").fill(sources[1].bundleId);
-    await page.locator("#bundleList .saved-report-summary").click();
-    await page.locator("#contextSidebar").getByRole("button", { name: "Compare saved reports", exact: true }).click();
+    await page.locator("#reportCompareLink").click();
     await page.waitForFunction(() => document.querySelector("#comparisonWorkspace select")?.options.length === 2);
     const options = await page.locator("#comparisonWorkspace select").first().locator("option").evaluateAll(nodes => nodes.map(node => node.value));
     assert.deepEqual(options.filter(Boolean), [sources[1].bundleId], "Comparison artifacts remain ineligible as report inputs");

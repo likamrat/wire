@@ -12,6 +12,12 @@ export function createReportComparison(wording = createAssessmentWording()) {
         "Speed measures tool calls from start to recorded completion. It also measures the time from the recorded request to its final response. Each has its own timed-call or timed-request count. The median is the middle recorded time (the lower middle for an even count). Calls that run at the same time are not added together. A final response does not prove the task succeeded.",
     ]);
     const comparisonNote = "The reports may cover different requests or time periods. A change between them does not tell you what caused it. Returned API entries, recorded Graph sites and HTTP recorder records are counted separately.";
+    const readingNotesFor = model => model?.metricProjectionVersion === 4 || model?.definitions?.metricProjectionVersion === 4
+        ? ["Missing measurements stay unavailable, not zero. Different definitions or scopes do not establish improvement.", readingNotes[3]]
+        : model?.metricProjectionVersion === 3 || model?.definitions?.metricProjectionVersion === 3
+        ? ["Personal feedback records opinions, not measured correctness or permission. Each result keeps its own request membership.",
+            "Missing measurements stay unavailable, not zero. Different definitions or scopes do not establish improvement.", readingNotes[3]]
+        : readingNotes;
     const labels = { success: "Succeeded", failure: "Failed", partial: "Partial", unknown: "Unknown", other: "Other", transport: "No response" };
     const outcomeTone = outcome => ({ success: "teal", failure: "pink", transport: "pink", partial: "orange", unknown: "slate", other: "slate" })[outcome];
     const reasons = {
@@ -330,7 +336,8 @@ export function createReportComparison(wording = createAssessmentWording()) {
                 const card = el("article", "comparison-score");
                 card.append(el("h3", "", side), el("p", "comparison-meta", evidence.scoreLabel));
                 card.append(el("strong", "comparison-score-value", !totals.count ? `No ${evidence.unitLabel}`
-                    : totals.success + totals.failure === 0 ? "Not scored" : formatValue(totals.successRate.percent, "percent")));
+                    : totals.success + totals.failure === 0 ? model.metricProjectionVersion === 4 ? "No binary outcomes" : "Not scored"
+                        : formatValue(totals.successRate.percent, "percent")));
                 card.append(el("p", "comparison-meta", `${formatNumber(totals.success, 0)} of ${formatNumber(totals.count, 0)} ${evidence.unitLabel} ${evidence.successVerb}`));
                 const strip = el("div", "comparison-outcome-strip");
                 strip.setAttribute("aria-hidden", "true");
@@ -413,9 +420,9 @@ export function createReportComparison(wording = createAssessmentWording()) {
         const details = el("details", "comparison-reading");
         details.append(el("summary", "", "Scope, coverage and reading notes"));
         const notes = el("div");
-        for (const text of readingNotes) notes.append(el("p", "", text));
+        for (const text of readingNotesFor(model)) notes.append(el("p", "", text));
         notes.append(el("p", "", comparisonNote));
-        notes.append(el("p", "", "Pass-share colors describe assessed results only: below 50%, 50–74%, 75–89%, and 90%+. They are not a combined quality grade."));
+        if (![3, 4].includes(model.metricProjectionVersion)) notes.append(el("p", "", "Pass-share colors describe assessed results only: below 50%, 50–74%, 75–89%, and 90%+. They are not a combined quality grade."));
         for (const text of scopeNotes(model)) notes.append(el("p", "", text));
         details.append(notes);
         panel.append(details);
@@ -423,7 +430,7 @@ export function createReportComparison(wording = createAssessmentWording()) {
     }
     return {
         presentation,
-        readingNotes,
+        readingNotes, readingNotesFor,
         comparisonNote,
         scopeNotes,
         outcomeTone,

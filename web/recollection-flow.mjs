@@ -214,7 +214,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             $("recollectPromptSummary").textContent = result.scope.restorePrompts
                 ? `Restore ${c.restoredPrompts} original prompt${c.restoredPrompts === 1 ? "" : "s"} for these requests.`
                 : "Deleted original prompts stay deleted.";
-            $("recollectPreserved").textContent = "Responses and feedback stay deleted. Saved reports, comparisons and Copilot sources stay unchanged.";
+            $("recollectPreserved").textContent = "Responses and historical annotations stay deleted. Saved reports, comparisons and Copilot sources stay unchanged.";
             $("recollectPolicy").textContent = result.boundary;
             $("recollectAvailability").replaceChildren(...result.availability.map(row => {
                 const li = document.createElement("li");

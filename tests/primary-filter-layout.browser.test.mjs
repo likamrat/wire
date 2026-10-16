@@ -154,51 +154,32 @@ test("active clear actions and custom dates keep dropdown geometry and filtering
     }
 });
 
-test("filter help explains actual categories and all six honest activity units without changing counts", { timeout: 45000 }, async t => {
+test("filter naming exposes real category, context and evidence-layer distinctions without routine help", { timeout: 45000 }, async t => {
     const { page } = await setup(t);
     await page.locator("#moreFilters > summary").click();
-    const labels = ["Work IQ calls", "Graph API call sites", "Graph statuses", "Returned API entries", "HTTP recorder", "Graph code references"];
+    const labels = ["Work IQ calls", "Graph API call sites", "Call sites with HTTP status", "Tool-returned API entries", "HTTP recorder captures", "Graph code references"];
     assert.deepEqual(await page.locator("#layerFilter option").allTextContents(), labels);
-    await page.getByRole("button", { name: "About Activity category", exact: true }).click();
-    const category = await page.getByRole("tooltip").innerText();
-    assert.match(category, /Mail, Calendar, Files.*recorded service targets/);
-    assert.equal(category, help.categoryGuide(await page.locator("#serviceFilter option").evaluateAll(nodes => nodes.map(node => node.value).filter(value => value !== "all"))));
-    assert.match(category, /Discovery:.*not data execution/);
-    assert.match(category, /Search and retrieval: may span sources/);
-    assert.match(category, /More than one service: one call, different services/);
-    assert.match(category, /Service not shown:.*not failure/);
-    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#filters .ux-help,#filters .help-heading").count(), 0);
+    assert.equal(await page.locator('label[for="serviceAssociationFilter-control"]').innerText(), "Service involved");
+    assert.equal(await page.locator('label[for="serviceFilter-control"]').innerText(), "Activity category");
+    assert.equal(await page.locator('label[for="promptAuthorFilter-control"]').innerText(), "Prompt author");
+    assert.equal(await page.locator('label[for="projectFilter-control"]').innerText(), "Copilot project");
+    assert.match(await page.locator('#dateFilter option[value=week]').innerText(), /Mon-Sun/);
+    for (const category of ["Discovery", "Multiple workloads", "Unknown"]) {
+        assert.equal(await page.locator(`#serviceFilter option[value="${category}"]`).innerText(), serviceCategories.describe(category).label);
+    }
+    assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["My prompts", "Agent prompts", "Author unverified"]);
     await selectActivityOption(page, "serviceFilter", "Mail"); await ready(page);
-    await page.getByRole("button", { name: "About Activity category", exact: true }).click();
-    assert.equal(await page.getByRole("tooltip").innerText(), "Mail: " + serviceCategories.describe("Mail").description);
-    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#serviceFilter-control").innerText(), "Mail");
     await selectActivityOption(page, "serviceFilter", "all"); await ready(page);
     for (const layer of Object.keys(help.layers)) {
         await selectActivityOption(page, "layerFilter", layer); await ready(page);
         const count = await page.locator("#activityCount").textContent(), url = page.url();
-        const button = page.getByRole("button", { name: "About Activity", exact: true });
-        await button.scrollIntoViewIfNeeded(); await button.focus();
-        await page.getByRole("tooltip").waitFor({ state: "visible" });
-        assert.equal(await page.getByRole("tooltip").innerText(), `${help.layers[layer]} ${help.fields.layerFilter}`);
-        const metrics = await button.evaluate(node => {
-            const glyph = node.querySelector("svg").getBoundingClientRect(), target = node.getBoundingClientRect();
-            const text = document.createRange(); text.selectNodeContents(node.previousElementSibling);
-            const label = text.getBoundingClientRect(), tip = document.querySelector("[role=tooltip]").getBoundingClientRect();
-            return { gap: target.left - node.previousElementSibling.getBoundingClientRect().right,
-                opticalOffset: Math.abs(glyph.top + glyph.height / 2 - label.top - label.height / 2),
-                anchorGap: tip.top >= glyph.bottom ? tip.top - glyph.bottom : glyph.top - tip.bottom,
-                target: { width: target.width, height: target.height }, tip: { left: tip.left, right: tip.right, top: tip.top, bottom: tip.bottom },
-                width: innerWidth, height: innerHeight, hoverFill: getComputedStyle(node).backgroundColor };
-        });
-        assert.equal(metrics.gap, 4);
-        assert.ok(metrics.opticalOffset <= 1, "Help glyph follows the text line, not the center of its larger hit target");
-        assert.equal(metrics.anchorGap, 8);
-        assert.ok(metrics.target.width >= 44 && metrics.target.height >= 44);
-        assert.ok(metrics.tip.left >= 8 && metrics.tip.right <= metrics.width - 8 && metrics.tip.top >= 8 && metrics.tip.bottom <= metrics.height - 8);
-        assert.equal(metrics.hoverFill, "rgba(0, 0, 0, 0)");
-        if (proofs) await page.screenshot({ path: path.join(proofs, `help-${layer}.png`) });
-        await page.keyboard.press("Escape");
-        assert.equal(await page.getByRole("tooltip").isVisible(), false);
+        assert.equal(await page.locator('label[for="layerFilter-control"]').innerText(), "Evidence layer");
+        assert.equal(await page.locator('label[for="chatFilter-control"]').innerText(), layer === "http" ? "Recorder source" : "Copilot chat");
+        assert.equal(await page.locator('#chatFilter option[value=all]').innerText(), layer === "http" ? "All recorder sources" : "All Copilot chats");
+        await page.locator("#layerFilter-control").press("ArrowDown"); await page.keyboard.press("Escape");
+        assert.equal(await page.getByRole("tooltip").count(), 0);
         assert.equal(await page.locator("#activityCount").textContent(), count);
         assert.equal(page.url(), url);
     }
@@ -206,7 +187,7 @@ test("filter help explains actual categories and all six honest activity units w
     assert.equal(await page.locator("#resultFilterScope").isVisible(), true, "Unavailable execution filtering keeps its explanation outside the scroller");
 });
 
-test("narrow keyboard and touch can reach the row, menus and help without clipped overlays or applying drafts", { timeout: 45000 }, async t => {
+test("narrow keyboard and touch reach each named filter directly without clipped overlays or applying drafts", { timeout: 45000 }, async t => {
     const { page } = await setup(t, true);
     const scroll = page.getByRole("region", { name: "Filter row", exact: true });
     await scroll.focus();
@@ -214,7 +195,6 @@ test("narrow keyboard and touch can reach the row, menus and help without clippe
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
         await scroll.focus();
         for (const id of ids) {
-            await page.keyboard.press("Tab");
             await page.keyboard.press("Tab");
             assert.equal(await page.evaluate(() => document.activeElement.id), id + "-control", "Tab follows the row's label/control order");
             const bounds = await page.locator("#" + id + "-control").boundingBox();
@@ -239,10 +219,7 @@ test("narrow keyboard and touch can reach the row, menus and help without clippe
         if (proofs) await page.screenshot({ path: path.join(proofs, `narrow-menu-${scale}.png`) });
         await page.keyboard.press("Escape");
         assert.equal(await activity.evaluate(node => node === document.activeElement), true);
-        const info = page.getByRole("button", { name: "About Activity", exact: true });
-        await info.tap(); await page.getByRole("tooltip").waitFor({ state: "visible" });
-        await page.locator("#pageTitle").tap();
-        assert.equal(await page.getByRole("tooltip").isVisible(), false);
+        assert.equal(await page.locator("#filters .ux-help").count(), 0);
         await activity.tap();
         await page.locator("#moreFilters").evaluate(node => { node.open = false; });
         await page.waitForFunction(() => document.querySelector(".select-popup").hidden);

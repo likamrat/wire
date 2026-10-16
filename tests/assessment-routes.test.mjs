@@ -26,20 +26,22 @@ test("synthetic: installed assessment reads, guarded mutation receipts and contr
     const detail = await (await post("/api/assessment/detail", { schemaVersion: 1, interactionRef, expectedSourceRevision: snapshot.revision }, a)).json();
     assert.equal(detail.data.interaction.interactionRef, interactionRef);
     const mutation = {
-        schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`, interactionRef,
+        schemaVersion: 1, mutationRef: `mutation-${randomBytes(16).toString("hex")}`,
         receiptToken: randomBytes(32).toString("hex"),
-        expectedBasis: detail.basis, checkId: "semantic-answer-correctness", verdict: "pass", withdraw: false,
+        expectedSourceRevision: detail.basis.sourceRevision, expectedConsentRevision: 0, policyVersion: 1,
+        enabled: false, categories: [], sourceConfigRef: "sourceconfig-" + "a".repeat(32), sourceConfigRevision: 0, confirmed: true,
     };
-    const response = await post("/api/assessment/feedback", mutation, a);
+    const response = await post("/api/assessment/consent/set", mutation, a);
     assert.equal(response.status, 200);
     const receipt = await response.json();
     assert.equal(receipt.phase, "complete");
     assert.equal(receipt.basis.sourceRevision, detail.basis.sourceRevision);
-    assert.equal(receipt.basis.overrideRevision, detail.basis.overrideRevision + 1);
+    assert.equal(receipt.basis.overrideRevision, detail.basis.overrideRevision);
+    assert.equal(receipt.basis.consentRevision, detail.basis.consentRevision + 1);
     assert.equal((await post("/api/assessment/mutation/status", { schemaVersion: 1, mutationRef: mutation.mutationRef }, b)).status, 403);
     assert.equal((await post("/api/assessment/detail", { schemaVersion: 1, interactionRef, expectedSourceRevision: receipt.basis.sourceRevision + 1 }, a)).status, 409);
     const empty = await (await post("/api/assessment/overview", { schemaVersion: 1, interactionRefs: [], expectedSourceRevision: receipt.basis.sourceRevision }, a)).json();
-    assert.deepEqual(empty.data, { interactionRefs: [], metrics: [], assessmentAttempts: [] });
+    assert.deepEqual(empty.data, { interactionRefs: [], metrics: [], assessmentAttempts: [], reviewStatuses: [] });
     await runtime.close();
     runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     origin = runtime.url.slice(0, -1);
@@ -49,7 +51,7 @@ test("synthetic: installed assessment reads, guarded mutation receipts and contr
     assert.equal(recovered.status, 200);
     assert.equal((await recovered.json()).phase, "complete");
     assert.equal((await post("/api/assessment/mutation/status", { schemaVersion: 1, mutationRef: mutation.mutationRef, receiptToken: "f".repeat(64) }, fresh)).status, 403);
-    assert.equal((await post("/api/assessment/feedback", mutation, fresh)).status, 403, "A receipt capability never authorizes mutation replay");
+    assert.equal((await post("/api/assessment/consent/set", mutation, fresh)).status, 403, "A receipt capability never authorizes mutation replay");
 });
 
 test("synthetic: read-only status survives a failed post-seal revocation and a real server restart", async t => {

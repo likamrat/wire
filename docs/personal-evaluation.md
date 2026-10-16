@@ -1,9 +1,83 @@
 # Personal interaction evaluation
 
-WIRE derives supported insights from retained, approved Work IQ and API activity.
-Default collection does not replay requests or call an evaluator. Optional
-personal feedback and separately approved model assessment are not a required
-grading workflow.
+WIRE retains observations and timing from approved Work IQ and API activity.
+AI review, automatic scoring and personal-feedback functionality are retired.
+
+## Current behavior and historical compatibility
+
+The current read model exposes recorded observations and timing. It no longer
+applies retained personal verdicts or generates deterministic pass/fail review checks,
+unsupported quality placeholders, model judgments or attempt-status recaps.
+Reader, Analyze, Settings, Search and current comparisons have no rating entry
+points, editors or replacement feedback panels. Reply consent, availability
+reasons, bounded saved response reads, source permissions and report disclosure
+and Save safeguards remain separate.
+
+New report envelopes remain schema v3; independently, `metricProjectionVersion`
+is now **4**. Its assessment-derived metrics admit observed timing only;
+assessments are empty. Rating, review-status and attempt blocks are absent.
+Recorded outcomes, membership, service facts and timing retain their definitions.
+Validators still accept the supported absent/v2/v3 projection shapes without
+rewriting them. New comparisons select compatible observed facts from
+the exact saved sources; unsupported or one-sided facts remain unavailable.
+Historical saved views use the original facts and labels, including JSON-only
+reports. No saved file or financial state is migrated.
+New presentation metadata is version 2 without grading bands; the historical
+version-1 presentation definitions remain available to saved readers.
+Direct period-bundle generation also requires current outer and both inner fact
+projections, followed by existing frozen-period validation. Historical readers
+remain separate; old facts are rejected for new generation, not relabeled.
+
+All authenticated `/api/evaluation/*` setup/execution/approval/revoke requests
+return `410 AI_REVIEW_RETIRED`. The only exceptions are exact historical reads:
+`/api/evaluation/status` accepts `runRef` and an optional original `receiptToken`;
+`/api/evaluation/automatic/status` accepts `schemaVersion: 1`, `mutationRef` and
+the original `receiptToken`. Existing owner/hash guards remain. Reads return the
+stored phase, including pending/unknown outcomes, without normalization or
+mutation. There is no global ledger-summary replacement. Retirement is not
+receipt reconciliation, approval revocation or evidence of a settled charge.
+
+`/api/assessment/feedback`, its canvas action and imported
+`executeAssessmentAction(..., "set_personal_assessment", ...)` reject with
+`410 PERSONAL_FEEDBACK_RETIRED` before validation, source callbacks, writes or
+idempotent mutation replay. Same-origin/session/body authorization still
+precedes HTTP rejection. Qualified `get_mutation_status` reads retain original
+personal receipts without rewriting them. Retained feedback records, revisions
+and definitions remain validated for historical compatibility and explicitly
+confirmed privacy deletion; they are not applied to current projections.
+
+New response-saving receipts use `wire.responseCapture.pending`. The older
+`wire.assessment.pending` slot is read conservatively: recognized personal
+receipts remain untouched without personal UI; recognized consent receipts keep
+their exact identity and storage owner. Two consent receipts block new mutations
+until explicitly checked, and clearing a terminal result requires the exact
+stored value still to match. Unreadable, malformed or unclassifiable storage
+blocks new changes rather than being assumed personal or silently cleared.
+Receipt identities and present tokens must be strings; array coercion is rejected.
+No status lookup replays a mutation.
+
+The legacy `move_card` / `/api/move` workflow classification remains independent.
+It changes captured/reviewing/ready-to-export labels, not ratings; the older
+ready-ID export path still depends on it. Existing card history, source approval
+and disclosure/Save checks are not retired by this change.
+
+Runtime startup and collection commits construct no evaluator or scheduler.
+Exported legacy controller/provider entry points reject execution too.
+Startup never cleans old evaluator work directories. Only the existing
+explicitly confirmed sealed activity-deletion path removes its dependent work.
+
+Retirement proofs are `ai-review-retirement.test.mjs`,
+`ai-review-retirement.browser.test.mjs` and
+`ai-review-retirement-reports.test.mjs`, the all-interface browser matrix and
+`response-receipt-retirement.browser.test.mjs`. They replace the removed evaluator and
+automatic-UI feature-presence suites with zero-dispatch, owner/receipt,
+collection, response-saving and frozen-file preservation assertions.
+
+## Historical review definitions (read-only reference)
+
+The review definitions and implementation history below explain retained old
+records and exports. They are not current setup instructions, available controls
+or permission to resume evaluation.
 
 ## What the dimensions mean
 
@@ -323,7 +397,10 @@ contract is served only at `/assets/assessment-contract.mjs`. The existing
 same-origin/capability transport applies; only read operations may reconnect
 automatically. New capture does not run as a startup migration.
 
-## Scoped model evaluation backend (off by default)
+## Historical scoped model backend (removed from runtime)
+
+The following describes the former implementation for interpreting historical
+receipts and diagnostics. Its execution, setup and recovery paths no longer run.
 
 `evaluation-controller.mjs` is connected to normal startup, shutdown and the
 same-origin capability routes under `/api/evaluation/`: `setup`, `start`,

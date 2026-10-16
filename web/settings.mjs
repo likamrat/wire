@@ -30,14 +30,9 @@ export const settingsMarkup = `
     </div>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Read history again</h3>
-    <p id="recollectActivityHelp">Preview available history from approved chats. Missing history, deleted replies and feedback cannot be restored.</p>
+    <p id="recollectActivityHelp">Preview available history from approved chats. Missing history, deleted replies and historical annotations cannot be restored.</p>
     </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Choose chats</button></div>
     <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3><p>Open or manage reports in the report library.</p></div><a class="button-link" href="#reports" data-settings-link>Open saved reports</a></div>
-  </section>
-  <section class="settings-section" data-settings-section="ai" aria-labelledby="aiReviewsTitle" hidden>
-    <h2 id="aiReviewsTitle" tabindex="-1">AI reviews</h2>
-    <p class="settings-intro">Review answers and tool use with AI. You choose the chats, evidence and spending allowance before anything is sent.</p>
-    <div id="automaticScoreSetup"></div>
   </section>
   <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
     <h2 id="displayTitle" tabindex="-1">Display</h2>

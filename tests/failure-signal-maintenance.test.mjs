@@ -16,6 +16,7 @@ import { maintenanceStateGuard } from "../lib/historical-maintenance.mjs";
 import { runFailureSignalMaintenance } from "../lib/failure-signal-maintenance.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { BOARD_ID } from "../lib/evidence.mjs";
+import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const digest = value => hash(JSON.stringify(value));
@@ -55,7 +56,11 @@ async function fixture(t) {
     f.input.scenarioIds = [f.inputs[1].record.scenarioId];
     f.input.expectedSourceRevision = (await loadBoardState(f.context)).evidenceRevision;
     f.input.maxAiCredits = 30;
-    await f.controller.start("synthetic", f.input); await f.controller.settle();
+    await updateBoardState(f.context, state => {
+        state.personalEvaluation = qualityDisplayFixture({ records: [f.inputs[1].record], judgments: ["pass"],
+            pseudonymKey: state.pseudonymKey }).state.personalEvaluation;
+        state.personalEvaluation.source = assessmentSource(state, f.config);
+    });
     const reports = createExportController(f.context), reportState = await loadBoardState(f.context);
     const preview = await reports.preview("synthetic", undefined, { promptMode: "none", formats: ["json"] }, { kind: "all", revision: reportState.revision });
     await reports.review("synthetic", preview.previewId, true); await reports.confirm("synthetic", preview.previewId, true);
@@ -118,7 +123,9 @@ test("one failed unassessed call and its existing checkpoint gain only the finit
     assert.equal(maintenanceStateGuard(after), maintenanceStateGuard(f.state));
     assert.deepEqual(after.personalEvaluation, f.state.personalEvaluation);
     assert.equal(evaluationRecordFingerprint(after.evidence[1]), evaluationRecordFingerprint(f.state.evidence[1]));
-    assert.equal(buildAssessmentModel(after).details.get(f.state.personalEvaluation.modelEvaluation.records[0].interactionRef).reviewStatus.assessment.result, "assessed");
+    assert.deepEqual(after.personalEvaluation.modelEvaluation.records, f.state.personalEvaluation.modelEvaluation.records);
+    assert.equal(buildAssessmentModel(after).details.get(f.state.personalEvaluation.modelEvaluation.records[0].interactionRef).reviewStatus, undefined,
+        "A source correction preserves historical judgments without restoring the retired current review projection.");
     const journal = await readJson(f.options.journalFile);
     assert.equal(journal.core.state.beforeSha256, originalState);
     assert.equal(journal.core.checkpoints[0].beforeSha256, originalCheckpoint);

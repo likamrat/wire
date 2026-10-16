@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption, openActivitySessions, restoreLegacySearch } from "./helpers.mjs";
-import { reportContents, chooseReportScope, inspectReportCopies, cancelReportPreview, openReportCreation } from "./report-journey-helpers.mjs";
+import { reportContents, chooseReportScope, inspectReportCopies, cancelReportPreview, openReportCreation, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 
 const proofDir = process.env.WORKIQ_SELECTION_PROOFS;
@@ -126,7 +126,7 @@ test("reader Continue connects canonical selection to report Activity and exact 
     await pick.click();
     await expect(page.locator("#activitySelectionSummary")).toContainText("3 request groups included");
     await expect(page.locator("#reportSelectionBar")).toBeHidden();
-    const copy = page.locator(".request-original").getByRole("button", { name: "Copy prompt", exact: true });
+    const copy = page.locator('[data-reader-section="prompt"]').getByRole("button", { name: "Copy prompt", exact: true });
     await copy.focus();
     const geometry = () => page.locator(".request-original").evaluate(node => {
         const p = node.querySelector("pre").getBoundingClientRect();
@@ -431,10 +431,10 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     await chooseReportScope(page, "selected");
     await navigateMain(page, "activity");
     await openActivitySessions(page);
-    await page.locator("#activityList .request-row").filter({ hasText: "Selection request 01" }).locator("input").check();
+    await selectAnalyzeRequest(page, page.locator("#activityList .request-row").filter({ hasText: "Selection request 01" }));
     assert.equal(await page.locator("#activitySelectionSummary").textContent(), "One report · 2 request groups included", "One overlapping selection expands to both canonical request owners");
     await page.getByRole("navigation", { name: "Analyze result pages", exact: true }).getByRole("button", { name: "Next", exact: true }).click();
-    await page.locator("#activityList input").first().check();
+    await selectAnalyzeRequest(page, page.locator("#activityList .request-row").first());
     assert.equal(await page.locator("#activitySelectionSummary").textContent(), "One report · 3 request groups included");
     const origin = page.url();
     await navigateMain(page, "reports");
@@ -451,7 +451,7 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     for (const [index, kind] of ["all", "current", "selected"].entries()) {
         if (index) {
             await navigateMain(page, "activity");
-            await page.locator("#activityList input").first().check();
+            await selectAnalyzeRequest(page, page.locator("#activityList .request-row").first());
             await navigateMain(page, "reports");
         }
         await chooseReportScope(page, kind);
@@ -466,7 +466,10 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     }
     await navigateMain(page, "activity");
     await page.getByRole("navigation", { name: "Analyze result pages", exact: true }).getByRole("button", { name: "Previous", exact: true }).click();
-    assert.equal(await page.locator("#activityList input:checked").count(), 0, "Clearing includes previous pages");
+    await page.locator("#activityList .request-card-open").first().click();
+    await expect(page.locator("#requestReportToggle")).toHaveText("Add to report");
+    await page.locator("#closeContextSidebar").click();
+    await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
     await navigateMain(page, "reports");
     assert.match(await page.locator("#scopeCount-current").textContent(), / · 7 interactions$/, "Current expands complete eligible requests, including a shared alias owner");
@@ -478,8 +481,8 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     assert.equal(page.url(), filtered);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "failure");
     await openActivitySessions(page);
-    await page.locator("#activityList input").first().check();
-    await page.locator("#activityList .request-link").first().click();
+    await selectAnalyzeRequest(page, page.locator("#activityList .request-row").first());
+    await page.locator("#activityList .request-card-open").first().click();
     await page.locator("#requestReportContinue").click(); await ready(page);
     await page.locator("#reportClearSelection").click();
     await page.goBack(); await ready(page);
@@ -487,7 +490,7 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     await emptySelection(page);
     await page.getByRole("button", { name: "Add to report", exact: true }).click();
     const membership = await page.locator("#activitySelectionSummary").textContent();
-    await page.locator("#contextBack").click(); await ready(page);
+    await page.locator("#closeContextSidebar").click(); await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" }); await ready(page);
     await page.locator("#resetView").click(); await ready(page);
     assert.match(new URL(page.url()).hash, /^#(?:home|analyze)/);
     assert.equal(await page.locator("#activitySelectionSummary").textContent(), membership, "Reset to Home does not clear explicit report IDs");
@@ -529,7 +532,7 @@ test("picker checkboxes follow resolved shared-call membership without losing fo
     await preserved();
 });
 
-test("Analyze explicit toggles and canonical report checks reconcile aliases and rejected mutations in place", { timeout: 30000 }, async t => {
+test("reader membership and canonical report checks reconcile aliases and rejected mutations in place", { timeout: 30000 }, async t => {
     const { page, runtime, preserved } = await setup(t);
     await page.goto(runtime.url + "#reports?task=create"); await ready(page);
     const nextReportPage = page.getByRole("button", { name: "Next report requests", exact: true });
@@ -538,24 +541,33 @@ test("Analyze explicit toggles and canonical report checks reconcile aliases and
     await page.locator("#report-select-selection-13").check();
     for (let index = 0; index < 3; index++) await previousReportPage.click();
     await navigateMain(page, "activity"); await ready(page);
-    const a = page.locator("#select-request-selection-0"), b = page.locator("#select-request-selection-1");
     const reportA = page.locator("#report-select-selection-0"), reportB = page.locator("#report-select-selection-1");
+    const reportC = page.locator("#report-select-selection-2"), toggle = page.locator("#requestReportToggle");
     const pageState = await page.locator("#activityPager").innerText();
-    await page.evaluate(() => {
-        window.mountedSelectionControls = ["select-request-selection-0", "select-request-selection-1",
-            "report-select-selection-0", "report-select-selection-1"].map(id => document.getElementById(id));
-    });
-    await a.check(); await b.check(); await a.uncheck();
-    assert.equal(await b.isChecked(), false, "Removing A's aliases also unchecks explicitly selected B in Analyze");
-    assert.equal(await a.isChecked(), false);
+    async function open(id) {
+        await page.locator(`.request-row[data-view-key="request:selection-${id}"] .request-card-open`).click();
+        await page.locator("#contextSidebar[open]").waitFor();
+    }
+    async function close() {
+        await page.locator("#closeContextSidebar").click();
+        await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
+    }
+    await open(0); await expect(toggle).toHaveText("Add to report"); await toggle.click(); await close();
+    await open(1); await expect(toggle).toHaveText("Add to report"); await toggle.click(); await close();
+    await open(0); await expect(toggle).toHaveText("Remove from report"); await toggle.click();
+    await expect(toggle).toHaveText("Add to report"); await expect(toggle).toBeFocused();
+    await close();
     assert.equal(await reportA.isChecked(), false);
-    assert.equal(await reportB.isChecked(), false);
-    assert.equal(await a.evaluate(node => node === document.activeElement), true);
+    assert.equal(await reportB.isChecked(), false, "Removing A's aliases also removes explicitly selected B");
     assert.match(await page.locator("#activitySelectionSummary").innerText(), /1 request group included/);
-    await b.check();
-    assert.equal(await a.isChecked(), false, "Analyze reflects explicit IDs, not inferred canonical membership");
-    assert.equal(await reportA.isChecked(), true, "Reports reflects canonical membership expanded through B");
+    await open(1); await expect(toggle).toHaveText("Add to report"); await toggle.click();
+    await expect(toggle).toHaveText("Remove from report");
+    assert.equal(await reportA.isChecked(), true, "Adding B in the reader expands canonical A in Reports");
     assert.equal(await reportB.isChecked(), true);
+    await page.evaluate(() => {
+        window.mountedSelectionControls = ["requestReportToggle", "report-select-selection-0",
+            "report-select-selection-1", "report-select-selection-2"].map(id => document.getElementById(id));
+    });
 
     let release, arrived;
     const held = new Promise(resolve => { release = resolve; }), pending = new Promise(resolve => { arrived = resolve; });
@@ -566,12 +578,16 @@ test("Analyze explicit toggles and canonical report checks reconcile aliases and
     }, { times: 1 });
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await pending;
-    await a.click();
-    assert.equal(await a.isChecked(), false, "A rejected native addition reverts to the authoritative explicit selection");
-    assert.equal(await a.evaluate(node => node === document.activeElement), true);
-    await b.click();
-    assert.equal(await b.isChecked(), true, "A rejected native removal cannot leave a selected interaction unchecked");
-    assert.equal(await b.evaluate(node => node === document.activeElement), true);
+    await expect(toggle).toBeDisabled();
+    await toggle.evaluate(node => { node.disabled = false; node.click(); });
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).toHaveText("Remove from report");
+    assert.equal(await reportB.isChecked(), true, "A rejected reader removal keeps the authoritative selection");
+    await reportC.evaluate(node => {
+        node.checked = true;
+        node.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    assert.equal(await reportC.isChecked(), false, "A rejected addition cannot enter canonical report membership");
     await reportA.evaluate(node => {
         node.checked = false;
         node.dispatchEvent(new Event("change", { bubbles: true }));
@@ -582,7 +598,7 @@ test("Analyze explicit toggles and canonical report checks reconcile aliases and
     assert.equal(await page.locator("#activityPager").innerText(), pageState);
     assert.match(await page.locator("#reportList").innerText(), /1-4 of 18/);
     assert.equal(await page.evaluate(() => window.mountedSelectionControls.every(node => node === document.getElementById(node.id))), true);
-    release(); await ready(page);
+    release(); await ready(page); await close();
     await navigateMain(page, "reports"); await openReportCreation(page);
     for (let index = 0; index < 3; index++) await nextReportPage.click();
     assert.equal(await page.locator("#report-select-selection-13").isChecked(), true, "Unrelated selections on other pages survive all mutations");
@@ -591,9 +607,8 @@ test("Analyze explicit toggles and canonical report checks reconcile aliases and
 
 test("clear discards per-copy edits and attestation, including late previews and late snapshots", { timeout: 120000 }, async t => {
     const { page, runtime, requests, preserved } = await setup(t);
-    await page.goto(runtime.url + "#activity"); await ready(page);
-    await page.locator("#activityList input").first().check();
-    await navigateMain(page, "reports");
+    await page.goto(runtime.url + "#reports?task=create"); await ready(page);
+    await page.locator("#reportList input[type=checkbox]").first().check();
     await preview(page);
     await page.locator(".prompt-comparison").first().getByText("Edit or omit this report copy", { exact: true }).click();
     await page.locator(".prompt-comparison textarea").first().fill("EDITED_SELECTION_COPY");
@@ -601,9 +616,7 @@ test("clear discards per-copy edits and attestation, including late previews and
     await emptySelection(page);
     await page.waitForFunction(() => document.activeElement.id === "reportStepTitle1");
     assert.equal(await page.locator("#reportReviewBody").textContent(), "");
-    await navigateMain(page, "activity");
-    await page.locator("#activityList input").first().check();
-    await navigateMain(page, "reports");
+    await page.locator("#reportList input[type=checkbox]").first().check();
     const fresh = await preview(page);
     assert.ok(!JSON.stringify(fresh.records).includes("EDITED_SELECTION_COPY"));
     assert.deepEqual(requests.filter(request => request.path === "/api/preview").at(-1).body.options.overrides, []);
@@ -654,7 +667,7 @@ test("clear discards per-copy edits and attestation, including late previews and
     await preserved();
 });
 
-test("selection summaries and shared pills stay compact and unclipped in light/navy at 375, 820 and 1200", { timeout: 120000 }, async t => {
+test("selection summaries and shared filters stay compact and unclipped in both themes at 375, 820 and 1200", { timeout: 120000 }, async t => {
     const { page, runtime, preserved } = await setup(t), measurements = [];
     await page.goto(runtime.url); await ready(page);
     for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) {
@@ -688,7 +701,9 @@ test("selection summaries and shared pills stay compact and unclipped in light/n
         const metrics = await page.evaluate(() => {
             const rect = (node, painted = false) => {
                 const style = getComputedStyle(node), box = node.getBoundingClientRect(), paint = getComputedStyle(node, "::before");
-                return { radius: style.borderRadius, height: box.height, right: box.right, actionable: node.matches("button,a"), backgroundSize: style.backgroundSize, clipped: node.scrollWidth > node.clientWidth + 1, paint: painted ? box.height - parseFloat(paint.top) - parseFloat(paint.bottom) : box.height };
+                return { radius: style.borderRadius, filter: node.classList.contains("select-trigger-filter"), height: box.height,
+                    natural: Math.max(parseFloat(style.minHeight) || 0, parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)),
+                    right: box.right, actionable: node.matches("button,a"), backgroundSize: style.backgroundSize, clipped: node.scrollWidth > node.clientWidth + 1, paint: painted ? box.height - parseFloat(paint.top) - parseFloat(paint.bottom) : box.height };
             };
             return {
                 fieldRadius: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--radius-field")),
@@ -703,16 +718,21 @@ test("selection summaries and shared pills stay compact and unclipped in light/n
             };
         });
         assert.equal(metrics.overflow, false);
-        for (const filter of metrics.filters) { assert.equal(parseFloat(filter.radius), metrics.fieldRadius); assert.equal(filter.height, 44); assert.equal(filter.paint, 36); }
+        for (const filter of metrics.filters) { assert.equal(parseFloat(filter.radius), filter.filter ? 24 : metrics.fieldRadius); assert.equal(filter.height, 44); assert.equal(filter.paint, filter.filter ? 44 : 36); }
         for (const chip of metrics.chips) { assert.equal(parseFloat(chip.radius), metrics.controlRadius); assert.equal(chip.height, 44); assert.equal(chip.paint, 32); }
-        for (const result of metrics.results) { assert.equal(parseFloat(result.radius), metrics.resultRadius); assert.equal(result.height, result.actionable ? 44 : 22); assert.equal(result.paint, result.actionable ? 24 : 22); assert.equal(result.clipped, false); assert.ok(result.right <= width); }
+        for (const result of metrics.results) {
+            assert.equal(parseFloat(result.radius), metrics.resultRadius);
+            assert.ok(Math.abs(result.height - (result.actionable ? 44 : result.natural)) <= 1, "Asta labels use their natural line box; actions retain a full target");
+            assert.equal(result.paint, result.actionable ? 24 : result.height);
+            assert.equal(result.clipped, false); assert.ok(result.right <= width);
+        }
         for (const nav of metrics.navigation) assert.equal(nav.radius, "6px", "Sidebar rows follow the quiet reference, not action pills");
-        assert.ok(metrics.formats.every(radius => parseFloat(radius) === metrics.controlRadius));
+        assert.ok(metrics.formats.every(radius => parseFloat(radius) === 0), "Report file choices are plain labeled checkboxes, not pill cards");
         await page.keyboard.press("Escape");
         await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `activity-pills-${theme}-${width}.png`), fullPage: true });
         await page.locator("#layerFilter-control").click();
-        assert.equal(await page.locator(".select-popup").evaluate(node => getComputedStyle(node).borderRadius), "6px");
+        assert.equal(await page.locator(".select-popup").evaluate(node => getComputedStyle(node).borderRadius), "20px");
         assert.equal(await page.locator(".select-popup .select-option-description").count(), 0);
         assert.deepEqual(await page.locator(".select-option").allInnerTexts(), await page.locator("#layerFilter option").allTextContents());
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `activity-popup-${theme}-${width}.png`) });

@@ -8,6 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
+import { reportContents } from "./report-journey-helpers.mjs";
 
 const proof = process.env.WIRE_COMPARISON_EXPERIENCE_PROOFS;
 async function setup(t, hash = "#analyze") {
@@ -108,7 +109,9 @@ test("explicit comparison completion moves attention to accepted results without
     }
     await page.locator("#createPeriodReport").click();
     await expect(page.locator("#reportStage1")).toBeVisible();
-    await expect(page.locator("#reportPopulationNote")).toContainText("Period A: 4 matching records; Period B: 4");
+    await expect(page.locator('[data-period-report-side="baseline"]')).toContainText("4 matching Work IQ tool calls");
+    await expect(page.locator('[data-period-report-side="later"]')).toContainText("4 matching Work IQ tool calls");
+    await reportContents(page);
     await expect(page.locator("#formatOptions input[value=pdf]")).not.toBeChecked();
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#exportBtn").click();

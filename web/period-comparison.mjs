@@ -274,22 +274,6 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             inputs[invalidSide + "From"].focus();
         }
     });
-    const dialog = el("dialog", undefined, "assessment-dialog"), dialogHead = el("div", undefined, "dialog-head");
-    let detailTrigger;
-    dialog.setAttribute("aria-label", "Comparison measure definitions");
-    dialogHead.append(el("h2", "Measure definitions"), button("Close", () => dialog.close()));
-    const dialogBody = el("div", undefined, "assessment-dialog-body");
-    dialog.append(dialogHead, dialogBody); root.append(dialog);
-    dialog.addEventListener("close", () => { if (detailTrigger?.isConnected && detailTrigger.checkVisibility()) detailTrigger.focus(); });
-    function showDefinitions(model, trigger) {
-        detailTrigger = trigger; dialogBody.replaceChildren(el("p", model.takeaway));
-        for (const row of [...Object.values(model.groups).flat(), ...model.diagnostics]) {
-            const section = el("section", undefined, "assessment-definition"), facts = el("ul");
-            for (const detail of row.details) facts.append(el("li", detail));
-            section.append(el("h3", row.label), facts); dialogBody.append(section);
-        }
-        dialog.showModal();
-    }
     function ready() {
         if (!contractPromise) contractPromise = Promise.all([
             import("/assets/assessment-contract.mjs"), import("/assets/period-comparison-math.mjs"),
@@ -411,17 +395,14 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 ["Parent calls before outcome/path filters", side.analytics.apiCoverage.eligibleToolCalls],
             ]));
             if (!side.rowIds.length) section.append(el("p", "No matching retained activity in this period. No findings or timing are inferred.", "assessment-empty"));
-            const findingsHost = el("div"), insights = el("div");
-            findingsHost.dataset.presentation = "comparison";
-            section.append(findingsHost, insights);
+            const insights = el("div");
+            section.append(insights);
             if (side.interactionRefs.length) {
                 const model = presentation.summarize(side.assessment.metrics, {
                     membershipStatus: side.unmappedScenarioIds.length ? "partial" : "complete-retained",
                     reviewStatuses: side.assessment.reviewStatuses, assessmentAttempts: side.assessment.assessmentAttempts,
                 });
-                assessmentFactories.renderSummary(insights, model, { findingsHost, bindDetails,
-                    disclosureKey: "period:" + key + ":" + JSON.stringify(side.interactionRefs),
-                    detailsLabel: "Measure definitions", onDetails: trigger => showDefinitions(model, trigger) });
+                assessmentFactories.renderTiming(insights, model.evidence.timing);
             }
             if (side.rowIds.length) {
                 const exact = el("details", undefined, "reading-section"); exact.append(el("summary", `Exact matching records (${side.rowIds.length})`));
@@ -435,7 +416,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             sides.append(section);
         }
         output.append(sides);
-        const deltas = el("details", undefined, "reading-section"); deltas.append(el("summary", "Compare saved checks and full-interaction timing"));
+        const deltas = el("details", undefined, "reading-section"); deltas.append(el("summary", "Compare recorded timing"));
         const formatter = assessmentFactories.createReportComparison();
         const factLabel = (fact, peer) => {
             if (!fact) return formatter.absentPeerLabel(peer);
@@ -447,7 +428,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             return (fact.kind === "pass-rate" ? `${fact.numerator} / ${fact.denominator} passed (${number(fact.numerator * 100 / fact.denominator)}%)`
                 : `${number(fact.value)} ${fact.unit}`) + `; ${counts}`;
         };
-        deltas.append(table("Saved reviews and measurements by source and method", ["Measure and origin", "Period A", "Period B", "Observed difference"],
+        deltas.append(table("Recorded timing", ["Measure and origin", "Period A", "Period B", "Observed difference"],
             value.comparison.metrics.map(item => {
                 const shared = formatter.definitionLabel(item);
                 const label = formatter.comparisonLabel(item) + (shared ? " / " + shared : "");
@@ -482,7 +463,6 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (!active) {
             completionIntent = null;
             generation++; machine?.leave(); requestKey = ""; contextKey = ""; datesEdited = false; lastRoute = "";
-            if (dialog.open) dialog.close();
             return;
         }
         const routeKey = JSON.stringify(periods(context.route));
@@ -568,7 +548,6 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         machine?.observe(value); machine?.leave(); generation++; requestKey = ""; blockedSnapshot = snapshotKey(context);
         completionIntent = null;
         syncReport();
-        if (dialog.open) dialog.close();
         clearResults();
         setStatus("Retained evidence or its permission changed. Read the current stored Analyze view before comparing again.", "notice");
     }

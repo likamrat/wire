@@ -33,20 +33,22 @@ function assertFrozenPair(frozen, live, pseudonymKey) {
         }
         assert.deepEqual(side.facts.memberships.map(item => item.interactionRef), original.interactionRefs);
         assert.deepEqual(side.facts.metrics, original.assessment.metrics.map(reportMetric));
-        assert.deepEqual(side.facts.reviewStatuses, original.assessment.reviewStatuses);
-        assert.deepEqual(side.facts.assessmentAttempts, original.assessment.assessmentAttempts);
+        assert.equal(side.facts.metricProjectionVersion, 4);
+        assert.deepEqual(side.facts.assessments, []);
+        assert.equal(Object.hasOwn(side.facts, "reviewStatuses"), false);
+        assert.equal(Object.hasOwn(side.facts, "assessmentAttempts"), false);
         assert.deepEqual(side.interactionCoverage, original.interactionCoverage);
     }
 }
 
-test("F12 unchanged public mixed current/legacy comparison freezes exact accepted order and model lanes", () => {
+test("F12 mixed current/legacy comparison freezes exact accepted order without retired rating lanes", () => {
     const { state, input } = periodFixture();
     input.options.filters.scope = "all";
     assert.doesNotThrow(() => validateAnalyticsInput(input.options));
     const live = buildPeriodComparison(state, input);
     assert.deepEqual([live.periods.baseline.rowIds.length, live.periods.later.rowIds.length], [4, 4]);
     assert.ok(live.periods.baseline.scenarioIds.includes("period-request-8"));
-    assert.ok(live.comparison.metrics.some(item => (item.baseline ?? item.later).basis === "model-assessment"));
+    assert.ok(live.comparison.metrics.every(item => (item.baseline ?? item.later).basis === "observed"));
     const accepted = acceptPeriodReport(state, live);
     const order = live.periods.baseline.interactionRefs;
     const records = order.map(ref => accepted.model.internals.get(ref).record);
@@ -193,7 +195,7 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
     const live = await (await compared).json();
     assert.equal(live.options.filters.scope, "all");
     assert.deepEqual([live.periods.baseline.rowIds.length, live.periods.later.rowIds.length], [4, 4]);
-    assert.ok(live.comparison.metrics.some(item => (item.baseline ?? item.later).basis === "model-assessment"));
+    assert.ok(live.comparison.metrics.every(item => (item.baseline ?? item.later).basis === "observed"));
     await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (4)");
     await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (4)");
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
@@ -223,7 +225,7 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
         extracted[format] = (await extractReportFile(document)).content;
         assert.match(extracted[format], /Period A/);
         assert.match(extracted[format], /Period B/);
-        assert.match(extracted[format], /synthetic-quality-fixture/);
+        assert.doesNotMatch(extracted[format], /synthetic-quality-fixture|Personal feedback|assessment coverage|full-interaction findings/i);
         if (format === "json") assertFrozenPair(document.snapshot.periodComparison, live, initial.pseudonymKey);
     }
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();

@@ -7,7 +7,7 @@ import { searchFixture } from "./live-search-fixture.mjs";
 import { chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
-test("Search paints only the actual hovered or pressed row, with fixed geometry and exact Open/Back", { timeout: 30000 }, async t => {
+test("Search gives only the actual hovered or pressed title quiet feedback, with fixed geometry and exact Open/Back", { timeout: 30000 }, async t => {
     const cleanup = [], app = await searchFixture({ after: fn => cleanup.push(fn) });
     const browser = await chromium.launch({
         channel: process.platform === "win32" ? "msedge" : undefined,
@@ -24,10 +24,12 @@ test("Search paints only the actual hovered or pressed row, with fixed geometry 
     async function paint(row) {
         return row.evaluate(node => {
             const css = getComputedStyle(node), before = getComputedStyle(node, "::before"), rect = node.getBoundingClientRect();
+            const title = getComputedStyle(node.querySelector(".wire-search-title"));
             return {
                 hover: node.matches(":hover"), active: node.matches(":active"), focused: document.activeElement === node,
                 background: css.backgroundColor, ink: css.color, outline: css.outlineStyle, outlineWidth: css.outlineWidth,
                 shadow: css.boxShadow, border: css.borderTopWidth,
+                title: { decoration: title.textDecorationLine, thickness: title.textDecorationThickness },
                 before: { content: before.content, background: before.backgroundColor, border: before.borderTopColor,
                     shadow: before.boxShadow, width: before.width, height: before.height, pointerEvents: before.pointerEvents },
                 rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
@@ -109,33 +111,32 @@ test("Search paints only the actual hovered or pressed row, with fixed geometry 
         const disabled = await paint(first);
         assert.ok(transparent(fill(disabled)), "Disabled rows cannot advertise an enabled action");
         assert.equal(disabled.before.content, "none");
+        assert.equal(disabled.title.decoration, "none");
         assert.equal(disabled.border, "0px"); assert.equal(disabled.shadow, "none");
         await page.mouse.move(0, 0); await page.mouse.up();
         await first.evaluate(node => { node.disabled = false; });
         await input.focus();
         await page.keyboard.press("Escape");
         await expect(panel).toBeHidden(); await expect(input).toBeFocused();
-        cases.push({ theme, width, idle, hover, pressed, keyboard, destination,
-            hoverPainted: !transparent(fill(hover)),
-            pressedPainted: !transparent(fill(pressed)),
-            pressedDistinct: fill(pressed) !== fill(hover) || pressed.before.shadow !== hover.before.shadow,
-        });
+        cases.push({ theme, width, idle, hover, pressed, keyboard, destination });
         await page.close();
     }
     if (proofs) await writeFile(path.join(proofs, "measurements.json"), JSON.stringify({ cases, url: app.runtime.url }, null, 2));
     for (const value of cases) {
         assert.ok(transparent(fill(value.idle)), `${value.theme}/${value.width}: idle rows stay unfilled`);
         assert.equal(value.idle.border, "0px"); assert.equal(value.idle.shadow, "none");
-        assert.equal(value.hoverPainted, true, `${value.theme}/${value.width}: native hover must visibly fill the row`);
-        assert.equal(value.pressedPainted, true, `${value.theme}/${value.width}: native press must visibly fill the row`);
-        assert.equal(value.pressedDistinct, true, `${value.theme}/${value.width}: pressed feedback differs from hover`);
+        assert.equal(value.idle.title.decoration, "none");
+        assert.equal(value.hover.title.decoration, "underline", "Hover feedback identifies the actual action without a gray slab");
+        assert.equal(value.pressed.title.decoration, "underline");
+        assert.equal(value.pressed.title.thickness, "2px");
+        assert.notEqual(value.hover.title.thickness, value.pressed.title.thickness, "Pressed feedback remains distinct");
         for (const state of [value.hover, value.pressed]) {
+            assert.ok(transparent(fill(state)), "Whole rows stay unfilled");
+            assert.equal(state.before.content, "none");
             assert.equal(state.before.pointerEvents, "none", "Paint must not intercept the native button target");
-            assert.ok(Math.abs(parseFloat(state.before.width) - state.rect.width) < 1, "Fill spans only the row width");
-            assert.ok(Math.abs(parseFloat(state.before.height) - state.rect.height) < 1, "Fill spans the full clickable row");
         }
-        assert.ok(contrast(value.hover.ink, fill(value.hover)) >= 4.5);
-        assert.ok(contrast(value.pressed.ink, fill(value.pressed)) >= 4.5);
+        assert.ok(contrast(value.hover.ink, value.hover.paper) >= 4.5);
+        assert.ok(contrast(value.pressed.ink, value.pressed.paper) >= 4.5);
         for (const state of [value.idle, value.hover, value.pressed, value.keyboard]) {
             const surface = transparent(fill(state)) ? state.paper : fill(state);
             for (const part of state.content) {

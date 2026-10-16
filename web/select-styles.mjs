@@ -87,31 +87,41 @@ export const selectStyles = `
 .select-all {width:100%;justify-content:flex-start;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--rule);border-radius:0;margin-bottom:4px}
 .select-draft-hint {font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin:8px 10px}
 .select-footer {display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px;border-top:1px solid var(--rule)}
-#filters .select-trigger {border-radius:24px}
-#filters .select-trigger::before {inset:0;border-color:var(--rule);background:var(--canvas)}
-#filters .select-trigger:hover:not(:disabled)::before {border-color:var(--control);background:var(--hover)}
-#filters .select-trigger:is([data-filter-active=true],[aria-expanded=true])::before {border-color:var(--ink);background:var(--paper)}
+.select-trigger.select-trigger-filter {border-radius:24px;font-weight:var(--weight-regular)}
+.select-trigger.select-trigger-filter::before {inset:0;border-color:var(--rule);background:var(--paper);box-shadow:none}
+.select-trigger.select-trigger-filter:hover:not(:disabled)::before {border-color:var(--control);background:var(--paper)}
+.select-trigger.select-trigger-filter:is([data-filter-active=true],[aria-expanded=true])::before {border-color:var(--control);background:var(--paper);box-shadow:none}
+.select-trigger.select-trigger-filter:disabled::before {border-style:dashed;border-color:var(--rule)}
 .select-popup-filter {
  min-width:min(max(16rem,var(--select-anchor-width)),var(--select-available-width));
  max-width:min(28rem,var(--select-available-width));max-height:min(28rem,calc(100dvh - 16px));
- padding:8px;border-radius:20px;
+ padding:8px;border-radius:20px;background:var(--paper);box-shadow:var(--surface-shadow);
 }
 .select-popup-filter .select-option {grid-template-columns:minmax(0,1fr) 32px;column-gap:16px;padding:10px 12px;border-radius:12px}
 .select-popup-filter .select-option:has(.select-option-count) {grid-template-columns:minmax(0,1fr) auto 32px}
 .select-option-count {max-inline-size:10ch;font-variant-numeric:tabular-nums;color:var(--muted);font-size:var(--type-caption);text-align:end}
-.select-popup-filter .select-option[aria-selected=true] {background:var(--hover);color:var(--ink);font-weight:var(--weight-regular)}
-.select-popup-filter .select-option[data-active=true] {outline:2px solid var(--focus);outline-offset:-2px}
+.select-popup-filter .select-option,
+.select-popup-filter .select-option:is([aria-selected=true],[data-active=true]) {background:transparent;color:var(--ink);font-weight:var(--weight-regular);outline:none}
+.select-popup-filter .select-option:not([aria-disabled=true]):hover {outline:1px solid var(--rule);outline-offset:-1px}
+:root:has(.select-trigger-filter[aria-expanded=true]:focus-visible) .select-popup-filter .select-option[data-active=true] {outline:2px solid var(--focus);outline-offset:-2px}
+.select-popup-filter .select-option[aria-disabled=true] {color:var(--muted)}
 .select-toggle {position:relative;display:block;width:32px;height:20px;border:1px solid var(--control);border-radius:20px;background:var(--canvas)}
 .select-toggle::after {content:"";position:absolute;width:12px;height:12px;inset:3px auto auto 3px;border-radius:50%;background:var(--muted)}
-.select-option[aria-selected=true] .select-toggle {border-color:var(--ink);background:var(--ink)}
-.select-option[aria-selected=true] .select-toggle::after {left:15px;background:var(--paper)}
-.select-popup-filter .select-all {display:flex;justify-content:space-between;gap:16px;padding:10px 12px;min-height:44px;font-weight:var(--weight-regular);border:0;border-bottom:1px solid var(--rule);border-radius:12px 12px 0 0}
-.select-popup-filter .select-all::after {content:"";flex:none;width:18px;height:18px;border:1px solid var(--control);border-radius:5px}
-.select-popup-filter .select-all[aria-checked=true]::after {background:var(--ink);box-shadow:inset 0 0 0 4px var(--paper)}
-.select-popup-filter .select-all[aria-checked=mixed]::after {background:linear-gradient(var(--ink),var(--ink)) center/10px 2px no-repeat}
+.select-option[aria-selected=true] .select-toggle,.select-all[aria-checked=true] .select-toggle {border-color:var(--ink);background:var(--ink)}
+.select-option[aria-selected=true] .select-toggle::after,.select-all[aria-checked=true] .select-toggle::after {left:15px;background:var(--paper)}
+.select-all[aria-checked=mixed] .select-toggle::after {width:10px;height:2px;left:10px;top:8px;border-radius:1px;background:var(--ink)}
+.select-popup-filter.select-popup-multiple .select-all {display:flex;justify-content:space-between;gap:16px;min-height:44px;font-weight:var(--weight-regular);border:0;border-radius:12px}
+.select-popup-filter.select-popup-multiple .select-all::before {content:none}
+.select-all-label {min-width:0;overflow-wrap:anywhere}
+.select-all>.select-toggle {flex:none}
+.select-popup-filter.select-popup-multiple [role=listbox] {border-top:1px solid var(--rule);padding-top:4px}
 .select-popup-filter .select-footer {gap:8px;padding:10px 12px 4px}
-.select-popup-filter .select-footer>button {min-height:44px;border-radius:24px}
-.select-popup-filter .select-draft-hint {margin:10px 12px;font-weight:var(--weight-regular)}
+.select-popup-filter .select-footer>button {
+ --pill-fill:var(--paper);--pill-hover:var(--paper);--pill-pressed:var(--paper);--canvas:var(--paper);
+ --pill-border:var(--rule);min-height:44px;border-radius:24px;font-weight:var(--weight-regular);
+}
+.select-popup-filter .select-footer>.select-apply,.select-popup-filter .select-footer>button:hover {--pill-border:var(--control)}
+.select-popup-filter .select-validation {margin:10px 12px;color:var(--muted);font-size:var(--type-caption);line-height:1.5}
 .filter-chip {min-height:44px;padding:4px 12px;gap:6px;line-height:20px;border-radius:var(--radius-control)}
 .view-switch {padding:0;gap:var(--pill-gap);border-radius:var(--radius-control);background:transparent;flex-wrap:wrap;max-width:100%;flex-shrink:1}
 .view-switch button {min-height:var(--pill-height);padding:6px var(--pill-inset);line-height:1.5;border-radius:var(--radius-control);background:var(--pill-fill);color:var(--pill-ink);border-color:var(--pill-border);white-space:normal}

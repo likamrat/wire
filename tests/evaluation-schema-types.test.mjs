@@ -44,7 +44,7 @@ async function rejectedSchema(value) {
     } finally { await session.disconnect(); await client.stop(); }
 }
 
-test("default installed evaluator passes the finite-type provider boundary and persists all three controlled metrics", async t => {
+test("retirement prevents the default installed evaluator from reaching even a valid finite-type schema provider", async t => {
     const f = await evaluationFixture(t);
     await materializeEvaluationSource(f);
     const keys = ["WORKIQ_EVIDENCE_COPILOT_SDK", "WORKIQ_EVIDENCE_COPILOT_CLI"];
@@ -65,26 +65,14 @@ test("default installed evaluator passes the finite-type provider boundary and p
     });
     const controller = createEvaluationController(f.context, { getSourceConfig: () => f.config });
     t.after(() => controller.close());
-    await controller.start("typed-schema-fixture", { ...f.input, maxAiCredits: 30, scenarioIds: [f.input.scenarioIds[0]] });
-    await controller.settle();
-    const receipt = await controller.status("typed-schema-fixture", { runRef: f.input.mutationRef });
-    assert.equal(receipt.phase, "complete");
-    assert.equal(receipt.callsReserved, 1); assert.equal(receipt.spentAiCredits, 0.1); assert.equal(receipt.costUnknown, false);
-    assert.equal(observed.sends, sendsBefore + 1); assert.equal(observed.schemaRejections.length, rejectionsBefore);
-    assert.equal(f.calls.length, 0, "The injected evaluator factory must not be used.");
     const state = await loadBoardState(f.context);
-    assert.equal(state.personalEvaluation.modelEvaluation.records.length, 1);
-    const metrics = buildAssessmentModel(state).overview.metrics.filter(metric => metric.origin === "model-assessed");
-    assert.deepEqual(metrics.map(metric => [metric.dimension, metric.value]), [["accuracy", 1], ["answer-trust", 1], ["action-trust", 1]]);
+    assert.throws(() => controller.start("typed-schema-fixture", { ...f.input, maxAiCredits: 30, scenarioIds: [f.input.scenarioIds[0]] }),
+        error => error.code === "AI_REVIEW_RETIRED");
+    assert.equal(observed.sends, sendsBefore); assert.equal(observed.schemaRejections.length, rejectionsBefore);
+    assert.equal(f.calls.length, 0);
+    assert.deepEqual(await loadBoardState(f.context), state);
     assert.equal(observed.processesStarted, 0);
-    const packet = JSON.parse(observed.rpc.at(-1).params.prompt).packet;
-    const prepared = createEvaluationRequest(packet, { confirmed: true, provider: "github-copilot", model: "gpt-6-astra",
-        maxCalls: 1, maxAiCredits: 30, interactionRefs: [packet.interactionRef],
-        sourceConfigRef: packet.sourceConfigRef, sourceConfigRevision: packet.sourceConfigRevision });
-    assert.equal(finiteSchemaTypeIssue(prepared.responseSchema), null);
-    assert.deepEqual(observed.rpc.at(-1).params.responseFormat, {
-        type: "json_schema", jsonSchema: { name: "response", strict: true, schema: prepared.responseSchema },
-    });
+    assert.equal(finiteSchemaTypeIssue(schema), null, "Historical schema definitions remain valid and unchanged.");
 });
 
 test("all six finite leaves have the correct primitive type and every other schema rule remains byte-equivalent", () => {

@@ -5,6 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
 import { chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { createRecordedResults } from "../web/recorded-results.mjs";
 
 test("compact Search keeps one stationary field and readable live rows without an empty deck", { timeout: 30000 }, async t => {
     const cleanup = [], app = await searchFixture({ after: fn => cleanup.push(fn) });
@@ -26,8 +27,8 @@ test("compact Search keeps one stationary field and readable live rows without a
     });
     assert.ok(field.labelWidth <= 1 && field.labelClip !== "none", "Accessible label does not occupy visible header space");
     assert.ok(Math.abs(field.width - field.ownerWidth) < 1 && Math.abs(field.left - field.ownerLeft) < 1);
-    await input.fill("what");
-    const view = page.locator("#wireSearchResults button").filter({ hasText: "What got in the way" });
+    await input.fill("Failed calls");
+    const view = page.locator("#wireSearchResults button").filter({ hasText: "Failed calls" });
     await expect(view).toBeVisible({ timeout: 15000 });
     await expect(view).toContainText("Analyze");
     await expect(view).not.toContainText("#analyze");
@@ -100,6 +101,7 @@ test("compact Search keeps one stationary field and readable live rows without a
 });
 
 test("minimal row accessible names retain recorded outcomes and partial/unavailable text facts", { timeout: 15000 }, async t => {
+    const results = createRecordedResults();
     const records = searchRecords();
     records[1].toolCalls[0].toolSucceeded = null;
     records[1].toolCalls[0].reportedOutcome = "partial";
@@ -116,8 +118,8 @@ test("minimal row accessible names retain recorded outcomes and partial/unavaila
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#wireSearchRelated")).toHaveCount(0);
     for (const [query, type, fact] of [
-        ["403", "action", "Failed"],
-        ["workiq-fetch", "action", "Partial result"],
+        ["403", "action", results.labels("http").failure],
+        ["workiq-fetch", "action", results.labels("tool").partial],
         ["Partially saved workshop request", "interaction", "Only part of this text was saved."],
         ["Invented local conversation 2", "interaction", "Saved text is unavailable."],
     ]) {

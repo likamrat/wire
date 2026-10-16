@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildAssessmentModel, buildReportFacts, assertReportCurrent, assessmentOverview } from "../lib/assessment-read-model.mjs";
 import { fixture } from "./helpers.mjs";
 
-test("synthetic: canonical real interaction has automatic narrow facts, unavailable quality and no Cost metric", () => {
+test("synthetic: canonical interaction retains observations and timing without generated review or Cost metrics", () => {
     const record = fixture("assessment");
     record.userPrompt.sourceEventId = "synthetic-prompt";
     Object.assign(record.toolCalls[0], {
@@ -19,7 +19,7 @@ test("synthetic: canonical real interaction has automatic narrow facts, unavaila
     assert.equal(view.interaction.members.length, 2);
     assert.equal(view.metrics.find(m => m.definitionId === "tool-duration").value, 1000);
     for (const dimension of ["accuracy", "answer-trust", "action-trust"]) {
-        assert.equal(view.assessments.find(a => a.dimension === dimension).verdict, "unassessed");
+        assert.equal(view.assessments.some(a => a.dimension === dimension), false);
     }
     assert.equal(view.metrics.some(m => m.dimension === "cost"), false);
     assert.equal(view.consent.state, "off");
@@ -38,21 +38,19 @@ test("synthetic: multiple recorded group aliases for one source message retain a
     assert.equal(model.catalog.length, 3);
     assert.equal(new Set(model.catalog.map(row => row.interactionRef)).size, 1);
     assert.equal([...model.details.values()][0].interaction.members.filter(m => m.kind === "tool-call").length, 2);
-    assert.deepEqual(assessmentOverview(state, model, []), { interactionRefs: [], metrics: [], assessmentAttempts: [] });
+    assert.deepEqual(assessmentOverview(state, model, []), { interactionRefs: [], metrics: [], assessmentAttempts: [], reviewStatuses: [] });
     assert.equal(JSON.stringify(state), before);
 });
 
-test("unsupported check reasons survive interaction, pooled overview and frozen report facts", () => {
+test("unsupported check placeholders are absent from current interaction, overview and new frozen facts", () => {
     const records = [fixture("reason-a"), fixture("reason-b")];
     const state = { revision: 1, pseudonymKey: "a".repeat(64), evidence: records, exports: [] };
     const model = buildAssessmentModel(state);
     const report = buildReportFacts(records, state);
     for (const metrics of [...model.details.values()].map(view => view.metrics).concat([model.overview.metrics, report.facts.metrics])) {
         for (const dimension of ["accuracy", "answer-trust", "action-trust"]) {
-            const metric = metrics.find(item => item.dimension === dimension);
-            assert.equal(metric.reason, "unsupported-check", `${dimension} must explain the actual missing check`);
-            assert.equal(metric.value, null);
-            assert.equal(metric.coverage.covered, 0);
+            assert.equal(metrics.some(item => item.dimension === dimension), false,
+                `${dimension} must not be replaced with a fabricated unassessed judgment`);
         }
     }
 });

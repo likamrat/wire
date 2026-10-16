@@ -349,7 +349,7 @@ test("integrated app has readable aligned type and exact-copy controls in both t
         await page.locator("#exportBtn").click();
         await page.locator("#reportsView[data-report-phase=ready]").waitFor();
         await inspectReportCopies(page);
-        await page.getByRole("button", { name: "Copy masked prompt", exact: true }).click();
+        await page.getByRole("button", { name: "Copy report copy", exact: true }).click();
         await page.waitForFunction(() => window.clipboardWrites.length === 4);
         assert.equal(await page.evaluate(() => window.clipboardWrites[3]), previewMasked);
         if (width >= 820) {
@@ -373,10 +373,9 @@ test("integrated app has readable aligned type and exact-copy controls in both t
 test("preview copy respects masked/no-prompts/original modes and exact raw report bytes", { timeout: 60000 }, async () => fixture(async ({ context, url, requests }) => {
     const page = await context.newPage();
     await page.setViewportSize({ width: 820, height: 1000 });
-    await page.goto(url + "/#activity");
+    await page.goto(url + "/#reports?task=create");
     await ready(page);
-    await page.locator("#activityList input").first().check();
-    await page.locator("nav [data-nav=reports]").click();
+    await page.locator("#reportList input[type=checkbox]").first().check();
     for (const mode of ["masked", "none", "original"]) {
         await reportContents(page);
         await page.locator(`[name=promptMode][value=${mode}]`).check();
@@ -390,8 +389,7 @@ test("preview copy respects masked/no-prompts/original modes and exact raw repor
             assert.equal(await page.getByRole("button", { name: "Copy local original", exact: true }).isVisible(), false);
             await page.locator(".prompt-original details > summary").click();
         } else {
-            const label = mode === "masked" ? "Copy masked prompt" : "Copy original-mode prompt";
-            await page.getByRole("button", { name: label, exact: true }).click();
+            await page.getByRole("button", { name: "Copy report copy", exact: true }).click();
             await page.waitForFunction(() => window.clipboardWrites.length === 1);
             assert.equal(await page.evaluate(() => window.clipboardWrites[0]), mode === "masked" ? previewMasked : previewOriginalMode);
             assert.equal(await page.evaluate(() => window.clipboardWrites[0].includes("SYNTHETIC_CREDENTIAL_CANARY")), false);
