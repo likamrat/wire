@@ -8,14 +8,35 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { privateFixture, fixture, navigateMain, chooseTheme } from "./helpers.mjs";
-import { chooseReportScope, reportContents, openReportLibrary } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, openReportLibrary, openReportComparison, scanReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
-async function setup(t, count = 1001) {
-    const { context } = await privateFixture(t, [fixture()]);
+async function setup(t, count = 1001, { prepared = false } = {}) {
+    const records = prepared ? Array.from({ length: 8 }, (_, index) => {
+        const record = fixture(`report-layout-${index}`);
+        record.userPrompt.text = `Invented planning request ${index + 1}: summarize the release exercise and its next steps.`;
+        return record;
+    }) : [fixture()];
+    const { context } = await privateFixture(t, records), controller = createExportController(context);
     const entries = [];
-    for (let index = 0; index < count + 1; index++) {
+    if (prepared) t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-16T12:00:00.000Z") });
+    if (prepared) for (let index = 0; index < count; index++) {
+        t.mock.timers.setTime(Date.parse("2026-10-16T12:00:00.000Z") + index * 120000);
+        const state = await loadBoardState(context), timeContext = { timeZone: "UTC", locale: "en-US" };
+        const selection = index ? { kind: "selected", revision: state.revision, scenarioIds: records.slice(0, index + 1).map(record => record.scenarioId) }
+            : { kind: "all", revision: state.revision };
+        const preview = await controller.preview("synthetic-layout-seed", undefined, {
+            title: index === count - 1
+                ? "Readiness review - calendar changes, document lookups and unresolved follow-up across the planning exercise"
+                : `Planning exercise ${index + 1}`,
+            promptMode: ["none", "masked", "original"][index % 3],
+            formats: index === count - 1 ? ["json"] : ["html", "pdf", "json", "markdown"], timeContext,
+        }, selection);
+        await controller.review("synthetic-layout-seed", preview.previewId, true, timeContext);
+        entries.push((await controller.confirm("synthetic-layout-seed", preview.previewId, true, timeContext)).bundle);
+    }
+    else for (let index = 0; index < count + 1; index++) {
         const bundleId = `export-${randomUUID()}`, kind = index === count ? "comparison" : "report";
         const folder = path.join(context.dataDir, "exports", bundleId, "files");
         await mkdir(folder, { recursive: true });
@@ -32,9 +53,10 @@ async function setup(t, count = 1001) {
             ...(kind === "comparison" ? { sourceReports: entries.slice(0, 2).map(entry => ({ bundleId: entry.bundleId })) } : {}),
         });
     }
-    await updateBoardState(context, state => { state.exports.push(...entries); });
-    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
-    const browser = await chromium.launch();
+    if (prepared) t.mock.timers.reset();
+    if (!prepared) await updateBoardState(context, state => { state.exports.push(...entries); });
+    const runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch({ headless: true });
     t.after(async () => { await browser.close(); runtime.server.closeAllConnections(); await runtime.close(); });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, reducedMotion: "reduce", timezoneId: "UTC" });
     page.setDefaultTimeout(60000);
@@ -54,25 +76,181 @@ async function shot(page, name) {
     await page.screenshot({ path: path.join(process.env.WIRE_LIBRARY_PROOFS, `${name}.png`), fullPage: !modal });
 }
 
+test("six saved reports share a deliberate page frame with tasks, inspector and wide document review", { timeout: 90000 }, async t => {
+    const { page, context, entries, requests } = await setup(t, 6, { prepared: true });
+    page.setDefaultTimeout(8000);
+    const files = entries.flatMap(entry => Object.values(entry.files));
+    const originals = await Promise.all(files.map(async file => hash(await readFile(file))));
+    const measurements = [], violations = [], external = [];
+    const origin = new URL(page.url()).origin;
+    await page.route("**/*", route => {
+        if (new URL(route.request().url()).origin !== origin) { external.push(route.request().url()); return route.abort(); }
+        return route.continue();
+    });
+    async function capture(name, body, { library = false, wide = false } = {}) {
+        await page.evaluate(() => document.fonts.ready);
+        await page.evaluate(() => Promise.all([...document.querySelectorAll("#main,#sidebar,#contextSidebar")]
+            .flatMap(node => node.getAnimations()).map(animation => animation.finished)));
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const measured = await page.evaluate(({ body, library }) => {
+            const box = node => {
+                const { x, y, width, height, right, bottom } = node.getBoundingClientRect();
+                return { x, y, width, height, right, bottom };
+            };
+            const textRight = node => {
+                const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT), rights = [];
+                for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+                    if (text.parentElement.closest('svg,[aria-hidden="true"]')) continue;
+                    const range = document.createRange(); range.selectNodeContents(text);
+                    rights.push(...[...range.getClientRects()].filter(rect => rect.width).map(rect => rect.right));
+                }
+                return Math.max(...rights);
+            };
+            const frame = document.querySelector(body), heading = document.querySelector(".page-heading");
+            const controls = [...document.querySelectorAll("#reportTaskNav a,#savedReportsPanel button,#savedReportsPanel summary,#savedReportSearch,#savedReportOrder-control")]
+                .filter(node => node.checkVisibility()).map(node => {
+                    const words = [], walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+                    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+                        if (text.parentElement.closest('svg,[aria-hidden="true"]')) continue;
+                        for (const match of text.textContent.matchAll(/\S+/g)) {
+                            const range = document.createRange();
+                            range.setStart(text, match.index); range.setEnd(text, match.index + match[0].length);
+                            const rects = [...range.getClientRects()].filter(rect => rect.width && rect.height);
+                            if (rects.length) words.push({ word: match[0], lines: new Set(rects.map(rect => rect.y)).size,
+                                left: Math.min(...rects.map(rect => rect.x)), right: Math.max(...rects.map(rect => rect.right)) });
+                        }
+                    }
+                    return { label: node.getAttribute("aria-label") || node.textContent.trim(), box: box(node), words };
+                });
+            return { viewport: innerWidth, text: getComputedStyle(document.documentElement).fontSize,
+                collapsed: document.querySelector("#navigationCollapse").getAttribute("aria-expanded") === "false",
+                main: box(document.querySelector("#main")), heading: box(heading), body: box(frame),
+                title: box(document.querySelector("#pageTitle")), controls,
+                actions: [...document.querySelectorAll("#reportTaskNav a")].filter(node => node.checkVisibility()).map(box),
+                overflow: document.documentElement.scrollWidth > innerWidth + 1,
+                ...(library ? {
+                    search: box(document.querySelector("#savedReportSearch")), order: box(document.querySelector("#savedReportOrder-control")),
+                    help: box(document.querySelector("#savedLibraryHelp")), position: box(document.querySelector("#bundleList [data-page-position]")),
+                    pager: box(document.querySelector("#bundleList .list-pager")),
+                    rows: [...document.querySelectorAll(".saved-library-row")].map(row => ({
+                        box: box(row), identity: box(row.querySelector(".saved-report-identity")),
+                        identityTextRight: textRight(row.querySelector(".saved-report-identity")),
+                        metadata: box(row.querySelector(".saved-report-metadata")),
+                        metadataText: row.querySelector(".saved-report-metadata").textContent,
+                        metadataTextRight: textRight(row.querySelector(".saved-report-metadata")),
+                        open: box(row.querySelector(":scope>button:not(.saved-report-summary),:scope>.saved-report-no-html")),
+                    })),
+                } : {}) };
+        }, { body, library });
+        measurements.push({ name, wide, ...measured });
+        const fail = (condition, reason) => { if (condition) violations.push(`${name}: ${reason}`); };
+        fail(Math.abs(measured.heading.x - measured.body.x) > 1 || Math.abs(measured.heading.width - measured.body.width) > 1,
+            `heading ${measured.heading.width}px / body ${measured.body.width}px use different frames`);
+        fail(measured.actions.some(action => action.x < measured.body.x - 1 || action.right > measured.body.right + 1), "task actions escape the body frame");
+        fail(measured.overflow || measured.controls.some(control => control.box.height < 44
+            || control.words.some(word => word.lines !== 1 || word.left < control.box.x - 1 || word.right > control.box.right + 1)),
+            "page overflow, a sub-44px target or a fragmented label");
+        if (wide) fail(measured.body.width < Math.min(1200, measured.main.width - 48), "document review is constrained to a catalog width");
+        if (library) {
+            fail(measured.actions.length !== 2, "both report task entries must remain visible");
+            fail(measured.rows.some(row => row.metadata.y > row.identity.y + 1 && Math.abs(row.open.y - row.identity.y) > 1),
+                "stacked rows must keep Open aligned with report identity");
+            fail(measured.position.y - measured.help.bottom > 16 || measured.rows[0].box.y - measured.position.bottom > 16,
+                `empty list spacing: ${measured.position.y - measured.help.bottom}px before count, ${measured.rows[0].box.y - measured.position.bottom}px after`);
+            if (measured.viewport >= 1400 && measured.text === "16px") {
+                fail(Math.abs(measured.search.y - measured.order.y) > 1 || measured.order.x - measured.search.right > 24, "search/order controls do not align");
+                fail(measured.rows.some(row => row.metadata.x - row.identityTextRight > 130), "row metadata is detached from identity");
+                fail(measured.rows.some(row => Math.abs(row.metadata.y - row.identity.y) <= 1
+                    && row.metadataText.includes("Markdown") && row.open.x - row.metadataTextRight > 160), "Open is detached from the report metadata");
+            }
+        }
+        await shot(page, name);
+    }
+    assert.equal(entries.length, 6);
+    assert.equal(await page.locator("#bundleList .saved-library-row").count(), 6);
+    for (const theme of ["light", "dark"]) for (const [width, text, collapsed] of [
+        [2000, 100, false], [2000, 100, true], [1440, 100, false], [1440, 200, true], [375, 100, false], [375, 200, false],
+    ]) {
+        await page.setViewportSize({ width: 1440, height: 1100 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+        if (await page.locator("#navigationCollapse").getAttribute("aria-expanded") === String(collapsed)) await page.locator("#navigationCollapse").click();
+        await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: width === 2000 ? 1220 : 1100 });
+        await page.evaluate(text => { document.documentElement.style.fontSize = text + "%"; }, text);
+        const name = `${theme}-${width}-${text}-${collapsed ? "collapsed" : "expanded"}`;
+        await capture("library-" + name, "#bundles", { library: true });
+        const inspect = page.locator(".saved-library-row").filter({ has: page.getByRole("button", { name: "Open saved report", exact: true }) }).first().locator(".saved-report-summary");
+        await inspect.click();
+        await page.locator("#contextSidebar[open]").waitFor();
+        await capture("inspector-" + name, "#bundles", { library: true });
+        await page.locator("#closeContextSidebar").click();
+        await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
+        assert.equal(await inspect.evaluate(node => node === document.activeElement), true);
+    }
+    await page.setViewportSize({ width: 2000, height: 1220 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await chooseTheme(page, "light");
+    await page.locator("#savedLibraryHelp>summary").click();
+    await capture("library-help-wide", "#bundles", { library: true });
+    await page.locator("#savedLibraryHelp>summary").click();
+    await page.locator("#savedLibraryManagement>summary").click();
+    await capture("library-management-wide", "#bundles", { library: true });
+    await page.locator("#savedLibraryManagement>summary").click();
+    await chooseReportScope(page, "all");
+    await capture("create-wide", "#reportCreatePanel");
+    await reportContents(page);
+    await capture("contents-wide", "#reportCreatePanel");
+    await scanReport(page);
+    await capture("review-wide", "#reportCreatePanel", { wide: true });
+    await openReportLibrary(page);
+    await openReportComparison(page);
+    await page.locator("#comparisonWorkspace select").first().locator("option").nth(1).waitFor({ state: "attached" });
+    await capture("comparison-wide", "#comparisonWorkspace");
+    for (const [label, entry] of [["Earlier report", entries[0]], ["Later report", entries[1]]]) {
+        await page.locator("#comparisonWorkspace").getByRole("combobox", { name: label, exact: true }).click();
+        await page.locator(`.select-popup .select-option[data-value="${entry.bundleId}"]`).click();
+    }
+    await page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true }).click();
+    await page.locator("#comparisonWorkspace").getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
+    await page.locator("#comparisonWorkspace .comparison-prepared-files iframe").waitFor();
+    await capture("comparison-review-wide", "#comparisonWorkspace", { wide: true });
+    await openReportLibrary(page);
+    const htmlEntry = entries.find(entry => entry.formats.includes("html"));
+    await page.locator(`.saved-library-row[data-bundle-id="${htmlEntry.bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
+    await capture("saved-reader-wide", "#savedReportReader", { wide: true });
+    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await capture("returned-library-wide", "#bundles", { library: true });
+    assert.deepEqual(await Promise.all(files.map(async file => hash(await readFile(file)))), originals);
+    assert.equal((await loadBoardState(context)).exports.length, 6);
+    assert.equal(requests.some(endpoint => ["/api/export", "/api/report-comparison/save", "/api/artifact-deletion/confirm"].includes(endpoint)), false);
+    assert.deepEqual(external, []);
+    if (process.env.WIRE_LIBRARY_PROOFS) await writeFile(path.join(process.env.WIRE_LIBRARY_PROOFS, "page-composition.json"), JSON.stringify(measurements, null, 2));
+    assert.deepEqual(violations, [], "Report header/actions/body, row spacing and complete labels must form one coherent page");
+});
+
 test("the library is an immediately readable list with useful scope identity and a direct return from frozen reading", { timeout: 30000 }, async t => {
     const { page, requests } = await setup(t, 8);
     page.setDefaultTimeout(8000);
     assert.equal(await page.locator("#bundles").evaluate(node => node.tagName), "SECTION");
+    assert.equal(await page.locator("#coverage").isVisible(), false, "Live Analyze coverage must not masquerade as saved-report coverage");
     assert.equal(await page.locator("#bundleList .saved-report").count(), 6);
     assert.match(await page.locator(".saved-report-summary").nth(1).innerText(), /8 interactions/);
     assert.doesNotMatch(await page.locator("#bundleList").innerText(), /Report ID:/);
     await page.locator("#savedReportSearch").fill("No prompts");
     const inspect = page.locator(".saved-library-row").filter({ has: page.getByRole("button", { name: "Open saved report", exact: true }) }).first().locator(".saved-report-summary");
     await inspect.click();
-    await page.getByRole("dialog", { name: "Saved report details", exact: true }).waitFor();
+    await page.locator("#contextSidebar").waitFor({ state: "visible" });
     assert.equal(requests.includes("/api/report/open"), false, "Selection reads indexed metadata only");
-    assert.match(await page.locator("#contextSidebarBody").innerText(), /Report ID/);
+    assert.match(await page.locator("#contextSidebarTitle").innerText(), /Activity report/);
+    assert.match(await page.locator("#contextSidebarBody").innerText(), /Prepared/);
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
     assert.equal(await page.locator("#contextSidebar").isVisible(), false);
-    assert.equal(await page.locator("#savedReaderTitle").evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator("#pageTitle").evaluate(node => node === document.activeElement), true);
     await page.getByRole("button", { name: "Back to report library", exact: true }).click();
-    await page.getByRole("dialog", { name: "Saved report details", exact: true }).waitFor();
+    await page.locator("#contextSidebar").waitFor({ state: "visible" });
     await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
     const open = page.getByRole("button", { name: "Open saved report", exact: true }).first();
     await open.click();

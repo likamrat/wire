@@ -51,7 +51,7 @@ test("Search separates original title, type, source and evidence without clippin
         assert.deepEqual(await input.boundingBox(), capsule);
         const row = rows.first();
         await expect(row.locator(".wire-search-title")).toContainText("PowerPoint");
-        await expect(row.locator(".wire-search-kind")).toHaveText("Interaction");
+        await expect(page.locator(".wire-search-group-label").first()).toHaveText("Interactions");
         await expect(row.locator(".wire-search-type-icon .wire-icon")).toHaveCount(1);
         await expect(row.locator(".wire-search-title mark")).toHaveText("Power");
         assert.equal(await row.locator("button,a,input,select,[tabindex]").count(), 0, "One result is one native action");
@@ -64,8 +64,8 @@ test("Search separates original title, type, source and evidence without clippin
                 const { x, y, width, height, bottom, right } = element.getBoundingClientRect();
                 return { x, y, width, height, bottom, right };
             };
-            const style = selector => {
-                const element = node.querySelector(selector);
+            const style = (selector, root = node) => {
+                const element = root.querySelector(selector);
                 if (!element) return null;
                 const css = getComputedStyle(element);
                 return { ...rect(element), color: css.color, background: css.backgroundColor,
@@ -73,9 +73,12 @@ test("Search separates original title, type, source and evidence without clippin
                     clamp: css.webkitLineClamp, overflow: css.overflow, text: element.textContent };
             };
             const parent = node.closest("li"), css = getComputedStyle(node);
-            return { row: rect(node), title: style(".wire-search-title"), meta: style(".wire-search-meta"),
+            let group = parent;
+            while (group && !group.querySelector(".wire-search-group-label")) group = group.previousElementSibling;
+            return { row: rect(node), heading: style(".wire-search-heading"), title: style(".wire-search-title"), meta: style(".wire-search-meta"),
                 source: style(".wire-search-source"), excerpt: style(".wire-search-excerpt"),
-                icon: style(".wire-search-type-icon .wire-icon"), kind: style(".wire-search-kind"), mark: style("mark"),
+                icon: style(".wire-search-type-icon .wire-icon"), kind: style(".wire-search-group-label", group), mark: style("mark"),
+                headingChildren: node.querySelector(".wire-search-heading").children.length,
                 border: getComputedStyle(parent).borderTopWidth, margin: getComputedStyle(parent).marginTop,
                 background: getComputedStyle(document.querySelector("#wireSearchPanel")).backgroundColor,
                 outline: css.outlineStyle, outlineColor: css.outlineColor, outlineWidth: css.outlineWidth,
@@ -83,23 +86,25 @@ test("Search separates original title, type, source and evidence without clippin
         }));
         for (const [index, item] of geometry.entries()) {
             assert.ok(item.row.height >= 44 && item.row.width >= 44);
-            assert.ok(item.title.bottom <= item.meta.y - 3, "The original title leads, with type below it");
-            assert.ok(Math.abs(item.title.x - item.meta.x) < 1, "Shared text edge");
+            assert.equal(item.headingChildren, 1, "Every result has the same unadorned canonical-title heading.");
+            assert.ok(item.title.x >= item.heading.x);
+            if (item.meta) assert.ok(item.meta.y >= item.heading.bottom + 3);
             assert.ok(item.icon.height <= item.kind.lineHeight, "No SVG baseline slack");
-            assert.ok(Math.abs(item.icon.y + item.icon.height / 2 - item.title.y - item.title.lineHeight / 2) < 1);
+            assert.ok(Math.abs(item.icon.y + item.icon.height / 2 - item.heading.y - item.title.lineHeight / 2) < 1);
             assert.equal(item.title.fontSize, item.kind.fontSize);
             assert.equal(item.title.fontSize, 14 * scale, "One reading scale matches the query and controls");
             assert.equal(item.title.weight, "400", "Original prompt titles stay regular");
             assert.ok(item.scrollWidth <= item.clientWidth + 1);
             if (index) {
-                assert.ok(parseFloat(item.border) >= 1 && parseFloat(item.margin) >= 4, "Visible separation between distinct results");
+                assert.equal(parseFloat(item.border), 0, "Compact results do not become stacks of separated cards.");
+                assert.ok(parseFloat(item.margin) >= 2);
             }
             if (item.source) {
-                assert.ok(item.source.y >= item.meta.bottom + 3, "Distinct source has its own line");
+                assert.ok(item.source.y >= (item.meta || item.heading).bottom + 3, "Only matched or disambiguating source context gets a supporting line.");
                 assert.ok(Math.abs(item.source.x - item.title.x) < 1);
             }
             if (item.excerpt) {
-                assert.ok(item.excerpt.y >= (item.source || item.meta).bottom + 7, "Match evidence is grouped below its context");
+                assert.ok(item.excerpt.y >= (item.source || item.meta || item.heading).bottom + 3, "Matching evidence follows the shared heading without a nested block.");
                 assert.equal(item.excerpt.clamp, "none");
                 assert.notEqual(item.excerpt.overflow, "hidden");
             }
@@ -196,7 +201,7 @@ for (const channel of [undefined, ...(process.platform === "win32" ? ["msedge"] 
     const input = page.locator("#wireSearch"), rows = page.locator(".wire-search-hit"), clear = page.locator("#wireSearchClear");
     await expect(clear).toHaveCount(1);
     await expect(page.locator("#wireSearchHome>#wireSearchClear")).toHaveCount(1);
-    await expect(page.locator("#wireSearchOptions #wireSearchClear")).toHaveCount(0);
+    await expect(page.locator(".wire-search-filters #wireSearchClear")).toHaveCount(0);
     await expect(input).toHaveAttribute("type", "search");
     await expect(clear).toHaveAttribute("type", "button");
     await page.evaluate(() => {
@@ -268,8 +273,9 @@ for (const channel of [undefined, ...(process.platform === "win32" ? ["msedge"] 
             adornment.style.removeProperty("display");
             const row = document.querySelector(".wire-search-hit"), slot = row.querySelector(".wire-search-type-icon");
             const textGeometry = () => ({
-                row: rect(row), meta: rect(row.querySelector(".wire-search-meta")),
-                title: rect(row.querySelector(".wire-search-title")), source: rect(row.querySelector(".wire-search-source")),
+                row: rect(row), meta: row.querySelector(".wire-search-meta") ? rect(row.querySelector(".wire-search-meta")) : null,
+                title: rect(row.querySelector(".wire-search-title")),
+                source: row.querySelector(".wire-search-source") ? rect(row.querySelector(".wire-search-source")) : null,
             });
             const beforeType = textGeometry();
             slot.style.display = "none";
@@ -314,7 +320,7 @@ for (const channel of [undefined, ...(process.platform === "win32" ? ["msedge"] 
         await expect(rows).toHaveCount(20);
         assert.equal(queries.length, beforePaging, "Paging changes a slice, not query/filter population");
         if (proofs) {
-            await page.locator("#wireSearchFilterSummary").scrollIntoViewIfNeeded();
+            await page.locator(".wire-search-filters").scrollIntoViewIfNeeded();
             await page.screenshot({ path: path.join(proofs, `capsule-${channel || "chromium"}-${theme}-${width}-${scale}-filters.png`) });
         }
         await input.focus(); await input.press("Tab"); await expect(clear).toBeFocused();
@@ -377,7 +383,8 @@ for (const channel of [undefined, ...(process.platform === "win32" ? ["msedge"] 
     } finally { gate.resolve(); }
     await input.fill("POWER"); await expect(clear).toBeVisible();
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
-    await expect(input).toHaveValue(""); await expect(clear).toBeHidden();
+    await expect(input).toHaveValue("POWER"); await expect(clear).toBeVisible();
+    await expect(rows).toHaveCount(0);
     await expect(page.locator("#wireSearchPanel")).toBeHidden();
     if (proofs) await writeFile(path.join(proofs, `capsule-${channel || "chromium"}-measurements.json`), JSON.stringify(measurements, null, 2));
 });

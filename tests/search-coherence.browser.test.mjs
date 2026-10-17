@@ -52,24 +52,27 @@ test("Search removes caption recitals without merging the interaction and its re
         await expect(action.locator(".wire-search-kind")).toHaveText("Work IQ tool call");
         await expect(action.locator(".wire-search-outcome")).toHaveText("Worked");
         await openSearchFilters(page);
-        await expect(page.locator("#wireSearchFilterSummary [data-lucide-icon=funnel]")).toHaveCount(1);
-        const textEdges = await page.evaluate(() => {
-            const label = document.querySelector(".wire-search-filters label"), range = document.createRange();
-            range.selectNodeContents(label);
-            const input = document.querySelector("#wireSearch"), css = getComputedStyle(input);
-            return {
-                input: input.getBoundingClientRect().x + parseFloat(css.paddingLeft) + parseFloat(css.borderLeftWidth),
-                title: document.querySelector(".wire-search-title").getBoundingClientRect().x,
-                summary: document.querySelector("#wireSearchFilterLabel").getBoundingClientRect().x,
-                label: range.getBoundingClientRect().x,
-                value: document.querySelector('[data-select-id="wireSearchScope"] .select-value').getBoundingClientRect().x,
-            };
+        await expect(page.locator("#wireSearchOptions,#wireSearchFilterSummary")).toHaveCount(0);
+        const filterLayout = await page.evaluate(() => {
+            const filters = document.querySelector(".wire-search-filters").getBoundingClientRect();
+            const matches = document.querySelector("#wireSearchMatches").getBoundingClientRect();
+            const panel = document.querySelector("#wireSearchPanel").getBoundingClientRect();
+            return { beforeResults: filters.bottom <= matches.top, inside: filters.x >= panel.x && filters.right <= panel.right };
         });
-        for (const edge of Object.values(textEdges)) assert.ok(Math.abs(edge - textEdges.title) < 1, "Reading and filter text share one deliberate edge");
+        assert.deepEqual(filterLayout, { beforeResults: true, inside: true });
         for (const id of ["wireSearchScope", "wireSearchType"]) {
             await expect(page.locator("#" + id)).toHaveAttribute("data-select-presentation", "filter");
             const trigger = page.locator(`[data-select-id=${id}]`);
             await expect(trigger).toHaveClass(/select-trigger-filter/);
+            const shared = await trigger.evaluate(node => {
+                const reference = document.querySelector("#toolFilter-control");
+                const shape = control => {
+                    const css = getComputedStyle(control);
+                    return [css.borderRadius, css.padding, css.minHeight, css.fontFamily, css.fontSize, css.fontWeight];
+                };
+                return { actual: shape(node), expected: shape(reference) };
+            });
+            assert.deepEqual(shared.actual, shared.expected, "Search uses the same filter bubble as the main activity filters.");
             await trigger.click();
             const popup = page.locator(".select-popup-filter:visible");
             await expect(popup).toBeVisible();
@@ -89,7 +92,7 @@ test("Search removes caption recitals without merging the interaction and its re
             await trigger.press("Escape");
             await expect(trigger).toBeFocused(); await expect(popup).toHaveCount(0);
         }
-        const typography = await page.locator("#wireSearch,.wire-search-title,.wire-search-kind,.wire-search-source,.wire-search-outcome,#wireSearchFilterSummary,.wire-search-filters label,.wire-search-filters .select-trigger").evaluateAll(nodes =>
+        const typography = await page.locator("#wireSearch,.wire-search-title,.wire-search-kind,.wire-search-source,.wire-search-outcome,.wire-search-filters .select-trigger").evaluateAll(nodes =>
             nodes.filter(node => node.checkVisibility()).map(node => {
                 const css = getComputedStyle(node);
                 return { role: node.id || node.className, family: css.fontFamily, size: css.fontSize, weight: css.fontWeight };
@@ -138,6 +141,7 @@ test("Search removes caption recitals without merging the interaction and its re
 
 test("Search action labels and glyphs use the real recorded-result layer contract", { timeout: 20000 }, async t => {
     const records = searchRecords(3), cleanup = [], results = createRecordedResults(), errors = [];
+    records[0].toolCalls[0].toolSucceeded = false; records[0].toolCalls[0].reportedOutcome = "failed";
     records[1].toolCalls[0].toolSucceeded = null; records[1].toolCalls[0].reportedOutcome = "partial";
     records[2].toolCalls[0].toolSucceeded = null; records[2].toolCalls[0].reportedOutcome = "unknown";
     const app = await searchFixture({ after: fn => cleanup.push(fn) }, { records, reply: false });
@@ -150,7 +154,7 @@ test("Search action labels and glyphs use the real recorded-result layer contrac
     t.after(async () => {
         await browser.close(); for (const fn of cleanup) await fn(); assert.deepEqual(errors, []);
     });
-    await page.goto(app.runtime.url);
+    await page.goto(app.runtime.url + "#analyze?mode=calls");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     for (const [query, layer, key] of [["403", "http", "failure"], ["partial", "tool", "partial"], ["unknown", "tool", "unknown"]]) {
         await page.locator("#wireSearch").fill(query);
@@ -160,6 +164,10 @@ test("Search action labels and glyphs use the real recorded-result layer contrac
         await expect(row.locator(".wire-search-kind")).toHaveText(results.unit(layer, 1));
         await expect(row.locator(".wire-search-outcome")).toHaveText(expected.label);
         await expect(row.locator(".wire-search-outcome .wire-icon")).toHaveAttribute("data-lucide-icon", uxIconSources[expected.icon]);
+        await expect(row.locator(".wire-search-outcome .wire-icon")).toHaveAttribute("data-icon-size", "16");
+        const shared = page.locator(`#activityList .recorded-result.${key} .wire-icon`).first();
+        await expect(shared).toHaveAttribute("data-icon-size", "16");
+        assert.equal(await row.locator(".wire-search-outcome .wire-icon").innerHTML(), await shared.innerHTML());
         await expect(row).toHaveAccessibleName(new RegExp(results.unit(layer, 1)));
         await expect(row.locator("mark")).not.toHaveCount(0);
     }
@@ -204,7 +212,8 @@ test("Search retires current review navigation without suppressing authorized fr
         }
         await selectActivityOption(page, "wireSearchType", "report");
         await expect(rows).toHaveCount(1);
-        await expect(rows.locator(".wire-search-format")).toHaveText("HTML");
+        await expect(rows.locator(".wire-search-format")).toHaveCount(0);
+        await expect(rows).toHaveAttribute("aria-label", /HTML/);
         await expect(rows.locator("mark")).toHaveText(phrase);
         await rows.click();
         await expect(page.frameLocator("#savedReportReader iframe").locator("body")).toContainText(records[0].userPrompt.text);

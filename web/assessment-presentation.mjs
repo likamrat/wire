@@ -5,7 +5,7 @@ import { createActivityProjection } from "../lib/activity-projection.mjs";
 export function createTimingPresentation(summarize = createActivityProjection(null, null, ["unknown"]).summarize, { compact = false } = {}) {
     const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
     const definitions = {
-        "tool-start-to-completion": ["Tool calls", "calls", "Call start to recorded completion"],
+        "tool-start-to-completion": ["Tool latency", "calls", "Call start to recorded completion"],
         "recorded-request-to-final-answer": ["Request to final response", "requests", "Recorded request to final response; not tool-call time"],
         "verified-request-to-final-answer": ["Whole-interaction latency", "requests", "Verified request to final answer"],
         "http-dispatch-to-response-headers": ["HTTP response time", "HTTP responses", "Dispatch to response headers"],
@@ -129,7 +129,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         "answer-evidence-present": "Retained response availability",
     };
     const speedLabels = {
-        "tool-duration": "Median call duration",
+        "tool-duration": "Median tool latency",
         "http-response-duration": "Median HTTP response time",
         "http-error-duration": "Median time to transport error",
         "interaction-latency": "Whole-interaction latency",
@@ -391,7 +391,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                 + `P95: ${row.timed > 1 ? `${row.distribution.p95Ms} ms` : "Not shown without multiple samples"}. Nearest rank; retained samples only.`);
         }
         const timingSummary = {
-            "tool-duration": { label: "Tool calls", unit: "calls" },
+            "tool-duration": { label: "Tool latency", unit: "calls" },
             "recorded-response-duration": { label: "Request to final response", unit: "requests" },
         }[metric.definitionId];
         return {
@@ -447,7 +447,7 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
                     .filter(([count]) => count).map(([count, label]) => `${number(count)} ${label}`).join("; ");
         }
         return {
-            label: { "tool-duration": "Call duration", "recorded-response-duration": "Recorded final-response time",
+            label: { "tool-duration": metric.coverage.covered > 1 ? "Median tool latency" : "Tool latency", "recorded-response-duration": "Recorded final-response time",
                 "interaction-latency": "Verified request-to-answer time" }[metric.definitionId] ?? row.label,
             value, tone, origin: metric.origin === "automatic-local" ? "Local observation" : row.origin, status: metric.status, reason: metric.reason,
             evaluator: metric.evaluator ? { ...metric.evaluator } : null,

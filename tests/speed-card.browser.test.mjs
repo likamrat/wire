@@ -101,7 +101,7 @@ test("Speed presents separate call and final-response timing groups without chan
         }
     }
     if (process.env.WIRE_SPEED_CARD_PROOFS) await writeFile(path.join(process.env.WIRE_SPEED_CARD_PROOFS, "layout.json"), JSON.stringify(evidence, null, 2));
-    assert.match(evidence[0].text, /Tool calls/);
+    assert.match(evidence[0].text, /Tool latency/);
     assert.match(evidence[0].text, /Request to final response/);
     assert.match(evidence[0].text, /218 of 219 calls timed/);
     assert.match(evidence[0].text, /2 of 62 requests timed/);
@@ -124,7 +124,7 @@ test("Speed presents separate call and final-response timing groups without chan
     await page.getByRole("button", { name: "Measure definitions", exact: true }).click();
     const details = page.getByRole("dialog", { name: "Insight details", exact: true });
     await details.getByText("Recorded measures and definitions", { exact: true }).click();
-    assert.match(await details.innerText(), /Median call duration.*Call start to recorded completion/s);
+    assert.match(await details.innerText(), /Median tool latency.*Call start to recorded completion/s);
     assert.match(await details.innerText(), /Time to recorded final response.*Recorded request to final response; not tool-call time/s);
     await details.getByRole("button", { name: "Close", exact: true }).click();
     const measurements = metrics => metrics.map(metric => ({

@@ -10,7 +10,7 @@ import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { comparisonBodyHtml, renderComparisonMarkdown } from "../lib/report-presentation.mjs";
 import { privateFixture, fixture, chooseTheme } from "./helpers.mjs";
 import { mountReportComparisonJourney } from "../web/report-comparison-journey.mjs";
-import { chooseReportScope, reportContents, scanReport, findReportCopy, openReportLibrary, openReportComparison } from "./report-journey-helpers.mjs";
+import { chooseReportScope, reportContents, scanReport, findReportCopy, openReportLibrary, openReportComparison, openReportCreation } from "./report-journey-helpers.mjs";
 
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -85,6 +85,126 @@ async function inspectSavedPair(page, bundles, row) {
     await selectReport(page, "Later report", bundles[1].bundleId);
     await page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true }).click();
 }
+
+test("comparison title follows its reviewed copy through editing, approval, save and opened output", async t => {
+    const { page, calls, bundles, context } = await setup(t);
+    await inspectSavedPair(page, bundles);
+    const workspace = page.locator("#comparisonWorkspace"), title = workspace.getByLabel("Report title", { exact: true });
+    await title.fill("Planning changes");
+    await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
+    await page.getByRole("heading", { name: "Planning changes", level: 1, exact: true }).waitFor();
+    const frame = workspace.locator("iframe");
+    assert.equal(await frame.getAttribute("title"), "Planning changes");
+    await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
+    await workspace.getByRole("button", { name: "Approve for local saving" }).click();
+    await workspace.getByRole("button", { name: "Save comparison", exact: true }).waitFor();
+    await workspace.getByRole("button", { name: "Back to comparison choices" }).click();
+    assert.equal(await title.inputValue(), "Planning changes");
+    await title.fill("Planning changes - final");
+    await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
+    await page.getByRole("heading", { name: "Planning changes - final", level: 1, exact: true }).waitFor();
+    assert.equal(await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).isChecked(), false);
+    assert.equal(await workspace.getByRole("button", { name: "Save comparison", exact: true }).isVisible(), false);
+    await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
+    await workspace.getByRole("button", { name: "Approve for local saving" }).click();
+    await workspace.getByRole("button", { name: "Save comparison", exact: true }).click();
+    await workspace.getByRole("button", { name: "Open saved comparison", exact: true }).waitFor();
+    assert.equal(await page.locator("#pageTitle").textContent(), "Planning changes - final");
+    assert.equal(await title.isVisible(), false);
+    await workspace.getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await page.locator("#savedReportReader iframe").waitFor();
+    assert.equal(await page.locator("#pageTitle").textContent(), "Planning changes - final");
+    const saved = (await loadBoardState(context)).exports.find(item => item.kind === "comparison");
+    assert.equal(saved.title, "Planning changes - final");
+    assert.equal(calls.filter(call => call.path === "/api/report-comparison/save").length, 1);
+    assert.deepEqual(calls.filter(call => call.path === "/api/report-comparison/preview").map(call => call.body.title),
+        ["Planning changes", "Planning changes - final"]);
+});
+
+test("completed comparison reconciles deletion without losing source choices or inventing deletion on a failed read", async t => {
+    const { page, context, bundles, savedComparison } = await setup(t, { comparison: true });
+    await inspectSavedPair(page, bundles);
+    const workspace = page.locator("#comparisonWorkspace");
+    await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
+    await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
+    await workspace.getByRole("button", { name: "Approve for local saving" }).click();
+    await workspace.getByRole("button", { name: "Save comparison", exact: true }).click();
+    const open = workspace.getByRole("button", { name: "Open saved comparison", exact: true });
+    await open.waitFor();
+    const result = (await loadBoardState(context)).exports.at(-1);
+    const refresh = async () => {
+        const response = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
+        await page.evaluate(() => window.dispatchEvent(new Event("online")));
+        return (await response).status();
+    };
+    await page.route("**/api/snapshot", route => route.fulfill({ status: 503, json: { error: "Invented unavailable inventory" } }), { times: 1 });
+    assert.equal(await refresh(), 503);
+    assert.doesNotMatch(await workspace.textContent(), /saved comparison is no longer available/);
+    assert.equal(await refresh(), 200);
+    await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await updateBoardState(context, state => { state.exports = state.exports.filter(entry => entry.bundleId !== savedComparison.bundleId); });
+    await refresh(); await page.locator('#workspace[aria-busy="false"]').waitFor();
+    assert.equal(await open.isEnabled(), true, "Deleting another comparison does not remove this result");
+    await updateBoardState(context, state => { state.exports = state.exports.filter(entry => entry.bundleId !== result.bundleId); });
+    await refresh(); await page.locator('#workspace[aria-busy="false"]').waitFor();
+    assert.equal(await open.isVisible(), false);
+    assert.match(await workspace.textContent(), /saved comparison is no longer available/);
+    assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
+    await openReportLibrary(page); await openReportComparison(page);
+    assert.equal(await open.isVisible(), false, "Returning cannot restore a dead Open action");
+    assert.match(await workspace.textContent(), /saved comparison is no longer available/);
+    await workspace.getByRole("button", { name: "Compare other reports", exact: true }).click();
+    assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
+    assert.equal(await workspace.getByRole("button", { name: "Compare reports", exact: true }).isEnabled(), true);
+});
+
+for (const failedRefresh of [false, true]) test(`confirmed comparison settlement uses post-save availability, not the receipt or prior choices: ${failedRefresh}`, async t => {
+    const { page, context, bundles } = await setup(t);
+    await inspectSavedPair(page, bundles);
+    const workspace = page.locator("#comparisonWorkspace");
+    await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
+    await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
+    await workspace.getByRole("button", { name: "Approve for local saving" }).click();
+    const committed = Promise.withResolvers(), release = Promise.withResolvers();
+    let saves = 0;
+    t.after(() => release.resolve());
+    await page.route("**/api/report-comparison/save", async route => {
+        saves++;
+        const response = await route.fetch();
+        committed.resolve((await response.json()).bundle);
+        await release.promise;
+        await route.fulfill({ response });
+    }, { times: 1 });
+    await workspace.getByRole("button", { name: "Save comparison", exact: true }).click();
+    const receipt = await committed.promise;
+    assert.equal((await loadBoardState(context)).exports.some(entry => entry.bundleId === receipt.bundleId), true);
+    if (!failedRefresh) await updateBoardState(context, state => {
+        state.exports = state.exports.filter(entry => entry.bundleId !== receipt.bundleId);
+    });
+    if (failedRefresh) await page.route("**/api/snapshot", route =>
+        route.fulfill({ status: 503, json: { error: "Invented failed post-save read" } }), { times: 1 });
+    const refreshed = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
+    release.resolve();
+    assert.equal((await refreshed).status(), failedRefresh ? 503 : 200);
+    await page.waitForFunction(() => document.querySelector("#comparisonWorkspace").getAttribute("aria-busy") === "false");
+    const open = workspace.getByRole("button", { name: "Open saved comparison", exact: true });
+    const recovery = workspace.getByRole("button", { name: "Read saved comparisons", exact: true });
+    assert.equal(await open.isVisible(), false);
+    if (failedRefresh) {
+        assert.equal(await recovery.isVisible(), true, "A failed refresh cannot turn the pre-save list into proof of deletion");
+        assert.doesNotMatch(await workspace.textContent(), /saved comparison is no longer available/);
+        await recovery.click();
+        await open.waitFor();
+        assert.equal(await open.isEnabled(), true);
+    } else {
+        assert.equal(await recovery.isVisible(), false, "The exact receipt settles the write even though the current file is gone");
+        assert.match(await workspace.textContent(), /saved comparison is no longer available/);
+        await openReportLibrary(page); await openReportComparison(page);
+        assert.equal(await open.isVisible(), false);
+    }
+    assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
+    assert.equal(saves, 1);
+});
 
 test("comparison is a bounded Reports task with a retained approved review and exact saved-source return", async t => {
     const { page, calls, bundles } = await setup(t);
@@ -215,7 +335,7 @@ test("new Prepare replaces only the other report preview and preserves both task
     await workspace.locator(".comparison-prepared-files iframe").waitFor();
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft", "A new comparison preview replaces ordinary preview authority");
     assert.equal(calls.filter(call => call.path === "/api/preview").length, ordinaryPreviews);
-    await page.locator("#reportCreateLink").click();
+    await openReportCreation(page);
     await reportContents(page);
     assert.equal(await page.locator("#exportBtn").textContent(), "Prepare report");
     assert.equal(await page.locator('[name=reportScope][value=all]').isChecked(), true);
@@ -314,7 +434,7 @@ for (const owner of ["report", "comparison"]) test(`a dispatched and lost ${owne
     await peer.evaluate(node => { node.disabled = false; node.click(); });
     assert.equal(calls.filter(call => call.path === peerEndpoint).length, peerCount);
     if (owner === "comparison") {
-        await page.locator("#reportCreateLink").click();
+        await openReportCreation(page);
         assert.equal(await page.getByRole("button", { name: "Rebuild preview", exact: true }).isDisabled(), true);
         assert.match(await page.locator(".rebuild-preview").innerText(), /Check the comparison save status/);
     }
@@ -322,7 +442,7 @@ for (const owner of ["report", "comparison"]) test(`a dispatched and lost ${owne
     await row(bundles[0].bundleId).getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.locator("#savedReportReader iframe").waitFor();
     await page.getByRole("button", { name: "Back to report library", exact: true }).click();
-    if (owner === "report") await page.locator("#reportCreateLink").click();
+    if (owner === "report") await openReportCreation(page);
     else await openReportComparison(page);
     await recovery.click();
     if (owner === "report") await page.locator('#reportsView[data-report-phase="saved"]').waitFor();
@@ -333,7 +453,7 @@ for (const owner of ["report", "comparison"]) test(`a dispatched and lost ${owne
     assert.equal(calls.filter(call => call.path === peerEndpoint).length, peerCount);
     assert.equal((await loadBoardState(context)).exports.filter(entry => entry.bundleId === saveId).length, 1);
     if (owner === "comparison") {
-        await page.locator("#reportCreateLink").click();
+        await openReportCreation(page);
         const fresh = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
         assert.ok((await (await fresh).json()).promptReview.some(copy => copy.text === "Edited report copy retained during comparison recovery"));
@@ -380,7 +500,7 @@ test("a dispatched comparison keeps its exact recovery identity through replacem
             },
             renderer: { render(root) { root.textContent = "Invented frozen facts"; }, clear(root) { root.replaceChildren(); } },
             timeContext: () => ({ timeZone: "UTC", locale: "en-US" }),
-            refresh: async () => { window.journey.syncPresence(window.available); return true; },
+            refresh: async () => { window.journey.syncPresence(window.available); return window.available; },
             beforePrepare: () => { window.prepares++; return ""; },
             onError: message => { throw Error(message); }, inspectSource() {},
         });
@@ -441,7 +561,7 @@ test("a dispatched comparison keeps its exact recovery identity through replacem
     await page.evaluate(() => { window.available = [{ kind: "comparison", bundleId: "dispatched-comparison" }]; });
     await recovery.click();
     assert.equal(await recovery.isVisible(), false);
-    assert.match(await page.locator('#comparison > [role="status"]').innerText(), /Comparison saved: dispatched-comparison/);
+    assert.match(await page.locator('#comparison > [role="status"]').innerText(), /Comparison saved locally/);
     assert.equal(await page.getByRole("button", { name: "Discard comparison", exact: true, includeHidden: true }).isEnabled(), true);
     const calls = await page.evaluate(() => window.calls);
     assert.equal(calls.filter(call => call.path.endsWith("/save")).length, 1);
@@ -450,7 +570,7 @@ test("a dispatched comparison keeps its exact recovery identity through replacem
     assert.equal(calls.filter(call => call.path.endsWith("/cancel")).length, 0, "Never cancel a dispatched write as though it were an unsaved preview");
 });
 
-for (const mismatch of ["identity", "kind", "shape"]) test(`comparison Save rejects a mismatched ${mismatch} receipt without permitting a replacement`, async t => {
+for (const mismatch of ["identity", "kind", "title", "shape"]) test(`comparison Save rejects a mismatched ${mismatch} receipt without permitting a replacement`, async t => {
     const { page, context, bundles, row } = await setup(t);
     await openReportComparison(page);
     const workspace = page.locator("#comparisonWorkspace");
@@ -468,6 +588,7 @@ for (const mismatch of ["identity", "kind", "shape"]) test(`comparison Save reje
         await route.fulfill({ status: 200, json: mismatch === "shape" ? {} : { bundle: {
             bundleId: mismatch === "identity" ? bundles[0].bundleId : preview.bundleId,
             kind: mismatch === "kind" ? "report" : "comparison",
+            title: mismatch === "title" ? "Different comparison title" : preview.title,
         } } });
     });
     await workspace.getByRole("button", { name: "Save comparison", exact: true }).click();
@@ -533,7 +654,7 @@ test("comparison choices describe saved scope and useful results precede unavail
     await workspace.locator("select").first().locator("option").nth(1).waitFor({ state: "attached" });
     const options = await workspace.locator("select").first().locator("option").allTextContents();
     assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.dataset.selectPresentation)), ["filter", "filter"]);
-    assert.ok(options[1].startsWith(bundles[0].preparedAtDisplay), "The distinguishing preparation time leads the selected summary");
+    assert.ok(options[1].startsWith(`${bundles[0].title} · ${bundles[0].preparedAtDisplay}`), "Title leads and the preparation time distinguishes saved versions");
     assert.match(options[1], /1 interaction.*No prompts/);
     assert.doesNotMatch(options.join(" "), /export-[a-f0-9-]{36}/, "Identity is not the primary option label");
     await workspace.getByRole("combobox", { name: "Earlier report", exact: true }).click();
@@ -542,7 +663,7 @@ test("comparison choices describe saved scope and useful results precede unavail
     await selectReport(page, "Earlier report", bundles[0].bundleId);
     await selectReport(page, "Later report", bundles[1].bundleId);
     await workspace.getByRole("button", { name: "Inspect earlier report", exact: true }).click();
-    assert.match(await page.locator("#contextSidebar").innerText(), new RegExp(bundles[0].bundleId));
+    assert.equal(await page.locator("#contextSidebarTitle").innerText(), bundles[0].title);
     assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
     await page.locator("#closeContextSidebar").click();
     assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
@@ -571,8 +692,8 @@ test("comparison choices describe saved scope and useful results precede unavail
     const html = comparisonBodyHtml(model);
     assert.ok(html.indexOf('class="comparison-tool-results"') < html.indexOf("<caption>Recorded measures</caption>"));
     assert.ok(html.indexOf("<caption>Recorded measures</caption>") < html.indexOf('class="comparison-unavailable"'));
-    assert.match(html.slice(html.indexOf('<table class="comparison-patterns">')), /comparison-mobile-label">Earlier/);
-    assert.match(html.slice(html.indexOf('<table class="comparison-patterns">')), /comparison-mobile-label">Later/);
+    assert.match(html.slice(html.indexOf('<table class="comparison-patterns"')), /comparison-mobile-label">Earlier/);
+    assert.match(html.slice(html.indexOf('<table class="comparison-patterns"')), /comparison-mobile-label">Later/);
     const markdown = renderComparisonMarkdown(model, { preparedAtDisplay: "Synthetic preparation time", bundleId: "synthetic", sourceReports: [] });
     assert.ok(markdown.indexOf("Earlier:") < markdown.indexOf("## Recorded measures"));
     assert.ok(markdown.indexOf("## Recorded measures") < markdown.indexOf("## Unavailable measures and coverage"));
@@ -876,15 +997,16 @@ test("library comparison Open reads its actual frozen HTML rather than today's c
     assert.deepEqual(await hashes(savedComparison), original);
 });
 
-test("library downloads reject altered registered files instead of bypassing the frozen reader", async t => {
+test("opened-report downloads reject altered registered files instead of bypassing verification", async t => {
     const { page, bundles, row } = await setup(t);
     const name = "product-report.html", original = await readFile(bundles[0].files[name]);
+    await row(bundles[0].bundleId).getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.locator("#savedReportReader iframe").waitFor();
     await writeFile(bundles[0].files[name], Buffer.concat([original, Buffer.from("\nALTERED_UNREVIEWED_COPY")]));
     const downloads = [];
     page.on("download", download => downloads.push(download.suggestedFilename()));
-    await row(bundles[0].bundleId).locator(".saved-report-summary").click();
     const response = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
-    await page.locator("#contextSidebar").getByRole("button", { name: "Download " + name + " for " + bundles[0].bundleId, exact: true }).click();
+    await page.locator("#savedReportReader").getByRole("button", { name: "Download", exact: true }).click();
     assert.equal((await response).status(), 409, "Unreviewed bytes must never be returned as a saved download");
     assert.deepEqual(downloads, []);
 });
@@ -942,19 +1064,22 @@ test("closing a pending frozen comparison fences its late response without chang
     const completed = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
     release.resolve(); await completed;
     assert.match(await page.frameLocator("#savedReportReader iframe").locator("body").textContent(), new RegExp(bundles[0].bundleId));
-    assert.match(await page.frameLocator("#savedReportReader iframe").locator("h1").innerText(), /Activity report/);
-    assert.equal(await page.locator("#savedReportReader iframe").getAttribute("title"), "Frozen saved report");
+    assert.equal(await page.frameLocator("#savedReportReader iframe").locator("h1").innerText(), bundles[0].title);
+    assert.equal(await page.locator("#savedReportReader iframe").getAttribute("title"), bundles[0].title);
 });
 
-test("a comparison without saved HTML names that limit and exposes only its verified saved formats", async t => {
+test("a comparison without saved HTML opens its verified JSON and exposes only its saved formats", async t => {
     const { page, savedComparison, row } = await setup(t, { comparison: true, comparisonFormats: ["json"] });
     const entry = row(savedComparison.bundleId);
-    assert.equal(await entry.getByRole("button", { name: "Open saved comparison", exact: true }).count(), 0);
-    assert.match(await entry.innerText(), /JSON.*No HTML/s);
-    await entry.locator(".saved-report-summary").click();
-    assert.match(await page.locator("#contextSidebar").innerText(), /HTML was not saved/);
+    assert.equal(await entry.getByRole("button", { name: "Open saved comparison", exact: true }).count(), 1);
+    assert.match(await entry.innerText(), /JSON/);
+    await entry.getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await page.locator("#savedReportReader pre").waitFor();
+    assert.equal(await page.locator("#pageTitle").textContent(), savedComparison.title);
+    assert.equal(await page.locator("#savedReportReader pre").textContent(), await readFile(savedComparison.files["comparison-report.json"], "utf8"));
+    assert.deepEqual(await page.locator("#savedReportReader select option").allTextContents(), ["JSON", "Manifest"]);
     const response = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
-    await page.locator("#contextSidebar").getByRole("button", { name: "Download comparison-report.json for " + savedComparison.bundleId, exact: true }).click();
+    await page.locator("#savedReportReader").getByRole("button", { name: "Download", exact: true }).click();
     const value = await (await response).json();
     assert.equal(value.format, "json");
     assert.deepEqual(Buffer.from(value.data, "base64"), await readFile(savedComparison.files["comparison-report.json"]));

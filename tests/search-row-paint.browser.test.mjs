@@ -64,7 +64,6 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
         const fieldBefore = await input.boundingBox();
         await input.fill("Invented local");
         await selectActivityOption(page, "wireSearchType", "interaction");
-        await page.locator("#wireSearchFilterSummary").click();
         const rows = page.locator("#wireSearchResults button"), first = rows.first(), neighbor = rows.nth(1);
         await expect(rows).toHaveCount(3);
         await expect(first).toContainText("The physician treated an injured patient in the hospital.");

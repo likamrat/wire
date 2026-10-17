@@ -7,7 +7,7 @@ import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { buildSanitizedBundle, createExportController } from "../lib/export.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { readSavedReportDocument, loadSavedReportSource, reportHash } from "../lib/report-artifacts.mjs";
+import { readSavedReportDocument, readSavedComparisonFile, loadSavedReportSource, reportHash } from "../lib/report-artifacts.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
 import { privateFixture, fixture } from "./helpers.mjs";
@@ -22,7 +22,8 @@ import { contrast, hue, measureChartPaint } from "./color-measurements.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 
-async function inspectPdf(bytes) {
+async function inspectPdf(bytes, directory) {
+    if (directory) await mkdir(directory, { recursive: true });
     const strict = await pdfDocumentText(bytes);
     const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: false, disableFontFace: true, fontExtraProperties: true });
     try {
@@ -55,6 +56,12 @@ async function inspectPdf(bytes) {
                 assert.ok(item.transform[5] >= 0 && item.transform[5] <= viewport.height + 1, `Page ${number}: vertical text clipping`);
             }
             pages.push(content.items.map(item => (item.str ?? "") + (item.hasEOL ? "\n" : " ")).join(""));
+            if (directory) {
+                const view = page.getViewport({ scale: 1.25 }), surface = document.canvasFactory.create(view.width, view.height);
+                await page.render({ canvasContext: surface.context, viewport: view }).promise;
+                await writeFile(path.join(directory, `pdf-page-${number}.png`), surface.canvas.toBuffer("image/png"));
+                document.canvasFactory.destroy(surface);
+            }
         }
         assert.equal(strict.pages, pages.length);
         return { pageCount: pages.length, pages, text: pages.join("\n"), fonts: [...fonts.values()], margins, strictReaderPages: strict.pages };
@@ -68,6 +75,126 @@ async function keepProof(name, files) {
     for (const [file, bytes] of Object.entries(files)) await writeFile(path.join(directory, file), bytes);
     return directory;
 }
+
+test("new human reports lead with their title and data, not repeated headings or machinery", { timeout: 60000 }, async t => {
+    const records = matrixRecords("report-reading", ["failure", "success", "unknown", "success"], {
+        groups: 2, durations: [100, 300, null, 500],
+    });
+    const title = "Calendar planning review";
+    const bundle = await buildSanitizedBundle(records, "b".repeat(64), {
+        title, promptMode: "none", formats: ["html", "pdf", "json", "markdown"],
+    });
+    const directory = await keepProof("human-report", bundle.files);
+    const browser = await chromium.launch({ headless: true });
+    t.after(() => browser.close());
+    const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: "block" });
+    const external = [], observations = [], violations = [];
+    await context.route("**/*", route => { external.push(route.request().url()); return route.abort(); });
+    const page = await context.newPage();
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1280, 100], [375, 100], [375, 200]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.setContent(bundle.previewHtml);
+        await page.locator("html").evaluate((node, { theme, scale }) => {
+            node.dataset.evidenceTheme = theme; node.style.fontSize = scale + "%";
+        }, { theme, scale });
+        await page.evaluate(() => document.fonts.ready);
+        const reading = await page.evaluate(() => {
+            const heading = document.querySelector("h1"), mark = [...document.querySelectorAll(".report-brand .brand-logo")].find(node => node.checkVisibility());
+            const visible = node => node.checkVisibility();
+            return {
+                title: heading.textContent, titleTop: heading.getBoundingClientRect().top, markTop: mark.getBoundingClientRect().top,
+                h1: document.querySelectorAll("h1").length,
+                headings: [...document.querySelectorAll("h2")].filter(visible).map(node => node.textContent),
+                overviewVisible: document.querySelector("#overview")?.checkVisibility(),
+                overviewTop: document.querySelector("#overview")?.getBoundingClientRect().top,
+                links: [...document.querySelectorAll(".report-nav a")].map(node => node.getAttribute("href")),
+                text: document.querySelector("main").innerText,
+                overflow: document.documentElement.scrollWidth > innerWidth + 1,
+                font: getComputedStyle(heading).fontFamily,
+            };
+        });
+        observations.push({ theme, width, scale, ...reading });
+        const fail = (condition, reason) => { if (condition) violations.push(`${theme}/${width}/${scale}: ${reason}`); };
+        fail(reading.h1 !== 1 || reading.title !== title || reading.titleTop > reading.markTop + 1, "the actual title must lead the document");
+        fail(!reading.overviewVisible || width === 1280 && reading.overviewTop > 400, "primary activity data is buried");
+        fail(!["Activity", "Timing", "Examples", "Operations"].every(name => reading.headings.includes(name)), "data sections are not clear");
+        fail(new Set(reading.links).size !== reading.links.length, "section navigation repeats destinations");
+        fail(/scenario-[a-f0-9]|Request reference:|masked-copy|retained-original|schemaVersion|stored revision/.test(reading.text), "machinery competes with the main report");
+        fail(reading.headings.includes("Reviewed prompt copies"), "No-prompts mode has a redundant empty section");
+        fail(reading.overflow || !reading.font.includes("Asta Sans"), "reading must reflow without replacing typography");
+        if (directory) await page.screenshot({ path: path.join(directory, `${theme}-${width}-${scale}.png`), fullPage: true });
+    }
+    const pdf = await inspectPdf(bundle.files["product-report.pdf"], directory);
+    assert.ok(pdf.text.includes(title));
+    assert.equal([...pdf.text.matchAll(/\/me\/drive\/items\/\{id\}/g)].length, 2, "The example and operation-table path both remain intact");
+    assert.equal(JSON.parse(bundle.files["product-report.json"]).title, title);
+    assert.deepEqual(external, []);
+    if (directory) await writeFile(path.join(directory, "reading.json"), JSON.stringify({ observations, pdf }, null, 2));
+    assert.deepEqual(violations, []);
+});
+
+test("new comparison files keep long titles, source facts and readable light, dark and enlarged output", { timeout: 60000 }, async t => {
+    const seed = qualityDisplayFixture({ requests: 3, calls: 7, timed: 6 }).state;
+    const { context } = await privateFixture(t, seed.evidence), controller = createExportController(context), sources = [];
+    for (const scenarioIds of [["quality-request-0", "quality-request-1"], ["quality-request-1", "quality-request-2"]]) {
+        const state = await loadBoardState(context);
+        const preview = await controller.preview("output-sources", undefined, { promptMode: "none", formats: ["html"] },
+            { kind: "selected", revision: state.revision, scenarioIds });
+        await controller.review("output-sources", preview.previewId, true);
+        sources.push((await controller.confirm("output-sources", preview.previewId, true)).bundle);
+    }
+    const title = "Planning follow-through: comparing calendar and document retrieval across two recorded work periods";
+    const preview = await controller.previewComparison("comparison-output", sources[0].bundleId, sources[1].bundleId,
+        { title, formats: ["html", "pdf", "json", "markdown"] });
+    const facts = JSON.stringify(preview.comparison);
+    await controller.reviewComparison("comparison-output", preview.previewId, true);
+    const saved = (await controller.confirmComparison("comparison-output", preview.previewId, true)).bundle;
+    const state = await loadBoardState(context), files = {};
+    for (const format of saved.formats) {
+        const file = await readSavedComparisonFile(context, state, saved.bundleId, format);
+        assert.equal(file.canonicalTitle, title);
+        files[file.name] = file.bytes;
+    }
+    assert.equal(JSON.stringify(JSON.parse(files["comparison-report.json"]).comparison), facts);
+    const directory = await keepProof("human-comparison", files), observations = [];
+    const browser = await chromium.launch({ headless: true }); t.after(() => browser.close());
+    const page = await browser.newPage({ javaScriptEnabled: false, serviceWorkers: "block" }), external = [];
+    await page.route("**/*", route => { external.push(route.request().url()); return route.abort(); });
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1280, 100], [375, 100], [375, 200]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.setContent(files["comparison-report.html"].toString());
+        await page.locator("html").evaluate((node, value) => {
+            node.dataset.evidenceTheme = value.theme; node.style.fontSize = value.scale + "%";
+        }, { theme, scale });
+        await page.evaluate(() => document.fonts.ready);
+        assert.equal(await page.locator("h1").textContent(), title);
+        assert.equal(await page.locator("h1").count(), 1);
+        const shape = await page.evaluate(() => ({
+            overflow: document.documentElement.scrollWidth > innerWidth + 1,
+            font: getComputedStyle(document.querySelector("h1")).fontFamily,
+            text: document.querySelector("main").innerText,
+            paper: getComputedStyle(document.body).backgroundColor,
+            failures: [...document.querySelectorAll(".comparison-outcome-failure")].map(node => getComputedStyle(node).backgroundColor),
+        }));
+        assert.equal(shape.overflow, false);
+        assert.match(shape.font, /Asta Sans/);
+        assert.ok(!shape.text.includes(saved.bundleId), "Technical identities belong to coverage, not the reading lead");
+        assert.match(shape.text, /Earlier/); assert.match(shape.text, /Later/);
+        assert.match(shape.text, /Median tool latency/, "The named timing statistic remains visible beside its value");
+        assert.ok(shape.failures.length);
+        for (const color of shape.failures) {
+            assert.ok(hue(color) <= 15 || hue(color) >= 345, "Failed calls must be red, not orange");
+            assert.ok(contrast(color, shape.paper) >= 3);
+        }
+        observations.push({ theme, width, scale, ...shape });
+        if (directory) await page.screenshot({ path: path.join(directory, `${theme}-${width}-${scale}.png`), fullPage: true });
+    }
+    const pdf = await inspectPdf(files["comparison-report.pdf"], directory);
+    assert.ok(pdf.text.replace(/\s+/g, " ").includes(title));
+    assert.deepEqual(external, []);
+    for (const [name, bytes] of Object.entries(files)) assert.deepEqual(await readFile(saved.files[name]), bytes);
+    if (directory) await writeFile(path.join(directory, "reading.json"), JSON.stringify({ observations, pdf }, null, 2));
+});
 
 test("native report bars separate outcome pills and adjacent rows at normal and enlarged text", { timeout: 120000 }, async t => {
     const records = matrixRecords("native-spacing", ["failure", ...Array(6).fill("success")],
@@ -149,7 +276,7 @@ test("native report bars separate outcome pills and adjacent rows at normal and 
         await page.emulateMedia({ media: "print" });
         layouts.push({ theme, print: true, ...await measure() });
         const bytes = theme === "light" ? bundle.files["product-report.pdf"] : await renderPdf(html);
-        const extracted = await inspectPdf(bytes);
+        const extracted = await inspectPdf(bytes, directory ? path.join(directory, `pdf-${theme}`) : null);
         const compact = extracted.text.replace(/\s+/g, "");
         for (const text of ["5/7(71.42%)", "4succeeded(80%)", "1failed(20%)", "workiq-ask", "workiq-get_schema"]) {
             assert.ok(compact.includes(text), `Actual ${theme} PDF retains ${text}`);
@@ -214,10 +341,11 @@ test("native spacing preserves new period report HTML and PDF without an Analyze
             if (directory) await page.screenshot({ path: path.join(directory, `${theme}-${enlarged ? "375-200" : "1280"}-full.png`), fullPage: true });
         }
         const bytes = theme === "light" ? files["product-report.pdf"] : await renderPdf(html);
-        const extracted = await inspectPdf(bytes);
+        const extracted = await inspectPdf(bytes, directory ? path.join(directory, `pdf-${theme}`) : null);
         assert.match(extracted.text, /Period A/);
         assert.match(extracted.text, /Period B/);
         assert.match(extracted.text, /Matching tools and records/);
+        assert.equal([...extracted.text.matchAll(/\bOutcome\b/g)].length, 2, "Both full-width matching tables retain whole-word column headings");
         if (directory) {
             await writeFile(path.join(directory, `product-report-${theme}.pdf`), bytes);
             await writeFile(path.join(directory, `pdf-${theme}-extraction.json`), JSON.stringify(extracted, null, 2));
@@ -259,8 +387,8 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
     const bundle = await buildSanitizedBundle(state.evidence, state.pseudonymKey,
         { promptMode: "original", formats: ["html", "pdf", "json", "markdown"] }, undefined, undefined, facts);
     const pdf = await inspectPdf(bundle.files["product-report.pdf"]);
-    assert.match(pdf.text, /At a glance/);
-    assert.match(pdf.text, /Work IQ sign-in required/);
+    assert.match(pdf.text, /Activity/);
+    assert.doesNotMatch(pdf.text, /Work IQ sign-in required|Completion checks:/);
     assert.match(pdf.text, /41100 ms/);
     assert.match(pdf.text, /677960 ms/);
     assert.match(pdf.text, /6 of 7 calls timed/);
@@ -272,8 +400,8 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
     assert.equal(bundle.snapshot.summary.metrics.find(row => row.layer === "http").outcomes.transport, 1);
     assert.equal(bundle.snapshot.evaluationFacts.serviceInvolvement.groups.reduce((count, group) => count + group.count, 0), 8);
     for (const text of [bundle.previewHtml, bundle.files["product-report.md"], pdf.text]) {
-        assert.equal([...text.matchAll(/Completion checks:/g)].length, 1, "Only Work IQ tool checks use the call-completion boundary");
-        assert.match(text, /7 eligible Work IQ calls/);
+        assert.equal([...text.matchAll(/Completion checks:/g)].length, 0, "Current reports do not revive retired check recitals");
+        assert.match(text, /6 of 7 calls timed/);
     }
     assert.ok(pdf.margins.length >= pdf.pageCount * 2);
     assert.ok(pdf.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === "#565656"));
@@ -331,16 +459,16 @@ test("real native report: both themes, narrow 200%, offline font, keyboard detai
             text: node.textContent, color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor,
         })));
         for (const label of layout.outcomeLabels) assert.ok(contrast(label.color, label.background) >= 4.5, label.text);
-        await page.locator("#quality > summary").focus();
+        await page.locator("#coverage > summary").focus();
         await page.keyboard.press("Enter");
-        assert.equal(await page.locator("#quality").getAttribute("open"), "");
-        assert.match(await page.locator("#quality").innerText(), /Counts and coverage/);
+        assert.equal(await page.locator("#coverage").getAttribute("open"), "");
+        assert.match(await page.locator("#coverage").innerText(), /Prompt coverage/);
         layout.expandedWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-        assert.ok(layout.expandedWidth <= layout.width + 1, "Expanded quality rows must also fit at 200%");
-        assert.equal(await page.locator("#quality > summary").evaluate(node => getComputedStyle(node).outlineStyle), "solid");
-        if (directory) await page.locator("#quality").screenshot({ path: path.join(directory, `${theme}-${narrow ? "390-200" : "1280"}-quality.png`) });
+        assert.ok(layout.expandedWidth <= layout.width + 1, "Expanded coverage must also fit at 200%");
+        assert.equal(await page.locator("#coverage > summary").evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+        if (directory) await page.locator("#coverage").screenshot({ path: path.join(directory, `${theme}-${narrow ? "390-200" : "1280"}-coverage.png`) });
         await page.keyboard.press("Enter");
-        assert.equal(await page.locator("#quality").getAttribute("open"), null);
+        assert.equal(await page.locator("#coverage").getAttribute("open"), null);
         layouts.push({ theme, narrow, ...layout });
         if (directory) {
             await page.evaluate(() => scrollTo(0, 0));
@@ -406,7 +534,7 @@ test("four-format recorded context keeps changed requests, omissions and exact a
         assert.match(text, /Omitted from this report/);
         assert.match(text, /finality unverified/);
         assert.doesNotMatch(text, /first@example|reply@example|UNRELATED_CONTEXT|Find five synthetic/);
-        assert.ok(text.indexOf("Recorded context") < text.indexOf("Examples from the recorded work"));
+        if (text === pdf.text) assert.ok(text.indexOf("Recorded context") < text.indexOf("Examples"));
     }
     const snapshot = JSON.parse(files["product-report.json"]);
     assert.ok(files["product-report.html"].toString().indexOf('<section id="recorded-context">')
@@ -437,7 +565,10 @@ test("four-format recorded context keeps changed requests, omissions and exact a
         await page.keyboard.press("Enter");
         assert.equal(await page.locator("#recorded-context .context-reference").first().getAttribute("open"), "");
         assert.match(await page.locator("#recorded-context").innerText(), /Reviewed three documents/);
-        assert.equal(await page.locator("#recorded-context pre").first().evaluate(node => getComputedStyle(node).borderRadius), "6px");
+        assert.deepEqual(await page.locator("#recorded-context pre").first().evaluate(node => {
+            const style = getComputedStyle(node);
+            return [style.borderRadius, style.borderLeftWidth];
+        }), ["0px", "2px"]);
         if (directory) await page.locator("#recorded-context").screenshot({ path: path.join(directory, `${theme}-390-200-context.png`) });
     }
 });
@@ -470,6 +601,7 @@ test("opening a verified historical report preserves all four format bytes and i
     for (const [name, bytes] of Object.entries(files)) { paths[name] = path.join(folder, name); await writeFile(paths[name], bytes); }
     await updateBoardState(context, state => { state.exports.push({
         kind: "report", bundleId: manifest.bundleId, preparedAt: manifest.preparedAt, formats: manifest.formats,
+        ...(manifest.title === undefined ? {} : { title: manifest.title }),
         promptMode: manifest.promptMode, bundleDir: folder, files: paths, privacyReview: manifest.privacyReview,
         manifestHash: reportHash(files["coverage-and-redaction-manifest.json"]), snapshotHash: manifest.snapshotHash,
         evaluationFactsHash: manifest.evaluationFactsHash,
@@ -489,27 +621,13 @@ test("opening a verified historical report preserves all four format bytes and i
     }, null, 2) });
 });
 
-test("mixed saved origins stay beside each native finding in HTML, Markdown and PDF", { timeout: 120000 }, async t => {
+test("new native files omit retired review claims without changing retained source reviews or recorded facts", { timeout: 120000 }, async t => {
     const records = matrixRecords("mixed-native-origins", ["success"], { durations: [1000] });
     const { state } = qualityDisplayFixture({ records, judgments: ["pass"] });
     const facts = structuredClone(buildReportFacts(records, state).facts);
-    const origins = [
-        { provider: "github-copilot", model: "saved-model-a", rubricId: "wire-recorded-interaction-review", rubricVersion: 2 },
-        { provider: "github-copilot", model: "saved-model-b", rubricId: "wire-recorded-interaction-review", rubricVersion: 7 },
-    ];
-    const metrics = facts.metrics.filter(metric => metric.origin === "model-assessed");
-    for (const [index, metric] of metrics.entries()) {
-        metric.evaluator = { ...origins[0] };
-        facts.metrics.push({ ...structuredClone(metric), metricRef: `metric-${(700 + index).toString(16).padStart(32, "0")}`,
-            evaluator: { ...origins[1] } });
-    }
-    const assessments = facts.assessments.filter(assessment => assessment.origin === "model-assessed");
-    for (const [index, assessment] of assessments.entries()) {
-        assessment.evaluator = { ...origins[0] };
-        facts.assessments.push({ ...structuredClone(assessment), assessmentRef: `assessment-${(700 + index).toString(16).padStart(32, "0")}`,
-            evaluator: { ...origins[1] } });
-    }
-    const before = structuredClone(facts);
+    const before = structuredClone(facts), sourceBefore = structuredClone(state);
+    assert.equal(facts.metricProjectionVersion, 4);
+    assert.ok(state.personalEvaluation.modelEvaluation.records.length > 0, "The source fixture contains retained historical reviews");
     const bundle = await buildSanitizedBundle(records, state.pseudonymKey,
         { promptMode: "none", formats: ["html", "pdf", "json", "markdown"] }, undefined, undefined, facts);
     const browser = await chromium.launch({ headless: true });
@@ -517,27 +635,17 @@ test("mixed saved origins stay beside each native finding in HTML, Markdown and 
     const page = await browser.newPage({ javaScriptEnabled: false, viewport: { width: 1280, height: 1000 } });
     await page.route("**/*", route => route.abort());
     await page.setContent(bundle.previewHtml);
-    const htmlFindings = await page.locator("#findings li").allTextContents();
-    const markdownFindings = bundle.files["product-report.md"].split("## At a glance")[1]
-        .split('<a id="overview"></a>')[0].split("\n").filter(line => line.startsWith("- Saved AI review"));
     const pdf = await inspectPdf(bundle.files["product-report.pdf"]);
-    const pdfFindings = pdf.text.split("At a glance")[1].split("Recorded numbers")[0].replace(/\s+/g, " ");
-    const directory = await keepProof("mixed-origins", { ...bundle.files, "pdf-extraction.json": JSON.stringify(pdf, null, 2) });
-    const claims = ["Answer: Correct (1 request)", "Support: Supported (1 request)", "Tool use: Matched request (1 request)"];
-    for (const origin of origins) for (const claim of claims) {
-        const label = `Model assessment · ${origin.model} · rubric ${origin.rubricId} v${origin.rubricVersion}`;
-        assert.equal(htmlFindings.filter(line => line.includes(claim) && line.includes(label)).length, 1,
-            `HTML finding must carry its own saved origin: ${label} / ${claim}`);
-        assert.equal(markdownFindings.filter(line => line.includes(claim) && line.includes(label)).length, 1,
-            `Markdown finding must carry its own saved origin: ${label} / ${claim}`);
-        assert.ok(pdfFindings.replace(/\s/g, "").includes(`${claim}. ${label}`.replace(/\s/g, "")),
-            `PDF finding must carry its own saved origin: ${label} / ${claim}`);
+    const directory = await keepProof("current-observations", { ...bundle.files, "pdf-extraction.json": JSON.stringify(pdf, null, 2) });
+    for (const text of [bundle.previewHtml, bundle.files["product-report.md"], bundle.files["product-report.json"], pdf.text]) {
+        assert.doesNotMatch(text, /Saved AI review|Model assessment|Personal feedback|Answer: Correct|Tool use: Matched request/);
     }
-    assert.equal(htmlFindings.filter(line => line.startsWith("Saved AI review")).length, 6);
-    assert.equal(markdownFindings.length, 6);
+    assert.match(await page.locator("#findings").textContent(), /recorded Work IQ call/);
+    assert.equal(await page.locator("#quality").count(), 0);
     assert.deepEqual(bundle.snapshot.evaluationFacts, before);
     assert.deepEqual(facts, before);
-    if (directory) await page.locator("#findings").screenshot({ path: path.join(directory, "finding-origins.png") });
+    assert.deepEqual(state, sourceBefore);
+    if (directory) await page.locator("#findings").screenshot({ path: path.join(directory, "recorded-patterns.png") });
 });
 
 test("normal report navigation keeps every desktop target at least 44px with narrow keyboard access", async t => {
@@ -552,9 +660,9 @@ test("normal report navigation keeps every desktop target at least 44px with nar
     await page.route("**/*", route => route.abort());
     await page.setContent(bundle.previewHtml);
     const expected = [
-        ["Numbers", "#overview"], ["Timing", "#timing"], ["Recorded context", "#recorded-context"],
-        ["Examples", "#examples"], ["Operation detail", "#operations"], ["Quality results", "#quality"],
-        ["Prompt copies", "#examples"], ["Coverage", "#coverage"], ["Complete JSON records", "product-report.json"],
+        ["Activity", "#overview"], ["Timing", "#timing"], ["Recorded context", "#recorded-context"],
+        ["Examples", "#examples"], ["Operations", "#operations"],
+        ["Coverage", "#coverage"], ["Complete records (JSON)", "product-report.json"],
     ];
     const bounds = () => page.locator(".report-nav a").evaluateAll(nodes => nodes.map(node => {
         const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
@@ -606,7 +714,7 @@ test("one new comparison PDF keeps shared margin typography in both themes and s
         const bytes = await renderPdf(themed), extracted = await inspectPdf(bytes);
         assert.match(extracted.text, /Report comparison/);
         assert.ok(extracted.margins.length >= extracted.pageCount * 2);
-        assert.ok(extracted.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === "#515767"));
+        assert.ok(extracted.margins.every(margin => /Arial|LiberationSans/.test(margin.font) && margin.color === (theme === "light" ? "#565656" : "#515767")));
         await keepProof("comparison-margins", {
             [`comparison-${theme}.html`]: themed, [`comparison-${theme}.pdf`]: bytes,
             [`comparison-${theme}-extraction.json`]: JSON.stringify(extracted, null, 2),

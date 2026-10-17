@@ -194,7 +194,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         }
         text(nodes.headings[2], phase === "saved" ? "Your report is saved" : phase === "unavailable" ? "Saved report unavailable"
             : phase === "writing" ? "Saving your report" : saveUnconfirmed ? "Save not confirmed" : "Review and save your report");
-        nodes.headings[2].classList.toggle("visually-hidden", ["ready", "reviewed"].includes(phase));
+        nodes.headings[2].classList.add("visually-hidden");
         if (presentStep?.({ step, focus, contents: nodes.panels[1], footer: nodes.contentFooter })) return;
         if (focus) {
             const samePreview = step < 3 || reading?.previewId === preview?.previewId;
@@ -208,7 +208,8 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
                 root.ownerDocument.defaultView.scrollBy(0, target.getBoundingClientRect().top - reading.top);
                 return;
             }
-            const heading = nodes.headings[step - 1];
+            const heading = step === 3 && nodes.headings[2].classList.contains("visually-hidden")
+                ? root.ownerDocument.getElementById("pageTitle") || nodes.headings[2] : nodes.headings[step - 1];
             heading.focus({ preventScroll: true });
             heading.scrollIntoView({ block: "nearest" });
         }
@@ -283,6 +284,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         phase = "draft";
         failure = "";
         model = { ...model, requestCount: 0, scope: "selected", scopeReady: false, entry: null };
+        delete model.title;
         nodes?.reviewHost.replaceChildren();
         nodes?.saveHost.replaceChildren();
         nodes?.reviewActions.replaceChildren();
@@ -432,6 +434,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
             if (isWriting() || saveUnconfirmed || phase === "scanning" || !ready() || !model.formats.length) return null;
             rememberStep();
             preview = bundle = undefined;
+            delete model.title;
             failure = "";
             phase = "scanning";
             step = reached = 3;
@@ -445,6 +448,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         previewReady(value, { confirm, feedback } = {}) {
             if (phase !== "scanning" || !value?.previewId || value.privacy?.allSelectedFieldsScanned !== true) return false;
             preview = value;
+            model.title = value.title;
             phase = "ready";
             failure = "";
             if (nodes) {
@@ -495,6 +499,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         saved(value, { available = true } = {}) {
             if (!value?.bundleId || !value.files || !Object.keys(value.files).length) throw new Error("Saved report file links are unavailable.");
             bundle = structuredClone(value);
+            model.title = value.title;
             saveUnconfirmed = false;
             const savedBundle = bundle;
             preview = undefined;
@@ -504,37 +509,33 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
             if (!available) { invalidateSavedReport(value.bundleId); return; }
             if (nodes) {
                 const { el, button, saveHost } = nodes;
-                const message = el("p", "report-save-success visually-hidden", "Report saved on this device.");
+                const message = el("p", "report-save-success", "Saved on this device.");
                 message.setAttribute("role", "status");
-                const details = el("details", "detail-disclosure");
-                details.append(el("summary", "", "Saved report details"), el("p", "report-saved-id", value.bundleId));
-                if (value.bundleDir) details.append(el("p", "report-saved-location", "Saved folder: " + value.bundleDir));
                 saveHost.replaceChildren(message);
                 const actions = el("div", "report-saved-actions");
-                if (value.files["product-report.html"] && openSavedReport) actions.append(button("Open saved report", event => openSavedReport(value, event.currentTarget), "primary"));
-                else if (!value.files["product-report.html"]) saveHost.append(el("p", "muted", "HTML was not saved. Read one of the saved downloads below."));
-                actions.append(button("View saved reports", () => root.ownerDocument.getElementById("reportLibraryLink").click()));
+                if (openSavedReport) actions.append(button("Open saved report", event => openSavedReport(value, event.currentTarget), "primary"));
+                actions.append(button("Start a new report", () => clearSelection?.()));
                 saveHost.append(actions);
-                const downloads = el("div", "report-downloads");
+                const downloads = el("div", "report-downloads saved-report-downloads");
                 downloads.setAttribute("role", "group");
                 downloads.setAttribute("aria-label", "Download saved files");
-                downloads.append(el("span", "report-download-label", "Download"));
-                for (const name of Object.keys(value.files)) {
+                const field = el("label", "saved-file-choice", "File"), select = el("select");
+                select.setAttribute("aria-label", "Saved file");
+                for (const name of Object.keys(value.files).sort((a, b) => Number(a === "coverage-and-redaction-manifest.json") - Number(b === "coverage-and-redaction-manifest.json"))) {
                     const label = name === "coverage-and-redaction-manifest.json" ? "Manifest" : name.endsWith(".html") ? "HTML"
                         : name.endsWith(".pdf") ? "PDF" : name.endsWith(".md") ? "Markdown" : "JSON";
-                    const control = button(label, async () => {
-                        control.disabled = true;
-                        try { await downloadFile(value, name, () => bundle === savedBundle); }
-                        catch (error) { if (bundle === savedBundle) { failure = `Download failed: ${error.message}`; paint(); } }
-                        finally { control.disabled = false; }
-                    });
-                    control.setAttribute("aria-label", `Download ${name}`);
-                    if (utility) utility(control, "download", `Download ${name}`, `Download ${label}`);
-                    const file = el("span", "report-file-action");
-                    file.append(el("span", "", label), control);
-                    (name === "coverage-and-redaction-manifest.json" ? details : downloads).append(file);
+                    const option = el("option", "", label); option.value = name; select.append(option);
                 }
-                saveHost.append(downloads, details, button("Start a new report", () => clearSelection?.()));
+                const control = button("Download", async () => {
+                    if (bundle !== savedBundle || control.disabled) return;
+                    const name = select.value;
+                    control.disabled = select.disabled = true;
+                    try { await downloadFile(value, name, () => bundle === savedBundle); }
+                    catch (error) { if (bundle === savedBundle) { failure = `Download failed: ${error.message}`; paint(); } }
+                    finally { if (bundle === savedBundle) control.disabled = select.disabled = false; }
+                });
+                field.append(select); downloads.append(field, control);
+                saveHost.append(downloads);
                 nodes.saveActions.replaceChildren();
                 for (const control of root.querySelectorAll("[data-review-control]")) control.disabled = true;
             }

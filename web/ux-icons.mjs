@@ -30,6 +30,9 @@ export const uxIconSources = Object.freeze({
     "navigation-reports": "clipboard-list", "navigation-settings": "settings",
     "navigation-collapse": "panel-left-close", "navigation-expand": "panel-left-open",
     "search-analysis": "chart-no-axes-combined",
+    "search-interaction": "message-square", "search-context": "messages-square", "search-reply": "message-square-reply",
+    "search-action": "workflow", "search-tool": "wrench",
+    "search-report": "file-text", "search-comparison": "columns-2", "search-view": "panels-top-left", "search-setting": "settings",
     "settings-connection": "plug", "settings-privacy": "shield", "settings-ai": "clipboard-check",
     "settings-display": "monitor", "settings-troubleshooting": "wrench",
     close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download",
@@ -40,5 +43,5 @@ export const uxIconSources = Object.freeze({
 
 export const uxIcons = Object.freeze(Object.fromEntries(Object.entries(uxIconSources).map(([role, asset]) => [
     role, lucideIcon(asset, role.startsWith("navigation-") || role.startsWith("settings-") || role === "search-analysis" ? 24
-        : role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small"].includes(role) ? 16 : 20),
+        : role.startsWith("search-") || role.endsWith("-compact") || ["info", "chevron", "disclosure", "select-check", "pending-small"].includes(role) ? 16 : 20),
 ])));

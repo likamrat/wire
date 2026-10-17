@@ -15,8 +15,8 @@ const frames = page => page.evaluate(() => new Promise(resolve => requestAnimati
 const ids = page => page.locator("#activityList .matched-action").evaluateAll(nodes => nodes.map(node => node.dataset.actionId));
 const row = (page, id) => page.locator("#activityList .matched-action").filter({ has: page.locator(`a.request-link[href*="${encodeURIComponent(id)}"]`) });
 
-async function setup(t) {
-    const cleanup = [], records = callInvestigationRecords();
+async function setup(t, records = callInvestigationRecords()) {
+    const cleanup = [];
     const { context } = await privateFixture({ after: action => cleanup.push(action) }, records);
     let expected = await loadBoardState(context), runtime, browser;
     const errors = [], denied = [], requests = [];
@@ -75,6 +75,71 @@ function exactURL(runtime, request, call, layer = "tool", extra = {}) {
     return runtime.url + "#request?" + new URLSearchParams({ request, call, layer, mode: "calls", ...extra });
 }
 
+test("Tool latency labels preserve individual values, accessible sorting and other evidence boundaries", { timeout: 60000 }, async t => {
+    const record = callInvestigationRecords()[1];
+    record.toolCalls = [record.toolCalls[0], record.toolCalls[1], record.toolCalls[9], record.toolCalls[10]];
+    record.toolCalls[1].durationMs = 7;
+    record.toolCalls[1].completedAt = new Date(Date.parse(record.toolCalls[1].startedAt) + 7).toISOString();
+    const { page, runtime } = await setup(t, [record]);
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1280, 1], [375, 2]]) {
+        await page.goto(runtime.url + "#analyze?mode=calls"); await ready(page);
+        await page.setViewportSize({ width: 1280, height: 1000 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        const sort = page.getByRole("combobox", { name: "Tool latency", exact: true });
+        await expect(sort).toBeVisible();
+        for (const order of ["slowest", "fastest"]) {
+            await selectActivityOption(page, "callSort", order); await ready(page);
+            const values = page.locator(".matched-action .call-duration");
+            assert.deepEqual(await values.allTextContents(), order === "slowest"
+                ? ["0.9 s", "<0.01 s", "0 s", "Not recorded"] : ["0 s", "<0.01 s", "0.9 s", "Not recorded"]);
+            assert.deepEqual(await values.evaluateAll(nodes => nodes.map(node => node.getAttribute("value"))),
+                order === "slowest" ? ["900", "7", "0", null] : ["0", "7", "900", null]);
+        }
+        await expect(page.locator(".matched-action dt").filter({ hasText: /^Tool latency:$/ })).toHaveCount(4);
+        await expect(page.locator("#activityList")).not.toContainText("Call duration");
+        await page.locator("#meaning > summary").click();
+        await expect(page.locator("#meaning")).toContainText("Tool latency runs from the recorded tool call start to completion.");
+        await expect(page.locator("#meaning")).toContainText("Tool latencies are not added together");
+        await page.locator("#meaning > summary").click();
+        const layout = await page.locator("#activityView").evaluate(root => ({
+            overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            clipped: [...root.querySelectorAll("#callSortLabel,.select-trigger,dt,.call-duration")].filter(node =>
+                node.checkVisibility() && node.clientWidth && node.scrollWidth > node.clientWidth + 1).map(node => node.textContent),
+        }));
+        assert.ok(layout.overflow <= 1); assert.deepEqual(layout.clipped, []);
+        await capture(page, `tool-latency-calls-${theme}-${width}-${scale}`);
+        await page.locator(".matched-action").filter({ has: page.locator('data[value="7"]') }).locator(".request-link").click();
+        const toolEntries = page.locator('#requestContent .journey-item[data-tool-call-id]');
+        for (const [value, text] of [[7, "7 ms"], [0, "0 ms"], [900, "900 ms"]]) {
+            await expect(toolEntries.locator(`.reader-call-duration:has(data[value="${value}"])`)).toHaveText(`Tool latency: ${text}`);
+        }
+        await expect(toolEntries.locator(".reader-call-duration").filter({ hasText: "Not recorded" })).toHaveText("Tool latency: Not recorded");
+        await expect(page.locator("#requestContent .response-timing")).toContainText("Prompt to final response");
+        await expect(page.locator("#requestContent .response-timing data")).toHaveAttribute("value", "3000");
+        assert.match(await toolEntries.locator(".reader-call-duration").first().ariaSnapshot(), /Tool latency/);
+        const clipped = await toolEntries.locator(".reader-call-duration").evaluateAll(nodes =>
+            nodes.filter(node => node.checkVisibility() && node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
+        assert.deepEqual(clipped, []);
+        await capture(page, `tool-latency-reader-${theme}-${width}-${scale}`);
+        await page.locator("#closeContextSidebar").click(); await ready(page);
+    }
+    for (const layer of ["reported-api", "http", "direct-request", "recorded-http", "code-reference"]) {
+        await page.goto(runtime.url + "#analyze?mode=calls&layer=" + layer); await ready(page);
+        await expect(page.getByRole("combobox", { name: "Duration", exact: true })).toBeVisible();
+        await expect(page.locator("#activityList")).not.toContainText("Tool latency");
+        if (layer === "reported-api") {
+            await expect(page.locator(".matched-action").first()).toContainText("API result duration:");
+            await expect(page.locator(".matched-action").first().locator("data.call-duration")).toHaveAttribute("value", "800");
+        } else if (layer === "http") {
+            await expect(page.locator(".matched-action").first()).toContainText("Record duration:");
+            await expect(page.locator(".matched-action").first().locator("data.call-duration")).toHaveAttribute("value", "20");
+        } else await expect(page.locator("#activityList data.call-duration")).toHaveCount(0);
+    }
+});
+
 test("Calls sort all canonical matches, anchor a nonfirst action in full context, and restore exact Back state", { timeout: 45000 }, async t => {
     const app = await setup(t), { page, runtime, records, requests } = app;
     await page.goto(runtime.url + "#analyze"); await ready(page);
@@ -129,13 +194,20 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
     }
     await page.emulateMedia({ reducedMotion: "reduce" });
     assert.equal(requests.filter(req => req.path === "/api/snapshot").length, beforeReads);
-    await expect(page.locator(".request-context-timeline [data-context-kind=action]")).toHaveCount(20);
-    await expect(page.locator(".request-context-timeline")).toContainText(records[0].userPrompt.text);
+    const selectedActions = records[1].toolCalls.length + records[1].graphActivities.length + records[1].httpRecords.length;
+    await expect(page.locator(".request-context-timeline [data-context-kind=action]")).toHaveCount(selectedActions);
+    const linked = page.locator('[data-reader-section="source"] .reader-linked-context');
+    await expect(linked).not.toHaveAttribute("open", "");
+    await expect(linked.locator(".full-text-content")).toHaveCount(0);
+    await linked.locator(":scope > summary").click();
+    await expect(linked).toContainText(records[0].userPrompt.text);
+    await expect(page.locator("#requestContent [data-context-kind=action]")).toHaveCount(20);
+    await linked.locator(":scope > summary").click();
     await expect(page.locator('[data-reader-section="prompt"]')).toContainText(records[1].userPrompt.text.trim());
     assert.doesNotMatch(await page.locator("#requestContent").innerText(), /UNRELATED_CALL_CONTEXT/);
     const timing = page.locator(".journey-item[data-context-kind=action]").filter({ has: page.locator('.reader-call-duration data[value="900"]') });
     await expect(timing).toHaveAttribute("data-action-id", target.id);
-    await expect(timing.locator(".reader-call-duration")).toHaveText("Call duration: 900 ms");
+    await expect(timing.locator(".reader-call-duration")).toHaveText("Tool latency: 900 ms");
     await expect(page.locator("#selectedCall>.action-context")).toHaveCount(0);
     await expect(page.locator("#selectedCall .call-heading [data-result-layer=tool]")).toHaveAttribute("aria-label", "Tool completion: 1 Work IQ tool call");
     await expect(page.locator('[data-reader-section="source"] .reader-source-record')).toHaveCount(2);
@@ -143,7 +215,7 @@ test("Calls sort all canonical matches, anchor a nonfirst action in full context
         nodes.map(node => node.dataset.contextGroup)), records.slice(0, 2).map(record => record.scenarioId));
     await capture(page, "exact-call-context-light");
     await expect(page.locator("#selectedCall .technical-detail")).toBeVisible();
-    await expect(page.locator("#selectedCall .reader-input-label")).toHaveText("Targets");
+    await expect(page.locator("#selectedCall .reader-input-label")).toHaveText("Requested paths");
     await expect(page.locator("#selectedCall .technical-detail details")).toHaveCount(0);
     await expect(page.locator("#selectedCall").getByRole("button", { name: "Copy recorded arguments", exact: true })).toHaveCount(0);
     const targets = page.locator("#selectedCall .reader-input-value code");
@@ -229,8 +301,10 @@ test("selected API result beyond the first details page opens its exact retained
     records[1].toolCalls[9].apiResults.shift();
     await replaceEvidence(app.context, () => ({ records, importCoverage: { counts: { includedSessions: 2, includedProjects: 1 }, roster: [] } }));
     await app.acceptFixtureChange();
+    const replacementRevision = (await loadBoardState(app.context)).revision;
     await page.goto(staleURL); await ready(page);
     await page.reload(); await ready(page);
+    await expect.poll(() => app.snapshot()?.revision).toBe(replacementRevision);
     assert.notEqual(String(app.snapshot().revision), callRevision);
     assert.ok(app.snapshot().requestActivity["reported-api"].some(row => row.id === retained.id), "The positional canonical ID was reused");
     await expect(page.locator("#unavailableCall")).toContainText("No other entry was substituted");

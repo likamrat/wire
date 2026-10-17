@@ -418,7 +418,7 @@ export function createEvidenceUX(icons) {
         let pending = false, resetTimer;
         class CopyUnavailableError extends Error {}
         control.addEventListener("click", async () => {
-            if (pending || control.disabled) return;
+            if (!control.isConnected || pending || control.disabled) return;
             clearTimeout(resetTimer);
             pending = true;
             control.setAttribute("aria-disabled", "true");

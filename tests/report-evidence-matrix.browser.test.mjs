@@ -49,12 +49,12 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
                 const metric = bundle.snapshot.evaluationFacts.metrics.find(metric => metric.checkId === checkId);
                 assert.match(await quality.locator("li,tr").filter({ hasText: label }).innerText(), new RegExp(`0 of ${metric.coverage.eligible} assessed`));
             }
-            const timing = page.locator("#timing tbody tr").filter({ hasText: /^Tool calls/ });
+            const timing = page.locator("#timing tbody tr").filter({ hasText: /^Tool latency/ });
             if (expected.timed) {
                 assert.match(await timing.innerText(), new RegExp(`${expected.timed} of ${expected.calls} calls? timed`));
                 assert.match(await timing.locator("td").first().innerText(), new RegExp(`\\(${expected.median} ms\\)`));
             } else {
-                const note = await page.locator("#timing > .reading-note").filter({ hasText: /^Tool calls:/ }).innerText();
+                const note = await page.locator("#timing > .reading-note").filter({ hasText: /^Tool latency:/ }).innerText();
                 assert.match(note, new RegExp(`0 of ${expected.calls} calls? timed`));
                 assert.match(note, /Not measured/);
             }

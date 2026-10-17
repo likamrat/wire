@@ -5,14 +5,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
-import { createExportController } from "../lib/export.mjs";
+import { buildSanitizedBundle, createExportController } from "../lib/export.mjs";
 import { replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { recordedResponseTiming } from "../lib/response-timing.mjs";
 import { fixture, privateFixture, chooseTheme, selectActivityOption, restoreLegacySearch, automaticScoreOffSummary } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { createTimingPresentation, renderRecordedTiming } from "../web/assessment-presentation.mjs";
-import { assessmentDependencies, assessmentRef, buildAssessmentModel } from "../lib/assessment-read-model.mjs";
+import { assessmentDependencies, assessmentRef, buildAssessmentModel, buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
+import { matrixRecords } from "./report-evidence-matrix-fixtures.mjs";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const proofs = process.env.WIRE_RECORDED_TIMING_PROOFS;
 const start = Date.UTC(2026, 8, 30, 12), stamp = delta => new Date(start + delta).toISOString();
@@ -378,5 +380,61 @@ test("retained aggregate renderer still preserves exact values for optional defi
         await expect(page.locator("#timing")).toContainText("Missing timing is not zero.");
         await expect(page.locator("#timing details,#timing button,.timing-scale")).toHaveCount(0);
         await expect(page.locator("#timing")).not.toContainText("Boundary ID");
+        await expect(page.locator("[data-timing-boundary]")).toHaveAttribute("aria-label", "Tool latency: Call start to recorded completion");
     }
+});
+
+test("Tool latency in newly rendered HTML Markdown and PDF keeps exact values and readable theme layouts", { timeout: 60000 }, async t => {
+    const records = matrixRecords("tool-latency", ["success", "success", "success", "unknown"], { durations: [0, 7, 1200, null] });
+    const key = "a".repeat(64), state = { revision: 1, pseudonymKey: key, evidence: records };
+    const facts = buildReportFacts(records, state).facts, before = JSON.stringify(facts);
+    const bundle = await buildSanitizedBundle(records, key, { promptMode: "none", formats: ["html", "markdown", "pdf", "json"] },
+        undefined, undefined, facts);
+    const loading = getDocument({ data: new Uint8Array(bundle.files["product-report.pdf"]), useSystemFonts: true });
+    let pdfText = "";
+    try {
+        const pdf = await loading.promise;
+        for (let number = 1; number <= pdf.numPages; number++) {
+            pdfText += (await (await pdf.getPage(number)).getTextContent()).items.map(item => item.str).join(" ") + "\n";
+        }
+    } finally { await loading.destroy(); }
+    for (const content of [bundle.previewHtml, bundle.files["product-report.md"], pdfText]) {
+        assert.match(content, /Tool latency/);
+        assert.match(content, /7 ms/);
+        assert.match(content, /1200 ms/);
+        assert.match(content, /3 of 4 calls timed/);
+        assert.doesNotMatch(content, /call duration|tool-call duration/i);
+    }
+    assert.equal(JSON.stringify(facts), before);
+    const json = JSON.parse(bundle.files["product-report.json"]);
+    const metric = json.evaluationFacts.metrics.find(metric => metric.definitionId === "tool-duration");
+    assert.equal(metric.boundary, "tool-start-to-completion");
+    assert.equal(metric.value, 7);
+    assert.deepEqual(metric.samples.map(sample => sample.value).sort((a, b) => a - b), [0, 7, 1200]);
+    const browser = await chromium.launch(), page = await browser.newPage({ javaScriptEnabled: false });
+    t.after(() => browser.close());
+    const denied = [];
+    await page.route("**/*", route => { denied.push(route.request().url()); return route.abort(); });
+    await page.setContent(bundle.previewHtml);
+    const toolRow = page.locator("#timing tbody tr").filter({ hasText: /^Tool latency/ });
+    await expect(toolRow).toHaveCount(1);
+    await expect(toolRow.locator("td").first()).toHaveText("<0.01 s (7 ms)");
+    await expect(toolRow.locator("td").last()).toHaveText("1.2 s (1200 ms)");
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1280, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(({ theme, scale }) => {
+            document.documentElement.dataset.evidenceTheme = theme;
+            document.documentElement.style.fontSize = `${scale * 100}%`;
+        }, { theme, scale });
+        const geometry = await toolRow.evaluate(root => ({
+            overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            clipped: [...root.querySelectorAll("th,td")].filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent),
+        }));
+        assert.ok(geometry.overflow <= 1); assert.deepEqual(geometry.clipped, []);
+        if (proofs) {
+            await mkdir(proofs, { recursive: true });
+            await page.locator("#timing").screenshot({ path: path.join(proofs, `tool-latency-report-${theme}-${width}-${scale}.png`) });
+        }
+    }
+    assert.deepEqual(denied, []);
 });

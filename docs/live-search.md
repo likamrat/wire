@@ -122,12 +122,29 @@ keyboard access, category filters and paging retain their existing behavior.
 
 ### Result presentation
 
-Each result is one native button led by its original title, with a small neutral
-Lucide glyph aligned to that first text line. Type, useful source context and
-original matching evidence share one text edge. Input, result text, metadata
+Each result is one native button led by its original title, with an existing
+semantic Lucide glyph aligned to that first text line. All ten categories have distinct
+screen-only `--search-*` colors, shared by their glyph and readable category heading:
+interaction, conversation context, reply, recorded action, tool, service, report,
+comparison, view and setting. Primary text stays neutral; an action's separate
+recorded outcome retains its canonical success/failure meaning and color.
+Category headings mark consecutive runs of the same type without moving any
+result out of its ranked position. Every hit underneath uses the same structure:
+one canonical-title row, then matching evidence or necessary supporting context.
+There are no per-row category labels on the right and no title-based layout rules.
+Original matching evidence follows only when it adds a different matched field.
+Input, result text, metadata
 and filter labels use the same regular Asta Sans reading scale; hierarchy comes
 from order, grouping and contrast, not accidental font sizes or weights.
-Type is entry metadata, not inferred prompt authorship.
+Type is entry metadata, not inferred prompt authorship. Unmatched source captions
+are omitted unless different source labels distinguish hits with the same exact
+type and canonical title across the full result population. A matched source is
+always preserved; no result is merged, reranked or removed by this presentation.
+Settings uses the existing Settings gear. Service hits obtain their identity
+from the verified service target, not their title, and reuse the same
+`serviceCue`/`dimensionalIcons` glyph as the recorded-data widgets. There is no
+second service-to-icon map or copied service label. Recorded outcomes use the
+existing `*-compact` roles rather than shrinking a regular control icon.
 
 An unmatched retained interaction/context caption is omitted only when its
 complete original value equals the complete original title after whitespace
@@ -144,15 +161,34 @@ Action unit, outcome label, applicability and icon come from the existing
 recorded-results helper. A Work IQ tool call can say Worked; an owned HTTP record
 instead says HTTP 2xx or HTTP 4xx/5xx, and code references retain Execution not
 observed. These are not interchangeable statuses or new analytical counts.
-Saved reports also name their supplied file format in the same metadata line;
-absent formats, including comparison formats not supplied by Search, are not guessed.
+File formats are not part of the main result heading. Supplied formats appear
+as supporting disambiguators only when otherwise identical report titles have
+different formats in the current full result population. The accessible action
+still names the supplied format. Absent formats, including comparison formats
+not supplied by Search, are not guessed.
+Unmatched fixed "Approved frozen report/comparison" captions are omitted because
+the type and saved-item destination already convey that context. A matched
+caption is still shown verbatim. Canonical titles always retain priority:
+"Saved report" or "Saved comparison" may be a genuine title, and the hit does
+not carry authoritative fallback provenance. Generic-looking and specific
+titles therefore use exactly the same title row. The title stays neutral,
+the type glyph keeps its category color, and matching body evidence stays below.
+No title, field, hit, target or match range is rewritten.
 
-Flat rows use whitespace and a single separating rule rather than nested cards.
-Body evidence has an inset reading edge. The scoped blue/teal match color marks
+Compact rows use whitespace rather than repeated rules or nested cards.
+Body evidence shares the heading's reading edge without a blockquote bar.
+The scoped blue/teal match color marks
 only the server-supplied original range, with an underline and semantic `mark`;
 it does not indicate a service, outcome, confidence or generated relevance.
 Other text uses existing neutral roles, with canonical outcome cue colors.
-Partial-corpus coverage is a concise readable line, not a filled card. Pending, error,
+The result count and any incomplete-coverage notice share one summary above the list.
+Category headings annotate consecutive runs only: they never regroup, merge or
+reorder hits, change paging membership, or present displayed-run counts as totals.
+Partial-corpus coverage is a concise readable line, not a filled card. Known
+report-file failures name the supplied cause (missing file or changed bytes that
+could not be verified); unclassified failures keep an honest general explanation.
+The message is computed only from issues affecting the current requested types,
+not from the presence or absence of matching rows. Pending, error,
 reconnect, incomplete and complete no-match messages retain their existing
 state meanings.
 
@@ -167,11 +203,14 @@ The whole hit area stays usable without a filled hover slab or geometry shift. F
 highlight and focus paint. These styles do not alter saved report output or
 global service, outcome, authorship or theme tokens.
 
-The native Filters disclosure uses the same official funnel identity as WIRE.
-Its scope and type selects opt into shared presentation with
+Scope and type are immediately available as two compact filter bubbles inside
+Search, directly below the query. There is no separate Filters disclosure,
+summary or extra click. Accessible labels remain associated with both controls
+without becoming another row of visible captions. Both selects use the same
+shared adapter and bubble styling as the main activity filters via
 `data-select-presentation="filter"`; the shared adapter supplies
-`.select-trigger-filter` and `.select-popup-filter`. Search owns only disclosure
-composition and local layout, not a copy of shared select styling. These remain
+`.select-trigger-filter` and `.select-popup-filter`. Search owns only placement
+and local layout, not a copy of shared select styling. These remain
 single-select listboxes with check marks, not multi-select toggles or new
 Apply/Cancel operations. Result rows never opt into filter-menu styling.
 
@@ -182,6 +221,21 @@ dismissal still hide the popup without clearing the query. Paging still changes
 only the displayed slice. Filters therefore contains only the scope and type
 choices, not another query-clear entry or an invented filter-reset operation.
 
+After the existing exact saved-file/manifest read succeeds, the corpus consumes
+only its optional `canonicalTitle` carrier. That carrier is supplied from the
+verified manifest by the saved-artifact reader, never inferred from an indexed
+title or UI fallback. Absence preserves extracted/legacy title behavior. A
+present malformed carrier fails closed; a valid masked title is used unchanged,
+including when masking expands it beyond the 200-character input limit. This
+does not bypass producer-side manifest/index/snapshot title binding or change
+historical bytes.
+The saved-entry constructor carries that verified presence through title
+projection: only a declared canonical report/comparison title skips the extra
+derived-metadata screening. Identifier-shaped text in that approved title
+therefore remains literally searchable with its original ranges. Legacy or
+extracted titles, body content, and other metadata keep their existing privacy
+filtering; matching text alone never establishes canonical provenance.
+
 The clear action is visible for any nonempty query, including whitespace, and
 uses the shared 44px icon target with an official 20px glyph. A reserved trailing
 region keeps it away from long editable text, with no capsule geometry change.
@@ -190,6 +244,64 @@ duplicate action; `type=search`, editing, selection, composition and keyboard
 behavior remain native. Decorative type glyphs stay inside their text lines
 without separate hit areas. Search does not override the shared icon-only
 sizing rule for Clear or paging.
+SVG dimensions come from the existing `data-icon-size` rules: compact metadata
+glyphs are 16px, shared service glyphs retain their established 24px role, and
+utility glyphs use 20px inside the shared 44px controls. A first-line-height
+decorative slot keeps the same 20px lane and 8px text gap without allowing SVG
+dimensions to inflate row height. Category colors and recorded-outcome colors
+remain distinct. No Search-local SVG shrink overrides or icon-only buttons are
+added to result rows.
+
+The stationary capsule has one blue/violet/rose gradient edge and a soft halo
+even while idle. Hover and focus glide the gradient over a bounded transition,
+without moving or resizing the field or running a perpetual animation. Keyboard
+focus replaces that edge with a high-contrast inset outline, not a second exterior
+ring. Both themes retain readable input and placeholder text. Reduced motion
+disables the transition; forced colors use system border/focus colors without
+gradient or glow. This treatment does not change other controls or saved output.
+
+The fixed timing destination describes "tool latencies" at the authoritative
+navigation-corpus source. Its title, route and focus target stay unchanged.
+Normal content hashing/index rebuilds provide new receipts and original ranges;
+historical text is not renamed and there are no search aliases.
+
+### Leaving and returning
+
+The runtime still releases an idle Search owner after 120 seconds. That cleanup
+is not a user cancellation: the mounted page keeps only its query, scope/type,
+page and reading intent in memory. Hidden/pagehide and genuine window-blur transitions clear displayed
+hits, receipts and open-document authority. On return a surviving stream gets
+one fresh query; a released owner gets a fresh authenticated stream and query.
+Focus-only return is covered even when an unminimized window stayed visible;
+focus moving into a child frame is not treated as leaving the window.
+Only an observed `idle`, `session-released` or `runtime-stopped` fence for the
+same stream, owner and epoch qualifies a clean remote EOF for automatic recovery.
+Idle release retains intent whether it happens before or after departure.
+One qualified release during return can replace the old stream once, not enter
+a retry loop. Unfenced EOF, protocol/parsing/network errors and engine read
+failures terminate automatic resume in both visible and inactive states.
+The transport finalizes fatal UTF-8 decoding, rejects unfinished event buffers,
+and never relabels caller cancellation as remote EOF.
+Repeated lifecycle notifications do not repeat the read.
+Query replacement, explicit clear/cancel/close, genuine read failure, and source
+or deletion invalidation retain their existing fences. A cancelled or failed
+query is not silently restarted by later visibility changes.
+
+Capability release/expiry and runtime shutdown have distinct stream fence reasons
+from explicit Search close. The old capability and receipt remain invalid; normal
+same-origin session renewal obtains a new owner before any result is admitted.
+No mutation or report save is retried. A failed recovery retains the actual error
+and explicit retry instead of replacing it with a false initial "connect" prompt.
+There is no persisted query/history cache. BFCache can restore the in-memory
+intent only when the browser actually retains the document; a discarded/reloaded
+document does not recover private query text from storage.
+
+The former `Updating this view...` return banner was owned by the independent
+snapshot read, not Search's idle timer. Automatic return/online restoration now
+uses the existing background-read path when an accepted snapshot exists. Loading,
+staleness, selection gates, generation checks, timeout/error handling and final
+busy cleanup still belong to that read. First load still uses foreground loading.
+Report-preview invalidation and save recovery are unchanged.
 
 ## Focused proof and retired research
 
@@ -208,6 +320,7 @@ Focused presentation and connected browser proof:
 
 ```powershell
 node --test --test-concurrency=1 web\live-search-presentation.test.mjs tests\search-coherence.browser.test.mjs tests\search-result-design.browser.test.mjs tests\search-row-paint.browser.test.mjs tests\search-text-ui.browser.test.mjs tests\search-control.browser.test.mjs tests\search-minimal.browser.test.mjs
+node --test --test-concurrency=1 tests\search-visibility.browser.test.mjs tests\search-category.browser.test.mjs tests\saved-artifact-read-lifecycle.browser.test.mjs tests\report-history-recovery.browser.test.mjs
 ```
 
 The design case measures full normal-root result hierarchy, text/icon alignment,
@@ -224,6 +337,21 @@ still matches and opens unchanged. Optional
 `WIRE_SEARCH_DESIGN_PROOFS`, `WIRE_SEARCH_ROW_PROOFS` and
 `WIRE_TEXT_SEARCH_PROOFS` directories receive local synthetic screenshots and
 measurements only; these are not live/private-data captures.
+
+`WIRE_SEARCH_CATEGORY_PROOFS` captures all ten actual category glyphs/labels and
+measures their rendered contrast (at least 4.5:1) and pairwise OKLab separation
+(at least 6), plus mixed results, the capsule's idle/hover/focus/open states,
+375px/enlarged text, partial/no-match/error/recovered states. Visibility proof
+uses a controlled 120001ms server interval, visibility and focus-only return,
+held and failed reads, capability
+expiry/release, runtime replacement, current page/focus restoration and a real
+CDP-frozen renderer. Dispatched page-transition events are emulation. A separate
+native back/forward traversal reports whether BFCache actually admitted the
+document; a fresh document is not misreported as BFCache recovery.
+Fault checks deliberately remove a fixture file or fail a request. They remain
+executable assertions, separate from healthy-state design screenshots; earlier
+fault captures are archived as internal evidence, not presented as observations
+of the user's live data.
 
 The old meaning-oriented MUST/ALLOWED fixture and model/linguistic/Related/denial
 experiments are **historical**, not passing gates for text Search. Their semantics

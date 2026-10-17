@@ -21,12 +21,21 @@ test("measure help leads with the human meaning and keeps calculation limits in 
     assert.match(speed.detail, /call starts.*recorded completion/);
     assert.match(speed.detail, /recorded request.*recorded final response/);
     assert.match(speed.detail, /lower middle.*even count/);
-    assert.match(speed.detail, /Concurrent call times are not added/);
+    assert.match(speed.detail, /Concurrent tool latencies are not added/);
     assert.match(coverage.definition, /does not rate the rest of your history/);
     assert.match(unassessed.detail, /error, not a failed answer/);
     assert.match(unassessed.detail, /does not mean one is queued/);
     const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})(), (${createAssessmentWording.toString()})());`)();
     assert.deepEqual(restored.glossary, help.glossary, "The normal shell uses the same short and detailed copy.");
+});
+
+test("Tool latency help uses the recorded tool boundary and retains distinct final-response timing", () => {
+    const { speed } = help.glossary;
+    assert.match(speed.detail, /Tool latency starts when the tool call starts and ends at its recorded completion/);
+    assert.match(speed.detail, /Final-response timing starts at the recorded request and ends at the recorded final response/);
+    assert.match(speed.detail, /Concurrent tool latencies are not added together/);
+    const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})());`)();
+    assert.deepEqual(restored.glossary.speed, speed);
 });
 
 test("category filter help explains available choices without inventing service evidence", () => {

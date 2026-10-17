@@ -4,6 +4,18 @@ import { createReportDraft } from "../web/report-draft.mjs";
 import { createRequestContext } from "../web/request-context.mjs";
 import { retainedContextFixture } from "./request-context-fixture.mjs";
 
+test("a report title belongs to its draft, survives scope refinement and clears with the whole draft", () => {
+    const draft = createReportDraft();
+    const token = draft.token();
+    draft.change({ title: "Weekly planning", formats: ["html", "json"] });
+    assert.equal(draft.current(token), false);
+    draft.select(["first", "second"]);
+    assert.equal(draft.options().title, "Weekly planning");
+    draft.clearSelection();
+    assert.equal(draft.options().title, undefined);
+    assert.deepEqual(draft.options().formats, ["html", "json"]);
+});
+
 test("context authority belongs to the rendered revision, survives edits, and fences late copies without losing write receipts", () => {
     const draft = createReportDraft();
     const basis = { sourceRevision: 4, membershipRevision: 4, consentRevision: 1, overrideRevision: 0, deletionEpoch: 0 };

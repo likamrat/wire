@@ -5,7 +5,7 @@ import { setImmediate } from "node:timers/promises";
 import { searchFixture, searchRecords, streamPanel, saveSearchComparison } from "./live-search-fixture.mjs";
 import { searchWireContract as wire, createSearchWireContract } from "../lib/search-wire-contract.mjs";
 import { SEARCH_MATCH_POLICY_ID, SEARCH_TYPES } from "../lib/search-text.mjs";
-import { loadBoardState } from "../lib/store.mjs";
+import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 import { acceptPeriodReport, freezePeriodReport } from "../lib/period-report.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
@@ -94,6 +94,43 @@ test("actual typing queries retain all 63 matches, suppress stale publication an
     assert.equal((await panel.api("/api/search/open", { id: result.matches.hits[0].id, receipt: result.matches.receipt, openId: 2 })).code, 409);
     assert.equal(panel.events.slice(panel.events.indexOf(result) + 1).some(event => event.event === "results" && event.requestId < 4), false);
     guard.verify();
+});
+
+test("current timing navigation indexes tool latency wording at its authoritative source", { timeout: 15000 }, async t => {
+    const { runtime } = await searchFixture(t);
+    const panel = await streamPanel(runtime);
+    t.after(() => panel.close());
+    await panel.api("/api/search/query", { query: "tool latenc", requestId: 1, types: ["view"] });
+    const result = await panel.wait(event => event.event === "results" && event.requestId === 1);
+    assert.equal(result.matches.total, 1);
+    const hit = result.matches.hits[0];
+    assert.equal(hit.title, "Recorded timing");
+    assert.equal(hit.target.href, "#analyze?mode=calls");
+    assert.equal(hit.target.focus, "activityView");
+    const { start, end, excerptStart } = hit.textMatch;
+    assert.equal(hit.textMatch.field, "content");
+    assert.equal(hit.excerpt.slice(start - excerptStart, end - excerptStart), "tool latenc");
+    assert.ok(hit.excerpt.includes("Compare individual tool latencies in Calls"));
+    await panel.api("/api/search/query", { query: "recorded call durations", requestId: 2, types: ["view"] });
+    const old = await panel.wait(event => event.event === "results" && event.requestId === 2);
+    assert.equal(old.matches.total, 0, "No alias, display-only replacement or semantic rewrite remains.");
+});
+
+test("an indexed title without saved manifest authority never becomes searchable report text", { timeout: 15000 }, async t => {
+    const { runtime, context, bundles } = await searchFixture(t, { formats: ["html"] });
+    const panel = await streamPanel(runtime);
+    t.after(() => panel.close());
+    await panel.api("/api/search/query", { query: "activity report", requestId: 1, types: ["report"] });
+    const legacy = await panel.wait(event => event.event === "results" && event.requestId === 1);
+    assert.equal(legacy.matches.total, 1);
+    assert.equal(legacy.matches.hits[0].textMatch.field, "title", "An absent canonical title preserves the real extracted legacy title.");
+    await updateBoardState(context, state => {
+        state.exports.find(artifact => artifact.bundleId === bundles[0].bundleId).title = "UNVERIFIED_INDEX_TITLE_CANARY";
+    });
+    runtime.search.invalidate();
+    await panel.api("/api/search/query", { query: "UNVERIFIED_INDEX_TITLE_CANARY", requestId: 2, types: ["report"] });
+    const unverified = await panel.wait(event => event.event === "results" && event.requestId === 2);
+    assert.equal(unverified.matches.total, 0, "An index-only title is not a manifest-qualified corpus title.");
 });
 
 test("text membership uses actual complete wire populations for both periods and frozen report scope", { timeout: 30000 }, async t => {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { createExportController } from "../lib/export.mjs";
@@ -8,6 +8,7 @@ import { loadBoardState, moveCard, updateBoardState, replaceEvidence } from "../
 import { fixture, privateFixture } from "./helpers.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { readSavedArtifactFile, readSavedComparison, loadSavedReportSource } from "../lib/report-artifacts.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 async function setup(t) {
@@ -26,6 +27,116 @@ async function setup(t) {
     return { context, controller, earlier: await save("earlier", ["html"]), later: await save("later", ["markdown"]) };
 }
 
+for (const source of ["earlier", "later"]) for (const stage of ["inspect", "prepare", "review", "save"]) {
+    test(`comparison ${stage} rejects a declared ${source} title mismatch without writing`, async t => {
+        const setupResult = await setup(t), { context, controller, earlier, later } = setupResult;
+        let preview;
+        if (stage === "review" || stage === "save") {
+            preview = await controller.previewComparison("title-binding", earlier.bundleId, later.bundleId, { formats: ["html"] });
+            if (stage === "save") await controller.reviewComparison("title-binding", preview.previewId, true);
+        }
+        await updateBoardState(context, state => {
+            state.exports.find(entry => entry.bundleId === setupResult[source].bundleId).title = "Not the declared source title";
+        });
+        const state = await loadBoardState(context), before = JSON.stringify(state);
+        const files = await Promise.all([earlier, later].flatMap(entry => Object.values(entry.files)).map(async file => [file, await readFile(file)]));
+        await assert.rejects(loadSavedReportSource(context, state, setupResult[source].bundleId), /title differs/);
+        const action = stage === "inspect" ? () => controller.inspectComparison("title-binding", earlier.bundleId, later.bundleId)
+            : stage === "prepare" ? () => controller.previewComparison("title-binding", earlier.bundleId, later.bundleId, { formats: ["html"] })
+                : stage === "review" ? () => controller.reviewComparison("title-binding", preview.previewId, true)
+                    : () => controller.confirmComparison("title-binding", preview.previewId, true);
+        await assert.rejects(action, /title differs|changed/i);
+        assert.equal(JSON.stringify(await loadBoardState(context)), before);
+        for (const [file, bytes] of files) assert.deepEqual(await readFile(file), bytes);
+    });
+}
+
+test("comparison titles bind every new format and verified canonical-title carrier", async t => {
+    const { context, controller, earlier, later } = await setup(t);
+    const title = "Calendar request comparison";
+    const originalFiles = [...Object.values(earlier.files), ...Object.values(later.files)];
+    const originals = await Promise.all(originalFiles.map(async file => hash(await readFile(file))));
+    const preview = await controller.previewComparison("named-comparison", earlier.bundleId, later.bundleId, {
+        title, formats: ["html", "pdf", "json", "markdown"],
+    });
+    assert.equal(preview.title, title);
+    assert.equal(preview.snapshot.title, title);
+    assert.equal(JSON.parse(preview.files["coverage-and-redaction-manifest.json"]).title, title);
+    assert.ok(preview.previewHtml.includes(`<title>WIRE - ${title}</title>`));
+    assert.ok(preview.files["comparison-report.md"].startsWith("# " + title + "\n"));
+    const document = getDocument({ data: new Uint8Array(Buffer.from(preview.files["comparison-report.pdf"].data, "base64")), useSystemFonts: false });
+    try {
+        const pdf = await document.promise;
+        const text = (await (await pdf.getPage(1)).getTextContent()).items.map(item => item.str || "").join(" ");
+        assert.ok(text.includes(title));
+    } finally { await document.destroy(); }
+    await controller.reviewComparison("named-comparison", preview.previewId, true);
+    const saved = (await controller.confirmComparison("named-comparison", preview.previewId, true)).bundle;
+    assert.equal(saved.title, title);
+    const state = await loadBoardState(context);
+    for (const format of ["html", "pdf", "json", "markdown", "manifest"]) {
+        assert.equal((await readSavedArtifactFile(context, state, saved.bundleId, "comparison", format)).canonicalTitle, title);
+    }
+    assert.equal((await readSavedComparison(context, state, saved.bundleId)).canonicalTitle, title);
+    const changed = structuredClone(state);
+    changed.exports.find(entry => entry.bundleId === saved.bundleId).title = "Another comparison";
+    await assert.rejects(readSavedArtifactFile(context, changed, saved.bundleId, "comparison", "html"), /title differs/);
+    await assert.rejects(readSavedComparison(context, changed, saved.bundleId), /title differs/);
+    assert.deepEqual(await Promise.all(originalFiles.map(async file => hash(await readFile(file)))), originals);
+    const jsonFile = saved.files["comparison-report.json"], manifestFile = saved.files["coverage-and-redaction-manifest.json"];
+    const mismatched = JSON.parse(await readFile(jsonFile, "utf8"));
+    mismatched.title = "Different document title";
+    const text = JSON.stringify(mismatched, null, 2) + "\n";
+    const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
+    manifest.files["comparison-report.json"] = { bytes: Buffer.byteLength(text), sha256: hash(text) };
+    manifest.snapshotHash = hash(JSON.stringify(mismatched));
+    const metadata = JSON.stringify(manifest);
+    await writeFile(jsonFile, text); await writeFile(manifestFile, metadata);
+    const conflicting = structuredClone(state);
+    conflicting.exports.find(entry => entry.bundleId === saved.bundleId).manifestHash = hash(metadata);
+    await assert.rejects(readSavedArtifactFile(context, conflicting, saved.bundleId, "comparison", "json"), /title differs/);
+});
+
+test("canonical title stays absent for verified older files even when indexed or document titles exist", async t => {
+    const { context, controller, earlier, later } = await setup(t);
+    const preview = await controller.previewComparison("legacy-title-carrier", earlier.bundleId, later.bundleId, {
+        formats: ["html", "pdf", "json", "markdown"],
+    });
+    await controller.reviewComparison("legacy-title-carrier", preview.previewId, true);
+    const comparison = (await controller.confirmComparison("legacy-title-carrier", preview.previewId, true)).bundle;
+    for (const entry of [earlier, comparison]) {
+        const name = entry.kind === "comparison" ? "comparison-report.json" : "product-report.json";
+        const manifestFile = entry.files["coverage-and-redaction-manifest.json"];
+        const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
+        delete manifest.title;
+        if (entry.files[name]) {
+            const snapshot = JSON.parse(await readFile(entry.files[name], "utf8"));
+            delete snapshot.title;
+            const text = JSON.stringify(snapshot, null, 2) + "\n";
+            await writeFile(entry.files[name], text);
+            manifest.files[name] = { bytes: Buffer.byteLength(text), sha256: hash(text) };
+            manifest.snapshotHash = hash(JSON.stringify(snapshot));
+        }
+        const bytes = JSON.stringify(manifest);
+        await writeFile(manifestFile, bytes);
+        await updateBoardState(context, state => {
+            const indexed = state.exports.find(value => value.bundleId === entry.bundleId);
+            indexed.title = "Indexed label, not a manifest-declared title";
+            indexed.manifestHash = hash(bytes);
+            indexed.snapshotHash = manifest.snapshotHash;
+        });
+    }
+    const state = await loadBoardState(context);
+    for (const entry of [earlier, comparison]) for (const format of entry.formats) {
+        const value = await readSavedArtifactFile(context, state, entry.bundleId, entry.kind, format);
+        assert.equal(Object.hasOwn(value, "canonicalTitle"), false);
+        assert.equal(value.artifact.title, "Indexed label, not a manifest-declared title");
+    }
+    assert.equal(Object.hasOwn(await readSavedComparison(context, state, comparison.bundleId), "canonicalTitle"), false);
+    assert.ok(await controller.inspectComparison("undeclared-source-title", earlier.bundleId, later.bundleId),
+        "An indexed legacy label does not become a manifest-declared title binding");
+});
+
 test("format-independent facts support comparison without saved source JSON", async t => {
     const { context, controller, earlier, later } = await setup(t);
     const inspected = await controller.inspectComparison("panel", earlier.bundleId, later.bundleId);
@@ -40,9 +151,10 @@ test("format-independent facts support comparison without saved source JSON", as
     assert.equal(preview.kind, "comparison");
     assert.equal(preview.privacy.reviewerConfirmed, false);
     for (const name of ["comparison-report.html", "comparison-report.md"]) {
-        assert.match(preview.files[name], /Partial: 0/);
-        assert.match(preview.files[name], /Unknown: 0/);
+        assert.doesNotMatch(preview.files[name], /Partial: 0|Unknown: 0/, "Zero-only outcomes do not clutter human output");
     }
+    assert.equal(preview.snapshot.comparison.toolComparison.raw.baseline.partial, 0);
+    assert.equal(preview.snapshot.comparison.toolComparison.raw.later.unknown, 0);
     await assert.rejects(controller.confirmComparison("panel", preview.previewId, true), /disclosure review/);
     const reviewed = await controller.reviewComparison("panel", preview.previewId, true);
     assert.equal(reviewed.privacy.reviewerConfirmed, true);

@@ -118,17 +118,17 @@ export const textAccessStyles = `
 #requestContent .request-intro:empty {display:none}
 #requestContent .reader-scope {font-size:var(--type-body);line-height:var(--leading-ui)}
 #requestContent .reader-scope {flex-basis:100%;margin-top:8px;color:var(--muted)}
-#requestContent .request-context-timeline {margin-block:0 12px;padding:0}
-#requestContent .request-context-timeline>.journey-item {padding:16px 0;margin:0;border:0;border-bottom:1px solid var(--rule)}
-#requestContent .request-context-timeline>.journey-item:first-child {padding-top:0}
-#requestContent .request-context-timeline>.journey-item:last-child {border-bottom:0;padding-bottom:0}
+#requestContent :is(.request-context-timeline,.reader-context-list) {margin-block:0 12px;padding:0}
+#requestContent :is(.request-context-timeline,.reader-context-list)>.journey-item {padding:16px 0;margin:0;border:0;border-bottom:1px solid var(--rule)}
+#requestContent :is(.request-context-timeline,.reader-context-list)>.journey-item:first-child {padding-top:0}
+#requestContent :is(.request-context-timeline,.reader-context-list)>.journey-item:last-child {border-bottom:0;padding-bottom:0}
 #requestContent .request-context-timeline>.journey-item[data-selected-action=true] {border-inline-start:2px solid var(--accent);padding-inline-start:16px}
 #requestContent .request-context-timeline :is(.full-text-header h2,.full-text-header h3,.interaction-response>h2,.call-heading h3) {font-family:var(--font);font-size:var(--type-body);line-height:var(--leading-reading);font-weight:var(--weight-strong);margin:0}
 #requestContent .request-context-timeline .context-entry-label {font-size:var(--type-body);line-height:var(--leading-ui);margin-bottom:4px;color:var(--ink)}
 #requestContent .context-entry-label strong {font:inherit;color:var(--muted)}
 #requestContent .request-context-timeline :is(.call-duration,.action-context,.action-fields,.reader-response-note,.reader-empty) {font-size:var(--type-body);line-height:var(--leading-reading)}
-#requestContent .request-context-timeline .call-heading {display:block;line-height:1.5}
-#requestContent .request-context-timeline .call-heading h3 {font-weight:var(--weight-regular);line-height:inherit}
+#requestContent :is(.request-context-timeline,.reader-context-list) .call-heading {display:block;line-height:1.5}
+#requestContent :is(.request-context-timeline,.reader-context-list) .call-heading h3 {font:inherit}
 #requestContent .request-context-timeline .call-heading .call-duration {line-height:inherit}
 #requestContent .full-text-complete {max-inline-size:100%}
 #requestContent .full-text-header {gap:4px 16px}
@@ -253,7 +253,7 @@ body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px)
  #requestContent .reader-facts .reader-source {gap:4px 16px}
 }
 #requestContent .reader-section {min-width:0}
-#requestContent .reader-section+.reader-section {margin-top:20px;padding-top:12px;border-top:1px solid var(--rule)}
+#requestContent .reader-section~.reader-section {margin-top:20px;padding-top:12px;border-top:1px solid var(--rule)}
 #requestContent .reader-section-heading {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin:0 0 6px;font-size:var(--type-reading);font-weight:var(--weight-medium);line-height:1.4}
 #requestContent .reader-section-toggle {display:inline-flex;flex:1 1 0;align-items:center;gap:8px;min-width:0;min-height:44px;max-width:100%;padding:0;border:0;border-radius:2px;background:transparent;font:inherit;text-align:start;white-space:normal}
 #requestContent .reader-section-toggle>span {min-width:0;overflow-wrap:anywhere}
@@ -314,7 +314,7 @@ body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px)
 #requestContent .reader-tool-name {font-weight:var(--weight-medium)}
 #requestContent .reader-recorded-signal {margin:8px 0 0;font:inherit;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
 #requestContent .reader-signal-label {color:var(--muted)}
-#requestContent .request-context-timeline .reader-call-identity .context-entry-label {display:inline;margin:0;font:inherit;color:var(--muted)}
+#requestContent :is(.request-context-timeline,.reader-context-list) .reader-call-identity .context-entry-label {display:inline;margin:0;font:inherit;color:var(--muted)}
 #requestContent .request-context-timeline .reader-call-identity .context-selected-label {color:var(--accent)}
 #requestContent .reader-entry-label {color:var(--ink);margin:0 0 12px}
 #requestContent .request-context-timeline>.journey-item[data-context-kind=action] {padding-block:20px}
@@ -333,6 +333,15 @@ body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px)
 #requestContent .reader-request-block>.reader-input-identity {margin-bottom:8px}
 #requestContent .reader-input>.ux-copy {grid-column:2;grid-row:1/span 2;align-self:start;align-items:flex-start;padding-block-start:max(0px,calc((1.5em - 20px)/2))}
 #requestContent .reader-input-value {grid-column:1;grid-row:2;min-width:0}
+#requestContent .reader-input-value>.reader-request-paths {margin:0}
+#requestContent .reader-input-value>ol.reader-request-paths {padding-inline-start:1.4em;list-style:decimal}
+#requestContent .reader-response-availability {margin:20px 0 0;padding:12px 0 0;border:0;border-top:1px solid var(--rule);border-radius:0;background:none;min-width:0}
+#requestContent .reader-response-availability:has(>.reader-empty) {display:block}
+#requestContent .reader-response-availability[hidden] {display:none}
+#requestContent .reader-response-availability.interaction-response>h2 {position:static;inline-size:auto;block-size:auto;overflow:visible;clip-path:none;white-space:normal;font:inherit;margin:0 0 8px}
+#requestContent .reader-linked-context>summary {min-height:44px;font:inherit}
+#requestContent .reader-linked-context .reader-context-heading {font:inherit;margin:0 0 6px}
+#requestContent .reader-linked-context .full-text-body {border:0;padding:0;background:none}
 #requestContent .reader-input>.reader-fields {grid-column:1/-1;margin-top:12px}
 #requestContent .reader-input>.ux-copy-status.error {grid-column:1/-1}
 #requestContent .reader-request-text {margin:0;padding:8px 12px;border-inline-start:2px solid var(--rule);background:none;font:inherit;font-weight:var(--weight-regular);white-space:pre-wrap;overflow-wrap:anywhere}

@@ -527,8 +527,8 @@ test("recorded models use the same stacked card fact and exact reader context wi
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     const call = callCard(page, "multiple");
     await expect(fact(call, "Interaction model").locator("dd")).toHaveText("recorded-model-a then recorded-model-b");
-    await expect(fact(call, "Call duration").locator("dd")).toHaveText("1.2 s");
-    await expect(fact(call, "Call duration").locator("data")).toHaveAttribute("value", "1200");
+    await expect(fact(call, "Tool latency").locator("dd")).toHaveText("1.2 s");
+    await expect(fact(call, "Tool latency").locator("data")).toHaveAttribute("value", "1200");
     await expect(call.locator(".response-timing")).toHaveCount(0);
     await expect(call.locator(".interaction-tools")).not.toContainText("recorded-model");
     const link = call.getByRole("link", { name: "Open exact call in context" });
@@ -670,7 +670,7 @@ test("emphasized previews and calm full reading retain exact text, missing value
             await expect(fact(missing, "Request time")).toContainText("Not recorded");
             await expect(missing.locator("[data-outcome=unknown]")).toHaveAttribute("data-count", "1");
             if (mode === "calls") {
-                await expect(fact(missing, "Call duration")).toContainText("Not recorded");
+                await expect(fact(missing, "Tool latency")).toContainText("Not recorded");
                 await expect(fact(missing, "API path")).toContainText("Not recorded");
             }
             for (const id of ["retry", "multiple", "archive"]) {

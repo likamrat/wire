@@ -4,7 +4,9 @@ import { readFile, writeFile, unlink, readdir } from "node:fs/promises";
 import path from "node:path";
 import { createSearchCorpus } from "../lib/search-corpus.mjs";
 import { corpusHash, corpusId, reportDocumentText } from "../lib/search-corpus-content.mjs";
-import { createCorpusSources } from "../lib/search-corpus-sources.mjs";
+import { createCorpusSources, createSavedCorpusEntry, projectSavedSearchTitle } from "../lib/search-corpus-sources.mjs";
+import { indexSearchText, rankTextSearch, textSearchHit } from "../lib/search-text.mjs";
+import { searchHitPresentation } from "../web/live-search.mjs";
 import { createSettingsNavigation } from "../web/settings-navigation.mjs";
 import { createCallInvestigation } from "../web/call-investigation.mjs";
 import { buildRequestActivity } from "../lib/activity-analytics.mjs";
@@ -18,8 +20,66 @@ import { createDeletionController } from "../lib/deletion.mjs";
 import { executeAssessmentAction } from "../lib/assessment.mjs";
 import { selectPersonalEvaluationCleanup } from "../lib/personal-evaluation.mjs";
 import { finalizePersonalEvaluationCleanup } from "../lib/assessment-read-model.mjs";
-import { createSavedArtifactDescriptor } from "../lib/report-artifacts.mjs";
+import { createSavedArtifactDescriptor, readSavedReportFile, readSavedComparison } from "../lib/report-artifacts.mjs";
+import { extractReportFile } from "../lib/search-corpus-report-content.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
+
+test("verified saved-title carrier is format-independent and preserves exact masked metadata", () => {
+    const canonicalTitle = "Release review \u2014 " + "[masked contact] ".repeat(30);
+    assert.ok(canonicalTitle.length > 200);
+    for (const format of ["html", "json", "markdown", "pdf", "comparison"]) {
+        assert.equal(projectSavedSearchTitle({ format, canonicalTitle }, "A different extracted title"), canonicalTitle);
+    }
+    for (const extracted of [undefined, "", "Saved report", "Saved comparison", "A genuine legacy title"]) {
+        assert.equal(projectSavedSearchTitle({ artifact: { title: "Index-only title" } }, extracted), extracted);
+        assert.equal(projectSavedSearchTitle({ snapshot: { title: "Not the agreed carrier" } }, extracted), extracted);
+    }
+    for (const canonicalTitle of [undefined, null, "", "  ", 42, "Title\nextra", "Title\u0085extra"]) {
+        assert.throws(() => projectSavedSearchTitle({ canonicalTitle }, "Legacy title"),
+            error => error.code === "invalid-canonical-title");
+    }
+});
+
+test("verified canonical title survives saved-entry construction, literal lookup and original ranges", async () => {
+    const identifier = "build-" + "a".repeat(32);
+    for (const kind of ["report", "comparison"]) for (const format of ["html", "json", "markdown", "pdf"]) {
+        for (const canonicalTitle of ["Review " + identifier, "[masked contact] ".repeat(20) + "Review \u{1f680} e\u0301 " + identifier]) {
+            const artifact = { bundleId: "export-00000000-0000-4000-8000-000000000001",
+                kind, manifestHash: "b".repeat(64), promptMode: "original", title: "Index-only title" };
+            const document = { artifact, format, sha256: "c".repeat(64), canonicalTitle };
+            const extracted = { title: canonicalTitle, content: "Body " + identifier, coverage: { format } };
+            const sourceRevision = "d".repeat(64);
+            const saved = createSavedCorpusEntry(artifact, document, extracted, sourceRevision);
+            assert.equal(saved.title, canonicalTitle, "The production entry builder must keep the verified declaration.");
+            assert.equal(saved.content, "Body [private value removed]", "Canonical title authority does not exempt body content.");
+            const matches = await rankTextSearch([indexSearchText(saved)], identifier.toUpperCase(), [kind], new AbortController().signal);
+            assert.equal(matches.length, 1);
+            const hit = textSearchHit(saved, matches[0]), range = hit.textMatch;
+            assert.equal(hit.title, canonicalTitle);
+            assert.equal(range.field, "title");
+            assert.equal(range.start, canonicalTitle.indexOf(identifier));
+            assert.equal(range.end, canonicalTitle.length);
+            assert.equal(hit.excerpt.slice(range.start - range.excerptStart, range.end - range.excerptStart), identifier);
+            const shown = searchHitPresentation(hit, { showSource: false });
+            assert.equal(shown.title.map(part => part.text).join(""), canonicalTitle);
+            assert.equal(shown.title.find(part => part.match).text, identifier);
+            const { revision, ...fields } = saved;
+            assert.equal(revision, corpusHash(fields));
+            assert.equal(Object.hasOwn(saved, "hasCanonicalTitle"), false, "The internal authority flag is not a new wire field.");
+
+            const legacyDocument = { ...document };
+            delete legacyDocument.canonicalTitle;
+            const legacy = createSavedCorpusEntry(artifact, legacyDocument, extracted, sourceRevision);
+            assert.equal(legacy.title, canonicalTitle.replace(identifier, "[private value removed]"),
+                "An equal extracted title without the real carrier retains privacy screening.");
+            assert.equal(legacy.id, saved.id);
+            assert.notEqual(legacy.revision, saved.revision, "Canonical title text participates in corpus identity.");
+            assert.deepEqual(await rankTextSearch([indexSearchText(legacy)], identifier, [kind], new AbortController().signal), []);
+            assert.throws(() => createSavedCorpusEntry(artifact, { ...document, canonicalTitle: null }, extracted, sourceRevision),
+                error => error.code === "invalid-canonical-title");
+        }
+    }
+});
 
 async function savedReport(session, controller, promptMode) {
     const state = await loadBoardState(session);
@@ -35,6 +95,89 @@ async function indexed(corpus) {
     return { items, ticket: { ...receipt, hits: items.map(({ id, revision }) => ({ id, revision })) }, status };
 }
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+
+test("real report producers preserve verified titles through every Search format and reject mismatched identity", async t => {
+    const records = [fixture("title-source-a"), fixture("title-source-b")];
+    const { context } = await privateFixture(t, records), controller = createExportController(context);
+    const formats = ["html", "json", "markdown", "pdf"], saved = [], ordinary = [];
+    const titleInput = "Zebra " + Array(8).fill("a@example.invalid").join(" ");
+    assert.ok(titleInput.length <= 200);
+    for (const format of formats) {
+        const state = await loadBoardState(context);
+        const preview = await controller.preview("title-search", undefined, {
+            title: titleInput, promptMode: "none", formats: [format],
+        }, { kind: "all", revision: state.revision });
+        assert.ok(preview.title.length > 200, "Metadata masking can expand a valid title input");
+        await controller.review("title-search", preview.previewId, true);
+        const bundle = (await controller.confirm("title-search", preview.previewId, true)).bundle;
+        ordinary.push(bundle); saved.push({ bundle, format, title: preview.title, kind: "report" });
+    }
+    for (const format of formats) {
+        const preview = await controller.previewComparison("title-search", ordinary[0].bundleId, ordinary[1].bundleId, {
+            title: "Zebra comparison", formats: [format],
+        });
+        await controller.reviewComparison("title-search", preview.previewId, true);
+        const bundle = (await controller.confirmComparison("title-search", preview.previewId, true)).bundle;
+        saved.push({ bundle, format, title: preview.title, kind: "comparison" });
+    }
+    const before = await loadBoardState(context), stateBytes = JSON.stringify(before);
+    const fileBytes = await Promise.all(saved.flatMap(({ bundle }) => Object.values(bundle.files)).map(async file => [file, await readFile(file)]));
+    const sources = createCorpusSources(context, { source: inventedSource }), frame = await sources.scan();
+    const artifacts = frame.entries.filter(entry => ["report", "comparison"].includes(entry.type));
+    assert.equal(artifacts.length, saved.length, JSON.stringify(frame.issues));
+    for (const expected of saved) {
+        const document = expected.kind === "report"
+            ? await readSavedReportFile(context, before, expected.bundle.bundleId, expected.format)
+            : await readSavedComparison(context, before, expected.bundle.bundleId);
+        assert.equal(document.canonicalTitle, expected.title);
+        const entry = artifacts.find(item => item.target.bundleId === expected.bundle.bundleId);
+        assert.equal(entry.title, expected.title);
+        assert.equal(entry.type, expected.kind);
+        if (expected.kind === "report") assert.equal(entry.coverage.format, expected.format);
+    }
+    const matches = await rankTextSearch(artifacts.map(indexSearchText), "zebra", ["report", "comparison"], new AbortController().signal);
+    assert.equal(matches.length, saved.length);
+    for (const match of matches) {
+        const entry = artifacts.find(item => item.id === match.id), hit = textSearchHit(entry, match);
+        assert.equal(hit.title, entry.title);
+        assert.equal(hit.textMatch.field, "title");
+        assert.equal(hit.title.slice(hit.textMatch.start, hit.textMatch.end), "Zebra");
+    }
+    assert.equal(JSON.stringify(await loadBoardState(context)), stateBytes);
+    for (const [file, bytes] of fileBytes) assert.deepEqual(await readFile(file), bytes);
+
+    const changed = [saved[0], saved[4]];
+    await updateBoardState(context, state => {
+        for (const item of changed) state.exports.find(entry => entry.bundleId === item.bundle.bundleId).title = "Wrong indexed label";
+    });
+    const mismatched = await sources.scan();
+    for (const item of changed) assert.equal(mismatched.entries.some(entry => entry.target.bundleId === item.bundle.bundleId), false);
+    assert.equal(mismatched.issues.filter(issue => ["report", "comparison"].some(type => issue.types.includes(type))).length, changed.length);
+
+    for (const item of changed) {
+        const manifestFile = item.bundle.files["coverage-and-redaction-manifest.json"];
+        const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
+        delete manifest.title;
+        const metadata = JSON.stringify(manifest);
+        await writeFile(manifestFile, metadata);
+        await updateBoardState(context, state => {
+            const entry = state.exports.find(value => value.bundleId === item.bundle.bundleId);
+            entry.manifestHash = corpusHash(metadata);
+            entry.title = "Index-only fallback, not a canonical title";
+        });
+    }
+    const legacyState = await loadBoardState(context), legacy = await sources.scan();
+    for (const item of changed) {
+        const document = item.kind === "report"
+            ? await readSavedReportFile(context, legacyState, item.bundle.bundleId, item.format)
+            : await readSavedComparison(context, legacyState, item.bundle.bundleId);
+        assert.equal(Object.hasOwn(document, "canonicalTitle"), false);
+        const entry = legacy.entries.find(value => value.target.bundleId === item.bundle.bundleId);
+        assert.ok(entry, JSON.stringify(legacy.issues));
+        assert.notEqual(entry.title, "Index-only fallback, not a canonical title");
+        assert.equal(entry.title, item.kind === "report" ? (await extractReportFile(document)).title : "Saved comparison");
+    }
+});
 
 test("inert body extraction keeps escaped text, never scripts, attributes, comments, SVG or fonts", () => {
     const html = `<!doctype html><html><head><style>@font-face { src: url(SECRET_FONT) }</style></head><body>

@@ -213,7 +213,8 @@ test("reader exposes exact operations and useful evidence without identifier but
     const reader = page.locator("#requestContent"), call = reader.locator("[data-tool-call-id]");
     await expect(call.locator(".reader-call-identity")).toHaveText(/Call 1\s*·\s*Tool: workiq-ask/);
     assert.equal(await call.locator(".reader-tool-name").innerText(), "workiq-ask");
-    assert.match(await call.locator(".interaction-response").innerText(), /No saved response\. Capture is off\./);
+    await expect(call.locator(".interaction-response")).toHaveCount(0);
+    assert.match(await reader.locator(":scope > .reader-response-availability").innerText(), /No saved response\. Capture is off\./);
     assert.equal(await reader.locator(".request-context-summaries>summary").count(), 0);
     await expect(reader.getByRole("heading", { name: "Reviews", exact: true })).toHaveCount(0);
     const pick = page.locator("#contextSidebarFooter").getByRole("button", { name: "Add to report", exact: true });
@@ -417,7 +418,7 @@ test("reader distillation keeps a legible story without repeated empty fields or
     await expect(timeline.getByText("Matches current view", { exact: true })).toHaveCount(1);
     assert.match(visible, /No error details recorded/);
     assert.doesNotMatch(visible, /Historical call evidence only/);
-    assert.match(visible, /No saved response\. Capture is off\./);
+    assert.match(await page.locator("#requestContent > .reader-response-availability").innerText(), /No saved response\. Capture is off\./);
     assert.match(await page.locator(".reader-scope").innerText(), /1 of 7.*match/);
     assert.equal(await timeline.locator(".context-selected-label").count(), 0, "A direct interaction entry needs no Selected prompt badge");
     const action = timeline.locator("[data-tool-call-id=synthetic-reading-call-0]");

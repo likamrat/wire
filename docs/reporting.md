@@ -17,6 +17,46 @@ review does not settle unknown billing or rewrite approval/receipt evidence.
 
 WIRE describes your approved, recorded interactions. It does not require a synthetic benchmark or an expected-answer dataset, and it does not replay Work IQ or Graph requests.
 
+## Report identity and saved originals
+
+**Report title** belongs to Contents, or to the copy options for a saved-report
+comparison. It accepts one line up to 200 input characters. A blank title uses a
+factual scope/type name. Titles are always masked metadata, including when prompt
+text is omitted or retained in original wording; manual masking terms still apply.
+Changing a title requires a newly prepared copy and disclosure review. It does not
+change selected interactions, period cohorts or file formats.
+
+New schema-v3 snapshots, manifests and indexed artifacts carry the same `title`.
+The library, inspector, reviewed page, saved result and generated files use that
+identity. The title appears before bulk records in JSON. Older files are not
+retitled: their indexed title is used when present, otherwise the interface combines
+known type/scope and preparation metadata without presenting that fallback as an
+original title.
+
+Verified reads expose optional `canonicalTitle` only when the verified manifest
+declares it and its indexed binding agrees. This applies to ordinary/comparison
+file reads, ordinary document reads and `readSavedComparison()`'s facts result.
+It is absent for undeclared titles; indexed labels and extracted document headings
+are not substitutes. Declared JSON titles must also agree with their manifest.
+Search consumes this carrier after its existing file checks, not a second title rule.
+
+**View original** is separate from verified Open. It supports an indexed,
+nondeleted ordinary legacy bundle in the `files/` layout with the supported
+unanchored v3 manifest: no modern verification fields or reviewed timestamp,
+strictly true legacy reviewer flags, a valid snapshot hash and exact per-file
+`{bytes, sha256}` descriptors. These legacy flags do not establish historical
+approval. False, malformed, partial or conflicting verification stays closed.
+
+The explicit `POST /api/report-original` accepts only `{bundleId, kind, format}`.
+Capability/origin checks, managed path/link/size checks, fatal UTF-8 decoding,
+read-only board gates and a fresh indexed-identity check apply. The response is
+`legacy-original` / `unverified`, with a current-read digest, never a historical
+verification receipt. An explicit click is required before reading; there is no
+Search fallback or automatic downgrade from broken verified files. HTML uses the
+existing opaque, network-free sandbox; JSON/Markdown are literal text; PDF is only
+an explicit download. Reads do not rewrite files, receipts or the index and cannot
+make a legacy report eligible for comparison.
+
 ## Reading the measures
 
 The analytical filter row uses short display names, not new provenance or units:
@@ -137,7 +177,7 @@ capabilities, or whether a recorded request succeeded.
 | --- | --- |
 | Recorded tool success | Successful recorded tool calls divided by all unique included calls. Failed, partial and unknown outcomes remain separate. This is not answer accuracy. |
 | Answer correctness | Passed reviews divided by passed plus failed reviews, with reviewed request coverage alongside. Personal feedback and AI reviews remain separate. |
-| Speed | The named recorded timing boundary, such as median tool-call duration or time to HTTP response headers. Different boundaries are not blended. |
+| Speed | The named recorded timing boundary, such as median tool latency or time to HTTP response headers. Different boundaries are not blended. |
 | Answer support | Evidence-supported answer reviews or explicitly labelled personal feedback. Citation presence alone does not establish support. |
 | Tool use vs. request | A saved AI review of whether recorded tool use fit what was asked. It is not proof of permission, successful retrieval or task completion. |
 | Permission for tool use | Personal feedback about permission, not the model's request-match review and not a permission grant. |
@@ -240,13 +280,19 @@ Prepare report runs the existing local preview controller. Its loading/error sta
 and the actual prepared document occupy the main workspace, with the sidebar closed
 for reading room. Review presents flat Report/Text/Files views. Text copies
 and privacy findings stay available without nested comparison disclosures.
-**Copy local original** and **Copy report copy** identify distinct subjects;
-Edit/omit belongs to its report-copy column. Copy feedback does not insert a line.
+Selection and disclosure review are reading tasks, not clipboard utilities.
+Their exact text remains selectable, without automatic Copy toolbars on prompts,
+original/report pairs, code snippets or file contents. Intentional prompt/response
+copying in the interaction reader is unchanged. Edit/omit belongs to the report
+column. Scanner counters and byte totals remain in the manifest, not the review UI.
 Both columns use regular screen typography and a restrained leading edge, not
 gray text cards or the frozen document's separate font rules.
 Files shows each exact filename once as its disclosure, without an additional
 heading repeating the selected tab. Retained partial, unavailable and mandatory
 credential-removal notices are not condensed away.
+Create and Compare are library entry choices. Once a task is active, its header
+offers Back to Reports rather than a competing task switch. Existing step/back,
+disclosure, Save and uncertain-outcome recovery actions remain available.
 **Approve for local saving** records disclosure; the text-only **Save report** is a
 separate action in that same reading workspace, not a fourth page repeating scope.
 Back to contents reopens setup and retains an unchanged prepared snapshot. Changing
@@ -332,21 +378,30 @@ control; page bounds alone are not evidence of coherent pagination.
 
 ### New native reports
 
-New ordinary HTML, PDF and Markdown lead with **At a glance**: the frozen
-interaction/chat population, most frequent recorded tools/services, call outcomes,
-supported historical reasons, and separately qualified answer/action findings.
-Period reports retain **What the record shows** for their paired cohorts.
-Flat tool bars and recorded timing follow; exact evidence counts remain
-in coverage.
-Permitted bounded context precedes representative technical examples; full
-quality measures, operation tables, reviewed prompt copies and coverage remain
-available as supporting detail. HTML disclosures are native keyboard controls.
+New ordinary HTML, PDF and Markdown lead with the report's actual title, concise
+scope/preparation metadata and evidence-backed distribution statements. **Activity**
+shows exact nonempty evidence layers and tool/service breakdowns; **Timing**,
+**Examples**, **Operations** and included **Report text** follow. Counts are no
+longer buried in coverage. Empty prompt sections and repeated section destinations
+are omitted. Coverage, definitions and technical identities have one supporting
+location. Period reports use the same title-first shell, side-by-side A/B activity
+and separate matching-call versus full-interaction timing. Saved-report comparisons
+keep overlap, one-sided coverage and incompatible definitions without a repeated
+subtitle stack. No new output revives retired assessment or personal-feedback lanes.
+HTML disclosures are native keyboard controls.
 PDF expands every disclosure and copy. JSON retains the factual snapshot rather
 than an inferred narrative.
 
-The summary calls service involvement **Services and operations**, not recorded
-targets: targetless retrieval is Search by tool purpose, and the existing
-category explanation retains that distinction. No classifier or facts change.
+The summary names the most frequent supported service associations without
+claiming that a bounded list contains every service. Targetless retrieval is Search
+by tool purpose; the existing category definition retains that distinction. No
+classifier or facts change.
+When frozen service involvement is available, human output does not append the
+different legacy category glossary or a contradictory tool-category warning.
+Both definitions and their original data remain in JSON. Operation tables reserve
+space for paths and scroll within the document on narrow screens. Printed period
+record tables use the full page width rather than squeezing four columns into
+half a sheet; text copies keep a restrained leading edge instead of form-like boxes.
 Short complete prompt copies appear once, with their representative call sequence;
 only longer or additional copies need the appendix. Each copy keeps author,
 availability, representation and mandatory-removal qualifications. Long examples
@@ -354,13 +409,14 @@ remain bounded excerpts linked to complete copies, never truncated audit content
 
 Unavailable timing keeps each distinct boundary and timed/eligible count in a
 concise note instead of repeating empty median/P95 cells. The nearest-rank method
-and missing-time/concurrency limits are stated once. Identically unsupported local
-checks share their explanation but keep separate named coverage counts; personal,
-model, unknown-definition and error results retain their own rows and origins.
+paragraph appears only when timed samples exist; a measured zero remains a real
+sample. Full definitions remain in machine-readable output. Current tool start-to-completion
+displays use **Tool latency**; request-to-final-response and HTTP timing remain
+distinct. Supported historical review formats retain their qualified interpretation.
 API-status coverage, service-overlap methodology, scope and privacy explanations
 each have one home. Full definitions, transformations and hashes remain in the
-manifest; JSON facts are unchanged. Print omits the screen's navigation controls
-and the redundant closing brand line, not evidence or limitations. Ordinary
+manifest; canonical JSON facts are unchanged. Print omits screen navigation
+controls, not evidence or limitations. Ordinary
 reports consolidate coverage into one account instead of repeatedly appending
 caveats; there is no page cap or smaller type.
 
@@ -698,12 +754,13 @@ timed-call/request counts stay separate. Exact model/rubric origins remain besid
 their saved results. These explanations do not change facts or older saved files.
 
 **Open saved report** reads the registered, disclosure-reviewed HTML file after
-checking its manifest and exact file hash. The reader names its preparation time,
-prompt mode and report ID and leaves any unfinished draft untouched. It does not
-regenerate the report from current activity. Missing HTML is explicit; other saved
-formats remain downloadable. The sandboxed reader blocks external resources and
+checking its manifest and exact file hash. If HTML was never declared, it reads a
+declared JSON or Markdown file literally, or offers an explicit PDF download.
+Declared but broken HTML never falls through to another format. The reader leads
+with report identity and leaves any unfinished draft untouched; it never
+regenerates the report from current activity. The sandboxed reader blocks external resources and
 out-of-document links (including the companion JSON link); use the saved download
-buttons for companion files. In-document section links remain usable. These reader
+file selector and Download action for companion files. In-document section links remain usable. These reader
 safety restrictions never modify saved bytes, including historical Cost content.
 
 ### Report a retained-period comparison
@@ -913,21 +970,37 @@ Search covers safe metadata across every page, not just the visible six items:
 IDs, preparation dates, formats, prompt modes and time zones. It does not read
 stored report bodies or prompts.
 
-Rows prioritize known scope and interaction count, preparation time and Open.
+Rows prioritize actual title, known scope and interaction count, preparation time and Open.
 Prompt mode and format availability remain compact secondary metadata.
 Selecting a row opens its safe indexed metadata in the shared right sidebar:
-known scope/count, preparation time, prompt mode, timezone/locale, full identity
-and saved file actions. Selection never reads the full file, downloads or deletes.
+known scope/count, preparation time, prompt mode and timezone. The inspector
+offers Open and the existing named Delete action, not another file-management
+toolbar or locale setting. Downloads belong to the opened report or completed
+Save result. Technical identifiers remain in saved metadata, not the
+reading lead. Selection never reads the full file, downloads or deletes.
 The independent row **Open** bypasses inspection. Preparation order can be newest
 or oldest first; unknown dates remain last. The current search, page and order stay
 in place while inspecting.
-The outer library is not collapsible. A missing HTML file offers an available
-saved PDF/Markdown/JSON download; missing metadata is never inferred from current activity.
-The inspector footer opens saved HTML, or explicitly offers an actually saved
-format download when HTML is absent. Format labels are content beside Lucide
-download icons with file-and-report-specific accessible names. Compare and Delete
+The outer library is not collapsible. Open also supports declared JSON/Markdown,
+or a PDF-only state requiring an explicit download. Missing metadata is never
+inferred from current activity. Registered filenames remain declarations when
+optional legacy format metadata is absent; registered or format-declared HTML
+always wins, and a broken declaration never falls through. Downloads still require
+the complete registered format inventory; an incomplete old record is readable
+without exposing a download that cannot pass those checks. A labelled **Saved file** selector and one
+**Download** action keep file access secondary to the report; the manifest is last,
+not the default when a report representation exists. Compare and Delete
 are separate text actions; Delete retains its existing named confirmation and
 original-operation receipt recovery.
+
+A completed comparison's Open action follows authoritative saved inventory.
+Deleting that comparison shows an unavailable result without erasing its unchanged
+source-pair choices. Failed reads do not imply deletion, and pending/unconfirmed
+Save recovery remains bound to its original dispatched identity.
+A matching Save receipt settles the write, not current availability. A successful
+post-save inventory that omits the comparison cannot be overwritten by that older
+receipt. Failed refreshes retain recovery; cached or pre-save choices are never
+used as evidence that the newly saved comparison was deleted.
 
 The saved reader occupies the full-width Reports main workspace, with the
 contextual pane closed and focus on its heading. It keeps the old opaque sandbox,
@@ -937,8 +1010,8 @@ does not create an inspector on return. Opening from the completed Save result
 still returns to the library, without discarding another in-memory draft.
 This applies to ordinary reports and saved comparisons: no saved HTML is
 regenerated or restyled, including historical typography and missing facts.
-Missing HTML and unknown metadata remain explicit; other formats are available
-through verified downloads. **About saved reports** holds the search/privacy
+Unavailable files and unknown metadata remain explicit; supported unanchored
+legacy originals require the separate action described above. **About saved reports** holds the search/privacy
 boundary. The single **Refresh** retains its existing source and draft/review
 guards; read-only **Retry** appears only when recovery is needed.
 

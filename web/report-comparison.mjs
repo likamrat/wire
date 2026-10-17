@@ -197,7 +197,7 @@ export function createReportComparison(wording = createAssessmentWording()) {
     }
     function factDefinitionLabel(fact, includeIdentity = false, includeOrigin = true) {
         if (fact.kind === "duration") return ({
-            "tool-start-to-completion": "Median tool-call duration",
+            "tool-start-to-completion": "Median tool latency",
             "http-dispatch-to-response-headers": "Median HTTP response time",
             "http-dispatch-to-transport-error": "Median time to transport error",
             "verified-request-to-final-answer": "Whole-interaction time",
@@ -242,6 +242,9 @@ export function createReportComparison(wording = createAssessmentWording()) {
         }
         for (const [kind, layer] of Object.entries(model.layerComparisons ?? {})) {
             if (kind === "tool-call") continue;
+            if (model.metricProjectionVersion === 4 && kind !== model.primaryLayer
+                && (layer.baselineCount === 0 && layer.laterCount === 0
+                    || layer.raw?.baseline?.count === 0 && layer.raw?.later?.count === 0)) continue;
             if (kind === "graph-code-reference") notes.push(`Code references: ${layer.baselineCount ?? "not recorded"} earlier; ${layer.laterCount ?? "not recorded"} later. ${layer.note}`);
             else if (layer.raw) notes.push(`${layer.unit}: ${layer.raw.baseline.count} earlier; ${layer.raw.later.count} later. ${layer.note}`);
             else notes.push(`${layer.unit}: not saved in both reports. ${layer.note}`);
@@ -336,7 +339,7 @@ export function createReportComparison(wording = createAssessmentWording()) {
                 const card = el("article", "comparison-score");
                 card.append(el("h3", "", side), el("p", "comparison-meta", evidence.scoreLabel));
                 card.append(el("strong", "comparison-score-value", !totals.count ? `No ${evidence.unitLabel}`
-                    : totals.success + totals.failure === 0 ? model.metricProjectionVersion === 4 ? "No binary outcomes" : "Not scored"
+                    : totals.success + totals.failure === 0 ? model.metricProjectionVersion === 4 ? "Success rate unavailable" : "Not scored"
                         : formatValue(totals.successRate.percent, "percent")));
                 card.append(el("p", "comparison-meta", `${formatNumber(totals.success, 0)} of ${formatNumber(totals.count, 0)} ${evidence.unitLabel} ${evidence.successVerb}`));
                 const strip = el("div", "comparison-outcome-strip");

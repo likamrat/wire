@@ -67,20 +67,26 @@ export const tokens = `
 const screenLight = `
  --page:#f1f3f7;--paper:#ffffff;--canvas:#ebebeb;--hover:#e3e3e3;
  --surface-shadow:0 2px 4px #26344d0a,0 8px 20px #26344d0a;
+ --navigation-sidebar-shadow:2px 0 8px #0000000d,14px 0 32px #0000001a;
  --context-sidebar-shadow:-2px 0 8px #0000000d,-14px 0 32px #0000001a;
  --ink:#202020;--muted:#565656;--rule:#c9c9c9;--control:#747474;
  --accent:#303030;--accent-soft:#e9e9e9;--accent-fill:#303030;--on-accent:#ffffff;
  --accent-hover:#dedede;--accent-pressed:#d5d5d5;--pill-pressed:#d9d9d9;
  --danger:#b3261e;--delete-fill:#b3261e;--delete-ink:#ffffff;--performance-red:#b3261e;
- --chart-success:#286336;--screen-success-high:#397c46;--screen-success-low:#286336;
- --chart-failure:#b3261e;--screen-failure-high:#c23c32;--screen-failure-low:#9f2922;
+ --chart-success:#286336;--screen-success-high:#60906e;--screen-success-low:#325f40;
+ --chart-failure:#b3261e;--screen-failure-high:#c17169;--screen-failure-low:#9e403a;
  --screen-service-files:#007357;
  --screen-prompt-user:#365f7a;
+ --search-interaction:#235eaa;--search-context:#795997;--search-reply:#006c74;
+ --search-action:#845b00;--search-tool:#943981;--search-service:#5b690b;
+ --search-report:#236c45;--search-comparison:#a34c1c;--search-view:#3330bd;--search-setting:#545454;
+ --search-ring-start:#2576b5;--search-ring-middle:#7864c3;--search-ring-end:#a650a0;--search-ring-focus:#59459b;
  --focus:#303030;--scrim:#000000a6;
 `;
 const screenDark = `
  --page:#101010;--paper:#191919;--canvas:#222222;--hover:#2b2b2b;
  --surface-shadow:0 2px 4px #00000029,0 8px 20px #00000029;
+ --navigation-sidebar-shadow:3px 0 10px #00000055,16px 0 36px #00000066;
  --context-sidebar-shadow:-3px 0 10px #00000055,-16px 0 36px #00000066;
  --ink:#f2f2f2;--muted:#b8b8b8;--rule:#444444;--control:#888888;
  --accent:#e0e0e0;--accent-soft:#2b2b2b;--accent-fill:#e0e0e0;--on-accent:#191919;
@@ -91,6 +97,10 @@ const screenDark = `
  --screen-service-files:#10b981;
  --chart-fade-strength:70%;
  --screen-prompt-user:#95b9d2;
+ --search-interaction:#79b6ff;--search-context:#c4a9e1;--search-reply:#66d0d7;
+ --search-action:#e2b455;--search-tool:#e791ce;--search-service:#becb6b;
+ --search-report:#7cce97;--search-comparison:#eea276;--search-view:#9f9bff;--search-setting:#abbbc7;
+ --search-ring-start:#70b6ed;--search-ring-middle:#a69beb;--search-ring-end:#d18eca;--search-ring-focus:#b5a5f3;
  --focus:#e0e0e0;--scrim:#000000bd;
 `;
 

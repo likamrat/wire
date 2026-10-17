@@ -37,7 +37,7 @@ test("new JSON, HTML, Markdown and manifest omit Cost even when supplied valid h
         assert.equal(value.evaluationFacts.metrics.some(metric => metric.dimension === "cost"), false);
     }
     for (const name of ["product-report.html", "product-report.md"]) assert.doesNotMatch(bundle.files[name], />Cost<|\| Cost \|/);
-    assert.match(bundle.files["product-report.md"], /\| Speed \| Median tool-call duration \|/);
+    assert.match(bundle.files["product-report.md"], /\| Speed \| Median tool latency \|/);
     assert.match(bundle.files["product-report.md"], /\| Speed \| Time to recorded final response \|/);
     assert.equal(JSON.stringify(legacy), original);
 });

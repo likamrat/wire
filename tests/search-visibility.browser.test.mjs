@@ -6,8 +6,12 @@ import { syncBuiltinESMExports } from "node:module";
 import { randomUUID } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
-import { selectActivityOption } from "./helpers.mjs";
+import { selectActivityOption, navigateMain } from "./helpers.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { startServer } from "../lib/server.mjs";
+import { createExportController } from "../lib/export.mjs";
+import path from "node:path";
+import { BOARD_ID } from "../lib/evidence.mjs";
 
 const visibility = (page, hidden) => page.evaluate(hidden => {
     // Exercise the real listener without taking focus from the user's window.
@@ -16,7 +20,7 @@ const visibility = (page, hidden) => page.evaluate(hidden => {
     document.dispatchEvent(new Event("visibilitychange"));
 }, hidden);
 
-async function setup(t, options = {}) {
+async function setup(t, options = {}, prepare) {
     const cleanup = [], children = [], fork = childProcess.fork;
     const forkMock = t.mock.method(childProcess, "fork", (...args) => {
         const child = fork(...args);
@@ -52,6 +56,7 @@ async function setup(t, options = {}) {
         return route.continue();
     });
     t.after(() => { assert.deepEqual(errors, []); assert.deepEqual(external, []); });
+    await prepare?.(page);
     await page.goto(app.runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const api = (route, input = {}) => page.evaluate(async ({ capability, route, input }) => {
@@ -115,7 +120,7 @@ test("four typed intents ending in latest retain one preparing index across hide
     assert.deepEqual(await input.evaluate(node => ({
         active: document.activeElement === node, start: node.selectionStart, end: node.selectionEnd,
     })), focus);
-    assert.equal(await page.locator("#wireSearchPanel").evaluate(node => node.hidden), true);
+    assert.equal(await page.locator("#wireSearchPanel").evaluate(node => node.hidden), false);
     await input.click();
     await expect(page.locator("#wireSearchResults button")).toHaveCount(2);
     await expect(page.locator("#wireSearchResults")).toContainText("latest physician");
@@ -168,6 +173,412 @@ test("consent revocation while hidden cannot revive a retained reply on return",
     assert.equal(await page.locator("#wireSearchResults button").count(), 0);
 });
 
+test("return after two hidden minutes automatically reads the current query with a fresh Search owner", { timeout: 20000 }, async t => {
+    const { page, runtime, queries } = await setup(t);
+    const input = page.locator("#wireSearch");
+    await input.fill("physician");
+    await selectActivityOption(page, "wireSearchType", "interaction");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await input.focus();
+    await input.press("Home"); await input.press("ArrowRight");
+    const selection = await input.evaluate(node => [node.selectionStart, node.selectionEnd]);
+    await visibility(page, true);
+    const now = Date.now;
+    t.mock.method(Date, "now", () => now() + 120001);
+    await expect.poll(() => runtime.search.status().panels).toBe(0);
+    const prior = queries.length;
+    await visibility(page, false);
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await expect(page.locator("#wireSearchStatus")).toHaveText("1 match");
+    assert.equal(queries.length, prior + 1);
+    await expect(input).toHaveValue("physician");
+    await expect(input).toBeFocused();
+    assert.deepEqual(await input.evaluate(node => [node.selectionStart, node.selectionEnd]), selection);
+    await expect(page.locator("#wireSearchType")).toHaveValue("interaction");
+    assert.equal(runtime.search.status().panels, 1);
+});
+
+test("idle release while still active retains intent for a later leave and return", { timeout: 20000 }, async t => {
+    const { page, runtime, queries } = await setup(t);
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    const now = Date.now;
+    t.mock.method(Date, "now", () => now() + 120001);
+    await expect.poll(() => runtime.search.status().panels).toBe(0);
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(0);
+    const prior = queries.length;
+    await visibility(page, true); await visibility(page, false);
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    assert.equal(queries.length, prior + 1);
+});
+
+test("a held old-owner completion cannot clear a freshly recovered stream", { timeout: 20000 }, async t => {
+    const { page, runtime, queries } = await setup(t);
+    const attach = runtime.search.attach, ended = Promise.withResolvers();
+    let first = true, finish;
+    t.after(() => finish?.());
+    t.mock.method(runtime.search, "attach", (owner, response, input) => {
+        if (first) {
+            first = false;
+            const end = response.end.bind(response);
+            response.end = (...args) => {
+                finish = () => { finish = null; if (!response.destroyed) end(...args); };
+                ended.resolve(); return response;
+            };
+        }
+        return attach(owner, response, input);
+    });
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    const now = Date.now;
+    t.mock.method(Date, "now", () => now() + 120001);
+    await ended.promise;
+    await expect.poll(() => runtime.search.status().panels).toBe(0);
+    await visibility(page, true); await visibility(page, false);
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    const current = queries.length;
+    finish?.();
+    await page.waitForTimeout(200);
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await expect(page.locator("#wireSearchStatus")).toHaveText("1 match");
+    assert.equal(queries.length, current);
+    assert.equal(runtime.search.status().panels, 1);
+});
+
+for (const failure of ["protocol", "malformed", "network", "eof", "stale-owner", "stale-epoch"]) {
+    test(`an away ${failure} stream failure stays terminal on return`, { timeout: 20000 }, async t => {
+        let attempts = 0;
+        const entered = Promise.withResolvers(), release = Promise.withResolvers();
+        t.after(() => release.resolve());
+        const { page } = await setup(t, {}, page => page.route("**/api/search/events", async route => {
+            attempts++; entered.resolve(); await release.promise;
+            if (failure === "protocol") return route.fulfill({ status: 409,
+                json: { code: "search-protocol-changed", error: "Search changed. Reload this panel." } });
+            if (failure === "malformed") return route.fulfill({ status: 200, contentType: "application/x-ndjson", body: "{broken\n" });
+            if (failure === "eof") return route.fulfill({ status: 200, contentType: "application/x-ndjson",
+                body: JSON.stringify({ schemaVersion: 3, event: "connected", panelId: randomUUID(), epoch: 0 }) + "\n" });
+            if (failure.startsWith("stale-")) {
+                const panelId = randomUUID();
+                const frames = [
+                    { schemaVersion: 3, event: "connected", panelId, epoch: 0 },
+                    { schemaVersion: 3, event: "fence", panelId, epoch: 1, reason: "idle" },
+                    failure === "stale-owner" ? { schemaVersion: 3, event: "connected", panelId: randomUUID(), epoch: 0 }
+                        : { schemaVersion: 3, event: "fence", panelId, epoch: 2, reason: "changed" },
+                ];
+                return route.fulfill({ status: 200, contentType: "application/x-ndjson", body: frames.map(frame => JSON.stringify(frame)).join("\n") + "\n" });
+            }
+            return route.abort("failed");
+        }));
+        await page.locator("#wireSearch").fill("physician"); await entered.promise;
+        await visibility(page, true); release.resolve();
+        await expect(page.locator("#wireSearchRetry")).not.toHaveAttribute("hidden", "");
+        const error = await page.locator("#wireSearchStatus").textContent();
+        assert.match(error, failure === "protocol" ? /changed/ : failure === "malformed" ? /unreadable/
+            : failure === "eof" || failure.startsWith("stale-") ? /disconnected/ : /unavailable/);
+        await visibility(page, false); await page.locator("#wireSearch").focus();
+        await page.waitForTimeout(300);
+        assert.equal(attempts, 1, "A terminal stream error cannot be converted into an automatic reconnect.");
+        await expect(page.locator("#wireSearchStatus")).toHaveText(error);
+        await visibility(page, true); await visibility(page, false);
+        await page.waitForTimeout(200);
+        assert.equal(attempts, 1);
+        await page.evaluate(() => {
+            window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+            window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+        });
+        await page.waitForTimeout(200);
+        assert.equal(attempts, 1);
+        await expect(page.locator("#wireSearchStatus")).toHaveText(error);
+    });
+}
+
+test("a visible engine read failure terminates automatic resume before leaving", { timeout: 20000 }, async t => {
+    const { page, context, queries, runtime } = await setup(t, { search: { heartbeatMs: 60000 } });
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    const stateFile = path.join(context.dataDir, BOARD_ID + ".state.json"), read = fs.readFile;
+    let failing = true, failedReads = 0;
+    const readMock = t.mock.method(fs, "readFile", (...args) => {
+        if (failing && String(args[0]) === stateFile) {
+            failedReads++;
+            throw Object.assign(new Error("Synthetic current-state read failed."), { code: "EIO" });
+        }
+        return read(...args);
+    });
+    syncBuiltinESMExports();
+    t.after(() => { readMock.mock.restore(); syncBuiltinESMExports(); });
+    await page.locator("#wireSearch").fill("mechanic");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is unavailable. Try again.");
+    assert.ok(failedReads > 0);
+    failing = false;
+    const prior = queries.length;
+    await visibility(page, true); await visibility(page, false);
+    await page.waitForTimeout(300);
+    assert.equal(queries.length, prior, "A genuine engine read failure stays terminal when the page becomes inactive later.");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is unavailable. Try again.");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(0);
+    await page.locator("#wireSearch").click();
+    await page.locator("#wireSearchRetry").click();
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    assert.equal(runtime.search.status().panels, 1);
+});
+
+test("focus-only return after two minutes reestablishes Search even when the document stayed visible", { timeout: 20000 }, async t => {
+    const { page, runtime, queries } = await setup(t);
+    const input = page.locator("#wireSearch");
+    await input.fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await page.evaluate(() => {
+        Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
+        window.dispatchEvent(new Event("blur"));
+    });
+    assert.equal(await page.evaluate(() => document.hidden), false, "A covered but unminimized window can remain visible.");
+    const now = Date.now;
+    t.mock.method(Date, "now", () => now() + 120001);
+    await expect.poll(() => runtime.search.status().panels).toBe(0);
+    const prior = queries.length;
+    await page.evaluate(() => {
+        delete document.hasFocus;
+        window.dispatchEvent(new Event("focus"));
+    });
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await expect(input).toHaveValue("physician");
+    await expect(input).toBeFocused();
+    await expect(page.locator("#wireSearchPanel")).toBeVisible();
+    assert.equal(queries.length, prior + 1);
+});
+
+test("the return updater belongs to the snapshot read and settles independently of idle Search", { timeout: 25000 }, async t => {
+    const { page, runtime } = await setup(t);
+    await page.evaluate(() => { location.hash = "#reports"; });
+    await expect(page.locator("#reportsView")).toBeVisible();
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    const entered = Promise.withResolvers(), release = Promise.withResolvers();
+    t.after(() => release.resolve());
+    await page.route("**/api/snapshot", async route => {
+        entered.resolve(); await release.promise; await route.continue();
+    });
+    await visibility(page, true);
+    const now = Date.now;
+    t.mock.method(Date, "now", () => now() + 120001);
+    await expect.poll(() => runtime.search.status().panels).toBe(0);
+    await visibility(page, false);
+    await entered.promise;
+    await expect(page.locator("#message")).toBeHidden();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
+    t.diagnostic("Held return snapshot: " + await page.locator("#wireSearchStatus").textContent());
+    release.resolve();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await expect(page.locator("#message")).toBeHidden();
+    await expect(page.locator("#reportsView")).toBeVisible();
+});
+
+test("a stalled return snapshot reaches an explicit error and read-only recovery instead of an indefinite updater", { timeout: 25000 }, async t => {
+    const { page } = await setup(t);
+    await navigateMain(page, "reports");
+    await page.route("**/api/snapshot", () => {});
+    await visibility(page, true); await visibility(page, false);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false", { timeout: 15000 });
+    await expect(page.locator("#message")).toContainText("Local runtime unavailable");
+    await expect(page.locator("#reportsView")).toBeVisible();
+    await expect(page.locator("#message")).not.toContainText("Updating");
+    await page.unroute("**/api/snapshot");
+    await page.locator("#storedViewRetry").click();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await expect(page.locator("#message")).toBeHidden();
+    await expect(page.locator("#reportsView")).toBeVisible();
+});
+
+test("return with no accepted snapshot still uses first-load error and loading ownership", { timeout: 20000 }, async t => {
+    let first = true;
+    const { page } = await setup(t, {}, page => page.route("**/api/snapshot", route => {
+        if (first) { first = false; return route.abort("connectionrefused"); }
+        return route.continue();
+    }));
+    await expect(page.locator("#workspace")).toBeHidden();
+    await expect(page.locator("#message")).toContainText("activity could not load");
+    await expect(page.locator("#message")).not.toContainText("last recorded snapshot");
+    await visibility(page, true); await visibility(page, false);
+    await expect(page.locator("#workspace")).toBeVisible();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await expect(page.locator("#message")).toBeHidden();
+});
+
+test("a late return snapshot cannot settle or replace a newer route read", { timeout: 20000 }, async t => {
+    const { page } = await setup(t);
+    await navigateMain(page, "reports");
+    const entered = [Promise.withResolvers(), Promise.withResolvers()], releases = [Promise.withResolvers(), Promise.withResolvers()];
+    let index = 0;
+    t.after(() => releases.forEach(gate => gate.resolve()));
+    await page.route("**/api/snapshot", async route => {
+        const own = index++, response = await route.fetch();
+        if (own < 2) { entered[own].resolve(); await releases[own].promise; }
+        await route.fulfill({ response });
+    });
+    await visibility(page, true); await visibility(page, false); await entered[0].promise;
+    await page.evaluate(() => { location.hash = "#analyze?layer=http"; });
+    await entered[1].promise;
+    const oldResponse = page.waitForResponse(response => response.url().endsWith("/api/snapshot")
+        && response.request().postDataJSON().layer === "tool");
+    releases[0].resolve(); await (await oldResponse).finished();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "true");
+    releases[1].resolve();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await expect(page).toHaveURL(/#analyze\?layer=http/);
+    await expect(page.locator("#homeView")).toBeVisible();
+    await expect(page.locator("#reportsView")).toBeHidden();
+    await expect(page.locator("#message")).toBeHidden();
+});
+
+test("query and scope replacement around resume reject a deliberately late old request", { timeout: 20000 }, async t => {
+    const { page, queries } = await setup(t);
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    const entered = Promise.withResolvers(), release = Promise.withResolvers();
+    t.after(() => release.resolve());
+    await page.route("**/api/search/query", async route => {
+        if (route.request().postDataJSON().query === "mechanic") { entered.resolve(); await release.promise; }
+        await route.continue();
+    });
+    await page.locator("#wireSearch").fill("mechanic"); await entered.promise;
+    await visibility(page, true);
+    await page.locator("#wireSearch").evaluate(node => {
+        node.value = "credentials"; node.dispatchEvent(new Event("input"));
+        document.getElementById("wireSearchScope").value = "analysis";
+        document.getElementById("wireSearchScope").dispatchEvent(new Event("change"));
+    });
+    await visibility(page, false);
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    await expect(page.locator("#wireSearchResults")).toContainText("credentials");
+    const late = page.waitForResponse(response => response.url().endsWith("/api/search/query")
+        && response.request().postDataJSON().query === "mechanic");
+    release.resolve(); await (await late).finished();
+    await expect(page.locator("#wireSearchResults")).toContainText("credentials");
+    await expect(page.locator("#wireSearchResults")).not.toContainText("mechanic");
+    await expect(page.locator("#activityCount")).toHaveText("1");
+    assert.equal(queries.at(-1).purpose, "analysis");
+    assert.equal(queries.at(-1).query, "credentials");
+});
+
+test("a replaced local runtime gets a new capability and current results, never the old owner", { timeout: 20000 }, async t => {
+    const { page, runtime, context, cleanup } = await setup(t);
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await visibility(page, true);
+    const close = runtime.close;
+    let closing;
+    t.mock.method(runtime, "close", () => closing ??= close());
+    await runtime.close();
+    const restarted = await startServer(context, createExportController(context), {
+        port: Number(new URL(runtime.url).port), collector: { timers: false }, search: { heartbeatMs: 50 },
+        evaluation: { evaluatorFactory: async () => { throw new Error("Provider forbidden."); } },
+    });
+    cleanup.unshift(() => restarted.close());
+    const renewed = [];
+    page.on("request", request => { if (request.url().endsWith("/api/session")) renewed.push(request); });
+    await visibility(page, false);
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    assert.equal(renewed.length, 1);
+    assert.equal(restarted.search.status().panels, 1);
+});
+
+test("a frozen renderer consumes the elapsed idle fence before admitting fresh return results", { timeout: 20000 }, async t => {
+    const { page, runtime } = await setup(t);
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    const cdp = await page.context().newCDPSession(page);
+    await visibility(page, true);
+    await cdp.send("Page.setWebLifecycleState", { state: "frozen" });
+    try {
+        const now = Date.now;
+        t.mock.method(Date, "now", () => now() + 120001);
+        await expect.poll(() => runtime.search.status().panels).toBe(0);
+    } finally { await cdp.send("Page.setWebLifecycleState", { state: "active" }); }
+    await visibility(page, false);
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await expect(page.locator("#wireSearchPanel")).toBeVisible();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    t.diagnostic("Real Chromium renderer freeze; visibility and 120001ms server elapsed time are controlled, not native tab backgrounding.");
+});
+
+test("native history traversal records BFCache admission without inventing a restored document", { timeout: 20000 }, async t => {
+    const { page, runtime } = await setup(t);
+    await page.locator("#wireSearch").fill("physician");
+    await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    const identity = await page.evaluate(() => {
+        window.returnProbe = { identity: crypto.randomUUID(), persisted: false };
+        window.addEventListener("pageshow", event => { window.returnProbe.persisted = event.persisted; });
+        return window.returnProbe.identity;
+    });
+    await page.goto(runtime.url + "health");
+    await page.goBack();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    const restored = await page.evaluate(() => ({
+        identity: window.returnProbe?.identity, persisted: window.returnProbe?.persisted,
+        reasons: performance.getEntriesByType("navigation")[0]?.notRestoredReasons?.toJSON?.() ?? null,
+    }));
+    if (restored.identity === identity && restored.persisted) {
+        await expect(page.locator("#wireSearch")).toHaveValue("physician");
+        await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+        t.diagnostic("Native BFCache admitted the original document; query and fresh results restored.");
+    } else {
+        await expect(page.locator("#wireSearch")).toHaveValue("");
+        t.diagnostic("Native traversal created a new document; BFCache recovery not claimed. " + JSON.stringify(restored.reasons));
+    }
+});
+
+test("return restores the current results page and keyboard reading position", { timeout: 20000 }, async t => {
+    const { page } = await setup(t, { records: searchRecords(24) });
+    await page.locator("#wireSearch").fill("Invented local");
+    await selectActivityOption(page, "wireSearchType", "interaction");
+    await page.getByRole("button", { name: "Next results", exact: true }).click();
+    const row = page.locator("#wireSearchResults button").nth(2);
+    await row.focus();
+    const id = await row.getAttribute("data-search-id");
+    await visibility(page, true); await visibility(page, false);
+    await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2; 24 total");
+    await expect(page.locator(`[data-search-id="${id}"]`)).toBeFocused();
+    await expect(page.locator("#wireSearchPanel")).toBeVisible();
+});
+
+for (const cause of ["capability-expiry", "session-release", "pagehide"]) {
+    test(`${cause} on an away page renews read-only Search without retaining old results`, { timeout: 20000 }, async t => {
+        const { page, runtime, queries, api } = await setup(t);
+        const requests = [];
+        page.on("request", request => { if (request.method() === "POST") requests.push(new URL(request.url()).pathname); });
+        await page.locator("#wireSearch").fill("physician");
+        await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+        await visibility(page, true);
+        if (cause === "capability-expiry") {
+            const now = Date.now;
+            t.mock.method(Date, "now", () => now() + 1800001);
+            assert.equal((await api("/api/search/status")).status, 403);
+        } else if (cause === "session-release") assert.equal((await api("/api/session/release")).status, 200);
+        else await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })));
+        await expect.poll(() => runtime.search.status().panels).toBe(0);
+        await expect(page.locator("#wireSearchResults button")).toHaveCount(0);
+        const prior = queries.length;
+        await visibility(page, false);
+        if (cause === "pagehide") await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+        await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+        await expect(page.locator("#wireSearch")).toHaveValue("physician");
+        await expect(page.locator("#wireSearchPanel")).toBeVisible();
+        assert.equal(queries.length, prior + 1);
+        assert.ok(requests.every(route => ["/api/search/query", "/api/search/events", "/api/search/status", "/api/session",
+            "/api/session/release", "/api/snapshot", "/api/collection/status", "/api/evaluation/automatic/summary"].includes(route)),
+        "Lifecycle return dispatches no collection, provider, save or other mutation");
+        await visibility(page, true); await visibility(page, false); await visibility(page, false);
+        await expect.poll(() => queries.length).toBe(prior + 2);
+        await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    });
+}
+
 test("a silent stream on visible return still reaches an explicit reconnect instead of waiting forever", { timeout: 20000 }, async t => {
     const { page, runtime, queries } = await setup(t, {
         search: { heartbeatMs: 60000 },
@@ -191,20 +602,14 @@ test("a silent stream on visible return still reaches an explicit reconnect inst
     assert.equal(await page.locator("#wireSearchResults button").count(), 0);
 });
 
-for (const action of ["clear", "cancel", "close", "idle", "expiry", "pagehide"]) {
+for (const action of ["clear", "cancel", "close"]) {
     test(`hidden ${action} releases owned work and cannot restart on return`, { timeout: 30000 }, async t => {
         const { page, runtime, api, status, queries, children } = await setup(t);
         await page.locator("#wireSearch").fill("physician");
         await expect(page.locator("#wireSearchResults button").first()).toBeVisible();
         await visibility(page, true);
-        if (action === "idle" || action === "expiry") {
-            const now = Date.now, elapsed = action === "idle" ? 120001 : 1800001;
-            t.mock.method(Date, "now", () => now() + elapsed);
-            if (action === "expiry") assert.equal((await status()).status, 403);
-        }
         if (action === "clear") await page.evaluate(() => document.getElementById("wireSearchClear").click());
         if (action === "cancel" || action === "close") assert.equal((await api("/api/search/" + action)).status, 200);
-        if (action === "pagehide") await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
         if (action === "clear" || action === "cancel") {
             await expect.poll(async () => (await status()).body.indexId).toBe(null);
         } else await expect.poll(() => runtime.search.status().panels, { timeout: 5000 }).toBe(0);
@@ -213,7 +618,10 @@ for (const action of ["clear", "cancel", "close", "idle", "expiry", "pagehide"])
         await visibility(page, false);
         await page.waitForTimeout(300);
         assert.equal(queries.length, prior, `${action} must not replay a query on return.`);
+        await visibility(page, true); await visibility(page, false);
+        await page.waitForTimeout(300);
+        assert.equal(queries.length, prior, `${action} stays terminal across repeated returns.`);
         assert.equal(await page.locator("#wireSearchResults button").count(), 0);
-        if (action === "clear" || action === "pagehide") assert.equal(await page.locator("#wireSearch").inputValue(), "");
+        if (action === "clear") assert.equal(await page.locator("#wireSearch").inputValue(), "");
     });
 }

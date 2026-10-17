@@ -141,3 +141,39 @@ test("matched sources remain source evidence even when an original title is iden
         assert.deepEqual(hit, original);
     }
 });
+
+test("saved results omit unmatched boilerplate without assuming generic-looking canonical titles are fallbacks", () => {
+    for (const type of ["report", "comparison"]) {
+        const title = "Saved " + type, label = "Approved frozen " + type;
+        const hit = { type, title, excerpt: "Arrange an atlas review.",
+            source: { kind: "saved-" + type, label },
+            textMatch: { field: "content", start: 111, end: 116, excerptStart: 100 } };
+        const original = structuredClone(hit), shown = search.searchHitPresentation(hit);
+        assert.deepEqual(shown.source, []);
+        assert.equal(shown.title.map(part => part.text).join(""), title);
+        assert.equal(shown.excerpt.find(part => part.match).text, "atlas");
+        assert.deepEqual(hit, original, "Display consolidation does not change the canonical title, hit or original range.");
+        const meaningful = search.searchHitPresentation({ ...hit, title: "Atlas release review" });
+        assert.equal(meaningful.title.map(part => part.text).join(""), "Atlas release review");
+        assert.ok(meaningful.excerpt.some(part => part.match));
+        const source = search.searchHitPresentation({ ...hit, excerpt: label,
+            textMatch: { field: "source", start: 0, end: 8, excerptStart: 0 } });
+        assert.equal(source.source.find(part => part.match).text, "Approved");
+        const titleMatch = search.searchHitPresentation({ ...hit, excerpt: title,
+            textMatch: { field: "title", start: 0, end: 5, excerptStart: 0 } });
+        assert.equal(titleMatch.title.find(part => part.match).text, "Saved");
+        assert.deepEqual(titleMatch.source, []);
+        const unique = search.searchHitPresentation({ ...hit, source: { kind: "saved-" + type, label: "Atlas review archive" } });
+        assert.equal(unique.source.map(part => part.text).join(""), "Atlas review archive");
+    }
+});
+
+test("optional source context disappears without losing a source match or an explicit disambiguator", () => {
+    const hit = { type: "interaction", title: "Prepare the atlas review.", excerpt: "Prepare the atlas review.",
+        source: { kind: "retained-activity", label: "Release planning" },
+        textMatch: { field: "title", start: 12, end: 17, excerptStart: 0 } };
+    assert.deepEqual(search.searchHitPresentation(hit, { showSource: false }).source, []);
+    assert.equal(search.searchHitPresentation(hit, { showSource: true }).source[0].text, "Release planning");
+    const matched = { ...hit, excerpt: hit.source.label, textMatch: { field: "source", start: 0, end: 7, excerptStart: 0 } };
+    assert.equal(search.searchHitPresentation(matched, { showSource: false }).source.find(part => part.match).text, "Release");
+});

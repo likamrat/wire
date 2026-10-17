@@ -14,7 +14,7 @@ async function capture(page, name) {
     const directory = process.env.WIRE_REPORT_SETUP_PROOFS;
     if (!directory) return;
     await mkdir(directory, { recursive: true });
-    await page.screenshot({ path: path.join(directory, name + ".png") });
+    await page.screenshot({ path: path.join(directory, name + ".png"), fullPage: !await page.locator(":modal").count() });
 }
 
 async function setup(t, { width = 1440, height = 1000, touch = false, recordCases } = {}) {
@@ -59,6 +59,101 @@ async function setup(t, { width = 1440, height = 1000, touch = false, recordCase
     await page.evaluate(() => document.fonts.ready);
     return { page, runtime, context, records, requests };
 }
+
+test("the report title stays with Contents and becomes the reviewed identity without granting approval", { timeout: 30000 }, async t => {
+    const { page, requests } = await setup(t);
+    await page.locator("#pageAction").click();
+    await chooseReportScope(page, "all");
+    await reportContents(page);
+    const title = page.locator("#reportTitle");
+    await title.fill("Calendar planning review");
+    await page.locator("#closeContextSidebar").click();
+    await reportContents(page);
+    await expect(title).toHaveValue("Calendar planning review");
+    const first = await scanReport(page);
+    assert.equal(first.title, "Calendar planning review");
+    await expect(page.locator("#pageTitle")).toHaveText(first.title);
+    await expect(page.locator("#pageTitle")).toBeFocused();
+    await page.locator(".attestation input[data-review-control]").check();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=reviewed]").waitFor();
+    await reportContents(page);
+    await title.fill("Updated Calendar planning review");
+    await expect(page.locator("#exportBtn")).toHaveText("Prepare report");
+    const next = await scanReport(page);
+    assert.equal(next.title, "Updated Calendar planning review");
+    assert.equal(next.privacy.reviewerConfirmed, false);
+    assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
+    await chooseReportScope(page, "all");
+    await page.locator("#reportClearSelection").click();
+    await expect(title).toHaveValue("");
+    assert.equal(requests.filter(request => request.url.pathname === "/api/export").length, 0);
+});
+
+test("reporting exposes task actions rather than automatic text utilities and scan internals", { timeout: 30000 }, async t => {
+    const { page, context } = await setup(t), problems = [];
+    await page.locator("#pageAction").click();
+    await chooseReportScope(page, "all");
+    if (await page.locator("#reportCompareLink").isVisible()) problems.push("creation offers a competing comparison task");
+    const preview = await scanReport(page);
+    const copy = await findReportCopy(page, "question0");
+    const original = await copy.locator(".prompt-original pre").textContent();
+    const projected = await copy.locator(".prompt-report pre").textContent();
+    assert.equal(original, preview.promptReview[0].original);
+    assert.equal(projected, preview.promptReview[0].text);
+    if (await page.locator("#reportTextInspection .ux-copy").count()) problems.push("reading report text adds clipboard controls");
+    if (/Strings scanned|Argument objects|source UTF-8 text bytes/.test(await page.locator("#reportTextInspection").textContent())) {
+        problems.push("privacy review exposes scanner implementation counters");
+    }
+    await page.getByRole("tab", { name: /^Files/ }).click();
+    await page.locator("#reportFileInspection details").evaluateAll(nodes => nodes.forEach(node => { node.open = true; }));
+    if (await page.locator("#reportFileInspection .ux-copy").count()) problems.push("file inspection adds clipboard controls");
+    if (/prepared in memory|separate confirmation|Inspect exact/.test(await page.locator("#reportFileInspection").textContent())) {
+        problems.push("file inspection repeats preparation machinery");
+    }
+    await page.locator(".attestation input[data-review-control]").check();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=saved]").waitFor();
+    await page.locator("#reportLibraryLink").click();
+    await page.locator("#bundleList .saved-report-summary").first().click();
+    if (await page.locator("#contextSidebar .saved-report-downloads").count()) problems.push("metadata inspection duplicates file management");
+    if (/Locale:/.test(await page.locator("#contextSidebar").textContent())) problems.push("metadata inspection exposes a formatting setting");
+    await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.locator("#savedReportReader iframe").waitFor();
+    assert.equal(await page.locator("#savedReportReader").getByRole("button", { name: "Download", exact: true }).count(), 1,
+        "File access remains where the report is being read");
+    assert.deepEqual(await page.evaluate(() => window.reportCopies), []);
+    assert.deepEqual(problems, []);
+});
+
+test("an ordinary title-mismatched receipt retains the dispatched identity and recovers without another save", { timeout: 30000 }, async t => {
+    const { page, context, requests } = await setup(t);
+    await page.locator("#pageAction").click();
+    await chooseReportScope(page, "all"); await reportContents(page);
+    await page.locator("#reportTitle").fill("Planning receipt identity");
+    const preview = await scanReport(page);
+    await page.locator(".attestation input[data-review-control]").check();
+    await page.getByRole("button", { name: "Approve for local saving", exact: true }).click();
+    await page.route("**/api/export", async route => {
+        const response = await route.fetch(), result = await response.json();
+        result.bundle.title = "Not this report";
+        await route.fulfill({ response, json: result });
+    }, { times: 1 });
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    const recovery = page.getByRole("button", { name: "Check save status", exact: true });
+    await recovery.waitFor();
+    assert.equal(await page.locator("#pageTitle").textContent(), preview.title);
+    assert.equal(await page.locator("#reportSaveBody .report-save-success").count(), 0);
+    assert.equal((await loadBoardState(context)).exports.length, 1, "The write may have completed despite a malformed receipt");
+    await recovery.click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    assert.equal(await page.locator("#pageTitle").textContent(), preview.title);
+    assert.equal(requests.filter(request => request.url.pathname === "/api/export").length, 1);
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: preview.title, level: 1, exact: true })).toBeVisible();
+});
 
 test("Activity stays interactive beside one mounted setup; peek, return and close retain its draft without preparing", { timeout: 30000 }, async t => {
     const { page, context, requests } = await setup(t);
@@ -176,18 +271,19 @@ test("real preparation leaves the sidebar for wide Report/Text/Files, copy edits
     await capture(page, "actual-prepared-main-document");
     assert.equal(await page.locator(".report-frame").getAttribute("sandbox"), "allow-same-origin");
     await page.getByRole("tab", { name: /^Files \(/ }).click();
-    await expect(page.locator("#reportFileInspection summary").filter({ hasText: "Inspect exact product-report.html" })).toBeVisible();
+    await expect(page.locator("#reportFileInspection summary").filter({ hasText: "product-report.html" })).toBeVisible();
     await expect(page.locator("#reportFileInspection>h3")).toHaveCount(0);
     await capture(page, "actual-prepared-files");
     const copy = await findReportCopy(page, "question0");
-    const copySurfaces = await copy.locator(".ux-code-block").evaluateAll(nodes => nodes.map(node => {
+    const copySurfaces = await copy.locator(".report-read-copy").evaluateAll(nodes => nodes.map(node => {
         const text = node.querySelector("pre"), style = getComputedStyle(text);
         return { font: style.fontFamily, weight: style.fontWeight, background: style.backgroundColor,
             blockBackground: getComputedStyle(node).backgroundColor,
-            toolbarTop: node.querySelector(".ux-code-toolbar").getBoundingClientRect().top };
+            captionTop: node.querySelector(".report-copy-label").getBoundingClientRect().top };
     }));
     assert.equal(copySurfaces.length, 2);
-    assert.equal(copySurfaces[0].toolbarTop, copySurfaces[1].toolbarTop);
+    assert.equal(copySurfaces[0].captionTop, copySurfaces[1].captionTop);
+    assert.equal(await copy.locator(".ux-copy").count(), 0);
     for (const surface of copySurfaces) {
         assert.match(surface.font, /^"Asta Sans"/);
         assert.equal(surface.weight, "400");
@@ -225,10 +321,18 @@ test("real preparation leaves the sidebar for wide Report/Text/Files, copy edits
     assert.equal(await save.locator("svg").count(), 0, "Save is text-only");
     await save.click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const fileGroup = await page.locator("#reportSaveBody .saved-report-downloads").evaluate(node => {
+        const select = node.querySelector("select");
+        const file = (select.closest(".select-control") || select.parentElement).getBoundingClientRect();
+        const action = node.querySelector(":scope > button").getBoundingClientRect();
+        return { gap: action.x - file.right, sameRow: Math.abs(action.bottom - file.bottom) < 2, file: file.toJSON(), action: action.toJSON() };
+    });
+    assert.equal(fileGroup.sameRow, true, JSON.stringify(fileGroup));
+    assert.ok(fileGroup.gap >= 0 && fileGroup.gap <= 16, "Download stays attached to its actual file selector");
     await capture(page, "actual-saved-result");
     assert.equal((await loadBoardState(context)).exports.length, 1);
     assert.equal(requests.filter(request => request.url.pathname === "/api/export").length, 1);
-    await page.getByRole("button", { name: "View saved reports", exact: true }).click();
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
 });
@@ -548,7 +652,7 @@ test("Search inspection from the saved library keeps the existing explicit Conti
     await page.locator('nav [data-nav="reports"]').click();
     await expect(page.locator("#savedReportsPanel")).toBeVisible();
     await page.locator("#wireSearch").fill("question0");
-    const hit = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-kind", { hasText: /^Interaction$/ }) }).first();
+    const hit = page.locator('#wireSearchResults [data-search-category="interaction"] .wire-search-hit').first();
     await hit.press("Enter");
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Interaction");
     await expect(page.locator("#requestReportContinue")).toHaveText("Continue to report");
@@ -678,10 +782,11 @@ test("picker full, long agent, partial unverified and unavailable prompts preser
     await expect(row("missing").locator(".full-text-toggle")).toHaveCount(0);
     await row("agent-long").getByRole("button", { name: "Read full prompt", exact: true }).click();
     await expect(row("agent-long").locator(".full-text-body pre")).toHaveText(cases[1].userPrompt.text, { useInnerText: false });
-    const beforeCopy = await row("agent-long").boundingBox();
-    await row("agent-long").getByRole("button", { name: "Copy prompt", exact: true }).click();
-    assert.deepEqual(await page.evaluate(() => window.reportCopies), [cases[1].userPrompt.text]);
-    assert.equal((await row("agent-long").boundingBox()).height, beforeCopy.height, "Copy feedback adds no row");
+    assert.equal(await row("agent-long").getByRole("button", { name: "Copy prompt", exact: true }).count(), 0);
+    assert.equal(await row("agent-long").locator(".ux-code-toolbar").count(), 0);
+    assert.deepEqual(await page.evaluate(() => window.reportCopies), []);
+    await row("agent-long").locator(".full-text-body pre").focus();
+    assert.equal(await row("agent-long").locator(".full-text-body pre").evaluate(node => document.activeElement === node), true);
     await row("agent-long").getByRole("button", { name: "Hide prompt", exact: true }).click();
     await row("partial").getByRole("button", { name: "Read retained prompt", exact: true }).click();
     assert.equal(await row("partial").locator(".full-text-body pre").textContent(), cases[2].userPrompt.text);
@@ -730,6 +835,14 @@ test("picker full, long agent, partial unverified and unavailable prompts preser
             assert.ok(contrast(geometry.color, geometry.background) >= 4.5);
             assert.ok(geometry.controls.every(control => control.width >= 44 && control.height >= 44));
             if (width === 375 || name === "full") await capture(page, `picker-${theme}-${width}-${scale}-${name}`);
+            if (name === "agent-long") {
+                await item.getByRole("button", { name: "Read full prompt", exact: true }).click();
+                assert.equal(await item.locator(".full-text-body pre").textContent(), cases[1].userPrompt.text);
+                assert.equal(await item.locator(".ux-copy,.ux-code-toolbar").count(), 0);
+                assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+                await capture(page, `picker-${theme}-${width}-${scale}-${name}-expanded`);
+                await item.getByRole("button", { name: "Hide prompt", exact: true }).click();
+            }
         }
     }
     await page.setViewportSize({ width: 1440, height: 1000 });

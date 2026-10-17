@@ -10,6 +10,7 @@ import { normalizeReportOptions, projectPrompts } from "../lib/prompt-projection
 import { loadBoardState, moveCard, replaceEvidence } from "../lib/store.mjs";
 import { fixture, privateFixture } from "./helpers.mjs";
 import { fontDataUrl, uiFontStack } from "../lib/typeface.mjs";
+import { readSavedReportFile, readSavedArtifactFile } from "../lib/report-artifacts.mjs";
 
 export function reportFixture() {
     const source = fixture();
@@ -46,6 +47,73 @@ export async function pdfText(bytes) {
     } finally { await task.destroy(); }
 }
 
+test("a report title is one reviewed identity across preview, four files and saved metadata", async t => {
+    const { context } = await privateFixture(t, [fixture("titled-report")]);
+    const controller = createExportController(context), state = await loadBoardState(context);
+    const title = "Release exercise - Calendar requests";
+    const preview = await controller.preview("title-flow", undefined, {
+        title, promptMode: "none", formats: ["html", "pdf", "json", "markdown"],
+    }, { kind: "all", revision: state.revision });
+    assert.equal(preview.title, title);
+    assert.equal(preview.snapshot.title, title);
+    assert.equal(JSON.parse(preview.files["product-report.json"]).title, title);
+    assert.equal(JSON.parse(preview.files["coverage-and-redaction-manifest.json"]).title, title);
+    assert.ok(preview.previewHtml.includes(`<title>WIRE - ${title}</title>`));
+    assert.ok(preview.previewHtml.includes(title + "</h1>"));
+    assert.ok(preview.files["product-report.md"].startsWith("# " + title + "\n"));
+    assert.ok((await pdfText(Buffer.from(preview.files["product-report.pdf"].data, "base64"))).text.includes(title));
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+    await controller.review("title-flow", preview.previewId, true);
+    const saved = (await controller.confirm("title-flow", preview.previewId, true)).bundle;
+    assert.equal(saved.title, title);
+    const after = await loadBoardState(context);
+    assert.equal(after.exports[0].title, title);
+    const file = await readSavedReportFile(context, after, saved.bundleId, "html");
+    assert.equal(file.artifact.title, title);
+    assert.equal(file.canonicalTitle, title);
+    for (const format of ["html", "pdf", "json", "markdown"]) {
+        assert.equal((await readSavedReportFile(context, after, saved.bundleId, format)).canonicalTitle, title);
+        assert.equal((await readSavedArtifactFile(context, after, saved.bundleId, "report", format)).canonicalTitle, title);
+    }
+    assert.equal(file.bytes.toString("utf8"), preview.previewHtml);
+});
+
+test("a saved report cannot present a different indexed title as the reviewed title", async t => {
+    const { context } = await privateFixture(t, [fixture("title-integrity")]);
+    const controller = createExportController(context), state = await loadBoardState(context);
+    const preview = await controller.preview("title-integrity", undefined, {
+        title: "Calendar requests", promptMode: "none", formats: ["html", "json"],
+    }, { kind: "all", revision: state.revision });
+    await controller.review("title-integrity", preview.previewId, true);
+    const saved = (await controller.confirm("title-integrity", preview.previewId, true)).bundle;
+    const after = await loadBoardState(context), changed = structuredClone(after);
+    changed.exports.find(entry => entry.bundleId === saved.bundleId).title = "A different report";
+    await assert.rejects(readSavedReportFile(context, changed, saved.bundleId, "html"), /title.*(?:changed|differ)/i);
+    assert.equal(JSON.stringify(await loadBoardState(context)), JSON.stringify(after));
+});
+
+test("report titles are bounded, always masked metadata and remain inside disclosure integrity", async () => {
+    for (const promptMode of ["none", "masked", "original"]) {
+        const bundle = await buildSanitizedBundle([fixture("private-title")], "a".repeat(64), {
+            title: "Plan for title.person@example.invalid password='TITLE_SECRET' private-project",
+            promptMode, formats: ["html", "json", "markdown"], manualTerms: ["private-project"],
+        });
+        assert.doesNotMatch(bundle.title, /title\.person|TITLE_SECRET|private-project/);
+        assert.match(bundle.title, /email identifier removed/);
+        assert.match(bundle.title, /credential removed/);
+        assert.match(bundle.title, /manual redaction/);
+        assert.equal(bundle.privacy.reportTitle.allTitleFieldsScanned, true);
+        assert.equal(bundle.privacy.reviewerConfirmed, false);
+        for (const text of Object.values(bundle.files)) assert.doesNotMatch(text, /title\.person|TITLE_SECRET|private-project/);
+        const changed = structuredClone(bundle);
+        changed.title = "Not the reviewed title";
+        assert.throws(() => assertProjectedBundle(changed), /title changed/);
+    }
+    for (const title of [null, 123, "A\nsecond line", "x".repeat(201)]) {
+        assert.throws(() => normalizeReportOptions({ title }), /report title.*200 characters/);
+    }
+});
+
 for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: four real formats share one snapshot and never leak credentials or side fields`, { timeout: 120000 }, async () => {
     const source = reportFixture(), before = structuredClone(source);
     const bundle = await buildSanitizedBundle([source], "a".repeat(64), { promptMode, formats: ["html", "pdf", "json", "markdown"], manualTerms: promptMode === "masked" ? ["Leila Navarro"] : [] });
@@ -54,8 +122,8 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: fo
     const extracted = await pdfText(bundle.files["product-report.pdf"]);
     assert.match(extracted.text, /WIRE - local report/);
     assert.match(extracted.text, /Work IQ Request Explorer/);
-    assert.match(bundle.files["product-report.md"], /^# WIRE - activity report/);
-    assert.match(bundle.files["product-report.html"], /<title>WIRE - activity report<\/title>/);
+    assert.ok(bundle.files["product-report.md"].startsWith(`# ${bundle.title}\n`));
+    assert.ok(bundle.files["product-report.html"].includes(`<title>WIRE - ${bundle.title}</title>`));
     assert.match(bundle.files["product-report.html"], /class="brand-logo" aria-hidden="true"/);
     assert.equal(bundle.files["product-report.pdf"].subarray(0, 5).toString(), "%PDF-");
     assert.deepEqual(snapshot.records, bundle.records);

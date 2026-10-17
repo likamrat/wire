@@ -15,6 +15,38 @@ const key = "a".repeat(64);
 const preparedAt = "2026-10-11T12:00:00.000Z";
 const freeze = records => buildReportFacts(records, { revision: 1, pseudonymKey: key, evidence: records }, { preparedAt }).facts;
 
+for (const measured of [false, true]) test(`timing method narration requires samples, including measured zero: ${measured}`, async () => {
+    const records = matrixRecords("timing-method", ["success", "success"], { durations: measured ? [0, 0] : [] });
+    const facts = freeze(records), before = structuredClone(facts);
+    const bundle = await buildSanitizedBundle(records, key, { promptMode: "none", formats: ["html", "markdown", "json", "pdf"] },
+        undefined, undefined, facts);
+    const loading = getDocument({ data: new Uint8Array(bundle.files["product-report.pdf"]), useSystemFonts: false });
+    let pdfText = "";
+    try {
+        const pdf = await loading.promise;
+        for (let number = 1; number <= pdf.numPages; number++) {
+            pdfText += (await (await pdf.getPage(number)).getTextContent()).items.map(item => item.str ?? "").join(" ") + "\n";
+        }
+    } finally { await loading.destroy(); }
+    for (const text of [bundle.previewHtml, bundle.files["product-report.md"], pdfText]) {
+        assert.equal(text.includes("nearest-rank timed samples"), measured, "Estimator prose must explain real samples, not absence");
+        assert.match(text, /Tool latency/);
+        assert.match(text, /Request to final response/);
+        assert.match(text, /0 of 1 requests? timed/);
+        if (measured) {
+            assert.match(text, /2 of 2 calls timed/);
+            assert.match(text, /0 s \(0 ms\)/);
+        } else {
+            assert.match(text, /0 of 2 calls timed/);
+            assert.match(text, /Not measured/);
+            assert.doesNotMatch(text, /0 s \(0 ms\)/);
+        }
+    }
+    assert.deepEqual(facts, before);
+    assert.deepEqual(JSON.parse(bundle.files["product-report.json"]).evaluationFacts, before);
+    assert.equal(bundle.snapshot.evaluationFacts.metrics.find(metric => metric.definitionId === "tool-duration").value, measured ? 0 : null);
+});
+
 test("new reports lead with bounded working patterns from the exact disclosed population", async () => {
     const records = matrixRecords("working-patterns", ["success", "failure", "unknown"], { groups: 2 });
     records[1].sourceSessionId = "second-chat";

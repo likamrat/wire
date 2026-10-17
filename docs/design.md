@@ -21,14 +21,30 @@ The contextual sidebar is one paper surface across its header, scrolling body
 and fixed actions, for interaction reading, report setup and saved-item inspection.
 A directional, diffuse shadow separates it from the main workspace in both
 themes instead of a hard perimeter line or separately outlined header/footer.
-The screen-only contextual shadow is independent of Search elevation.
+The left rail and narrow navigation drawer use the same screen-only depth in
+the opposite direction. Shadows paint outside the scrolling surfaces, at the
+exposed workspace edges; the fixed header stays above the docked panes.
+These directional shadows are independent of Search elevation.
 Transparent decorative borders retain existing box metrics; forced colors
 restore system-color pane and fixed-region edges when shadows are unavailable.
 
 The left rail retains its geometry-based glide and registered brand motion.
 The right sidebar retains its single-surface glide, actual column reflow,
 selected-card anchor compensation and fixed actions. Replacing its content does
-not replay the entrance. Owned request history suppresses native scroll
+not replay the entrance. All three surfaces share the 320ms eased timing.
+In docked mode the main column's actual width follows the panel's exposed edge
+on that same animation clock, in both directions; it does not snap narrower
+before entry or wait until exit to reclaim space. The panel translates at its
+full readable width, while existing chart/container layouts use the real
+remaining width. Reversal starts from the current painted and layout geometry.
+Anchor compensation tracks reflow only while its navigation and input intent
+still own the reading position. Overlay/modal mode leaves main geometry alone.
+Exit releases the reserved column before canceling its animation fill; it never
+samples a temporary docked width or compensates after newer user input.
+Saved-item replacement keeps the current entrance clock. Reopening an exiting
+saved inspector releases its old controls without settling the moving surface,
+then reverses from the current panel and column geometry.
+Owned request history suppresses native scroll
 restoration while the sidebar owns the anchor, then restores the caller's mode.
 Leaving before a delayed snapshot mounts the sidebar also releases that ownership.
 An ordinary authorized exit keeps its existing body and footer mounted but
@@ -42,6 +58,10 @@ current motion immediately without replaying an earlier close or stealing newer
 focus. System reduced-motion changes apply when the preference follows system.
 Motion must be checked in flight, including reversal and focus restoration,
 not inferred from endpoint screenshots.
+`sidebar-motion-depth.browser.test.mjs` samples real main/panel geometry and
+compares rendered pixels with and without each shadow. The prior one-width
+assertion missed the docked snap; computed shadow strings alone missed the
+unelevated left rail.
 The supplied four-state reference establishes surfaces and collapsed/expanded
 geometry only; it does not establish animation timing or easing.
 
@@ -133,6 +153,15 @@ states. Mixed states do not create a separate global mode. The selected prompt
 starts at its section header; an exact-call link opens its owning section and
 focuses the exact record instead.
 
+Only the selected interaction occupies that primary flow. Other linked messages,
+calls and replies live in one initially closed **Linked context** disclosure
+under Source details, using the existing keyed disclosure owner. Their headings
+name the earlier/following context and author; they are not another selected
+prompt. Opening it is deliberate, and closing it or Source clears private
+text/Copy subjects. Recorded associations and distinct attempts remain intact;
+similar prompt text never deduplicates interactions. Call ordinals are local
+to each interaction; exact call IDs and selection anchors do not change.
+
 **Copy** is icon-only, with a short hover/focus explanation,
 a subject-specific accessible name and a 44px target. The reader does not also
 offer a duplicate prompt/response Hide button; other text-access consumers keep
@@ -155,6 +184,14 @@ keeping Copy beside it rather than on a separate utility row.
 Only substantive requests or raw/unknown inputs reserve a Copy column. A known
 target-based input with no question/query has no Copy control or empty column;
 its paths and any known parameters remain selectable and complete.
+Target-only input has one **Requested path** or **Requested paths** caption
+with its existing service cues; multiple values retain ordered numbering.
+Prose requests keep **Recorded request**, with separate path and parameter
+groups only when those distinct facts exist.
+Path values use the canonical call-path renderer, not a guessed
+operation, HTTP method or host. Relative paths and query strings remain exact
+technical evidence. Soft wrapping opportunities at path/query separators do not
+change copied text, decode values, or manufacture an observed Graph request.
 
 **Prompt to final response** means the existing recorded-request-to-final-response timing,
 not the call's duration. The screen-only timing option renders 114090 ms as
@@ -164,7 +201,7 @@ subminute hundredths, tiny-positive and true-zero displays remain distinct.
 Exact milliseconds stay in data elements and exact timestamps in time elements.
 Reader-formatted absolute timestamps display whole seconds while retaining the
 unaltered raw value in `datetime` and title; raw payload copying keeps precision.
-Each actual tool call has an explicit **Call duration** beside its recorded
+Each actual tool call has an explicit **Tool latency** beside its recorded
 outcome, using the existing admitted duration value. Below one second that
 summary shows milliseconds, so **7 ms** never becomes **0 ms**. Missing duration
 stays Not recorded. Owned HTTP uses Recorded duration; code references and
@@ -249,9 +286,12 @@ missing service target; the reader does not repeat its generic absence
 paragraph. Hosted routing, unsupported attribution and unavailable API metadata
 keep their distinct qualifications.
 
-A missing response follows its group's calls without an empty Response controller:
+A missing response has a plain **Response** availability heading after the
+interaction's activity, outside every call/request block and without an empty
+Response controller:
 **No saved response. Capture is off.** when that state is known. It is not a
-failed call or proof that Copilot did not answer. A selected interaction with no
+failed call, an empty path result, or proof that Copilot did not answer. The
+availability host is per interaction, never per call. A selected interaction with no
 individual actions says so in Recorded activity, beside its response availability;
 no empty diagnostic panel replaces removed features. Contradictory raw completion
 flags and source-specific limits remain in their scoped evidence. Broad coverage stays in Analyze
@@ -501,6 +541,25 @@ workspace, not a wizard appended below the library. It is also reachable with
 an empty library, where the two-report prerequisite is explicit; an unresolved
 comparison save keeps its recovery action even when its sources disappear.
 
+Reports uses one left-aligned content frame for its page heading, task actions,
+library, Activity and comparison choices. The 52rem task frame fits a readable
+preparation/identity column, file metadata and a full Open target without spreading
+these into unrelated parts of a wide window. The header shares that exact frame,
+not the shell's wider maximum. It shrinks with the actual available main area when
+navigation or the inspector changes; reporting does not size or animate either
+sidebar. Prepared and saved document reading use the wider 86.5rem reading frame,
+with the page heading following it. Frozen document styling and bytes are unchanged.
+
+Search and preparation order form one compact, aligned toolbar. A single-page
+range keeps its count but does not reserve an empty 44px pager-button row; real
+pagination retains its targets. Saved rows bound the identity column before file
+metadata and keep Open in a consistent action column. At narrow widths the same
+information stacks without reducing text or targets, and disclosure expansion
+keeps the count/list attached to the controls above it.
+Stacked rows align Open with the report identity. When the available report width
+is narrow relative to the text size, Activity's action footer stays in normal flow
+instead of covering the picker with a tall sticky action area.
+
 A verified empty library shows one empty message and emphasizes that existing
 Create / Continue entry. Search, help and bulk management stay mounted but hidden
 until records exist. A pending or failed read is not an empty library: controls
@@ -513,6 +572,14 @@ prepared review and disclosure approval. Browser Back restores the task and
 library search/page/order. Relevant source, permission, filter and evidence changes
 still invalidate previews; switching tasks does not bypass their checks.
 The saved library remains separate from Activity / Contents / Review & save.
+Reports does not show Analyze's live coverage beneath saved or separately scoped
+reports. Report selection and frozen-file coverage stay with the report they describe.
+Controls must serve the current task, not appear because a shared component can
+provide them. Report selection and review keep exact selectable text without Copy
+toolbars; deliberate interaction/response copying remains in the reader. Active
+Create/Compare tasks return through Reports instead of offering competing task
+switches. Privacy limitations and actual findings remain; scanner counters and
+per-block preparation recitals do not.
 It uses the existing metadata search and six-item paginated history, not another
 list or search implementation. Reports and comparisons have explicit labels and
 separate counts. The range and Previous/Next remain together; the saved-library-only
@@ -527,20 +594,30 @@ below its trigger rather than moving the trigger from the right edge to a new ro
 Three short, labelled paragraphs explain search, preparation dates and frozen
 copies, with bounded line length and no smaller text at narrow sizes.
 A compact row aligns the
-report's scope, interaction count, preparation identity, prompt mode, format
+report's title, scope, interaction count, preparation identity, prompt mode, format
 availability and direct **Open**. The rest of the row is a native inspection button,
 with controlled/expanded state and a quiet selected edge. It supplies indexed
 metadata to the one shared right sidebar, not an in-row disclosure or file read.
-Its body holds downloads, full identity and individual deletion controls.
+Its body holds useful metadata and individual deletion; Open leads to the report
+and its file access. Download selectors and locale settings do not belong in this
+metadata inspection step. Raw identifiers do not compete with the title.
 Comparison starts from the explicit Reports task, not a redundant inspector action.
 The footer opens the saved report. Frozen-copy
-and search details stay in **About saved reports**. Missing HTML offers an available
-PDF/Markdown/JSON download instead of an inert Open action; absent metadata stays unknown.
+and search details stay in **About saved reports**. When HTML was not declared,
+Open reads verified JSON/Markdown as literal text or offers an explicit PDF
+download; a declared but broken HTML file never triggers an alternate read.
+Supported unanchored v3 originals require a separate **View original** action
+and remain explicitly unverified. Absent metadata stays unknown.
 The frozen reader uses the full Reports main width, not a floating dialog. Opening
 closes the contextual pane and focuses the reader heading. Its short preparation
 caption and Back utility restore the precise library or comparison origin and prior inspector
 only when one was open. Its opaque sandbox and old bytes are unchanged; no height
 measurement privilege is added. Prepared report measurement remains separate.
+New report titles are one reviewed, always-masked metadata value across Contents,
+the main heading, saved metadata and newly generated files. Existing genuine
+indexed titles take precedence; a metadata-derived legacy fallback is not a
+canonical title. The verified manifest-only `canonicalTitle` carrier keeps Search
+and file formats aligned without renaming historical files.
 An unchanged comparison return retains its pair, prepared frame and approval
 without another read or preparation. A changed saved inventory refreshes choices
 on task entry; read failures stay explicit and cannot be mistaken for no reports.
@@ -1044,7 +1121,7 @@ Focused proof: `tests/period-comparison.test.mjs`,
 `tests/period-comparison.browser.test.mjs`, plus the exact static module closure in
 `tests/period-comparison-assets.browser.test.mjs`. Fixtures are invented retained
 records; optional `WIRE_PERIOD_PROOFS` writes numeric snapshots and normal-render
-images outside the repository. Matching-call duration comparisons currently
+images outside the repository. Matching tool latency comparisons currently
 apply to the Work IQ call layer only; other layers keep their canonical counts
 and distinct full-interaction metric boundaries.
 
@@ -1160,10 +1237,11 @@ a new draft or repeat a mutation. Back retains an unchanged draft/reading positi
 Fresh catalogue timing transport revisions alone do not invalidate unchanged selected
 facts; source, timing, permission, context and saved-review changes retain their guards.
 
-New human-readable reports lead with **At a glance**, grounded in frozen counts,
-tool/service patterns and actual saved findings. Prompt-led examples and exact timing/
-coverage support that account. Unrun canonical local checks share their explanation,
-not their separate values or denominators; errors and unknown definitions remain explicit.
+New human-readable reports lead with the actual report title and concise,
+frozen tool/service patterns. Activity, timing, examples, operations and included
+text form the reading order. Current output contains no retired review/check
+recitals. Period A/B and saved comparisons preserve distinct populations,
+overlap, unavailable measurements and incompatible definitions.
 Red is reserved for failures, while service colors keep their distinct meaning. Report
 fonts/styles are embedded independently from screen tokens; old artifacts and machine
 facts are not rewritten. The same actual HTML, PDF and Markdown are inspected during proof.
@@ -1717,7 +1795,7 @@ prompt shows **Final response**, using that exact interaction's qualified metric
 After each retained reader prompt, the same timing fact accompanies its
 Model/Models fact. Both use the shared
 single-colon key formatter. Each call retains its own
-start-to-completion duration and existing duration ordering. Missing values say
+start-to-completion **Tool latency** and existing duration ordering. Missing values say
 **Not recorded**, genuine zero remains measured, and no duration receives a
 speed verdict or threshold color. No trace gaps are labelled as model thinking,
 waiting or retries.
@@ -1946,6 +2024,21 @@ and uses matching paints for outcome glyphs, legends and marks. Forced colors
 retain names, counts, glyphs and system focus instead of relying on hue.
 
 `screenTokens` and `screenFontStack` in `web/tokens.mjs` own screen appearance.
+Light-screen success and failure marks use muted green and coral fades with
+a visible light-to-deep tonal range, not two near-identical dark ink stops.
+Their shared high/low roles feed the outcome donut, time columns, path comparisons
+and on-screen report comparison strips. Status labels and icons retain the
+darker readable semantic inks. Light-ring hover/focus darkens the same gradient
+slightly instead of replacing it with a flat fill; the label keeps its focus ring.
+Connection failures share red, while unknown, partial and other results keep
+their own roles. Both ends of the changed fades maintain at least 3:1 against
+white widgets and inset comparison tracks; text keeps at least 4.5:1.
+Counts, exact geometry, destinations and white filter surfaces
+are unchanged. The accepted dark stops and report-facing palette are untouched.
+Full synthetic widget renders in both themes, including narrow/enlarged text,
+small sectors, selected/empty views and hover/focus complement the paint checks
+in `tests/light-theme-paint.browser.test.mjs`.
+
 Screens use Asta Sans first, followed by Segoe UI and system fallbacks.
 The existing local Latin variable face declares weights 300-800;
 regular/medium/semibold roles are 400/500/600. The font is retained in WIRE
@@ -3640,7 +3733,10 @@ meaning. Known failures and genuine missing duration/service/author evidence
 remain visible. Aggregate results and exact selected-call reader layouts are
 unchanged by this card-only treatment.
 
-**Duration** names the existing Slowest first / Fastest first control.
+**Tool latency** names the existing Slowest first / Fastest first control for
+tool calls; other evidence layers retain **Duration**. Current timing summaries,
+comparisons and newly rendered reports use the same term, with Median or P95
+where applicable. Source fields, saved files and Search match text stay unchanged.
 The primary sort row mentions unavailable durations only when present; the
 pager supplies the canonical record unit and total. The list names its source
 interaction population and explains once that tool completion is not answer
@@ -3812,13 +3908,15 @@ actions. Editing a copy or changing any export choice requires rebuilding and
 reviewing again. The final commit writes every selected format before appending
 an export-history entry; source records and their classifications remain unchanged.
 
-Newly generated ordinary reports start with a short **At a glance**, not the disclosure
-manifest. Separate-unit counts, recorded outcomes, services and missing-status
+Newly generated ordinary reports start with their title and a short factual
+summary, not a generic title/subtitle stack or the disclosure manifest.
+Separate-unit counts, recorded outcomes, services and missing-status
 coverage lead; bounded request-to-action examples precede exact operation tables.
 HTML links to full prompt copies in native disclosures, while PDF expands those
 same copies and numbers pages. Full wording is never silently clipped. Markdown
-uses linked sections and inert prompt blocks, and JSON puts the shared summary
-before complete record detail. Scope/privacy explanations remain accessible in
+uses linked sections and inert prompt blocks, and JSON puts title and summary
+before complete record detail. No-prompts output omits an empty text section.
+Scope/privacy explanations remain accessible in
 the coverage appendix. Known empty retained strings are labeled unavailable with
 their source-status discrepancy, never reconstructed or repaired in source.
 

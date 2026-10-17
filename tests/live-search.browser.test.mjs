@@ -36,7 +36,6 @@ async function find(page, query, type = "") {
     await page.locator("#wireSearch").focus();
     await page.locator("#wireSearch").fill(query);
     await selectActivityOption(page, "wireSearchType", type);
-    if (await page.locator("#wireSearchOptions").evaluate(node => node.open)) await page.locator("#wireSearchFilterSummary").click();
     await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|Search is incomplete\. Some saved content could not be searched\.)$/, { timeout: 30000 });
     return page.locator("#wireSearchResults button");
 }

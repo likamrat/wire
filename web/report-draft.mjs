@@ -90,6 +90,7 @@ export function createReportDraft({ contextSelector } = {}) {
         clearSelection() {
             selection = "";
             basis = authorityBasis = undefined;
+            delete options.title;
             options.overrides = [];
             context = undefined;
             contextVersion++;

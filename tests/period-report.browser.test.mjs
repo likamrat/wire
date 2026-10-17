@@ -149,7 +149,8 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     assert.ok(live.comparison.metrics.every(item => (item.baseline ?? item.later).metric === "speed"), "Current reports retain timing, not historical feedback lanes");
     assert.equal(preview.snapshot.evaluationFacts, undefined);
     const frame = page.frameLocator(".report-frame");
-    await expect(frame.getByRole("heading", { name: "What differs", exact: true })).toBeVisible();
+    await expect(frame.getByRole("heading", { name: preview.title, level: 1, exact: true })).toBeVisible();
+    await expect(frame.getByRole("heading", { name: "Activity", level: 2, exact: true })).toBeVisible();
     await expect(frame.locator("#baseline")).not.toContainText("Work IQ sign-in was required");
     await expect(frame.locator("#baseline")).not.toContainText("synthetic-quality-fixture");
     assert.ok(preview.records.every(record => !record.toolCalls.length));
@@ -213,7 +214,7 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     const filesBefore = new Map(await Promise.all(Object.entries(entry.files).map(async ([name, file]) => [name, await readFile(file)])));
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
     await expect(page.locator("#savedReportReader")).toBeVisible();
-    await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: /Retained-period comparison report/ })).toBeVisible();
+    await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: entry.title, level: 1, exact: true })).toBeVisible();
     await assert.rejects(loadSavedReportSource(context, state, entry.bundleId), /two frozen cohorts/);
     const inventory = await createSavedArtifactDescriptor(context)(state, { artifactKind: "report", artifactId: entry.bundleId });
     assert.equal(inventory.files.length, 5);

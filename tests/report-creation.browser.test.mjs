@@ -101,7 +101,7 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
     assert.equal(await page.locator("#reportReviewBody").isVisible(), true);
     assert.equal(await page.locator(".report-frame").evaluate(node => node === window.preparedFrameBeforeApproval), true, "Approval must not replace the reading document");
     await page.getByRole("tab", { name: /^Files \(/ }).click();
-    await page.locator("#reportFileInspection summary").filter({ hasText: "Inspect exact coverage-and-redaction-manifest.json" }).click();
+    await page.locator("#reportFileInspection summary").filter({ hasText: "coverage-and-redaction-manifest.json" }).click();
     assert.match(await page.locator("#reportFileInspection").innerText(), /"reviewerConfirmed": true/);
     assert.equal((await loadBoardState(context)).exports.length, 0);
     await page.getByRole("tab", { name: "Report", exact: true }).click();
@@ -123,7 +123,7 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.frameLocator("#savedReportReader iframe").locator("h1").waitFor();
     await capture("08-frozen-reader");
-    await page.getByRole("region", { name: "Saved report", exact: true }).getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.locator("#savedReportReader").getByRole("button", { name: "Back to report library", exact: true }).click();
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), true, "The reader's library action returns directly to the library after saving");
     await capture("09-library");
     await page.getByRole("link", { name: "Create a report", exact: true }).click();

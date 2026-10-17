@@ -13,6 +13,7 @@ import { recordedResponseTiming } from "../lib/response-timing.mjs";
 import { recordedInteractionModels } from "../lib/interaction-model.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
+import { searchFixture } from "./live-search-fixture.mjs";
 
 const proofs = process.env.WIRE_READER_PROOFS;
 async function captureCorrection(page, name, sectionName, focusSelector) {
@@ -56,7 +57,7 @@ function readerRecord() {
     return record;
 }
 
-async function setup(t, records = [readerRecord()], { responseText, assessmentFixture, motion = "reduce", sidebarMotion, saveFrozen = false, initialStorage = {} } = {}) {
+async function setup(t, records = [readerRecord()], { responseText, assessmentFixture, responseCompleteness = "bounded-fragment", motion = "reduce", sidebarMotion, saveFrozen = false, initialStorage = {} } = {}) {
     const cleanups = [];
     const { context } = await privateFixture({ after: action => cleanups.push(action) }, records);
     const reports = createExportController(context);
@@ -79,7 +80,7 @@ async function setup(t, records = [readerRecord()], { responseText, assessmentFi
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: motion });
     const errors = [], requests = [];
     page.setDefaultTimeout(6000);
-    page.on("pageerror", error => errors.push(error.message));
+    page.on("pageerror", error => errors.push(error.stack));
     page.on("request", request => requests.push({ path: new URL(request.url()).pathname, origin: new URL(request.url()).origin }));
     await page.route("**/api/evaluation/**", route => route.abort("blockedbyclient"));
     await page.addInitScript(storage => {
@@ -95,6 +96,7 @@ async function setup(t, records = [readerRecord()], { responseText, assessmentFi
         const texts = responseText === undefined ? [] : Array.isArray(responseText) ? responseText : [responseText];
         const view = assessmentView = assessmentFixture ?? retainedResponse(texts[0], records[0]);
         const first = view.observations.find(item => item.kind === "answer"), responseTexts = new Map(first ? [[first.observationRef, texts[0]]] : []);
+        if (first?.payload && responseText !== undefined) first.payload.completeness = responseCompleteness;
         for (let index = 1; index < texts.length; index++) {
             const answer = structuredClone(first);
             answer.observationRef = samples.id("observation", 80 + index);
@@ -130,7 +132,7 @@ async function setup(t, records = [readerRecord()], { responseText, assessmentFi
             const input = route.request().postDataJSON();
             contract.validateRequest("get_interaction_evidence", input);
             await route.fulfill({ json: envelope({ observationRef: input.observationRef, text: responseTexts.get(input.observationRef),
-                completeness: "bounded-fragment", finality: "unverified", basis: view.basis }) });
+                completeness: responseCompleteness, finality: "unverified", basis: view.basis }) });
         });
     }
     t.after(async () => {
@@ -295,7 +297,7 @@ test("plural inputs and mixed evidence retain exact scopes and readable geometry
                 overflow: root.scrollWidth - root.clientWidth,
                 labels: getComputedStyle(label).fontSize, values: getComputedStyle(value).fontSize };
         });
-        assert.ok(measured.gap >= 0 && measured.gap <= 6, `${theme}/${width}/${scale}: heading/value gap ${measured.gap}`);
+        assert.ok(measured.gap >= 0 && measured.gap <= 6, `${theme}/${width}/${scale}: path caption/value gap ${measured.gap}`);
         assert.equal(measured.targetCopies, 0);
         assert.ok(measured.unusedWidth <= 1, "Target text does not retain an empty Copy column");
         const requestCopy = await retrieve.getByRole("button", { name: "Copy recorded arguments", exact: true }).boundingBox();
@@ -554,7 +556,7 @@ test("retirement: historical model judgments do not create current reader panels
     await expect(reader.locator('[aria-busy="true"]')).toHaveCount(0);
     await expect(reader.locator('[data-reader-section="reviews"],.single-interaction-measures,.assessment-finding-group,.reader-check-counts')).toHaveCount(0);
     assert.doesNotMatch(await reader.innerText(), /synthetic-quality-fixture|wire-recorded-interaction-review|AI judgments|Local checks|No saved reviews/);
-    await expect(reader.locator(".reader-call-duration")).toHaveText("Call duration: 1 s");
+    await expect(reader.locator(".reader-call-duration")).toHaveText("Tool latency: 1 s");
     await expect(reader.locator(".request-original pre")).toHaveText(record.userPrompt.text);
     assert.deepEqual(state.personalEvaluation, historical);
     await captureCorrection(page, "retired-history-reading", "prompt");
@@ -865,15 +867,15 @@ test("EC92 released presentation keeps compact identities, explicit durations an
     const fetch = reader.locator('[data-tool-call-id="invented-reader-call"]');
     await expect(fetch.locator(".reader-call-identity")).toHaveText(/Call 1\s*·\s*Tool: workiq-fetch/);
     await expect(fetch.locator("dt").filter({ hasText: /^Result$/ })).toHaveCount(0);
-    await expect(fetch.locator(".reader-call-duration")).toHaveText("Call duration: 7 ms");
+    await expect(fetch.locator(".reader-call-duration")).toHaveText("Tool latency: 7 ms");
     await expect(fetch.locator(".reader-call-duration data")).toHaveAttribute("value", "7");
-    await expect(reader.locator('[data-tool-call-id="invented-ec92-zero"] .reader-call-duration')).toHaveText("Call duration: 0 ms");
+    await expect(reader.locator('[data-tool-call-id="invented-ec92-zero"] .reader-call-duration')).toHaveText("Tool latency: 0 ms");
     await expect(fetch.getByRole("button", { name: "Copy recorded arguments", exact: true })).toHaveCount(0);
     await expect(fetch.locator(".reader-input-heading .service-cue")).toHaveCount(2);
     await expect(fetch.locator(".reader-input-value code")).toHaveText(first.requestArgs.entityUrls);
     await expect(fetch.locator(".reader-input>.reader-fields dd")).toHaveText("UTC");
     const query = reader.locator('[data-tool-call-id="invented-ec92-request"]');
-    await expect(query.locator(".reader-call-duration")).toHaveText("Call duration: Not recorded");
+    await expect(query.locator(".reader-call-duration")).toHaveText("Tool latency: Not recorded");
     await query.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
     assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), JSON.stringify(record.toolCalls[2].requestArgs, null, 2));
     const unknown = reader.locator('[data-tool-call-id="invented-ec92-unknown"]');
@@ -983,4 +985,243 @@ test("EC92 final assembly keeps timing with its subject and only useful reading 
     assert.ok(targets.separate && targets.aligned && targets.copyWidth >= 44 && targets.copyHeight >= 44, JSON.stringify(targets));
     await captureCorrection(page, "ec92-final-prompt", "prompt");
     await captureCorrection(page, "ec92-final-response", "response");
+});
+
+test("reader story separates the recorded request, interaction response and optional following context", { timeout: 25000 }, async t => {
+    const record = readerRecord(), requestPath = "/me?$select=preferredLanguage";
+    record.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
+    record.userPrompt.text = "Review the invented directory preference recorded for this example. ".repeat(5);
+    Object.assign(record.toolCalls[0], {
+        requestArgs: { entityUrls: [requestPath] }, durationMs: 237,
+        toolSucceeded: false, reportedOutcome: "failed",
+        failureEvidence: { version: 1, reason: "no-structured-error", messageStatus: "text-excluded", messageSignal: "workiq-sign-in-required" },
+    });
+    const following = "Separate work: compare the invented handoff notes and identify unresolved owners. ".repeat(5);
+    record.followUpPrompts = [{ text: following, status: "full", sourceEventId: "invented-following-work",
+        sourceTimestamp: "2026-09-30T12:01:00.000Z", authorship: { actor: "agent", basis: "source-agent" } }];
+    const otherAttempt = structuredClone(record);
+    otherAttempt.scenarioId = "invented-distinct-attempt";
+    otherAttempt.userPrompt.sourceEventId = "invented-distinct-prompt";
+    otherAttempt.userPrompt.sourceTimestamp = "2026-09-30T12:30:00.000Z";
+    otherAttempt.followUpPrompts = [];
+    Object.assign(otherAttempt.toolCalls[0], { toolCallId: "invented-distinct-call", startEventId: "invented-distinct-start",
+        startedAt: "2026-09-30T12:30:02.000Z", completedAt: "2026-09-30T12:30:03.000Z",
+        toolSucceeded: true, reportedOutcome: "succeeded", failureEvidence: null });
+    const { page, context } = await setup(t, [record, otherAttempt]);
+    await page.locator('.request-card-open[href*="request=reader-approved"]').click();
+    await expect(page.locator(".request-card-open")).toHaveCount(2);
+    const reader = page.locator("#requestContent"), call = reader.locator('[data-tool-call-id="invented-reader-call"]');
+    await expect(reader.getByText("No saved response. Capture is off.", { exact: true })).toHaveCount(1);
+    await expect(call.locator(".reader-input-value code")).toHaveText(requestPath);
+    await expect(call.locator(".reader-input-heading .service-cue")).toHaveText("People");
+    await expect(call.locator(".reader-recorded-signal")).toHaveText("Recorded error signal: sign-in required.");
+    const observations = [];
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        await page.evaluate(() => document.documentElement.style.fontSize = "100%");
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+        await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", scale === 1 ? "docked" : "overlay");
+        const observed = await reader.evaluate(root => {
+            const call = root.querySelector('[data-tool-call-id="invented-reader-call"]');
+            const target = call.querySelector(".reader-input-value code"), input = call.querySelector(".reader-input");
+            const box = node => { const value = node.getBoundingClientRect(); return { x: value.x, y: value.y, width: value.width, height: value.height }; };
+            const responseHeading = root.querySelector(":scope > .reader-response-availability > h2");
+            const text = [...target.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.includes("preferredLanguage"));
+            const token = document.createRange(), offset = text.textContent.indexOf("preferredLanguage");
+            token.setStart(text, offset); token.setEnd(text, offset + "preferredLanguage".length);
+            return {
+                primaryPrompts: [...root.querySelectorAll('[data-text-subject=request] .full-text-content')].filter(node => node.checkVisibility()).length,
+                responseInsideCall: Boolean(call.querySelector(".interaction-response")),
+                requestCaption: input.querySelector(".reader-input-label").textContent,
+                pathCaptionCount: input.querySelectorAll(".reader-input-label,.reader-request-paths dt").length,
+                rawPath: target.textContent, path: box(target), input: box(input),
+                queryTokenLines: token.getClientRects().length,
+                responseHeading: responseHeading && { ...box(responseHeading), clip: getComputedStyle(responseHeading).clipPath },
+                overflow: document.getElementById("contextSidebarBody").scrollWidth - document.getElementById("contextSidebarBody").clientWidth,
+            };
+        });
+        observations.push({ theme, width, scale, ...observed });
+        const directory = process.env.WIRE_READER_STORY_PROOFS;
+        if (directory) {
+            await mkdir(directory, { recursive: true });
+            await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop = 0);
+            await page.screenshot({ path: path.join(directory, `story-prompt-${theme}-${width}-${scale}.png`) });
+            await call.evaluate(node => {
+                const scroll = document.getElementById("contextSidebarBody");
+                scroll.scrollTop += node.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 64;
+            });
+            await page.screenshot({ path: path.join(directory, `story-activity-${theme}-${width}-${scale}.png`) });
+            await writeFile(path.join(directory, "story-measurements.json"), JSON.stringify(observations, null, 2));
+        }
+    }
+    assert.equal((await loadBoardState(context)).evidence.length, 2, "Similar prompt text does not merge genuine attempts");
+    for (const observed of observations) {
+        assert.equal(observed.rawPath, requestPath, "The retained relative request is not malformed or rewritten");
+        assert.ok(observed.overflow <= 1);
+        assert.equal(observed.queryTokenLines, 1, "A query token that fits wraps at a meaningful separator, not a final orphaned character");
+        assert.ok(observed.responseHeading?.height >= 20 && observed.responseHeading.clip === "none", "Availability has a visible subject heading");
+        assert.equal(observed.pathCaptionCount, 1, "A target-only request has one path caption, not stacked request/path labels");
+        assert.deepEqual({ primaryPrompts: observed.primaryPrompts, responseInsideCall: observed.responseInsideCall, requestCaption: observed.requestCaption },
+            { primaryPrompts: 1, responseInsideCall: false, requestCaption: "Requested path" });
+    }
+    const linked = reader.locator('[data-reader-section="source"] .reader-linked-context');
+    await expect(linked).not.toHaveAttribute("open", "");
+    await expect(linked.locator(".full-text-content,.ux-copy")).toHaveCount(0);
+    await linked.locator(":scope > summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(linked.locator(".full-text-content")).toHaveText(following);
+    await expect(linked.locator(".reader-context-heading")).toHaveText("Following message · Agent prompt");
+    assert.equal(await linked.locator("[data-prompt-actor=agent]").evaluate(node => getComputedStyle(node).color),
+        await reader.locator('[data-reader-section="prompt"] [data-prompt-actor=agent]').first().evaluate(node => getComputedStyle(node).color),
+        "Subordinate context retains the shared author meaning without a primary prompt treatment");
+    if (process.env.WIRE_READER_STORY_PROOFS) {
+        await linked.evaluate(node => {
+            const scroll = document.getElementById("contextSidebarBody");
+            scroll.scrollTop += node.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 64;
+        });
+        await page.screenshot({ path: path.join(process.env.WIRE_READER_STORY_PROOFS, "story-linked-open-dark-375-2.png") });
+    }
+    const followingCopy = linked.getByRole("button", { name: "Copy following message", exact: true });
+    await followingCopy.click();
+    assert.deepEqual(await page.evaluate(() => window.readerCopies), [following]);
+    const staleCopy = await followingCopy.elementHandle();
+    await linked.locator(":scope > summary").click();
+    await expect(linked.locator(".full-text-content,.ux-copy")).toHaveCount(0);
+    await staleCopy.evaluate(node => node.click());
+    assert.deepEqual(await page.evaluate(() => window.readerCopies), [following]);
+    await linked.locator(":scope > summary").click();
+    await expect(linked.locator(".full-text-content")).toHaveText(following);
+    await reader.locator('[data-reader-section="source"] .reader-section-toggle').click();
+    await expect(linked.locator(".full-text-content,.ux-copy")).toHaveCount(0);
+    await reader.locator('[data-reader-section="source"] .reader-section-toggle').click();
+    await expect(linked.locator(".full-text-content")).toHaveText(following);
+});
+
+test("reader story keeps the complete visible sequence across response states, plural calls and long requests", { timeout: 30000 }, async t => {
+    for (const [responseState, outcome] of [["absent", "success"], ["partial", "failure"], ["full", "unknown"]]) {
+        const record = readerRecord(), first = record.toolCalls[0], exact = "Invented saved reply.\n  Keep its exact bytes.\n";
+        const paths = ["/me/drive/items/" + "long-invented-resource-".repeat(12) + "?$select=name,webUrl", "/me?$select=preferredLanguage&$expand=manager"];
+        Object.assign(first, { requestArgs: { entityUrls: paths }, toolSucceeded: outcome === "unknown" ? null : outcome === "success",
+            reportedOutcome: outcome === "unknown" ? "unknown" : outcome === "success" ? "succeeded" : "failed" });
+        record.toolCalls.push({ ...first, toolCallId: "invented-second-call", startEventId: "invented-second-start",
+            requestArgs: { query: "  Invented query with retained spacing.\n", capabilities: [{ name: "Email" }] } });
+        record.followUpPrompts = [{ text: "A separate invented follow-up fragment.", status: "partial",
+            sourceEventId: "invented-fragment", sourceTimestamp: "2026-09-30T12:10:00.000Z",
+            authorship: { actor: "unknown", basis: "legacy-missing" } }];
+        const options = responseState === "absent" ? {} : { responseText: exact,
+            responseCompleteness: responseState === "full" ? "full-record" : "bounded-fragment" };
+        const { page, context } = await setup(t, [record], options), reader = page.locator("#requestContent");
+        await expect(reader.locator('[aria-busy="true"]')).toHaveCount(0);
+        const response = reader.locator('[data-reader-section="response"]'), before = (await loadBoardState(context)).evidence;
+        if (responseState !== "absent") {
+            await expect(response.locator(".full-text-content")).toHaveText(exact);
+            await expect(response.getByText("Partial text", { exact: true })).toHaveCount(responseState === "partial" ? 1 : 0);
+            await response.getByRole("button", { name: "Copy response", exact: true }).click();
+            assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), exact);
+        } else await expect(reader.locator(":scope > .reader-response-availability")).toContainText("No saved response. Capture is off.");
+        const expected = ["prompt", "activity", responseState === "absent" ? "availability" : "response", "source"];
+        assert.deepEqual(await reader.evaluate(root => [...root.children].filter(node => node.checkVisibility()
+            && (node.dataset.readerSection || node.classList.contains("reader-response-availability")))
+            .map(node => node.dataset.readerSection ?? "availability")), expected);
+        const call = reader.locator('[data-tool-call-id="invented-reader-call"]');
+        await expect(call.locator(".reader-request-paths code")).toHaveText(paths);
+        await expect(reader.locator(".journey-item .reader-response-availability")).toHaveCount(0);
+        await expect(reader.locator(".reader-linked-context .full-text-content")).toHaveCount(0);
+        await expect(reader.locator('.request-context-timeline [data-context-kind="action"]')).toHaveCount(2);
+        await expect(call.locator(".recorded-result-label")).toHaveText({ success: "Worked", failure: "Tool failed", unknown: "No result recorded" }[outcome]);
+        for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await page.evaluate(() => document.documentElement.style.fontSize = "100%");
+            await chooseTheme(page, theme);
+            await page.setViewportSize({ width, height: 1000 });
+            await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+            await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", scale === 1 ? "docked" : "overlay");
+            const geometry = await call.locator(".reader-request-paths code").evaluateAll(nodes => nodes.map(node => ({
+                text: node.textContent, overflow: node.scrollWidth - node.clientWidth,
+                font: getComputedStyle(node).fontFamily, size: getComputedStyle(node).fontSize, weight: getComputedStyle(node).fontWeight,
+            })));
+            for (const value of geometry) {
+                assert.ok(value.overflow <= 1);
+                assert.match(value.font, /Asta Sans/);
+                assert.equal(value.size, `${14 * scale}px`);
+                assert.equal(value.weight, "400");
+            }
+            assert.deepEqual(geometry.map(value => value.text), paths);
+            assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+        }
+        assert.deepEqual((await loadBoardState(context)).evidence, before);
+    }
+});
+
+test("reader story remains scoped when opened through actual Search and report peek", { timeout: 30000 }, async t => {
+    const record = readerRecord(), cleanup = [], marker = "Invented Orchid directory review";
+    record.userPrompt.text = marker; record.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
+    record.toolCalls[0].requestArgs = { entityUrls: ["/me?$select=preferredLanguage"] };
+    record.followUpPrompts = [{ text: "Independent invented work, not a second selected prompt.", status: "full",
+        sourceEventId: "invented-search-following", sourceTimestamp: "2026-09-30T12:01:00Z",
+        authorship: { actor: "agent", basis: "source-agent" } }];
+    const app = await searchFixture({ after: fn => cleanup.push(fn) }, { records: [record], reply: false });
+    const browser = await chromium.launch(), page = await browser.newPage({ reducedMotion: "reduce", viewport: { width: 1440, height: 1000 } });
+    const errors = [], requests = [];
+    page.on("pageerror", error => errors.push(error.stack));
+    page.on("request", request => requests.push(new URL(request.url())));
+    t.after(async () => {
+        await browser.close(); for (const fn of cleanup) await fn();
+        assert.deepEqual(errors, []);
+        assert.ok(requests.every(url => url.origin === new URL(app.runtime.url).origin));
+        assert.ok(!requests.some(url => /\/api\/(?:preview|privacy-review|export|assessment\/feedback|assessment\/consent\/set)$/.test(url.pathname)));
+    });
+    await page.goto(app.runtime.url);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await page.locator("#wireSearch").fill("Orchid");
+    const hit = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-title", { hasText: marker }) });
+    await expect(hit).toHaveCount(1);
+    const verify = async () => {
+        await expect(page.locator(".request-original pre")).toHaveText(marker);
+        await expect(page.locator(".reader-linked-context")).not.toHaveAttribute("open", "");
+        await expect(page.locator(".reader-linked-context .full-text-content")).toHaveCount(0);
+        await expect(page.locator(".request-context-timeline .reader-response-availability")).toHaveCount(0);
+        await expect(page.locator("#requestContent > .reader-response-availability")).toContainText("No saved response.");
+        await expect(page.locator(".reader-request-paths code")).toHaveText(record.toolCalls[0].requestArgs.entityUrls);
+    };
+    await hit.click(); await verify();
+    await page.goBack(); await expect(hit).toBeFocused();
+    await hit.click(); await verify();
+    await page.locator("#requestReportToggle").click();
+    await page.locator("#requestReportContinue").click();
+    await page.locator("#reportList .request-link").click();
+    await verify();
+    await expect(page.getByRole("button", { name: "Back to activity", exact: true })).toBeVisible();
+    assert.equal((await loadBoardState(app.context)).exports.length, 0);
+});
+
+test("target-only caption consolidation preserves numbered paths and distinct request parameters", { timeout: 20000 }, async t => {
+    const record = readerRecord(), first = record.toolCalls[0];
+    first.requestArgs = { entityUrls: ["/me?$select=preferredLanguage"], timeZone: "UTC" };
+    const paths = ["/me/messages/invented-item", "/me/drive/items/invented-file"];
+    record.toolCalls.push(
+        { ...first, toolCallId: "invented-numbered-paths", startEventId: "invented-numbered-start", requestArgs: { entityUrls: paths } },
+        { ...first, toolCallId: "invented-prose-and-path", startEventId: "invented-prose-start",
+            requestArgs: { query: "  Keep this invented request separate.\n", entityUrls: [paths[1]], timeZone: "UTC", capabilities: [{ name: "OneDriveAndSharePoint" }] } });
+    const { page } = await setup(t, [record]);
+    const calls = page.locator(".request-context-timeline [data-tool-call-id]");
+    await expect(calls.nth(0).locator(".reader-input-label")).toHaveText("Requested path");
+    await expect(calls.nth(0).locator(".reader-request-paths dt")).toHaveCount(0);
+    await expect(calls.nth(0).locator(".reader-input>.reader-fields")).toHaveText("Time zoneUTC");
+    await expect(calls.nth(1).locator(".reader-input-label")).toHaveText("Requested paths");
+    await expect(calls.nth(1).locator("ol.reader-request-paths>li code")).toHaveText(paths);
+    assert.equal(await calls.nth(1).locator("ol.reader-request-paths").evaluate(node => getComputedStyle(node).listStyleType), "decimal");
+    assert.equal(await calls.nth(1).locator("ol.reader-request-paths>li").first().evaluate(node => getComputedStyle(node).display), "list-item");
+    await expect(calls.nth(1).getByRole("button", { name: "Copy recorded arguments", exact: true })).toHaveCount(0);
+    const prose = calls.nth(2);
+    await expect(prose.locator(".reader-input-label")).toHaveText("Recorded request");
+    await expect(prose.locator(".reader-request-text")).toHaveText(record.toolCalls[2].requestArgs.query);
+    await expect(prose.locator("dl.reader-request-paths dt")).toHaveText("Requested path");
+    await expect(prose.locator("dl.reader-request-paths code")).toHaveText(paths[1]);
+    await expect(prose.locator(".reader-input>.reader-fields dt")).toHaveText(["Requested sources", "Time zone"]);
+    await prose.getByRole("button", { name: "Copy recorded arguments", exact: true }).click();
+    assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), JSON.stringify(record.toolCalls[2].requestArgs, null, 2));
+    await captureCorrection(page, "caption-known-input", "activity");
 });

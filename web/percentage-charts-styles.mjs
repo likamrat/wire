@@ -13,7 +13,14 @@ export const percentageChartStyles = `
 .percentage-face {stroke:none;pointer-events:visibleFill}
 .percentage-ring a {cursor:pointer}
 .percentage-ring a:focus:not(:focus-visible) {outline:none}
-.percentage-face.percentage-active {fill:var(--column-label);fill-opacity:1}
+.percentage-face.percentage-active {fill-opacity:1}
+@media(forced-colors:none) {
+ .percentage-face.percentage-active {filter:brightness(.9)}
+ :root[data-evidence-theme=dark] .percentage-face.percentage-active {fill:var(--column-label);filter:none}
+}
+@media(prefers-color-scheme:dark) and (forced-colors:none) {
+ :root:not([data-evidence-theme]) .percentage-face.percentage-active {fill:var(--column-label);filter:none}
+}
 .percentage-legend {list-style:none;margin:0;padding:0;min-width:0;display:grid;gap:8px}
 /* Preserve the existing label/count/bar positions around the larger service glyph. */
 .percentage-card[data-breakdown=services] {--percentage-icon-size:24px;--percentage-icon-gap:4px}

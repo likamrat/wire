@@ -365,15 +365,15 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const comparison = value.comparison.matchingCallTiming[aggregation];
                 const display = fact => `${aggregation === "p95" && fact.coverage.count < 2 ? "Not shown without multiple samples"
                     : fact.state === "available" ? number(fact.value) + " ms" : "Not measured"}; ${fact.coverage.count} / ${fact.coverage.eligible} calls timed${fact.coverage.count === 1 ? "; single sample" : ""}`;
-                return [aggregation === "median" ? "Median call duration" : "P95 call duration", display(comparison.baseline), display(comparison.later),
+                return [aggregation === "median" ? "Median tool latency" : "P95 tool latency", display(comparison.baseline), display(comparison.later),
                     comparison.delta && (aggregation !== "p95" || Math.min(comparison.baseline.coverage.count, comparison.later.coverage.count) > 1)
                         ? signed(comparison.delta.value) + " ms" : "Not comparable"];
             });
             const timing = el("div");
-            timing.append(table("Matching call duration", ["Timing", "Period A", "Period B", "Difference"], timingRows),
+            timing.append(table("Matching tool latency", ["Timing", "Period A", "Period B", "Difference"], timingRows),
                 el("p", "Recorded start to completion; timed calls only.", "context-help-note"));
             measures.append(timing);
-        } else measures.append(el("p", "Call duration is unavailable for this evidence type.", "context-help-note"));
+        } else measures.append(el("p", "Tool latency is unavailable for this evidence type.", "context-help-note"));
         const detailTitle = el("h2", "Whole interactions"); detailTitle.id = "periodInteractionDetailsTitle";
         output.append(detailTitle, el("p", "Includes calls outside the selected dates or filters.", "context-help-note"));
         const sides = el("div", undefined, "period-comparison-sides");
@@ -406,7 +406,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             }
             if (side.rowIds.length) {
                 const exact = el("details", undefined, "reading-section"); exact.append(el("summary", `Exact matching records (${side.rowIds.length})`));
-                exact.append(table(`${label} exact record membership`, ["Tool or record", "Recorded start", "Outcome", "Duration"], side.analytics.rows.map(row => [
+                exact.append(table(`${label} exact record membership`, ["Tool or record", "Recorded start", "Outcome", value.definitions.layer === "tool" ? "Tool latency" : "Duration"], side.analytics.rows.map(row => [
                     recordLink(row, side, value), time.formatTime(row.startedAt, value.timeContext), labels[row.outcome],
                     Number.isFinite(row.durationMs) ? number(row.durationMs) + " ms" : "Not measured",
                 ])));

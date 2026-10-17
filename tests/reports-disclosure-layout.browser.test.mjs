@@ -256,9 +256,11 @@ test("creation disclosures retain their anchors and controls at desktop and enla
     const { page } = await setup(t);
     await chooseReportScope(page, "all");
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [375, 200]]) {
+        if (await page.locator("#contextSidebar[open]").count()) await page.locator("#closeContextSidebar").click();
         await page.setViewportSize({ width, height: 1100 });
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
+        if (await page.locator("#contextSidebar:modal").count()) await page.locator("#closeContextSidebar").click();
         await page.getByRole("button", { name: "1. Activity", exact: true }).click();
         await togglePlacement(page, "#scopeDetails", `activity-scope-${theme}-${width}-${scale}`);
         assert.equal(await page.locator("#reportRequests").evaluate(node => node.tagName), "SECTION");
@@ -273,7 +275,7 @@ test("creation disclosures retain their anchors and controls at desktop and enla
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
         await inspectReportCopies(page);
-        for (const selector of [".report-privacy-findings:visible", ".prompt-comparison>details"]) {
+        for (const selector of [".report-privacy-findings:visible", ".prompt-report>details"]) {
             await togglePlacement(page, selector, `review-${selector.split(":")[0].slice(1)}-${theme}-${width}-${scale}`);
         }
     }

@@ -76,3 +76,45 @@ test("search renewal preserves the supplied version and invalid versions never d
     assert.deepEqual(requests.map(request => request.url), ["/api/search/events", "/api/session", "/api/search/events"]);
     assert.equal(requests.at(-1).capability, "b".repeat(64));
 });
+
+test("only clean stream EOF is classified as owner closure, never truncated or malformed text", async t => {
+    const original = globalThis.fetch;
+    t.after(() => { globalThis.fetch = original; });
+    for (const [bytes, ended] of [
+        [new TextEncoder().encode('{"event":"heartbeat"}\n'), true],
+        [new TextEncoder().encode('{"event":"heartbeat"}'), false],
+        [new TextEncoder().encode("{broken\n"), false],
+        [new Uint8Array([0xc3]), false],
+    ]) {
+        globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) {
+            controller.enqueue(bytes); controller.close();
+        } }));
+        const api = createBoardTransport("a".repeat(64));
+        await assert.rejects(api.searchEvents(() => {}, { signal: new AbortController().signal, schemaVersion: 3 }),
+            error => (error.reason === "search-stream-ended") === ended);
+    }
+});
+
+test("split UTF-8 and a complete fence retain clean EOF but explicit cancellation does not", async t => {
+    const original = globalThis.fetch;
+    t.after(() => { globalThis.fetch = original; });
+    const bytes = new TextEncoder().encode('{"event":"fence","reason":"idle","label":"\u20ac"}\n');
+    const split = bytes.indexOf(0xe2) + 1, events = [];
+    globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) {
+        controller.enqueue(bytes.slice(0, split)); controller.enqueue(bytes.slice(split)); controller.close();
+    } }));
+    const api = createBoardTransport("a".repeat(64));
+    await assert.rejects(api.searchEvents(event => events.push(event), { signal: new AbortController().signal, schemaVersion: 3 }),
+        error => error.reason === "search-stream-ended");
+    assert.deepEqual(events, [{ event: "fence", reason: "idle", label: "\u20ac" }]);
+    const entered = Promise.withResolvers();
+    let end;
+    globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) {
+        end = () => controller.close(); entered.resolve();
+    } }));
+    const controller = new AbortController();
+    const pending = api.searchEvents(() => assert.fail("Cancelled stream must not dispatch"), { signal: controller.signal, schemaVersion: 3 });
+    await entered.promise;
+    controller.abort(); end();
+    await pending;
+});

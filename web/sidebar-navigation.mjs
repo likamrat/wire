@@ -76,6 +76,7 @@ export function initializeSidebarMotionPreference() {
     apply();
     return {
         get enabled() { return enabled(); },
+        timing: { duration: 320, easing: "cubic-bezier(.2,0,0,1)", fill: "both" },
         subscribe(listener) { listeners.add(listener); listener(state()); },
         setPreference(value) {
             if (!valid(value)) throw new Error("Choose Follow system, On or Off for sidebar motion.");
@@ -142,7 +143,7 @@ export function mountSidebarNavigation(ux, preference, motion) {
     function glide(from) {
         const to = captureGeometry();
         if (Math.abs(from.width - to.width) < 1) return;
-        const timing = { duration: 320, easing: "cubic-bezier(.2,0,0,1)", fill: "both" };
+        const timing = motion.timing;
         const animate = (node, keyframes, options = timing) => {
             const animation = node.animate(keyframes, options);
             animations.push(animation);
@@ -240,7 +241,7 @@ export function mountSidebarNavigation(ux, preference, motion) {
         drawerClosing = !entering;
         if (!motion.enabled) { finishDrawerMotion(); return; }
         const animation = drawer.animate([{ transform: from }, { transform: entering ? "translateX(0)" : "translateX(-100%)" }],
-            { duration: entering ? 240 : 180, easing: entering ? "cubic-bezier(.2,0,0,1)" : "cubic-bezier(.4,0,1,1)", fill: "both" });
+            motion.timing);
         drawerAnimation = animation;
         animation.addEventListener("finish", () => { if (drawerAnimation === animation) finishDrawerMotion(); }, { once: true });
     }

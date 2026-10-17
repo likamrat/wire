@@ -30,7 +30,7 @@ test("compact Search keeps one stationary field and readable live rows without a
     await input.fill("Failed calls");
     const view = page.locator("#wireSearchResults button").filter({ hasText: "Failed calls" });
     await expect(view).toBeVisible({ timeout: 15000 });
-    await expect(view).toContainText("Analyze");
+    await expect(view).toHaveAttribute("data-search-type", "view");
     await expect(view).not.toContainText("#analyze");
     await expect(view).not.toContainText("WIRE navigation");
     if (process.env.WIRE_MINIMAL_SEARCH_PROOFS) {
@@ -39,8 +39,9 @@ test("compact Search keeps one stationary field and readable live rows without a
     }
     await input.fill("Theme");
     await expect(page.locator("#wireSearchResults button")).toHaveCount(1, { timeout: 15000 });
-    await expect(page.locator("#wireSearchOptions")).not.toHaveAttribute("open");
-    await expect(page.locator("#wireSearchFilterSummary")).toHaveText("Filters");
+    await expect(page.locator("#wireSearchOptions,#wireSearchFilterSummary")).toHaveCount(0);
+    await expect(page.locator(".wire-search-filters .select-trigger")).toHaveCount(2);
+    await expect(page.locator(".wire-search-filters")).toBeVisible();
     const surfaces = await page.locator("#wireSearchPanel").evaluate(node => {
         const style = getComputedStyle(node), hit = node.querySelector(".wire-search-hit"), row = getComputedStyle(hit, "::before");
         return { border: style.borderTopWidth, background: style.backgroundColor, radius: style.borderTopLeftRadius,
@@ -51,7 +52,7 @@ test("compact Search keeps one stationary field and readable live rows without a
     assert.equal(surfaces.rowContent, "none");
     const row = page.locator("#wireSearchResults button");
     await expect(row).toContainText("Theme");
-    await expect(row).toContainText("Settings");
+    await expect(page.locator(".wire-search-group-label")).toHaveText("Settings");
     await expect(row).not.toContainText("Open setting");
     await expect(row).not.toContainText("#settings");
     await expect(page.locator("#wireSearchScopeNote")).toBeHidden();
@@ -86,10 +87,8 @@ test("compact Search keeps one stationary field and readable live rows without a
     }
     await page.setViewportSize({ width: 1280, height: 950 });
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-    await page.locator("#wireSearchFilterSummary").click();
     await selectActivityOption(page, "wireSearchType", "setting");
-    await page.locator("#wireSearchFilterSummary").click();
-    await expect(page.locator("#wireSearchFilterSummary")).toHaveText("Filters · Settings");
+    await expect(page.locator('[data-select-id="wireSearchType"] .select-value')).toHaveText("Settings");
     await expect(row).toHaveCount(1);
     await input.focus(); await input.press("ArrowDown"); await expect(row).toBeFocused(); await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/setting=theme/);
@@ -97,7 +96,7 @@ test("compact Search keeps one stationary field and readable live rows without a
     await expect(input).toHaveValue("Theme");
     await expect(row).toBeFocused();
     await expect(page.locator("#wireSearchType")).toHaveValue("setting");
-    await expect(page.locator("#wireSearchOptions")).not.toHaveAttribute("open");
+    await expect(page.locator(".wire-search-filters")).toBeVisible();
 });
 
 test("minimal row accessible names retain recorded outcomes and partial/unavailable text facts", { timeout: 15000 }, async t => {

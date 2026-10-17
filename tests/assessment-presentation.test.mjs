@@ -264,9 +264,9 @@ test("call latency displays the backend median, not a sum or a recomputed averag
     const metric = samples.makeDuration([1, 2, 100000]);
     const displayed = presentation.format(metric);
     assert.equal(displayed.value, "2 ms");
-    assert.equal(displayed.label, "Median call duration");
+    assert.equal(displayed.label, "Median tool latency");
     assert.equal(displayed.qualification, "Call start to recorded completion");
-    assert.deepEqual(displayed.summary, { label: "Tool calls", coverage: "Median \u00b7 3 / 3 calls timed" });
+    assert.deepEqual(displayed.summary, { label: "Tool latency", coverage: "Median \u00b7 3 / 3 calls timed" });
     assert.equal(displayed.band, "neutral");
 });
 test("compact final-response copy preserves full definitions, numeric values and exact request coverage", () => {

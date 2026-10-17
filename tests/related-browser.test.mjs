@@ -37,7 +37,6 @@ async function search(page, text, type = "") {
     await page.getByRole("searchbox", { name: "Search", exact: true }).focus();
     await page.locator("#wireSearch").fill(text);
     await selectActivityOption(page, "wireSearchType", type);
-    if (await page.locator("#wireSearchOptions").evaluate(node => node.open)) await page.locator("#wireSearchFilterSummary").click();
 }
 async function capture(page, name) {
     if (!process.env.WIRE_RELATED_PROOFS) return;

@@ -124,8 +124,7 @@ export async function setLegacyTimeBucket(page, bucket) {
 
 export async function openSearchFilters(page) {
     await page.locator("#wireSearch").focus();
-    const options = page.locator("#wireSearchOptions");
-    if (await options.count() && !await options.evaluate(node => node.open)) await options.locator("summary").click();
+    await page.locator(".wire-search-filters").waitFor({ state: "visible" });
 }
 
 // These invented records exist only in isolated tests, never in application data.

@@ -177,7 +177,8 @@ the time to display the answer on screen or proof that every call finished insid
 that interval. **Not recorded** means no qualified timing is available; a recorded
 zero remains zero. Timing metadata does not require saving the answer's text.
 
-Individual call durations stay beside calls in **Calls** and the reader. Use
+**Tool latency** is the recorded tool start-to-completion time beside each call
+in **Calls** and the reader, not network or prompt-to-final-response time. Use
 **Slowest first** or **Fastest first** to compare them; WIRE does not judge a long
 call as bad or flag a speed threshold. Missing call timing says **Not recorded**
 and sorts last in either direction. There is no detached timing widget or default

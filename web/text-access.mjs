@@ -20,7 +20,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         }
         return end < compact.length ? compact.slice(0, end).trimEnd() + "..." : compact;
     }
-    function render(source, { key, navigationNode, label, copyLabel, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel }) {
+    function render(source, { key, navigationNode, label, copyLabel, allowCopy = true, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
@@ -61,8 +61,10 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         if (complete) {
             header.append(heading);
             if (contentFirst) {
-                if (actionsHost) actionsHost.append(readerActions);
-                else header.append(readerActions);
+                if (allowCopy) {
+                    if (actionsHost) actionsHost.append(readerActions);
+                    else header.append(readerActions);
+                }
                 header.append(qualifiers);
             }
             root.append(header);
@@ -113,23 +115,25 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                 if (!contentFirst) root.append(explanation);
             } else root.append(note);
         }
-        if (complete && !contentFirst) header.append(readerActions);
+        if (complete && !contentFirst && allowCopy) header.append(readerActions);
         let details;
-        if (complete && !contentFirst) {
+        if (complete && !contentFirst && (allowCopy || subject === "request" && authorship || notice)) {
             details = document.createElement("details");
             details.className = "reader-details";
             const summary = document.createElement("summary");
-            summary.textContent = subject === "request" ? "About this prompt & copying" : "About this response & copying";
+            summary.textContent = `About this ${noun}${allowCopy ? " & copying" : ""}`;
             details.append(summary);
             if (subject === "request" && authorship) {
                 const reason = document.createElement("p");
                 reason.textContent = authorship.reason(source);
                 details.append(reason);
             }
-            const explanation = document.createElement("p");
-            explanation.textContent = text === null ? `No ${noun} text is available to copy.` : notice
-                ?? `Copy includes the complete retained ${noun} text only, without masking. Other apps and clipboard history may access your system clipboard.`;
-            details.append(explanation);
+            if (allowCopy || notice) {
+                const explanation = document.createElement("p");
+                explanation.textContent = !allowCopy ? notice : text === null ? `No ${noun} text is available to copy.` : notice
+                    ?? `Copy includes the complete retained ${noun} text only, without masking. Other apps and clipboard history may access your system clipboard.`;
+                details.append(explanation);
+            }
             root.append(details);
         }
         const actions = document.createElement("div");
@@ -149,6 +153,10 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         control.setAttribute("aria-controls", bodyId);
         if (complete) {
             if (!visibility) readerActions.append(control);
+            if (!allowCopy && readerActions.childElementCount) {
+                if (contentFirst && actionsHost) actionsHost.append(readerActions);
+                else header.append(readerActions);
+            }
         }
         else if (inline) passage.append(document.createTextNode(" "), control);
         else {
@@ -175,31 +183,33 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                     body.setAttribute("aria-labelledby", heading.id);
                 }
                 const noticeId = "text-notice-" + encodeURIComponent(key);
-                if (notice && !complete) {
+                if (notice && (!complete || !allowCopy && contentFirst)) {
                     const privacy = document.createElement("p");
                     privacy.id = noticeId;
                     privacy.className = complete ? "full-text-privacy" : "context-help-note";
                     privacy.textContent = notice;
                     body.append(privacy);
                 }
-                if (complete) {
+                if (complete || !allowCopy) {
                     const pre = document.createElement("pre");
                     pre.className = "full-text-content";
                     pre.tabIndex = 0;
                     pre.setAttribute("aria-label", "Exact recorded " + noun + " text");
                     pre.textContent = text;
-                    const copy = ux.copyButton({ label: copyLabel,
-                        getText: () => pre.isConnected && (!visibility || visibility.isCurrent() && visibility.isOpen()) ? pre.textContent : null,
-                        tooltip: "Copy " + noun });
-                    const scope = document.createElement("span");
-                    scope.id = noticeId;
-                    scope.className = "reader-copy-scope";
-                    scope.textContent = contentFirst
-                        ? "Copy uses unmasked text. Other apps and clipboard history may access it."
-                        : "Copies original text, unmasked.";
-                    copy.setAttribute("aria-describedby", copyNoticeId ?? noticeId);
-                    readerActions.append(copy);
-                    if (!copyNoticeId) readerActions.append(scope);
+                    if (allowCopy) {
+                        const copy = ux.copyButton({ label: copyLabel,
+                            getText: () => pre.isConnected && (!visibility || visibility.isCurrent() && visibility.isOpen()) ? pre.textContent : null,
+                            tooltip: "Copy " + noun });
+                        const scope = document.createElement("span");
+                        scope.id = noticeId;
+                        scope.className = "reader-copy-scope";
+                        scope.textContent = contentFirst
+                            ? "Copy uses unmasked text. Other apps and clipboard history may access it."
+                            : "Copies original text, unmasked.";
+                        copy.setAttribute("aria-describedby", copyNoticeId ?? noticeId);
+                        readerActions.append(copy);
+                        if (!copyNoticeId) readerActions.append(scope);
+                    }
                     body.append(pre);
                 } else {
                     body.append(ux.codeBlock(text, { label: subject === "response" ? "Exact retained text / local only" : promptLabel + " / local only", copyLabel, prose: true, ...(notice ? { tooltip: notice } : {}) }));
@@ -219,7 +229,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         bindings.set(root, () => {
             unsubscribe?.();
             root.querySelector(".full-text-body")?.remove();
-            if (actionsHost) readerActions.remove();
+            if (actionsHost || !allowCopy) readerActions.remove();
             else readerActions.replaceChildren();
         });
         paint();

@@ -3,7 +3,10 @@ export async function openReportLibrary(page) {
 }
 
 export async function openReportComparison(page) {
-    if (!await page.locator("#comparisonWorkspace").isVisible()) await page.locator("#reportCompareLink").click();
+    if (!await page.locator("#comparisonWorkspace").isVisible()) {
+        if (!await page.locator("#reportCompareLink").isVisible()) await openReportLibrary(page);
+        await page.locator("#reportCompareLink").click();
+    }
 }
 
 export async function reportActivityActionGeometry(page) {
@@ -38,7 +41,10 @@ export async function reportActivityActionGeometry(page) {
 }
 
 export async function openReportCreation(page) {
-    if (!await page.locator("#reportCreatePanel").isVisible()) await page.locator("#reportCreateLink").click();
+    if (!await page.locator("#reportCreatePanel").isVisible()) {
+        if (!await page.locator("#reportCreateLink").isVisible()) await openReportLibrary(page);
+        await page.locator("#reportCreateLink").click();
+    }
 }
 
 export async function selectAnalyzeRequest(page, row) {

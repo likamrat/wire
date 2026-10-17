@@ -33,7 +33,7 @@ test("every authored icon preserves local official Lucide geometry and qualified
     }
     assert.ok(Object.isFrozen(uxIcons));
     assert.ok(Object.isFrozen(dimensionalIcons));
-    assert.equal(assets.size, 59);
+    assert.equal(assets.size, 65);
     assert.equal(uxIconSources["collapse-sections"], "fold-vertical");
     assert.equal(uxIconSources["expand-sections"], "unfold-vertical");
     assert.equal(uxIconSources.filter, "funnel");
@@ -66,6 +66,12 @@ test("missing Lucide assets and unsupported sizes fail instead of rendering a bl
     assert.throws(() => lucideIcon("missing-evidence-icon"), /Cannot find module/);
     for (const size of [0, 18, 22, 28, "20"]) assert.throws(() => lucideIcon("copy", size), TypeError);
     assert.throws(() => lucideIcon("../copy"), TypeError);
+});
+
+test("Search reuses the established Settings and report glyphs rather than alternative artwork", () => {
+    assert.equal(uxIconSources["search-setting"], uxIconSources.settings);
+    assert.equal(uxIconSources["search-report"], uxIconSources.reports);
+    assert.equal(uxIcons["search-setting"], lucideIcon(uxIconSources.settings, 16));
 });
 
 test("disclosure and progress cues use official SVGs, not CSS-drawn replacements or external images", () => {

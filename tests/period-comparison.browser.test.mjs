@@ -106,6 +106,55 @@ async function openComparison(app, { select = false } = {}) {
     await expect(page.locator("#createPeriodReport")).toBeVisible();
 }
 
+test("Tool latency period labels identify matching aggregates and exact tool records without changing values", { timeout: 45000 }, async t => {
+    const app = await setup(t), { page } = app;
+    await openComparison(app);
+    const root = page.locator("#periodComparison");
+    const table = root.getByRole("table", { name: "Matching tool latency", exact: true });
+    const region = root.getByRole("region", { name: "Matching tool latency", exact: true });
+    await expect(table.getByRole("rowheader")).toHaveText(["Median tool latency", "P95 tool latency"]);
+    const before = await table.innerText();
+    const metrics = structuredClone(app.replies.at(-1).comparison.matchingCallTiming);
+    assert.equal(metrics.median.baseline.value, 0);
+    assert.equal(metrics.p95.baseline.value, 1000);
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1280, 1], [375, 2]]) {
+        await page.setViewportSize({ width: 1280, height: 1000 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        assert.equal(await table.innerText(), before);
+        const clipped = await table.locator("th,td,caption").evaluateAll(nodes => nodes.filter(node =>
+            node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
+        assert.deepEqual(clipped, []);
+        await region.evaluate(node => { node.scrollLeft = 0; });
+        if (await region.evaluate(node => node.scrollWidth > node.clientWidth + 1)) {
+            await region.focus();
+            await page.keyboard.press("ArrowRight");
+            await expect.poll(() => region.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+            await region.evaluate(node => { node.scrollLeft = node.scrollWidth; });
+            assert.ok(await region.evaluate(node =>
+                node.querySelector("tbody tr td:last-child").getBoundingClientRect().right <= node.getBoundingClientRect().right + 1),
+            "The existing keyboard-scrollable table exposes the entire last comparison column");
+            if (proof) {
+                await mkdir(proof, { recursive: true });
+                await region.screenshot({ path: path.join(proof, `tool-latency-period-${theme}-${width}-${scale}-right.png`) });
+            }
+            await region.evaluate(node => { node.scrollLeft = 0; });
+        }
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));
+        const first = root.locator('[data-period-side="baseline"]');
+        await first.getByText(/Exact matching records/).click();
+        await expect(first.getByRole("columnheader", { name: "Tool latency", exact: true })).toBeVisible();
+        await first.getByText(/Exact matching records/).click();
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await region.screenshot({ path: path.join(proof, `tool-latency-period-${theme}-${width}-${scale}.png`) });
+        }
+    }
+    assert.deepEqual(app.replies.at(-1).comparison.matchingCallTiming, metrics);
+});
+
 test("F13 period visualization separates permission feedback from tool-use matching without changing facts", { timeout: 30000 }, async t => {
     const app = await setup(t, { permissionFeedback: true }), { page } = app;
     await page.goto(app.url + "#analyze?compare=periods&services=Files&includeMissingService=true&aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09");

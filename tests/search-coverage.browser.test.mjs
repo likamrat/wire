@@ -61,7 +61,7 @@ test("normal Analyze search remains usable when only an unrelated report is corr
     await expect(page.locator("#activityCount")).toHaveText("2");
     await expect(page.locator("#wireSearchRelated")).toHaveCount(0);
     await selectActivityOption(page, "wireSearchScope", "everywhere");
-    await expect(page.locator("#wireSearchCoverage")).toContainText("Some saved content is unavailable.");
+    await expect(page.locator("#wireSearchCoverage")).toContainText("Changed report files could not be verified.");
     await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
     await expect(page.locator("#activityCount")).toHaveText("3");
     await page.locator("#wireSearch").fill("lab results");

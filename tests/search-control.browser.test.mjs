@@ -341,7 +341,6 @@ test("compact Search opens the exact retained interaction and restores its resul
         const count = await page.locator("#activityCount").textContent();
         await input.fill("physician");
         await selectActivityOption(page, "wireSearchType", "interaction");
-        if (await page.locator("#wireSearchOptions").evaluate(node => node.open)) await page.locator("#wireSearchFilterSummary").click();
         const result = page.locator("#wireSearchResults button");
         await expect(result).toHaveCount(1);
         await expect(page.locator("#activityCount")).toHaveText(count);
@@ -390,7 +389,6 @@ test("Search preserves View records through live results, dismissal and record B
         }
         if (mode === "back") {
             await selectActivityOption(page, "wireSearchType", "interaction");
-            await page.locator("#wireSearchFilterSummary").click();
             await expect(page.locator("#wireSearchResults button")).toHaveCount(3);
             await input.press("ArrowDown");
             const id = await page.locator("#wireSearchResults button:focus").getAttribute("data-search-id");
@@ -452,7 +450,6 @@ test("compact result scrolling, paging and Back stay inside the list without cha
     await clickVisible(page, input);
     await page.keyboard.type("Invented local");
     await selectActivityOption(page, "wireSearchType", "interaction");
-    await page.locator("#wireSearchFilterSummary").click();
     await expect(page.locator("#wireSearchResults button")).toHaveCount(20);
     await expect(page.locator("#wireSearchPaging")).toContainText("Page 1 of 3");
     const ids = new Set(await page.locator("#wireSearchResults button").evaluateAll(nodes => nodes.map(node => node.dataset.searchId)));
@@ -502,6 +499,10 @@ test("compact result scrolling, paging and Back stay inside the list without cha
     assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop), "0px");
     await page.keyboard.press("Tab");
     await expect(page.locator("#wireSearchClear")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#wireSearchScope-control")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#wireSearchType-control")).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.locator("#wireSearchResults button").first()).toBeFocused();
     await clickVisible(page, page.getByRole("switch", { name: "Dark theme", exact: true }));

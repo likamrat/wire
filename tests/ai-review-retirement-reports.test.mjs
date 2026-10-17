@@ -226,6 +226,6 @@ test("v4 rejects all rating facts while legacy absent, v2 and v3 projections kee
     const historical = comparisonBodyHtml(compareFrozenReportFacts(...sources, { metricProjectionVersion: 3 }));
     const current = comparisonBodyHtml(compareFrozenReportFacts(...sources, { metricProjectionVersion: 4 }));
     assert.match(historical, /Not scored/);
-    assert.match(current, /No binary outcomes/);
+    assert.match(current, /Success rate unavailable/);
     assert.doesNotMatch(current, /Not scored|Personal feedback/);
 });

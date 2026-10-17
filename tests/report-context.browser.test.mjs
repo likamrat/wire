@@ -30,7 +30,7 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
         const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail", "/api/assessment/evidence",
-            "/api/evaluation/automatic/summary", "/api/preview", "/api/privacy-review", "/api/export", "/api/cancel-preview"];
+            "/api/evaluation/automatic/summary", "/api/preview", "/api/privacy-review", "/api/export", "/api/cancel-preview", "/api/report/open"];
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && !allowed.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
         }
@@ -100,7 +100,7 @@ test("lost contextual report save keeps its unknown outcome and recovers without
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     await expect(page.locator("#savedLibraryTitle")).toHaveText("Saved reports (1)");
-    assert.equal(await page.locator("#reportSaveBody .report-saved-id").textContent(), saved.exports[0].bundleId);
+    assert.equal(await page.locator("#pageTitle").textContent(), saved.exports[0].title);
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), membership);
     if (process.env.WIRE_REPORT_CONTEXT_PROOFS) {
         await page.evaluate(() => { document.activeElement?.blur(); scrollTo(0, 0); });
@@ -122,6 +122,9 @@ test("lost contextual report save keeps its unknown outcome and recovers without
         const expected = reviewed.files[name];
         assert.deepEqual(bytes, typeof expected === "string" ? Buffer.from(expected) : Buffer.from(expected.data, "base64"), name);
     }
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("bundle"), saved.exports[0].bundleId);
+    await page.locator("#savedReportReader iframe").waitFor();
     assert.deepEqual(errors, []); assert.deepEqual(denied, []);
 });
 

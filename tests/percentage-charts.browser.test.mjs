@@ -54,7 +54,8 @@ async function update(page, counts, longNames = false) {
 
 test("flat outcome paint retains exact tiny/full circles, inert centers, local fills and separate keyboard labels", async t => {
     const page = await setup(t);
-    for (const counts of [[193, 25, 1], [1, 0, 0], [1, 1, 0], [0, 0, 1], [0, 0, 0]]) {
+    for (const theme of ["light", "dark"]) for (const counts of [[193, 25, 1], [1022, 1, 1], [1, 0, 0], [1, 1, 0], [0, 0, 1], [0, 0, 0]]) {
+        await page.evaluate(theme => { document.documentElement.dataset.evidenceTheme = theme; }, theme);
         await update(page, counts);
         const total = counts.reduce((sum, count) => sum + count, 0);
         assert.equal(await page.locator(".percentage-ring").count(), total ? 1 : 0);
@@ -96,6 +97,35 @@ test("flat outcome paint retains exact tiny/full circles, inert centers, local f
             }));
         }
         assert.equal(await page.locator(".percentage-outer-wall,.percentage-inner-wall,.percentage-glint").count(), 0);
+    }
+});
+
+test("outcome emphasis preserves light fades, accepted dark fills and forced colors with explicit or OS themes", async t => {
+    const page = await setup(t);
+    await update(page, [6, 1, 1]);
+    const label = page.locator('[data-percentage-card="outcomes"] [data-category="failure"] .percentage-label');
+    const slice = page.locator('.percentage-slice[data-category="failure"]');
+    for (const os of ["light", "dark"]) for (const explicit of [null, "light", "dark"]) {
+        await page.emulateMedia({ colorScheme: os, forcedColors: "none" });
+        await page.evaluate(theme => {
+            if (theme) document.documentElement.dataset.evidenceTheme = theme;
+            else document.documentElement.removeAttribute("data-evidence-theme");
+        }, explicit);
+        await label.focus();
+        const paint = await slice.evaluate(node => {
+            const css = getComputedStyle(node);
+            return { fill: css.fill, filter: css.filter };
+        });
+        if ((explicit || os) === "light") {
+            assert.match(paint.fill, /^url\(/);
+            assert.equal(paint.filter, "brightness(0.9)");
+        } else {
+            assert.equal(paint.fill, "rgb(242, 139, 130)");
+            assert.equal(paint.filter, "none");
+        }
+        await page.emulateMedia({ forcedColors: "active" });
+        assert.equal(await slice.evaluate(node => getComputedStyle(node).filter), "none");
+        assert.doesNotMatch(await slice.evaluate(node => getComputedStyle(node).fill), /^url\(/);
     }
 });
 

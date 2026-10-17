@@ -1050,9 +1050,15 @@ test("motion glides only the sidebar and interrupted close settles to the newest
             if (panel.open) window.sidebarMotion.push({ cardY: card.getBoundingClientRect().top,
                 panelX: panel.getBoundingClientRect().left, transform: getComputedStyle(panel).transform,
                 cardTransform: getComputedStyle(card).transform });
-            if (++count < 30) requestAnimationFrame(sample);
         }
-        requestAnimationFrame(sample);
+        const layout = new ResizeObserver(sample);
+        layout.observe(document.querySelector("#main"));
+        function tick() {
+            if (!panel.getAnimations().length) sample();
+            if (++count < 30) requestAnimationFrame(tick);
+            else layout.disconnect();
+        }
+        requestAnimationFrame(tick);
     });
     const box = await a.boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + 20);
@@ -1211,10 +1217,18 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
                     transform: css.transform, opacity: css.opacity, cardTransform: getComputedStyle(card).transform,
                     headerX: rect(panel.querySelector("header")).x, bodyX: rect(document.querySelector("#contextSidebarBody")).x,
                     footerX: rect(document.querySelector("#contextSidebarFooter")).x, animations: panel.getAnimations().length,
-                    mainWidth: document.querySelector("#main").clientWidth });
-                if (state.running) requestAnimationFrame(frame);
+                    mainWidth: document.querySelector("#main").clientWidth,
+                    mainRight: rect(document.querySelector("#main")).right });
             }
-            requestAnimationFrame(frame);
+            // WIRE's layout observer was registered at mount; sample after it compensates reflow.
+            const layout = new ResizeObserver(() => { if (state.running) frame(performance.now()); });
+            layout.observe(document.querySelector("#main"));
+            function tick(at) {
+                if (!panel.getAnimations().length) frame(at);
+                if (state.running) requestAnimationFrame(tick);
+                else layout.disconnect();
+            }
+            requestAnimationFrame(tick);
         });
         await page.mouse.click(entry.x + entry.width / 2, entry.y + 20);
         await expect(page.locator("#contextSidebar[open]")).toBeVisible(); await settled();
@@ -1263,7 +1277,8 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
                 `${phase}: card anchor ${entry.y}, observed ${moving.map(row => row.cardY)}`);
             assert.ok(moving.every(row => Math.abs(row.headerX - row.bodyX) <= 1 && Math.abs(row.bodyX - row.footerX) <= 1));
             assert.ok(moving.every(row => row.width >= panelWidth && row.width <= panelWidth + 2), "Panel translates without scaling or morphing");
-            assert.equal(new Set(moving.map(row => row.mainWidth)).size, 1, "Docked width does not animate reading text");
+            assert.ok(new Set(moving.map(row => row.mainWidth)).size >= 3, "The real main column reflows with the sidebar");
+            assert.ok(moving.every(row => Math.abs(row.mainRight - row.x) < 2), "Main layout and the painted panel share one edge");
             for (let i = 1; i < moving.length; i++) {
                 assert.ok(phase === "open" ? moving[i].x <= moving[i - 1].x + 1 : moving[i].x >= moving[i - 1].x - 1,
                     "One directional glide without bounce");
@@ -1324,9 +1339,15 @@ test("owned sidebar history keeps Close, Escape, Back and Forward anchored and r
                 const panel = document.querySelector("#contextSidebar");
                 trace.frames.push({ open: panel.open, moving: panel.getAnimations().length > 0,
                     cardY: document.querySelector(".request-card-open").getBoundingClientRect().y });
-                if (trace.running) requestAnimationFrame(sample);
             }
-            requestAnimationFrame(sample);
+            const layout = new ResizeObserver(() => { if (trace.running) sample(); });
+            layout.observe(document.querySelector("#main"));
+            function tick() {
+                if (!document.querySelector("#contextSidebar").getAnimations().length) sample();
+                if (trace.running) requestAnimationFrame(tick);
+                else layout.disconnect();
+            }
+            requestAnimationFrame(tick);
         });
         if (action === "Close") await page.locator("#closeContextSidebar").click();
         else if (action === "Escape") {
@@ -1342,7 +1363,8 @@ test("owned sidebar history keeps Close, Escape, Back and Forward anchored and r
         await page.goForward();
         await expect(page.locator("#contextSidebar[open]")).toBeVisible();
         await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
-        assert.ok(Math.abs((await link.boundingBox()).y - entry.y) <= 3, "Forward restores the owned sidebar without native scroll");
+        const forwardY = (await link.boundingBox()).y;
+        assert.ok(Math.abs(forwardY - entry.y) <= 3, `${mode}/${action}: Forward restores the owned sidebar anchor ${entry.y}, got ${forwardY}`);
         await page.locator("#closeContextSidebar").click();
         await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
         assert.equal(await page.evaluate(() => history.scrollRestoration), mode);

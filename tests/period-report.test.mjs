@@ -5,7 +5,7 @@ import { privateFixture } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 import { acceptPeriodReport, freezePeriodReport, validatePeriodReport, periodReportComparison, PERIOD_POPULATION } from "../lib/period-report.mjs";
-import { renderPeriodReportHtml } from "../lib/period-report-output.mjs";
+import { renderPeriodReportHtml, renderPeriodReportMarkdown, periodReportDisplay } from "../lib/period-report-output.mjs";
 import { buildSanitizedBundle, createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState, replaceEvidence } from "../lib/store.mjs";
 import { reportContextFixture } from "./report-context-fixture.mjs";
@@ -26,6 +26,58 @@ async function setup(t) {
     const value = buildPeriodComparison(state, input);
     return { ...app, state, value, options: { formats: ["html", "json", "markdown"], promptMode: "masked", timeContext: value.timeContext } };
 }
+
+test("Tool latency period output qualifies aggregates and only labels exact tool rows", () => {
+    const { state, input } = periodFixture();
+    for (const layer of ["tool", "reported-api"]) {
+        const value = buildPeriodComparison(state, { ...input, options: { ...input.options, layer } });
+        const frozen = freezePeriodReport(state, acceptPeriodReport(state, value), "2026-10-11T10:00:00.000Z").frozen;
+        const before = JSON.stringify(frozen);
+        const records = [...new Set(Object.values(frozen.periods).flatMap(side => side.scenarioRefs))]
+            .map(scenarioId => ({ scenarioId, toolCalls: [], graphActivities: [], httpRecords: [], prompts: [] }));
+        const snapshot = { periodComparison: frozen, records, preparedAtDisplay: "Oct 11, 2026" };
+        const html = renderPeriodReportHtml(snapshot), markdown = renderPeriodReportMarkdown(snapshot);
+        if (layer === "tool") {
+            assert.deepEqual(periodReportDisplay(frozen).timing.map(row => row[0]), ["Median tool latency", "P95 tool latency"]);
+            for (const output of [html, markdown]) {
+                assert.match(output, /Matching tool latency/);
+                assert.match(output, /Median tool latency/);
+                assert.match(output, /P95 tool latency/);
+                assert.match(output, /1000 ms/);
+                assert.doesNotMatch(output, /call duration|tool-call duration/i);
+            }
+            assert.match(html, /<th scope="col">Tool latency<\/th>/);
+            assert.match(markdown, /\| Record \/ interaction \| Tool \/ services \| Outcome \| Tool latency \|/);
+        } else {
+            assert.deepEqual(periodReportDisplay(frozen).timing, []);
+            assert.match(html, /<th scope="col">Recorded duration<\/th>/);
+            assert.doesNotMatch(html, /<th scope="col">Tool latency<\/th>/);
+            assert.match(markdown, /\| Record \/ interaction \| Tool \/ services \| Outcome \| Recorded duration \|/);
+        }
+        assert.equal(JSON.stringify(frozen), before);
+    }
+});
+
+test("a paired report keeps its title across human output and verified files without changing either cohort", async t => {
+    const { context, value, options } = await setup(t), controller = createExportController(context);
+    const title = "Calendar period comparison";
+    const preview = await controller.preview("period-title", undefined, { ...options, title, formats: ["html", "pdf", "json", "markdown"] }, undefined, value);
+    assert.equal(preview.title, title);
+    assert.equal(preview.snapshot.title, title);
+    assert.deepEqual(preview.snapshot.periodComparison.comparison, value.comparison);
+    assert.ok(preview.previewHtml.includes(`<title>WIRE - ${title}</title>`));
+    assert.ok(preview.previewHtml.includes(title + "</h1>"));
+    assert.ok(preview.files["product-report.md"].startsWith("# " + title + "\n"));
+    await controller.review("period-title", preview.previewId, true, value.timeContext);
+    const saved = (await controller.confirm("period-title", preview.previewId, true, value.timeContext)).bundle;
+    const state = await loadBoardState(context);
+    for (const format of ["html", "pdf", "json", "markdown"]) {
+        const file = await readSavedReportFile(context, state, saved.bundleId, format);
+        assert.equal(file.canonicalTitle, title);
+        if (format === "json") assert.equal(JSON.parse(file.bytes.toString("utf8")).title, title);
+        else assert.ok((await extractReportFile(file)).content.includes(title), `${format}: the human output includes its title`);
+    }
+});
 
 test("authoritative paired admission rejects numeric, membership, scope and stale tampering", () => {
     const { state, input } = periodFixture(), value = buildPeriodComparison(state, input);
@@ -187,7 +239,8 @@ test("one paired report uses existing actual disclosure and separate local save"
     const wrongHash = structuredClone(document);
     wrongHash.manifest.periodComparisonHash = "0".repeat(64);
     await assert.rejects(extractReportFile(wrongHash), error => error.code === "report-period-integrity");
-    assert.match(preview.previewHtml, /What differs/);
+    assert.ok(preview.previewHtml.includes(`<h1>${preview.title}</h1>`));
+    assert.match(preview.previewHtml, /id="numbers"><h2>Activity<\/h2>/);
     assert.match(preview.files["product-report.md"], /No calls|Full-interaction|full retained/);
     await assert.rejects(controller.confirm("owner", preview.previewId, true, value.timeContext), /Preview not found/);
 });

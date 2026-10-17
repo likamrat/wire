@@ -19,7 +19,7 @@ export const sidebarStyles = `
 .workspace-utilities .theme-control {flex:none}
 .header-inner .theme-control {margin-left:0}
 html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
-.app-sidebar {position:fixed;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:196px;padding:16px 12px;background:var(--paper);border-right:1px solid transparent;overflow-y:auto;overscroll-behavior:contain}
+.app-sidebar {position:fixed;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:196px;padding:16px 12px;background:var(--paper);border-right:1px solid transparent;box-shadow:var(--navigation-sidebar-shadow);overflow-y:auto;overscroll-behavior:contain}
 .navigation-content {display:flex;flex-direction:column;gap:24px}
 .navigation-collapse {display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0 0 12px;padding:10px;border:1px solid transparent;border-radius:var(--radius-control);background:var(--paper);color:var(--ink);box-shadow:none}
 .navigation-collapse:hover {background:var(--hover);border-color:transparent}
@@ -50,7 +50,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 #workspace {min-width:0}
 #workspace>:not(#homeView),#homeView>.chart-actions,#homeView>.supporting {max-width:1384px}
 .navigation-toggle {display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;padding:10px}
-.navigation-drawer {margin:0;inset:0 auto 0 0;width:min(304px,calc(100vw - 16px));max-width:none;height:100dvh;max-height:100dvh;border:0;border-right:1px solid var(--rule);border-radius:0;padding:20px 12px;background:var(--paper);color:var(--ink)}
+.navigation-drawer {margin:0;inset:0 auto 0 0;width:min(304px,calc(100vw - 16px));max-width:none;height:100dvh;max-height:100dvh;border:0;border-right:1px solid transparent;border-radius:0;padding:20px 12px;background:var(--paper);color:var(--ink);box-shadow:var(--navigation-sidebar-shadow)}
 .navigation-drawer .drawer-heading {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--rule)}
 .navigation-drawer .drawer-heading h2 {flex:1 1 7rem;min-width:0}
 .navigation-drawer .drawer-heading>button {margin-inline-start:auto}
@@ -58,6 +58,9 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 .navigation-drawer .brand-logo {width:140px;height:44px}
 .navigation-drawer .brand-caption {font-size:.6875rem}
 .navigation-drawer::backdrop {background:var(--scrim)}
+@media(forced-colors:active) {
+ .app-sidebar,.navigation-drawer {border-right-color:CanvasText;box-shadow:none}
+}
 @media(prefers-reduced-motion:no-preference) {
  :root[data-sidebar-motion=on] .navigation-drawer[open]::backdrop {animation:navigation-scrim 180ms ease-out}
  @keyframes navigation-scrim {from {opacity:0} to {opacity:1}}

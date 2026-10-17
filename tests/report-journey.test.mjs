@@ -7,6 +7,24 @@ function chosen(journey, count = 2) {
     journey.update({ requestCount: count, scopeReady: true, formats: ["html", "pdf", "json", "markdown"] });
 }
 
+test("reviewed report identity survives an uncertain save and clears only with its draft", () => {
+    const journey = createReportJourney();
+    chosen(journey);
+    journey.beginScan();
+    journey.previewReady({ ...preview, title: "Planning review" });
+    assert.equal(journey.snapshot().title, "Planning review");
+    journey.reviewed();
+    journey.writing(true);
+    journey.failed("Save result unavailable");
+    assert.equal(journey.snapshot().saveUnconfirmed, true);
+    assert.equal(journey.snapshot().title, "Planning review");
+    assert.equal(journey.clear(), false);
+    journey.saved({ bundleId: "saved-planning", title: "Planning review", files: { "product-report.html": true } });
+    assert.equal(journey.snapshot().title, "Planning review");
+    journey.clear();
+    assert.equal(journey.snapshot().title, undefined);
+});
+
 test("setup presentation notifications are idempotent and cannot reopen or approve a report", () => {
     const presentations = [];
     const journey = createReportJourney({ presentStep: value => presentations.push(value) });

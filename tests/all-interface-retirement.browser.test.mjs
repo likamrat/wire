@@ -103,7 +103,7 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await page.locator(".request-card-open").first().click();
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await expect(page.locator("#contextSidebar .reader-call-duration").first()).toBeVisible();
-    await expect(page.locator("#contextSidebar .reader-call-duration").first()).toContainText("Call duration:");
+    await expect(page.locator("#contextSidebar .reader-call-duration").first()).toContainText("Tool latency:");
     await expect(page.locator("#contextSidebar .reader-local-timing")).toHaveCount(0);
     const expandSections = page.getByRole("button", { name: "Expand all sections", exact: true });
     if (await expandSections.isEnabled()) await expandSections.click();

@@ -26,7 +26,7 @@ export function searchRecords(count = 3) {
         return row;
     });
 }
-export async function searchFixture(t, { records = searchRecords(), formats = [], search, reply = true, sessionTtlMs } = {}) {
+export async function searchFixture(t, { records = searchRecords(), formats = [], reportTitles = [], search, reply = true, sessionTtlMs } = {}) {
     const cleanups = [];
     const { context, root } = await privateFixture({ after: fn => cleanups.push(fn) }, records);
     const sessionRoot = path.join(root, "session-state");
@@ -53,8 +53,10 @@ export async function searchFixture(t, { records = searchRecords(), formats = []
     if (reply) await seedRetainedReply(context, runtime.collector.assessmentSource(await loadBoardState(context)),
         "The lab results show a steady recovery.");
     const bundles = [];
-    for (const format of formats) {
-        const preview = await exports.preview("live-proof", undefined, { promptMode: "original", formats: [format] },
+    for (const [index, format] of formats.entries()) {
+        const preview = await exports.preview("live-proof", undefined, {
+            promptMode: "original", formats: [format], ...(reportTitles[index] === undefined ? {} : { title: reportTitles[index] }),
+        },
             { kind: "all", revision: (await loadBoardState(context)).revision });
         await exports.review("live-proof", preview.previewId, true);
         bundles.push((await exports.confirm("live-proof", preview.previewId, true)).bundle);

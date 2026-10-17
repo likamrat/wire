@@ -73,12 +73,11 @@ test("typing POWER shows actual categorized title/body/source matches without co
     assert.deepEqual(await input.boundingBox(), before, "The capsule stays stationary");
     assert.equal(page.url(), origin, "Typing never opens a result");
     assert.ok(requests.some(request => request.query === "POW") && requests.some(request => request.query === "POWER"));
-    const categories = await page.locator(".wire-search-kind").allTextContents();
-    assert.ok(categories.includes("Report") && categories.includes("Interaction"));
+    const categories = await page.locator(".wire-search-group-label").allTextContents();
+    assert.ok(categories.includes("Reports") && categories.includes("Interactions"));
     assert.ok(await page.locator(".wire-search-excerpt mark").count() > 0, "Body-only matches remain visible");
     assert.ok(await page.locator(".wire-search-source mark").count() > 0, "Source matches keep their original offsets");
-    const sourceOnly = page.locator(".wire-search-hit")
-        .filter({ has: page.locator(".wire-search-kind", { hasText: /^Interaction$/ }) })
+    const sourceOnly = page.locator(".wire-search-hit[data-search-type=interaction]")
         .filter({ has: page.locator(".wire-search-source mark") });
     await expect(sourceOnly).toHaveCount(2);
     assert.deepEqual((await sourceOnly.locator("strong").allTextContents()).sort(),
@@ -90,7 +89,7 @@ test("typing POWER shows actual categorized title/body/source matches without co
     assert.doesNotMatch(await page.locator("#wireSearchCoverage").textContent(), /model|meaning|word search only/i);
     assert.ok((await page.locator(".wire-search-hit").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height))).every(height => height >= 44));
     if (proof) await page.screenshot({ path: path.join(proof, "typed-power-mixed.png") });
-    const report = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-kind", { hasText: /^Report$/ }) }).first();
+    const report = page.locator(".wire-search-hit[data-search-type=report]").first();
     if (proof) {
         await report.scrollIntoViewIfNeeded();
         await page.screenshot({ path: path.join(proof, "typed-power-report-body.png") });
@@ -103,7 +102,7 @@ test("typing POWER shows actual categorized title/body/source matches without co
     assert.equal(await page.locator("#wireSearchResults img").count(), 0);
     assert.equal(await page.evaluate(() => window.unexpectedSearchMarkup === true), false);
     await input.fill("POWER");
-    const interaction = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-kind", { hasText: /^Interaction$/ }) }).first();
+    const interaction = page.locator(".wire-search-hit[data-search-type=interaction]").first();
     await expect(interaction.locator("mark")).not.toHaveCount(0);
     await input.press("ArrowDown");
     await expect(page.locator(".wire-search-hit").first()).toBeFocused();
@@ -131,11 +130,10 @@ test("formatted report body hits show compact marked context before opening unch
         await chooseTheme(page, theme);
         await page.locator("#wireSearch").fill("POWER");
         await selectActivityOption(page, "wireSearchType", "report");
-        if (await page.locator("#wireSearchOptions").evaluate(node => node.open)) await page.locator("#wireSearchFilterSummary").click();
         const row = page.locator(".wire-search-hit");
         await expect(row).toHaveCount(1);
-        await expect(row.locator(".wire-search-kind")).toHaveText("Report");
-        await expect(row.locator(".wire-search-source")).toHaveText("Approved frozen report");
+        await expect(page.locator(".wire-search-group-label")).toHaveText("Reports");
+        await expect(row.locator(".wire-search-source")).toHaveCount(0);
         await expect(row.locator(".wire-search-excerpt mark")).toHaveText("Power");
         const snippet = await row.locator(".wire-search-excerpt").textContent();
         assert.doesNotMatch(snippet, /[\r\n\t]| {2,}/);
@@ -143,12 +141,12 @@ test("formatted report body hits show compact marked context before opening unch
         const geometry = await row.evaluate(node => {
             const rect = target => { const { top, bottom, height } = target.getBoundingClientRect(); return { top, bottom, height }; };
             const excerpt = node.querySelector(".wire-search-excerpt");
-            return { row: rect(node), meta: rect(node.querySelector(".wire-search-meta")), snippet: rect(excerpt),
+            return { row: rect(node), heading: rect(node.querySelector(".wire-search-heading")), snippet: rect(excerpt),
                 mark: rect(excerpt.querySelector("mark")), panel: rect(document.querySelector("#wireSearchPanel")),
                 clamp: getComputedStyle(excerpt).webkitLineClamp };
         });
 
-        assert.ok(geometry.meta.bottom <= geometry.snippet.top + 1);
+        assert.ok(geometry.heading.bottom <= geometry.snippet.top + 1);
         assert.ok(geometry.row.height <= (scale === 1 ? 170 : 400), JSON.stringify(geometry));
         assert.ok(geometry.mark.top >= geometry.panel.top && geometry.mark.bottom <= geometry.panel.bottom, JSON.stringify(geometry));
         assert.equal(geometry.clamp, "none");
@@ -205,7 +203,7 @@ test("literal result rows retain visible marks and touch targets in both themes 
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.locator("#wireSearch").fill("POWER");
-        const row = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-kind", { hasText: /^Interaction$/ }) }).first();
+        const row = page.locator(".wire-search-hit[data-search-type=interaction]").first();
         await expect(row.locator("mark")).not.toHaveCount(0);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         const box = await row.boundingBox();
@@ -264,7 +262,7 @@ test("Search results and category controls stay operable above an open docked si
     await expect(page.locator("#contextSidebar")).toHaveAttribute("data-mode", "docked");
     await page.locator("#wireSearch").fill("POWER");
     await selectActivityOption(page, "wireSearchType", "report");
-    await expect(page.locator(".wire-search-kind")).toHaveText(["Report"]);
+    await expect(page.locator(".wire-search-group-label")).toHaveText(["Reports"]);
     const row = page.locator(".wire-search-hit");
     await row.scrollIntoViewIfNeeded();
     assert.equal(await row.evaluate(node => {
@@ -360,7 +358,7 @@ test("animated modal Close restores Search focus only after the sidebar releases
     await page.locator("#resultsLink").click();
     const before = await page.evaluate(() => scrollY);
     await page.locator("#wireSearch").fill("POWER");
-    const row = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-kind", { hasText: /^Interaction$/ }) }).first();
+    const row = page.locator(".wire-search-hit[data-search-type=interaction]").first();
     await expect(row).toBeVisible();
     const id = await row.getAttribute("data-search-id");
     await row.tap();

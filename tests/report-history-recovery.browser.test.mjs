@@ -116,7 +116,8 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     assert.equal(summaries.length, 6);
     assert.match(summaries[0], /Masked prompts.*HTML/i, "Collapsed saved reports need safe identifying metadata");
     await page.locator("#bundleList .saved-report-summary").first().click();
-    assert.ok((await page.locator("#contextSidebar").innerText()).includes(newest.bundleId), "Newest report is the first row");
+    assert.equal(await page.locator("#bundleList .saved-library-row").first().getAttribute("data-bundle-id"), newest.bundleId, "Newest report is the first row");
+    assert.equal(await page.locator("#contextSidebarTitle").textContent(), newest.title);
     assert.deepEqual(state.exports.slice(0, 6), before.exports, "Presentation sorting cannot reorder or rewrite the persisted index");
     assert.deepEqual(await hashes(state.exports.slice(0, 6)), bytes, "Old artifact bytes remain frozen");
     const first = page.locator("#bundleList .saved-library-row").first();
@@ -239,7 +240,8 @@ test("UX-002 deterministic ties, truthful legacy/unknown metadata and long froze
     const ids = await page.locator("#bundleList .saved-library-row").evaluateAll(nodes => nodes.map(node => node.dataset.viewKey));
     assert.deepEqual(ids, [5, 4, 3, 2, 0, 1].map(index => "bundle:" + registered.exports[index].bundleId), "Exact timestamp ties use reverse registration order; missing dates remain stable at the end");
     const labels = await page.locator("#bundleList .saved-report-summary").allTextContents();
-    assert.match(labels[4], /Report.*Preparation time unavailable/);
+    assert.ok(labels[4].startsWith(registered.exports[0].title), "A retained title survives missing optional metadata");
+    assert.match(labels[4], /Preparation time unavailable/);
     assert.doesNotMatch(labels[4], /Masked|Original|HTML|request group/);
     assert.match(labels[5], /Preparation time unavailable/);
     assert.match(labels[3], /jeudi 1 octobre/);
@@ -248,7 +250,7 @@ test("UX-002 deterministic ties, truthful legacy/unknown metadata and long froze
     assert.match(await page.locator("#bundleList").textContent(), /No saved reports match/, "Search is literal, not a regex");
     await page.locator("#savedReportSearch").fill(registered.exports[0].bundleId);
     await page.locator("#bundleList .saved-report-summary").click();
-    assert.match(await page.locator("#contextSidebar").textContent(), new RegExp(registered.exports[0].bundleId));
+    assert.equal(await page.locator("#contextSidebarTitle").textContent(), registered.exports[0].title);
     assert.deepEqual((await loadBoardState(context)).exports, registered.exports);
     assert.deepEqual(await hashes(registered.exports), frozen);
 });
@@ -294,10 +296,12 @@ test("UX-003 late completed deletion receipt cannot clear a successor saved repo
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "saved");
-    assert.equal(await page.locator("#reportStage3 .report-saved-id").textContent(), successor.bundleId);
+    assert.equal(await page.locator("#pageTitle").textContent(), successor.title);
     assert.ok(await page.locator("#reportStage3 .report-downloads button").count());
     assert.equal(requests.filter(value => value === "/api/artifact-deletion/confirm").length, 1);
     assert.equal(requests.filter(value => value === "/api/artifact-deletion/status").length, 1);
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("bundle"), successor.bundleId);
 });
 
 test("UX-003 a delayed export receipt cannot claim a report deleted before the receipt arrived", { timeout: 60000 }, async t => {
@@ -340,7 +344,7 @@ test("UX-003 an in-flight download is not dispatched after the displayed target 
     }, { times: 1 });
     const downloads = [];
     page.on("download", download => downloads.push(download.suggestedFilename()));
-    await page.locator("#reportStage3").getByRole("button", { name: "Download product-report.html", exact: true }).click();
+    await page.locator("#reportStage3").getByRole("button", { name: "Download", exact: true }).click();
     await pending;
     const dialog = await deleteReport(page, saved.bundleId);
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
@@ -362,10 +366,12 @@ test("UX-002 report/comparison labels preserve named actions, chooser eligibilit
     await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
     await history(page);
     const comparisonRow = page.locator("#bundleList .saved-library-row").first();
-    assert.match(await comparisonRow.locator(".saved-report-summary").textContent(), /^Comparison.*HTML, JSON/);
+    assert.ok((await comparisonRow.locator(".saved-report-summary").textContent()).startsWith(comparison.title));
+    assert.match(await comparisonRow.locator(".saved-report-summary").textContent(), /HTML, JSON/);
     await comparisonRow.locator(".saved-report-summary").click();
     await comparisonRow.getByRole("button", { name: "Open saved comparison", exact: true }).click();
-    await page.getByRole("region", { name: "Saved comparison", exact: true }).waitFor();
+    await page.locator("#savedReportReader").waitFor({ state: "visible" });
+    assert.equal(await page.locator("#pageTitle").textContent(), comparison.title);
     await page.getByRole("button", { name: "Back to report library", exact: true }).click();
     const dialog = await deleteReport(page, sources[0].bundleId);
     await dialog.getByRole("heading", { name: "Saved report deleted", exact: true }).waitFor();
