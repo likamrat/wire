@@ -5255,7 +5255,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 editing: collectionSettings.hasDraft() || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) || Boolean(document.querySelector(".select-popup:not([hidden])")),
             });
             setText($("newDataNotice"), fresh.snapshot().phase === "error" ? "Stored evidence has changed. Retry the stored read; the earlier source check is not repeated."
-                : collectionSettings.hasDraft() ? "New evidence is available. Your unsaved Settings changes are kept; save or cancel them to update automatically." : "New data is available. Your report preview stays frozen; close it to update the activity view.");
+                : collectionSettings.hasDraft() ? "New evidence is available. Your unsaved Settings changes are kept; save or cancel them to update automatically."
+                : reportJourney?.isReviewOpen() && reportJourney.snapshot().hasPreview ? "New evidence is available. Your report preview stays frozen."
+                : "New evidence is available.");
             $("newDataNotice").hidden = action !== "defer" || status.revision === state?.revision;
             const canApply = !isLoading && !$("overlay").open && !deletionUI.isOpen() && !recollectionUI.isOpen() && !reportJourney?.isReviewOpen() && !collectionSettings.hasDraft()
                 && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) && !document.querySelector(".select-popup:not([hidden])");

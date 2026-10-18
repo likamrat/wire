@@ -3619,7 +3619,10 @@ The runtime owns collection independently of this panel. Its chosen event cadenc
 30-second source reconciliation and five-second page check are described as polling,
 not guaranteed "live" delivery. Unchanged revisions do not repaint charts. New
 snapshots retain analytical filters, empty/cleared report membership and scroll;
-editing controls and open report reviews defer them. A visible new-data notice
+editing controls and open report reviews defer them. Ordinary typing and local
+search use a minimal new-evidence notice, not a claim that a report preview exists.
+Frozen-preview wording requires an actual preview holding the update; Settings
+drafts and failed stored reads retain their own explanations. A visible new-data notice
 does not apply old consent to new records: the report membership and bytes remain
 frozen, and selected-content/options changes require a new review. Original and
 masked prompts still use the existing privacy gate. No report files are written

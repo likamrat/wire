@@ -5,13 +5,13 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, writeFile, appendFile, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealStoredRefresh, setLegacyTimeBucket } from "./helpers.mjs";
-import { reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
+import { chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealStoredRefresh, setLegacyTimeBucket, openSourceEditor } from "./helpers.mjs";
+import { chooseReportScope, reportContents, scanReport, inspectReportCopies } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { time } from "../lib/time.mjs";
 import { metadata174Schema } from "./copilot-metadata-fixture.mjs";
@@ -61,6 +61,71 @@ async function fixture(t, approved = true, timers = false, pageOptions = {}, met
     return { root, context, config, db, page, writes, receipts, source, check,
         runtime: () => runtime, restart: async () => { await runtime.close(); runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } }); } };
 }
+
+test("collection deferral describes the current hold without inventing a report preview", { timeout: 60000 }, async t => {
+    const app = await fixture(t, true, false, { reducedMotion: "no-preference" }), { page } = app;
+    const source = await app.source([event("user.message", { content: "Orchard release checklist" }), call("initial"), complete("initial")]);
+    await app.runtime().collector.collectNow();
+    await page.goto(app.runtime().url + "#reports"); await ready(page);
+    const snapshots = [];
+    page.on("request", request => { if (request.url().endsWith("/api/snapshot")) snapshots.push(request.postDataJSON()); });
+    const notice = page.locator("#newDataNotice");
+    let count = 0;
+    async function advance() {
+        const id = `deferred-${++count}`;
+        await appendFile(source.file, jsonl([call(id), complete(id)]));
+        await app.runtime().collector.collectNow();
+        await expect(notice).toBeVisible({ timeout: 10000 });
+        return (await loadBoardState(app.context)).revision;
+    }
+    async function apply(revision) {
+        await page.locator("#pageTitle").focus();
+        await page.waitForFunction(revision => document.querySelector("#promptAuthorSummary").dataset.revision === String(revision), revision);
+        await expect(notice).toBeHidden();
+    }
+    for (const id of ["wireSearch", "settingsSearch"]) {
+        if (id === "settingsSearch") await navigateMain(page, "settings");
+        const input = page.locator("#" + id), original = await input.elementHandle();
+        await input.fill("Orchard");
+        if (id === "wireSearch") await expect(page.locator(".wire-search-hit").first()).toBeVisible();
+        await input.evaluate(node => node.setSelectionRange(1, 4));
+        const reads = snapshots.length, applied = await page.locator("#promptAuthorSummary").getAttribute("data-revision");
+        const revision = await advance();
+        await expect(notice).toHaveText("New evidence is available.");
+        assert.equal(snapshots.length, reads, "Typing still defers snapshot application");
+        assert.equal(await page.locator("#promptAuthorSummary").getAttribute("data-revision"), applied);
+        assert.equal(await input.evaluate((node, original) => node === original && node === document.activeElement, original), true);
+        assert.deepEqual(await input.evaluate(node => [node.value, node.selectionStart, node.selectionEnd]), ["Orchard", 1, 4]);
+        assert.equal(await page.locator("#reportReviewBody .report-frame").count(), 0);
+        if (process.env.WIRE_REFRESH_CONTEXT_PROOFS) {
+            await mkdir(process.env.WIRE_REFRESH_CONTEXT_PROOFS, { recursive: true });
+            await page.screenshot({ path: path.join(process.env.WIRE_REFRESH_CONTEXT_PROOFS, `deferred-${id}.png`) });
+        }
+        await input.fill("");
+        await apply(revision);
+    }
+    await navigateMain(page, "settings");
+    await openSourceEditor(page);
+    await page.locator("#sourceSessions").fill(app.config.sessionRoot + "-draft");
+    const settingsReads = snapshots.length, settingsRevision = await advance();
+    await expect(notice).toContainText("Your unsaved Settings changes are kept; save or cancel them");
+    assert.equal(snapshots.length, settingsReads);
+    await page.locator("#cancelSource").click();
+    await apply(settingsRevision);
+    await navigateMain(page, "reports");
+    await chooseReportScope(page, "all");
+    await scanReport(page);
+    const frame = page.locator("#reportReviewBody iframe"), originalFrame = await frame.elementHandle();
+    const preview = await frame.getAttribute("srcdoc"), reviewReads = snapshots.length;
+    await advance();
+    await expect(notice).toHaveText("New evidence is available. Your report preview stays frozen.");
+    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "ready");
+    assert.equal(await frame.getAttribute("srcdoc"), preview);
+    assert.equal(await frame.evaluate((node, original) => node === original, originalFrame), true);
+    assert.equal(snapshots.length, reviewReads, "A genuine preview still owns the snapshot hold");
+    assert.deepEqual(app.writes, [], "No browser source check or permission write was added");
+    assert.equal((await loadBoardState(app.context)).exports.length, 0);
+});
 
 test("Refresh checks grounded metadata174 and retains its view on genuinely incompatible mappings", { timeout: 30000 }, async t => {
     const app = await fixture(t, true, false, {}, true), { page } = app;
