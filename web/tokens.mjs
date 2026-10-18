@@ -65,13 +65,18 @@ export const tokens = `
 
 // Screen surfaces are separate from the tokens embedded in saved reports and PDFs.
 const screenLight = `
- --page:#f1f3f7;--paper:#ffffff;--canvas:#ebebeb;--hover:#e3e3e3;
- --surface-shadow:0 2px 4px #26344d0a,0 8px 20px #26344d0a;
- --navigation-sidebar-shadow:2px 0 8px #0000000d,14px 0 32px #0000001a;
- --context-sidebar-shadow:-2px 0 8px #0000000d,-14px 0 32px #0000001a;
+ --page:#f1f3f7;--paper:#ffffff;--canvas:#f4f5f8;--hover:#f7f7f7;
+ --surface-edge:#20202012;--surface-divider:#20202024;
+ --panel-shadow:0 1px 2px #26344d0a,0 6px 18px #26344d0d;
+ --surface-shadow:0 3px 8px #26344d14,0 16px 36px #26344d1c;
+ --control-shadow:inset 0 1px 0 #ffffff80,0 1px 3px #26344d14;
+ --navigation-sidebar-shadow:inset -1px 0 #20202008,3px 0 10px #0000000d,14px 0 32px #0000001a;
+ --context-sidebar-shadow:inset 1px 0 #20202008,-3px 0 10px #0000000d,-14px 0 32px #0000001a;
+ --toggle-on:#486cbb;--toggle-thumb:#ffffff;--toggle-off:#f0f2f7;
  --ink:#202020;--muted:#565656;--rule:#c9c9c9;--control:#747474;
- --accent:#303030;--accent-soft:#e9e9e9;--accent-fill:#303030;--on-accent:#ffffff;
- --accent-hover:#dedede;--accent-pressed:#d5d5d5;--pill-pressed:#d9d9d9;
+ --accent:#303030;--accent-soft:#f1f1f1;--accent-fill:#303030;--on-accent:#ffffff;
+ --accent-hover:#ebebeb;--accent-pressed:#e5e5e5;--pill-pressed:#ededed;
+ --primary-hover:#202020;--primary-pressed:#101010;
  --danger:#b3261e;--delete-fill:#b3261e;--delete-ink:#ffffff;--performance-red:#b3261e;
  --chart-success:#286336;--screen-success-high:#60906e;--screen-success-low:#325f40;
  --chart-failure:#b3261e;--screen-failure-high:#c17169;--screen-failure-low:#9e403a;
@@ -84,18 +89,23 @@ const screenLight = `
  --focus:#303030;--scrim:#000000a6;
 `;
 const screenDark = `
- --page:#101010;--paper:#191919;--canvas:#222222;--hover:#2b2b2b;
- --surface-shadow:0 2px 4px #00000029,0 8px 20px #00000029;
- --navigation-sidebar-shadow:3px 0 10px #00000055,16px 0 36px #00000066;
- --context-sidebar-shadow:-3px 0 10px #00000055,-16px 0 36px #00000066;
+ --page:#111111;--paper:#202020;--canvas:#292929;--hover:#282828;
+ --surface-edge:#ffffff0e;--surface-divider:#ffffff1c;
+ --panel-shadow:inset 0 1px 0 #ffffff05,0 2px 4px #00000033,0 10px 24px #00000033;
+ --surface-shadow:inset 0 1px 0 #ffffff0a,0 4px 12px #00000066,0 20px 44px #00000066;
+ --control-shadow:inset 0 1px 0 #ffffff0d,0 1px 3px #0000004d;
+ --navigation-sidebar-shadow:inset -1px 0 #ffffff08,3px 0 10px #00000055,16px 0 36px #00000066;
+ --context-sidebar-shadow:inset 1px 0 #ffffff08,-3px 0 10px #00000055,-16px 0 36px #00000066;
+ --toggle-on:#8fa8eb;--toggle-thumb:#17213b;--toggle-off:#292c35;
  --ink:#f2f2f2;--muted:#b8b8b8;--rule:#444444;--control:#888888;
- --accent:#e0e0e0;--accent-soft:#2b2b2b;--accent-fill:#e0e0e0;--on-accent:#191919;
- --accent-hover:#333333;--accent-pressed:#3b3b3b;--pill-pressed:#353535;
+ --accent:#e0e0e0;--accent-soft:#2d2d2d;--accent-fill:#e0e0e0;--on-accent:#191919;
+ --accent-hover:#323232;--accent-pressed:#383838;--pill-pressed:#333333;
+ --primary-hover:#f2f2f2;--primary-pressed:#ffffff;
  --danger:#f28b82;--delete-fill:#f28b82;--delete-ink:#281210;--performance-red:#f28b82;
  --chart-success:#83d494;--screen-success-high:#83d494;--screen-success-low:#528d5e;
  --chart-failure:#f28b82;--screen-failure-high:#f28b82;--screen-failure-low:#be635c;
  --screen-service-files:#10b981;
- --chart-fade-strength:70%;
+ --chart-fade-strength:74%;
  --screen-prompt-user:#95b9d2;
  --search-interaction:#79b6ff;--search-context:#c4a9e1;--search-reply:#66d0d7;
  --search-action:#e2b455;--search-tool:#e791ce;--search-service:#becb6b;
@@ -110,6 +120,9 @@ export const screenTokens = `${tokens}
 :root {
  --font:${screenFontStack};
  --weight-regular:400;--weight-medium:500;--weight-strong:600;--tracking-heading:0;
+ --radius:12px;--radius-small:10px;--radius-dialog:12px;--radius-field:8px;
+ --pill-fill:var(--paper);--pill-border:var(--surface-edge);--shadow:var(--surface-shadow);
+ --state-transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease,box-shadow 140ms ease;
 }
 :root {${screenLight}}
 @media(prefers-color-scheme:dark) {

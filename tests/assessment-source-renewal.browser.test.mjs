@@ -80,7 +80,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
         return page.locator("#assessmentSetup");
     }
     let pane = await settings();
-    await pane.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true }).check();
+    await pane.getByRole("switch", { name: "Save Copilot replies locally", exact: true }).check();
     const enableResponse = page.waitForResponse(response => response.url().endsWith("/api/assessment/consent/set"));
     await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     assert.equal((await enableResponse).status(), 200);
@@ -138,7 +138,7 @@ test("actual source renewal is explicit, cleans prior optional evidence and leav
     const baseBeforeRenewal = structuredClone(state.evidence);
     pane = await settings();
     assert.match(await pane.locator(".assessment-applied").textContent(), /inactive.*source changed/i);
-    const checkbox = pane.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    const checkbox = pane.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     assert.equal(await checkbox.isChecked(), false);
     assert.equal(calls.filter(call => call.path.endsWith("/consent/set")).length, 1);
     await checkbox.check();

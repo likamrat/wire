@@ -10,6 +10,7 @@ import { defaultConsent, validateRequest } from "../lib/assessment-contract.mjs"
 import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption, openSourceEditor, restoreLegacySearch } from "./helpers.mjs";
 import { createSettingsNavigation } from "../web/settings-navigation.mjs";
 import { createLocalSearch } from "../web/local-search.mjs";
+import { enabledConsent } from "./assessment-contract-fixtures.mjs";
 
 async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
     const records = [fixture("settings-reference")], reads = [], blocked = [], errors = [];
@@ -70,7 +71,7 @@ async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
         return response.end(JSON.stringify({ schemaVersion: 1, basis, data: { interactionRefs: input.interactionRefs, metrics: [] } }));
     });
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-    const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce" });
+    const browser = await chromium.launch(), context = await browser.newContext({ viewport: { width: 1200, height: 1000 }, reducedMotion: "reduce" }), page = await context.newPage();
     const origin = `http://127.0.0.1:${server.address().port}`;
     page.setDefaultTimeout(8000); page.on("pageerror", error => errors.push(error.message));
     await page.route("**/*", route => {
@@ -81,7 +82,16 @@ async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
     await page.goto(origin + "/#settings?section=display");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
-    return { page, reads, status, automatic, origin };
+    return { page, reads, status, automatic, origin, assessment };
+}
+async function captureSwitchState(page, name) {
+    const proofs = process.env.WIRE_RESPONSE_SETTINGS_PROOFS;
+    if (!proofs) return;
+    await mkdir(proofs, { recursive: true });
+    await page.mouse.move(0, 0);
+    await page.waitForFunction(() => !document.getAnimations().some(animation =>
+        animation.playState === "running" && Number.isFinite(animation.effect?.getComputedTiming().endTime)));
+    await page.screenshot({ path: path.join(proofs, name + ".png"), fullPage: true });
 }
 async function category(page, value) {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -102,8 +112,8 @@ test("response saving belongs to Privacy and saved data with valid forms and com
     assert.equal(await page.getByRole("heading", { name: "Optional evidence", exact: true }).count(), 0);
     assert.equal(await page.locator("#assessmentSetup form").count(), 1);
     assert.equal(await page.locator("form form").count(), 0);
-    assert.equal(await page.locator("#assessmentSetup>section>p").count(), 1, "Current state stays; a separate introductory paragraph is unnecessary");
-    const choice = page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    assert.equal(await page.locator("#assessmentSetup .settings-reply-help").count(), 1, "One explanation stays with the choice");
+    const choice = page.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     await choice.check();
     await category(page, "connection");
     await page.goBack();
@@ -126,7 +136,7 @@ test("Settings uses a compact search/category rail and flat pane without changin
     assert.equal(await page.locator(".settings-rail .settings-status-link").count(), 1);
     assert.equal(await page.locator(".settings-layout>.settings-content").count(), 1);
     assert.equal(await page.locator("#settingsSearch").getAttribute("placeholder"), "Search settings");
-    assert.equal(await page.locator(".settings-search-icon").getAttribute("aria-hidden"), "true");
+    assert.equal(await page.locator(".settings-search .wire-search-icon svg").getAttribute("aria-hidden"), "true");
     for (const value of ["connection", "display", "troubleshooting", "privacy"]) {
         await category(page, value);
         const row = page.locator(`#settingsCategoryNav [data-category="${value}"]`);
@@ -266,7 +276,7 @@ test("category navigation preserves source and reply drafts, local search, cance
     await expect(page.locator("#checkActivity")).toBeDisabled();
     await expect(page.locator("#preferenceActions")).toBeHidden();
     await category(page, "privacy");
-    const choice = page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    const choice = page.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     await choice.check();
     await page.locator("#settingsSearch").fill("Theme");
     await page.locator('#settingsSearchResults a[data-setting="theme"]').click();
@@ -371,7 +381,7 @@ test("source preferences, pause and replacement keep their own explicit save gat
     assert.equal(writes[2].input.enabled, true);
     assert.equal(writes[2].input.appDbPath, "C:\\invented-new\\data.db");
     await category(page, "privacy");
-    await expect(page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true })).not.toBeChecked();
+    await expect(page.getByRole("switch", { name: "Save Copilot replies locally", exact: true })).not.toBeChecked();
     await expect(page.locator("#automaticScoreState,[data-category=ai]")).toHaveCount(0);
 });
 
@@ -385,7 +395,7 @@ test("reply-saving pending and uncertain state survives the rail without repeati
         await route.abort("failed");
     });
     await category(page, "privacy");
-    const choice = page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    const choice = page.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     await choice.check();
     await page.getByRole("button", { name: "Turn on response saving", exact: true }).click();
     await expect(choice).toBeDisabled();
@@ -471,18 +481,62 @@ test("four current groups retain keyboard focus and readable geometry at 375 and
     const next = previous === "light" ? "dark" : "light";
     await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", next);
     await expect(page.locator("#themePreference")).toHaveAttribute("aria-checked", String(next === "dark"));
-    await expect(page.locator("#settingsThemePreference")).toHaveText(next === "dark" ? "Switch to light theme" : "Switch to dark theme");
+    await expect(page.locator("#settingsThemePreference")).toHaveAttribute("aria-checked", String(next === "dark"));
     if (proofs) await writeFile(path.join(proofs, "geometry.json"), JSON.stringify(evidence, null, 2));
 });
 
-test("Display and header share theme state and storage errors; Time zone remains in Display", async t => {
-    const { page } = await setup(t);
+test("Display and header share switch artwork, native activation, storage updates and errors", async t => {
+    const { page, origin } = await setup(t);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
     await category(page, "display");
-    await chooseTheme(page, "light");
-    await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to dark theme");
-    await page.locator("#themePreference").click();
-    await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to light theme");
-    await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to light theme");
+    const controls = [page.locator("#themePreference"), page.locator("#settingsThemePreference")], evidence = [];
+    const other = await page.context().newPage();
+    t.after(() => other.close());
+    await other.goto(origin + "/#settings?section=display");
+    await expect(other.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        for (const control of controls) {
+            await expect(control).toHaveAttribute("role", "switch");
+            await expect(control).toHaveAttribute("aria-checked", String(theme === "dark"));
+            await expect(control.locator(".theme-thumb")).toHaveCSS("transform", `matrix(1, 0, 0, 1, ${theme === "dark" ? 36 : 0}, 0)`);
+        }
+        const geometry = [];
+        for (const control of controls) geometry.push(await control.evaluate(node => {
+            const rect = node.getBoundingClientRect();
+            const box = element => {
+                const value = element.getBoundingClientRect();
+                return { x: value.x - rect.x, y: value.y - rect.y, width: value.width, height: value.height };
+            };
+            return { target: { width: rect.width, height: rect.height }, track: box(node.querySelector(".theme-track")),
+                thumb: box(node.querySelector(".theme-thumb")), glyphs: [...node.querySelectorAll("svg")].map(icon => ({
+                    name: icon.dataset.lucideIcon, ...box(icon), color: getComputedStyle(icon).color,
+                })), artwork: node.querySelector(".theme-track").outerHTML };
+        }));
+        assert.deepEqual(geometry[0], geometry[1], "Same painted glyphs, thumb/track and target, not just matching SVG names");
+        assert.deepEqual(geometry[0].target, { width: 80, height: 44 });
+        assert.equal(geometry[0].track.width, 76);
+        assert.equal(geometry[0].thumb.width, 32);
+        assert.deepEqual(geometry[0].glyphs.map(glyph => [glyph.name, glyph.width, glyph.height]), [["sun", 20, 20], ["moon", 20, 20]]);
+        for (const control of controls) for (const action of ["click", "Space", "Enter"]) {
+            const wasDark = await control.getAttribute("aria-checked") === "true";
+            if (action === "click") await control.click();
+            else { await control.focus(); await page.keyboard.press(action); }
+            for (const mirrored of controls) await expect(mirrored).toHaveAttribute("aria-checked", String(!wasDark));
+            await expect(other.locator("#settingsThemePreference")).toHaveAttribute("aria-checked", String(!wasDark));
+        }
+        await controls[1].focus();
+        await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+        await expect(controls[1]).toBeFocused();
+        await expect(controls[1]).toHaveCSS("outline-style", "solid");
+        await expect(controls[1]).toHaveAccessibleName("Use dark theme");
+        await captureSwitchState(page, `theme-${theme}-synchronized-focus`);
+        evidence.push({ theme, geometry });
+    }
+    await other.locator("#settingsThemePreference").click();
+    const storedDark = await other.locator("#settingsThemePreference").getAttribute("aria-checked");
+    for (const control of controls) await expect(control).toHaveAttribute("aria-checked", storedDark);
+    await chooseTheme(page, "dark");
     await page.evaluate(() => {
         const set = Storage.prototype.setItem;
         Storage.prototype.setItem = function(key, value) {
@@ -492,14 +546,114 @@ test("Display and header share theme state and storage errors; Time zone remains
     });
     await page.locator("#settingsThemePreference").click();
     await expect(page.locator("#themeStorageNotice")).toBeVisible();
-    await expect(page.locator("#settingsThemePreference")).toHaveText("Switch to dark theme");
+    await expect(page.locator("#settingsThemePreference")).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("#settingsThemePreference")).toHaveAttribute("aria-describedby", "themeStorageNotice");
+    await expect(page.locator("#settingsThemePreference")).toHaveAccessibleDescription(/theme.*panel|preference.*panel/i);
     await expect(page.locator("#themePreference")).toHaveAttribute("aria-checked", "false");
+    await expect(other.locator("#settingsThemePreference")).toHaveAttribute("aria-checked", "true");
+    await captureSwitchState(page, "theme-storage-warning");
     await category(page, "connection");
     await category(page, "display");
     await expect(page.getByRole("combobox", { name: "Time zone", exact: true })).toBeVisible();
     await page.locator("#displayTimeZone-control").focus();
     await expect(page.locator("#displayTimeZone-control")).toBeFocused();
     await expect(page.locator("#settingsCategoryNav [aria-current=page]")).toHaveAttribute("data-category", "display");
+    const proofs = process.env.WIRE_RESPONSE_SETTINGS_PROOFS;
+    if (proofs) await writeFile(path.join(proofs, "theme-switch-geometry.json"), JSON.stringify(evidence, null, 2));
+});
+
+for (const theme of ["light", "dark"]) test(`reply switch source, pending, unknown and rejected states stay explicit (${theme})`, { timeout: 30000 }, async t => {
+    const { page, assessment } = await setup(t);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await chooseTheme(page, theme);
+    await category(page, "privacy");
+    const pane = page.locator("#assessmentSetup"), choice = pane.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
+    const writes = [], reads = [];
+    let release, finishRead, reject = false;
+    t.after(() => { release?.(); finishRead?.(); });
+    await page.route("**/api/assessment/consent/set", async route => {
+        writes.push(route.request().postDataJSON());
+        if (reject) return route.fulfill({ status: 403, json: { error: "Synthetic source approval changed. No choice was saved." } });
+        await new Promise(resolve => { release = resolve; });
+        await route.abort("failed");
+    });
+    await page.route("**/api/assessment/mutation/status", async route => {
+        reads.push(route.request().postDataJSON());
+        await new Promise(resolve => { finishRead = resolve; });
+        await route.fulfill({ json: { schemaVersion: 1, mutationRef: writes[0].mutationRef, phase: "not-started" } });
+    });
+    await choice.focus(); await page.keyboard.press("Space");
+    await expect(choice).toBeChecked();
+    await expect(pane.locator(".assessment-applied")).toContainText("not saved yet");
+    assert.equal(writes.length, 0);
+    await captureSwitchState(page, `${theme}-reply-on-draft`);
+    await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
+    await expect(choice).toBeDisabled();
+    await expect(pane.getByRole("button", { name: "Discard change", exact: true })).toBeDisabled();
+    await captureSwitchState(page, `${theme}-reply-saving`);
+    await category(page, "display"); release();
+    await category(page, "privacy");
+    await expect(pane.getByRole("alert")).toContainText("do not repeat the update");
+    await expect(choice).toBeDisabled();
+    await expect(pane.getByRole("button", { name: "Discard change", exact: true })).toHaveCount(0);
+    await captureSwitchState(page, `${theme}-reply-unknown`);
+    await pane.getByRole("button", { name: "Check update result", exact: true }).click();
+    await expect(pane.getByRole("button", { name: "Check update result", exact: true })).toBeDisabled();
+    await captureSwitchState(page, `${theme}-reply-checking`);
+    await expect.poll(() => reads.length).toBe(1);
+    assert.equal(reads[0].mutationRef, writes[0].mutationRef);
+    assert.equal(reads[0].receiptToken, writes[0].receiptToken);
+    finishRead();
+    await expect(choice).toBeEnabled();
+    await expect(choice).not.toBeChecked();
+    await expect(pane.getByRole("button")).toHaveCount(0);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem("wire.responseCapture.pending")), null);
+    assert.equal(writes.length, 1);
+    await captureSwitchState(page, `${theme}-reply-recovered-current-state`);
+    reject = true;
+    await choice.click();
+    await pane.getByRole("button", { name: "Turn on response saving", exact: true }).click();
+    await expect(pane.getByRole("alert")).toContainText("Synthetic source approval changed");
+    await expect(choice).toBeEnabled();
+    assert.equal(writes.length, 2);
+    assert.notEqual(writes[1].mutationRef, writes[0].mutationRef);
+    await captureSwitchState(page, `${theme}-reply-rejected`);
+    await pane.getByRole("button", { name: "Discard change", exact: true }).click();
+    assessment.consent = { ...enabledConsent(), sourceConfigRef: assessment.source.sourceConfigRef, categories: ["answer"] };
+    assessment.basis.consentRevision = 1;
+    await page.reload();
+    await expect(choice).toBeChecked();
+    await choice.click();
+    await expect(pane.getByText(/Turning this off stops future capture/)).toBeVisible();
+    await captureSwitchState(page, `${theme}-reply-off-confirmation`);
+    await pane.getByRole("button", { name: "Discard change", exact: true }).click();
+    assessment.source.sourceConfigRevision++;
+    await page.reload();
+    await expect(pane.locator(".assessment-applied")).toContainText("source changed");
+    await expect(choice).not.toBeChecked();
+    await choice.click();
+    await expect(pane.getByText(/Enabling capture for this source removes prior/)).toBeVisible();
+    await captureSwitchState(page, `${theme}-reply-renewal-confirmation`);
+    await pane.getByRole("button", { name: "Discard change", exact: true }).click();
+    assessment.source.available = false;
+    await page.reload();
+    await expect(choice).toBeDisabled();
+    await expect(pane.locator(".assessment-applied")).toContainText("source is unavailable");
+    await pane.getByRole("button", { name: "Remove previously saved responses", exact: true }).click();
+    await expect(pane.getByRole("button", { name: "Turn off and delete responses", exact: true })).toBeEnabled();
+    await captureSwitchState(page, `${theme}-reply-unavailable-revoke`);
+    await pane.getByRole("button", { name: "Discard change", exact: true }).click();
+    assert.equal(writes.length, 2, "Source states, navigation and cancellation never send a write");
+    await page.emulateMedia({ forcedColors: "active" });
+    await captureSwitchState(page, `${theme}-reply-forced-colors`);
+    await page.emulateMedia({ forcedColors: "none" });
+    assessment.consent = defaultConsent();
+    assessment.basis.consentRevision = 0;
+    await page.reload();
+    await expect(choice).toHaveCount(0);
+    await expect(page.locator(".settings-reply-fallback")).toBeVisible();
+    await expect(pane).toContainText("Connect a supported local Copilot source");
+    await captureSwitchState(page, `${theme}-reply-source-needed`);
 });
 
 test("Troubleshooting opens the named Analyze mode from its opposite without losing scope, private query or selection", async t => {

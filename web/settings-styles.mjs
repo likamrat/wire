@@ -26,7 +26,7 @@ export const settingsStyles = `
 .collection-status-actions {display:flex;flex-wrap:wrap;align-items:center;gap:4px 24px;margin-top:12px}
 .collection-status-actions a,.history-chat-link {display:inline-flex;align-items:center;min-height:44px;width:fit-content;max-width:100%;overflow-wrap:anywhere}
 .collection-status-view .scoped-search {margin-block:20px 16px}
-.collection-status-view .search-input-row {max-width:32rem}
+.collection-status-view .search-capsule {max-width:32rem}
 .collection-status-view .scoped-search>label {margin-bottom:4px}
 .collection-status-view .scoped-search p {margin-top:4px}
 .collection-status-view .scoped-search .settings-help {max-width:66ch}
@@ -52,18 +52,11 @@ export const settingsStyles = `
 .settings-category-label {min-width:0;overflow-wrap:anywhere}
 .settings-categories a:hover {background:var(--hover);color:var(--ink);text-decoration:none}
 .settings-categories a:active {background:var(--pill-pressed);color:var(--ink)}
-.settings-categories a[aria-current=page] {background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-strong)}
+.settings-categories a[aria-current=page] {background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-strong);box-shadow:inset 0 0 0 1px var(--rule)}
 .settings-categories a[aria-current=page]:hover {background:var(--hover)}
 .settings-categories a[aria-current=page]:active {background:var(--pill-pressed)}
 .settings-categories>summary {padding:10px 12px;background:var(--canvas);color:var(--ink);border:0;border-radius:var(--settings-nav-radius);cursor:pointer;min-height:44px;overflow-wrap:anywhere}
 .settings-view .settings-search {width:100%;margin:0 0 var(--space-md)}
-.settings-search .search-input-row {gap:var(--space-sm);min-height:44px;padding-inline:10px;border:1px solid var(--control);border-radius:var(--settings-action-radius);background:var(--paper)}
-.settings-search .search-input-row:has(input:focus-visible) {outline:2px solid var(--focus);outline-offset:3px}
-.settings-search .settings-search-icon {color:var(--muted);flex:none}
-.settings-search .search-input-row input {border:0;border-radius:0;background:transparent;padding:8px 0;min-height:44px}
-.settings-search .search-input-row input:focus-visible {outline:none}
-.settings-search .search-input-row button {padding:8px var(--pill-inset);border:0;background:transparent;min-width:44px}
-.settings-search .search-input-row button:focus-visible {outline-offset:0}
 .settings-rail .settings-status-link {display:flex;flex-direction:column;align-items:flex-start;padding:12px;font-size:var(--type-small);line-height:var(--leading-ui)}
 .scoped-search {margin-block:16px;min-width:0}
 .scoped-search>label {display:block;font-weight:600;margin-bottom:6px}
@@ -182,17 +175,40 @@ export const settingsStyles = `
 .settings-view .settings-group>.settings-task-row {padding:0;border:0;margin:0}
 .settings-view .settings-group>.settings-task-row h3 {margin:0}
 .settings-group>.collection-status-actions {margin-top:8px}
-.settings-reply-row {display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding-block:0 24px;margin:0}
-.settings-reply-row>h3 {font-size:var(--type-reading);line-height:var(--leading-ui);font-weight:var(--weight-strong)}
+.settings-reply-row {padding-block:0 24px;margin:0}
+.settings-reply-fallback {font-size:var(--type-reading);line-height:var(--leading-ui);font-weight:var(--weight-strong)}
+.settings-reply-row:has(.settings-choice-row)>.settings-reply-fallback {display:none}
 .settings-view #assessmentSetup {min-width:0}
-.settings-view #assessmentSetup .settings-choice-row {display:flex;align-items:center;gap:var(--space-sm);width:fit-content;max-width:100%;min-height:44px;margin-top:0;padding:8px 0;cursor:pointer}
-.settings-view #assessmentSetup .settings-choice-row>input {margin:0;min-height:0}
-.settings-view #assessmentSetup .settings-choice-row>span {min-width:0}
+.settings-view #assessmentSetup .settings-choice-row {display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:start;gap:8px 24px}
+.settings-view #assessmentSetup .settings-row-copy h3 {display:flex;align-items:center;min-height:44px}
+.settings-view #assessmentSetup .settings-row-copy h3 label {cursor:pointer}
+.settings-view #assessmentSetup .settings-reply-help {margin-top:0}
+.settings-view .settings-switch {position:relative;display:flex;align-items:center;justify-content:center;width:44px;height:44px;cursor:pointer}
+.settings-view .settings-switch input {position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}
+.settings-view .settings-switch .select-toggle {pointer-events:none}
+.settings-view .settings-switch:has(input:checked) .select-toggle {border-color:var(--toggle-on);background:var(--toggle-on)}
+.settings-view .settings-switch:has(input:checked) .select-toggle::after {transform:translateX(12px);background:var(--toggle-thumb)}
+.settings-view .settings-switch:has(input:focus-visible) .select-toggle {outline:2px solid var(--focus);outline-offset:3px}
+.settings-view .settings-switch:has(input:disabled) {cursor:not-allowed}
+.settings-view .settings-switch:has(input:disabled) .select-toggle {box-shadow:none;border-color:var(--muted);border-style:dashed}
+.settings-view .settings-switch:has(input:disabled:checked) .select-toggle {background:var(--muted)}
+.settings-view .settings-switch:hover:has(input:enabled) .select-toggle {outline:1px solid var(--control);outline-offset:2px}
+.settings-view .settings-switch:hover:has(input:focus-visible) .select-toggle {outline:2px solid var(--focus);outline-offset:3px}
+.settings-view #assessmentSetup .assessment-applied {font-weight:var(--weight-regular);color:var(--muted)}
 .settings-view #assessmentSetup .assessment-control-actions {justify-content:flex-start;margin:12px 0 0}
 .settings-view #assessmentSetup .assessment-control-actions:not(:has(>button:not([hidden]))) {display:none}
 .settings-view #assessmentSetup .assessment-capture-details {margin-block:8px;padding:12px 0;border-block:1px solid var(--rule);color:var(--muted)}
 .settings-view #assessmentSetup .settings-help {margin-top:0}
 .settings-view #assessmentSetup>section>p {max-width:70ch}
+@media(forced-colors:active) {
+ .settings-view .settings-switch .select-toggle {background:Canvas;border-color:ButtonText;box-shadow:none;forced-color-adjust:none}
+ .settings-view .settings-switch .select-toggle::after {background:ButtonText}
+ .settings-view .settings-switch:has(input:checked) .select-toggle {background:Highlight;border-color:Highlight}
+ .settings-view .settings-switch:has(input:checked) .select-toggle::after {background:HighlightText}
+ .settings-view .settings-switch:has(input:disabled) .select-toggle {border-color:GrayText}
+ .settings-view .settings-switch:has(input:disabled:checked) .select-toggle {background:GrayText}
+ .settings-view .settings-switch:has(input:focus-visible) .select-toggle {outline-color:Highlight}
+}
 .settings-view .settings-automatic-row {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:0;margin:0;border:0}
 .settings-view .settings-automatic-row>h3,.settings-view .settings-automatic-row>p {margin:0}
 .settings-view .settings-automatic-actions {display:flex;flex-wrap:wrap;align-items:start;gap:8px;min-width:0}
@@ -206,6 +222,8 @@ export const settingsStyles = `
 .settings-view .settings-advanced>p {margin:0 0 8px;color:var(--muted)}
 .settings-view [data-settings-section=troubleshooting]>.settings-group {padding-top:0;border:0}
 .settings-view [data-settings-section=display]>.settings-theme-row {padding-top:0;border:0}
+.settings-view .settings-theme-row {align-items:center}
+.settings-view .settings-theme-row .theme-trigger {border-radius:var(--radius-pill)}
 .settings-view .settings-section>:last-child {padding-bottom:0}
 .display-time-field p {overflow-wrap:anywhere}
 .permission-boundary {margin-top:20px!important;padding-top:16px;border-top:1px solid var(--rule)}
@@ -223,6 +241,10 @@ export const settingsStyles = `
  .settings-paths dd {margin-bottom:12px}
 }
 @container settings-pane (max-width:34rem) {
+ .settings-view #assessmentSetup .settings-row-copy {display:contents}
+ .settings-view #assessmentSetup .settings-row-copy h3 {grid-column:1;grid-row:1}
+ .settings-view #assessmentSetup .settings-reply-help {grid-column:1/-1;grid-row:2}
+ .settings-view #assessmentSetup .settings-switch {grid-column:2;grid-row:1}
  .settings-view :is(.settings-display-field,.settings-task-row) {grid-template-columns:minmax(0,1fr);gap:12px}
  .settings-view .settings-preferences {grid-template-columns:minmax(0,1fr)}
  .settings-view .settings-task-row>:is(button,.button-link,.ux-disabled-help),.settings-display-field>.select-control {justify-self:start}

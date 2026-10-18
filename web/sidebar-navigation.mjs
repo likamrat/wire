@@ -43,58 +43,10 @@ export function initializeNavigationPreference() {
     };
 }
 
-// Serialized before paint, like the other browser-local display preferences.
-export function initializeSidebarMotionPreference() {
-    const key = "workiq-evidence.sidebar-motion", listeners = new Set();
-    const media = matchMedia("(prefers-reduced-motion: reduce)");
-    const valid = value => ["system", "on", "off"].includes(value);
-    let preference = "system", storage, warning = "";
-    function storageFailure(error) {
-        if (!["SecurityError", "QuotaExceededError"].includes(error.name)) throw error;
-        warning = "Sidebar motion could not be saved or read. This choice applies to this panel only until reload.";
-        console.warn(warning);
-    }
-    function accept(value) {
-        preference = valid(value) ? value : "system";
-        warning = value !== null && !valid(value) ? "Saved sidebar motion is invalid. Following the system setting." : "";
-        if (warning) console.warn(warning);
-    }
-    try { storage = window.localStorage; accept(storage.getItem(key)); }
-    catch (error) { storageFailure(error); }
-    const enabled = () => preference === "on" || preference === "system" && !media.matches;
-    const state = () => ({ preference, enabled: enabled(), warning });
-    function apply() {
-        document.documentElement.dataset.sidebarMotion = enabled() ? "on" : "off";
-        for (const listener of listeners) listener(state());
-    }
-    media.addEventListener("change", apply);
-    window.addEventListener("storage", event => {
-        if (event.storageArea !== storage || (event.key !== key && event.key !== null)) return;
-        accept(event.key === null ? null : event.newValue);
-        apply();
-    });
-    apply();
-    return {
-        get enabled() { return enabled(); },
-        timing: { duration: 320, easing: "cubic-bezier(.2,0,0,1)", fill: "both" },
-        subscribe(listener) { listeners.add(listener); listener(state()); },
-        setPreference(value) {
-            if (!valid(value)) throw new Error("Choose Follow system, On or Off for sidebar motion.");
-            preference = value;
-            try {
-                storage = window.localStorage;
-                if (value === "system") storage.removeItem(key);
-                else storage.setItem(key, value);
-                warning = "";
-            } catch (error) { storageFailure(error); }
-            apply();
-        },
-    };
-}
-
 // Move the same navigation nodes into a native modal on narrow screens.
-export function mountSidebarNavigation(ux, preference, motion) {
+export function mountSidebarNavigation(ux, preference) {
     const $ = (id) => document.getElementById(id);
+    const timing = { duration: 320, easing: "cubic-bezier(.2,0,0,1)", fill: "both" };
     const media = matchMedia("(max-width: 699px)");
     const trigger = $("navigationToggle"), drawer = $("navigationDrawer");
     const content = $("navigationContent"), rail = $("sidebar");
@@ -143,7 +95,6 @@ export function mountSidebarNavigation(ux, preference, motion) {
     function glide(from) {
         const to = captureGeometry();
         if (Math.abs(from.width - to.width) < 1) return;
-        const timing = motion.timing;
         const animate = (node, keyframes, options = timing) => {
             const animation = node.animate(keyframes, options);
             animations.push(animation);
@@ -217,7 +168,7 @@ export function mountSidebarNavigation(ux, preference, motion) {
         collapse.setAttribute("aria-label", label());
         collapse.replaceChildren(ux.icon(collapsed ? "navigation-expand" : "navigation-collapse"));
         $("navigationStorageNotice").hidden = !state.storageUnavailable;
-        if (motionOrigin && !media.matches && motion.enabled) glide(motionOrigin);
+        if (motionOrigin && !media.matches) glide(motionOrigin);
         measure();
     });
     collapse.addEventListener("click", () => {
@@ -239,9 +190,8 @@ export function mountSidebarNavigation(ux, preference, motion) {
         drawerAnimation?.cancel();
         drawerAnimation = null;
         drawerClosing = !entering;
-        if (!motion.enabled) { finishDrawerMotion(); return; }
         const animation = drawer.animate([{ transform: from }, { transform: entering ? "translateX(0)" : "translateX(-100%)" }],
-            motion.timing);
+            timing);
         drawerAnimation = animation;
         animation.addEventListener("finish", () => { if (drawerAnimation === animation) finishDrawerMotion(); }, { once: true });
     }
@@ -305,9 +255,8 @@ export function mountSidebarNavigation(ux, preference, motion) {
         finishDrawerMotion();
     }
     window.addEventListener("resize", settleMotion);
-    motion.subscribe(state => { if (!state.enabled) settleMotion(); });
     document.addEventListener("visibilitychange", () => { if (document.hidden) settleMotion(); });
     media.addEventListener("change", layout);
     layout();
-    return { close, motion };
+    return { close, timing };
 }

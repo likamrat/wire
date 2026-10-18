@@ -276,7 +276,7 @@ test("brand paint follows the eased sidebar through collapse, expansion and reve
     }
 });
 
-test("native browser preference preserves actual frames for both sidebars or settles for reduced motion", async t => {
+test("both built-in sidebars paint actual frames under the unchanged native browser preference", async t => {
     const { page } = await setup(t, { reducedMotion: null }, scopeRecords(), {
         channel: process.platform === "win32" ? "msedge" : undefined,
         headless: process.env.WIRE_NATIVE_MOTION_PROBE !== "headed",
@@ -320,8 +320,7 @@ test("native browser preference preserves actual frames for both sidebars or set
             const frames = trace.filter(frame => frame.phase === phase && (["collapse", "expand"].includes(phase) || frame.open));
             const positions = new Set(frames.map(frame => Math.round(["collapse", "expand"].includes(phase) ? frame.width : frame.x))).size;
             t.diagnostic(JSON.stringify({ theme, phase, ...environment, frames: frames.length, positions }));
-            if (environment.reduced) assert.ok(positions <= 1, `${theme}/${phase}: native reduced motion settles`);
-            else assert.ok(positions >= 3, `${theme}/${phase}: actual intermediate frames, not just an animation object`);
+            assert.ok(positions >= 3, `${theme}/${phase}: actual intermediate frames, not just an animation object`);
         }
         traces.push({ theme, environment, trace });
     }
@@ -704,10 +703,12 @@ test("enlarged text and reduced motion keep a stable header without squeezing th
         }));
         const before = await geometry();
         await collapse(page).click();
+        await settled(page);
         assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
         assert.equal(await page.locator("#shellBrand").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
         assert.deepEqual(await geometry(), before);
         await collapse(page).click();
+        await settled(page);
         assert.deepEqual(await geometry(), before);
         const caption = await page.locator(".brand-caption").evaluate(node => ({
             width: node.clientWidth, content: node.scrollWidth, visible: node.checkVisibility({ visibilityProperty: true }),
@@ -737,7 +738,7 @@ test("brand focus, touch, reduced motion and breakpoint interruption retain sett
         await page.keyboard.press("Enter"); await ready(page);
         await expect(page.locator('nav [data-nav="analyze"]')).toHaveAttribute("aria-current", "page");
         await collapse(page).tap();
-        await page.waitForTimeout(60);
+        assert.ok(await page.locator("#sidebar").evaluate(node => node.hasAttribute("data-navigation-moving")));
         await page.emulateMedia({ reducedMotion: "reduce" });
         await settled(page);
         assert.equal(await brand.evaluate(node => node.getAnimations({ subtree: true }).length), 0);
@@ -745,7 +746,7 @@ test("brand focus, touch, reduced motion and breakpoint interruption retain sett
         await expect(brand.locator(`.brand-logo[data-brand-theme=${theme}]`)).toHaveCSS("transform", "none");
         await page.emulateMedia({ reducedMotion: "no-preference" });
         await collapse(page).tap();
-        await page.waitForTimeout(60);
+        assert.ok(await page.locator("#sidebar").evaluate(node => node.hasAttribute("data-navigation-moving")));
         await page.setViewportSize({ width: 375, height: 900 });
         await page.locator("#navigationToggle").tap();
         await expect(page.locator("#navigationDrawer #shellBrand")).toBeVisible();
@@ -759,7 +760,7 @@ test("brand focus, touch, reduced motion and breakpoint interruption retain sett
     }
 });
 
-test("narrow overlay restores focus, traps keyboard, preserves the desktop choice and honors reduced motion", async t => {
+test("narrow overlay restores focus, traps keyboard and preserves the desktop choice under either host policy", async t => {
     const { page } = await setup(t);
     await collapse(page).click(); await settled(page);
     const navigation = await page.locator(".primary-navigation").elementHandle();
@@ -776,7 +777,7 @@ test("narrow overlay restores focus, traps keyboard, preserves the desktop choic
         await trigger.click();
         await expect(page.locator('nav [data-nav="analyze"]')).toBeFocused();
         assert.equal(await navigation.evaluate(node => node.closest("#navigationDrawer") !== null), true);
-        await page.waitForTimeout(260);
+        await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
         await capture(page, `narrow-${theme}-open`);
         for (let i = 0; i < 6; i++) {
             await page.keyboard.press("Tab");
@@ -794,7 +795,7 @@ test("narrow overlay restores focus, traps keyboard, preserves the desktop choic
     await page.goBack(); await ready(page);
     await expect(page.locator("#pageTitle")).toHaveText("Analyze");
     await trigger.click();
-    await page.waitForTimeout(260);
+    await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
     await page.mouse.click(366, 400);
     await expect(drawer).not.toHaveAttribute("open", "");
     await expect(trigger).toBeFocused();
@@ -808,11 +809,13 @@ test("narrow overlay restores focus, traps keyboard, preserves the desktop choic
     await expect(collapse(page)).toHaveAttribute("aria-expanded", "false");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await collapse(page).click();
+    await settled(page);
     assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
     await expect(collapse(page)).toHaveAttribute("aria-expanded", "true");
     await page.setViewportSize({ width: 375, height: 900 });
     await page.evaluate(() => document.documentElement.style.fontSize = "200%");
     await trigger.click();
+    await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
     assert.equal(await drawer.evaluate(node => node.getAnimations().length), 0);
     for (const link of await page.locator(".primary-navigation a").all()) assert.ok((await link.boundingBox()).height >= 44);
     await page.keyboard.press("Escape"); await expect(trigger).toBeFocused();

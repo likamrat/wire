@@ -1,6 +1,7 @@
 // One reader's views; visibility remains in the existing keyed presentation owner.
-export function createReaderSections({ root, presentation, ux, motion, isCurrent, requestClose, onChange }) {
+export function createReaderSections({ root, presentation, ux, isCurrent, requestClose, onChange }) {
     const doc = root.ownerDocument, views = [];
+    const reducedMotion = doc.defaultView.matchMedia("(prefers-reduced-motion: reduce)");
     let active = true;
     const current = () => active && root.isConnected && isCurrent();
     function element(tag, cls, text) {
@@ -13,6 +14,8 @@ export function createReaderSections({ root, presentation, ux, motion, isCurrent
     const snapshot = () => presentation.openSummary(present().map(view => view.key), true);
     function refresh() { if (active) onChange?.(snapshot()); }
     function finishAll() { for (const view of views) view.finish(); }
+    const motionChanged = () => { if (reducedMotion.matches) finishAll(); };
+    reducedMotion.addEventListener("change", motionChanged);
     function request(open, targets, animate = true) {
         if (!current()) return;
         const changed = targets.filter(view => root.contains(view.element) && view.isOpen() !== open);
@@ -79,7 +82,7 @@ export function createReaderSections({ root, presentation, ux, motion, isCurrent
             // Text owners clear body/Copy immediately on hide, including pending getters.
             for (const listener of listeners) listener(open);
             const target = open ? content.getBoundingClientRect().height : 0;
-            if (!animate || !motion.enabled || height === target) { finish(); return; }
+            if (!animate || reducedMotion.matches || height === target) { finish(); return; }
             clip.style.overflow = "hidden";
             clip.inert = true;
             animation = clip.animate([{ height: height + "px" }, { height: target + "px" }],
@@ -121,6 +124,7 @@ export function createReaderSections({ root, presentation, ux, motion, isCurrent
         },
         dispose() {
             active = false;
+            reducedMotion.removeEventListener("change", motionChanged);
             observer.disconnect();
             for (const view of views) view.dispose();
             views.length = 0;

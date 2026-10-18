@@ -19,7 +19,7 @@ import { promptAuthorStyles } from "./prompt-author-styles.mjs";
 import { analyzeLayoutStyles } from "./analyze-layout-styles.mjs";
 
 // These components already own their painted surface independently of their hit target.
-const textAction = ":is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.filter-chip,.report-step,.comparison-pattern-title,.time-column,.chart-row,.chart-data-action)";
+const textAction = ":is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.filter-chip,.report-step,.saved-report-summary,[role=tab],.comparison-pattern-title,.time-column,.chart-row,.chart-data-action)";
 
 export const styles = `
 /* Shared screen presentation; saved output uses its own tokens. */
@@ -38,8 +38,8 @@ select {padding-right:8px;cursor:pointer}
 input::placeholder {color:var(--muted);opacity:1}
 option {background:var(--paper);color:var(--ink)}
 button,.button-link {cursor:pointer;touch-action:manipulation}
-button:disabled {cursor:not-allowed;background:var(--canvas);border-color:var(--rule);color:var(--muted)}
-button:hover:not(:disabled),.button-link:hover {border-color:var(--pill-border);background:var(--pill-hover);color:var(--pill-ink)}
+button:disabled {cursor:not-allowed;background:transparent;border-color:var(--rule);color:var(--muted)}
+button:hover:not(:disabled),.button-link:hover {border-color:var(--pill-hover-border,var(--control));background:var(--pill-hover);color:var(--pill-ink)}
 button:active:not(:disabled),.button-link:active {background:var(--pill-pressed);color:var(--pill-ink)}
 a {color:var(--accent);text-decoration:none}
 a:is(:hover,:active) {color:var(--ink)}
@@ -105,16 +105,12 @@ p {max-width:72ch}
 .collector-panel .detail-disclosure>p {margin-top:12px}
 .collector-panel .mono {overflow-wrap:anywhere}
 .mono {font-family:var(--mono);overflow-wrap:anywhere}
-.quiet {border-color:transparent;background:transparent;color:var(--muted);font-weight:var(--weight-regular)}
-.quiet:hover:not(:disabled),.quiet:active:not(:disabled) {background:var(--hover);color:var(--ink)}
-.primary {--action-radius:var(--radius-primary);font-weight:var(--weight-strong)}
-.primary:not(:disabled),.primary:hover:not(:disabled),.primary:active:not(:disabled) {background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
-.primary:hover:not(:disabled) {background:var(--accent-hover)}
-.primary:active:not(:disabled) {background:var(--accent-pressed)}
-button.danger {white-space:normal;overflow-wrap:anywhere}
-button.danger:not(:disabled) {background:var(--paper);color:var(--danger);border-color:var(--danger)}
-button.danger:hover:not(:disabled) {background:color-mix(in srgb,var(--danger) 6%,var(--paper))}
-button.danger:active:not(:disabled) {background:color-mix(in srgb,var(--danger) 10%,var(--paper));box-shadow:inset 0 0 0 1px var(--danger)}
+.quiet {--pill-fill:transparent;--pill-border:transparent;--pill-hover-border:transparent;--action-shadow:none;border-color:transparent;background:transparent;color:var(--muted);font-weight:var(--weight-regular)}
+.quiet:hover:not(:disabled) {background:var(--pill-hover);color:var(--pill-ink)}
+.quiet:active:not(:disabled) {background:var(--pill-pressed);color:var(--pill-ink)}
+.primary {--action-radius:var(--radius-primary);--pill-fill:var(--accent-fill);--pill-ink:var(--on-accent);--pill-border:transparent;--pill-hover-border:transparent;--pill-hover:var(--primary-hover);--pill-pressed:var(--primary-pressed);--action-shadow:var(--control-shadow);color:var(--pill-ink);font-weight:var(--weight-strong)}
+button.danger {--pill-fill:transparent;--pill-ink:var(--danger);--pill-border:var(--danger);--pill-hover-border:var(--danger);--pill-hover:color-mix(in srgb,var(--danger) 6%,var(--paper));--pill-pressed:color-mix(in srgb,var(--danger) 10%,var(--paper));white-space:normal;overflow-wrap:anywhere}
+button.danger:not(:disabled) {color:var(--danger)}
 .text-link {font-weight:var(--weight-medium);text-decoration:none}
 .button-link {display:inline-flex;align-items:center;justify-content:center;gap:var(--pill-gap);min-height:var(--pill-height);white-space:normal;overflow-wrap:anywhere}
 :is(a.button-link,a.result-link,.primary-navigation a,.app-header nav a):any-link {text-decoration:none}
@@ -331,7 +327,8 @@ dialog::backdrop {background:var(--scrim)}
  .report-document td::before {content:attr(data-label);color:var(--muted)}
 }
 @media(prefers-reduced-motion:no-preference) {
- button,select,input,.button-link,.app-header nav a {transition:border-color .12s ease,box-shadow .12s ease}
+ button,select,input,.button-link,.primary-navigation a,.settings-categories a,.request-card-open,
+ .select-option,button::before,.button-link::before {transition:var(--state-transition)}
 }
 @media(prefers-reduced-motion:reduce) {*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .report-options {display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;margin:24px 0}
@@ -554,21 +551,13 @@ ${textAction},${textAction}:is(:hover,:active,:disabled,[aria-pressed]) {
 }
 ${textAction}::before {
  content:"";position:absolute;inset:4px 0;z-index:-1;pointer-events:none;
- border:1px solid var(--pill-border);border-radius:inherit;background:var(--pill-fill);
+ border:1px solid var(--pill-border);border-radius:inherit;background:var(--pill-fill);box-shadow:var(--action-shadow,var(--control-shadow));
 }
-${textAction}:hover:not(:disabled)::before {background:var(--pill-hover)}
+${textAction}:hover:not(:disabled)::before {background:var(--pill-hover);border-color:var(--pill-hover-border,var(--control))}
 ${textAction}:active:not(:disabled)::before {background:var(--pill-pressed)}
-${textAction}[aria-pressed=true]::before {background:var(--pill-hover);box-shadow:inset 0 0 0 1px var(--pill-border)}
-${textAction}:disabled::before {background:var(--canvas);border-color:var(--rule)}
-${textAction}.quiet:not([aria-pressed])::before {background:transparent;border-color:transparent}
-${textAction}.quiet:not([aria-pressed]):hover:not(:disabled)::before {background:var(--hover)}
-${textAction}.quiet:not([aria-pressed]):active:not(:disabled)::before {background:var(--pill-pressed)}
-${textAction}.primary:not(:disabled)::before {background:var(--accent-soft);border-color:var(--accent)}
-${textAction}.primary:hover:not(:disabled)::before {background:var(--accent-hover)}
-${textAction}.primary:active:not(:disabled)::before {background:var(--accent-pressed)}
-${textAction}.danger:not(:disabled)::before {background:var(--paper);border-color:var(--danger)}
-${textAction}.danger:hover:not(:disabled)::before {background:color-mix(in srgb,var(--danger) 6%,var(--paper))}
-${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb,var(--danger) 10%,var(--paper));box-shadow:inset 0 0 0 1px var(--danger)}
+${textAction}[aria-pressed=true]::before {background:var(--accent-soft);border-color:var(--control)}
+${textAction}:disabled::before {background:transparent;border-color:var(--rule);box-shadow:none}
+${textAction}.quiet:disabled::before {border-color:transparent}
 @media(max-width:500px) {
  .recorded-results {gap:6px 14px}
  .recorded-results .result-unit {flex-basis:100%}
@@ -585,7 +574,8 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
 #activityList>.request-row {display:block;padding:0}
 .request-card-open {display:block;min-height:44px;padding:16px 12px;color:var(--ink);border-inline-start:3px solid transparent;border-radius:inherit}
 .request-card-open:hover {background:var(--hover)}
-.request-row[data-detail-active]>.request-card-open {border-inline-start-color:var(--control);background:var(--canvas)}
+.request-card-open:active {background:var(--pill-pressed)}
+.request-row[data-detail-active]>.request-card-open {border-inline-start-color:var(--accent);background:var(--accent-soft)}
 .request-card-prompt {font:var(--type-body)/var(--leading-reading) var(--font);max-width:68ch}
 .interaction-summary {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm) var(--space-lg);margin-top:var(--space-sm);font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
 .interaction-identity {display:grid;gap:var(--space-xs);flex-basis:100%;min-width:0;color:var(--ink)}
@@ -668,6 +658,16 @@ ${textAction}.danger:active:not(:disabled)::before {background:color-mix(in srgb
  #activityView>.section-heading>.filter-field input {width:100%}
 }
 ${analyzeLayoutStyles}
+.settings-content,.collector-panel,.collection-status-view>.settings-section,
+#activityList>.activity-card,#reportsView :is(.report-journey,#bundles,#comparisonWorkspace) {
+ box-shadow:var(--panel-shadow);
+}
+.select-popup,.ux-tooltip,.wire-search-panel {border-color:var(--surface-edge)}
+dialog:not(#contextSidebar,.navigation-drawer) {box-shadow:var(--surface-shadow)}
+@media(forced-colors:active) {
+ .settings-content,.collector-panel,.collection-status-view>.settings-section,
+ #activityList>.activity-card,#reportsView :is(.report-journey,#bundles,#comparisonWorkspace) {outline:1px solid CanvasText;box-shadow:none}
+}
 /* Screen-only semantic aliases follow shared chart CSS; saved output keeps its own palette. */
 :root[data-evidence-theme],:root:not([data-evidence-theme]) {
  --chart-teal-top:var(--screen-success-high);--chart-teal-mid:var(--chart-success);
@@ -687,7 +687,14 @@ ${analyzeLayoutStyles}
 .select-option:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label,
 .select-trigger:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label {color:var(--chart-failure)}
 @media(forced-colors:active) {
+ button::before,.button-link::before {border-color:ButtonText}
+ button:disabled::before {border-color:GrayText}
+ #bundleList .saved-report-summary,.request-card-open {border-inline-start-width:0;padding-inline-start:15px}
+ #bundleList .saved-library-row[data-detail-active] .saved-report-summary,
+ .request-row[data-detail-active]>.request-card-open {border-inline-start:3px solid Highlight;padding-inline-start:12px}
+ :is(.report-step[aria-current=step],[role=tab][aria-selected=true]) {border-bottom:2px solid Highlight}
  :is(.primary-navigation,.settings-categories) a[aria-current=page] {background:Highlight;color:HighlightText;forced-color-adjust:none}
+ .primary-navigation a>.wire-icon {color:LinkText}
  .primary-navigation a[aria-current=page]>.wire-icon {color:HighlightText}
  .percentage-card[data-breakdown=outcomes] .percentage-legend-row .percentage-label,
  .select-option:has(:is(.result-tone-failure,.result-tone-transport)) .result-option-label,

@@ -93,12 +93,29 @@ test("comparison title follows its reviewed copy through editing, approval, save
     await title.fill("Planning changes");
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
     await page.getByRole("heading", { name: "Planning changes", level: 1, exact: true }).waitFor();
+    assert.equal(await workspace.locator(".comparison-task-heading").isVisible(), false);
+    assert.equal(await page.locator("#pageTitle").evaluate(node => node === document.activeElement), true);
+    assert.equal(await workspace.locator(".report-inspection-tabs").getByRole("button", { name: "Back to comparison choices" }).isVisible(), true);
     const frame = workspace.locator("iframe");
     assert.equal(await frame.getAttribute("title"), "Planning changes");
+    await page.setViewportSize({ width: 375, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    const controls = await workspace.locator(".report-inspection-tabs button").evaluateAll(nodes => nodes.map(node => {
+        const { x, right, height } = node.getBoundingClientRect();
+        return { label: node.textContent, x, right, height, clipped: node.scrollWidth > node.clientWidth + 1 };
+    }));
+    assert.deepEqual(controls.filter(control => control.x < 0 || control.right > 375 || control.height < 44 || control.clipped), []);
+    if (process.env.WIRE_LIBRARY_PROOFS) {
+        await mkdir(process.env.WIRE_LIBRARY_PROOFS, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.WIRE_LIBRARY_PROOFS, "comparison-review-narrow-200.png"), fullPage: true });
+    }
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await page.setViewportSize({ width: 1200, height: 1000 });
     await workspace.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
     await workspace.getByRole("button", { name: "Approve for local saving" }).click();
     await workspace.getByRole("button", { name: "Save comparison", exact: true }).waitFor();
     await workspace.getByRole("button", { name: "Back to comparison choices" }).click();
+    assert.equal(await workspace.locator(".comparison-task-heading").isVisible(), true);
     assert.equal(await title.inputValue(), "Planning changes");
     await title.fill("Planning changes - final");
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();

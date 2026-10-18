@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
@@ -114,21 +114,31 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     await openReportLibrary(page);
     const summaries = await page.locator("#bundleList .saved-report-summary").allTextContents();
     assert.equal(summaries.length, 6);
-    assert.match(summaries[0], /Masked prompts.*HTML/i, "Collapsed saved reports need safe identifying metadata");
+    assert.ok(summaries[0].startsWith(newest.title));
+    assert.match(summaries[0], /HTML/, "The concise row retains its actual title and recorded format");
+    assert.doesNotMatch(summaries[0], /Masked prompts/);
     await page.locator("#bundleList .saved-report-summary").first().click();
     assert.equal(await page.locator("#bundleList .saved-library-row").first().getAttribute("data-bundle-id"), newest.bundleId, "Newest report is the first row");
     assert.equal(await page.locator("#contextSidebarTitle").textContent(), newest.title);
     assert.deepEqual(state.exports.slice(0, 6), before.exports, "Presentation sorting cannot reorder or rewrite the persisted index");
     assert.deepEqual(await hashes(state.exports.slice(0, 6)), bytes, "Old artifact bytes remain frozen");
     const first = page.locator("#bundleList .saved-library-row").first();
-    assert.match(await first.locator(".saved-report-summary").textContent(), /1 interaction/, "Membership is available without opening a second explanation");
+    assert.match(await page.locator(".saved-inspector-facts").textContent(), /Interactions:1/, "Exact membership remains in the existing details");
     await page.locator("#closeContextSidebar").focus();
     await page.keyboard.press("Enter");
     await page.locator("#contextSidebar").waitFor({ state: "hidden" });
     assert.equal(await first.locator(".saved-report-summary").evaluate(node => node === document.activeElement), true);
+    await page.evaluate(() => {
+        window.savedReopenFocus = [];
+        document.querySelector("#contextSidebar").addEventListener("focusin", event => window.savedReopenFocus.push(event.target.id));
+    });
+
     await page.keyboard.press("Space");
     await page.locator("#contextSidebar[open]").waitFor();
-    assert.equal(await page.locator("#contextSidebarTitle").evaluate(node => node === document.activeElement), true);
+    assert.equal(await page.locator("#savedInspectorTitle").evaluate(node => node === document.activeElement), true);
+    assert.deepEqual(await page.evaluate(() => window.savedReopenFocus), ["savedInspectorTitle"],
+        "Native dialog entry must not visit Close and leave its unrelated help over the heading");
+    assert.equal(await page.locator(".ux-tooltip:not([hidden])").count(), 0);
     await page.keyboard.press("Escape");
     await page.locator("#contextSidebar").waitFor({ state: "hidden" });
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
@@ -172,6 +182,140 @@ test("UX-002 seventh actual saved report is descriptive and on first history pag
     assert.equal(await page.locator("#savedReportSearch").inputValue(), "masked", "Explicit saves keep the history query");
     assert.match(await page.locator("#bundleList").textContent(), /1-6 of 8 saved reports/);
     assert.equal(await page.locator("#bundleList .saved-library-row").first().getAttribute("data-view-key"), "bundle:" + next.bundleId, "Explicit save returns only the active history page to the top");
+});
+
+test("saved title owns native entry while current tooltip and select keep first Escape priority", { timeout: 30000 }, async t => {
+    const { page, context } = await setup(t, 2);
+    const before = await loadBoardState(context), bytes = await hashes(before.exports), evidence = [];
+    await page.evaluate(() => {
+        window.savedEntryFocus = [];
+        document.querySelector("#contextSidebar").addEventListener("focusin", event => window.savedEntryFocus.push(event.target.id));
+    });
+    for (const [width, textSize] of [[1440, "100%"], [600, "100%"], [1440, "200%"]]) {
+        await page.setViewportSize({ width, height: 960 });
+        await page.evaluate(value => document.documentElement.style.fontSize = value, textSize);
+        const first = page.locator("#bundleList .saved-report-summary").first();
+        async function open() {
+            await first.focus();
+            await page.evaluate(() => { window.savedEntryFocus = []; });
+            await page.keyboard.press("Space");
+            await page.locator("#contextSidebar[open]").waitFor();
+            assert.deepEqual(await page.evaluate(() => window.savedEntryFocus), ["savedInspectorTitle"]);
+            assert.equal(await page.locator(".ux-tooltip:not([hidden])").count(), 0, "Native opening never exposes accidental Close help");
+        }
+        await open();
+        const panel = page.locator("#contextSidebar"), close = page.locator("#closeContextSidebar");
+        const modal = await panel.evaluate(node => node.matches(":modal"));
+        assert.equal(modal, width === 600 || textSize === "200%");
+        await close.focus();
+        await page.getByRole("tooltip", { name: "Close saved report details", exact: true }).waitFor();
+        await page.keyboard.press("Escape");
+        assert.equal(await panel.evaluate(node => node.open), true, "First Escape dismisses genuine focused Close help only");
+        assert.equal(await close.evaluate(node => node === document.activeElement), true);
+        assert.equal(await page.locator(".ux-tooltip:not([hidden])").count(), 0);
+        await page.keyboard.press("Enter");
+        await panel.waitFor({ state: "hidden" });
+        assert.equal(await first.evaluate(node => node === document.activeElement), true);
+
+        await open();
+        await close.hover();
+        await page.getByRole("tooltip", { name: "Close saved report details", exact: true }).waitFor();
+        await page.keyboard.press("Escape");
+        assert.equal(await panel.evaluate(node => node.open), true, "Genuine pointer help retains its first-Escape dismissal");
+        await page.keyboard.press("Escape");
+        await panel.waitFor({ state: "hidden" });
+        assert.equal(await first.evaluate(node => node === document.activeElement), true);
+
+        await open();
+        await panel.evaluate(node => {
+            const label = document.createElement("label"), select = document.createElement("select");
+            label.textContent = "Invented saved scope";
+            select.id = "savedEscapeScope";
+            select.append(new Option("First scope", "first"), new Option("Second scope", "second"));
+            label.append(select);
+            node.querySelector(".saved-report-inspection").append(label);
+        });
+        const select = page.getByRole("combobox", { name: "Invented saved scope", exact: true });
+        await select.click();
+        await page.getByRole("option", { name: "Second scope", exact: true }).waitFor();
+        await page.keyboard.press("Escape");
+        assert.equal(await panel.evaluate(node => node.open), true, "A live nested popup, not the outer dialog, owns first Escape");
+        assert.equal(await select.evaluate(node => node.getAttribute("aria-expanded")), "false");
+        assert.equal(await select.evaluate(node => node === document.activeElement), true);
+        await page.locator("#savedInspectorTitle").focus();
+        await page.keyboard.press("Escape");
+        await panel.waitFor({ state: "hidden" });
+        assert.equal(await first.evaluate(node => node === document.activeElement), true);
+        evidence.push({ width, textSize, modal, nativeFocus: await page.evaluate(() => window.savedEntryFocus) });
+    }
+    assert.deepEqual((await loadBoardState(context)).exports, before.exports);
+    assert.deepEqual(await hashes(before.exports), bytes);
+    if (process.env.WIRE_REPORT_UX_PROOFS) {
+        await mkdir(process.env.WIRE_REPORT_UX_PROOFS, { recursive: true });
+        await writeFile(path.join(process.env.WIRE_REPORT_UX_PROOFS, "saved-native-escape.json"), JSON.stringify(evidence, null, 2));
+    }
+});
+
+test("saved native autofocus does not steal newer focus after replacement, refresh or departure", { timeout: 30000 }, async t => {
+    const { page, context } = await setup(t, 2);
+    const before = await loadBoardState(context), bytes = await hashes(before.exports);
+    const rows = page.locator("#bundleList .saved-report-summary"), panel = page.locator("#contextSidebar");
+    await rows.first().click();
+    const replacement = await page.evaluate(async () => {
+        document.querySelectorAll("#bundleList .saved-report-summary")[1].click();
+        const heading = document.querySelector("#savedInspectorTitle");
+        const initial = document.activeElement.id;
+        document.querySelector("#closeContextSidebar").focus();
+        const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+        for (let i = 0; i < 120; i++) {
+            await frame();
+            if (i > 2 && !document.querySelector("#contextSidebar").getAnimations().length) break;
+        }
+        return { initial, focus: document.activeElement.id, headingCurrent: heading.isConnected,
+            autofocus: heading.autofocus, headings: document.querySelectorAll("#savedInspectorTitle").length };
+    });
+    assert.deepEqual(replacement, { initial: "savedInspectorTitle", focus: "closeContextSidebar", headingCurrent: true, autofocus: true, headings: 1 });
+
+    await page.route("**/api/snapshot", async route => {
+        const response = await route.fetch(), data = await response.json();
+        for (const saved of data.exports || []) saved.preparedAtDisplay = "Synthetic refreshed display date";
+        await route.fulfill({ response, json: data });
+    });
+    const refreshed = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
+    await page.evaluate(() => dispatchEvent(new Event("online")));
+    await refreshed;
+    await page.locator(".saved-inspector-facts").getByText("Synthetic refreshed display date", { exact: true }).waitFor();
+    const refreshFocus = await page.locator("#closeContextSidebar").evaluate(async node => {
+        node.focus();
+        const visits = [], listener = event => visits.push(event.target.id);
+        document.addEventListener("focusin", listener);
+        for (let i = 0; i < 3; i++) await new Promise(resolve => requestAnimationFrame(resolve));
+        document.removeEventListener("focusin", listener);
+        return { focus: document.activeElement.id, visits };
+    });
+    assert.deepEqual(refreshFocus, { focus: "closeContextSidebar", visits: [] }, "Inserted autofocus is not a later focus command in an already-open inspector");
+    await page.unroute("**/api/snapshot");
+
+    await panel.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.locator("#savedReportReader").waitFor();
+    await panel.waitFor({ state: "hidden" });
+    await page.locator("#savedReportReader").getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.locator("#savedInspectorTitle").waitFor();
+    const restoredAction = panel.getByRole("button", { name: "Open saved report", exact: true });
+    assert.equal(await restoredAction.evaluate(node => node === document.activeElement), true, "Reader return keeps the existing action-focus contract");
+    await page.keyboard.press("Escape");
+    await panel.waitFor({ state: "hidden" });
+    await chooseReportScope(page, "all");
+    await reportContents(page);
+    const nextOwner = await panel.evaluate(async node => {
+        const title = document.getElementById("reportTitle");
+        title.focus();
+        for (let i = 0; i < 120 && node.getAnimations().length; i++) await new Promise(resolve => requestAnimationFrame(resolve));
+        return { focused: document.activeElement.id, oldHeadingConnected: Boolean(document.getElementById("savedInspectorTitle")), setup: Boolean(node.querySelector("#reportStage2")) };
+    });
+    assert.deepEqual(nextOwner, { focused: "reportTitle", oldHeadingConnected: false, setup: true });
+    assert.deepEqual((await loadBoardState(context)).exports, before.exports);
+    assert.deepEqual(await hashes(before.exports), bytes);
 });
 
 test("UX-003 deleting the displayed saved report removes its ready result", { timeout: 60000 }, async t => {
@@ -242,7 +386,9 @@ test("UX-002 deterministic ties, truthful legacy/unknown metadata and long froze
     const labels = await page.locator("#bundleList .saved-report-summary").allTextContents();
     assert.ok(labels[4].startsWith(registered.exports[0].title), "A retained title survives missing optional metadata");
     assert.match(labels[4], /Preparation time unavailable/);
-    assert.doesNotMatch(labels[4], /Masked|Original|HTML|request group/);
+    assert.doesNotMatch(labels[4], /Masked|Original|request group/);
+    assert.deepEqual(await page.locator("#bundleList .saved-report-summary").nth(4).locator(".report-format").allTextContents(),
+        ["HTML", "JSON"], "Recorded file labels come from exact registered names even when the optional format list is absent");
     assert.match(labels[5], /Preparation time unavailable/);
     assert.match(labels[3], /jeudi 1 octobre/);
     assert.ok(labels[0].includes(registered.exports[5].bundleId), "Identical metadata gets full-ID disambiguation");
@@ -367,7 +513,7 @@ test("UX-002 report/comparison labels preserve named actions, chooser eligibilit
     await history(page);
     const comparisonRow = page.locator("#bundleList .saved-library-row").first();
     assert.ok((await comparisonRow.locator(".saved-report-summary").textContent()).startsWith(comparison.title));
-    assert.match(await comparisonRow.locator(".saved-report-summary").textContent(), /HTML, JSON/);
+    assert.deepEqual(await comparisonRow.locator(".report-format").allTextContents(), ["HTML", "JSON"]);
     await comparisonRow.locator(".saved-report-summary").click();
     await comparisonRow.getByRole("button", { name: "Open saved comparison", exact: true }).click();
     await page.locator("#savedReportReader").waitFor({ state: "visible" });

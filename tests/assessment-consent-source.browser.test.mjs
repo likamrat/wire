@@ -73,7 +73,7 @@ for (const changed of [
     test(`enabled grant for an old ${changed.name} is inactive until explicit renewal for the current source`, { timeout: 30000 }, async t => {
         const { page, calls } = await setup(t, changed.source), pane = page.locator("#setup");
         assert.match(await pane.locator(".assessment-applied").textContent(), /inactive.*source changed/i);
-        const check = pane.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+        const check = pane.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
         assert.equal(await check.isChecked(), false);
         assert.equal(await pane.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
         assert.equal(calls.filter(call => call.path.endsWith("/set")).length, 0);
@@ -114,7 +114,7 @@ for (const changed of [
 
 test("same-source enabled state stays unchanged and disabled until edited", { timeout: 30000 }, async t => {
     const { page, calls } = await setup(t, { available: true, sourceConfigRef: samples.id("config"), sourceConfigRevision: 1 });
-    const pane = page.locator("#setup"), check = pane.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    const pane = page.locator("#setup"), check = pane.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     assert.equal(await pane.getByRole("button", { name: "Remove previously saved responses", exact: true }).isVisible(), false);
     assert.equal(await pane.getByText(/Enabling capture for this source removes/).isVisible(), false);
     assert.equal(await check.isChecked(), true);
@@ -174,7 +174,7 @@ test("response saving keeps pending and uncertain writes explicit without offeri
         await held;
         throw new Error("Synthetic unconfirmed response-saving update.");
     });
-    const pane = page.locator("#setup"), input = pane.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    const pane = page.locator("#setup"), input = pane.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     await input.uncheck();
     await pane.getByRole("button", { name: "Turn off and delete responses", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("#setup form").getAttribute("aria-busy") === "true");

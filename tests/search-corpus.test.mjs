@@ -209,6 +209,8 @@ test("real retained readers yield all corpus types, canonical targets and immuta
     }
     records[1].followUpPrompts.push({ status: "partial", text: "INVENTED_FOLLOWUP_CONTEXT",
         sourceEventId: "extra-followup", sourceTimestamp: "2026-09-30T12:00:09Z" });
+    records[1].followUpPrompts.push({ status: "partial", text: "Historical note: Sidebar motion was discussed.",
+        sourceEventId: "historical-motion-note", sourceTimestamp: "2026-09-30T12:00:10Z" });
     records[1].followUpPrompts.push({ status: "unavailable", text: "HIDDEN_NOT_RETAINED" });
     const { context } = await privateFixture(t, records);
     await seedRetainedReply(context);
@@ -231,6 +233,8 @@ test("real retained readers yield all corpus types, canonical targets and immuta
     assert.equal(origin.contentHash, corpusHash(origin.content));
     assert.ok(origin.coverage.linkedInteractions.length <= 3);
     assert.ok(items.some(item => item.type === "context" && item.content === "INVENTED_FOLLOWUP_CONTEXT"));
+    assert.ok(items.some(item => item.type === "context" && item.content === "Historical note: Sidebar motion was discussed."),
+        "Retiring a setting does not erase historical saved text");
     const reply = items.find(item => item.type === "reply");
     assert.match(reply.content, /INVENTED_RETAINED_REPLY/); assert.equal(reply.coverage.finality, "unverified");
     assert.ok(items.some(item => item.type === "action" && item.content.includes("workiq-sign-in-required")));
@@ -247,7 +251,8 @@ test("real retained readers yield all corpus types, canonical targets and immuta
     assert.match(frozenComparison.target.documentHash, /^[a-f0-9]{64}$/);
     assert.equal(JSON.stringify(items).match(/HIDDEN_NOT_RETAINED|payloadFile|receiptToken|sourceConfigRef|bundleDir|C:\\\\/g)?.join(",") ?? null, null);
     const settings = createSettingsNavigation(), settingsItems = items.filter(item => item.type === "setting");
-    assert.equal(settingsItems.length, 20);
+    assert.equal(settingsItems.length, 19);
+    assert.ok(settingsItems.every(item => !item.target.href.includes("sidebar-motion")));
     for (const item of settingsItems) {
         const [view, query] = item.target.href.slice(1).split("?"), parameters = Object.fromEntries(new URLSearchParams(query));
         const resolved = settings.resolve(parameters);

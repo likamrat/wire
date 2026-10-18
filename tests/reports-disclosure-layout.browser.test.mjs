@@ -89,25 +89,19 @@ async function togglePlacement(page, selector, name) {
     return { name, closed, opened, reclosed };
 }
 
-test("About saved reports stays anchored when opened and closed at the same viewport", { timeout: 30000 }, async t => {
+test("saved reports start with the list instead of explanatory headings and disclosures", { timeout: 30000 }, async t => {
     const { page } = await setup(t, 1);
-    const summary = page.getByText("About saved reports", { exact: true });
-    await summary.focus();
-    const closed = await placement(summary);
-    await shot(page, "baseline-closed");
-    await summary.press("Enter");
-    const opened = await placement(summary);
-    await shot(page, "baseline-open");
-    await summary.press("Space");
-    const reclosed = await placement(summary);
-    console.log(JSON.stringify({ viewport: page.viewportSize(), closed, opened, reclosed }));
-    assert.ok(Math.abs(opened.x - closed.x) <= 1, `Opening help moved its trigger horizontally: ${JSON.stringify({ closed, opened })}`);
-    assert.ok(Math.abs(opened.y - closed.y) <= 1, `Opening help moved its trigger vertically: ${JSON.stringify({ closed, opened })}`);
-    assert.ok(Math.abs(reclosed.x - closed.x) <= 1 && Math.abs(reclosed.y - closed.y) <= 1, "Closing restores the same anchor");
-    assert.ok(closed.focused && opened.focused && reclosed.focused, "Keyboard focus remains on the disclosure");
+    assert.equal(await page.locator("#savedLibraryHelp,.saved-library-columns,.saved-report-metadata,.saved-report-date").count(), 0);
+    assert.equal(await page.locator(".saved-report-name").count(), 1);
+    assert.deepEqual(await page.locator(".saved-report-formats").allTextContents(), ["HTML"]);
+    assert.equal(await page.getByRole("button", { name: "Open saved report", exact: true }).isVisible(), true);
+    const description = await page.locator("#savedReportSearch").getAttribute("aria-describedby");
+    assert.match(await page.locator("#" + description).textContent(), /not report contents/);
+    assert.equal(await page.locator("#" + description).getAttribute("class"), "visually-hidden");
+    await shot(page, "direct-library");
 });
 
-test("library help and management follow search and reading in empty, nonempty and no-match states", { timeout: 60000 }, async t => {
+test("library controls lead into reading while management stays secondary in empty, nonempty and no-match states", { timeout: 60000 }, async t => {
     const { page, context, entries, requests } = await setup(t, 2);
     const before = await loadBoardState(context);
     const frozenBefore = await Promise.all(entries.flatMap(entry => Object.values(entry.files)).map(file => readFile(file)));
@@ -130,43 +124,32 @@ test("library help and management follow search and reading in empty, nonempty a
             const name = `${state}-${theme}-${width}-${scale}`;
             if (state === "empty") {
                 assert.equal(await page.locator("#savedReportSearch").isVisible(), false);
-                assert.equal(await page.locator("#savedLibraryHelp").isVisible(), false);
+                assert.equal(await page.locator("#savedLibraryHelp").count(), 0);
                 assert.equal(await page.locator("#savedLibraryManagement").isVisible(), false);
                 assert.equal(await page.locator("#deleteAllReports").isDisabled(), true);
                 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
                 await shot(page, name);
                 continue;
             }
-            measurements.push(await togglePlacement(page, "#savedLibraryHelp", name));
-            const summary = page.locator("#savedLibraryHelp > summary");
-            await summary.press("Enter");
             const geometry = await page.locator("#savedReportsPanel").evaluate(panel => {
                 const box = selector => panel.querySelector(selector).getBoundingClientRect().toJSON();
-                const help = panel.querySelector("#savedLibraryHelpBody");
-                const measure = document.createElement("span");
-                measure.style.cssText = "display:block;width:65ch;height:0";
-                help.append(measure);
-                const readingWidth = measure.getBoundingClientRect().width;
-                measure.remove();
                 return {
-                    search: box("#savedReportSearch"), help: box("#savedLibraryHelp"), body: box("#savedLibraryHelpBody"),
+                    search: box("#savedReportSearch"),
                     list: box("#bundleList"), management: box("#savedLibraryManagement"),
-                    readingWidth, fontSize: parseFloat(getComputedStyle(help).fontSize),
+                    fontSize: parseFloat(getComputedStyle(panel.querySelector("#savedReportSearch")).fontSize),
                     overflow: document.documentElement.scrollWidth > innerWidth + 1,
-                    clipped: [...panel.querySelectorAll("summary,button,input,p")].filter(node => node.checkVisibility()
+                    clipped: [...panel.querySelectorAll("summary,button,input,p")].filter(node => !node.closest(".visually-hidden") && node.checkVisibility()
                         && ((node.tagName !== "INPUT" && node.scrollWidth > node.clientWidth + 1) || node.getBoundingClientRect().right > innerWidth + 1))
                         .map(node => node.textContent || node.id),
                 };
             });
             assert.equal(geometry.overflow, false, name);
             assert.deepEqual(geometry.clipped, [], name);
-            assert.ok(Math.abs(geometry.help.x - geometry.search.x) <= 1, `${name}: help starts with its search section`);
-            assert.ok(geometry.help.y >= geometry.search.bottom, `${name}: the primary search comes before its help`);
-            assert.ok(geometry.body.width <= geometry.readingWidth + 1, `${name}: help has a readable line length`);
+            assert.ok(geometry.list.y >= geometry.search.bottom, `${name}: search leads into its results`);
             assert.ok(geometry.management.y >= geometry.list.bottom, `${name}: destructive management follows reading`);
             assert.equal(await page.locator("#deleteAllReports").isVisible(), false, `${name}: bulk deletion does not compete with opening a report`);
             if (scale === 200) assert.ok(geometry.fontSize >= 24, `${name}: text is enlarged, not shrunk to fit`);
-            await summary.press("Space");
+            measurements.push({ name, ...geometry });
             measurements.push(await togglePlacement(page, "#savedLibraryManagement", `${name}-management`));
             await page.locator("#savedLibraryManagement > summary").focus();
             await page.keyboard.press("Enter");
@@ -185,7 +168,7 @@ test("library help and management follow search and reading in empty, nonempty a
     if (process.env.WIRE_REPORTS_LAYOUT_PROOFS) await writeFile(path.join(process.env.WIRE_REPORTS_LAYOUT_PROOFS, "measurements.json"), JSON.stringify(measurements, null, 2));
 });
 
-test("help wraps long content without moving its summary and library reads retain pending, error and Escape recovery", { timeout: 60000 }, async t => {
+test("the concise library retains pending, error and Escape recovery without an explanatory disclosure", { timeout: 60000 }, async t => {
     const { page, context, entries, requests } = await setup(t, 2);
     const before = await loadBoardState(context);
     const frozenBefore = await Promise.all(entries.flatMap(entry => Object.values(entry.files)).map(file => readFile(file)));
@@ -193,14 +176,7 @@ test("help wraps long content without moving its summary and library reads retai
         await page.setViewportSize({ width, height: 1100 });
         await chooseTheme(page, theme);
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
-        await page.locator("#savedLibraryHelpBody").evaluate(body => {
-            if (body.querySelector("[data-invented-long-help]")) return;
-            const paragraph = document.createElement("p");
-            paragraph.dataset.inventedLongHelp = "";
-            paragraph.textContent = "An invented long explanation exercises ordinary wrapping without hiding meaning. ".repeat(6);
-            body.append(paragraph);
-        });
-        await togglePlacement(page, "#savedLibraryHelp", `long-help-${theme}-${width}-${scale}`);
+        assert.equal(await page.locator("#savedLibraryHelp").count(), 0);
         await page.locator("#savedLibraryManagement > summary").click();
         await page.locator("#deleteAllReports").click();
         const dialog = page.locator(".deletion-dialog:modal");
@@ -227,7 +203,7 @@ test("help wraps long content without moving its summary and library reads retai
         await page.locator('#workspace[aria-busy="true"]').waitFor();
         assert.equal(await page.locator("#deleteAllReports").isDisabled(), true);
         assert.equal(await page.locator("#savedLibraryTitle").innerText(), "Saved reports (2)");
-        await togglePlacement(page, "#savedLibraryHelp", `pending-${theme}-${width}-${scale}`);
+        assert.equal(await page.locator("#savedLibraryHelp").count(), 0);
         await togglePlacement(page, "#savedLibraryManagement", `pending-management-${theme}-${width}-${scale}`);
         release();
         await page.locator('#workspace[aria-busy="false"]').waitFor();
@@ -238,7 +214,7 @@ test("help wraps long content without moving its summary and library reads retai
         await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false"
             && document.querySelector("#deleteAllReports").disabled);
         assert.equal(await page.locator("#savedLibraryTitle").innerText(), "Saved reports (2)");
-        await togglePlacement(page, "#savedLibraryHelp", `error-${theme}-${width}-${scale}`);
+        assert.equal(await page.locator("#savedLibraryHelp").count(), 0);
         await togglePlacement(page, "#savedLibraryManagement", `error-management-${theme}-${width}-${scale}`);
         await page.reload();
         await page.locator('#workspace[aria-busy="false"]').waitFor();

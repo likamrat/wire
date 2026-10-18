@@ -33,6 +33,15 @@ retitled: their indexed title is used when present, otherwise the interface comb
 known type/scope and preparation metadata without presenting that fallback as an
 original title.
 
+The screen library shows the report name, recorded file formats and one direct
+Open/unavailable action. Format names appear as compact passive labels from the
+exact registered filenames; they are not download controls or claims that a file
+has been verified. They remain readable when rows stack at narrow widths. The
+inspector repeats that selected item's recorded files beside its facts; Open
+keeps the existing verification boundary, then the reader's file chooser and
+Download action address the actual saved copy. Unlisted or missing files never
+gain a fabricated format label or a successful-looking fallback.
+
 Verified reads expose optional `canonicalTitle` only when the verified manifest
 declares it and its indexed binding agrees. This applies to ordinary/comparison
 file reads, ordinary document reads and `readSavedComparison()`'s facts result.
@@ -278,7 +287,12 @@ classification actions remain outside report creation. Reports has no analytical
 
 Prepare report runs the existing local preview controller. Its loading/error state
 and the actual prepared document occupy the main workspace, with the sidebar closed
-for reading room. Review presents flat Report/Text/Files views. Text copies
+for reading room. Review presents flat Report/Text/Files views. Their tabs
+use the same unboxed action vocabulary; the current reading tab has a persistent
+underline separate from hover and keyboard focus. Primary continuation, approval
+and Save share compact ink emphasis; Back to Reports, Back to activity and the
+reader's labelled Back action retain their distinct destinations.
+Text copies
 and privacy findings stay available without nested comparison disclosures.
 Selection and disclosure review are reading tasks, not clipboard utilities.
 Their exact text remains selectable, without automatic Copy toolbars on prompts,
@@ -963,15 +977,23 @@ legacy `#report` link) opens creation; reloading still starts a new empty draft,
 not an inferred selection. Existing source, permission and evidence checks remain.
 
 Saved history already paginates; it is not an endless list. **Saved reports** shows
-six items per page, the current range and total, Previous/Next, and a **Page / Go**
-control to jump directly to a distant page. When comparisons are present, the
+six items per page. Multi-page results show their range, Previous/Next and a
+**Page / Go** control; one-page results do not repeat the heading or match count.
+When comparisons are present, the
 library names them explicitly and counts reports and comparisons separately.
 Search covers safe metadata across every page, not just the visible six items:
-IDs, preparation dates, formats, prompt modes and time zones. It does not read
+titles, IDs, preparation dates, formats, prompt modes and time zones. It does not read
 stored report bodies or prompts.
 
-Rows prioritize actual title, known scope and interaction count, preparation time and Open.
-Prompt mode and format availability remain compact secondary metadata.
+The library leads directly from its heading and search/order controls to rows,
+without an introductory disclosure or column-header strip. Selecting
+a row opens details. Format labels describe registered files, not verified
+availability; Open and Download check the saved copy, independently of current
+activity filters or unfinished report choices.
+
+Rows contain the report name, recorded file formats and Open or an explicit
+unavailable state. Dates, scope, interaction counts and prompt mode belong in
+details or the report, not additional list columns.
 Selecting a row opens its safe indexed metadata in the shared right sidebar:
 known scope/count, preparation time, prompt mode and timezone. The inspector
 offers Open and the existing named Delete action, not another file-management
@@ -1011,8 +1033,9 @@ still returns to the library, without discarding another in-memory draft.
 This applies to ordinary reports and saved comparisons: no saved HTML is
 regenerated or restyled, including historical typography and missing facts.
 Unavailable files and unknown metadata remain explicit; supported unanchored
-legacy originals require the separate action described above. **About saved reports** holds the search/privacy
-boundary. The single **Refresh** retains its existing source and draft/review
+legacy originals require the separate action described above. The search field's
+accessible description retains its metadata-only scope without a visible help
+disclosure. The single **Refresh** retains its existing source and draft/review
 guards; read-only **Retry** appears only when recovery is needed.
 
 `POST /api/artifact-file` accepts only `{bundleId, kind, format}`, with `kind`

@@ -1,3 +1,5 @@
+import { searchFieldMarkup } from "./search-field.mjs";
+
 export const recollectionMarkup = `
 <dialog id="recollectDialog" class="deletion-dialog" aria-labelledby="recollectTitle" aria-describedby="recollectBoundary">
   <div class="dialog-head"><h2 id="recollectTitle">Recollect from approved sources</h2><button id="recollectClose" type="button">Cancel</button></div>
@@ -7,7 +9,7 @@ export const recollectionMarkup = `
     <p id="recollectWindow"></p>
     <fieldset><legend>Choose local Copilot chats</legend>
       <label for="recollectSearch" class="visually-hidden">Find a chat to recollect</label>
-      <div class="search-input-row"><input id="recollectSearch" type="search" placeholder="Find a chat" autocomplete="off" spellcheck="false"><button id="recollectClearSearch" type="button" class="quiet" hidden>Clear search</button></div>
+      ${searchFieldMarkup({ id: "recollectSearch", clearId: "recollectClearSearch", placeholder: "Find a chat" })}
       <div class="recollect-selection"><p id="recollectSelected" role="status" aria-live="polite"></p><button id="recollectShowSelected" type="button" class="quiet" disabled>Show selected</button></div>
       <div id="recollectSources" tabindex="-1" aria-describedby="recollectSourceHelp"></div>
     </fieldset>
@@ -43,7 +45,7 @@ export const recollectionStyles = `
 #recollectDialog .list-pager {flex-wrap:wrap}
 #recollectSources .delete-choice {padding:8px 0;align-items:flex-start}
 #recollectSources .delete-choice input {margin-top:2px}
-#recollectDialog input:is([type=date],[type=search]) {min-width:0;border-radius:10px}
+#recollectDialog input[type=date] {min-width:0;border-radius:10px}
 #recollectDialog .recollect-dates {display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
 #recollectDialog .recollect-dates label {display:grid;gap:6px;flex:1 1 12rem;min-width:0}
 #recollectDialog input[type=checkbox] {appearance:auto;width:20px;height:20px;flex:none;accent-color:var(--accent)}
@@ -61,7 +63,7 @@ export const recollectionStyles = `
 `;
 
 // Serialized into the page; dependencies stay inside the mount function.
-export function mountRecollection({ api, time, timeContext, search, pageSources, ux, onCommitted }) {
+export function mountRecollection({ api, time, timeContext, search, pageSources, ux, searchFields, onCommitted }) {
     const $ = id => document.getElementById(id), dialog = $("recollectDialog");
     const storageKey = "workiq-evidence.recollection-operation";
     let phase = "editing", token = 0, preview, receipt, trigger, busy = false, sourcesReady = false;
@@ -85,7 +87,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         const query = $("recollectSearch").value;
         const matches = sources.filter(source => (!selectedOnly || selectedSources.has(source.sourceSessionId))
             && search.matches(query, [source.name]));
-        $("recollectClearSearch").hidden = !query;
+        searchField.sync();
         pageSources($("recollectSources"), matches, source => {
             const label = document.createElement("label"), input = document.createElement("input"), name = document.createElement("span");
             label.className = "delete-choice";
@@ -147,7 +149,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     async function readSources() {
         const version = ++token;
         $("recollectSources").replaceChildren();
-        sources = []; selectedSources.clear(); selectedOnly = false; $("recollectSearch").value = ""; selectionCount();
+        sources = []; selectedSources.clear(); selectedOnly = false; searchField.sync(""); selectionCount();
         busy = true; sourcesReady = false; update();
         status("Reading eligible chats from your approved local source. No evidence is being changed.");
         try {
@@ -261,9 +263,8 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         if (input.checked) selectedSources.add(input.value); else selectedSources.delete(input.value);
         edit(); selectionCount(); status("");
     });
-    $("recollectSearch").addEventListener("input", () => renderSources());
-    $("recollectClearSearch").addEventListener("click", () => { $("recollectSearch").value = ""; renderSources(); $("recollectSearch").focus(); });
-    $("recollectShowSelected").addEventListener("click", () => { selectedOnly = !selectedOnly; $("recollectSearch").value = ""; renderSources(); });
+    const searchField = searchFields.mount($("recollectSearch"), { clearLabel: "Clear search", onInput: () => renderSources() });
+    $("recollectShowSelected").addEventListener("click", () => { selectedOnly = !selectedOnly; searchField.sync(""); renderSources(); });
     for (const id of ["recollectFrom", "recollectTo", "recollectPrompts"]) $(id).addEventListener("input", () => { edit(); status(""); });
     $("recollectClose").addEventListener("click", () => dialog.close());
     dialog.addEventListener("cancel", event => { if (phase === "pending") event.preventDefault(); });

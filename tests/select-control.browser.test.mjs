@@ -523,7 +523,7 @@ test("dialog, scroll, disabled, empty, loading, stale and dynamically replaced o
     await trigger.click();
     await page.locator("#testScope").evaluate((node) => node.replaceChildren(new Option("Replacement scope", "fresh")));
     await page.waitForFunction(() => document.querySelector("#testScope-control").getAttribute("aria-expanded") === "false");
-    assert.equal(await trigger.textContent(), "Replacement scope");
+    assert.equal(await trigger.locator(".select-value").textContent(), "Replacement scope");
     assert.equal(await page.evaluate(() => window.controlChanges.length), 0, "Replacing options cannot commit a stale row");
     for (const state of ["loading", "stale"]) {
         await page.locator("#testScope").evaluate((node, state) => node.dataset.selectState = state, state);
@@ -541,4 +541,57 @@ test("dialog, scroll, disabled, empty, loading, stale and dynamically replaced o
     assert.equal(await trigger.isVisible(), false);
     await page.locator("#overlay").evaluate((node) => node.close());
     assert.equal(await page.evaluate(() => window.controlChanges.length), 0);
+}));
+
+test("native close events dispose only a current selection inside that still-closed dialog", async () => setup(async ({ context, origin }) => {
+    const page = await context.newPage();
+    await page.goto(origin); await ready(page);
+    await page.evaluate(() => {
+        const owner = document.createElement("dialog"), unrelated = document.createElement("dialog");
+        owner.id = "selectOwner";
+        unrelated.id = "unrelatedOwner";
+        owner.innerHTML = '<label>Owned scope<select id="ownedScope"><option value="a">First scope</option><option value="b">Second scope</option></select></label>';
+        document.body.append(owner, unrelated);
+        owner.showModal();
+    });
+    const trigger = page.getByRole("combobox", { name: "Owned scope", exact: true });
+    await trigger.click();
+    const closed = await page.evaluate(() => new Promise(resolve => {
+        const owner = document.querySelector("#selectOwner");
+        owner.addEventListener("close", event => resolve({ trusted: event.isTrusted, open: owner.open,
+            popupHidden: document.querySelector(".select-popup").hidden,
+            expanded: document.querySelector("#ownedScope-control").getAttribute("aria-expanded") }), { once: true });
+        owner.close();
+    }));
+    assert.deepEqual(closed, { trusted: true, open: false, popupHidden: true, expanded: "false" });
+
+    const reopened = await page.evaluate(() => new Promise(resolve => {
+        const owner = document.querySelector("#selectOwner");
+        owner.showModal();
+        owner.addEventListener("close", event => resolve({ trusted: event.isTrusted, open: owner.open,
+            popupHidden: document.querySelector(".select-popup").hidden,
+            expanded: document.querySelector("#ownedScope-control").getAttribute("aria-expanded"),
+            focused: document.activeElement.id }), { once: true });
+        owner.close();
+        owner.showModal();
+        document.querySelector("#ownedScope-control").click();
+    }));
+    assert.deepEqual(reopened, { trusted: true, open: true, popupHidden: false, expanded: "true", focused: "ownedScope-control" },
+        "A queued close cannot dispose a new selection after the same native dialog reopened");
+    await trigger.press("Escape");
+    const unrelated = await page.evaluate(() => new Promise(resolve => {
+        const other = document.querySelector("#unrelatedOwner"), trigger = document.querySelector("#ownedScope-control");
+        other.show();
+        other.addEventListener("close", event => resolve({ trusted: event.isTrusted,
+            popupHidden: document.querySelector(".select-popup").hidden, focused: document.activeElement.id }), { once: true });
+        other.close();
+        trigger.focus();
+        trigger.click();
+    }));
+    assert.deepEqual(unrelated, { trusted: true, popupHidden: false, focused: "ownedScope-control" },
+        "The current trigger's dialog owns the popup, not another closing dialog");
+    await page.getByRole("option", { name: "Second scope", exact: true }).click();
+    assert.equal(await page.locator("#ownedScope").inputValue(), "b");
+    assert.deepEqual(await page.evaluate(() => window.controlChanges), [{ id: "ownedScope", value: "b" }]);
+    assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
 }));

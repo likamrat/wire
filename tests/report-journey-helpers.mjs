@@ -55,6 +55,7 @@ export async function selectAnalyzeRequest(page, row) {
 }
 
 export async function reportContents(page) {
+    await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     await openReportCreation(page);
     const reports = page.locator("#reportsView");
     if (await reports.getAttribute("data-report-step") === "1") await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
@@ -62,6 +63,7 @@ export async function reportContents(page) {
 }
 
 export async function chooseReportScope(page, value) {
+    await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     await openReportCreation(page);
     if (await page.locator("#contextSidebarBody #reportStage2").isVisible()) await page.getByRole("button", { name: "Back to activity", exact: true }).click();
     else if (await page.locator("#reportsView").getAttribute("data-report-step") !== "1") await page.getByRole("button", { name: "1. Activity", exact: true }).click();

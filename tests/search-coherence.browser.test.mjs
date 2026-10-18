@@ -114,7 +114,7 @@ test("Search removes caption recitals without merging the interaction and its re
         });
         assert.equal(paint.fill, "rgba(0, 0, 0, 0)");
         assert.equal(paint.before, "rgba(0, 0, 0, 0)", "No gray full-row hover slab");
-        assert.ok(paint.decoration.includes("underline"));
+        assert.equal(paint.decoration, "none", "Search titles use restrained color feedback, not underlines");
         assert.ok(contrast(paint.outcome, paint.paper) >= 4.5);
         assert.deepEqual(await interaction.boundingBox(), before, "A neighboring hover cannot move the reading layout");
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));

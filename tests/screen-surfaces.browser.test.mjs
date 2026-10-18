@@ -147,7 +147,7 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
                 } else assert.ok(channels.every(channel => channel === channels[0]), `${role} is neutral: ${measured[role]}`);
             }
             assert.equal(measured.borderWidth, "1px");
-            assert.equal(measured.shadow, "none", "Widgets use tonal grouping, not stacked shadows");
+            assert.notEqual(measured.shadow, "none", "Standalone widgets use the shared soft panel depth");
             assert.equal(measured.font, screenFontStack);
             assert.equal(measured.success, theme === "light" ? "#286336" : "#83d494");
             assert.equal(measured.failure, theme === "light" ? "#b3261e" : "#f28b82");

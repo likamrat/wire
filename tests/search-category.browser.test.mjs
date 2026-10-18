@@ -22,11 +22,11 @@ test("every Search category has its own readable rendered color, Lucide identity
     });
     await saveSearchComparison(app, ["html"]);
     const reference = await streamPanel(app.runtime);
-    let rankedIds;
+    let rankedHits;
     try {
         await reference.api("/api/search/query", { query: "atlas", requestId: 1 });
         const ranked = await reference.wait(event => event.event === "results" && event.requestId === 1);
-        rankedIds = ranked.matches.hits.map(hit => hit.id);
+        rankedHits = ranked.matches.hits;
     } finally { await reference.close(); }
     browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
@@ -145,7 +145,13 @@ test("every Search category has its own readable rendered color, Lucide identity
         await expect(page.locator("#wireSearchOptions")).toHaveCount(0);
         await expect(page.getByRole("group", { name: "Search filters", exact: true })).toBeVisible();
         const identities = await rows.evaluateAll(nodes => nodes.map(node => node.dataset.searchId));
-        assert.deepEqual(identities, rankedIds, "Category headings do not regroup or rerank the real server population.");
+        assert.deepEqual([...identities].sort(), rankedHits.map(hit => hit.id).sort(), "Grouping retains the complete server population.");
+        const shownTypes = await rows.evaluateAll(nodes => nodes.map(node => node.dataset.searchType));
+        assert.deepEqual([...new Set(shownTypes)], [...new Set(rankedHits.map(hit => hit.type))]);
+        for (const type of new Set(shownTypes)) {
+            assert.deepEqual(identities.filter((_, index) => shownTypes[index] === type),
+                rankedHits.filter(hit => hit.type === type).map(hit => hit.id), "Each group keeps its server ranking.");
+        }
         await expect(page.locator(".wire-search-body-typed-title")).toHaveCount(0);
         assert.ok((await rows.evaluateAll(nodes => nodes.map(node => node.querySelector(".wire-search-heading")?.children.length)))
             .every(count => count === 1), "Every result has one canonical-title heading, without category/format machinery.");

@@ -20,7 +20,8 @@ async function setup(t, { touch = false, formatted = false } = {}) {
     records[3].sourceSessionId = records[1].sourceSessionId;
     records[3].sourceSessionName = records[1].sourceSessionName;
     if (formatted) {
-        records[0].userPrompt.text = "Invented opening notes and documented release context.\n\n".repeat(12)
+        records[0].userPrompt.text = "Review the release readiness checklist for the regional warehouse rollout, including inventory reconciliation, ownership changes and the staged support handoff.\n\n"
+            + "Earlier planning notes cover baseline stock counts, shipping cutoffs and the unresolved weekend support rotation. Keep those conditions separate from the presentation request below.\n\n"
             + "Prepare the PowerPoint handoff and the quarterly release notes.\n\n"
             + "Invented closing notes retained in the complete frozen report.\n\n".repeat(12);
         records[2].userPrompt.text = "Deployment notes for an invented service.";
@@ -161,6 +162,62 @@ test("formatted report body hits show compact marked context before opening unch
         assert.deepEqual(await readFile(file), bytes);
         await page.locator("#wireSearch").press("Escape");
     }
+});
+
+test("body-match omission markers never form dot-only lines and Search results have no underlined chrome", { timeout: 30000 }, async t => {
+    const { page, records } = await setup(t, { formatted: true });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.locator("#wireSearch").fill("POWER");
+    const row = page.locator(".wire-search-hit");
+    const orphaned = [];
+    for (const theme of ["light", "dark"]) for (const type of ["report", "interaction"]) for (const [width, scale] of [[500, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await chooseTheme(page, theme);
+        await page.locator("#wireSearch").click();
+        await selectActivityOption(page, "wireSearchType", type);
+        await expect(row).toHaveCount(1);
+        await expect(row.locator("mark")).toHaveText("Power");
+        if (type === "interaction") await expect(row.locator(".wire-search-title")).toHaveText(records[0].userPrompt.text.slice(0, 120));
+        const lines = await row.locator(".wire-search-excerpt").evaluate(node => {
+            const lines = new Map(), walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+            let text;
+            while ((text = walker.nextNode())) {
+                let offset = 0;
+                for (const char of text.data) {
+                    const range = document.createRange();
+                    range.setStart(text, offset); offset += char.length; range.setEnd(text, offset);
+                    const rect = range.getBoundingClientRect(), key = Math.round(rect.y);
+                    if (rect.width) lines.set(key, (lines.get(key) || "") + char);
+                }
+            }
+            return [...lines.values()];
+        });
+        if (lines.some(line => /^[.\u2026\s]+$/u.test(line))) {
+            orphaned.push({ theme, type, width, scale, lines });
+            if (proof) await page.screenshot({ path: path.join(proof, `orphan-marker-${width}-${scale}.png`) });
+        }
+        await row.hover();
+        assert.equal(await row.locator(".wire-search-title").evaluate(node => getComputedStyle(node).textDecorationLine), "none");
+        assert.equal(await row.locator("mark").evaluate(node => getComputedStyle(node).textDecorationLine), "none");
+        if (proof) await page.screenshot({ path: path.join(proof, `body-match-${type}-${theme}-${width}-${scale}-hover.png`) });
+        await page.locator("#wireSearch").focus(); await page.keyboard.press("ArrowDown");
+        await expect(row).toBeFocused(); await expect(row).toHaveCSS("outline-style", "solid");
+        if (proof) await page.screenshot({ path: path.join(proof, `body-match-${type}-${theme}-${width}-${scale}-focus.png`) });
+    }
+    assert.deepEqual(orphaned, [], "Omission indicators must stay with readable context, never occupy their own row");
+    const id = await row.getAttribute("data-search-id");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+    await expect(page).toHaveURL(/#request\?request=search-0(?:&|$)/);
+    await page.goBack();
+    await expect(row).toBeFocused(); await expect(row).toHaveAttribute("data-search-id", id);
+    await expect(row.locator("mark")).toHaveText("Power");
+    await page.locator("#wireSearch").fill("no invented result contains this phrase");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches. Try different words.");
+    await page.locator("#wireSearchClear").click();
+    await expect(page.locator("#wireSearch")).toBeFocused();
+    await expect(page.locator("#wireSearchPanel")).toBeHidden();
 });
 
 test("Search frozen reading retains its receipt fence without borrowing the independent library permission", { timeout: 30000 }, async t => {

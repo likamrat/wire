@@ -2,15 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption } from "./helpers.mjs";
+import { shadowPaint } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_MOTION_DEPTH_PROOFS;
 
-async function setup(t, { nativeScrollbars = false, savedReports = 0 } = {}) {
+async function setup(t, { nativeScrollbars = false, savedReports = 0, storedMotion = null, reducedMotion = null } = {}) {
     const cleanup = [];
     const records = Array.from({ length: 16 }, (_, i) => {
         const record = fixture(`motion-depth-${i}`);
@@ -34,12 +35,23 @@ async function setup(t, { nativeScrollbars = false, savedReports = 0 } = {}) {
     const browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined,
         ...(nativeScrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}) });
     if (proofs) await mkdir(proofs, { recursive: true });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: null,
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion,
         ...(proofs ? { recordVideo: { dir: proofs, size: { width: 1440, height: 1000 } } } : {}) });
     const errors = [], external = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("request", request => { if (new URL(request.url()).origin !== new URL(runtime.url).origin) external.push(request.url()); });
-    await page.addInitScript(() => localStorage.setItem("workiq-evidence.sidebar-motion", "on"));
+    await page.addInitScript(value => {
+        const key = "workiq-evidence.sidebar-motion";
+        if (value !== null) localStorage.setItem(key, value);
+        window.retiredMotionReads = [];
+        for (const operation of ["getItem", "setItem", "removeItem"]) {
+            const original = Storage.prototype[operation];
+            Storage.prototype[operation] = function (...args) {
+                if (args[0] === key) window.retiredMotionReads.push(operation);
+                return original.apply(this, args);
+            };
+        }
+    }, storedMotion);
     t.after(async () => {
         await browser.close();
         await runtime.close();
@@ -58,6 +70,90 @@ async function setup(t, { nativeScrollbars = false, savedReports = 0 } = {}) {
 async function save(name, value) {
     if (proofs) await writeFile(path.join(proofs, `${name}.json`), JSON.stringify(value, null, 2));
 }
+
+test("built-in glide ignores absent and legacy choices under native and controlled media without a setting", async t => {
+    const results = [];
+    for (const reducedMotion of [null, "reduce", "no-preference"]) for (const storedMotion of [null, "off", "system", "on"]) {
+        await t.test(`${reducedMotion ?? "native"}/${storedMotion ?? "clean"}`, async t => {
+            const page = await setup(t, { storedMotion, reducedMotion });
+            const native = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+            const frames = await page.evaluate(async () => {
+                const rail = document.querySelector("#sidebar"), panel = document.querySelector("#contextSidebar"), rows = [];
+                const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+                for (const phase of ["collapse", "expand", "open", "close"]) {
+                    const left = phase === "collapse" || phase === "expand";
+                    document.querySelector(left ? "#navigationCollapse" : phase === "open" ? ".request-card-open" : "#closeContextSidebar").click();
+                    for (let i = 0; i < 120; i++) {
+                        await frame();
+                        rows.push({ phase, width: rail.getBoundingClientRect().width, x: panel.getBoundingClientRect().x, open: panel.open });
+                        if (i > 2 && !(left ? rail.hasAttribute("data-navigation-moving")
+                            : panel.getAnimations().length || panel.open !== (phase === "open"))) break;
+                        if (i === 119) throw new Error(`${phase} did not settle`);
+                    }
+                }
+                return rows;
+            });
+            for (const phase of ["collapse", "expand", "open", "close"]) {
+                const left = phase === "collapse" || phase === "expand";
+                assert.ok(new Set(frames.filter(row => row.phase === phase && (left || row.open)).map(row => Math.round(left ? row.width : row.x))).size >= 3,
+                    `${phase}: built-in glide must paint intermediate positions without opting in`);
+            }
+            await page.evaluate(() => {
+                window.sidebarResizeDelivered = false;
+                addEventListener("resize", () => { window.sidebarResizeDelivered = true; }, { once: true });
+            });
+            await page.setViewportSize({ width: 375, height: 900 });
+            await page.waitForFunction(() => window.sidebarResizeDelivered && document.querySelector("#navigationContent").closest("#navigationDrawer"));
+            const drawerFrames = await page.evaluate(async () => {
+                const drawer = document.querySelector("#navigationDrawer"), rows = [];
+                const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+                for (const phase of ["open", "close"]) {
+                    document.querySelector(phase === "open" ? "#navigationToggle" : "#closeNavigation").click();
+                    for (let i = 0; i < 120; i++) {
+                        await frame(); rows.push({ phase, x: drawer.getBoundingClientRect().x, open: drawer.open });
+                        if (i > 2 && drawer.open === (phase === "open") && !drawer.getAnimations().length) break;
+                        if (i === 119) throw new Error(`Drawer ${phase} did not settle`);
+                    }
+                }
+                return rows;
+            });
+            for (const phase of ["open", "close"]) assert.ok(new Set(drawerFrames.filter(row => row.phase === phase && row.open).map(row => Math.round(row.x))).size >= 3);
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await page.goto(new URL("#settings?section=display&setting=sidebar-motion", page.url()).href);
+            await page.locator('#workspace[aria-busy="false"]').waitFor();
+            assert.equal(await page.locator("#sidebarMotionPreference,#sidebarMotionNotice,#sidebarMotionHelp").count(), 0);
+            assert.ok(await page.locator("#displayTimeZone").count());
+            assert.ok(await page.locator("#settingsThemePreference").isVisible());
+            await page.locator("#settingsSearch").fill("Sidebar motion");
+            assert.equal(await page.locator("#settingsSearchResults a").count(), 0);
+            const persisted = await page.evaluate(() => ({
+                reads: window.retiredMotionReads.slice(),
+                value: Object.entries(localStorage).find(([key]) => key === "workiq-evidence.sidebar-motion")?.[1] ?? null,
+                reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
+            }));
+            assert.deepEqual(persisted.reads, [], "No runtime reads or writes of the retired preference");
+            assert.equal(persisted.value, storedMotion, "Old storage is preserved, not migrated or deleted");
+            assert.equal(persisted.reduced, native);
+            results.push({ reducedMotion, storedMotion, nativeReduced: native, frames, drawerFrames, persisted });
+        });
+    }
+    await save("built-in-glide-matrix", results);
+});
+
+test("retired motion setting is absent from global Search and cannot return through a stale URL", async t => {
+    const page = await setup(t, { reducedMotion: "reduce" });
+    await page.locator("#wireSearch").fill("Sidebar motion");
+    await selectActivityOption(page, "wireSearchType", "setting");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches. Try different words.");
+    assert.equal(await page.locator(".wire-search-title").filter({ hasText: /^Sidebar motion$/ }).count(), 0);
+    await page.goto(new URL("#settings?section=display&setting=sidebar-motion", page.url()).href);
+    await page.reload();
+    await page.locator('#workspace[aria-busy="false"]').waitFor();
+    assert.equal(await page.locator("#sidebarMotionPreference").count(), 0, "Reloading an obsolete deep link cannot recreate the control");
+    await expect(page.locator("#settingsThemePreference")).toBeVisible();
+    await expect(page.locator("#displayTimeZone-control")).toBeVisible();
+    if (proofs) await page.screenshot({ path: path.join(proofs, "display-without-motion.png") });
+});
 
 test("docked contextual glide moves the real main edge with the painted sidebar in both directions", async t => {
     const page = await setup(t);
@@ -91,39 +187,6 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
         assert.ok(maxGap < 2, `${phase}: main edge must follow the actual exposed sidebar edge, gap ${maxGap}`);
     }
 });
-
-async function shadowPaint(page, selector, side) {
-    const bounds = await page.locator(selector).boundingBox();
-    const baseline = await page.screenshot();
-    await page.locator(selector).evaluate(node => node.style.setProperty("box-shadow", "none", "important"));
-    const flat = await page.screenshot();
-    await page.locator(selector).evaluate(node => node.style.removeProperty("box-shadow"));
-    const result = await page.evaluate(async ({ before, after, bounds, side }) => {
-        async function pixels(base64) {
-            const image = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), char => char.charCodeAt(0))]));
-            const canvas = document.createElement("canvas");
-            canvas.width = image.width; canvas.height = image.height;
-            const context = canvas.getContext("2d");
-            context.drawImage(image, 0, 0);
-            return context.getImageData(0, 0, image.width, image.height);
-        }
-        const a = await pixels(before), b = await pixels(after), bands = [];
-        const edge = side === "right" ? bounds.x + bounds.width : bounds.x;
-        for (const distance of [2, 6, 12, 24, 40]) {
-            const x = Math.floor(edge + (side === "right" ? distance : -distance));
-            let delta = 0, count = 0;
-            for (let y = Math.ceil(bounds.y + 80); y < Math.min(a.height, bounds.y + bounds.height) - 40; y++) {
-                const i = (y * a.width + x) * 4;
-                if (x < 0 || x >= a.width) continue;
-                delta += (b.data[i] - a.data[i] + b.data[i + 1] - a.data[i + 1] + b.data[i + 2] - a.data[i + 2]) / 3;
-                count++;
-            }
-            bands.push({ distance, darkening: count ? delta / count : 0 });
-        }
-        return bands;
-    }, { before: baseline.toString("base64"), after: flat.toString("base64"), bounds, side });
-    return { bands: result, screenshot: baseline };
-}
 
 test("both exposed sidebar edges paint visible restrained depth in light and dark", async t => {
     const page = await setup(t), results = [];
@@ -399,6 +462,9 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
             selected: document.querySelector(".saved-library-row[data-detail-active]")?.dataset.bundleId,
             text: document.querySelector(".saved-report-inspection")?.textContent,
             title: document.querySelector("#contextSidebarTitle")?.textContent,
+            bodyTitle: panel.querySelector(".saved-inspector-title")?.textContent,
+            titleCount: panel.querySelectorAll(".saved-inspector-title").length,
+            label: document.getElementById(panel.getAttribute("aria-labelledby"))?.textContent,
             interactions: Number([...document.querySelectorAll(".saved-inspector-facts>div")]
                 .find(row => row.querySelector("dt")?.textContent === "Interactions:")?.querySelector("dd")?.textContent),
             focused: document.activeElement?.id,
@@ -415,7 +481,7 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
         }
         const ids = rows.map(row => row.closest(".saved-library-row").dataset.bundleId);
         const titles = rows.map(row => row.querySelector(".saved-report-name").textContent);
-        const interactionCounts = rows.map(row => parseInt(row.querySelector(".saved-report-scope").textContent, 10));
+        const interactionCounts = [2, 1];
         rows[0].click(); await advance(3);
         const firstBody = document.querySelector(".saved-report-inspection");
         const entrance = panel.getAnimations()[0], column = main.getAnimations()[0];
@@ -451,6 +517,9 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
     assert.ok(Math.abs(result.beforeReplace.mainRight - result.afterReplace.mainRight) < 1);
     assert.equal(result.replacement.selected, result.ids[1]);
     assert.equal(result.replacement.title, result.titles[1]);
+    assert.equal(result.replacement.bodyTitle, result.titles[1]);
+    assert.equal(result.replacement.label, result.titles[1]);
+    assert.equal(result.replacement.titleCount, 1);
     assert.equal(result.replacement.interactions, result.interactionCounts[1]);
     assert.ok(result.removedFirst && result.removedSecond, "Old saved bodies and their controls are released");
     assert.equal(result.beforeReverse.moving, true, "Reverse during actual unpaused exit");
@@ -461,8 +530,11 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
     assert.equal(result.retiredExitState, "idle", "The superseded exit cannot later finish against the reopened owner");
     assert.equal(result.final.selected, result.ids[0]);
     assert.equal(result.final.title, result.titles[0]);
+    assert.equal(result.final.bodyTitle, result.titles[0]);
+    assert.equal(result.final.label, result.titles[0]);
+    assert.equal(result.final.titleCount, 1);
     assert.equal(result.final.interactions, result.interactionCounts[0]);
-    assert.equal(result.final.focused, "contextSidebarTitle");
+    assert.equal(result.final.focused, "savedInspectorTitle");
     assert.equal(result.final.inert, false);
     assert.equal(await page.locator("dialog[open]").count(), 1);
     for (const phase of ["replace", "reverse", "same-reverse"]) {

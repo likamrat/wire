@@ -406,10 +406,11 @@ test("sidebar and content glide together through intermediate widths, reverse wi
     }
 });
 
-test("resizing or choosing reduced motion during a glide removes transient geometry without losing the desktop choice", { timeout: 30000 }, async t => {
+test("resizing settles geometry while host motion changes preserve built-in glide and the desktop choice", { timeout: 30000 }, async t => {
     const { page } = await setup(t, { reducedMotion: "no-preference" });
+    const expanded = (await geometry(page)).sidebar.width;
     await toggle(page).click();
-    await page.waitForTimeout(80);
+    assert.ok(await page.locator("#sidebar").evaluate(node => node.hasAttribute("data-navigation-moving")));
     await page.setViewportSize({ width: 375, height: 900 }); await frames(page);
     assert.equal(await page.locator("#sidebar").getAttribute("data-navigation-moving"), null);
     assert.equal(await page.locator("#main").evaluate(node => node.getBoundingClientRect().width), 375);
@@ -420,11 +421,12 @@ test("resizing or choosing reduced motion during a glide removes transient geome
     await page.setViewportSize({ width: 1440, height: 1000 }); await frames(page);
     assert.equal((await geometry(page)).sidebar.width, 69);
     await toggle(page).click();
-    await page.waitForTimeout(80);
     await page.emulateMedia({ reducedMotion: "reduce" }); await frames(page);
+    await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
     assert.equal(await page.locator("#sidebar").getAttribute("data-navigation-moving"), null);
-    assert.equal((await geometry(page)).sidebar.width, 208);
+    assert.equal((await geometry(page)).sidebar.width, expanded);
     await toggle(page).click();
+    await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
     assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
     assert.equal((await geometry(page)).sidebar.width, 69);
     await page.reload(); await ready(page);

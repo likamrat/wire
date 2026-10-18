@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runInNewContext } from "node:vm";
-import { initializeNavigationPreference, initializeSidebarMotionPreference } from "../web/sidebar-navigation.mjs";
+import { initializeNavigationPreference } from "../web/sidebar-navigation.mjs";
 
 function fixture({ stored = null, readError, writeError } = {}) {
     const root = { dataset: {} }, warnings = [], writes = [], events = new Map();
@@ -65,82 +65,4 @@ test("known storage failures surface panel-only state and recover on the next ex
     }
     assert.throws(() => fixture({ readError: new Error("Unexpected storage error") }), /Unexpected storage error/);
     assert.throws(() => fixture({ writeError: new Error("Unexpected storage error") }).navigation.setPreference("collapsed"), /Unexpected storage error/);
-});
-
-function motionFixture({ stored = null, reduced = true, readError, writeError } = {}) {
-    const root = { dataset: {} }, warnings = [], writes = [], events = new Map();
-    let mediaChange, state;
-    const media = { matches: reduced, addEventListener: (type, listener) => { mediaChange = listener; } };
-    const storage = {
-        getItem(key) { assert.equal(key, "workiq-evidence.sidebar-motion"); if (readError) throw readError; return stored; },
-        setItem(key, value) { assert.equal(key, "workiq-evidence.sidebar-motion"); if (writeError) throw writeError; writes.push(value); stored = value; },
-        removeItem(key) { assert.equal(key, "workiq-evidence.sidebar-motion"); if (writeError) throw writeError; writes.push(null); stored = null; },
-    };
-    const motion = runInNewContext(`(${initializeSidebarMotionPreference.toString()})()`, {
-        document: { documentElement: root }, matchMedia: () => media,
-        window: { localStorage: storage, addEventListener: (type, listener) => events.set(type, listener) },
-        console: { warn: text => warnings.push(text) },
-    });
-    motion.subscribe(value => { state = value; });
-    return { motion, root, writes, warnings, get state() { return state; },
-        reduce(value) { media.matches = value; mediaChange(); },
-        recover() { readError = writeError = undefined; },
-        storageEvent(value, extra = {}) { events.get("storage")({ key: "workiq-evidence.sidebar-motion", storageArea: storage, newValue: value, ...extra }); },
-    };
-}
-
-test("one sidebar policy restores On/Off before paint and otherwise follows system without saving an override", () => {
-    for (const reduced of [false, true]) for (const stored of [null, "system", "on", "off", "invalid"]) {
-        const value = motionFixture({ stored, reduced });
-        const expected = stored === "on" || stored !== "off" && !reduced;
-        assert.equal(value.motion.enabled, expected);
-        assert.equal(value.state.enabled, expected);
-        assert.equal(value.root.dataset.sidebarMotion, expected ? "on" : "off");
-        assert.deepEqual(value.writes, []);
-        value.reduce(!reduced);
-        assert.equal(value.motion.enabled, stored === "on" || stored !== "off" && reduced);
-        if (stored === "invalid") assert.match(value.state.warning, /invalid.*Following the system/);
-    }
-});
-
-test("sidebar policy shares exact same-origin changes, ignores unrelated storage, and resets to system on removal", () => {
-    const value = motionFixture();
-    value.motion.setPreference("on");
-    assert.equal(value.state.enabled, true);
-    value.reduce(true);
-    assert.equal(value.state.enabled, true);
-    value.storageEvent("off", { storageArea: {} });
-    value.storageEvent("off", { key: "unrelated" });
-    assert.equal(value.state.preference, "on");
-    value.storageEvent("off");
-    assert.equal(value.state.enabled, false);
-    value.storageEvent(null);
-    assert.equal(value.state.preference, "system");
-    value.reduce(false);
-    assert.equal(value.state.enabled, true);
-    value.motion.setPreference("off");
-    value.storageEvent(null, { key: null });
-    assert.equal(value.state.preference, "system");
-    value.motion.setPreference("system");
-    assert.deepEqual(value.writes, ["on", "off", null]);
-    assert.throws(() => value.motion.setPreference("always"), /Choose Follow system/);
-});
-
-test("sidebar storage denial is explicit, panel-local and recoverable without hiding unexpected errors", () => {
-    for (const name of ["SecurityError", "QuotaExceededError"]) {
-        const error = new DOMException("Synthetic denial", name);
-        const value = motionFixture({ readError: error, writeError: error });
-        assert.equal(value.state.enabled, false);
-        assert.match(value.state.warning, /panel only until reload/);
-        value.motion.setPreference("on");
-        assert.equal(value.state.enabled, true);
-        assert.match(value.state.warning, /panel only until reload/);
-        assert.ok(value.warnings.length > 0);
-        value.recover();
-        value.motion.setPreference("off");
-        assert.equal(value.state.warning, "");
-        assert.deepEqual(value.writes, ["off"]);
-    }
-    assert.throws(() => motionFixture({ readError: new Error("Unexpected") }), /Unexpected/);
-    assert.throws(() => motionFixture({ writeError: new Error("Unexpected") }).motion.setPreference("on"), /Unexpected/);
 });

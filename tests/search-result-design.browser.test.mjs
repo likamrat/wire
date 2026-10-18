@@ -159,12 +159,13 @@ test("Search separates original title, type, source and evidence without clippin
     await input.press("ArrowDown");
     const forced = await rows.first().evaluate(node => {
         const mark = getComputedStyle(node.querySelector("mark")), css = getComputedStyle(node);
-        return { color: mark.color, background: mark.backgroundColor, decoration: mark.textDecorationLine,
+        return { color: mark.color, background: mark.backgroundColor, decoration: mark.textDecorationLine, weight: mark.fontWeight,
             outline: css.outlineStyle, outlineColor: css.outlineColor,
             paper: getComputedStyle(document.querySelector("#wireSearchPanel")).backgroundColor };
     });
     assert.ok(contrast(forced.color, forced.background) >= 4.5);
-    assert.ok(forced.decoration.includes("underline"));
+    assert.equal(forced.decoration, "none");
+    assert.equal(forced.weight, "600", "Match emphasis survives without a color-only cue or underline");
     assert.equal(forced.outline, "solid"); assert.ok(contrast(forced.outlineColor, forced.paper) >= 3);
     if (proofs) await page.screenshot({ path: path.join(proofs, "hierarchy-forced-colors.png") });
     if (proofs) await writeFile(path.join(proofs, "hierarchy-measurements.json"), JSON.stringify(measurements, null, 2));
@@ -200,7 +201,7 @@ for (const channel of [undefined, ...(process.platform === "win32" ? ["msedge"] 
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const input = page.locator("#wireSearch"), rows = page.locator(".wire-search-hit"), clear = page.locator("#wireSearchClear");
     await expect(clear).toHaveCount(1);
-    await expect(page.locator("#wireSearchHome>#wireSearchClear")).toHaveCount(1);
+    await expect(page.locator("#wireSearchHome>.search-capsule>#wireSearchClear")).toHaveCount(1);
     await expect(page.locator(".wire-search-filters #wireSearchClear")).toHaveCount(0);
     await expect(input).toHaveAttribute("type", "search");
     await expect(clear).toHaveAttribute("type", "button");

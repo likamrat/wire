@@ -113,7 +113,7 @@ test("An empty library has one honest state and the existing create path instead
     await capture(page, "empty-library", "#savedReportsPanel");
     assert.equal(await page.locator("#savedReportSearch").isVisible(), false);
     assert.equal(await page.locator("#savedReportCount").isVisible(), false);
-    assert.equal(await page.locator("#savedLibraryHelp").isVisible(), false);
+    assert.equal(await page.locator("#savedLibraryHelp").count(), 0);
     assert.equal(await page.locator("#savedLibraryManagement").isVisible(), false);
     assert.equal(await page.locator("#savedLibraryTitle").innerText(), "Saved reports");
     assert.match(await page.locator("#bundleList").innerText(), /No local reports have been saved/);
@@ -177,7 +177,7 @@ test("verified empty transitions through actual review, separate save, frozen re
     const frozenBefore = await Promise.all(Object.values(saved.files).map(file => readFile(file)));
     await openReportLibrary(page);
     assert.equal(await page.locator("#savedReportSearch").isVisible(), true);
-    assert.equal(await page.locator("#savedLibraryHelp").isVisible(), true);
+    assert.equal(await page.locator("#savedLibraryHelp").count(), 0);
     assert.equal(await page.locator("#savedLibraryManagement").isVisible(), true);
     await page.locator("#savedReportSearch").fill("no-such-report");
     assert.match(await page.locator("#bundleList").innerText(), /No saved reports match/);

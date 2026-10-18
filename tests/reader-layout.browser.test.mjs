@@ -469,40 +469,38 @@ test("missing prompt and action facts stay explicit, while contradictory complet
 });
 
 for (const [sidebarMotion, motion, enabled] of [
-    ["on", "reduce", true], ["off", "no-preference", false], ["system", "reduce", false], ["system", "no-preference", true],
-]) test(`section folding uses effective ${sidebarMotion}/${motion} motion and one reversible owner`, { timeout: 20000 }, async t => {
+    ["on", "reduce", false], ["off", "no-preference", true], ["system", "reduce", false], ["system", "no-preference", true],
+]) test(`section folding follows native ${motion}, ignoring retired ${sidebarMotion}, with one reversible owner`, { timeout: 20000 }, async t => {
     const { page } = await setup(t, [readerRecord()], { sidebarMotion, motion });
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
     const prompt = page.locator('[data-reader-section="prompt"]'), toggle = prompt.locator(".reader-section-toggle");
-    const state = await toggle.evaluate(button => {
+    const state = await toggle.evaluate(async button => {
         const clip = button.closest("section").querySelector(".reader-section-clip");
         button.click();
         const animation = clip.getAnimations()[0];
-        if (animation) { animation.pause(); animation.currentTime = 90; }
         window.readerFold = animation;
-        return { animated: Boolean(animation), frames: animation?.effect.getKeyframes() };
+        const frames = [];
+        for (let i = 0; i < 3; i++) {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            frames.push(clip.getBoundingClientRect().height);
+        }
+        return { animated: Boolean(animation), frames };
     });
     assert.equal(state.animated, enabled);
     await expect(prompt.locator("pre,.ux-copy")).toHaveCount(0);
     if (enabled) {
-        assert.ok(parseFloat(state.frames[0].height) > 0);
-        assert.equal(state.frames[1].height, "0px");
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+        assert.ok(new Set(state.frames).size > 1, "Folding has actual unpaused intermediate heights");
         const reversed = await toggle.evaluate(button => {
             const clip = button.closest("section").querySelector(".reader-section-clip"), height = clip.getBoundingClientRect().height;
             button.click();
             const animation = clip.getAnimations()[0];
-            animation.pause();
             const result = { height, start: parseFloat(animation.effect.getKeyframes()[0].height), old: window.readerFold.playState };
             window.readerFold = animation;
             return result;
         });
         assert.ok(Math.abs(reversed.start - reversed.height) < 1);
         assert.equal(reversed.old, "idle");
-        await page.evaluate(() => {
-            localStorage.setItem("workiq-evidence.sidebar-motion", "off");
-            dispatchEvent(new StorageEvent("storage", { key: "workiq-evidence.sidebar-motion", newValue: "off", storageArea: localStorage }));
-        });
+        await page.emulateMedia({ reducedMotion: "reduce" });
         await expect(prompt.locator(".reader-section-clip")).not.toHaveAttribute("inert", "");
         assert.equal(await prompt.locator(".reader-section-clip").evaluate(node => node.getAnimations().length), 0);
     } else await toggle.click();

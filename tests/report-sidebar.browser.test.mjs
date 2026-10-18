@@ -68,6 +68,7 @@ test("the report title stays with Contents and becomes the reviewed identity wit
     const title = page.locator("#reportTitle");
     await title.fill("Calendar planning review");
     await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
     await reportContents(page);
     await expect(title).toHaveValue("Calendar planning review");
     const first = await scanReport(page);
@@ -664,7 +665,7 @@ test("Search inspection from the saved library keeps the existing explicit Conti
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
 });
 
-test("Back from report setup restores the original Analyze card anchor before closing the returned reader", { timeout: 20000 }, async t => {
+for (const newerInput of [false, true]) test(`Back from report setup restores the Analyze anchor ${newerInput ? "then yields to newer scrolling" : "before closing the returned reader"}`, { timeout: 20000 }, async t => {
     const { page } = await setup(t);
     await page.locator("#resultsLink").click();
     const card = page.locator(".request-card-open").first();
@@ -678,10 +679,28 @@ test("Back from report setup restores the original Analyze card anchor before cl
     await page.goBack();
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Interaction");
     await expect(page.locator("#requestReportContinue")).toBeFocused();
+    let expectedTop = entry.y;
+    if (newerInput) {
+        await page.evaluate(() => {
+            const panel = document.querySelector("#contextSidebar");
+            window.returnScroll = null;
+            addEventListener("wheel", event => {
+                if (event.isTrusted) window.returnScroll = { y: scrollY, moving: panel.getAnimations().length > 0 };
+            }, { once: true, passive: true });
+        });
+        await page.mouse.move(400, 500);
+        await page.mouse.wheel(0, 160);
+        await page.waitForFunction(() => window.returnScroll && !document.querySelector("#contextSidebar").getAnimations().length);
+        const scrolled = await page.evaluate(() => ({ ...window.returnScroll, finalY: scrollY }));
+        assert.equal(scrolled.moving, true, "New input arrives during the restored reader's actual glide");
+        assert.ok(Math.abs(scrolled.finalY - scrolled.y) <= 1, "The earlier navigation anchor cannot resume compensation after newer input");
+        await expect(page.locator("#requestReportContinue")).toBeFocused();
+        expectedTop = (await card.boundingBox()).y;
+    }
     await page.locator("#closeContextSidebar").click();
     await expect(card).toBeFocused();
     const restored = await card.boundingBox();
-    assert.ok(Math.abs(restored.y - entry.y) < 3, JSON.stringify({ before: entry.y, after: restored.y }));
+    assert.ok(Math.abs(restored.y - expectedTop) < 3, JSON.stringify({ before: expectedTop, after: restored.y }));
 });
 
 test("responsive adaptation preserves the main card anchor through narrow doubled text and back", { timeout: 20000 }, async t => {

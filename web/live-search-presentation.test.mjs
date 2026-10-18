@@ -85,7 +85,7 @@ test("formatted body previews stay match-centered without changing the original 
         textMatch: { field: "content", start: 900 + from, end: 905 + from, excerptStart: 900 } };
     const before = structuredClone(hit), shown = search.searchHitPresentation(hit);
     assert.equal(shown.excerpt.map(part => part.text).join(""),
-        "... Prepare the PowerPoint handoff and the quarterly release notes. ...");
+        "\u2026\u00a0Prepare the PowerPoint handoff and the quarterly release notes.\u00a0\u2026");
     assert.equal(shown.excerpt.find(part => part.match).text, "Power");
     assert.deepEqual(hit, before);
     const serialized = new Function("return (" + search.searchHitPresentation.toString() + ")")();

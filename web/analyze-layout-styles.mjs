@@ -1,11 +1,10 @@
 export const analyzeLayoutStyles = `
 .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card {
- border:1px solid transparent;border-radius:var(--radius);
- background:var(--paper);box-shadow:none;
+ border:1px solid var(--surface-edge);border-radius:var(--radius);
+ background:var(--paper);box-shadow:var(--panel-shadow);
 }
-:root[data-evidence-theme=dark] :is(.analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card) {background:color-mix(in srgb,var(--paper) 96%,var(--ink))}
-@media(prefers-color-scheme:dark) {
- :root:not([data-evidence-theme]) :is(.analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card) {background:color-mix(in srgb,var(--paper) 96%,var(--ink))}
+@media(forced-colors:active) {
+ .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card {border-color:CanvasText;box-shadow:none}
 }
 #workspace>#analyzePopulation {padding:16px 20px;margin-block:0 20px;max-width:none;min-width:0}
 #analyzePopulation:not(:has(#filters:not([hidden]),#filterChips:not([hidden]):not(:empty),#freshActivity:not([hidden]),#collectionNotice:not([hidden]))) {display:none}

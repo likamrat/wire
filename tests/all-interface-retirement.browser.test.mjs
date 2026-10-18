@@ -122,7 +122,7 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await capture("source-permission-review", page.locator("#sourceEditor"));
     await page.locator("#cancelSource").click();
     await navigateSettings(page, "privacy");
-    await page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true }).check();
+    await page.getByRole("switch", { name: "Save Copilot replies locally", exact: true }).check();
     await capture("response-saving-disclosure", page.locator("#assessmentSetup"));
     await page.getByRole("button", { name: "Discard change", exact: true }).click();
     await page.locator("#deleteActivity").click();

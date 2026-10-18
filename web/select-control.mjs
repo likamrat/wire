@@ -470,7 +470,9 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         listen(window.visualViewport, "scroll", schedulePosition);
     }
     listen(document, "toggle", () => { if (active && !visible(active)) close(); }, { capture: true });
-    listen(document, "close", () => close(), { capture: true });
+    listen(document, "close", event => {
+        if (active && event.target instanceof HTMLDialogElement && !event.target.open && event.target.contains(active.trigger)) close();
+    }, { capture: true });
     listen(window, "pagehide", () => close());
     listen(document, "visibilitychange", () => { if (document.hidden) close(); });
     listen(document, "reset", () => queueMicrotask(sync));

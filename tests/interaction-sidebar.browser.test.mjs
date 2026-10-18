@@ -22,16 +22,12 @@ function sidebarGeometryCurrent() {
         && (narrow || parseFloat(root.style.getPropertyValue("--app-sidebar-width")) === document.querySelector("#sidebar").getBoundingClientRect().width);
 }
 
-function sidebarMotionSettled({ selector, pause = false }) {
+function sidebarMotionSettled({ selector }) {
     const surface = document.querySelector(selector);
     const owners = selector === "#sidebar" ? [surface, document.querySelector("#shellBrand")] : [surface];
     // Sidebar controllers create WAAPI animations; control CSS feedback has a separate lifetime.
     const animations = owners.flatMap(node => node.getAnimations({ subtree: selector === "#sidebar" }))
         .filter(animation => animation.constructor === Animation);
-    if (pause) {
-        if (!animations.some(animation => animation.effect.target === surface)) throw new Error("The preference change must interrupt actual sidebar motion");
-        for (const animation of animations) animation.pause();
-    }
     return animations.length === 0;
 }
 
@@ -89,10 +85,9 @@ async function setup(t, { savedReport = false, touch = false, beforeNavigate, mo
     return { page, runtime, records, requests, context, errors };
 }
 
-test("WIRE On glides both sidebars under native reduced motion without changing the host policy", async t => {
+test("built-in motion glides both sidebars without changing the native host policy", async t => {
     const { page } = await setup(t, { motion: null,
         browserOptions: { channel: process.platform === "win32" ? "msedge" : undefined },
-        beforeNavigate: page => page.addInitScript(() => localStorage.setItem("workiq-evidence.sidebar-motion", "on")),
     });
     const nativeReduced = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
     await page.locator("#resultsLink").click();
@@ -121,25 +116,17 @@ test("WIRE On glides both sidebars under native reduced motion without changing 
         const positions = new Set(frames.filter(frame => frame.phase === phase && (rail || frame.open))
             .map(frame => Math.round(rail ? frame.width : frame.x))).size;
         t.diagnostic(JSON.stringify({ phase, nativeReduced, positions }));
-        assert.ok(positions >= 3, `${phase}: WIRE On must paint at least 3 distinct positions, including when the host requests reduce`);
+        assert.ok(positions >= 3, `${phase}: built-in glide paints at least 3 distinct positions, including when the host requests reduce`);
     }
     assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), nativeReduced);
 });
 
-test("Display sidebar motion persists and controls every sidebar role, drawer and interrupted owner", { timeout: 45000 }, async t => {
-    const { page, runtime, requests, context } = await setup(t, { savedReport: true, motion: null,
+test("built-in glide covers every sidebar role and drawer without changing saved state", { timeout: 45000 }, async t => {
+    const { page, requests, context } = await setup(t, { savedReport: true, motion: null,
         browserOptions: { channel: process.platform === "win32" ? "msedge" : undefined },
     });
     const beforeState = await loadBoardState(context);
     const nativeReduced = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
-    await navigateMain(page, "settings"); await navigateSettings(page, "display");
-    await expect(page.locator("#sidebarMotionPreference")).toHaveValue("system");
-    await selectActivityOption(page, "sidebarMotionPreference", "on");
-    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.sidebar-motion")), "on");
-    await expect(page.locator("#saveCollection")).toBeDisabled();
-    await expect(page.locator("#cancelPreferences")).toBeDisabled();
-    await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await expect(page.locator("#sidebarMotionPreference")).toHaveValue("on");
     const evidence = [];
     async function trace(selector, action, expectedOpen) {
         await page.evaluate(selector => {
@@ -205,99 +192,32 @@ test("Display sidebar motion persists and controls every sidebar role, drawer an
         await page.evaluate(() => document.documentElement.style.fontSize = "");
         await page.setViewportSize({ width: 1440, height: 1000 });
     }
-    const settings = await page.context().newPage();
-    await settings.goto(runtime.url + "#settings?section=display&setting=sidebar-motion");
-    await settings.locator('#workspace[aria-busy="false"]').waitFor();
-    await expect(settings.locator("#sidebarMotionPreference")).toHaveValue("on");
-    for (const selector of ["#sidebar", "#contextSidebar", "#navigationDrawer"]) {
-        if (selector === "#sidebar") await page.locator("#navigationCollapse").click();
-        else if (selector === "#contextSidebar") {
-            await page.locator(".request-card-open").first().click();
-            await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
-            await page.locator("#closeContextSidebar").click();
-        } else {
-            await page.setViewportSize({ width: 375, height: 900 });
-            await page.locator("#navigationToggle").click();
-        }
-        await page.evaluate(sidebarMotionSettled, { selector, pause: true });
-        await selectActivityOption(settings, "sidebarMotionPreference", "off");
-        await page.waitForFunction(sidebarMotionSettled, { selector });
-        await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
-        if (selector === "#contextSidebar") await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
-        if (selector === "#navigationDrawer") {
-            await page.keyboard.press("Escape");
-            await expect(page.locator("#navigationDrawer")).not.toHaveAttribute("open", "");
-            await page.setViewportSize({ width: 1440, height: 1000 });
-        }
-        await selectActivityOption(settings, "sidebarMotionPreference", "on");
-        await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "on");
-    }
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.locator(".request-card-open").first().click();
-    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
-    await selectActivityOption(settings, "sidebarMotionPreference", "system");
-    await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
-    await expect(page.locator("#contextSidebar")).toHaveJSProperty("open", true);
-    await expect(settings.locator("#sidebarMotionPreference-control")).toBeFocused();
-    await page.locator("#closeContextSidebar").click();
-    await selectActivityOption(settings, "sidebarMotionPreference", "off");
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
-    for (const [selector, action, open] of [
-        ["#sidebar", () => page.locator("#navigationCollapse").click(), undefined],
-        ["#contextSidebar", () => page.locator(".request-card-open").first().click(), true],
-        ["#contextSidebar", () => page.locator("#closeContextSidebar").click(), false],
-    ]) assert.equal((await trace(selector, action, open)).some(frame => frame.moving), false, "WIRE Off wins even when the host allows motion");
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await selectActivityOption(settings, "sidebarMotionPreference", "system");
-    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
-    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.sidebar-motion")), null);
-    await page.locator("#navigationCollapse").click();
-    assert.equal(await page.locator("#sidebar").evaluate(node => node.getAnimations({ subtree: true }).length), 0);
-    await page.locator(".request-card-open").first().click();
-    assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length), 0);
-    await page.locator("#closeContextSidebar").click();
-    await expect(page.locator("#contextSidebar")).not.toHaveAttribute("open", "");
-    await page.setViewportSize({ width: 375, height: 900 });
-    await page.locator("#navigationToggle").click();
-    assert.equal(await page.locator("#navigationDrawer").evaluate(node => node.getAnimations().length), 0);
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#navigationDrawer")).not.toHaveAttribute("open", "");
     assert.equal(requests.some(url => /\/api\/(?:preview|export|privacy-review|assessment\/feedback|collection\/configure|evaluation\/run)$/.test(url.pathname)), false);
-    assert.deepEqual(await loadBoardState(context), beforeState, "Motion choices and inspection never change persisted evidence or authority");
+    assert.deepEqual(await loadBoardState(context), beforeState, "Motion and inspection never change persisted evidence or authority");
     if (proof) {
         await mkdir(proof, { recursive: true });
-        await writeFile(path.join(proof, "sidebar-preference-frames.json"), JSON.stringify(evidence, null, 2));
-        await settings.setViewportSize({ width: 375, height: 900 });
-        await settings.evaluate(() => document.documentElement.style.fontSize = "200%");
-        await settings.screenshot({ path: path.join(proof, "sidebar-motion-display.png"), fullPage: true });
+        await writeFile(path.join(proof, "sidebar-role-frames.json"), JSON.stringify(evidence, null, 2));
     }
 });
 
 for (const motion of ["no-preference", "reduce"]) test(`sidebar interruption settles its owned motion without canceling control feedback (${motion})`, async t => {
-    const { page, runtime } = await setup(t, { motion, sidebarMotion: "on" });
-    const settings = await page.context().newPage();
-    await settings.goto(runtime.url + "#settings?section=display&setting=sidebar-motion");
-    await settings.locator('#workspace[aria-busy="false"]').waitFor();
+    const { page } = await setup(t, { motion });
     const width = await page.locator("#sidebar").evaluate(node => node.getBoundingClientRect().width);
     await page.locator("#navigationCollapse").evaluate(node => node.addEventListener("click", () => {
         window.sidebarControlFeedback = node.getAnimations().filter(animation => animation instanceof CSSTransition);
         window.sidebarFeedbackStarted = window.sidebarControlFeedback.map(animation => ({
             property: animation.transitionProperty, state: animation.playState }));
-        // Hold one real transition as an ownership sentinel; the others must keep playing.
-        window.sidebarControlFeedback[0]?.pause();
     }, { once: true }));
     await page.locator("#navigationCollapse").click();
-    await page.evaluate(sidebarMotionSettled, { selector: "#sidebar", pause: true });
+    assert.equal(await page.evaluate(sidebarMotionSettled, { selector: "#sidebar" }), false);
     const feedback = await page.evaluate(() => window.sidebarFeedbackStarted);
     assert.ok(feedback.every(animation => animation.state !== "paused"), "Real control feedback starts unpaused");
     if (motion === "no-preference") assert.ok(feedback.length > 0, "Exercise real CSS feedback, not a newly manufactured animation");
     else assert.deepEqual(feedback, []);
-    assert.ok(await page.evaluate(() => window.sidebarControlFeedback.slice(1).every(animation => animation.playState !== "paused")),
-        "Pausing owned motion leaves the other feedback transitions running or naturally finished");
-    await selectActivityOption(settings, "sidebarMotionPreference", "off");
+    assert.ok(await page.evaluate(() => window.sidebarControlFeedback.every(animation => animation.playState !== "paused")),
+        "The owned glide leaves other feedback transitions running or naturally finished");
+    await page.evaluate(() => dispatchEvent(new Event("resize")));
     await page.waitForFunction(sidebarMotionSettled, { selector: "#sidebar" });
-    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
     await expect(page.locator("#sidebar")).not.toHaveAttribute("data-navigation-moving", "");
     await expect(page.locator("#navigationCollapse")).toHaveAttribute("aria-expanded", "false");
     const remaining = await page.evaluate(() => {
@@ -305,39 +225,34 @@ for (const motion of ["no-preference", "reduce"]) test(`sidebar interruption set
         return { width: rail.width, mainX: document.querySelector("#main").getBoundingClientRect().x,
             feedback: window.sidebarControlFeedback.map(animation => ({ property: animation.transitionProperty, state: animation.playState })) };
     });
-    assert.ok(remaining.width < width - 100, "Off settles the requested collapsed state");
+    assert.ok(remaining.width < width - 100, "Resize settles the requested collapsed state");
     assert.ok(Math.abs(remaining.mainX - remaining.width) < 1.1, "The actual main column follows the settled rail");
-    if (remaining.feedback.length) assert.equal(remaining.feedback[0].state, "paused", "Sidebar settlement cannot cancel unrelated feedback");
-    assert.ok(remaining.feedback.slice(1).every(animation => animation.state !== "paused"));
+    assert.ok(remaining.feedback.every(animation => animation.state !== "idle" && animation.state !== "paused"),
+        "Sidebar settlement cannot cancel or pause unrelated feedback");
     t.diagnostic(JSON.stringify({ motion, feedback, remaining }));
-    await page.evaluate(async () => {
-        const sentinel = window.sidebarControlFeedback[0];
-        if (sentinel) { sentinel.play(); await sentinel.finished; }
-    });
 });
 
-test("Display sidebar motion reports storage denial without pretending the choice persisted", async t => {
+test("built-in motion never accesses the retired preference even when storage rejects it", async t => {
     const { page } = await setup(t, { beforeNavigate: page => page.addInitScript(() => {
-        const save = Storage.prototype.setItem;
-        Storage.prototype.setItem = function (key, value) {
-            if (key === "workiq-evidence.sidebar-motion") throw new DOMException("Synthetic storage denial", "SecurityError");
-            return save.call(this, key, value);
-        };
+        window.motionStorageAttempts = [];
+        for (const operation of ["getItem", "setItem", "removeItem"]) {
+            const original = Storage.prototype[operation];
+            Storage.prototype[operation] = function (...args) {
+                if (args[0] === "workiq-evidence.sidebar-motion") {
+                    window.motionStorageAttempts.push(operation);
+                    throw new DOMException("Synthetic storage denial", "SecurityError");
+                }
+                return original.apply(this, args);
+            };
+        }
     }) });
     await navigateMain(page, "settings"); await navigateSettings(page, "display");
-    await selectActivityOption(page, "sidebarMotionPreference", "on");
-    await expect(page.locator("#sidebarMotionNotice")).toContainText("panel only until reload");
-    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "on");
-    await page.setViewportSize({ width: 375, height: 900 });
-    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
-    const control = page.getByRole("combobox", { name: "Sidebar motion", exact: true });
-    await expect(control).toHaveText("On");
-    const box = await control.boundingBox();
-    assert.ok(box.width >= 44 && box.height >= 44);
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await expect(page.locator("#sidebarMotionPreference")).toHaveCount(0);
+    await page.locator("#navigationCollapse").click();
+    await page.waitForFunction(sidebarMotionSettled, { selector: "#sidebar" });
+    assert.deepEqual(await page.evaluate(() => window.motionStorageAttempts), []);
     await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await expect(page.locator("#sidebarMotionPreference")).toHaveValue("system");
-    await expect(page.locator("html")).toHaveAttribute("data-sidebar-motion", "off");
+    assert.deepEqual(await page.evaluate(() => window.motionStorageAttempts), []);
 });
 
 for (const replace of [false, true]) test(`sidebar close preserves the current anchor ${replace ? "after an off-screen replacement scroll" : "without a replacement scroll"}`, async t => {
@@ -421,7 +336,7 @@ test("sidebar geometry waits for actual header publication before its baseline",
     t.diagnostic(JSON.stringify({ unpublished, before, hovered, focused }));
 });
 
-test("sidebar command icons keep separate glyph, target and text geometry across all roles", { timeout: 45000 }, async t => {
+for (const theme of ["light", "dark"]) test(`sidebar command icons keep separate glyph, target and text geometry across all roles in ${theme}`, { timeout: 45000 }, async t => {
     const { page } = await setup(t, { savedReport: true });
     const directory = process.env.WIRE_SIDEBAR_ICON_PROOFS, evidence = [];
     await page.evaluate(() => {
@@ -433,6 +348,8 @@ test("sidebar command icons keep separate glyph, target and text geometry across
         }
     });
     async function control(selector, label, navigation = false) {
+        await page.waitForFunction(() => ["sidebar", "navigationDrawer", "contextSidebar"].every(id =>
+            !document.getElementById(id).getAnimations().length));
         const node = page.locator(selector);
         const before = await node.boundingBox();
         await node.hover();
@@ -481,6 +398,7 @@ test("sidebar command icons keep separate glyph, target and text geometry across
         assert.equal(await page.evaluate(id => window.sidebarCommandClicks[id], id), before + 1, `${id}: one edge activation`);
     }
     async function navigation(label) {
+        await page.waitForFunction(() => ["sidebar", "navigationDrawer"].every(id => !document.getElementById(id).getAnimations().length));
         const rows = page.locator(".primary-navigation a");
         const before = await rows.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
         for (const destination of ["analyze", "reports", "settings"]) await control(`.primary-navigation [data-nav="${destination}"]`, `${label}/${destination}`, true);
@@ -494,7 +412,7 @@ test("sidebar command icons keep separate glyph, target and text geometry across
         }));
         evidence.push({ label, rows: metrics });
     }
-    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [1440, 200], [375, 100], [375, 200]]) {
+    for (const [width, scale] of [[1440, 100], [1440, 200], [375, 100], [375, 200]]) {
         await page.setViewportSize({ width, height: 900 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale}%`, scale);
         await chooseTheme(page, theme);
@@ -565,7 +483,7 @@ test("sidebar command icons keep separate glyph, target and text geometry across
     }
     if (directory) {
         await mkdir(directory, { recursive: true });
-        await writeFile(path.join(directory, "sidebar-command-geometry.json"), JSON.stringify(evidence, null, 2));
+        await writeFile(path.join(directory, `sidebar-command-geometry-${theme}.json`), JSON.stringify(evidence, null, 2));
     }
     const headers = evidence.filter(entry => entry.label.endsWith("/header"));
     t.diagnostic(JSON.stringify({ measuredControls: evidence.filter(entry => entry.target && entry.svg).length,
@@ -596,6 +514,7 @@ test("sidebar icon-only targets do not inherit text-line height", async t => {
     }
     await probe("#navigationToggle", ".workspace-toolbar-inner", ".wire-search-entry");
     await page.locator("#navigationToggle").click();
+    await page.waitForFunction(sidebarMotionSettled, { selector: "#navigationDrawer" });
     await probe("#closeNavigation", ".drawer-heading", "#drawerBrand");
     await page.locator("#closeNavigation").click();
     for (const row of evidence) {
@@ -741,6 +660,7 @@ test("minimal native card opens an anchored sidebar without replacing the Analyz
     const mainWidth = await page.locator("#main").evaluate(node => node.clientWidth);
     await page.mouse.click(before.x + before.width / 2, before.y + 20);
     await page.locator("#contextSidebar[open]").waitFor();
+    await page.waitForFunction(sidebarMotionSettled, { selector: "#contextSidebar" });
     assert.equal(await page.locator("#homeView").isVisible(), true);
     assert.equal(await page.evaluate(() => window.originalActivityList === document.querySelector("#activityList").firstElementChild), true);
     assert.ok(Math.abs((await card.boundingBox()).y - before.y) <= 3, "Card vertical anchor retained");
@@ -1290,7 +1210,7 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.locator(".request-card-open").first().press("Enter");
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
-    assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length), 0);
+    await settled();
     await page.locator("#closeContextSidebar").press("Enter");
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     if (proof) {
@@ -1299,7 +1219,7 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
     }
 });
 
-test("enabling reduced motion settles an in-flight contextual entrance immediately", { timeout: 20000 }, async t => {
+test("a host reduced-motion change does not cancel built-in contextual glide", { timeout: 20000 }, async t => {
     const { page } = await setup(t);
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.locator("#resultsLink").click();
@@ -1307,13 +1227,17 @@ test("enabling reduced motion settles an in-flight contextual entrance immediate
     await link.scrollIntoViewIfNeeded();
     const box = await link.boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + 20);
-    await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 1);
+    await page.locator("#contextSidebar").evaluate(node => { window.ongoingGlide = node.getAnimations()[0]; });
     await page.emulateMedia({ reducedMotion: "reduce" });
     const motion = await page.locator("#contextSidebar").evaluate(async node => {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        return node.getAnimations().map(animation => ({ state: animation.playState, time: animation.currentTime, duration: animation.effect.getTiming().duration }));
+        const rows = [], animation = window.ongoingGlide;
+        while (node.getAnimations().includes(animation)) {
+            rows.push(node.getBoundingClientRect().x);
+            await new Promise(resolve => requestAnimationFrame(resolve));
+        }
+        return rows;
     });
-    assert.deepEqual(motion, [], "An OS motion-preference change must not leave the running glide behind");
+    assert.ok(new Set(motion.map(Math.round)).size >= 3, "The existing glide continues through the controlled host change");
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await page.locator("#closeContextSidebar").click();
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
@@ -1395,7 +1319,7 @@ test("owned sidebar history keeps Close, Escape, Back and Forward anchored and r
     }
 });
 
-test("reduced-motion exit and newer keyboard intent settle without stale focus or docking", { timeout: 30000 }, async t => {
+test("host media change and newer keyboard intent preserve the current exit owner", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.locator("#resultsLink").click();
@@ -1414,10 +1338,8 @@ test("reduced-motion exit and newer keyboard intent settle without stale focus o
     await link.click();
     await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
     await page.locator("#closeContextSidebar").click();
-    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
     await page.locator("#wireSearch").focus();
     await page.keyboard.press("ArrowRight");
-    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].finish());
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await expect(page.locator("#wireSearch")).toBeFocused();
     assert.equal(await page.locator("body").getAttribute("data-context-docked"), null);
@@ -1429,12 +1351,12 @@ test("resizing during entry or exit settles the latest layout without a stale ov
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.locator("#resultsLink").click();
     await page.locator(".request-card-open").first().click();
-    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+    assert.ok(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length > 0));
     await page.setViewportSize({ width: 375, height: 820 });
     await expect.poll(() => page.locator("#contextSidebar").evaluate(node => node.matches(":modal") && node.getAnimations().length === 0)).toBe(true);
     await expect(page.locator("#closeContextSidebar")).toBeInViewport();
     await page.locator("#closeContextSidebar").click();
-    await page.locator("#contextSidebar").evaluate(node => node.getAnimations()[0].pause());
+    assert.ok(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length > 0));
     await page.setViewportSize({ width: 1440, height: 1000 });
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     assert.equal(await page.locator("body").getAttribute("data-context-docked"), null);

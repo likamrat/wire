@@ -15,6 +15,16 @@ test("settings canonical routes preserve legacy display/history/issues and expli
     assert.equal(model.resolve({ section: "display", setting: "cadence" }).section, "connection");
 });
 
+test("retired sidebar motion has no current setting, search result or deep-link destination", () => {
+    const model = createSettingsNavigation(createLocalSearch());
+    assert.equal(model.entries.some(entry => entry.id === "sidebar-motion"), false);
+    assert.deepEqual(model.find("sidebar motion"), []);
+    assert.deepEqual(model.find("glide"), []);
+    assert.deepEqual(model.resolve({ section: "display", setting: "sidebar-motion" }), {
+        section: "display", setting: undefined, warning: "Unknown setting. Showing the category instead.",
+    });
+});
+
 test("operational destinations leave Settings and preserve named legacy targets", () => {
     const model = createSettingsNavigation(createLocalSearch());
     for (const route of [{ section: "diagnostics" }, { setting: "issues" }, { setting: "advanced" }, { view: "collection-status" }]) {
@@ -32,7 +42,7 @@ test("operational destinations leave Settings and preserve named legacy targets"
 
 test("settings search finds control descriptions and synonyms across categories without private paths", () => {
     const model = createSettingsNavigation(createLocalSearch());
-    for (const [query, id] of [["glide", "sidebar-motion"], ["TIME-zone", "time-zone"], ["city", "time-zone"], ["pause", "collection-state"], ["resume", "collection-state"], ["permission", "source"], ["cadence", "cadence"], ["window", "history-window"], ["missing history", "issues"]]) {
+    for (const [query, id] of [["TIME-zone", "time-zone"], ["city", "time-zone"], ["pause", "collection-state"], ["resume", "collection-state"], ["permission", "source"], ["cadence", "cadence"], ["window", "history-window"], ["missing history", "issues"]]) {
         assert.ok(model.find(query).some(entry => entry.id === id), query);
     }
     assert.equal(model.find("").length, 0);

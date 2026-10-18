@@ -1,4 +1,4 @@
-import { uxIcons } from "./ux-icons.mjs";
+import { searchFieldMarkup } from "./search-field.mjs";
 
 export function searchHitPresentation(hit, { showSource = true } = {}) {
     const invalid = () => { throw new TypeError("Search match text or range is invalid. Search again."); };
@@ -53,10 +53,12 @@ export function searchHitPresentation(hit, { showSource = true } = {}) {
             return value;
         }
         const left = context(prefix, true), right = context(suffix, false);
+        const leftText = left.replace(/\s+/gu, " "), rightText = right.replace(/\s+/gu, " ");
+        // Keep each omission mark attached to its context rather than on a line of its own.
         shown.excerpt = [
-            { text: ((left.length < prefix.length ? "... " : "") + left).replace(/\s+/gu, " "), match: false },
+            { text: left.length < prefix.length ? "\u2026\u00a0" + leftText.trimStart() : leftText, match: false },
             { text: hit.excerpt.slice(from, to), match: true },
-            { text: (right + (right.length < suffix.length ? " ..." : "")).replace(/\s+/gu, " "), match: false },
+            { text: right.length < suffix.length ? rightText.trimEnd() + "\u00a0\u2026" : rightText, match: false },
         ].filter(part => part.text);
     }
     if (field !== "source" && hit.type === "view" && hit.target?.kind === "route" && typeof hit.target.href === "string") {
@@ -90,9 +92,7 @@ export const liveSearchPanel = `
 export const liveSearchMarkup = `
 <div id="wireSearchHome" class="wire-search-entry">
   <label for="wireSearch" class="visually-hidden">Search</label>
-  <span class="wire-search-icon">${uxIcons.search}</span>
-  <input id="wireSearch" type="search" placeholder="Search" autocomplete="off" spellcheck="false" aria-controls="wireSearchPanel" aria-expanded="false">
-  <button id="wireSearchClear" type="button" class="quiet" hidden>Clear search</button>
+  ${searchFieldMarkup({ id: "wireSearch", clearId: "wireSearchClear", controls: "wireSearchPanel" })}
   ${liveSearchPanel}
 </div>`;
 
@@ -101,13 +101,7 @@ export const liveSearchStyles = `
 html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-entry {position:relative;display:grid;grid-template-columns:minmax(0,1fr);align-items:center;flex:1 1 280px;min-width:180px;max-width:480px}
 .wire-search-entry>label {font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);white-space:nowrap}
-.wire-search-icon {position:absolute;inset-inline-start:14px;top:50%;transform:translateY(-50%);display:flex;pointer-events:none;color:var(--muted)}
-#wireSearch {grid-area:1/1;width:100%;min-width:0;min-height:var(--pill-height);border:1px solid transparent;border-radius:var(--radius-pill);padding-inline:42px calc(var(--pill-height) + 12px);background:linear-gradient(var(--paper),var(--paper)) padding-box,linear-gradient(110deg,var(--search-ring-start),var(--search-ring-middle),var(--search-ring-end)) border-box;background-size:100% 100%,200% 100%;background-position:0 0,0 50%;box-shadow:0 0 12px color-mix(in srgb,var(--search-ring-middle) 16%,transparent),var(--surface-shadow);transition:background-position .32s ease-out,box-shadow .2s ease-out}
-#wireSearch:hover,#wireSearch[aria-expanded=true] {background-position:0 0,65% 50%;box-shadow:0 0 14px color-mix(in srgb,var(--search-ring-middle) 24%,transparent),var(--surface-shadow)}
-#wireSearch:focus-visible {outline:2px solid var(--search-ring-focus);outline-offset:-2px;background-position:0 0,100% 50%;box-shadow:0 0 16px color-mix(in srgb,var(--search-ring-middle) 28%,transparent),var(--surface-shadow)}
-#wireSearch::-webkit-search-cancel-button {display:none}
-#wireSearchClear {grid-area:1/1;align-self:center;justify-self:end;margin-inline-end:2px;border-radius:var(--radius-pill);z-index:1}
-.wire-search-panel {--wire-search-match:#006580;position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--surface-shadow);font:var(--type-body)/var(--leading-ui) var(--font);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
+.wire-search-panel {--wire-search-match:#006580;position:absolute;inset-inline:0;top:calc(100% + 8px);margin:0;min-width:0;padding:8px;background:var(--paper);border:1px solid var(--surface-edge);border-radius:16px;box-shadow:var(--surface-shadow);font:var(--type-body)/var(--leading-ui) var(--font);max-height:min(30rem,calc(100dvh - var(--app-header-height,148px) - 24px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:8px}
 @media(prefers-color-scheme:dark) {
  :root:not([data-evidence-theme]) .wire-search-panel {--wire-search-match:#67c9df}
 }
@@ -123,12 +117,12 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-group-label {margin:10px 6px 2px 34px;font:inherit;color:var(--search-category)}
 #wireSearchPanel .wire-search-hit {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:8px;width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font:inherit;padding:10px 6px}
 #wireSearchPanel .wire-search-hit::before {content:none;background:transparent;border:0;box-shadow:none}
-#wireSearchPanel .wire-search-hit:is(:hover,:focus-visible):not(:disabled) .wire-search-title {text-decoration:underline;text-underline-offset:.18em}
-#wireSearchPanel .wire-search-hit:active:not(:disabled) .wire-search-title {text-decoration-thickness:2px}
+#wireSearchPanel .wire-search-hit:is(:hover,:focus-visible):not(:disabled) .wire-search-title {color:var(--accent)}
+#wireSearchPanel .wire-search-hit:active:not(:disabled) .wire-search-title {color:var(--ink)}
 .wire-search-body {grid-column:2;display:grid;gap:4px;min-width:0}
 .wire-search-heading {min-width:0;overflow-wrap:anywhere}
 .wire-search-title {font:inherit;min-width:0;overflow-wrap:anywhere}
-.wire-search-hit mark {background:var(--accent-soft);color:var(--wire-search-match);text-decoration:underline;text-underline-offset:.15em}
+.wire-search-hit mark {background:var(--accent-soft);color:var(--wire-search-match);font-weight:600;text-decoration:none}
 .wire-search-excerpt {white-space:normal;overflow-wrap:anywhere;font:inherit;color:var(--muted)}
 .wire-search-meta,.wire-search-source,.wire-search-limitation {font:inherit;color:var(--muted);min-width:0;overflow-wrap:anywhere}
 .wire-search-meta {display:flex;gap:4px 8px;flex-wrap:wrap;align-items:baseline}
@@ -153,9 +147,7 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
  .wire-search-filters>.select-control {max-width:100%}
 }
 @media(forced-colors:active) {
- .wire-search-panel,#wireSearch {box-shadow:none;border-color:CanvasText;background:Canvas}
- #wireSearch:is(:hover,:focus-visible,[aria-expanded=true]) {box-shadow:none}
- #wireSearch:focus-visible {outline-color:Highlight}
+ .wire-search-panel {box-shadow:none;border-color:CanvasText;background:Canvas}
  .wire-search-results>li+li,.wire-search-excerpt {border-color:CanvasText}
  .wire-search-hit mark {color:HighlightText;background:Highlight;forced-color-adjust:none}
  #wireSearchPanel .wire-search-hit:focus-visible {outline-color:Highlight}
@@ -195,7 +187,7 @@ export function createFrozenReportFrame(html, doc = document) {
     return frame;
 }
 
-export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, results, presentHit, serviceIcon }) {
+export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, presentHit, serviceIcon }) {
     const $ = id => document.getElementById(id);
     const input = $("wireSearch"), panel = $("wireSearchPanel"), list = $("wireSearchResults");
     const home = $("wireSearchHome");
@@ -252,7 +244,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         return "Some saved content could not be searched.";
     }
     function show() {
-        $("wireSearchClear").hidden = !input.value;
+        field.sync();
         panel.hidden = !input.value.trim();
         input.setAttribute("aria-expanded", String(!panel.hidden));
     }
@@ -341,17 +333,20 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         drawnKeys[key] = draw;
         const list = lists[key], paging = pagers[key];
         list.replaceChildren();
-        const contexts = new Map();
+        const contexts = new Map(), byType = new Map();
         const reportFormat = hit => hit.type === "report" && ["html", "json", "markdown", "pdf"].includes(hit.coverage?.format)
             ? hit.coverage.format === "markdown" ? "Markdown" : hit.coverage.format.toUpperCase() : null;
         for (const hit of hits) {
+            if (!byType.has(hit.type)) byType.set(hit.type, []);
+            byType.get(hit.type).push(hit);
             const titleKey = JSON.stringify([hit.type, hit.title]);
             if (!contexts.has(titleKey)) contexts.set(titleKey, { sources: new Set(), formats: new Set() });
             contexts.get(titleKey).sources.add(hit.source.label);
             if (reportFormat(hit)) contexts.get(titleKey).formats.add(reportFormat(hit));
         }
+        const groupedHits = [...byType.values()].flat();
         let previousType = null;
-        for (const hit of hits.slice(pages[key] * size, (pages[key] + 1) * size)) {
+        for (const hit of groupedHits.slice(pages[key] * size, (pages[key] + 1) * size)) {
             const context = contexts.get(JSON.stringify([hit.type, hit.title]));
             const shown = presentHit(hit, { showSource: context.sources.size > 1 });
             const row = el("li"), target = button("", () => open(hit, key));
@@ -550,14 +545,17 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
     }
     input.addEventListener("focus", () => { show(); paint(); });
     input.addEventListener("click", () => { if (panel.hidden) { show(); paint(); } });
-    input.addEventListener("input", () => { restore = null; panel.scrollTop = 0; show(); schedule(); });
+    const field = searchFields.mount(input, {
+        clearLabel: "Clear search",
+        onInput: () => { restore = null; panel.scrollTop = 0; show(); schedule(); },
+        onClear: () => { restore = null; show(); schedule(); },
+    });
     scope.addEventListener("change", () => {
         restore = null;
         syncScope();
         schedule();
     });
     category.addEventListener("change", () => { restore = null; schedule(); });
-    $("wireSearchClear").addEventListener("click", () => { restore = null; input.value = ""; show(); schedule(); input.focus(); });
     $("wireSearchRetry").addEventListener("click", () => { connected ? schedule() : connect(); });
     input.addEventListener("keydown", event => {
         if (event.isComposing) return;

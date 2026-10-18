@@ -1,3 +1,5 @@
+import { searchFieldMarkup } from "./search-field.mjs";
+
 export const settingsMarkup = `
 <section id="settingsView" class="settings-view" aria-label="Settings" hidden>
   <p id="settingsRouteNotice" class="notice" role="status" hidden></p>
@@ -5,7 +7,7 @@ export const settingsMarkup = `
   <aside class="settings-rail" aria-label="Settings navigation">
   <div class="scoped-search settings-search">
     <label for="settingsSearch" class="visually-hidden">Search settings</label>
-    <div class="search-input-row"><input id="settingsSearch" type="search" placeholder="Search settings" autocomplete="off" spellcheck="false"><button id="clearSettingsSearch" type="button" class="quiet" hidden>Clear</button></div>
+    ${searchFieldMarkup({ id: "settingsSearch", clearId: "clearSettingsSearch", placeholder: "Search settings" })}
     <p id="settingsSearchCount" class="search-count" role="status" hidden></p>
     <ul id="settingsSearchResults" class="settings-search-results" hidden></ul>
   </div>
@@ -18,8 +20,8 @@ export const settingsMarkup = `
   <button id="reloadSettings" type="button" hidden>Read current connection</button>
   <section class="settings-section" data-settings-section="privacy" aria-labelledby="dataManagementTitle" hidden>
     <h2 id="dataManagementTitle" tabindex="-1">Privacy &amp; saved data</h2>
-    <section class="settings-reply-row" aria-labelledby="assessmentSetupTitle">
-      <h3 id="assessmentSetupTitle" tabindex="-1">Recorded replies</h3>
+    <section id="assessmentSetupTitle" class="settings-reply-row" aria-label="Recorded replies" tabindex="-1">
+      <h3 class="settings-reply-fallback">Save Copilot replies locally</h3>
       <div id="assessmentSetup"><p>Loading response-saving settings.</p></div>
     </section>
     <div class="settings-task-row"><div class="settings-row-copy">
@@ -39,13 +41,7 @@ export const settingsMarkup = `
     <p class="settings-intro">Changes apply immediately in this browser. Saved reports stay unchanged.</p>
     <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
       <h3>Theme</h3>
-    </div><button id="settingsThemePreference" type="button" aria-describedby="themeStorageNotice">Change theme</button></div>
-    <div class="settings-field settings-display-field">
-      <div class="settings-row-copy"><h3><label for="sidebarMotionPreference">Sidebar motion</label></h3>
-      <p id="sidebarMotionHelp" class="settings-help">Controls both WIRE sidebars. On glides even with reduced system motion. Windows settings stay unchanged.</p></div>
-      <select id="sidebarMotionPreference" aria-describedby="sidebarMotionHelp sidebarMotionNotice"><option value="system">Follow system</option><option value="on">On</option><option value="off">Off</option></select>
-      <p id="sidebarMotionNotice" class="notice" role="status" hidden></p>
-    </div>
+    </div><button id="settingsThemePreference" type="button" class="theme-trigger" aria-label="Use dark theme" aria-describedby="themeStorageNotice">Change theme</button></div>
     <div class="settings-field settings-display-field display-time-field">
       <div class="settings-row-copy"><h3><label for="displayTimeZone">Time zone</label></h3></div>
       <select id="displayTimeZone" aria-describedby="displayTimeEffective displayTimeHelp timeZoneNotice"></select>
@@ -124,7 +120,7 @@ export const settingsMarkup = `
     <p id="collectionIssueLabel"></p>
     <div id="collectionIssuesBody" class="collection-issues-body">
       <p id="collectionIssueCounts" class="muted"></p><p id="collectionIssueImpact"></p>
-      <div class="scoped-search"><label for="issueSearch">Find a chat with gaps</label><div class="search-input-row"><input id="issueSearch" type="search" placeholder="Search" autocomplete="off" spellcheck="false" aria-describedby="issueSearchHelp"><button id="clearIssueSearch" type="button" class="quiet" hidden>Clear</button></div><p id="issueSearchHelp" class="settings-help">Search all affected chat names, projects, IDs and reasons. No prompts or source paths.</p><p id="issueSearchCount" class="search-count" role="status"></p></div>
+      <div class="scoped-search"><label for="issueSearch">Find a chat with gaps</label>${searchFieldMarkup({ id: "issueSearch", clearId: "clearIssueSearch", describedBy: "issueSearchHelp" })}<p id="issueSearchHelp" class="settings-help">Search all affected chat names, projects, IDs and reasons. No prompts or source paths.</p><p id="issueSearchCount" class="search-count" role="status"></p></div>
       <p id="collectionIssuesMessage" role="status" hidden></p><div id="collectionIssueGroups"></div>
       <p class="settings-help">Each chat appears under one primary reason; other limits may overlap. History gaps are not failed Work IQ or Graph requests.</p>
     </div>
@@ -147,14 +143,8 @@ export const settingsMarkup = `
 </section>`;
 
 // Display preferences are browser-local and never enter collection configuration.
-export function mountDisplayTimeSettings({ time, sidebarMotion, onChange }) {
+export function mountDisplayTimeSettings({ time, onChange }) {
     const $ = id => document.getElementById(id), key = "workiq-evidence.time-zone";
-    sidebarMotion.subscribe(state => {
-        $("sidebarMotionPreference").value = state.preference;
-        $("sidebarMotionNotice").textContent = state.warning;
-        $("sidebarMotionNotice").hidden = !state.warning;
-    });
-    $("sidebarMotionPreference").addEventListener("change", () => sidebarMotion.setPreference($("sidebarMotionPreference").value));
     let preference = null, warning = "", choicesKey = "", current, busy = false, stale = false;
     function accept(value) {
         try {

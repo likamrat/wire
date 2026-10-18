@@ -73,6 +73,8 @@ async function capture(page, name, end = false) {
     if (!proofs) return;
     await mkdir(proofs, { recursive: true });
     await page.mouse.move(0, 0);
+    await page.waitForFunction(() => !document.getAnimations().some(animation =>
+        animation.playState === "running" && Number.isFinite(animation.effect?.getComputedTiming().endTime)));
     await page.evaluate(end => {
         for (const dialog of document.querySelectorAll("dialog[open], dialog[open] .assessment-dialog-body")) dialog.scrollTop = end ? dialog.scrollHeight : 0;
     }, end);
@@ -140,6 +142,11 @@ async function geometry(page, selector = "[data-settings-section]:visible") {
         const alignment = [...root.querySelectorAll(".settings-task-row,.settings-display-field")].map(row => {
             const heading = row.querySelector("h3"), control = row.querySelector("button,a.button-link");
             if (!heading || !control) return null;
+            if (control.matches(".theme-trigger")) {
+                const label = textBox(heading), track = box(control.querySelector(".theme-track"));
+                return label && track.x > label.right + 8 ? { label: heading.textContent,
+                    difference: Math.abs((label.top + label.bottom) / 2 - (track.y + track.bottom) / 2) } : null;
+            }
             const label = textBox(heading), value = textBox(control.querySelector(".select-value") || control);
             return label && value && value.x > label.right + 8 ? { label: heading.textContent, difference: Math.abs(label.bottom - value.bottom) } : null;
         }).filter(Boolean);
@@ -172,6 +179,7 @@ async function geometry(page, selector = "[data-settings-section]:visible") {
 
 test("Settings normal entry presents all four current sections with coherent hierarchy at desktop, narrow and doubled text", { timeout: 90000 }, async t => {
     const { page } = await setup(t), measures = [];
+    await page.emulateMedia({ reducedMotion: "no-preference" });
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
@@ -232,6 +240,7 @@ test("Settings search locates without acting; source and preference drafts survi
 
 test("Settings expanded permission, source, unknown billing and privacy previews stay readable without authorizing work", { timeout: 90000 }, async t => {
     const { page, posts } = await setup(t, { unknownBilling: true }), measures = [];
+    await page.emulateMedia({ reducedMotion: "no-preference" });
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) for (const scale of [1, 2]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
@@ -244,7 +253,7 @@ test("Settings expanded permission, source, unknown billing and privacy previews
         await navigateSettings(page, "privacy");
         const checkbox = page.locator("#assessmentSetup input[type=checkbox]");
         await checkbox.check();
-        await expect(page.locator(".assessment-capture-details")).toContainText("Nothing is sent for AI review");
+        await expect(page.locator(".assessment-capture-details")).toContainText("This does not send them to another service.");
         await capture(page, `reply-draft-${width}-${scale}x-${theme}`);
         measures.push({ theme, width, scale, ...await geometry(page) });
         await page.getByRole("button", { name: "Discard change", exact: true }).click();
@@ -283,7 +292,7 @@ test("Settings global Search preserves old phrases and receipt-bound focus; Disp
     for (const [query, title, target] of [
         ["Delete collected activity", "Review deletion", "#deleteActivity"],
         ["Initial history window", "History to include", "#collectionWindow-control"],
-        ["Sidebar motion", "Sidebar motion", "#sidebarMotionPreference-control"],
+        ["Time zone", "Time zone", "#displayTimeZone-control"],
     ]) {
         await page.locator("#wireSearch").fill(query);
         await selectActivityOption(page, "wireSearchType", "setting");
@@ -293,14 +302,12 @@ test("Settings global Search preserves old phrases and receipt-bound focus; Disp
         await expect(page.locator(target)).toBeFocused();
         await expect(page.locator("#deleteDialog")).not.toBeVisible();
     }
-    await selectActivityOption(page, "sidebarMotionPreference", "on");
-    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.sidebar-motion")), "on");
+    await expect(page.locator("#sidebarMotionPreference")).toHaveCount(0);
     assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), true);
     await expect(page.locator("#saveCollection")).toBeDisabled();
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator("#sidebarMotionPreference")).toHaveValue("on");
-    await selectActivityOption(page, "sidebarMotionPreference", "system");
+    await expect(page.locator("#sidebarMotionPreference")).toHaveCount(0);
     assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.sidebar-motion")), null);
     await selectActivityOption(page, "displayTimeZone", "UTC");
     await expect(page.locator("#displayTimeZone")).toHaveValue("UTC");
@@ -376,7 +383,7 @@ test("Settings disclosure, search-empty and popup controls remain reachable with
         await page.locator("#settingsSearch").press("Escape");
         await expect(page.locator("#settingsSearch")).toHaveValue("");
         await navigateSettings(page, "display");
-        for (const id of ["sidebarMotionPreference", "displayTimeZone"]) {
+        for (const id of ["displayTimeZone"]) {
             const trigger = page.locator(`#${id}-control`);
             await trigger.focus();
             await page.keyboard.press("Enter");

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, mkdir, writeFile, appendFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, appendFile, readFile, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import os from "node:os";
@@ -212,7 +212,8 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     await collector.configure({ appDbPath: dbPath, sessionRoot: sourceRoot, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
     await collector.collectNow();
     await collector.close();
-    const runtime = await startServer(session, createExportController(session), { port: 0, collector: { timers: false } });
+    const reports = createExportController(session);
+    const runtime = await startServer(session, reports, { port: 0, collector: { timers: false } });
     collector = collectorFor(session);
     const { context, page, calls, close } = await browserFor(t, runtime);
     t.after(async () => {
@@ -224,10 +225,11 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     });
     await page.goto(runtime.url + "#settings?section=evidence"); await settled(page);
     const setup = page.locator("#assessmentSetup");
-    await setup.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true }).waitFor();
-    const checkbox = setup.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    await setup.getByRole("switch", { name: "Save Copilot replies locally", exact: true }).waitFor();
+    const checkbox = setup.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     assert.equal(await page.locator('[data-settings-section="privacy"] h2').count(), 1, "Reply saving belongs to Privacy and saved data.");
-    assert.equal(await page.locator("#assessmentSetupTitle").textContent(), "Recorded replies");
+    assert.equal(await page.locator("#assessmentSetupTitle").getAttribute("aria-label"), "Recorded replies");
+    assert.equal(await setup.getByRole("heading", { name: "Save Copilot replies locally", exact: true }).count(), 1);
     assert.equal(await checkbox.isChecked(), false);
     assert.equal(await setup.getByRole("button", { name: "Save response setting", exact: true, includeHidden: true }).isEnabled(), false);
     assert.equal((await loadBoardState(session)).personalEvaluation, undefined);
@@ -252,7 +254,12 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
         const value = await setup.getByRole("button", { name: "Turn off and delete responses", exact: true }).evaluate(node => {
             const style = getComputedStyle(node), face = getComputedStyle(node, "::before");
             const surface = face.content !== "none" && face.zIndex === "-1" ? face : style;
-            return { color: style.color, background: surface.backgroundColor, border: surface.borderColor, danger: style.getPropertyValue("--danger").trim(), height: node.getBoundingClientRect().height };
+            let background = surface.backgroundColor, parent = node.parentElement;
+            while (background === "rgba(0, 0, 0, 0)" && parent) {
+                background = getComputedStyle(parent).backgroundColor;
+                parent = parent.parentElement;
+            }
+            return { color: style.color, background, border: surface.borderColor, danger: style.getPropertyValue("--danger").trim(), height: node.getBoundingClientRect().height };
         });
         assert.deepEqual(rgb(value.color), rgb(value.danger));
         assert.deepEqual(rgb(value.border), rgb(value.danger));
@@ -271,12 +278,15 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     const scenarioId = state.evidence[0].scenarioId;
     const other = await context.newPage();
     await other.goto(runtime.url + "#request?request=" + encodeURIComponent(scenarioId)); await settled(other);
-    await other.getByRole("button", { name: "Read response", exact: true }).click();
-    await other.getByRole("region", { name: "Retained response text", exact: true }).locator("pre").waitFor();
-    assert.equal(await other.locator(".interaction-response pre").textContent(), text);
+    await other.getByText(text, { exact: true }).waitFor();
     assert.equal(calls.filter(path => path === "/api/assessment/evidence").length, 1);
+    const preview = await reports.preview("synthetic-revoke-preservation", undefined, { promptMode: "none", formats: ["json"] },
+        { kind: "selected", revision: state.revision, scenarioIds: [scenarioId] });
+    await reports.review("synthetic-revoke-preservation", preview.previewId, true);
+    const saved = (await reports.confirm("synthetic-revoke-preservation", preview.previewId, true)).bundle;
+    const frozen = await Promise.all(Object.values(saved.files).map(async file => [file, await readFile(file)]));
     await page.bringToFront();
-    await (await revealStoredRefresh(page)).click(); await settled(page);
+    await page.reload(); await settled(page);
     await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
     await page.waitForFunction(() => document.querySelector("#assessmentSetup input")?.checked && document.querySelector("#assessmentSetup button[type=submit]")?.hidden);
     await checkbox.uncheck();
@@ -286,10 +296,11 @@ test("setup enable/cancel and cross-panel revocation operate only on an isolated
     assert.equal(revokeResponse.status(), 200, await revokeResponse.text());
     await other.bringToFront();
     await other.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    await other.waitForFunction(() => !document.querySelector(".interaction-response pre"), { timeout: 15000 });
+    await other.waitForFunction(text => !document.querySelector(".interaction-response")?.textContent.includes(text), text, { timeout: 15000 });
     state = await loadBoardState(session);
     assert.equal(state.personalEvaluation.consent.state, "revoked");
     assert.equal(state.personalEvaluation.captures.length, 0);
     assert.equal(state.evidence.length, 1, "Revocation preserves ordinary retained activity.");
+    for (const [file, bytes] of frozen) assert.deepEqual(await readFile(file), bytes, "Revocation preserves frozen report files.");
     assert.equal(calls.filter(path => path === "/api/assessment/consent/set").length, 2);
 });

@@ -29,14 +29,14 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
                 hover: node.matches(":hover"), active: node.matches(":active"), focused: document.activeElement === node,
                 background: css.backgroundColor, ink: css.color, outline: css.outlineStyle, outlineWidth: css.outlineWidth,
                 shadow: css.boxShadow, border: css.borderTopWidth,
-                title: { decoration: title.textDecorationLine, thickness: title.textDecorationThickness },
+                title: { decoration: title.textDecorationLine, color: title.color },
                 before: { content: before.content, background: before.backgroundColor, border: before.borderTopColor,
                     shadow: before.boxShadow, width: before.width, height: before.height, pointerEvents: before.pointerEvents },
                 rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
                 content: [...node.querySelectorAll(".wire-search-title,.wire-search-kind,.wire-search-source,.wire-search-excerpt,.wire-search-outcome,mark,.wire-icon")].map(part => {
                     const css = getComputedStyle(part);
                     return { role: part.localName === "mark" ? "mark" : part.className.baseVal || part.className,
-                        color: css.color, background: css.backgroundColor, underline: css.textDecorationLine };
+                        color: css.color, background: css.backgroundColor, underline: css.textDecorationLine, weight: css.fontWeight };
                 }),
                 paper: getComputedStyle(document.querySelector("#wireSearchPanel")).backgroundColor,
             };
@@ -48,7 +48,7 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
         if (proofs) await page.screenshot({ path: path.join(proofs, name + ".png") });
     }
     for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
-        const page = await browser.newPage({ viewport: { width, height: width === 375 ? 812 : 1000 }, reducedMotion: "reduce" });
+        const page = await browser.newPage({ viewport: { width, height: width === 375 ? 812 : 1000 }, reducedMotion: "no-preference" });
         page.on("pageerror", error => errors.push(error.message));
         await page.route("**/*", route => {
             if (new URL(route.request().url()).origin !== new URL(app.runtime.url).origin) {
@@ -92,6 +92,7 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
         assert.equal(new URL(destination).hash, "#request?request=search-0");
         await expect(page.locator("#requestContent")).toContainText("The physician treated an injured patient in the hospital.");
         await page.goBack();
+        await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
         await expect(first).toBeFocused();
         await expect(first).toHaveAttribute("data-search-id", id);
         await expect(first).toHaveAttribute("aria-label", rowName);
@@ -125,10 +126,10 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
         assert.ok(transparent(fill(value.idle)), `${value.theme}/${value.width}: idle rows stay unfilled`);
         assert.equal(value.idle.border, "0px"); assert.equal(value.idle.shadow, "none");
         assert.equal(value.idle.title.decoration, "none");
-        assert.equal(value.hover.title.decoration, "underline", "Hover feedback identifies the actual action without a gray slab");
-        assert.equal(value.pressed.title.decoration, "underline");
-        assert.equal(value.pressed.title.thickness, "2px");
-        assert.notEqual(value.hover.title.thickness, value.pressed.title.thickness, "Pressed feedback remains distinct");
+        assert.equal(value.hover.title.decoration, "none", "Hover feedback needs neither underlines nor a gray slab");
+        assert.equal(value.pressed.title.decoration, "none");
+        assert.notEqual(value.hover.title.color, value.idle.title.color);
+        assert.notEqual(value.hover.title.color, value.pressed.title.color, "Pressed feedback remains distinct");
         for (const state of [value.hover, value.pressed]) {
             assert.ok(transparent(fill(state)), "Whole rows stay unfilled");
             assert.equal(state.before.content, "none");
@@ -141,7 +142,10 @@ test("Search gives only the actual hovered or pressed title quiet feedback, with
             for (const part of state.content) {
                 assert.ok(contrast(part.color, transparent(part.background) ? surface : part.background)
                     >= (part.role === "wire-icon" ? 3 : 4.5), `${value.theme}/${value.width}: ${part.role} contrast`);
-                if (part.role === "mark") assert.ok(part.underline.includes("underline"), "Match meaning is not color alone");
+                if (part.role === "mark") {
+                    assert.equal(part.underline, "none");
+                    assert.equal(part.weight, "600", "The supplied match has quiet weight emphasis, not color alone");
+                }
             }
         }
     }

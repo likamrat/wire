@@ -15,6 +15,11 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         const node = el("button", label, cls);
         node.type = "button"; node.addEventListener("click", action); return node;
     }
+    function focusHeading(block = "start") {
+        const target = header.hidden ? doc.getElementById("pageTitle") || preparedFiles.querySelector('[role="tab"]') : heading;
+        target?.focus({ preventScroll: true });
+        target?.scrollIntoView({ block });
+    }
     const heading = el("h2", "Compare saved reports"); heading.tabIndex = -1;
     const header = el("header", undefined, "comparison-task-heading");
     const backChoices = button("Back to comparison choices", () => {
@@ -123,6 +128,12 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         const valid = baseline.value && later.value && baseline.value !== later.value;
         const locked = Boolean(dispatchedSave);
         const reviewing = showingPrepared && Boolean(preview) && !unknownSave;
+        const choicesHost = reviewing ? preparedFiles.querySelector(".comparison-inspection-actions") : header;
+        if (choicesHost && backChoices.parentElement !== choicesHost) {
+            if (choicesHost === header) header.insertBefore(backChoices, discard);
+            else choicesHost.prepend(backChoices);
+        }
+        header.hidden = reviewing;
         heading.textContent = savedMode ? savedDocumentTitle || "Saved comparison"
             : reviewing ? preview.title || "Review comparison" : dispatchedSave?.title || savedResult?.title || "Compare saved reports";
         titleInput.value = draftTitle; titleInput.disabled = writing || locked;
@@ -233,7 +244,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         if (preview) {
             onRead?.();
             showingPrepared = true; paint();
-            heading.focus({ preventScroll: true }); heading.scrollIntoView({ block: "nearest" });
+            focusHeading("nearest");
             return;
         }
         const blocked = prepareBlockReason?.() || "";
@@ -300,16 +311,18 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
                     : (current + (event.key === "ArrowRight" ? 1 : -1) + controls.length) % controls.length;
                 controls[next].click(); controls[next].focus();
             });
-            tabs.append(tabList, button("Disclosure & save", () => {
+            const tabActions = el("div", undefined, "comparison-inspection-actions");
+            tabActions.append(button("Disclosure & save", () => {
                 decision.scrollIntoView({ block: "center" });
                 const control = approved ? save : reviewCheck;
                 if (!control.disabled) control.focus({ preventScroll: true });
             }));
+            tabs.append(tabList, tabActions);
             preparedFiles.replaceChildren(tabs, reportPanel, filePanel);
             showingPrepared = true;
             message("");
             paint();
-            heading.focus({ preventScroll: true }); heading.scrollIntoView({ block: "start" });
+            focusHeading();
         } catch (error) { if (token === generation) message(error.message, true); }
         finally { if (token === generation) { preparing = writing = false; paint(); } }
     }
@@ -444,7 +457,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         if (retain && (choicesLoaded || choicesLoading)) return;
         if (writing || artifactPending) { message("Wait for the current saved-object operation to finish."); return; }
         root.hidden = false;
-        if (focus) { heading.focus({ preventScroll: true }); heading.scrollIntoView({ block: "start" }); }
+        if (focus) focusHeading();
         if (bundleId) {
             savedMode = true; savedArtifactId = bundleId; savedDocumentTitle = ""; heading.textContent = "Saved comparison";
             const token = ++generation;

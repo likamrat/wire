@@ -125,6 +125,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const draft = createReportDraft({ contextSelector: createRequestContext() });
     const renderedContextBundles = new Set();
     const ux = createEvidenceUX(uxIcons);
+    const searchFields = assessmentFactories.createSearchFields(ux);
     const metadata = createInlineMetadata(ux);
     // Keep operation wording on screen separate from saved report definitions.
     const recordedCategories = createServiceCategories();
@@ -241,9 +242,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ? "Read stored activity. No source check will be repeated."
         : collection?.config?.approved ? "Refresh approved local history. Paused collection stays paused." : "Refresh stored activity. No source is approved.");
     ux.tooltip($("refreshBtn"), "Read stored activity. No source check will be repeated.");
-    for (const [id, label] of Object.entries({ clearSettingsSearch: "Clear settings search", clearIssueSearch: "Clear history search",
-        clearSavedReportSearch: "Clear report search", clearReportRequestSearch: "Clear interaction search", clearDates: "Clear dates",
-        clearActivitySearch: "Clear legacy search", wireSearchClear: "Clear search" })) ux.utility($(id), "close", label);
+    for (const [id, label] of Object.entries({ clearDates: "Clear dates", clearActivitySearch: "Clear legacy search" })) ux.utility($(id), "close", label);
     ux.utility($("openAnalysisSearch"), "search", "Search this Analyze scope", "Search this view");
     for (const node of document.querySelectorAll("[data-chart]")) ux.tooltip(node, () =>
         node.dataset.chart === "workload" && applied?.layer === "tool" ? help.charts.activityCategory : help.charts[node.dataset.chart]);
@@ -373,15 +372,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sidebarColumnAnchor = null;
         sidebarColumnAnimation?.cancel();
         sidebarColumnAnimation = null;
-        if (!sidebar.motion.enabled) { finish(); return; }
         const animation = contextSidebar.animate([{ transform: from }, { transform: entering ? "translateX(0)" : "translateX(100%)" }],
-            sidebar.motion.timing);
+            sidebar.timing);
         if (docked) {
             const columnWidth = space => `calc(100% - var(--app-sidebar-width,196px) - ${space}px)`;
             sidebarColumnAnimation = main.animate([
                 { width: columnWidth(occupied), overflowAnchor: "none" },
                 { width: columnWidth(entering ? width : 0), overflowAnchor: "none" },
-            ], sidebar.motion.timing);
+            ], sidebar.timing);
             // Both edges share one clock; the width still follows a simultaneously moving left rail.
             const start = document.timeline.currentTime;
             animation.startTime = start;
@@ -392,7 +390,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sidebarAnimation = animation; sidebarAnimationFinish = finish;
         animation.onfinish = () => { if (sidebarAnimation === animation) finishSidebarMotion(); };
     }
-    sidebar.motion.subscribe(state => { if (!state.enabled) { finishSidebarMotion(); readerSections?.settle(); } });
     function clearSidebarExit() {
         const exit = sidebarExit;
         if (!exit) return;
@@ -418,7 +415,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             tag: target.tagName, label: target.getAttribute("aria-label") };
         if (contextOwner?.identity === "report-setup") reportSetupReturn = { ...reportSetupReturn, focus: target };
     });
-    function showContextSidebar({ identity, title, body, footer, anchor, requestClose, closeLabel = "Close interaction" }) {
+    function showContextSidebar({ identity, title, body, bodyTitle, footer, anchor, requestClose, closeLabel = "Close interaction" }) {
         if (body !== $("requestView")) clearReaderSections();
         const entering = !sidebarIdentity;
         if (entering) {
@@ -443,11 +440,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (footer && footer.parentElement !== $("contextSidebarFooter")) $("contextSidebarFooter").replaceChildren(footer);
         body.hidden = false;
         $("contextSidebarTitle").textContent = title;
+        $("contextSidebarTitle").hidden = Boolean(bodyTitle);
+        if (bodyTitle) bodyTitle.textContent = title;
         $("closeContextSidebar").setAttribute("aria-label", closeLabel);
         ux.tooltip($("closeContextSidebar"), closeLabel);
         const main = $("main");
         // Publish the docked state without first painting its final, narrower column.
-        if (entering && sidebar.motion.enabled) main.style.width = main.getBoundingClientRect().width + "px";
+        if (entering) main.style.width = main.getBoundingClientRect().width + "px";
         try {
             fitContextSidebar();
             if (entering) moveSidebar(true);
@@ -699,6 +698,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const anchor = saved.anchor ? keyed(saved.anchor) : null;
         window.scrollTo(saved.x, anchor?.checkVisibility() ? scrollY + anchor.getBoundingClientRect().top - saved.top : saved.y);
         rememberSidebarAnchor();
+        if (sidebarColumnAnimation && sidebarIdentity && sidebarColumnAnchor?.navigation === navigationGeneration && sidebarColumnAnchor.intent === readingIntent) {
+            sidebarColumnAnchor.top = sidebarColumnAnchor.anchor?.getBoundingClientRect().top;
+        }
         if (saved.textSelection) {
             const { key, text, anchor, focus } = saved.textSelection;
             const reader = key ? keyed(key)?.querySelector(".full-text-body pre") : null;
@@ -797,15 +799,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function option(value, label) { const node = el("option", "", label); node.value = value; return node; }
     function count(value) { return Number.isFinite(value) ? value.toLocaleString() : "Not recorded"; }
     function localQuery(id) { return route.localSearch?.[id] || ""; }
-    const scopedSearches = {
-        settingsSearch: "clearSettingsSearch", issueSearch: "clearIssueSearch",
-        savedReportSearch: "clearSavedReportSearch", reportRequestSearch: "clearReportRequestSearch",
-    };
+    const scopedSearches = {};
     function syncLocalSearchFields() {
-        for (const [id, clear] of Object.entries(scopedSearches)) {
-            if ($(id).value !== localQuery(id)) $(id).value = localQuery(id);
-            $(clear).hidden = !localQuery(id);
-        }
+        for (const [id, field] of Object.entries(scopedSearches)) field.sync(localQuery(id));
         $("clearActivitySearch").hidden = !search;
     }
     function highlighted(node, text, query) {
@@ -844,7 +840,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         list.replaceChildren();
         list.hidden = !query.trim();
         status.hidden = !query.trim();
-        setText(status, entries.length ? `${entries.length} setting${entries.length === 1 ? "" : "s"} found. Opening a result changes nothing.` : "No settings match. Try time zone or history.");
+        setText(status, entries.length ? `${entries.length} setting${entries.length === 1 ? "" : "s"} found.` : "No settings match. Try time zone or history.");
         entries.forEach((entry, index) => {
             const item = el("li"), anchor = link("", entry.view || "settings", { section: entry.section, setting: entry.id });
             anchor.dataset.setting = entry.id;
@@ -1221,7 +1217,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             receipt: null, scenarioIds: [], actionIds: [], parentScenarioIds: [] };
     }
     liveSearchUI = assessmentFactories.liveSearch.mount({
-        api, ux, results, createState: assessmentFactories.liveSearch.createState,
+        api, ux, searchFields, results, createState: assessmentFactories.liveSearch.createState,
         serviceIcon(target) {
             if (target?.kind !== "route" || typeof target.href !== "string" || !target.href.startsWith("#analyze?")) throw new TypeError("Search service target is invalid.");
             const services = new URLSearchParams(target.href.split("?")[1]).getAll("services");
@@ -1299,7 +1295,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return load();
         },
     });
-    recollectionUI = assessmentFactories.mountRecollection({ api, time, timeContext: () => viewerTime, search: localSearch, ux,
+    recollectionUI = assessmentFactories.mountRecollection({ api, time, timeContext: () => viewerTime, search: localSearch, ux, searchFields,
         pageSources: (host, sources, renderItem, reset) => {
             if (reset) presentation.setPage("recollection-chats", 0);
             pagedList(host, sources, { key: "recollection-chats", size: pageSize, noun: "chats", renderItem });
@@ -2147,8 +2143,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (leavingSaved?.origin?.inspect === route.inspect) {
                     restoreReading(leavingSaved.reading);
                     contextBody.scrollTop = leavingSaved.inspectorTop || 0;
-                    ux.restoreFocus(keyed(leavingSaved.focusKey) || $("contextSidebarTitle"));
-                } else $("contextSidebarTitle").focus({ preventScroll: true });
+                    ux.restoreFocus(keyed(leavingSaved.focusKey) || savedInspector?.heading || $("contextSidebarTitle"));
+                } else (savedInspector?.heading || $("contextSidebarTitle")).focus({ preventScroll: true });
                 return;
             }
             if (leavingSaved?.origin && readingKey(next) === readingKey(leavingSaved.origin)) {
@@ -3303,7 +3299,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ux.explainDisabled(collapse, "All sections are collapsed.", { compact: true });
         ux.explainDisabled(expand, "All sections are expanded.", { compact: true });
         sections = assessmentFactories.readerSections({
-            root: body, presentation, ux, motion: sidebar.motion, isCurrent: currentReader,
+            root: body, presentation, ux, isCurrent: currentReader,
             onChange: value => {
                 const focused = document.activeElement;
                 collapse.disabled = !value.canCollapse;
@@ -4048,7 +4044,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!state) return;
         const savedCount = state.exports?.length || 0;
         const verifiedEmptyLibrary = !savedCount && !isLoading && !isStale;
-        for (const node of $("bundles").querySelectorAll(":scope > .saved-library-tools,:scope > #savedLibraryHelp,:scope > #savedLibraryManagement")) {
+        for (const node of $("bundles").querySelectorAll(".saved-library-tools,:scope > #savedLibraryManagement")) {
             if (verifiedEmptyLibrary && node.contains(document.activeElement)) $("reportCreateLink").focus({ preventScroll: true });
             node.hidden = verifiedEmptyLibrary;
         }
@@ -4329,10 +4325,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 mode, formats,
                 Number.isSafeInteger(groups) && groups >= 0 ? `${count(groups)} interaction${groups === 1 ? "" : "s"}` : "",
             ].filter(Boolean).join(" / ");
-            return { bundle, index, prepared, label, date, mode, formats, title, groups };
+            return { bundle, index, prepared, label, title: savedTitle(bundle) };
         });
-        const labelCounts = new Map();
-        for (const { label } of rows) labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
         $("savedReportOrder").value = route.order || "newest";
         rows.sort((a, b) => a.prepared === null ? b.prepared === null ? a.index - b.index : 1
             : b.prepared === null ? -1 : (route.order === "oldest" ? 1 : -1) * (a.prepared - b.prepared || a.index - b.index));
@@ -4344,7 +4338,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ]));
         setText($("savedReportSearchCount"), query ? `${count(matching.length)} of ${count(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
         if (!matching.length) { $("bundleList").append(empty("No saved reports match", "Try a title, date or file format, or clear this search.")); return; }
-        pagedList(history, matching, { key: savedLibraryPageKey(), noun: comparisonCount ? "saved items" : "saved reports", jump: true, onPage: () => leaveSavedInspectorContext(), renderItem: ({ bundle, label, date, mode, formats, title, groups }) => {
+        pagedList(history, matching, { key: savedLibraryPageKey(), noun: comparisonCount ? "saved items" : "saved reports", jump: true, onPage: () => leaveSavedInspectorContext(), renderItem: ({ bundle, title }) => {
             detailOwner = "bundle:" + bundle.bundleId;
             const outer = viewKey(el("article", "saved-library-row"), detailOwner);
             outer.dataset.bundleId = bundle.bundleId;
@@ -4353,20 +4347,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             summary.setAttribute("aria-controls", "contextSidebar");
             summary.setAttribute("aria-expanded", String(route.inspect === bundle.bundleId));
             const identity = el("span", "saved-report-identity");
-            identity.append(el("span", "saved-report-name", title),
-                el("span", "", date === "Time not recorded" ? "Preparation time unavailable" : `Prepared ${date}`));
-            if (Number.isSafeInteger(groups) && groups >= 0 && bundle.reportType !== "period-comparison") identity.append(el("span", "saved-report-scope", `${count(groups)} interaction${groups === 1 ? "" : "s"}`));
-            if (labelCounts.get(label) > 1) identity.append(el("span", "saved-report-disambiguation", bundle.bundleId));
-            const metadata = el("span", "saved-report-metadata");
-            if (mode) metadata.append(el("span", "", mode));
-            if (formats) metadata.append(el("span", "", formats));
-            summary.append(identity, metadata);
+            identity.append(el("span", "saved-report-name", title));
+            summary.append(identity, savedFormatLabels(bundle));
             outer.append(summary);
             if (savedReadableFormat(bundle)) {
                 const open = viewKey(button("Open", event => openSavedReport(bundle, event.currentTarget), "quiet"), "open-bundle:" + bundle.bundleId);
                 open.setAttribute("aria-label", bundle.kind === "comparison" ? "Open saved comparison" : "Open saved report");
                 outer.append(open);
-            } else outer.append(el("span", "saved-report-no-html", "No HTML"));
+            } else outer.append(el("span", "saved-report-no-html", "No supported file"));
             return outer;
         } });
         $("bundleList").append(history);
@@ -4375,6 +4363,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         updateSelection();
     }
     function savedLibraryPageKey() { return "saved-reports:" + localQuery("savedReportSearch") + (route.order === "oldest" ? ":oldest" : ""); }
+    function savedFormatLabels(bundle) {
+        const labels = el("span", "saved-report-formats");
+        labels.setAttribute("role", "group");
+        labels.setAttribute("aria-label", "Recorded files");
+        const prefix = bundle.kind === "comparison" ? "comparison-report" : "product-report";
+        for (const [extension, label] of [["html", "HTML"], ["pdf", "PDF"], ["json", "JSON"], ["md", "Markdown"]]) {
+            if (Object.hasOwn(bundle.files ?? {}, `${prefix}.${extension}`)) labels.append(el("span", "report-format", label));
+        }
+        if (!labels.childElementCount) labels.append(el("span", "saved-file-gap", "Files not listed"));
+        return labels;
+    }
     function savedReadableFormat(bundle) {
         const prefix = bundle.kind === "comparison" ? "comparison-report" : "product-report";
         return ["html", "json", "markdown", "pdf"].find(format => bundle.formats?.includes(format)
@@ -4399,7 +4398,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return key;
     }
     function inspectSavedReport(bundle, trigger) {
-        if (route.inspect === bundle.bundleId) { $("contextSidebarTitle").focus({ preventScroll: true }); return; }
+        if (route.inspect === bundle.bundleId) { (savedInspector?.heading || $("contextSidebarTitle")).focus({ preventScroll: true }); return; }
         const key = savedEntry("inspector", bundle, trigger);
         if (route.inspect) {
             const previous = savedEntries.get(route.savedEntry);
@@ -4475,9 +4474,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (savedInspector) { savedInspector.body.remove(); savedInspector.footer.remove(); savedInspector = null; }
         if (!contextOwner?.identity.startsWith("saved:")) finishSidebarMotion();
         const body = el("section", "saved-report-inspection"), footer = el("div", "saved-inspector-actions");
+        const heading = el("h2", "saved-inspector-title");
+        heading.id = "savedInspectorTitle";
+        heading.tabIndex = -1;
+        heading.autofocus = true;
+        body.append(heading);
         const focusKey = savedEntries.get(route.savedEntry)?.focusKey, trigger = keyed(focusKey);
         const anchor = trigger?.closest(".saved-library-row") || trigger || keyed("bundle:" + route.inspect);
-        const current = { body, footer, bundleId: route.inspect, metadata: JSON.stringify(bundle), focusKey, anchor };
+        const current = { body, heading, footer, bundleId: route.inspect, metadata: JSON.stringify(bundle), focusKey, anchor };
         savedInspector = current;
         const valid = () => savedInspector === current && bundle && indexedSaved(bundle);
         if (!bundle) body.append(el("p", "error", "This saved item is no longer available. Return to the library and refresh."));
@@ -4491,6 +4495,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (bundle.timeContext) add("Timezone", time.label(bundle.timeContext));
             body.append(facts);
             if (bundle.reportType === "period-comparison") body.append(el("p", "", "Period A and Period B are fixed saved cohorts."));
+            const files = el("section", "saved-inspector-files");
+            files.append(el("h3", "", "Recorded files"), savedFormatLabels(bundle));
+            body.append(files);
             body.append(button(bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", event => {
                 if (valid()) savedArtifactUI.open({ artifactKind: bundle.kind === "comparison" ? "comparison" : "report",
                     artifactId: bundle.bundleId, label: `${savedTitle(bundle)} / ${bundle.bundleId}` }, event.currentTarget);
@@ -4504,10 +4511,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 footer.append(el("p", "error", "No supported saved format is registered for this report."));
             }
         }
-        showContextSidebar({ identity: "saved:" + route.inspect, title: savedTitle(bundle), body, footer,
+        showContextSidebar({ identity: "saved:" + route.inspect, title: savedTitle(bundle), body, bodyTitle: heading, footer,
             anchor, requestClose: backSaved, closeLabel: "Close saved report details" });
         contextBody.scrollTop = 0;
-        $("contextSidebarTitle").focus({ preventScroll: true });
+        heading.focus({ preventScroll: true });
     }
     function clearSavedReader() {
         if (savedReportView) savedReportView.invalid = true;
@@ -4536,7 +4543,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const host = $("savedReportReader"), header = el("header", "saved-reader-heading"), body = el("div", "saved-reader-body"), actions = el("div", "saved-reader-actions");
         const backLabel = entry?.searchReturn ? "Back to search" : entry?.origin?.task === "compare" ? "Back to comparison" : "Back to report library";
         const back = button(backLabel, backSaved, "quiet");
-        ux.utility(back, "back", backLabel);
+        back.prepend(ux.icon("back"));
         header.append(back);
         host.replaceChildren(header, actions, body);
         const current = { body, actions, title: savedTitle(bundle || entry?.value?.artifact), bundleId: route.bundle, identity: savedIdentity(bundle), entryKey: route.savedEntry, invalid: false };
@@ -5856,12 +5863,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("activitySearch").addEventListener("keydown", event => {
         if (event.key === "Escape" && search) { event.preventDefault(); $("clearActivitySearch").click(); }
     });
-    for (const [id, clear] of Object.entries(scopedSearches)) {
-        $(clear).setAttribute("aria-label", ({
-            settingsSearch: "Clear settings search", issueSearch: "Clear affected chat search",
-            savedReportSearch: "Clear saved report search", reportRequestSearch: "Clear report request search",
-        })[id]);
-        $(id).addEventListener("input", () => {
+    for (const [id, clearLabel] of Object.entries({
+        settingsSearch: "Clear settings search", issueSearch: "Clear affected chat search",
+        savedReportSearch: "Clear saved report search", reportRequestSearch: "Clear report request search",
+    })) {
+        scopedSearches[id] = searchFields.mount($(id), { clearLabel, onInput() {
             if (id === "savedReportSearch") leaveSavedInspectorContext();
             const localSearch = { ...route.localSearch, [id]: $(id).value };
             route = { ...route, localSearch,
@@ -5872,14 +5878,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (id === "settingsSearch") renderSettingsSearch();
             else if (id === "issueSearch") { if (issueRows) renderCollectionIssues({ historyIssues: issueRows }); }
             else renderReports();
-        });
-        $(clear).addEventListener("click", () => {
-            $(id).value = ""; $(id).dispatchEvent(new Event("input"));
+        }, focusAfterClear() {
             if (id === "issueSearch" && !$(id).checkVisibility()) ux.restoreFocus($("collectionIssuesTitle"));
             else $(id).focus();
-        });
+        } });
         $(id).addEventListener("keydown", event => {
-            if (event.key === "Escape" && $(id).value) { event.preventDefault(); $(clear).click(); }
+            if (event.key === "Escape" && !event.isComposing && !event.defaultPrevented && $(id).value) { event.preventDefault(); scopedSearches[id].clear(); }
         });
     }
     $("savedReportOrder").addEventListener("change", () => {
@@ -5889,9 +5893,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("settingsSearchResults").addEventListener("keydown", event => {
         if (event.key === "Escape") { event.preventDefault(); $("clearSettingsSearch").click(); }
     });
-    const settingsSearchIcon = ux.icon("search");
-    settingsSearchIcon.classList.add("settings-search-icon");
-    $("settingsSearch").before(settingsSearchIcon);
     for (const category of settingsNavigation.categories) {
         const anchor = link("", "settings", { section: category.id, setting: undefined, issues: undefined });
         anchor.dataset.category = category.id;
@@ -6076,7 +6077,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return load({ background: true });
         },
     });
-    displayTimeSettings = mountDisplayTimeSettings({ time, sidebarMotion: sidebar.motion, onChange: () => { if (!exportWriting) load(); } });
+    displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
     $("callSort").addEventListener("change", () => {
         if (!restoring) navigate(routeFor("analyze", { callSort: $("callSort").value, page: undefined }), false, { keepFocus: true });
     });

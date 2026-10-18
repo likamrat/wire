@@ -46,7 +46,7 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             scrollTo(0, 0);
         }, scale);
-        const name = `${theme}-${width}-${scale}`, paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(25, 25, 25)";
+        const name = `${theme}-${width}-${scale}`, paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 32, 32)";
         if (await page.locator("#filters .ux-help").count()) violations.push(`${name}: routine field info targets remain`);
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `context-${name}.png`), fullPage: true });
         if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFiltersToggle").click();
@@ -165,7 +165,7 @@ test("native opt-in outside Analyze reuses the filter presentation without chang
             for (const id of ["scope", "type"]) document.getElementById(id).selectedIndex = 0;
             window.controlChanges = []; window.controls.sync();
         }, theme);
-        const paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(25, 25, 25)";
+        const paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 32, 32)";
         for (const [id, value] of [["scope", "analysis"], ["type", "setting"]]) {
             const trigger = page.locator(`#${id}-control`);
             assert.equal(await trigger.evaluate(node => node.classList.contains("select-trigger-filter")), true);

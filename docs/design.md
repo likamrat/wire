@@ -2,20 +2,66 @@
 
 ## Screen surfaces and motion
 
-Current Analyze, Reports and Settings screens use tonal surfaces and spacing
-instead of stacked decorative outlines. Widgets and report journey/library
-containers retain their existing radii and dimensions, without perimeter paint
-or widget shadows. Interaction cards use the existing small radius and retain
-their selected-card leading edge. Settings groups use spacing where a repeated
-rule adds no meaning; input, permission and action boundaries remain explicit.
+Current screens use three related planes: the neutral workspace, softly raised
+panels and higher floating menus/dialogs. Analyze widgets, standalone interaction
+cards, report workspaces, Settings content and collection-status groups use
+`--panel-shadow`; portals use `--surface-shadow`. Both combine a small contact
+shadow with diffuse depth, with subtle edge highlights in dark mode. Screen
+corners are softened without changing box dimensions or hit targets.
+Nested chart content, report rows, reader sections and linked text stay flat
+inside their owning surface rather than gaining another decorative wrapper.
+Settings groups use spacing where a repeated rule adds no meaning; input,
+permission, error and confirmation boundaries remain explicit.
+Dark service/tool bar fades retain enough of their existing identity color to
+contrast with the raised track across both gradient stops. This does not change
+service glyph/text colors, outcome stops or saved report paint.
 
-The left navigation marks the current destination with a neutral tonal strip,
+The left navigation marks the current destination with a restrained neutral
+surface and inset keyline,
 not an additional leading stripe. Expanded icon-and-text and collapsed icon-only
 states keep the same targets and alignment. Tonal regions separate the rail
 and toolbar without painted shell seams or a strong continuous frame. In forced colors the current
 destination uses system highlight colors. Keyboard focus, fields, errors, chart
 axes, code/data structure and consequential confirmations keep their functional
 boundaries; this is not a global reduction of rule or control contrast.
+
+Screen controls share paper-first states through the existing pill variables.
+Ordinary actions use a light outline; hover strengthens that outline and adds
+a small tonal change. Quiet navigation/return actions are unboxed. Primary
+progression and save actions use compact, high-contrast ink paint in both themes,
+not a different gray fill in each workspace. Destructive actions retain red
+text and outline, their light pressed tint and separate confirmation. Disabled
+actions keep readable muted labels without a selected-looking background.
+Inset text-action paint remains independent of its full 44px-or-larger target.
+Color/border transitions take 140ms with no scaling or positional movement and
+are omitted under reduced motion. Keyboard focus stays explicit; forced colors
+retain native control boundaries and selected markers.
+
+Persistent navigation/current, transient hover and keyboard focus are separate.
+Saved rows retain a leading selected edge without a persistent hover slab or
+selection-driven padding shift. Analyze cards retain their selected edge and
+subtle selected surface. Report reading tabs use an underline, not the generic
+button face; row summaries and tabs own their paint instead of fighting global
+button pseudo-elements. Filter toggles, checkboxes, radio choices, service/outcome
+colors and Search's title-underlining feedback retain their own meanings.
+The library's aligned final column accommodates both Open and an unavailable-file
+status without splitting ordinary words. Saved-item titles and facts share the
+existing reading scroller, leaving Close and the Open/unavailable footer fixed
+and reachable even with a maximum-length title at enlarged text. The full title
+receives native initial autofocus, avoiding an intermediate Close focus and
+orphaned Close tooltip during keyboard reopening. Genuine tooltip and nested
+select help keep their first-Escape priority. A synchronized hidden header label preserves the dialog's
+accessible name without moving or detaching the shared heading. Interaction and
+report-setup headings return to their established fixed header placement.
+
+Theme and select-option switches share screen-only `--toggle-on`,
+`--toggle-thumb` and `--toggle-off` paint. Selection uses a restrained blue fill
+qualified separately for light and dark, not a borrowed success/failure/service
+color or a black/white-only track. Thumb and icon contrast remains explicit.
+The existing switch geometry and semantics stay: theme changes immediately;
+filter switches change a draft until Apply. Thumb transitions are observed
+unpaused in browser proof and follow native reduced-motion policy. Disabled
+controls stay distinct, and forced colors use system highlight/thumb colors.
 
 The contextual sidebar is one paper surface across its header, scrolling body
 and fixed actions, for interaction reading, report setup and saved-item inspection.
@@ -27,6 +73,10 @@ exposed workspace edges; the fixed header stays above the docked panes.
 These directional shadows are independent of Search elevation.
 Transparent decorative borders retain existing box metrics; forced colors
 restore system-color pane and fixed-region edges when shadows are unavailable.
+`surface-depth.browser.test.mjs` exercises populated widget, reader, reporting,
+Search/filter, Settings, collection, confirmation, refusal and recovery surfaces
+in both themes. The shared shadow-pixel measurement also checks real painted
+widget and sidebar depth; computed shadow strings alone are not sufficient.
 
 The left rail retains its geometry-based glide and registered brand motion.
 The right sidebar retains its single-surface glide, actual column reflow,
@@ -39,8 +89,14 @@ full readable width, while existing chart/container layouts use the real
 remaining width. Reversal starts from the current painted and layout geometry.
 Anchor compensation tracks reflow only while its navigation and input intent
 still own the reading position. Overlay/modal mode leaves main geometry alone.
+An authorized navigation restoration updates the existing moving-column anchor
+only while that live owner still has the same navigation and input intent.
 Exit releases the reserved column before canceling its animation fill; it never
 samples a temporary docked width or compensates after newer user input.
+The dialog's queued close event only dismisses a select whose current trigger
+belongs to that still-closed dialog. A newly opened Search select stays usable
+while the old sidebar finishes exiting; reopening a dialog also leaves its
+new selection owner intact.
 Saved-item replacement keeps the current entrance clock. Reopening an exiting
 saved inspector releases its old controls without settling the moving surface,
 then reverses from the current panel and column geometry.
@@ -53,9 +109,9 @@ visibility changes and replacement still scrub immediately. Pending writes
 leave through their existing receipt recovery, not a retained interactive form.
 An action in the still-interactive origin finishes old exit cleanup before
 acquiring shared reading or automatic-score controls.
-Disabling effective sidebar motion or changing the available layout settles
+Changing the available layout settles
 current motion immediately without replaying an earlier close or stealing newer
-focus. System reduced-motion changes apply when the preference follows system.
+focus.
 Motion must be checked in flight, including reversal and focus restoration,
 not inferred from endpoint screenshots.
 `sidebar-motion-depth.browser.test.mjs` samples real main/panel geometry and
@@ -65,36 +121,22 @@ unelevated left rail.
 The supplied four-state reference establishes surfaces and collapsed/expanded
 geometry only; it does not establish animation timing or easing.
 
-When both rails appear to snap, first inspect `prefers-reduced-motion` in the
-actual embedding surface without changing its preference. With the default
-**Follow system** choice, both motion owners settle immediately when it requests
-`reduce`; available Web Animations support alone does not override that choice. Browser
-automation defaults can differ from the embedding host. The native-preference
-case in `restored-sidebar.browser.test.mjs` uses `reducedMotion: null` to retain
-the system preference and records intermediate positions for both rails in
-both themes. Set `WIRE_NATIVE_MOTION_PROBE=headed` to run that same case in
-headed Edge on Windows. Keep this environment qualification separate from
-the explicit `no-preference` glide proofs; neither establishes the preference
-of a different or already-open host.
+Gliding is built in for the left rail, narrow navigation drawer and right
+interaction, report-setup and saved-item surfaces. The bounded 320ms transition
+runs under either native reduced-motion signal; there is no Sidebar motion
+setting or replacement switch. The former On/Off/Follow system choices are
+retired. WIRE neither reads nor writes their old localStorage value, so existing
+data stays intact without controlling the glide. Settings, its local search and
+global Search share the current navigation registry; obsolete setting links
+fall back to their category and cannot recreate the control.
 
-**Settings > Display > Sidebar motion** offers **Follow system** (the default),
-**On** and **Off**. On is an explicit WIRE-only opt-in to gliding even when the
-host reduces motion; Off skips sidebar motion even when the host allows it.
-The one shared effective preference controls the left rail, narrow navigation
-drawer and right interaction, report-setup and saved-item surfaces. It does not
-enable other controls' animations or change Windows/browser settings. Drawer
-entry uses the same owned Web Animations path as its exit so it can honor the
-opt-in without overriding the global reduced-motion stylesheet.
-
-The choice applies immediately, separately from Connection's Save preferences,
-and is read before paint from `workiq-evidence.sidebar-motion` in localStorage.
-Choosing Follow system removes the override. Reload and same-origin pages in
-the same browser storage profile share it through the existing storage-event
-pattern. A different hostname, port or host storage profile has its own choice;
-deployment alone does not opt a user in. Apply On through Display in the WIRE
-surface the user actually uses. Storage failures show a panel-only warning
-instead of claiming persistence. No collection, report or private-evidence
-configuration contains this preference.
+This is a sidebar-only behavior change. Windows/browser preferences, the global
+reduced-motion stylesheet and other controls' animation policies are unchanged.
+Reader section folding follows native reduced motion independently. The native
+case in `restored-sidebar.browser.test.mjs` records actual positions without
+media emulation. The built-in-glide matrix also covers clean storage and each
+legacy value under native, reduce and no-preference conditions. Headless proof
+does not establish the loaded source or behavior of a different user window.
 
 These changes are screen-local. Search retains its capsule, result behavior and
 surface shadow. Report-facing tokens, typography, renderers and saved HTML,
@@ -136,9 +178,9 @@ legends and filters reflow without scaling. Opening and closing compensate the
 selected card's vertical anchor. The main page and sidebar scroll independently;
 selected-call scrolling belongs only to the sidebar. The header contains a title,
 Collapse all, Expand all and Close; one fixed bottom group owns report actions.
-The sidebar surface and the reader's major sections use the existing effective
-WIRE motion policy. Off changes state immediately; System follows reduced
-motion; On permits a reversible section-height glide. Cards do not animate.
+The sidebar surface uses the built-in glide. The reader's major sections use
+a reversible height transition when the native host allows motion and settle
+immediately when it requests reduced motion. Cards do not animate.
 When readable columns cannot fit, the same native dialog becomes modal, including
 at enlarged text sizes; it never opens a second interaction page.
 
@@ -464,11 +506,19 @@ text nodes, not browser query matching or injected HTML. Bounds and surrogate
 boundaries are checked before painting a match.
 Body previews keep a short, grapheme-safe context window around that exact
 supplied match, collapse display-only paragraph whitespace, and mark omitted
-context with simple ellipses. Category/source precede the snippet. The complete
+context with single ellipsis glyphs joined to the adjacent text by nonbreaking
+spaces, never standalone dot rows. Search titles use quiet color feedback on
+hover/press and a visible keyboard-focus outline, not underlines or filled
+hover slabs. Matched ranges retain semantic `mark`, the existing match color
+and restrained weight emphasis without underlining. Category/source precede the snippet. The complete
 match remains visible without line-clamping, including at 375px/200% text;
 original hit/range metadata and frozen files are unchanged.
 
 The existing keyboard, touch, paging, verified Open, Back and clear controls stay.
+Result types form contiguous groups over the full authorized population before
+paging. Categories follow their first ranked match, preserving server order
+within each category; the server hit array, receipts and analytical membership
+are not changed by this display ordering.
 New queries, source invalidation and stale opens cannot restore an older result.
 Partial coverage with zero matches is incomplete or unavailable, not a complete
 no-match conclusion. The client uses the one shared wire contract's version for
@@ -542,21 +592,31 @@ an empty library, where the two-report prerequisite is explicit; an unresolved
 comparison save keeps its recovery action even when its sources disappear.
 
 Reports uses one left-aligned content frame for its page heading, task actions,
-library, Activity and comparison choices. The 52rem task frame fits a readable
-preparation/identity column, file metadata and a full Open target without spreading
-these into unrelated parts of a wide window. The header shares that exact frame,
+library, Activity and comparison choices. The 74rem task frame aligns report
+names, recorded file formats and a full Open/unavailable target. Dates, interaction
+counts and prompt settings remain in the inspector or report, not competing list
+columns. Titles have modest size/weight emphasis. The header shares that exact frame,
 not the shell's wider maximum. It shrinks with the actual available main area when
 navigation or the inspector changes; reporting does not size or animate either
 sidebar. Prepared and saved document reading use the wider 86.5rem reading frame,
 with the page heading following it. Frozen document styling and bytes are unchanged.
 
-Search and preparation order form one compact, aligned toolbar. A single-page
-range keeps its count but does not reserve an empty 44px pager-button row; real
-pagination retains its targets. Saved rows bound the identity column before file
-metadata and keep Open in a consistent action column. At narrow widths the same
-information stacks without reducing text or targets, and disclosure expansion
-keeps the count/list attached to the controls above it.
-Stacked rows align Open with the report identity. When the available report width
+Search and preparation order form one compact, aligned toolbar. The local field
+is capped at 18rem and shares the global Search capsule's actual paint, font,
+padding, magnifier and clear-target treatment, without its global query behavior.
+Both controls retain accessible labels without repeated visible captions. An unfiltered
+single-page library counts items once in its heading, without a duplicate range
+row. Active searches retain matched-versus-total information without repeating
+it as a single-page range;
+multi-page libraries retain real ranges and navigation targets. Saved rows bound
+the name before file formats and keep Open in a consistent action column. At
+narrow widths the same three elements stack without reducing text or targets.
+Untitled legacy copies use the existing type/time fallback name from their
+inspector; removing metadata columns does not turn them into indistinguishable
+generic titles or rename any saved file.
+Stacked rows align Open with the report title. Below 24rem of available library
+width it follows the full-width summary, so a long title is not squeezed beside
+a competing action column. When the available report width
 is narrow relative to the text size, Activity's action footer stays in normal flow
 instead of covering the picker with a tall sticky action area.
 
@@ -586,31 +646,35 @@ separate counts. The range and Previous/Next remain together; the saved-library-
 Page / Go control reaches distant pages without serial scrolling. Other pagers
 retain their previous behavior.
 
-Search says **Search saved reports**; the metadata-only limitation stays in help.
-It has a bounded desktop width and a visible label. Count, search, help and results
-follow one left-aligned reading order inside the saved-library panel.
-**About saved reports** stays below search in both states: opening it adds height
-below its trigger rather than moving the trigger from the right edge to a new row.
-Three short, labelled paragraphs explain search, preparation dates and frozen
-copies, with bounded line length and no smaller text at narrow sizes.
+Search says **Search saved reports**; its accessible description retains the
+metadata-only limitation. It has a bounded desktop width and an accessible label.
+The heading, search/order controls and report rows lead directly into reading.
+There is no **About saved reports** disclosure or column-header strip beneath
+the already named library. Names, format capsules and Open identify themselves. Search scope
+and frozen-file behavior belong in the reporting documentation, not another
+visible explanation of ordinary list controls.
 A compact row aligns the
-report's title, scope, interaction count, preparation identity, prompt mode, format
-availability and direct **Open**. The rest of the row is a native inspection button,
+report's name, format labels and direct **Open**. Recorded files use compact passive format
+capsules, not comma-separated prose, download buttons or readiness claims.
+Each label corresponds to an exact registered report/comparison filename, not
+just a declared format; a missing filename is not manufactured. Missing file
+listings are explicit. These labels do not verify disk availability or historical
+approval; Open and download keep the existing checks and error paths.
+The rest of the row is a native inspection button,
 with controlled/expanded state and a quiet selected edge. It supplies indexed
 metadata to the one shared right sidebar, not an in-row disclosure or file read.
-Its body holds useful metadata and individual deletion; Open leads to the report
+Its body holds useful metadata, the same recorded-file labels and individual deletion; Open leads to the report
 and its file access. Download selectors and locale settings do not belong in this
 metadata inspection step. Raw identifiers do not compete with the title.
 Comparison starts from the explicit Reports task, not a redundant inspector action.
-The footer opens the saved report. Frozen-copy
-and search details stay in **About saved reports**. When HTML was not declared,
+The footer opens the saved report. When HTML was not declared,
 Open reads verified JSON/Markdown as literal text or offers an explicit PDF
 download; a declared but broken HTML file never triggers an alternate read.
 Supported unanchored v3 originals require a separate **View original** action
 and remain explicitly unverified. Absent metadata stays unknown.
 The frozen reader uses the full Reports main width, not a floating dialog. Opening
 closes the contextual pane and focuses the reader heading. Its short preparation
-caption and Back utility restore the precise library or comparison origin and prior inspector
+caption and labelled Back action restore the precise library or comparison origin and prior inspector
 only when one was open. Its opaque sandbox and old bytes are unchanged; no height
 measurement privilege is added. Prepared report measurement remains separate.
 New report titles are one reviewed, always-masked metadata value across Contents,
@@ -680,7 +744,10 @@ interaction/call context and permitted Search return. A closing saved inspector
 releases its inert exit owner before a subsequent interaction acquires the panel.
 
 Preparing a new saved-report comparison shows its frozen formatted copy and exact
-text files before disclosure confirmation. Save is separate; an uncertain Save
+text files before disclosure confirmation. The outer page title owns app identity;
+the redundant inner app heading is absent during prepared review. Back to comparison
+choices shares the inspection toolbar and still differs from Back to Reports.
+The frozen document's title is unchanged. Save is separate; an uncertain Save
 offers a saved-library read, not replay. The app's comparison view follows its
 current light/dark theme, while new frozen comparison HTML explicitly stays light,
 including on a dark OS. Browser print expands unopened coverage disclosures.
@@ -1830,15 +1897,18 @@ and the individual interaction through `renderAssessmentSummary`; report
 documents and frozen comparison renderers retain their separate presentation.
 
 Local reply saving is a row in Privacy & saved data, not a separate Settings
-category. It uses the existing row divider, spacing and heading role, a plain
-current state and **Save Copilot replies locally** beside its checkbox, without
-a separate introduction. These are recorded assistant replies, not guaranteed final answers.
+category. **Save Copilot replies locally** is its one visible heading/label,
+followed by a short explanation of local saving and deletion when turned off.
+Its native checkbox has switch semantics and the existing filter-toggle artwork:
+a 32-by-20 track and 12px thumb inside a separate 44px activation target. Checked,
+disabled, keyboard focus and forced-color states bind to the native input, not a
+select controller. These are recorded assistant replies, not guaranteed final answers.
 Legacy evidence-category links and the named assessment-evidence target resolve
 to this row. Collection/source controls keep explicit action handlers; the outer
 collection container does not nest the response-saving form inside another form.
-**What gets saved** holds source, partial-text, privacy and technical limits.
+An enabling draft reveals source, partial-text and credential-screening limits.
 Only an edited choice reveals **Turn on response saving** or the destructive
-**Turn off and delete responses**, plus **Discard change**. The checkbox alone
+**Turn off and delete responses**, plus **Discard change**. The switch alone
 does not write permission; discard restores the current choice and focus.
 Revocation/renewal consequences stay visible before confirmation. Errors,
 pending work and receipt recovery remain explicit. Local retention is not
@@ -2413,9 +2483,15 @@ time-scale picker remain intentional non-pill exceptions.
 The Settings overhaul replaces the disconnected fixed label/action columns.
 The earlier reference composition is no longer the target: the user's screenshot
 identified its competing headings, loose controls and missing task hierarchy.
-The five existing categories and outer application navigation stay unchanged.
+The four current categories and outer application navigation stay unchanged.
 Search, the native narrow category disclosure and Collection status remain in
-one quiet rail. A bounded paper surface contains the active category, with a
+one quiet rail. Settings search uses the shared search-field Module's capsule,
+input, magnifier and overlaid Clear target, like the global and saved-report
+fields. Its fixed-metadata query and navigation remain local; typing or clearing
+it never changes the global query or sends an evidence search. The Module owns
+field markup, paint and clear interaction; the caller owns its width, accessible
+label/help, query lifecycle and results. A bounded paper surface contains the
+active category, with a
 24px section heading below the 32px page title, concise context and distinct
 task groups. There are no nested decorative cards or category icons.
 
@@ -2432,7 +2508,8 @@ reveal selectable read-only values, and Save preferences resolves to the actual
 same-source action, never to source approval. Display and privacy
 task rows keep each explanation attached to its label, with a bounded action or
 control alongside; narrow/enlarged layouts stack them in that reading order.
-Recorded replies retain the checkbox draft and separate confirmation. **Review
+Recorded replies retain the native input draft and separate confirmation, with
+switch presentation rather than a bare checkbox. **Review
 deletion** previews collected-activity removal; **Read history again > Choose
 chats** starts the separate recollection review. Old setting IDs, aliases and
 search phrases remain valid and only locate controls, never approve actions.
@@ -2442,6 +2519,13 @@ Settings uses 10px fields/actions, 8px category rows and one 12px content surfac
 Targets remain at least 44px, including the search input itself. Inputs retain
 visible focus; long paths, status explanations and options wrap. No shared select
 behavior or new motion policy is introduced.
+Display's theme switch uses the header's existing track, thumb and sun/moon
+glyphs, one theme subscription and the same immediate browser-local action.
+Both switches mirror the applied theme, including cross-panel storage changes;
+storage failures remain described by the existing warning. This immediate
+preference is deliberately different from the reply-saving draft and Save step.
+Pause/Resume and Refresh remain actions. Finite selectors, privacy attestations,
+radio choices and destructive confirmations do not become switches.
 Rows align the actual label and control text baselines, not merely their outer
 44px boxes. Read-only path and model labels sit directly above their values;
 they do not inherit a utility-sized empty line. The Refresh action and concise effect/current result form one task, without a
@@ -3274,11 +3358,11 @@ keeping the source draft and its independent approval.
 The registry in `web/settings-navigation.mjs` is fixed metadata, not a new search
 engine or permission store. All existing control nodes stay mounted when the rail
 changes category. The original source controller, reply-saving controller,
-automatic-score dialog, deletion/recollection flows and read-only status routes
+deletion/recollection flows and read-only status routes
 remain their owners. Busy source writes still guard navigation; unknown outcomes
 keep their error and explicit read-result action across categories. Save preferences
 only changes window/frequency on the already approved source and retains its pause
-state. There is no Save all. Display's theme button and the header switch subscribe
+state. There is no Save all. Display's theme switch and the header switch subscribe
 to the same existing browser preference.
 
 | Previous setting ID / control | New category or view | Exact target / preserved flow |
@@ -3288,9 +3372,9 @@ to the same existing browser preference.
 | `collection-state` | Connection & updates | `pauseCollection`; unapproved sources target `reviewSource` without invoking it. |
 | `collect-now` | Connection & updates | Visible shared `checkActivity`. Hidden `collectNow` retains explicit-event forwarding and all guards. No second visible Refresh. |
 | `history-window`, `cadence`, `save-preferences` | Connection & updates | `collectionWindow`, `collectionCadence`, `saveCollection`; custom select triggers or disabled explanations receive focus. `cancelPreferences`, draft status, advanced collection details and `reloadSettings` retain their independent roles. |
-| `assessment-evidence` / Recorded replies | Privacy & saved data | `assessmentSetupTitle`; existing checkbox, Turn on/Turn off and delete, Discard, previous-source removal and Check update result stay within `assessmentSetup`. |
+| `assessment-evidence` / Recorded replies | Privacy & saved data | `assessmentSetupTitle` focuses the reply-saving region; its labelled native switch, Turn on/Turn off and delete, Discard, previous-source removal and Check update result stay within `assessmentSetup`. |
 | `delete-activity`, `recollect-activity` | Privacy & saved data | `deleteActivity`, `recollectActivity`; existing scope/preview/confirmation/cancel/recovery flows unchanged. Saved-report management remains in Reports. |
-| `automatic-scores` | AI reviews | `automaticScoreReview`, described by `automaticScoreState`; only an explicit click opens existing chat/disclosure/allowance/AI-credit approval or receipt recovery. Stop and remove remains a separate confirmation. |
+| `automatic-scores` | Retired | No AI review category or control is restored. Unknown-setting recovery remains the normal route behavior. |
 | `time-zone`; header theme switch | Display | `displayTimeZone` and `settingsThemePreference`; the header `themePreference` remains available. Device identity stays in the existing option; pending/failed effective-zone mismatches and storage errors remain visible. |
 | `issues`, `collection-details`, status link | Collection status, linked from Troubleshooting | `collectionIssuesTitle`, `collectionSetup` summary, `pageTitle`; affected-chat search, counts, provenance and diagnostic limits unchanged. |
 | Optional HTTP recorder | Collection status, linked from Troubleshooting | New registry ID `network-diagnostic` targets `recorderDiagnostics` summary; opening only reads stored status. `recordBtn` still requires its existing separate confirmation. |
@@ -4095,7 +4179,7 @@ The wordmark targets Analyze. `mountSidebarNavigation` preserves the stored
 expanded/collapsed choice and glides the rail and content together. At the
 699px breakpoint the same navigation nodes move into the keyboard-accessible
 modal drawer; closing restores focus without changing the desktop preference.
-The shared sidebar-motion preference decides whether to glide. Navigation changes do not remount the page,
+The shared built-in glide needs no preference. Navigation changes do not remount the page,
 discard filters/report drafts or add a route-history entry.
 
 Header branding reserves the wordmark's 148x46 layout and a 148px caption row,
@@ -4105,7 +4189,7 @@ invisible caption. The two unchanged SVGs share artwork coordinates during the
 existing 320ms eased rail glide: uniform transforms register their W paths while
 their paint fades together. There is no separate logo clock, stretched artwork,
 manual glyph offset or whole-page animation. Reversal starts from the current
-painted geometry; disabling effective motion and breakpoint changes cancel the same owned
+painted geometry; breakpoint changes cancel the same owned
 animations. The fixed caption width prevents temporary wrapping and page bounce.
 The header remains content-sized, not a fixed-height crop. Its measured height
 still sets the rail and scroll offsets. `restored-sidebar.browser.test.mjs` checks

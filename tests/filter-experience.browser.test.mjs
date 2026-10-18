@@ -430,23 +430,21 @@ test("failed filter reads keep the accepted population and Settings drafts still
     assert.equal(await page.locator("#checkActivity").isDisabled(), false);
 });
 
-test("joined Search reaches existing Settings targets and sidebar motion persists independently of filters", { timeout: 30000 }, async t => {
+test("joined Search reaches current Display settings independently of filters", { timeout: 30000 }, async t => {
     const { page, choose, runtime } = await setup(t);
     const reduced = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
     await choose("promptAuthorFilter", ["user"]);
-    await page.locator("#wireSearch").fill("Sidebar motion");
-    const motion = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-title", { hasText: /^Sidebar motion$/ }) });
-    await motion.click(); await page.waitForURL(/section=display/); await ready(page);
+    await page.locator("#wireSearch").fill("Time zone");
+    const setting = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-title", { hasText: /^Time zone$/ }) });
+    await setting.click(); await page.waitForURL(/section=display/); await ready(page);
     assert.match(page.url(), /section=display/);
-    assert.equal(await page.evaluate(() => document.activeElement.id), "sidebarMotionPreference-control");
-    assert.equal(await page.locator("#sidebarMotionPreference").inputValue(), "system");
-    await choose("sidebarMotionPreference", "on");
-    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.sidebar-motion")), "on");
+    assert.equal(await page.evaluate(() => document.activeElement.id), "displayTimeZone-control");
+    await choose("displayTimeZone", "UTC");
+    assert.equal(await page.evaluate(() => localStorage.getItem("workiq-evidence.time-zone")), "UTC");
     assert.equal(await page.locator("#saveCollection").isDisabled(), true);
     await page.reload(); await ready(page);
-    assert.equal(await page.locator("#sidebarMotionPreference").inputValue(), "on");
+    assert.equal(await page.locator("#displayTimeZone").inputValue(), "UTC");
     assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches), reduced);
-    await choose("sidebarMotionPreference", "off");
     await navigateMain(page, "analyze"); await ready(page);
     assert.equal(await page.locator("#promptAuthorFilter").evaluate(node => node.selectedOptions[0].value), "user");
     await page.locator("#wireSearch").fill("Delete collected activity");
@@ -458,7 +456,7 @@ test("joined Search reaches existing Settings targets and sidebar motion persist
     assert.equal(await page.locator("#promptAuthorFilter").evaluate(node => node.selectedOptions[0].value), "user");
     await page.goto(runtime.url + "#settings?section=connection&setting=collect-now"); await ready(page);
     assert.equal(await page.evaluate(() => document.activeElement.id), "checkActivity");
-    assert.equal(await page.locator("html").getAttribute("data-sidebar-motion"), "off");
+    assert.equal(await page.locator("#sidebarMotionPreference").count(), 0);
 });
 
 async function metadataListSetup(t, options) {

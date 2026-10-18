@@ -128,8 +128,10 @@ screen-only `--search-*` colors, shared by their glyph and readable category hea
 interaction, conversation context, reply, recorded action, tool, service, report,
 comparison, view and setting. Primary text stays neutral; an action's separate
 recorded outcome retains its canonical success/failure meaning and color.
-Category headings mark consecutive runs of the same type without moving any
-result out of its ranked position. Every hit underneath uses the same structure:
+The full authorized result population is grouped by type before the displayed
+20-item page is selected. Category order follows each type's first ranked match;
+results within each category keep their original server ranking. A category can
+continue on the next page, but another type cannot interrupt it. Every hit uses the same structure:
 one canonical-title row, then matching evidence or necessary supporting context.
 There are no per-row category labels on the right and no title-based layout rules.
 Original matching evidence follows only when it adds a different matched field.
@@ -139,7 +141,7 @@ from order, grouping and contrast, not accidental font sizes or weights.
 Type is entry metadata, not inferred prompt authorship. Unmatched source captions
 are omitted unless different source labels distinguish hits with the same exact
 type and canonical title across the full result population. A matched source is
-always preserved; no result is merged, reranked or removed by this presentation.
+always preserved; no result is merged or removed by this presentation.
 Settings uses the existing Settings gear. Service hits obtain their identity
 from the verified service target, not their title, and reuse the same
 `serviceCue`/`dimensionalIcons` glyph as the recorded-data widgets. There is no
@@ -152,7 +154,7 @@ and terminal-sentence-punctuation handling. Case, interior punctuation and
 distinct qualifications are not discarded. This is display-only comparison,
 not fuzzy corpus deduplication or relationship inference. Matched source text
 is never omitted or rematched: if title and matched source are exactly equal,
-the source supplies the single original primary line. Each hit, order, count,
+the source supplies the single original primary line. Each hit, within-type order, count,
 identity, Open target and server-supplied range stays unchanged. Related actions
 remain separate results; a source-only action match still shows its original
 source evidence. Absent optional fields create no blank slots.
@@ -178,12 +180,15 @@ No title, field, hit, target or match range is rewritten.
 Compact rows use whitespace rather than repeated rules or nested cards.
 Body evidence shares the heading's reading edge without a blockquote bar.
 The scoped blue/teal match color marks
-only the server-supplied original range, with an underline and semantic `mark`;
+only the server-supplied original range, with restrained weight and semantic `mark`,
+not an underline;
 it does not indicate a service, outcome, confidence or generated relevance.
 Other text uses existing neutral roles, with canonical outcome cue colors.
 The result count and any incomplete-coverage notice share one summary above the list.
-Category headings annotate consecutive runs only: they never regroup, merge or
-reorder hits, change paging membership, or present displayed-run counts as totals.
+The grouped display is a new ordering of the same hit references, not a mutation
+of the server array. Receipts, exact IDs/revisions/ranges, total counts and
+analytical membership are unchanged. Paging, keyboard movement and Open/Back
+use that grouped display consistently; displayed-page counts are not group totals.
 Partial-corpus coverage is a concise readable line, not a filled card. Known
 report-file failures name the supplied cause (missing file or changed bytes that
 could not be verified); unclassified failures keep an honest general explanation.
@@ -194,11 +199,14 @@ state meanings.
 
 Titles, sources and excerpts wrap independently, including bidirectional text
 and unbroken tokens. No CSS line clamp hides a match. The existing excerpt
-window preserves the full marked text and indicates omitted context; it is not
+window preserves the full marked text. A single ellipsis at each omitted boundary
+is attached to its neighboring text with a nonbreaking space, never a separate
+dot-only row or a second block of punctuation. It is not
 labelled as complete saved content. Search keeps its fixed capsule and popup
 placement, full-result membership, 20-item paging, single whole-row action,
-keyboard focus and native Open/Back history. Hover underlines the actual title;
-press strengthens that underline and keyboard focus keeps its visible outline.
+keyboard focus and native Open/Back history. Hover gives the actual title a
+restrained accent tint; press returns it to ink and keyboard focus keeps its
+visible outline. Neither titles nor match ranges acquire underlines.
 The whole hit area stays usable without a filled hover slab or geometry shift. Forced colors retain system
 highlight and focus paint. These styles do not alter saved report output or
 global service, outcome, authorship or theme tokens.
@@ -239,8 +247,8 @@ filtering; matching text alone never establishes canonical provenance.
 The clear action is visible for any nonempty query, including whitespace, and
 uses the shared 44px icon target with an official 20px glyph. A reserved trailing
 region keeps it away from long editable text, with no capsule geometry change.
-Only this input's native pointer-cancel decoration is suppressed to avoid a
-duplicate action; `type=search`, editing, selection, composition and keyboard
+The shared field suppresses native pointer-cancel decoration to avoid a
+duplicate Clear action; `type=search`, editing, selection, composition and keyboard
 behavior remain native. Decorative type glyphs stay inside their text lines
 without separate hit areas. Search does not override the shared icon-only
 sizing rule for Clear or paging.
@@ -258,7 +266,42 @@ without moving or resizing the field or running a perpetual animation. Keyboard
 focus replaces that edge with a high-contrast inset outline, not a second exterior
 ring. Both themes retain readable input and placeholder text. Reduced motion
 disables the transition; forced colors use system border/focus colors without
-gradient or glow. This treatment does not change other controls or saved output.
+gradient or glow. This treatment does not change non-search controls or saved output.
+
+### Shared search field
+
+`web/search-field.mjs` owns the search-field Module: `searchFieldMarkup` renders
+the escaped input identity, placeholder, optional help/popup associations,
+canonical magnifier and Clear target; `searchFieldStyles` supplies the capsule
+paint and geometry. Callers retain their associated labels and contextual help,
+results and width constraints. The saved-report field remains capped at 18rem;
+the global field remains stationary.
+
+The nonce-authorized shell injects the self-contained `createSearchFields(ux)`
+factory once. Its `mount(input, { clearLabel, onInput, onClear?, focusAfterClear? })`
+Interface returns `sync(value?)`, `clear()` and `dispose()`. Native input calls
+the caller once, without changing composition, selection, debounce or submission.
+Clear updates the field and calls `onClear` (or `onInput`) once, then restores
+focus. It does not synthesize a second input event. `sync` reconciles caller-owned
+values without dispatch, and avoids replacing an unchanged value/caret.
+Remounting the same input releases its previous field listeners; transient
+owners call `dispose` before retirement. Persistent shell fields are mounted once.
+No queries, corpus, storage, transport or result state live in this Module.
+
+| Current entry | Caller-owned behavior |
+| --- | --- |
+| `wireSearch` | Global/Analyze query, existing debounce, popup Escape, verified results and Open/Back |
+| `settingsSearch` | Fixed setting metadata and native setting destinations; Escape clears |
+| `issueSearch` | Affected-history metadata, existing paging; clearing an authoritative empty list focuses its heading |
+| `savedReportSearch` | Saved-report metadata, not saved contents; Clear preserves library paging |
+| `reportRequestSearch` | Local interaction list; Clear never changes the report selection |
+| `recollectSearch` | Local eligible-chat names and independent selection; native Escape clears nonempty search before dialog cancellation |
+
+Period comparison's current **Search this comparison** entry opens `wireSearch`
+in Analyze scope. `comparisonSearch` is a hidden fallback, and `activitySearch`
+is the hidden legacy private-filter adapter. Neither is revived as a second
+visible search field. Ordinary title/path/date inputs and select-option lists
+are not search bars.
 
 The fixed timing destination describes "tool latencies" at the authoritative
 navigation-corpus source. Its title, route and focus target stay unchanged.
@@ -321,6 +364,7 @@ Focused presentation and connected browser proof:
 ```powershell
 node --test --test-concurrency=1 web\live-search-presentation.test.mjs tests\search-coherence.browser.test.mjs tests\search-result-design.browser.test.mjs tests\search-row-paint.browser.test.mjs tests\search-text-ui.browser.test.mjs tests\search-control.browser.test.mjs tests\search-minimal.browser.test.mjs
 node --test --test-concurrency=1 tests\search-visibility.browser.test.mjs tests\search-category.browser.test.mjs tests\saved-artifact-read-lifecycle.browser.test.mjs tests\report-history-recovery.browser.test.mjs
+node --test tests\search-grouping.browser.test.mjs
 ```
 
 The design case measures full normal-root result hierarchy, text/icon alignment,

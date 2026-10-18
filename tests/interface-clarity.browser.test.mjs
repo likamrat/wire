@@ -140,7 +140,7 @@ test("library keeps one count and opens the actual frozen report after separate 
     const { page, go, context, writes } = await setup(t);
     await go("#reports");
     await expect(page.locator("#savedReportSearch")).toBeHidden();
-    await expect(page.locator("#savedLibraryHelp")).toBeHidden();
+    await expect(page.locator("#savedLibraryHelp")).toHaveCount(0);
     await page.getByRole("link", { name: "Create a report", exact: true }).click();
     await chooseReportScope(page, "all");
     await reportContents(page);
@@ -159,10 +159,8 @@ test("library keeps one count and opens the actual frozen report after separate 
     await openReportLibrary(page);
     await expect(page.locator("#savedLibraryTitle")).toHaveText("Saved reports (1)");
     await expect(page.locator("#savedReportCount")).toBeHidden();
-    await page.locator("#savedLibraryHelp > summary").focus();
-    await page.keyboard.press("Enter");
-    await expect(page.locator("#savedLibraryHelp")).toContainText("use the saved copy");
-    await page.keyboard.press("Space");
+    await expect(page.locator("#savedLibraryHelp")).toHaveCount(0);
+    await expect(page.locator("#savedReportSearch")).toHaveAccessibleDescription(/not report contents/);
     await page.locator("#savedReportSearch").fill("no-such-report");
     await expect(page.locator("#bundleList")).toContainText("No saved reports match");
     await page.locator("#clearSavedReportSearch").click();

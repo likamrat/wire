@@ -208,6 +208,9 @@ test("normal report journey remains readable through scope, pending, dirty, reco
                 await page.setViewportSize({ width, height: 1000 });
                 await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, text);
                 await page.evaluate(() => document.fonts.ready);
+                await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+                await page.waitForFunction(() => [...document.querySelectorAll("#main,#sidebar,#contextSidebar")]
+                    .every(node => node.getAnimations().every(animation => animation.playState !== "running")));
                 const measured = await page.evaluate(() => {
                     const root = document.querySelector("#reportsView"), panel = root.querySelector(".report-stage:not([hidden])");
                     const shown = node => node.checkVisibility({ checkVisibilityCSS: true });

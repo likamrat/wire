@@ -49,7 +49,7 @@ async function setup(t) {
             };
         }, { entries, unreadable, legacyKey });
         await page.goto(runtime.url + "#settings?section=privacy");
-        await expect(page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true })).toBeVisible();
+        await expect(page.getByRole("switch", { name: "Save Copilot replies locally", exact: true })).toBeVisible();
     }
     return { ...fixture, page, writes, statusReads, consent, open };
 }
@@ -58,7 +58,7 @@ test("retired personal receipt stays untouched while new response-saving consent
     const f = await setup(t), old = receipt({ mutationRef: f.personalMutationRef, receiptToken: f.receiptToken }, "set_personal_assessment");
     const before = await loadBoardState(f.context);
     await f.open({ [legacyKey]: old });
-    const choice = f.page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    const choice = f.page.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     await expect(choice).toBeEnabled();
     await expect(f.page.locator(".assessment-recovery")).toBeHidden();
     await choice.check();
@@ -79,7 +79,7 @@ test("coexisting current and legacy consent receipts block changes and resolve o
     const f = await setup(t), oldId = await f.consent(false), newId = await f.consent(true);
     const old = receipt(oldId), current = receipt(newId), before = await loadBoardState(f.context);
     await f.open({ [legacyKey]: old, [currentKey]: current });
-    const choice = f.page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    const choice = f.page.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     await expect(choice).toBeDisabled();
     await expect(f.page.locator(".assessment-recovery")).toContainText("Two response-saving updates");
     await f.page.getByRole("button", { name: "Check response-saving result", exact: true }).click();
@@ -108,7 +108,7 @@ test("a newer receipt cannot be cleared by a late read of an older terminal resu
     await expect(f.page.locator("#message")).toContainText("receipt changed");
     assert.equal(await f.page.evaluate(key => sessionStorage.getItem(key), currentKey), replacement);
     assert.deepEqual(await f.page.evaluate(() => window.removedReceiptKeys), []);
-    await expect(f.page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true })).toBeDisabled();
+    await expect(f.page.getByRole("switch", { name: "Save Copilot replies locally", exact: true })).toBeDisabled();
     assert.deepEqual(f.writes, []);
     assert.deepEqual(await loadBoardState(f.context), before);
 });
@@ -119,7 +119,7 @@ for (const kind of ["malformed", "unclassifiable-personal", "unreadable"]) test(
         ? receipt({ mutationRef: "not-an-identity", receiptToken: f.receiptToken }, "set_personal_assessment")
         : receipt(identity());
     await f.open({ [legacyKey]: raw }, kind === "unreadable");
-    await expect(f.page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true })).toBeDisabled();
+    await expect(f.page.getByRole("switch", { name: "Save Copilot replies locally", exact: true })).toBeDisabled();
     await expect(f.page.locator(".assessment-recovery")).toContainText("could not be read");
     assert.deepEqual(await f.page.evaluate(() => window.removedReceiptKeys), []);
     if (kind !== "unreadable") assert.equal(await f.page.evaluate(key => sessionStorage.getItem(key), legacyKey), raw);
@@ -132,7 +132,7 @@ for (const field of ["mutationRef", "receiptToken"]) test(`array-valued ${field}
     const id = { mutationRef: f.personalMutationRef, receiptToken: f.receiptToken };
     const raw = receipt({ ...id, [field]: [id[field]] }, "set_personal_assessment");
     await f.open({ [legacyKey]: raw });
-    const choice = f.page.getByRole("checkbox", { name: "Save Copilot replies locally", exact: true });
+    const choice = f.page.getByRole("switch", { name: "Save Copilot replies locally", exact: true });
     if (await choice.isEnabled()) {
         await choice.check();
         const response = f.page.waitForResponse(result => result.url().endsWith("/api/assessment/consent/set"));

@@ -20,7 +20,9 @@ selections or report drafts. On narrow screens, **Open navigation** slides out
 the same destinations. Escape or **Close** returns focus to that button.
 Search is centered in the workspace toolbar, separate from the sidebar branding.
 The brand and time-zone shortcut move into the drawer on narrow screens.
-Reduced-motion preferences remove the slide. Earlier Home and Activity links
+Both sidebars glide by default, with no motion setting to configure. Existing
+sidebar-motion choices are ignored without changing saved data or Windows/browser
+preferences. Earlier Home and Activity links
 open Analyze; no chat chooser is required before reading interactions.
 
 The screen uses locally bundled Asta Sans, the font verified in the linked
