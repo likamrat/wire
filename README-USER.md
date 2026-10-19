@@ -48,10 +48,13 @@ repeating a save or source check; unsaved preferences are kept.
 
 ## Inspect an interaction
 
-**Refresh** checks approved local histories and reads the latest stored activity
-without rerunning Work IQ or Graph queries. Automatic collection keeps its current
-configuration; paused collection stays paused. Before source approval, Refresh
-only reads stored activity. The Refresh icon sits beside the Analyze heading.
+Open the freshness label beside Analyze's scope/count line for activity updates.
+**Check local history** checks approved histories and reads the latest stored
+activity without rerunning Work IQ or Graph queries. **Read stored activity**
+only reads WIRE's saved view. **Read history again...** opens a separate,
+scoped preview and confirmation; it never runs from an ordinary check.
+Automatic collection keeps its current configuration; paused collection stays
+paused. Before source approval, only the stored-view read is available.
 **Review source & connect**, in **Settings > Connection & updates**, remains a separate action.
 
 Accepted results, filters and report selections stay while updating. Finish an
@@ -88,7 +91,7 @@ chats, open a reason, then open a chat for its retained activity or additional
 limits. Each chat is counted once, even when several limits apply.
 Paused or disconnected collection points to the relevant existing Settings
 control. Current collection errors stay visible; **Technical details** holds
-the full timestamps and limits. **Refresh** stays above the page. **Read stored
+the full timestamps and limits. **Refresh** stays within Collection status. **Read stored
 activity**, or **Retry** for a separate status failure, offers safe read-only recovery. The optional network
 diagnostic does not check collection and is not a required next step.
 
@@ -100,11 +103,12 @@ Light-mode controls and menus stay white; selection marks and keyboard focus sho
 state without filled rows. Names and options replace routine information buttons.
 An empty draft still explains why Apply is unavailable.
 The **Reset Analyze** icon sits with the applied filters and clears browsing state only, not
-report selections, evidence or preferences. Refresh is separate, beside the page heading.
+report selections, evidence or preferences. Activity updates are separate, on the scope/count line.
 Relevant collection notices link to the existing Settings or Collection status page.
 Source permissions, pause/resume and history/frequency stay in **Settings > Connection & updates**.
-Deletion and recollection belong in **Settings > Privacy & saved data**, not the filter area;
-both keep their separate review and confirmation. Below the filters, the matching total sits beside **View records**
+Deletion remains in **Settings > Privacy & saved data**. Scoped recollection
+is also available from activity updates; both retain their separate review and
+confirmation. Below the filters, the matching total sits beside **View records**
 and **Compare periods**. Recorded outcomes and the time/category/path view share
 one chart row, followed by **Work IQ tool calls** and **Services**. All use the same
 applied filters. **Chart data and definitions** is the single place for exact
@@ -329,12 +333,12 @@ For collected records, use **Settings > Privacy & saved data > Collected activit
 
 After deletion, ordinary refresh and collection checks do not bring deleted records back.
 
-1. Open **Settings > Privacy & saved data > Read history again > Choose chats**. Settings search still finds **Recollect activity**.
+1. Open Analyze's freshness label, then **Read history again...**. The same flow remains in **Settings > Privacy & saved data > Read history again > Choose chats**. Settings search still finds **Recollect activity**.
 2. Use **Find a chat** or the paged list, then enter **From/To** dates. Choices stay selected across searches and pages; **Show selected** reviews them. Only the already-approved source and history window can be read.
 3. If wanted, select **Also restore original prompts for these requests**. This is off by default. Deleted response captures and personal feedback are not restored.
 4. Select **Preview available evidence**. Review the exact records, prompt choice and **Source availability and limits**. Missing history cannot be recovered. **Cancel**, Escape or **Change scope** makes no stored change.
-5. Select **Recollect N records**. Then create a new report from the recollected requests. Existing saved reports and comparisons are unchanged.
+5. Answer the confirmation question with **Read N records again**. Then create a new report from the recollected requests. Existing saved reports and comparisons are unchanged. Your Dates and filters are kept; reread records may be outside them.
 
-If the result is uncertain, use **Check recollection result**, even after reopening the panel. Do not repeat confirmation. Recollection is a deliberate source reread, not an undo, backup restoration or new Work IQ query.
+If the result is uncertain, use **Check recollection result**, even after reopening the panel. It reads the original receipt without another confirmation or source scan. After a reload, WIRE explicitly says when the earlier chats and dates are unavailable; returned counts are not a reconstruction of that scope. Do not repeat confirmation. If recollection completed but the view could not update, use **Read stored activity** rather than recollecting again. Recollection is a deliberate source reread, not an undo, backup restoration or new Work IQ query.
 
 After an uncertain result, use its result/status check. Do not repeat the change. [Technical and privacy details](README.md).

@@ -658,36 +658,33 @@ for (const theme of ["light", "dark"]) test(`reply switch source, pending, unkno
     await captureSwitchState(page, `${theme}-reply-source-needed`);
 });
 
-test("Troubleshooting opens the named Analyze mode from its opposite without losing scope, private query or selection", async t => {
+test("Troubleshooting returns to unified Activity without losing scope, private query or selection", async t => {
     const { page } = await setup(t, { nonmatchingRecord: true });
     await page.evaluate(() => { location.hash = "#analyze?project=test-project&layer=tool"; });
-    await expect(page.locator('[data-analyze-mode="interactions"]')).toHaveAttribute("aria-current", "true");
-    await expect(page.locator('#activityList .request-row input[type="checkbox"]')).toHaveCount(2);
+    await expect(page.locator("#activityTitle")).toHaveText("Activity");
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(2);
     const query = "SYNTHETIC_PRIVATE_PROMPT";
     await restoreLegacySearch(page, query);
-    const selected = page.locator('#activityList .request-row input[type="checkbox"]');
+    const selected = page.locator("#activityList .request-card-open");
     await expect(selected).toHaveCount(1);
-    await selected.check();
-    for (const [mode, help, label] of [
-        ["calls", "serviceProvenanceHelp", "Open Calls in Analyze"],
-        ["interactions", "authorProvenanceHelp", "Open interactions in Analyze"],
-    ]) {
+    await selected.click();
+    await page.locator("#requestReportToggle").click();
+    await page.locator("#closeContextSidebar").click();
+    await page.waitForFunction(() => !document.querySelector("#contextSidebar").open);
+    for (const help of ["serviceProvenanceHelp", "authorProvenanceHelp"]) {
         await page.locator('nav [data-nav="settings"]').click();
         await category(page, "troubleshooting");
         await page.locator(`#${help}>summary`).click();
-        const link = page.getByRole("link", { name: label, exact: true });
+        const link = page.locator("#" + help).getByRole("link", { name: "Open Activity in Analyze", exact: true });
         await link.focus();
         await page.keyboard.press("Enter");
-        await expect(page.locator(`[data-analyze-mode="${mode}"]`)).toHaveAttribute("aria-current", "true");
+        await expect(page.locator("#activityTitle")).toHaveText("Activity");
         const params = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
         assert.equal(params.get("project"), "test-project");
         assert.equal(params.get("layer"), "tool");
         assert.equal(page.url().includes(query), false, "The private query stays out of the URL");
         await expect(page.locator("#activitySearch")).toHaveValue(query);
-        if (mode === "interactions") {
-            await expect(selected).toHaveCount(1);
-            await expect(selected).toBeChecked();
-        }
+        await expect(selected).toHaveCount(1);
         await expect(page.locator("#activityCount")).toHaveText("1");
         await expect(page.locator('#activityList a[href*="request=settings-unmatched"]')).toHaveCount(0);
     }

@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { privateFixture, chooseTheme, navigateMain } from "./helpers.mjs";
+import { privateFixture, chooseTheme, navigateMain, revealStoredRefresh } from "./helpers.mjs";
 
 async function placement(page) {
     return page.evaluate(() => {
@@ -18,7 +18,7 @@ async function placement(page) {
         };
         return {
             action: box(action), help: box(help), result: box(result), scrollY,
-            resultVisible: result.checkVisibility(),
+            resultVisible: result.checkVisibility(), helpVisible: help.checkVisibility(),
             ordered: Boolean(action.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING)
                 && Boolean(help.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING),
         };
@@ -26,10 +26,9 @@ async function placement(page) {
 }
 function assertAdjacent(value) {
     assert.ok(value.ordered, "DOM and keyboard order must be Refresh, source help, then result");
-    assert.ok(value.help.x >= value.action.right && value.help.x - value.action.right <= 28
-        && Math.abs(value.help.y - value.action.y) <= 4,
-    `Source and collection must sit beside its check action, not at the far page edge: ${JSON.stringify(value)}`);
-    if (value.resultVisible) assert.ok(value.result.y >= Math.max(value.action.bottom, value.help.bottom),
+    if (value.helpVisible) assert.ok(Math.abs(value.help.x - value.action.x) <= 1 && value.help.y >= value.action.bottom,
+        `Check details belong below the expanded actions at the same content edge: ${JSON.stringify(value)}`);
+    if (value.resultVisible) assert.ok(value.result.y >= Math.max(value.action.bottom, value.helpVisible ? value.help.bottom : 0),
         "Visible status belongs below both controls, not between them");
 }
 
@@ -88,13 +87,14 @@ test("freshness groups source help with the action and explains check-wide gaps"
     await page.goto(runtime.url);
     await page.waitForFunction(() => document.querySelector("#workspace").getAttribute("aria-busy") === "false");
     await page.evaluate(() => document.fonts.ready);
+    await revealStoredRefresh(page);
     const idle = await placement(page);
     assertAdjacent(idle);
     assert.equal(idle.resultVisible, false, "Idle collection does not reserve an empty result row");
     assert.equal(idle.result.height, 0);
     await page.locator("#checkActivity").focus();
     await page.keyboard.press("Tab");
-    await expect(page.locator("#freshHelp > summary")).toBeFocused();
+    await expect(page.locator("#freshStoredRead")).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(page.locator("#checkActivity")).toBeFocused();
     await page.mouse.click(idle.action.x + 15, idle.action.y + idle.action.height / 2);
@@ -105,7 +105,8 @@ test("freshness groups source help with the action and explains check-wide gaps"
     assertAdjacent(completed);
     assert.equal(completed.resultVisible, true);
     assert.deepEqual(completed.action, idle.action);
-    assert.deepEqual(completed.help, idle.help);
+    assert.equal(idle.helpVisible, false, "Routine idle state has no permanent source-help gate");
+    assert.equal(completed.helpVisible, true);
     assert.equal(completed.scrollY, idle.scrollY);
     const liveStatus = page.locator("#freshResult [role=status]");
     assert.equal(await liveStatus.getAttribute("aria-live"), "polite");
@@ -163,7 +164,7 @@ test("freshness groups source help with the action and explains check-wide gaps"
             await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "checking");
             assert.equal(await page.locator("#checkActivity").isDisabled(), true);
             assert.equal(await page.locator("#checkActivity .pending-indicator").evaluate(node => getComputedStyle(node).animationName), "none");
-            for (const id of ["checkActivity", "freshHelp", "freshStatus"]) {
+            for (const id of ["checkActivity"]) {
                 const box = (await boxes())[id];
                 assert.ok(Math.abs(box.x - anchor[id].x) <= 1 && Math.abs(box.y - anchor[id].y) <= 1, `${theme}/${width}/${scale}/${state}/${id}: stable pending anchor`);
             }
@@ -173,7 +174,7 @@ test("freshness groups source help with the action and explains check-wide gaps"
             const currentPlacement = await placement(page);
             assert.ok(currentPlacement.ordered, "Status changes preserve control order");
             if (width === 1644 && scale === 1) assertAdjacent(currentPlacement);
-            for (const id of ["checkActivity", "freshHelp", "freshStatus"]) {
+            for (const id of ["checkActivity"]) {
                 assert.ok(Math.abs(completedBoxes[id].x - anchor[id].x) <= 1 && Math.abs(completedBoxes[id].y - anchor[id].y) <= 1, `${theme}/${width}/${scale}/${state}/${id}: stable result anchor`);
             }
             assert.equal(await page.locator("#checkActivity").evaluate(node => node === document.activeElement), true);

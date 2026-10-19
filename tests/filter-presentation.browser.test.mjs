@@ -46,7 +46,8 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             scrollTo(0, 0);
         }, scale);
-        const name = `${theme}-${width}-${scale}`, paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 32, 32)";
+        const name = `${theme}-${width}-${scale}`, paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 44, 59)";
+        const controlPaper = theme === "light" ? paper : "rgb(25, 35, 48)";
         if (await page.locator("#filters .ux-help").count()) violations.push(`${name}: routine field info targets remain`);
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `context-${name}.png`), fullPage: true });
         if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFiltersToggle").click();
@@ -73,7 +74,7 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
                     all: node.querySelector(".select-all")?.textContent.trim() || "",
                     box: { x: b.x, y: b.y, right: b.right, bottom: b.bottom } };
             }, id);
-            if (paint.background !== paper || paint.trigger !== paper) violations.push(`${name}/${id}: trigger/menu is not paper`);
+            if (paint.background !== paper || paint.trigger !== controlPaper) violations.push(`${name}/${id}: trigger/menu does not use its paper role`);
             if (paint.rows.some(row => !["rgba(0, 0, 0, 0)", paper].includes(row.background))) violations.push(`${name}/${id}: filled option slabs`);
             if (paint.apply && paint.apply !== paper) violations.push(`${name}/${id}: filled Apply capsule`);
             if (paint.routineHint) violations.push(`${name}/${id}: routine draft instruction remains`);
@@ -129,7 +130,7 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
         const activePaint = await page.locator("#filters .select-trigger[data-filter-active=true]").evaluateAll(nodes =>
             nodes.map(node => getComputedStyle(node, "::before").backgroundColor));
         assert.equal(activePaint.length, 2);
-        assert.ok(activePaint.every(color => color === paper));
+        assert.ok(activePaint.every(color => color === controlPaper));
         if (proofDir) {
             await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(proofDir, `active-${name}.png`), fullPage: true });
@@ -165,15 +166,17 @@ test("native opt-in outside Analyze reuses the filter presentation without chang
             for (const id of ["scope", "type"]) document.getElementById(id).selectedIndex = 0;
             window.controlChanges = []; window.controls.sync();
         }, theme);
-        const paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 32, 32)";
+        const paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 44, 59)";
+        const controlPaper = theme === "light" ? paper : "rgb(25, 35, 48)";
         for (const [id, value] of [["scope", "analysis"], ["type", "setting"]]) {
             const trigger = page.locator(`#${id}-control`);
             assert.equal(await trigger.evaluate(node => node.classList.contains("select-trigger-filter")), true);
-            assert.equal(await trigger.evaluate(node => getComputedStyle(node, "::before").backgroundColor), paper);
+            assert.equal(await trigger.evaluate(node => getComputedStyle(node, "::before").backgroundColor), controlPaper);
             assert.equal(await trigger.evaluate(node => getComputedStyle(node).borderRadius), "24px");
             assert.equal(await trigger.evaluate(node => getComputedStyle(node).fontWeight), "400");
             await trigger.click();
             const popup = page.locator(".select-popup:visible");
+            assert.equal(await popup.evaluate(node => getComputedStyle(node).backgroundColor), paper);
             assert.equal(await popup.evaluate(node => node.classList.contains("select-popup-filter")), true);
             assert.equal(await popup.getByRole("listbox").getAttribute("aria-multiselectable"), null);
             assert.equal(await popup.locator(".select-toggle,.select-footer,.select-all").count(), 0);

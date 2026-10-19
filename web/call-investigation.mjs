@@ -1,5 +1,5 @@
 // Read-only presentation over the accepted snapshot; never looks up source records.
-export function createCallInvestigation() {
+export function createCallInvestigation(compareEntries) {
     const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
     const duration = (row, layer = "tool") => ["tool", "reported-api", "http"].includes(layer)
         && Number.isFinite(row?.durationMs) && row.durationMs >= 0 ? row.durationMs : null;
@@ -31,5 +31,21 @@ export function createCallInvestigation() {
                 : scenario.graphActivities?.find(record => record.activityId === row.activityId);
         return source ? { status: "available", row, source, actionId: parent.id } : unavailable;
     }
-    return { duration, order, resolve };
+    function firstFailure(activity, records, matching, route, revision) {
+        if (route.view !== "request" || route.layer !== "tool" || route.call !== undefined) return null;
+        const candidates = [];
+        for (const row of matching) {
+            if (row.scenarioId !== route.request || row.outcome !== "failure") continue;
+            const target = { ...route, call: row.id };
+            const resolved = resolve(activity, records, target, revision);
+            // Missing ownership cannot be repaired by selecting a neighboring failure.
+            if (resolved.status !== "available") return target;
+            if (resolved.row.outcome !== "failure") continue;
+            const source = records.find(record => record.scenarioId === route.request);
+            candidates.push({ target, at: resolved.source.startedAt, index: source.toolCalls.indexOf(resolved.source) });
+        }
+        candidates.sort((a, b) => compareEntries(a, b) || a.index - b.index);
+        return candidates[0]?.target ?? null;
+    }
+    return { duration, order, resolve, firstFailure };
 }

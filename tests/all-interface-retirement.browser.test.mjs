@@ -97,16 +97,14 @@ test("every current interface excludes retired reviews, including menus, dialogs
         await capture("filter-" + id, page.locator(".select-popup"));
         await page.keyboard.press("Escape");
     }
-    await page.locator('[data-analyze-mode=calls]').click(); await ready();
-    await capture("calls");
-    await page.locator('[data-analyze-mode=interactions]').click(); await ready();
+    await expect(page.locator("[data-analyze-mode],#callSort")).toHaveCount(0);
+    await capture("activity");
     await page.locator(".request-card-open").first().click();
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     await expect(page.locator("#contextSidebar .reader-call-duration").first()).toBeVisible();
     await expect(page.locator("#contextSidebar .reader-call-duration").first()).toContainText("Tool latency:");
     await expect(page.locator("#contextSidebar .reader-local-timing")).toHaveCount(0);
-    const expandSections = page.getByRole("button", { name: "Expand all sections", exact: true });
-    if (await expandSections.isEnabled()) await expandSections.click();
+    await expect(page.getByRole("button", { name: "Expand all sections", exact: true })).toHaveCount(0);
     await capture("interaction-reader", page.locator("#contextSidebar"), true);
     await expect(page.locator('[data-reader-section="reviews"],[data-feedback-dimension],.assessment-feedback-dialog')).toHaveCount(0);
     await page.locator("#closeContextSidebar").click();
@@ -151,9 +149,9 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await page.locator("#wireSearch").fill("Failed calls");
     await expect(page.locator("#wireSearchResults")).toContainText("Failed calls");
     await page.locator("#wireSearchResults").getByText("Failed calls", { exact: true }).click();
-    await expect(page).toHaveURL(/mode=calls/);
+    await expect(page).toHaveURL(/result=failure/);
     await ready();
-    assert.match(page.url(), /mode=calls/); assert.match(page.url(), /result=failure/);
+    assert.doesNotMatch(page.url(), /mode=calls|callSort=/); assert.match(page.url(), /result=failure/);
     await capture("failed-call-navigation");
 
     await navigateMain(page, "reports");

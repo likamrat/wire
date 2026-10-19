@@ -1,4 +1,5 @@
 export const settingsStyles = `
+.assessment-inline-recovery>.assessment-recovery {margin:12px 0 0}
 :is(.settings-view,#workspace:has(>#settingsView:not([hidden]))) {
  --settings-title-size:2rem;--settings-title-leading:1.25;--settings-title-tracking:-.025em;
  --settings-field-radius:10px;--settings-nav-radius:8px;--settings-action-radius:8px;

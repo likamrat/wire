@@ -219,7 +219,8 @@ with the verified corrected runtime before this safety fix takes effect.
 
 ### Recollect activity
 
-Use **Settings > Data management > Recollect from approved sources**.
+Use Analyze's freshness entry beside the scope/count line, then **Read history
+again...**, or **Settings > Privacy & saved data > Read history again > Choose chats**.
 Find eligible local Copilot chats with **Find a chat** and the paged list.
 **Show selected** reviews choices across searches/pages; the selected count
 remains visible. Search stays in the panel and does not change the chosen scope.
@@ -248,7 +249,8 @@ envelopes in that agent-created source remain unverified. Normalized author
 metadata is retained, not the transformed host-envelope corpus.
 
 **Cancel**, Escape and **Change scope** before confirmation do not write
-evidence, markers or source files. **Recollect N records** separately confirms
+evidence, markers or source files. **Read N records again** answers an explicit
+question and separately confirms
 the exact preview, including the prompt choice. Confirmation rereads the source
 and revalidates its file stamps, eligible mapping, approval, evidence revision,
 two-minute expiry and exact canonical target. Changes fail closed and require
@@ -272,9 +274,25 @@ are unchanged. Create a **new** reviewed report from the resulting evidence.
 
 An uncertain response offers **Check recollection result**, a read of the
 original receipt, including after panel reload/runtime restart. It never repeats
-confirmation. A scoped receipt token is saved in this tab and only its hash in
+confirmation or scans sources again. The dialog retains its reviewed scope while
+available. The persisted receipt contains counts, not the original chat/date
+selection or affected member IDs: after reload that missing scope is explicit,
+not reconstructed, and unavailable counts are never shown as zero. Dates and
+filters remain unchanged; reread records may be outside them. A late receipt
+cannot replace a frozen report or discard Settings edits. If the stored view is
+deferred or fails, read stored activity rather than repeat recollection; only a
+successful snapshot read started for that completed operation acknowledges its
+view as applied. A scoped receipt token is saved in this tab and only its hash in
 the store. Atomic publication either commits evidence and authorization together
 or leaves the earlier store authoritative; restart never begins a recollection.
+A not-started receipt stays an explicit no-commit result; reading it does not
+silently reopen selection or fetch source metadata. A new selection needs a
+separate user action.
+Unreadable recovery storage, malformed retained JSON or an invalid retained
+operation/token blocks recollection in that page. The original storage entry is
+not removed or overwritten, and no source list, preview, confirmation or invented
+receipt lookup is requested. The existing dialog explains the problem with Close
+as its only action; ordinary stored reads and unrelated work remain available.
 Existing pending/legacy deletion cleanup must be resolved first and is not
 bypassed by this feature.
 
@@ -310,9 +328,12 @@ the existing history preferences. New checks keep the approved paths, history
 window and limits. Empty results mean no matching retained evidence, not proof
 that no activity occurred. Older retained evidence is not removed.
 
-**Refresh** reads the currently approved local Copilot metadata and histories,
-then applies the stored view. Its one control and result stay with the activity
-task: in Analyze, inside Settings **Connection & updates** below the source
+**Check local history** reads the currently approved local Copilot metadata and
+histories, then applies the stored view. Analyze's freshness label opens this
+action, a distinct **Read stored activity**, and scoped **Read history again...**
+beside the existing scope/count line. Ordinary checks and stored reads have no
+new confirmation. The same check node is labeled **Refresh** inside Settings
+**Connection & updates** below the source
 summary, or within **Collection status**. Display, Privacy,
 Troubleshooting, request reading and Reports do not show the collection toolbar
 or its routine completion message. If an update still needs attention after
@@ -362,20 +383,27 @@ block source dispatch explicitly. A failed clear keeps source dispatch blocked
 without denying an already confirmed receipt. This is tab-session protection,
 not cross-tab or durable runtime-wide correlation; status cannot resolve it.
 
-Settings consumers: `checkActivity` is the visible unified **Refresh** control;
+Settings consumers: `checkActivity` is the existing check control, labeled
+**Refresh** in Settings and **Check local history** in Analyze;
 the `collect-now` setting/search alias targets it without dispatching.
 `collectNow` is a hidden compatibility event alias with existing
 edit/uncertain/stale guards, not an independent settings mutation.
-`refreshBtn`, `collectionRetry` and `[data-stored-refresh-retry]` are read/status
+`freshStoredRead`, `refreshBtn`, `collectionRetry` and `[data-stored-refresh-retry]` are read/status
 recovery only. `freshActivity` exposes its phase and confirmed check ID/revision;
 `unconfirmed` is not success or completeness. Source setup remains
 `#settings?section=connection&setting=source`.
 
-Analyze places its sole Refresh utility beside the page heading, separate from
-**Reset Analyze** beside the applied-filter chips. The funnel-labeled filter group
+Analyze places its freshness disclosure beside the existing scope/count line,
+not in the page heading or a separate maintenance widget. It remains available
+when search membership is unbound, without displaying stale analytical counts.
+The entry distinguishes paused, unchecked, pending, failed and unknown outcomes;
+a newer status timestamp cannot confirm an unknown source check. Its approved
+source/history scope is separate from the current Dates/filter scope.
+**Reset Analyze** remains beside the applied-filter chips. The funnel-labeled filter group
 uses rounded controls; Author and Outcome keep draft selection with Apply/Cancel,
 not immediate switches. All primary and secondary filters retain their existing
-query semantics. Contextual update results stay below the filters; **Update details**
+query semantics. Contextual update results stay with the scope line, including
+when the action disclosure is closed; **Update details**
 appears after a check, not as permanent source machinery. Collection administration
 stays in the existing Connection & updates and Privacy & saved data categories.
 The Analyze deletion shortcut and its binding are removed. Connection & updates
@@ -599,7 +627,7 @@ or promise that another check recreates the file. Previously collected evidence
 stays. Technical codes and chat identifiers remain secondary support details.
 The closed **Technical details** section labels counters with their units and
 explains the unchanged history window, file/entry read limits and context limits.
-The shared **Refresh** action stays above the page; **Retry** appears only for
+The shared **Refresh** action stays within Collection status; **Retry** appears only for
 safe stored-view/status recovery, not as a second refresh choice.
 With no reported gaps the search and empty reason list are hidden. Unchecked,
 importing and failed states never become a successful empty-history message.
@@ -902,17 +930,21 @@ window and links to history preferences in Settings (`#settings?section=history`
 it never widens backfill or grants approval automatically. Empty results do not
 claim that no activity occurred. Source errors remain visible outside the filters.
 
-Analyze pages eight **interactions**, not eight chats. Rows retain the available
-prompt excerpt, author, source chat/project, tools, service/category and matching
-outcomes. Source names are optional context links; **Chat** in More filters also
-keeps sources without matching evidence available for coverage inspection. The
-results list never adds metadata-only chats to its analytical population.
+Analyze has one **Activity** list, paging eight interactions rather than chats.
+Cards retain a recognizable prompt/author, matching recorded outcomes and time.
+The full gliding reader contains every retained call in order, its own outcome
+and supported cause, services and correctly bounded timing. Exact input opens
+from that call's identity in the same pane; closing it removes its private body
+and Copy control. Chat/model/provenance details stay in Source details.
 
-**Interactions / Calls** switches the same exact analytical slice. Calls reuses
-the existing recorded-action renderer and pages canonical rows, without treating
-service associations or legacy aliases as additional calls. It opens the existing
-interaction reader; dedicated call sorting and exact-action context navigation
-are separate work, not implied by this entry.
+A valid remembered interaction restores its reading position and focus on reopen.
+Otherwise, a fresh ordinary click on a failing Work IQ card brings the first matching
+canonical failure into view only when needed. It does not reorder the log or
+expand arguments. Other evidence layers, explicit targets, Search, report entry,
+Back and user scrolling do not receive this default. Report selection is always
+the whole interaction. There is no separate Calls interface or global call ranking.
+Records lacking a retained interaction remain explicitly identified entries;
+they do not gain an invented interaction or exact-detail link.
 
 **Search this Analyze scope** uses the single live Search field and its
 receipt-bound literal text membership. Legacy browser-history phrase queries
@@ -921,13 +953,15 @@ all-page matched membership. Insights and ordinary reports still include full
 selected interactions; their scope notes distinguish them from matching calls.
 New global queries stay in panel/local-runtime memory, never URLs or browser storage.
 Legacy private/list queries retain browser-history behavior.
-Back/Forward restores the mode, filters, query, page, scroll and focused row;
+Back/Forward restores filters, query, interaction page, scroll and focused row;
 report selection hidden by later filters remains selected.
 
-Canonical entry is `#analyze`; `#analyze?mode=calls` opens Calls. Existing
-`#home`, `#overview`, `#activity` and `#calls` links normalize to equivalent
-Analyze scope. Legacy chat/result Activity links open Calls. Request, Reports,
-saved-library, draft, Settings and Collection status routes remain available.
+Canonical entry is `#analyze`. Existing `#home`, `#overview` and `#activity`
+links retain equivalent Analyze scope. Legacy `#calls`, `mode=calls` and
+`callSort` links retain valid filters but discard obsolete call sorting and
+call-page offsets; those offsets are not interaction pages. Exact `#request`
+links retain canonical call/result identity and API-result revision guards.
+Reports, saved-library, draft, Settings and Collection status routes remain available.
 
 The focused analysis names the chat and project, the recorded count and
 results, the date/service scope and any known history gaps. Settings > Display identifies the time zone. The

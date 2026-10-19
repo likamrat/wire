@@ -431,7 +431,7 @@ test("full retained roster includes undated and earlier interactions, with no pr
     assert.ok(items.some(item => item.type === "action" && item.target.href.includes("request=earlier")));
     assert.equal(JSON.stringify(items).match(/UNSEARCHABLE_|ghp_|C:\\\\/g)?.join(",") ?? null, null);
     assert.ok(items.filter(item => item.type === "view").some(item => item.target.focus === "activityView"
-        && item.target.href === "#analyze?mode=calls"));
+        && item.target.href === "#analyze"));
 });
 
 test("frozen comparison identity survives deletion of an original source report", async t => {

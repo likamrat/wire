@@ -2,6 +2,50 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createFreshActivity } from "./fresh-activity.mjs";
 
+test("the contextual entry cannot turn an unknown check into a newer successful history check", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.fail(token, "Response lost");
+    const context = { approved: true, enabled: true, checked: "just now" };
+    assert.equal(flow.entry(context).label, "Local check unconfirmed");
+    assert.equal(flow.entry(context).storedOnly, true);
+    assert.equal(flow.entry(context).attention, true);
+    flow.retryApply();
+    assert.equal(flow.entry(context).label, "Reading stored activity...");
+    flow.applied(12, "approved", []);
+    assert.equal(flow.entry(context).label, "Local check unconfirmed");
+    assert.equal(flow.begin(), null);
+});
+
+test("the contextual entry distinguishes approved history, paused collection and stored-only reads", () => {
+    const flow = createFreshActivity();
+    assert.equal(flow.entry({ approved: true, enabled: true, checked: "5 minutes ago" }).label, "History checked 5 minutes ago");
+    assert.equal(flow.entry({ approved: true, enabled: false, checked: "5 minutes ago" }).label, "Collection paused");
+    assert.equal(flow.entry({ approved: false, checked: "5 minutes ago" }).label, "Stored activity only");
+    assert.equal(flow.entry({ approved: true, readError: true }).label, "Stored view not updated");
+    assert.equal(flow.entry({ approved: true, readError: true }).storedOnly, true);
+    assert.equal(flow.entry({ approved: true, collectionState: "error" }).label, "Local history needs attention");
+    flow.begin({ checkSource: false }); flow.applied(4, "approved", []);
+    assert.equal(flow.entry({ approved: true, enabled: true, checked: "just now" }).label, "Stored activity read");
+});
+
+test("the contextual entry keeps deferred, partial and read-only states distinct", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    const context = { approved: true, enabled: false, checked: "just now" };
+    flow.collected(token, { schemaVersion: 2, id: "partial", revision: 3, configVersion: "approved",
+        completedAt: "2026-10-05T20:00:00Z", outcome: "partial", changes: { added: 0, updated: 0, items: [] },
+        coverage: { limited: 1 }, sourcesChecked: 1, eligibleSources: 1 });
+    flow.defer();
+    assert.equal(flow.entry(context).label, "Activity update waiting");
+    assert.equal(flow.entry(context).attention, true);
+    flow.applied(3, "approved", []);
+    assert.equal(flow.entry(context).label, "Some history is incomplete");
+    assert.equal(flow.entry(context).storedOnly, false);
+    flow.blockSource("Recovery marker could not be cleared.");
+    assert.equal(flow.entry(context).label, "Source checks are read-only");
+    assert.equal(flow.entry(context).attention, true);
+    assert.equal(flow.entry(context).storedOnly, true);
+});
+
 test("a rejected source configuration stays a known failure after a stored-only recovery", () => {
     const flow = createFreshActivity(), token = flow.begin();
     flow.fail(token, "Choose the Copilot app's absolute data.db path and CLI session-state directory. No other file tree is scanned.",

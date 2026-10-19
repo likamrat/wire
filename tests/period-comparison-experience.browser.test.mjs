@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -63,13 +64,134 @@ async function compare(page) {
     await expect(page.locator("#periodComparisonResultsTitle")).toBeVisible();
     return value;
 }
+async function settleLayout(page) {
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForFunction(() => [...document.querySelectorAll("#main,#sidebar,#contextSidebar")]
+        .every(node => node.getAnimations({ subtree: true }).every(animation => animation.playState !== "running")));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
 async function capture(page, name) {
     if (!proof) return;
+    await settleLayout(page);
     await mkdir(proof, { recursive: true });
     await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({ path: path.join(proof, `${name}-viewport.png`) });
     await page.screenshot({ path: path.join(proof, `${name}-full.png`), fullPage: true });
 }
+
+test("comparison record return keeps the exact reading position after the accepted result arrives", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, "#analyze?services=Files&includeMissingService=true");
+    await page.locator("#comparePeriods").click();
+    await fillPeriods(page);
+    await compare(page);
+    const disclosure = page.locator('[data-period-side="baseline"] details').filter({ hasText: "Exact matching records" });
+    if (await disclosure.count()) await disclosure.locator("summary").click();
+    const target = page.locator("#periodComparisonResults a:visible").first();
+    await target.scrollIntoViewIfNeeded();
+    await target.focus();
+    const position = () => page.evaluate(() => {
+        const href = document.activeElement.getAttribute("href");
+        const [view, query] = href?.split("?") ?? [];
+        const params = new URLSearchParams(query); params.sort();
+        return { y: scrollY, focusedHref: href ? `${view}?${params}` : null };
+    });
+    const before = await position(), box = await target.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.locator("#contextSidebar")).toBeVisible();
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        await settleLayout(page);
+        await page.screenshot({ path: path.join(proof, "record-reader-desktop.png") });
+    }
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).not.toBeVisible();
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
+    await expect.poll(position).toEqual(before);
+});
+
+test("exact late-record Close and Back preserve the native roster scroller and selected target", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await page.locator("#comparePeriods").click();
+    await fillPeriods(page); await compare(page);
+    const target = page.locator('[data-period-side="baseline"] tbody tr').last().locator("a");
+    const position = () => page.evaluate(() => ({
+        y: scrollY, focus: document.activeElement.id,
+        inner: document.querySelector("#comparison-record-scroll-A").scrollTop,
+    }));
+    for (const action of ["close", "back"]) {
+        await target.scrollIntoViewIfNeeded(); await target.focus();
+        const before = await position(), box = await target.boundingBox();
+        assert.ok(before.inner > 0, "The selected record must be below the initial roster viewport");
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await expect(page.locator("#contextSidebar")).toBeVisible();
+        if (proof) {
+            await mkdir(proof, { recursive: true });
+            await settleLayout(page);
+            await page.screenshot({ path: path.join(proof, `${action}-late-record-reader.png`) });
+        }
+        if (action === "close") await page.locator("#closeContextSidebar").click();
+        else await page.goBack();
+        await expect(page.locator("#contextSidebar")).not.toBeVisible();
+        await expect(page.locator("#createPeriodReport")).toBeVisible();
+        await expect.poll(position).toEqual(before);
+        await expect(page.locator("#comparisonRecordsA")).toHaveAttribute("aria-selected", "true");
+        if (proof) await page.screenshot({ path: path.join(proof, `${action}-late-record-return.png`) });
+    }
+});
+
+test("newer reading input cancels a pending comparison-origin restoration", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await page.locator("#comparePeriods").click(); await fillPeriods(page); await compare(page);
+    const link = page.locator('[data-period-side="baseline"] tbody tr').last().locator("a");
+    await link.scrollIntoViewIfNeeded(); await link.focus();
+    const box = await link.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.locator("#contextSidebar")).toBeVisible();
+    let entered, release;
+    const held = new Promise(resolve => { entered = resolve; });
+    t.after(() => release?.());
+    await page.route("**/api/period-comparison", async route => {
+        const response = await route.fetch();
+        await new Promise(resolve => { release = resolve; entered(); });
+        await route.fulfill({ response });
+    }, { times: 1 });
+    await page.locator("#closeContextSidebar").click(); await held;
+    await page.mouse.move(350, 700); await page.mouse.wheel(0, -200);
+    const position = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() =>
+        resolve({ y: scrollY, focus: document.activeElement.id })))));
+    const before = await position();
+    release();
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
+    assert.deepEqual(await position(), before);
+});
+
+test("accepted comparison presents outcome shares and both timed distributions without conflating coverage", { timeout: 30000 }, async t => {
+    const { page } = await setup(t);
+    await page.locator("#comparePeriods").click();
+    await fillPeriods(page);
+    const value = await compare(page);
+    await expect(page.getByRole("heading", { name: "Recorded outcomes", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Matching tool latency", exact: true })).toBeVisible();
+    await expect(page.locator(".compare-outcome-bar")).toHaveCount(2);
+    for (const [i, side] of Object.values(value.periods).entries()) {
+        const bar = page.locator(".compare-outcome-bar").nth(i);
+        await expect(bar).toHaveAttribute("aria-label", new RegExp(`Worked ${side.analytics.totals.success}`));
+        const widths = await bar.locator("[data-outcome]").evaluateAll(nodes => nodes.map(node => [node.dataset.outcome, parseFloat(node.style.width)]));
+        for (const [outcome, width] of widths) assert.equal(width, side.analytics.totals[outcome] * 100 / side.rowIds.length);
+    }
+    await expect(page.locator(".compare-timing-metric")).toHaveCount(2);
+    await expect(page.locator(".compare-latency")).toContainText(`B ${value.periods.later.analytics.totals.duration.sampleCount}/${value.periods.later.rowIds.length}`);
+    await expect(page.getByRole("heading", { name: "Whole-interaction timing", exact: true })).toBeVisible();
+    await expect(page.locator(".compare-full-timing")).toContainText("Includes calls outside the selected dates or filters");
+    await page.getByRole("tab", { name: /^B ·/ }).click();
+    await expect(page.locator('[data-period-side="later"]')).toBeVisible();
+    await expect(page.locator('[data-period-side="baseline"]')).toBeHidden();
+    assert.equal(await page.locator('[data-period-side="later"] tbody tr').count(), value.periods.later.rowIds.length);
+});
 
 test("explicit comparison completion moves attention to accepted results without a second navigation action", { timeout: 30000 }, async t => {
     const { page } = await setup(t, "#analyze?services=Files&includeMissingService=true");
@@ -107,21 +229,50 @@ test("explicit comparison completion moves attention to accepted results without
         assert.ok(observation.title.top >= 0 && observation.title.bottom <= observation.height, JSON.stringify(observation));
         assert.ok(observation.report.top >= 0 && observation.report.bottom <= observation.height, JSON.stringify(observation));
     }
-    await page.locator("#createPeriodReport").click();
+    await page.locator("#createPeriodReport").evaluate(node => node.focus({ preventScroll: true }));
+    const reportOrigin = await page.evaluate(() => ({ url: location.href, y: scrollY, focus: document.activeElement.id }));
+    const reportButton = await page.locator("#createPeriodReport").boundingBox();
+    await page.mouse.click(reportButton.x + reportButton.width / 2, reportButton.y + reportButton.height / 2);
     await expect(page.locator("#reportStage1")).toBeVisible();
     await expect(page.locator('[data-period-report-side="baseline"]')).toContainText("4 matching Work IQ tool calls");
     await expect(page.locator('[data-period-report-side="later"]')).toContainText("4 matching Work IQ tool calls");
     await reportContents(page);
     await expect(page.locator("#formatOptions input[value=pdf]")).not.toBeChecked();
+    await page.locator('[name=promptMode][value=none]').check();
+    for (const format of ["pdf", "json", "markdown"]) await page.locator(`#formatOptions input[value=${format}]`).check();
     const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#exportBtn").click();
     const preview = await (await response).json();
     assert.equal(preview.error, undefined);
     assert.deepEqual(preview.snapshot.periodComparison.comparison, comparison.comparison);
+    const documentTask = getDocument({ data: new Uint8Array(Buffer.from(preview.files["product-report.pdf"].data, "base64")),
+        useSystemFonts: false, disableFontFace: true });
+    try {
+        const document = await documentTask.promise;
+        const last = (await (await document.getPage(document.numPages)).getTextContent()).items.map(item => item.str ?? "").join(" ");
+        assert.ok(!last.includes("Interpretation") || last.includes("Timing method") || last.includes("Record "),
+            "The short-group period report must not strand Interpretation and its footer");
+    } finally { await documentTask.destroy(); }
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "ready");
-    await expect(page.frameLocator(".report-frame").getByRole("heading", { name: "What differs", exact: true })).toBeVisible();
+    await expect(page.frameLocator(".report-frame").getByRole("heading", { name: "Recorded outcomes", exact: true })).toBeVisible();
     await expect(page.locator("input[data-review-control]")).not.toBeChecked();
-    if (proof) await page.screenshot({ path: path.join(proof, "html-review-viewport.png") });
+    if (proof) {
+        await settleLayout(page);
+        await page.screenshot({ path: path.join(proof, "html-review-viewport.png") });
+        await mkdir(path.join(proof, "report"), { recursive: true });
+        for (const [name, contents] of Object.entries(preview.files)) await writeFile(path.join(proof, "report", name),
+            typeof contents === "string" ? contents : Buffer.from(contents.data, "base64"));
+    }
+    await page.goBack();
+    await expect(page.locator("#createPeriodReport")).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({ url: location.href, y: scrollY, focus: document.activeElement.id }))).toEqual(reportOrigin);
+    await expect(page.getByRole("tab", { name: "A · 4 records", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "B · 4 records", exact: true })).toBeVisible();
+    if (proof) {
+        await settleLayout(page);
+        await page.screenshot({ path: path.join(proof, "report-return.png") });
+        await writeFile(path.join(proof, "report-return.json"), JSON.stringify(reportOrigin, null, 2));
+    }
 });
 
 test("pending comparison respects subsequent reading and editing while automatic refinements never move focus", { timeout: 30000 }, async t => {
@@ -223,7 +374,8 @@ test("normal-root paired controls validate dates, show only accepted results and
     await expect(page.locator("#createPeriodReport")).toBeVisible();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#periodComparisonStatus")).toHaveClass("visually-hidden");
-    await expect(page.locator("#periodComparison")).toContainText("3,000 ms; 2 / 4 calls timed");
+    await expect(page.locator(".compare-latency")).toContainText("3,000 ms");
+    await expect(page.locator(".compare-latency")).toContainText("B 2/4");
     await expect(page.locator("#periodComparison")).toContainText("Includes calls outside the selected dates or filters");
     await page.getByLabel("Period A to", { exact: true }).fill("2026-03-08");
     await expect(page.locator("#createPeriodReport")).toBeHidden();
@@ -284,7 +436,7 @@ test("normal-root empty sides, pending reads and read errors never offer an inva
     await page.locator("#applyPeriodComparison").click();
     await held;
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Reading both periods...");
-    await expect(page.locator("#periodComparisonResults")).toBeEmpty();
+    await expect(page.locator("#periodComparisonResults")).toHaveText("Reading both periods...");
     await expect(page.locator("#createPeriodReport")).toBeHidden();
     await capture(page, "pending");
     release();
@@ -345,11 +497,24 @@ test("normal-root comparison keeps controls and complete results reachable in bo
                 assert.ok(geometry.overflow <= 1, JSON.stringify(geometry));
                 assert.equal(geometry.fields.length, 4);
                 assert.ok(geometry.fields.every(field => field.left >= 0 && field.right <= width && field.height >= 44));
+                if (width === 390) {
+                    const hint = await page.locator("#comparisonDateHint").evaluate(node => ({
+                        width: node.getBoundingClientRect().width,
+                        available: node.parentElement.getBoundingClientRect().width,
+                        height: node.getBoundingClientRect().height,
+                        line: parseFloat(getComputedStyle(node).lineHeight),
+                    }));
+                    assert.ok(hint.width >= hint.available - 1 && hint.height <= hint.line * 3,
+                        `Date scope must wrap above Search rather than into a narrow letter column: ${JSON.stringify(hint)}`);
+                }
                 for (const selector of ["#applyPeriodComparison", "#periodComparisonSetup button:first-of-type", ...(populated ? ["#createPeriodReport"] : [])]) {
                     await page.locator(selector).first().focus();
                     await expect(page.locator(selector).first()).toBeFocused();
                 }
-                if (populated) await expect(page.getByRole("table", { name: "Matching Work IQ tool calls", exact: true })).toContainText("Period B");
+                if (populated) {
+                    await expect(page.getByRole("heading", { name: "Recorded outcomes", exact: true })).toBeVisible();
+                    await expect(page.locator(".compare-outcome-bar")).toHaveCount(2);
+                }
                 layouts.push({ populated, width, height, scale, theme, ...geometry });
                 await capture(page, `${populated ? "populated" : "initial"}-${theme}-${width}-${scale}`);
             }

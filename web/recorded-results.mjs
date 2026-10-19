@@ -51,9 +51,9 @@ export function createRecordedResults() {
         const names = labels(layer);
         return keys.filter(key => summary[key] > 0).map(key => ({ key, label: names[key], count: summary[key], icon: icon(key) }));
     }
-    function failureReason(call) {
+    function failureCause(call) {
         const evidence = call?.failureEvidence;
-        if (evidence?.version !== 1) return "Error detail not recorded";
+        if (evidence?.version !== 1) return null;
         // These signals were qualified at retention. Never re-read error prose or infer from HTTP status.
         if (evidence.messageStatus === "text-excluded") {
             if (evidence.messageSignal === "workiq-sign-in-required") return "Sign-in was required";
@@ -61,22 +61,31 @@ export function createRecordedResults() {
             if (evidence.messageSignal === "request-timeout") return "Request timed out (MCP -32001)";
         }
         if (evidence.reason === "error-code-recorded" && evidence.code && evidence.code !== "failure") return "Recorded error: " + evidence.code;
+        return null;
+    }
+    function failureReason(call) {
+        const cause = failureCause(call);
+        if (cause) return cause;
+        const evidence = call?.failureEvidence;
+        if (evidence?.version !== 1) return "Error detail not recorded";
         if (evidence.messageStatus === "sensitive-excluded") return "Error detail excluded for privacy";
         if (["error-details-excluded", "result-content-excluded", "unsupported-error-format"].includes(evidence.reason)
             || ["text-excluded", "size-excluded", "unsupported-format"].includes(evidence.messageStatus)) return "Error detail not retained";
         return "Error detail not recorded";
     }
-    function explainedEntries(layer, rows, callFor) {
+    function explainedEntries(layer, rows, callFor, { concise = false } = {}) {
         const summary = summarize(rows), ordinary = entries(layer, summary);
         if (!ordinary || layer !== "tool") return ordinary;
         const failures = new Map();
         for (const row of new Map(rows.map(row => [row.id, row])).values()) {
             if (row.outcome !== "failure") continue;
-            const reason = failureReason(callFor(row));
-            failures.set(reason, (failures.get(reason) ?? 0) + 1);
+            const call = callFor(row), reason = failureReason(call);
+            const previous = failures.get(reason);
+            failures.set(reason, { count: (previous?.count ?? 0) + 1, reasonOnly: Boolean(failureCause(call)) });
         }
         return ordinary.flatMap(entry => entry.key === "failure"
-            ? [...failures].map(([reason, count]) => ({ ...entry, count, reason })) : [entry]);
+            ? [...failures].map(([reason, detail]) => ({ ...entry, count: detail.count, reason,
+                ...concise ? { reasonOnly: detail.reasonOnly } : {} })) : [entry]);
     }
     function unit(layer, count) { return units[layer]?.[count === 1 ? 0 : 1] || "records"; }
     function columnUnit(layer, count) {

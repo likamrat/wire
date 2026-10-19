@@ -74,12 +74,12 @@ async function setup(t, record = clarityRecord()) {
 test("a recorded failure explains its cause with the outcome from card to reader", async t => {
     const { page } = await setup(t);
     const card = page.locator(".request-card-open");
-    await expect(card.locator('[data-outcome="failure"]')).toContainText("Sign-in was required");
-    await expect(card).toHaveAccessibleName(/Sign-in was required/);
+    await expect(card.locator('[data-outcome="failure"]')).toContainText("1 Tool failed");
+    await expect(card).not.toContainText("Sign-in was required");
     await card.click();
     const call = page.locator('.journey-item[data-tool-call-id="clarity-call"]');
     await expect(call.locator(".call-heading")).toContainText("Sign-in was required");
-    await expect(call.locator(".call-heading")).toContainText("Tool failed");
+    await expect(call.locator(".call-heading")).not.toContainText("Tool failed");
     await expect(call.locator(".reader-recorded-signal")).toHaveCount(0);
     assert.equal((await call.innerText()).match(/Sign-in was required/g)?.length, 1);
     await expect(call.locator(".reader-call-duration data")).toHaveAttribute("value", "252");
@@ -90,7 +90,7 @@ test("model identity is separate from an explained incomplete recording", async 
     await page.locator(".request-card-open").click();
     await expect(page.locator(".interaction-model-fact .model-identity")).toHaveText("recorded-model");
     await expect(page.locator(".model-recording-note")).toContainText("final response");
-    await expect(page.locator(".request-original")).not.toContainText("(partial record)");
+    await expect(page.locator(".model-identity")).not.toContainText("(partial record)");
 });
 
 test("model recording reasons compose one qualified statement without losing any retained reason", async t => {
@@ -168,10 +168,11 @@ test("returned API failures keep their own codes without borrowing the parent si
     const { page, runtime } = await setup(t, record);
     await page.goto(runtime.url + "#analyze?layer=reported-api&mode=calls");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    const calls = page.locator(".matched-action");
+    await page.locator(".request-card-open").click();
+    const calls = page.locator(".api-result-entry");
     await expect(calls).toHaveCount(2);
-    await expect(calls.locator(".card-result-note")).toHaveText([
-        "Tool-reported HTTP 503: MailboxUnavailable. Response body was not retained.",
+    await expect(calls.locator(".recorded-result-label")).toHaveText([
+        "Tool-reported HTTP 503: MailboxUnavailable",
         "Tool-reported error: InvalidQuery",
     ]);
     await expect(calls.locator(".result-cause")).toHaveCount(0);
@@ -283,6 +284,7 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
     await page.evaluate(() => document.fonts.ready);
     const single = page.locator('.request-row[data-view-key="request:clarity-sign-in"] .request-card-open');
     const mixed = page.locator('.request-row[data-view-key="request:clarity-mixed"] .request-card-open');
+    let exactCall;
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await capture(`${theme}-whole-analyze`, true);
@@ -292,6 +294,7 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
         await single.focus();
         await page.keyboard.press("Enter");
         await settled();
+        exactCall = await page.locator('[data-tool-call-id="clarity-call"]').getAttribute("data-action-id");
         await expect(page.locator(".call-heading .result-cause")).toBeInViewport();
         await expect(page.locator(".model-recording-note")).toHaveText("Model history is incomplete: a source window or retention limit cut it short.");
         await expect(page.locator(".model-recording-note")).not.toContainText("final response");
@@ -300,16 +303,14 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
         await capture(`${theme}-reader-first-glance`);
         const focusOrder = [];
         if (theme === "light") {
-            await expect(page.locator("#contextSidebarTitle")).toBeFocused();
+            await expect(page.locator('[data-tool-call-id="clarity-call"]')).toBeFocused();
             for (let index = 0; index < 8; index++) {
-                await page.keyboard.press("Tab");
+                await page.keyboard.press("Shift+Tab");
                 const name = await page.evaluate(() => document.activeElement.getAttribute("aria-label") || document.activeElement.textContent);
                 focusOrder.push(name.trim());
                 if (name === "Copy prompt") break;
             }
-        } else {
-            focusOrder.push("Restored Copy prompt focus from the same reader");
-        }
+        } else focusOrder.push("Restored Copy prompt focus from the same reader");
         observations.push({ name: `${theme}-tab-sequence`, focusOrder });
         await expect(page.getByRole("button", { name: "Copy prompt", exact: true })).toBeFocused();
         await capture(`${theme}-reader-keyboard`);
@@ -347,7 +348,7 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
         await page.locator("#closeContextSidebar").click(); await settled();
     }
     await selectActivityOption(page, "toolFilter", "workiq-fetch");
-    await expect(mixed.locator(".result-cause")).toHaveText(["Error detail not recorded"]);
+    await expect(mixed.locator('[data-outcome="failure"]')).toContainText("1 Tool failed");
     await expect(mixed).not.toContainText("Sign-in");
     await mixed.click();
     await expect(page.locator(".reader-scope")).toContainText("2 of 6 Work IQ tool calls match");
@@ -357,13 +358,11 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
     await capture("filtered-whole-interaction");
     await page.locator("#closeContextSidebar").click(); await settled();
     await selectActivityOption(page, "toolFilter", "all");
-    await page.locator('[data-analyze-mode="calls"]').click();
-    const callCard = page.locator(".matched-action").filter({ hasText: records[0].userPrompt.text });
-    await expect(callCard.locator(".card-outcomes .result-cause")).toHaveText("Sign-in was required");
-    await expect(callCard.locator(".model-recording-note")).toContainText("source window or retention limit");
-    await callCard.getByRole("link", { name: "Open exact call in context" }).click();
+    await page.goto(app.runtime.url + "#request?" + new URLSearchParams({ request: records[0].scenarioId, layer: "tool", call: exactCall }));
+    await page.locator('#workspace[aria-busy="false"]').waitFor();
     await expect(page.locator("#selectedCall")).toBeFocused();
-    await capture("calls-exact-target");
+    await expect(page.locator(".model-recording-note")).toContainText("source window or retention limit");
+    await capture("explicit-call-target");
     await page.locator("#closeContextSidebar").click(); await settled();
     await page.locator("#wireSearch").fill("workshop agenda");
     const hit = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-title", { hasText: records[0].userPrompt.text }) });

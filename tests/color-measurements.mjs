@@ -5,13 +5,13 @@ export function rgb(value) {
     throw new TypeError(`Unsupported measured color: ${value}`);
 }
 
-export async function shadowPaint(page, selector, side) {
+export async function shadowPaint(page, selector, side, distances = [2, 6, 12, 24, 40]) {
     const bounds = await page.locator(selector).boundingBox();
     const baseline = await page.screenshot();
     await page.locator(selector).evaluate(node => node.style.setProperty("box-shadow", "none", "important"));
     const flat = await page.screenshot();
     await page.locator(selector).evaluate(node => node.style.removeProperty("box-shadow"));
-    const result = await page.evaluate(async ({ before, after, bounds, side }) => {
+    const result = await page.evaluate(async ({ before, after, bounds, side, distances }) => {
         async function pixels(base64) {
             const image = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), char => char.charCodeAt(0))]));
             const canvas = document.createElement("canvas");
@@ -24,7 +24,7 @@ export async function shadowPaint(page, selector, side) {
         const a = await pixels(before), b = await pixels(after), bands = [];
         const bottom = side === "bottom";
         const edge = bottom ? bounds.y + bounds.height : side === "right" ? bounds.x + bounds.width : bounds.x;
-        for (const distance of [2, 6, 12, 24, 40]) {
+        for (const distance of distances) {
             const cross = Math.floor(edge + (side === "left" ? -distance : distance));
             let delta = 0, count = 0;
             const start = Math.ceil(bottom ? bounds.x + 20 : bounds.y + 80);
@@ -39,7 +39,7 @@ export async function shadowPaint(page, selector, side) {
             bands.push({ distance, darkening: count ? delta / count : 0 });
         }
         return bands;
-    }, { before: baseline.toString("base64"), after: flat.toString("base64"), bounds, side });
+    }, { before: baseline.toString("base64"), after: flat.toString("base64"), bounds, side, distances });
     return { bands: result, screenshot: baseline };
 }
 

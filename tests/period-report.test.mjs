@@ -43,14 +43,15 @@ test("Tool latency period output qualifies aggregates and only labels exact tool
                 assert.match(output, /Matching tool latency/);
                 assert.match(output, /Median tool latency/);
                 assert.match(output, /P95 tool latency/);
-                assert.match(output, /1000 ms/);
                 assert.doesNotMatch(output, /call duration|tool-call duration/i);
             }
-            assert.match(html, /<th scope="col">Tool latency<\/th>/);
+            assert.match(html, /1,000 ms/);
+            assert.match(markdown, /1000 ms/);
+            assert.match(html, /Tool latency: call start to recorded completion/);
             assert.match(markdown, /\| Record \/ interaction \| Tool \/ services \| Outcome \| Tool latency \|/);
         } else {
             assert.deepEqual(periodReportDisplay(frozen).timing, []);
-            assert.match(html, /<th scope="col">Recorded duration<\/th>/);
+            assert.match(html, /Recorded duration for this evidence layer/);
             assert.doesNotMatch(html, /<th scope="col">Tool latency<\/th>/);
             assert.match(markdown, /\| Record \/ interaction \| Tool \/ services \| Outcome \| Recorded duration \|/);
         }
@@ -240,7 +241,7 @@ test("one paired report uses existing actual disclosure and separate local save"
     wrongHash.manifest.periodComparisonHash = "0".repeat(64);
     await assert.rejects(extractReportFile(wrongHash), error => error.code === "report-period-integrity");
     assert.ok(preview.previewHtml.includes(`<h1>${preview.title}</h1>`));
-    assert.match(preview.previewHtml, /id="numbers"><h2>Activity<\/h2>/);
+    assert.match(preview.previewHtml, /<h2>Recorded outcomes<\/h2>/);
     assert.match(preview.files["product-report.md"], /No calls|Full-interaction|full retained/);
     await assert.rejects(controller.confirm("owner", preview.previewId, true, value.timeContext), /Preview not found/);
 });

@@ -114,6 +114,23 @@ const screenDark = `
  --focus:#e0e0e0;--scrim:#000000bd;
 `;
 
+// Native forced colors retain the base palette; ordinary dark screens use these material roles.
+const darkScreenSurfaces = `
+ --page:#10161f;--paper:#192330;--navigation-paper:var(--page);
+ --context-paper:#1c2939;--floating-paper:#202c3b;--canvas:#14212f;--hover:#1e2b3b;
+ --ink:#f2f4f8;--muted:#bbc5d4;--rule:#3d4e64;--control:#8b9cb2;
+ --surface-edge:#bfd2ee1a;--surface-divider:#bfd2ee24;
+ --panel-shadow:inset 0 1px 0 #c0d6f008,0 1px 2px #050b1414;
+ --control-shadow:inset 0 1px 0 #d3e3fa0a;
+ --surface-shadow:0 8px 24px #03081133;
+ --navigation-sidebar-shadow:inset -1px 0 #b5cbe514;
+ --context-sidebar-shadow:inset 1px 0 #b5cbe50d,-8px 0 24px #03081126;
+ --accent:#dbe7f7;--accent-soft:#202c3b;--accent-fill:#dbe7f7;--on-accent:#142130;
+ --accent-hover:#1e2b3b;--accent-pressed:#142332;--pill-pressed:#142332;
+ --primary-hover:#edf4fc;--primary-pressed:#c7d8ee;
+ --focus:#bdd6ff;--toggle-off:#152435;--scrim:#050a12bd;
+`;
+
 export const screenFontStack = '"Asta Sans","Segoe UI","Segoe UI Web (West European)",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",sans-serif';
 
 export const screenTokens = `${tokens}
@@ -122,6 +139,7 @@ export const screenTokens = `${tokens}
  --weight-regular:400;--weight-medium:500;--weight-strong:600;--tracking-heading:0;
  --radius:12px;--radius-small:10px;--radius-dialog:12px;--radius-field:8px;
  --pill-fill:var(--paper);--pill-border:var(--surface-edge);--shadow:var(--surface-shadow);
+ --navigation-paper:var(--paper);--context-paper:var(--paper);--floating-paper:var(--paper);
  --state-transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease,box-shadow 140ms ease;
 }
 :root {${screenLight}}
@@ -130,4 +148,10 @@ export const screenTokens = `${tokens}
 }
 :root[data-evidence-theme=light] {${screenLight}}
 :root[data-evidence-theme=dark] {${screenDark}}
+@media(prefers-color-scheme:dark) and (forced-colors:none) {
+ :root:not([data-evidence-theme]) {${darkScreenSurfaces}}
+}
+@media(forced-colors:none) {
+ :root[data-evidence-theme=dark] {${darkScreenSurfaces}}
+}
 `;

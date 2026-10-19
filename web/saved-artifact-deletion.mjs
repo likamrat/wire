@@ -1,14 +1,17 @@
 export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallbackFocus }) {
     const dialog = document.createElement("dialog");
-    dialog.className = "deletion-dialog";
+    dialog.className = "deletion-dialog decision-frame";
+    dialog.dataset.decisionKind = "destructive";
     dialog.setAttribute("aria-labelledby", "savedArtifactDeleteTitle");
     const title = document.createElement("h2"); title.id = "savedArtifactDeleteTitle";
     const heading = document.createElement("div"); heading.className = "delete-heading";
     const icon = document.createElement("span"); icon.className = "delete-warning-icon"; icon.setAttribute("aria-hidden", "true"); icon.append(ux.icon("warning"));
     heading.append(icon, title);
+    const body = document.createElement("div"); body.className = "decision-body";
+    const identity = document.createElement("p"); identity.className = "decision-object";
     const scope = document.createElement("p"), preservation = document.createElement("p"), dependents = document.createElement("p");
     const warning = document.createElement("p"); warning.className = "delete-irreversible"; warning.textContent = "Permanent local deletion. This cannot be undone.";
-    const status = document.createElement("p"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite"); status.tabIndex = -1;
+    const status = document.createElement("p"); status.className = "decision-status"; status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite"); status.tabIndex = -1;
     const footer = document.createElement("div"); footer.className = "delete-actions";
     function button(text, action, cls) {
         const node = document.createElement("button"); node.type = "button"; node.textContent = text;
@@ -17,8 +20,10 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
     const cancel = button("Cancel", () => dialog.close());
     const confirm = button("Delete report", commit, "delete-object-confirm danger");
     const check = button("Check deletion result", checkResult);
-    footer.append(check, cancel, confirm);
-    dialog.append(heading, scope, preservation, dependents, warning, status, footer);
+    confirm.dataset.decisionAction = "commit"; check.dataset.decisionAction = "check";
+    footer.append(cancel, check, confirm);
+    body.append(identity, scope, preservation, dependents, warning, status);
+    dialog.append(heading, body, footer);
     document.body.append(dialog);
     const recoveryNotice = document.createElement("div");
     recoveryNotice.className = "notice"; recoveryNotice.hidden = true;
@@ -43,6 +48,21 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
     }
     function message(text, error = false) { status.textContent = text; status.setAttribute("role", error ? "alert" : "status"); status.classList.toggle("error", error); }
     function paint() {
+        const displayPhase = phase === "preview" ? "confirm" : phase;
+        if (dialog.dataset.decisionPhase !== displayPhase) {
+            const role = phase === "complete" ? "check" : ["loading", "pending", "checking"].includes(phase) ? "pending" : "warning";
+            const glyph = ux.icon(role);
+            if (role === "pending") glyph.classList.add("pending-indicator");
+            icon.replaceChildren(glyph);
+            dialog.dataset.decisionPhase = displayPhase;
+        }
+        const object = target?.scope === "all-reports" ? "saved reports" : target?.artifactKind === "comparison" ? "saved comparison" : "report";
+        if (phase === "preview") title.textContent = target?.scope === "all-reports" ? "Delete all saved reports?" : `Delete this ${object}?`;
+        else if (phase !== "complete") title.textContent = {
+            loading: "Review saved-item deletion", pending: `Deleting ${object}`, checking: "Checking deletion result",
+            unknown: "Deletion result unknown", error: "Saved-item deletion unavailable", "not-started": "No saved-item deletion found",
+        }[phase] ?? title.textContent;
+        identity.hidden = !identity.textContent || phase === "complete";
         confirm.hidden = phase !== "preview" && phase !== "pending";
         confirm.disabled = phase !== "preview";
         check.hidden = !["unknown", "checking"].includes(phase);
@@ -138,6 +158,8 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
         if (busy()) return;
         restoreOnClose = true;
         trigger = from; target = value; preview = null;
+        identity.textContent = ""; scope.textContent = ""; preservation.textContent = ""; dependents.textContent = "";
+        body.scrollTop = 0;
         let stored;
         try { stored = sessionStorage.getItem(receiptKey); }
         catch { phase = "error"; title.textContent = "Saved-object deletion unavailable"; message("The panel cannot read its earlier deletion receipt. No new deletion was requested.", true); paint(); dialog.showModal(); cancel.focus(); return; }
@@ -166,6 +188,7 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
         const token = ++generation;
         taskActive = true;
         phase = "loading"; title.textContent = bulk ? "Delete all saved reports?" : `Delete ${value.artifactKind === "comparison" ? "saved comparison" : "report"} ${value.label || value.artifactId}?`;
+        identity.textContent = bulk ? "" : value.label || value.artifactId;
         warning.textContent = bulk
             ? "Permanent local deletion. This cannot be undone. If interrupted, some files may remain. Use Check deletion result to see whether cleanup has finished."
             : "Permanent local deletion. This cannot be undone.";

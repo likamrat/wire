@@ -18,14 +18,14 @@ async function capture(page, name) {
     await mkdir(process.env.WIRE_RECOLLECTION_PROOF_DIR, { recursive: true });
     await page.screenshot({ path: path.join(process.env.WIRE_RECOLLECTION_PROOF_DIR, `${name}.png`) });
 }
-async function visibleHeaderExit(page) {
+async function visibleDecisionExit(page) {
     const box = await page.locator("#recollectClose").evaluate(button => {
         const rect = button.getBoundingClientRect();
         const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
         return { top: rect.top, bottom: rect.bottom, height: innerHeight, reachable: button === point || button.contains(point),
-            header: button.parentElement.classList.contains("dialog-head") };
+            actions: button.parentElement.classList.contains("delete-actions") };
     });
-    assert.ok(box.header && box.top >= 0 && box.bottom <= box.height && box.reachable, JSON.stringify(box));
+    assert.ok(box.actions && box.top >= 0 && box.bottom <= box.height && box.reachable, JSON.stringify(box));
 }
 async function chooseScope(page, f, prompts = false) {
     await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
@@ -48,7 +48,7 @@ async function setup(t) {
     page.setDefaultTimeout(7000);
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
-    t.after(async () => { await browser.close(); assert.deepEqual(errors, []); });
+    f.closeClient(async () => { await browser.close(); assert.deepEqual(errors, []); });
     await page.goto(f.runtime.url);
     await page.locator("#workspace[aria-busy=false]").waitFor();
     await navigateMain(page, "settings"); await navigateSettings(page, "data");
@@ -58,7 +58,7 @@ async function setup(t) {
 test("deleted source activity stays absent until an explicit source-backed recollection", { timeout: 30000 }, async t => {
     const f = await recollectionFixture(t);
     const browser = await chromium.launch();
-    t.after(() => browser.close());
+    f.closeClient(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, timezoneId: "UTC" });
     page.setDefaultTimeout(7000);
     await page.goto(f.runtime.url);
@@ -75,7 +75,7 @@ test("deleted source activity stays absent until an explicit source-backed recol
     assert.deepEqual((await loadBoardState(f.context)).evidence, []);
     await f.collector.collectNow();
     assert.deepEqual((await loadBoardState(f.context)).evidence, []);
-    assert.equal(await page.getByRole("button", { name: "Recollect from approved sources", exact: true }).count(), 1,
+    assert.equal(await page.locator("#recollectActivity").count(), 1,
         "Deleting to empty needs an explicit in-app source-backed recollection, not a test reset");
     const sourceHashes = await Promise.all([...f.files, f.dbPath].map(async file => deletionHash(await readFile(file))));
     const before = await loadBoardState(f.context);
@@ -86,7 +86,7 @@ test("deleted source activity stays absent until an explicit source-backed recol
     await capture(page, "recollection-scope");
     await previewScope(page, f, true);
     assert.match(await page.locator("#recollectSummary").innerText(), /1 previously deleted/);
-    assert.match(await page.locator("#recollectPromptSummary").innerText(), /Restore 1 original prompt/);
+    assert.match(await page.locator("#recollectPromptSummary").innerText(), /1 original prompt selected for restoration/);
     await page.keyboard.press("Escape");
     assert.equal(await page.evaluate(() => document.activeElement.id), "recollectActivity");
     assert.deepEqual(await loadBoardState(f.context), before);
@@ -98,7 +98,7 @@ test("deleted source activity stays absent until an explicit source-backed recol
     await page.locator("#recollectPreview").click();
     await page.locator("#recollectConfirmation").waitFor({ state: "visible" });
     await page.locator("#recollectConfirm").click();
-    await page.waitForFunction(() => document.querySelector("#recollectTitle").textContent === "Evidence recollected");
+    await page.waitForFunction(() => document.querySelector("#recollectDialog").dataset.decisionPhase === "complete");
     await capture(page, "recollection-complete");
     const result = await loadBoardState(f.context);
     assert.deepEqual(result.evidence.flatMap(row => row.toolCalls.map(call => call.toolCallId)), ["selected-A"]);
@@ -135,13 +135,14 @@ test("pending and lost recollection response recover by receipt after reload, ne
         commits++; committedId = route.request().postDataJSON().operationId;
         await route.fetch(); await held; await route.abort("failed");
     });
-    await page.locator("#recollectConfirm").click();
-    await page.waitForFunction(() => document.querySelector("#recollectStatus").textContent.includes("Re-reading"));
-    assert.equal(await page.locator("#recollectClose").isDisabled(), true);
-    await page.keyboard.press("Escape");
-    assert.equal(await page.locator("#recollectDialog").isVisible(), true);
-    await capture(page, "recollection-pending");
-    release();
+    try {
+        await page.locator("#recollectConfirm").click();
+        await page.waitForFunction(() => document.querySelector("#recollectStatus").textContent.includes("Re-reading"));
+        assert.equal(await page.locator("#recollectClose").isDisabled(), true);
+        await page.keyboard.press("Escape");
+        assert.equal(await page.locator("#recollectDialog").isVisible(), true);
+        await capture(page, "recollection-pending");
+    } finally { release(); }
     await page.locator("#recollectCheck").waitFor({ state: "visible" });
     await capture(page, "recollection-uncertain");
     await page.reload(); await page.locator("#workspace[aria-busy=false]").waitFor();
@@ -157,13 +158,14 @@ test("pending and lost recollection response recover by receipt after reload, ne
         await heldRead;
         await route.fulfill({ response });
     });
-    await page.locator("#recollectCheck").click();
-    await page.waitForFunction(() => document.querySelector("#recollectCheck").disabled);
-    await visibleHeaderExit(page);
-    assert.equal(await page.locator("#recollectClose").isEnabled(), true);
-    await page.locator("#recollectClose").click();
-    assert.equal(await page.evaluate(() => document.activeElement.id), "recollectActivity");
-    releaseRead();
+    try {
+        await page.locator("#recollectCheck").click();
+        await page.waitForFunction(() => document.querySelector("#recollectCheck").disabled);
+        await visibleDecisionExit(page);
+        assert.equal(await page.locator("#recollectClose").isEnabled(), true);
+        await page.locator("#recollectClose").click();
+        await page.waitForFunction(() => document.activeElement.id === "recollectActivity");
+    } finally { releaseRead(); }
     await page.waitForFunction(() => !sessionStorage.getItem("workiq-evidence.recollection-operation"));
     assert.equal(await page.locator("#recollectDialog").isVisible(), false, "A late receipt does not reopen a dismissed read");
     assert.equal(commits, 1);
@@ -197,12 +199,12 @@ test("source changes and missing history have readable non-success states", { ti
     assert.deepEqual((await loadBoardState(f.context)).evidence, []);
 });
 
-test("recollection confirmation is readable in light/navy, narrow/large text, with keyboard focus and safe Close", { timeout: 30000 }, async t => {
+test("recollection confirmation is readable in light/dark, narrow/large text, with keyboard focus and safe Close", { timeout: 30000 }, async t => {
     const { f, page } = await setup(t);
     const proofDir = process.env.WIRE_RECOLLECTION_PROOF_DIR;
     if (proofDir) await mkdir(proofDir, { recursive: true });
-    for (const theme of ["light", "navy"]) {
-        await chooseTheme(page, theme === "navy" ? "dark" : "light");
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
         for (const [width, fontSize] of [[1200, "16px"], [375, "16px"], [375, "32px"]]) {
             await page.setViewportSize({ width, height: 950 });
             await page.evaluate(size => { document.documentElement.style.fontSize = size; }, fontSize);
@@ -225,20 +227,23 @@ test("recollection confirmation is readable in light/navy, narrow/large text, wi
                     const channel = n / 255;
                     return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
                 }).reduce((sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i], 0);
-                const background = luminance(getComputedStyle(dialog).backgroundColor);
                 return [...dialog.querySelectorAll("p,summary,button")].filter(node => node.checkVisibility() && !node.disabled).map(node => {
                     const foreground = luminance(getComputedStyle(node).color);
+                    const face = node.matches("button") ? getComputedStyle(node, "::before").backgroundColor : "rgba(0, 0, 0, 0)";
+                    let background = face;
+                    for (let current = node; background === "rgba(0, 0, 0, 0)" && current; current = current.parentElement) background = getComputedStyle(current).backgroundColor;
+                    background = luminance(background);
                     return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
                 });
             });
             assert.ok(contrast.every(value => value >= 4.5), JSON.stringify({ theme, contrast }));
             assert.equal(await page.evaluate(() => document.activeElement.id), "recollectClose");
             await page.locator("#recollectConfirm").focus(); await page.keyboard.press("Tab");
-            assert.equal(await page.evaluate(() => document.activeElement.id), "recollectClose");
+            assert.equal(await page.evaluate(() => document.activeElement.id), "recollectChange");
             await page.keyboard.press("Shift+Tab");
             assert.equal(await page.evaluate(() => document.activeElement.id), "recollectConfirm");
             if (proofDir) {
-                await page.locator("#recollectDialog").evaluate(dialog => { dialog.scrollTop = 0; });
+                await page.locator("#recollectDialog").evaluate(dialog => { dialog.querySelector(".decision-body").scrollTop = 0; });
                 await page.screenshot({ path: path.join(proofDir, `recollection-${theme}-${width}-${fontSize}.png`) });
             }
             await page.locator("#recollectClose").click();
@@ -263,9 +268,9 @@ test("940 real eligible chats use bounded local search/paging and preserve selec
     await page.locator("#recollectActivity").click();
     await page.locator("#recollectSources .list-pager").getByText("1-8 of 940 chats", { exact: true }).waitFor();
     await page.setViewportSize({ width: 375, height: 680 });
-    await visibleHeaderExit(page);
+    await visibleDecisionExit(page);
     await page.locator("#recollectDialog").evaluate(dialog => { dialog.scrollTop = dialog.scrollHeight; });
-    await visibleHeaderExit(page);
+    await visibleDecisionExit(page);
     await capture(page, "recollection-940-header-exit-scrolled");
     await page.keyboard.press("Escape");
     assert.equal(await page.locator("#recollectDialog").isVisible(), false);
@@ -305,16 +310,16 @@ test("940 real eligible chats use bounded local search/paging and preserve selec
     await page.locator("#recollectConfirmation").waitFor({ state: "visible" });
     const requested = requests.find(request => request.url().endsWith("/api/recollection/preview")).postDataJSON();
     assert.deepEqual(new Set(requested.sourceSessionIds), new Set([f.sourceId, pagedId, searchedId]));
-    assert.match(await page.locator("#recollectSummary").innerText(), /1 request record/);
+    assert.match(await page.locator("#recollectSummary").innerText(), /1 record: 1 previously deleted/);
     assert.match(await page.locator("#recollectStatus").innerText(), /Some history is unavailable or incomplete/);
     assert.equal(await page.locator("#recollectAvailabilityToggle").evaluate(node => node.parentElement.open), false);
-    assert.match(await page.locator("#recollectPreserved").innerText(), /Responses and feedback stay deleted/);
+    assert.match(await page.locator("#recollectPreserved").innerText(), /Responses and historical annotations stay deleted/);
     await page.setViewportSize({ width: 375, height: 950 });
     await capture(page, "recollection-940-partial-375");
     await page.locator("#recollectAvailabilityToggle").click();
-    await page.locator("#recollectDialog").evaluate(dialog => { dialog.scrollTop = dialog.scrollHeight; });
-    await visibleHeaderExit(page);
-    await capture(page, "recollection-preview-header-exit-scrolled");
+    await page.locator("#recollectDialog .decision-body").evaluate(body => { body.scrollTop = body.scrollHeight; });
+    await visibleDecisionExit(page);
+    await capture(page, "recollection-preview-actions-scrolled");
     await page.locator("#recollectClose").click();
     assert.equal(await page.evaluate(() => document.activeElement.id), "recollectActivity");
     assert.deepEqual(await loadBoardState(f.context), before);

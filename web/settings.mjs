@@ -96,8 +96,8 @@ export const settingsMarkup = `
       <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">Missing history</h3><p>Find chats with gaps and the collection details that explain them.</p></div><a class="button-link" href="#collection-status" data-settings-link>Open collection status</a></div>
     </section>
     <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3><p>Inspect the recorder, not collection. Sending a public test request needs a separate confirmation.</p></div><a class="button-link" href="#collection-status?setting=network-diagnostic" data-settings-link>View diagnostic</a></div>
-    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="#analyze?mode=calls" data-settings-link>Open Calls in Analyze</a></details>
-    <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="#analyze?mode=interactions" data-settings-link>Open interactions in Analyze</a></details>
+    <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
+    <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
     <details id="settingsSearchDetails" class="settings-advanced"><summary>Missing search results</summary><p>Search matches text in saved activity and reports. Missing history may leave results out. Refresh the stored view, then try again.</p></details>
   </section>
   </div>

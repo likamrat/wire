@@ -351,6 +351,10 @@ test("shared controls distinguish pointer, persistent selection, focus, primary 
                 border: face.borderColor, outline: style.outlineStyle, outlineWidth: style.outlineWidth,
                 focused: node.matches(":focus-visible"), hover: node.matches(":hover"), pressed: node.matches(":active"),
                 shadow: style.boxShadow, disabled: node.disabled, before: before.content,
+                title: node.matches(".saved-report-summary") ? {
+                    decoration: getComputedStyle(node.querySelector(".saved-report-name")).textDecorationLine,
+                    thickness: getComputedStyle(node.querySelector(".saved-report-name")).textDecorationThickness,
+                } : null,
                 bounds: { x: box.x, y: box.y, width: box.width, height: box.height },
                 paintHeight: box.height - (pseudo ? parseFloat(before.top) + parseFloat(before.bottom) : 0) };
         });
@@ -380,8 +384,15 @@ test("shared controls distinguish pointer, persistent selection, focus, primary 
         } else evidence.push({ name, rest, hover, pressed });
         assert.equal(hover.hover, true, name); assert.equal(pressed.pressed, true, name);
         assert.deepEqual(rest.bounds, hover.bounds, name); assert.deepEqual(rest.bounds, pressed.bounds, name);
-        assert.notEqual(rest.fill, hover.fill, name);
-        assert.notEqual(hover.fill, pressed.fill, name);
+        if (rest.title) {
+            assert.equal(rest.fill, "rgba(0, 0, 0, 0)");
+            assert.equal(hover.fill, rest.fill); assert.equal(pressed.fill, rest.fill);
+            assert.equal(hover.title.decoration, "underline"); assert.equal(hover.title.thickness, "1px");
+            assert.equal(pressed.title.decoration, "underline"); assert.equal(pressed.title.thickness, "2px");
+        } else {
+            assert.notEqual(rest.fill, hover.fill, name);
+            assert.notEqual(hover.fill, pressed.fill, name);
+        }
         for (const state of [rest, hover, pressed]) {
             assert.ok(contrast(state.ink, state.background) >= 4.5, name + " text contrast");
             assert.ok(state.bounds.height >= 44, name + " target");

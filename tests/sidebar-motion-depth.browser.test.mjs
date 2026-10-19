@@ -188,14 +188,15 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
     }
 });
 
-test("both exposed sidebar edges paint visible restrained depth in light and dark", async t => {
+test("sidebar paint preserves light depth and distinguishes dark inset navigation from contextual depth", async t => {
     const page = await setup(t), results = [];
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.locator(".request-card-open").first().click();
         await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
         for (const [selector, side] of [["#sidebar", "right"], ["#contextSidebar", "left"]]) {
-            const { bands, screenshot } = await shadowPaint(page, selector, side);
+            const distances = theme === "dark" && selector === "#sidebar" ? [-2, -1, 2, 6, 12, 24, 40] : undefined;
+            const { bands, screenshot } = await shadowPaint(page, selector, side, distances);
             results.push({ theme, selector, bands });
             if (proofs) await writeFile(path.join(proofs, `${theme}-${selector.slice(1)}.png`), screenshot);
         }
@@ -205,8 +206,14 @@ test("both exposed sidebar edges paint visible restrained depth in light and dar
     await save("shadow-paint", results);
     for (const result of results) {
         t.diagnostic(JSON.stringify(result));
-        assert.ok(result.bands[0].darkening >= 4, `${result.theme}/${result.selector}: no visible painted edge depth`);
-        assert.ok(result.bands[2].darkening >= 2, `${result.theme}/${result.selector}: shadow should extend beyond a hairline`);
+        if (result.theme === "dark" && result.selector === "#sidebar") {
+            assert.ok(result.bands.filter(band => band.distance < 0).some(band => band.darkening <= -5),
+                "Dark navigation has an actual inset highlight, not an outward shadow band");
+            assert.ok(result.bands.filter(band => band.distance > 0).every(band => Math.abs(band.darkening) < .05));
+            continue;
+        }
+        assert.ok(result.bands[0].darkening >= (result.theme === "light" ? 4 : 2), `${result.theme}/${result.selector}: no visible painted edge depth`);
+        assert.ok(result.bands[2].darkening >= (result.theme === "light" ? 2 : 1), `${result.theme}/${result.selector}: shadow should extend beyond a hairline`);
         assert.ok(result.bands[4].darkening < result.bands[0].darkening / 2, "Depth fades into the workspace, not a gray slab");
     }
 });

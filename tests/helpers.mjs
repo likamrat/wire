@@ -42,7 +42,10 @@ export async function navigateMain(page, view) {
 export async function revealStoredRefresh(page) {
     // Legacy callers now use the one Refresh journey, or its read-only recovery.
     const retry = page.locator("#refreshBtn:visible, #collectionRetry:visible, [data-stored-refresh-retry]:visible").first();
-    return await retry.count() ? retry : page.locator("#checkActivity");
+    if (await retry.count()) return retry;
+    const entry = page.locator("#activityUpdateToggle");
+    if (await entry.isVisible() && await entry.getAttribute("aria-expanded") !== "true") await entry.click();
+    return page.locator("#checkActivity");
 }
 
 export async function restoreLegacySearch(page, search) {

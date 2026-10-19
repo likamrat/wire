@@ -15,6 +15,12 @@ export function createAssessmentControls(contract) {
         }
         return {
             snapshot: () => clone(state),
+            matchesRecovery(recovery) {
+                return Boolean(recovery && ["unknown", "checking"].includes(state.phase)
+                    && operation?.action === "set_assessment_consent" && recovery.action === operation.action
+                    && typeof operation.input.receiptToken === "string" && /^[a-f0-9]{64}$/.test(operation.input.receiptToken)
+                    && recovery.mutationRef === operation.input.mutationRef && recovery.receiptToken === operation.input.receiptToken);
+            },
             hasUnsentDraft: () => !locked() && state.draft !== null,
             edit(value) {
                 if (locked()) throw new Error("Read the pending result or current context before editing.");

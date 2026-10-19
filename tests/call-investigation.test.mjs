@@ -1,6 +1,38 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCallInvestigation } from "../web/call-investigation.mjs";
+import { createRequestContext } from "../web/request-context.mjs";
+
+test("homepage failure entry selects the first matching canonical failure in retained log order", () => {
+    const calls = createCallInvestigation(createRequestContext().compare);
+    const source = { scenarioId: "group", toolCalls: [
+        { toolCallId: "later", startedAt: "2026-10-01T12:00:03Z" },
+        { toolCallId: "first", startedAt: "2026-10-01T12:00:01Z" },
+        { toolCallId: "second", startedAt: "2026-10-01T12:00:02Z" },
+    ] };
+    const rows = source.toolCalls.map(call => ({ id: call.toolCallId, scenarioId: "group", toolCallId: call.toolCallId, outcome: "failure" }));
+    const route = { view: "request", request: "group", layer: "tool" };
+    assert.deepEqual(calls.firstFailure({ tool: rows }, [source], [rows[0], rows[2]], route, 1),
+        { ...route, call: "second" });
+    assert.deepEqual(source.toolCalls.map(call => call.toolCallId), ["later", "first", "second"]);
+});
+
+test("failure entry preserves explicit targets and fails closed on missing ownership without promoting a successful parent", () => {
+    const calls = createCallInvestigation(createRequestContext().compare);
+    const records = [{ scenarioId: "group", toolCalls: [{ toolCallId: "success" }, { toolCallId: "failure" }] }];
+    const rows = [
+        { id: "success", scenarioId: "group", toolCallId: "success", outcome: "success" },
+        { id: "failure", scenarioId: "group", toolCallId: "failure", outcome: "failure" },
+    ];
+    const activity = { tool: rows, "reported-api": [{ id: "child", scenarioId: "group", parentCallId: "success", outcome: "failure" }] };
+    const route = { view: "request", request: "group", layer: "tool" };
+    assert.equal(calls.firstFailure(activity, records, rows, { ...route, call: "success" }, 1), null);
+    for (const layer of ["reported-api", "http", "code-reference"]) assert.equal(calls.firstFailure(activity, records, rows, { ...route, layer }, 1), null);
+    assert.equal(calls.firstFailure(activity, records, [{ ...rows[0], outcome: "failure" }], route, 1), null);
+    assert.equal(calls.firstFailure(activity, records, [{ ...rows[0], outcome: "unknown" }], route, 1), null);
+    const unavailable = { id: "missing", scenarioId: "group", outcome: "failure" };
+    assert.deepEqual(calls.firstFailure(activity, records, [unavailable, rows[1]], route, 1), { ...route, call: "missing" });
+});
 
 test("duration ordering is measured, stable by canonical ID, and keeps unavailable values separate", () => {
     const calls = createCallInvestigation();

@@ -110,10 +110,9 @@ test("Tool latency period labels identify matching aggregates and exact tool rec
     const app = await setup(t), { page } = app;
     await openComparison(app);
     const root = page.locator("#periodComparison");
-    const table = root.getByRole("table", { name: "Matching tool latency", exact: true });
-    const region = root.getByRole("region", { name: "Matching tool latency", exact: true });
-    await expect(table.getByRole("rowheader")).toHaveText(["Median tool latency", "P95 tool latency"]);
-    const before = await table.innerText();
+    const region = root.locator(".compare-latency");
+    await expect(region.locator("h4")).toHaveText(["Median", "95th percentile"]);
+    const before = await region.innerText();
     const metrics = structuredClone(app.replies.at(-1).comparison.matchingCallTiming);
     assert.equal(metrics.median.baseline.value, 0);
     assert.equal(metrics.p95.baseline.value, 1000);
@@ -123,30 +122,13 @@ test("Tool latency period labels identify matching aggregates and exact tool rec
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        assert.equal(await table.innerText(), before);
-        const clipped = await table.locator("th,td,caption").evaluateAll(nodes => nodes.filter(node =>
-            node.scrollWidth > node.clientWidth + 1).map(node => node.textContent));
-        assert.deepEqual(clipped, []);
-        await region.evaluate(node => { node.scrollLeft = 0; });
-        if (await region.evaluate(node => node.scrollWidth > node.clientWidth + 1)) {
-            await region.focus();
-            await page.keyboard.press("ArrowRight");
-            await expect.poll(() => region.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
-            await region.evaluate(node => { node.scrollLeft = node.scrollWidth; });
-            assert.ok(await region.evaluate(node =>
-                node.querySelector("tbody tr td:last-child").getBoundingClientRect().right <= node.getBoundingClientRect().right + 1),
-            "The existing keyboard-scrollable table exposes the entire last comparison column");
-            if (proof) {
-                await mkdir(proof, { recursive: true });
-                await region.screenshot({ path: path.join(proof, `tool-latency-period-${theme}-${width}-${scale}-right.png`) });
-            }
-            await region.evaluate(node => { node.scrollLeft = 0; });
-        }
+        assert.equal(await region.innerText(), before);
+        await expect(region.locator("svg")).toHaveCount(2);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));
         const first = root.locator('[data-period-side="baseline"]');
-        await first.getByText(/Exact matching records/).click();
-        await expect(first.getByRole("columnheader", { name: "Tool latency", exact: true })).toBeVisible();
-        await first.getByText(/Exact matching records/).click();
+        await page.locator("#comparisonRecordsA").click();
+        await expect(first).toBeVisible();
+        await expect(first.locator("table")).toContainText("Tool latency");
         if (proof) {
             await mkdir(proof, { recursive: true });
             await region.screenshot({ path: path.join(proof, `tool-latency-period-${theme}-${width}-${scale}.png`) });
@@ -362,8 +344,9 @@ test("private search and Author refinements, empty periods, stale errors and lat
     await expect(root.locator('[data-period-side="later"]')).toContainText("Exact matching records (2)");
     await expect(page.locator("#pageAction")).not.toBeVisible();
     await page.getByRole("button", { name: "Stop comparing" }).click();
-    await page.locator('[data-analyze-mode="calls"]').click();
-    await expect(page.locator("#callSortControls")).toBeVisible();
+    await expect(page.locator("#activityTitle")).toHaveText("Activity");
+    await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
+    await expect(page.locator('[data-analyze-mode],#callSortControls')).toHaveCount(0);
 });
 
 test("an in-flight comparison is invalidated during an unchanged stored reread and can restart afterward", { timeout: 30000 }, async t => {
@@ -418,7 +401,10 @@ test("comparison Outcome choices use both cohorts and a late facet read does not
     await expect(page.locator("#outcomeFilter-control")).toHaveAttribute("aria-expanded", "true");
     await expect(choice).toHaveAttribute("aria-selected", "false");
     await page.keyboard.press("Escape");
-    await expect(page.locator("#outcomeFilter-control")).toContainText("A: 2; B: 0");
+    await expect(page.locator("#outcomeFilter-control")).toContainText("All results");
+    await page.locator("#outcomeFilter-control").click();
+    await expect(page.locator('.select-popup .select-option[data-value="failure"] .select-option-count')).toHaveText("A: 1; B: 0");
+    await page.keyboard.press("Escape");
     assert.equal(new URLSearchParams(page.url().split("?")[1]).get("result"), null);
 });
 
@@ -438,5 +424,6 @@ test("inconsistent derived response shows an error and clears comparison tables 
     app.alterComparison(null);
     await page.getByRole("button", { name: "Retry comparison read", exact: true }).click();
     await expect(page.locator("#createPeriodReport")).toBeVisible();
-    await expect(page.locator("#outcomeFilter-control")).toContainText("A: 3; B: 4");
+    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (3)");
+    await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (4)");
 });

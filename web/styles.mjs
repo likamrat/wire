@@ -518,9 +518,6 @@ ${selectStyles}
 .matched-action .action-purpose {margin:8px 0}
 .matched-action .action-error {color:var(--danger)}
 .matched-action>.text-link,.session-analysis>.text-link {display:inline-flex;align-items:center;min-height:44px}
-.call-sort-controls {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;margin-block:8px;min-width:0}
-.call-sort-controls>.context-help-note {margin:0}
-.call-sort-controls .select-control {max-width:100%}
 .call-duration {font-variant-numeric:tabular-nums}
 ${reportJourneyStyles}
 ${settingsStyles}
@@ -567,9 +564,6 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
  .recorded-results .result-unit {flex-basis:100%}
 }
 #resultsLink {display:inline-flex;align-items:center;min-height:44px;padding:8px}
-#analyzeModes {flex-wrap:wrap;align-self:center;width:auto}
-#analyzeModes a {min-height:44px}
-#analyzeModes a[aria-current=true]::before {background:var(--accent-soft);border-color:var(--accent)}
 #activityView>.section-heading {justify-content:start}
 #activityView>.section-heading>.filter-field {margin-inline-start:auto}
 .analyze-result-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-block:12px}
@@ -581,6 +575,8 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .request-card-open:active {background:var(--pill-pressed)}
 .request-row[data-detail-active]>.request-card-open {border-inline-start-color:var(--accent);background:var(--accent-soft)}
 .request-card-prompt {font:var(--type-body)/var(--leading-reading) var(--font);max-width:68ch}
+.request-card-summary {display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:10px;font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
+.request-card-time {margin-inline-start:auto}
 .interaction-summary {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm) var(--space-lg);margin-top:var(--space-sm);font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
 .interaction-identity {display:grid;gap:var(--space-xs);flex-basis:100%;min-width:0;color:var(--ink)}
 .identity-group,.identity-list {min-width:0;max-width:100%;overflow-wrap:anywhere}
@@ -590,8 +586,8 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .identity-list .service-cue .wire-icon {position:absolute;inset-inline-start:0;inset-block-start:calc((1lh - var(--cue-icon-size,20px)) / 2);margin:0}
 .interaction-summary .recorded-results {align-items:center;margin:0;font:inherit;gap:4px 8px}
 :is(.interaction-summary,.matched-action,.call-heading) .service-cue {--cue-icon-size:20px;font-weight:var(--weight-regular);line-height:inherit}
-:is(.interaction-summary,.matched-action,.call-heading) .recorded-result {font-size:var(--type-small)}
-:is(.interaction-summary,.matched-action,#requestContent) .recorded-result-label {font-weight:var(--weight-regular);text-transform:none;letter-spacing:0}
+:is(.interaction-summary,.request-card-summary,.matched-action,.call-heading) .recorded-result {font-size:var(--type-small)}
+:is(.interaction-summary,.request-card-summary,.matched-action,#requestContent) .recorded-result-label {font-weight:var(--weight-regular);text-transform:none;letter-spacing:0}
 .interaction-summary .result-unavailable,.interaction-summary .muted {font:inherit}
 #activityList>.request-row .interaction-body {display:grid;gap:12px;min-width:0}
 #activityList>.matched-action {gap:12px}
@@ -658,11 +654,21 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .interaction-select input {margin:0}
 @media(max-width:699px) {
  #activityView>.section-heading {align-items:stretch}
- #analyzeModes {align-self:start}
  #activityView>.section-heading>.filter-field {margin-inline-start:0;width:100%}
  #activityView>.section-heading>.filter-field input {width:100%}
 }
 ${analyzeLayoutStyles}
+.app-header,.app-sidebar,.navigation-drawer {background:var(--navigation-paper)}
+#contextSidebar {--paper:var(--context-paper);--pill-fill:var(--paper)}
+.select-popup,.ux-tooltip,.wire-search-panel,dialog:not(#contextSidebar,.navigation-drawer) {
+ --paper:var(--floating-paper);--pill-fill:var(--paper);
+}
+@media(forced-colors:none) {
+ :root[data-evidence-theme=dark] button:disabled {color:var(--muted);--pill-ink:var(--muted);--pill-fill:transparent;--action-shadow:none}
+}
+@media(prefers-color-scheme:dark) and (forced-colors:none) {
+ :root:not([data-evidence-theme]) button:disabled {color:var(--muted);--pill-ink:var(--muted);--pill-fill:transparent;--action-shadow:none}
+}
 .settings-content,.collector-panel,.collection-status-view>.settings-section,
 #activityList>.activity-card,#reportsView :is(.report-journey,#bundles,#comparisonWorkspace) {
  box-shadow:var(--panel-shadow);

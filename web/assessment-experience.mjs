@@ -25,7 +25,9 @@ export function createAssessmentExperience({ api, createPresentation, createCont
     }
     const recoveryHost = el("div", undefined, "notice assessment-recovery");
     recoveryHost.hidden = true;
-    document.getElementById("message")?.after(recoveryHost);
+    const recoveryHome = document.createComment("Response-saving recovery");
+    document.getElementById("message")?.after(recoveryHome);
+    recoveryHome.after(recoveryHost);
     function readReceipts() {
         const found = [];
         recoveryInvalid = false;
@@ -49,12 +51,59 @@ export function createAssessmentExperience({ api, createPresentation, createCont
         recoveries = found;
     }
     const recoveryBlocked = () => recoveryInvalid || recoveries.length > 0;
+    function owningRecovery() {
+        const recovery = recoveries[0], view = consentView?.recoveryPresentation();
+        if (recoveryInvalid || recoveries.length !== 1 || recovery.key !== receiptKey
+            || !consentControl?.matchesRecovery(recovery) || !view?.offered) return null;
+        return { recovery, view, control: consentControl };
+    }
+    function recoveryFocus() {
+        const owner = owningRecovery(), active = document.activeElement;
+        if (recoveryHost.contains(active)) return { node: active, control: owner?.control, recovery: owner?.recovery };
+        if (!owner) return null;
+        return active === owner.view.check || active === owner.view.status
+            ? { node: active, control: owner.control, recovery: owner.recovery } : null;
+    }
+    function syncRecoveryPresentation(focus) {
+        const owner = owningRecovery();
+        let currentSlot = false;
+        if (owner) {
+            try {
+                currentSlot = sessionStorage.getItem(receiptKey) === owner.recovery.raw
+                    && sessionStorage.getItem(legacyReceiptKey) === null;
+            } catch { currentSlot = false; } // Keep unresolved recovery global when storage cannot be verified.
+        }
+        const inline = Boolean(owner?.view.presented && currentSlot && recoveryHome.isConnected && !recoveryHost.hidden && recoveryHost.firstChild);
+        consentView?.recoveryPresentation().delegate(inline);
+        if (inline) {
+            if (recoveryHost.parentElement !== owner.view.slot) owner.view.slot.append(recoveryHost);
+        } else if (recoveryHome.parentNode && recoveryHome.nextSibling !== recoveryHost) recoveryHome.after(recoveryHost);
+        const notice = recoveryHost.querySelector("p");
+        if (notice && inline) {
+            notice.setAttribute("role", recovering || pendingRequest === "checking" ? "status" : owner.view.status.getAttribute("role"));
+            notice.setAttribute("aria-live", "polite");
+        } else if (notice) { notice.removeAttribute("role"); notice.removeAttribute("aria-live"); }
+        if (!focus || (document.activeElement !== focus.node && document.activeElement !== document.body)) return;
+        const original = recoveryHost.contains(focus.node) && focus.node.isConnected
+            && focus.node.checkVisibility() && !focus.node.matches(":disabled") ? focus.node : null;
+        if (!original && (!owner || focus.control !== owner.control || !currentSlot || !owner.control.matchesRecovery(focus.recovery))) return;
+        const action = recoveryHost.querySelector("button:not(:disabled)") || recoveryHost.querySelector("p");
+        const target = original || action;
+        if (!recoveryHost.hidden && target?.checkVisibility() && document.activeElement !== target) target.focus({ preventScroll: true });
+    }
+    function prepareRecoveryPresentation() {
+        const focus = recoveryFocus();
+        return () => syncRecoveryPresentation(focus);
+    }
     function showRecovery(message = recoveryInvalid
         ? "An earlier response-saving receipt could not be read. New changes are blocked. Reload this panel when its receipt storage is readable."
         : recoveries.length > 1 ? "Two response-saving updates need checking. Both receipts are kept; no new change will be sent."
             : "An earlier response-saving update needs checking. It will not be repeated.") {
+        const finishPresentation = prepareRecoveryPresentation();
         recoveryHost.hidden = false;
-        recoveryHost.replaceChildren(el("p", message));
+        const notice = el("p", message);
+        notice.tabIndex = -1;
+        recoveryHost.replaceChildren(notice);
         for (const recovery of recoveries) {
             const label = recovery.key === legacyReceiptKey ? "Check earlier response-saving result" : "Check response-saving result";
             const check = button(pendingRequest === "saving" ? "Saving update..." : recovering || pendingRequest === "checking" ? "Checking update..." : label, async () => {
@@ -93,6 +142,7 @@ export function createAssessmentExperience({ api, createPresentation, createCont
             });
             check.disabled = recovering || pendingRequest !== null; recoveryHost.append(check);
         }
+        finishPresentation();
     }
     function clearReceipt(recovery) {
         try {
@@ -121,10 +171,12 @@ export function createAssessmentExperience({ api, createPresentation, createCont
         await contractPromise;
     }
     function unavailable(host, message, retry) {
+        const finishPresentation = prepareRecoveryPresentation();
         host.removeAttribute("aria-busy");
         host.replaceChildren(el("p", message, "assessment-unavailable"));
         if (host.classList.contains("interaction-response")) host.prepend(el("h2", "Response"));
         if (retry) host.append(button("Read retained evidence again", retry));
+        finishPresentation();
     }
     function reserveSpace(host) {
         const height = host.getBoundingClientRect().height;
@@ -550,10 +602,12 @@ export function createAssessmentExperience({ api, createPresentation, createCont
                 onSubmit: packet => mutate(consentControl, consentView, packet),
                 onCheck: packet => checkMutation(consentControl, consentView, packet),
                 onCancel: () => consentView.render(),
+                onRender: prepareRecoveryPresentation,
             });
             consentSignature = signature;
+            prepareRecoveryPresentation()();
         } catch (error) { if (host.isConnected) unavailable(host, error.message, () => setup(host)); }
     }
-    return { receive, observe, detail, setup, leave, invalidate, clearPrivateText,
+    return { receive, observe, detail, setup, leave, invalidate, clearPrivateText, prepareRecoveryPresentation,
         invalidatePendingViewReads() { generation++; } };
 }

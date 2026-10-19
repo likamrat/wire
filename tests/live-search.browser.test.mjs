@@ -542,7 +542,7 @@ test("joint: literal matching and legacy scope span both periods through Review 
     await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
     await page.locator("#wireSearchResults button").click();
     await expect(page.locator("#savedReportReader")).toBeVisible();
-    await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: /Retained-period comparison report/ })).toBeVisible();
+    await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: preview.title, exact: true })).toBeVisible();
     if (process.env.WIRE_SEARCH_PROOFS) await page.screenshot({ path: path.join(process.env.WIRE_SEARCH_PROOFS, "joint-frozen.png") });
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator("#wireSearch")).toHaveValue("Period A");
@@ -565,8 +565,8 @@ test("joint: exact action receipt keeps broad API parents and a stale fence bloc
         assert.equal(value.periods[side].analytics.apiCoverage.eligibleToolCalls, 2);
         assert.equal(value.periods[side].analytics.apiCoverage.returnedResultUnits, 3);
     }
-    const exact = page.locator('[data-period-side="later"] details').filter({ has: page.getByText("Exact matching records (1)", { exact: true }) });
-    await exact.locator("summary").click();
+    await page.locator("#comparisonRecordsB").click();
+    const exact = page.locator('[data-period-side="later"]');
     await exact.locator("a").click();
     await expect(page.locator("#selectedCall")).toBeVisible();
     const backRead = page.waitForResponse(response => response.url().endsWith("/api/period-comparison"));
@@ -576,7 +576,8 @@ test("joint: exact action receipt keeps broad API parents and a stale fence bloc
     assert.deepEqual(restored.selection.withinScenarioIds, ["search-0", "search-3"]);
     await expect(page.getByLabel("Period B to", { exact: true })).toHaveValue("2026-10-01");
     await expect(page.locator("#wireSearch")).toHaveValue("403");
-    await expect(exact).toHaveAttribute("open", "");
+    await expect(exact).toBeVisible();
+    await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
     await expect(exact.locator("a")).toBeFocused();
     await page.locator("#periodComparisonTitle").focus();
     assert.equal((await api("/api/move", { scenarioId: "search-5", toState: "reviewing" })).status(), 200);

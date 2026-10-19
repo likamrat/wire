@@ -1,6 +1,6 @@
 // One reader's views; visibility remains in the existing keyed presentation owner.
 export function createReaderSections({ root, presentation, ux, isCurrent, requestClose, onChange }) {
-    const doc = root.ownerDocument, views = [];
+    const doc = root.ownerDocument, views = [], details = [];
     const reducedMotion = doc.defaultView.matchMedia("(prefers-reduced-motion: reduce)");
     let active = true;
     const current = () => active && root.isConnected && isCurrent();
@@ -11,14 +11,14 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         return node;
     }
     const present = () => views.filter(view => root.contains(view.element));
-    const snapshot = () => presentation.openSummary(present().map(view => view.key), true);
+    const snapshot = () => presentation.openSummary(present().filter(view => view.collapsible).map(view => view.key), true);
     function refresh() { if (active) onChange?.(snapshot()); }
     function finishAll() { for (const view of views) view.finish(); }
     const motionChanged = () => { if (reducedMotion.matches) finishAll(); };
     reducedMotion.addEventListener("change", motionChanged);
     function request(open, targets, animate = true) {
         if (!current()) return;
-        const changed = targets.filter(view => root.contains(view.element) && view.isOpen() !== open);
+        const changed = targets.filter(view => view.collapsible && root.contains(view.element) && view.isOpen() !== open);
         if (!changed.length) return;
         const commit = () => {
             if (!current()) return;
@@ -28,17 +28,18 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         if (!open && requestClose) requestClose(changed, commit);
         else commit();
     }
-    function add(name, title, { key, metadata } = {}) {
+    function add(name, title, { key, metadata, collapsible = true } = {}) {
         if (views.some(view => view.key === key)) throw new Error("Reader sections require distinct presentation owners.");
         const section = element("section", "reader-section");
         section.dataset.readerSection = name;
         section.dataset.disclosureKey = key;
         section.dataset.viewKey = "disclosure:" + key;
         const heading = element("h2", "reader-section-heading");
-        const toggle = element("button", "reader-section-toggle");
-        toggle.type = "button";
+        const toggle = element(collapsible ? "button" : "span", collapsible ? "reader-section-toggle" : "reader-section-title");
+        if (collapsible) toggle.type = "button";
         toggle.id = "reader-toggle-" + encodeURIComponent(key);
-        toggle.append(element("span", "", title), ux.icon("disclosure"));
+        toggle.append(element("span", "", title));
+        if (collapsible) toggle.append(ux.icon("disclosure"));
         const actions = element("div", "reader-section-actions");
         if (metadata) {
             const context = element("span", "reader-section-context", metadata);
@@ -54,12 +55,12 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         clip.id = "reader-body-" + encodeURIComponent(key);
         clip.setAttribute("role", "region");
         clip.setAttribute("aria-labelledby", toggle.id);
-        toggle.setAttribute("aria-controls", clip.id);
+        if (collapsible) toggle.setAttribute("aria-controls", clip.id);
         clip.append(content);
         section.append(heading, notice, clip);
         const listeners = new Set();
         let animation = null;
-        const isOpen = () => presentation.isOpen(key, true);
+        const isOpen = () => !collapsible || presentation.isOpen(key, true);
         function finish() {
             animation?.cancel();
             animation = null;
@@ -89,12 +90,12 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
                 { duration: 180, easing: "cubic-bezier(.2,0,0,1)", fill: "both" });
             animation.onfinish = finish;
         }
-        toggle.setAttribute("aria-expanded", String(isOpen()));
+        if (collapsible) toggle.setAttribute("aria-expanded", String(isOpen()));
         section.dataset.open = String(isOpen());
         clip.hidden = !isOpen();
         clip.inert = !isOpen();
         const view = {
-            name, key, element: section, body: content, actions, toggle, isOpen, apply, finish,
+            name, key, collapsible, element: section, body: content, actions, toggle, isOpen, apply, finish,
             visibility: {
                 isOpen: () => current() && isOpen(),
                 isCurrent: current,
@@ -103,9 +104,41 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
             showNotice(message) { notice.textContent = message; notice.hidden = false; },
             dispose() { finish(); listeners.clear(); },
         };
-        toggle.addEventListener("click", () => request(!isOpen(), [view]));
+        if (collapsible) toggle.addEventListener("click", () => request(!isOpen(), [view]));
         views.push(view);
         return view;
+    }
+    function detail({ key, toggle, body, visibility, initialOpen = false, render }) {
+        let live = true;
+        const owned = {
+            isCurrent: () => live && current() && visibility.isCurrent(),
+            isOpen: () => owned.isCurrent() && visibility.isOpen() && presentation.isOpen(key, initialOpen),
+        };
+        body.id = "reader-detail-" + encodeURIComponent(key);
+        body.dataset.disclosureKey = key;
+        toggle.setAttribute("aria-controls", body.id);
+        function paint() {
+            body.replaceChildren();
+            body.hidden = !owned.isOpen();
+            toggle.setAttribute("aria-expanded", String(presentation.isOpen(key, initialOpen)));
+            if (!body.hidden) body.append(render(owned));
+        }
+        const unsubscribe = visibility.subscribe(paint);
+        toggle.addEventListener("click", () => {
+            if (!owned.isCurrent() || !visibility.isOpen()) return;
+            presentation.setOpen(key, !presentation.isOpen(key, initialOpen));
+            paint();
+        });
+        details.push(() => {
+            live = false;
+            unsubscribe();
+            body.replaceChildren();
+            body.hidden = true;
+            toggle.setAttribute("aria-expanded", "false");
+            toggle.disabled = true;
+            render = null;
+        });
+        paint();
     }
     let width = root.getBoundingClientRect().width, font = getComputedStyle(root).fontSize;
     const observer = new ResizeObserver(() => {
@@ -115,7 +148,7 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
     });
     observer.observe(root);
     return {
-        add, refresh, snapshot, settle: finishAll,
+        add, detail, refresh, snapshot, settle: finishAll,
         setAll(open) { request(open, present()); },
         reveal(node) {
             if (!current()) return;
@@ -126,6 +159,8 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
             active = false;
             reducedMotion.removeEventListener("change", motionChanged);
             observer.disconnect();
+            for (const dispose of details) dispose();
+            details.length = 0;
             for (const view of views) view.dispose();
             views.length = 0;
         },

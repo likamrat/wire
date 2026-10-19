@@ -2,19 +2,31 @@
 
 ## Screen surfaces and motion
 
-Current screens use three related planes: the neutral workspace, softly raised
-panels and higher floating menus/dialogs. Analyze widgets, standalone interaction
+Current screens use related workspace, working-paper, contextual and floating
+planes. Ordinary dark screens use shared ink-blue roles: ground `#10161f`,
+paper `#192330`, contextual paper `#1c2939` and floating paper `#202c3b`.
+Explicit and system-dark entry use the same roles; light and native forced-color
+paint retain their existing treatment. There is no additional theme choice.
+`--navigation-paper`, `--context-paper` and `--floating-paper` default to ordinary
+paper outside the dark material override. Contextual and floating containers
+rebind both `--paper` and `--pill-fill`, keeping their controls on the same local
+surface rather than inheriting the workspace's paper.
+Analyze widgets, standalone interaction
 cards, report workspaces, Settings content and collection-status groups use
-`--panel-shadow`; portals use `--surface-shadow`. Both combine a small contact
-shadow with diffuse depth, with subtle edge highlights in dark mode. Screen
+`--panel-shadow`; portals use `--surface-shadow`. Dark resting panels use a quiet
+edge and contact shadow, while floating surfaces retain diffuse separation. Screen
 corners are softened without changing box dimensions or hit targets.
 Nested chart content, report rows, reader sections and linked text stay flat
 inside their owning surface rather than gaining another decorative wrapper.
 Settings groups use spacing where a repeated rule adds no meaning; input,
 permission, error and confirmation boundaries remain explicit.
 Dark service/tool bar fades retain enough of their existing identity color to
-contrast with the raised track across both gradient stops. This does not change
+contrast with the recessed track across both gradient stops. This does not change
 service glyph/text colors, outcome stops or saved report paint.
+Generic semantic-bearing grounds never exceed the floating role: existing
+Calendar text remains above 4.5:1, not just the brighter violet author cue.
+Primary and destructive filled controls use their own contrasting label pairs.
+Disabled controls retain readable secondary ink without an active-looking face.
 
 The left navigation marks the current destination with a restrained neutral
 surface and inset keyline,
@@ -45,8 +57,11 @@ the surrounding surface. Quiet actions, disabled states, primary/destructive
 roles, switches and the shared Search field retain their separate treatments.
 
 Persistent navigation/current, transient hover and keyboard focus are separate.
-Saved rows retain a leading selected edge without a persistent hover slab or
-selection-driven padding shift. Analyze cards retain their selected edge and
+Saved rows retain a leading selected edge without a hover or pressed slab or
+selection-driven padding shift. Hover keeps a one-pixel title underline; pressing
+strengthens it to two pixels. Keyboard focus retains its independent target
+outline. Formats and the separate Open action do not acquire new feedback roles.
+Analyze cards retain their selected edge and
 subtle selected surface. Report reading tabs use an underline, not the generic
 button face; row summaries and tabs own their paint instead of fighting global
 button pseudo-elements. Filter toggles, checkboxes, radio choices, service/outcome
@@ -74,16 +89,17 @@ The contextual sidebar is one paper surface across its header, scrolling body
 and fixed actions, for interaction reading, report setup and saved-item inspection.
 A directional, diffuse shadow separates it from the main workspace in both
 themes instead of a hard perimeter line or separately outlined header/footer.
-The left rail and narrow navigation drawer use the same screen-only depth in
-the opposite direction. Shadows paint outside the scrolling surfaces, at the
-exposed workspace edges; the fixed header stays above the docked panes.
-These directional shadows are independent of Search elevation.
+The dark left rail and narrow drawer recede into the ground with an inset edge;
+their light-theme directional depth is unchanged. The contextual shadow paints
+outside its scrolling surface, while the fixed header stays above docked panes.
+Pane separation remains independent of Search elevation.
 Transparent decorative borders retain existing box metrics; forced colors
 restore system-color pane and fixed-region edges when shadows are unavailable.
 `surface-depth.browser.test.mjs` exercises populated widget, reader, reporting,
 Search/filter, Settings, collection, confirmation, refusal and recovery surfaces
 in both themes. The shared shadow-pixel measurement also checks real painted
-widget and sidebar depth; computed shadow strings alone are not sufficient.
+widget/contextual depth and the dark navigation inset; computed shadow strings
+alone are not sufficient.
 
 The left rail retains its geometry-based glide and registered brand motion.
 The right sidebar retains its single-surface glide, actual column reflow,
@@ -151,20 +167,18 @@ PDF, JSON and Markdown content are not restyled.
 
 ## Interaction reading
 
-Analyze cards lead with a regular Asta Sans prompt preview, followed by exact
-recorded tool names, supported service or activity cues, outcome pills and recorded
-time. The same Lucide service colors and status-pill vocabulary carries through
-Calls, per-call sidebar details and report-picker inspection. Tools have a dedicated
-row, services/purpose/evidence gaps a second row, and recorded call outcomes a third.
-Quiet timing appears once with its existing meaning. Tools to services keep a
-compact 4px gap; services to recorded outcomes use 8px of intentional breathing room.
-Failure outcomes lead with their retained cause: **Sign-in was required · Tool
-failed**, for example, rather than a generic failure followed by a secondary
-error paragraph. Compact cards include the count in the same outcome. Distinct
-causes split only the failed-call count; they never become a whole-interaction
-verdict or get assigned to the other calls. The same shared presentation serves
-Analyze, Calls and report-picker summaries, and the opened reader reached through
-any of them or Search. The exact call's tool stays above its outcome and latency.
+Analyze has one Activity list. Minimal cards lead with a regular Asta Sans
+prompt/author preview, matching recorded-outcome counts and recorded time.
+When only capture time is available it is named, not presented as message time.
+Tools, services, supported causes and per-call timing belong in the full gliding
+reader, not another primary Calls list. Report-picker summaries retain their
+full-interaction context and shared service vocabulary.
+Each call shows its own outcome and supported cause once. A specific retained
+cause such as **Sign-in was required** replaces a redundant **Tool failed**
+recital on that row; a missing/excluded reason still names the known failure.
+Only the existing vetted failure signals/codes supply explanations. Unknown,
+partial and missing service evidence do not become failures or task-success
+verdicts. No reader outcome/attention strip duplicates its rows.
 The reason is visible once, not repeated in a badge, warning and explanation.
 Outcome prefixes and pills align at their centers, so the first decorative SVG
 inside a pill does not set the row's baseline or add height in the report picker.
@@ -174,7 +188,7 @@ its 20px bubble stays centered in the unchanged 24px service lane.
 Noninteractive service glyphs fit the text line box instead of adding baseline
 slack or a 44px control-sized row. Wrapped names add real text lines, not empty
 spacers. Tools and services are separate sets of evidence, not assumed pairs.
-Compact summaries show up to two
+Report-picker compact summaries show up to two
 distinct tool names and two known service names; More tools and More services
 continue within their own row's comma-separated group in the same typography, not as a button,
 badge or separate panel. All outcomes and missing/partial-evidence qualifiers remain
@@ -191,24 +205,37 @@ Interaction details occupy one right-edge sidebar beside the unchanged workspace
 Its width actually reduces the main column, so existing widget container queries,
 legends and filters reflow without scaling. Opening and closing compensate the
 selected card's vertical anchor. The main page and sidebar scroll independently;
-selected-call scrolling belongs only to the sidebar. The header contains a title,
-Collapse all, Expand all and Close; one fixed bottom group owns report actions.
+selected-call scrolling belongs only to the sidebar. The header contains the
+existing identity and Close; one fixed bottom group owns report actions.
 The sidebar surface uses the built-in glide. The reader's major sections use
 a reversible height transition when the native host allows motion and settle
 immediately when it requests reduced motion. Cards do not animate.
 When readable columns cannot fit, the same native dialog becomes modal, including
 at enlarged text sizes; it never opens a second interaction page.
 
-The EC92 reader replaces pill/diagnostic-first presentation with the recorded
+The reader replaces pill/diagnostic-first presentation with the recorded
 interaction itself. Its reading order is **My/Agent prompt (or Author unverified),
 Recorded activity, Recorded response (when retained text exists), Source details**.
 There is no separate Timing, Reviews, personal editor or replacement score panel.
-Useful major sections
-start open. Their section controls are the only reading visibility owners;
-Collapse all and Expand all derive their availability from those same keyed
-states. Mixed states do not create a separate global mode. The selected prompt
-starts at its section header; an exact-call link opens its owning section and
-focuses the exact record instead.
+Prompt and Recorded activity stay open without duplicate global collapse/expand
+controls. Response and Source details retain their keyed section visibility.
+Call identities open secondary exact evidence in place. These native disclosure
+owners build authorized bodies only while visible, scrub them on close, and
+invalidate detached Copy getters. No hidden argument body or argument-derived
+presentation key is retained in the DOM. Visibility loss, invalidation and
+departure dispose private readers; re-entry requires the accepted current
+snapshot. An exact-call link focuses its exact record, not a neighboring failure.
+
+Valid remembered reading for the same identity, revision and assessment basis
+wins on Close/reopen; its unused failure hint is discarded. With no valid memory,
+only a fresh, ordinary, otherwise-untargeted Work IQ homepage-card gesture may
+select the first matching canonical failure in the retained log's stable order.
+It uses the existing exact resolver and the card's applied subset. It does not
+pick a failure outside that subset, promote a successful parent with a failed API
+child, reorder rows, or expand arguments. It scrolls only if necessary and keeps
+the selected interaction recognizable in the existing header. Explicit targets,
+Search/report entry, reload, Back and later reading intent retain ownership.
+Other layers do not receive this default; report inclusion remains the interaction.
 
 Only the selected interaction occupies that primary flow. Other linked messages,
 calls and replies live in one initially closed **Linked context** disclosure
@@ -258,11 +285,18 @@ subminute hundredths, tiny-positive and true-zero displays remain distinct.
 Exact milliseconds stay in data elements and exact timestamps in time elements.
 Reader-formatted absolute timestamps display whole seconds while retaining the
 unaltered raw value in `datetime` and title; raw payload copying keeps precision.
-Each actual tool call has an explicit **Tool latency** beside its recorded
-outcome, using the existing admitted duration value. Below one second that
+Each call's secondary evidence retains its recorded start and any retained end
+timestamp; an end is never reconstructed from a duration.
+Pure tool logs keep one visible **Tool latency** column heading through late
+entry and scrolling, with per-value accessible boundary labels. Its measured
+height and the existing scrollport padding keep targets, focus and identity
+uncovered at narrow/enlarged sizes. Mixed and non-tool layers keep their own
+explicit boundaries. Each value uses the existing admitted duration. Below one second that
 summary shows milliseconds, so **7 ms** never becomes **0 ms**. Missing duration
-stays Not recorded. Owned HTTP uses Recorded duration; code references and
-request-site evidence do not acquire an execution duration.
+stays Not recorded. Returned entries retain API result duration, status and safe
+error code on their own canonical result, never a borrowed parent cause. Their
+own result rows replace a duplicate API-summary recital. Owned HTTP uses Recorded
+duration; code references and request-site evidence do not acquire an execution duration.
 The prompt's recorded timestamp sits below its context, followed by the
 prompt-to-final-response value when available. An invalid timing projection
 remains an explicit read error, not a guessed value. Missing prompt time says
@@ -831,9 +865,9 @@ completeness reasons, derived in the same validation/ordering path as the existi
 model fact. Its original value/status, distinct model list and stored evidence
 remain unchanged. No raw linkage or retained-response counts are added. Unverified,
 conflicting and excluded-only metadata cannot disclose model names through it.
-Calls labels this source-context fact **Interaction model**, not a property of
-the tool or returned API result. The reader shows the same fact beside each
-interaction's own prompt. Filtering calls does not narrow the interaction's model
+The reader's Source details keep this **Model/Models** fact interaction-scoped,
+not a property of a tool or returned API result. Linked interactions retain
+their own model context. Filtering calls does not narrow the interaction's model
 evidence or change the existing per-tool counts.
 
 Only explicitly linked original/root assistant response metadata supplies names.
@@ -1030,16 +1064,34 @@ private phrase remains an additional narrowing, never a replacement for the
 receipt-bound text-match population. **Stop comparing** restores ordinary Analyze dates and filters.
 
 Accepted results start with **What differs** and the optional **Create comparison
-report** action, then exact outcomes and matching-call timing. Full-interaction
-findings follow under **Whole interactions**, with one short note about calls
-outside the selected dates or filters. Per-side coverage, service gaps, origins, overlap, measure definitions and
-exact record tables stay available. An empty side has no empty record disclosure;
-two empty sides show one recovery message instead of tables of unavailable values.
-No report action appears before a current, nonempty comparison is accepted.
+report** action. Two outcome-share bars keep A/B identity separate from recorded
+success/failure meaning; exact counts and percentages accompany the marks.
+Failure-share change is in percentage points, while raw volume change stays
+neutral. Median and P95 tool latency are both visible on their own labelled linear
+scales, with exact milliseconds and one matching-call timing-coverage line.
+Lower median latency does not hide a worse tail or increased failure share.
+Unequal civil-day windows are not normalized per day, and overlap is explicit.
+
+**Evidence behind the comparison** has one A/B roster, with native tab panels and
+keyboard navigation. Record links retain exact parent/call/revision targets.
+Changing tabs keeps each panel's native scroller; accepted repaint uses stable
+record/scroller identities and the existing reading restoration. Narrow records
+stack complete labelled fields instead of clipping or shrinking them.
+**Whole-interaction timing** then shows paired boundary/value/coverage facts,
+including unavailable measures, rather than another prose-filled table.
+Its population explicitly includes calls outside the selected dates or filters;
+it is not deduplicated against matching-call timing merely because values match.
+Service context, missing associations and returned-API parent coverage remain
+with the relevant roster. Two empty sides show one recovery message, and no
+report action appears before a current, nonempty comparison is accepted.
 
 Editing a date clears old results, outcome counts and report eligibility until
 the dates are submitted again. Native required-date validation and per-period
-range errors stay beside the form. Loading, read failure, stale evidence and
+range errors stay beside the form. The pending-read message occupies the result
+region, not an extra setup row that disappears at completion. The closed Outcome
+control stays compact; its menu retains the exact A/B before-outcome counts.
+This prevents accepted counts and pending text from changing setup height under
+someone who scrolled while waiting. Loading, read failure, stale evidence and
 unready Search remain explicit, with read-only retry where appropriate; successful
 completion is announced without another visible machinery paragraph. These are
 presentation/draft-input guards, not a new comparison or date engine.
@@ -1052,21 +1104,19 @@ existing comparison signature/generation and the client's trusted reading-intent
 counter; later input, wheel/keyboard scrolling, navigation, changed focus or
 invalidated evidence cancels the move. No setup controls are collapsed or removed.
 
-The comparison findings opt into a count-based view of the existing assessment
-presentation. Reported outcomes use labeled counts rather than a sentence; the
-total is the full-interaction population, not the matching-record count above.
-When reported context is incomplete, the same presentation explicitly names
-**Completion-evidence checks** instead. Counts and the boundary come directly
-from the existing qualified projection, never from parsing display prose.
-Known causes are short reason/count rows; absent causes, unfinished reviews and
-missing evidence remain explicit. Review rows retain their own assessed/eligible
-coverage and separate personal/model provenance. Matching-service coverage uses
-labeled facts; generic causal disclaimers and repeated membership paragraphs are
-not carried forward. Definitions remain in the existing saved-details disclosure.
-Review labels use intrinsic, bounded column widths with shared row tracks; longer
-labels can wrap without splitting short labels unnecessarily or misaligning coverage.
-This opt-in does not activate Analyze's compact/empty-review behavior or change
-the default reader, timing layout, report output or saved facts.
+Close and browser Back from an exact comparison record restore the chosen roster,
+exact link focus and window/inner-scroll position. The comparison mount signals
+accepted results after ready-state layout has settled; the client uses the same
+navigation-generation and trusted-reading-intent guarded restoration as its
+ordinary render continuation. A later workspace observer can therefore finish
+restoration without introducing a second navigation owner, timer or global
+scroll restorer. Newer input and invalidated evidence still cancel it.
+
+Current comparison presentation consumes the validated outcome/recorded-timing
+projection. It does not revive retired model or personal review lanes, infer
+answer quality from tool outcomes, or combine concurrent call times into task
+duration. Whole-interaction metric selection uses the existing metric slot
+identity, preserving distinct definitions and compatibility warnings.
 
 Analyze's `compare=periods` route adds `aFrom`, `aTo`, `bFrom`, `bTo`. Ordinary
 `range/from/to`, author/outcome drafts, call routes/sort and report selection
@@ -1232,14 +1282,21 @@ and distinct full-interaction metric boundaries.
 
 ## Fresh activity and history coverage
 
-Analyze's one Refresh utility sits beside the page heading, separate from Reset
-Analyze's icon-only utility beside applied-filter chips. The funnel-labeled filter group keeps Dates,
+Analyze's freshness disclosure shares the existing scope/count line, subordinate
+to the population headline. It expands approved source/history context and the
+existing check, stored-read and scoped reread actions; it is not a permanent
+maintenance strip or widget. Ordinary checks and reads do not open confirmation.
+Compare periods keeps this same entry between its scope controls and results;
+only ordinary single-period figures and actions are hidden. Stored reads keep
+the paired date scopes and filters, and Stop restores the ordinary summary.
+Reset Analyze remains beside applied-filter chips. The funnel-labeled filter group keeps Dates,
 Tool, Service, Outcome and Author visible; More filters retains Category, Project,
 Chat, Activity and Collection. Rounded triggers and aligned count/selection columns
 use the existing listbox controller. Multi-selection marks are toggle-like but
 remain draft options, committed only by Apply; single choices retain single-select
 semantics. Custom dates still require Apply. Menus have no entrance animation.
-Source/update status and transient Update details remain below the filters.
+Source/update results and transient Update details remain beside this activity
+context, including after collapsing its actions.
 Source configuration and deletion are not filter controls: their existing Settings
 destinations retain all guards and confirmation flows. Native disclosure, Asta/Lucide,
 light/dark tokens, visible focus and 44px targets remain.
@@ -1257,7 +1314,9 @@ cannot be assigned to the current filtered view from these diagnostics.
 Previously retained evidence stays; excluded/out-of-window/deleted records,
 chats with no Work IQ calls and absent tool completions are not reclassified as
 failed source reads. The check result retains its single timestamp. Refresh
-stays inside source help and keeps the existing frozen-report guard.
+retains the same node and handler across Analyze, Connection & updates and
+Collection status. Dirty Settings, frozen reports and pending operations keep
+their existing guards; global read recovery takes precedence over a local retry.
 
 The supplied screenshot and synthetic normal-renderer comparisons informed this
 focused change. The local Python catalogue was unavailable; installed
@@ -1570,7 +1629,7 @@ descriptions use the existing lifecycle. Popup padding remains the existing
 
 ## Activity category meaning
 
-Calls-card metadata uses the existing local Lucide service cue and
+Reader call metadata uses the existing local Lucide service cue and
 semantic color alongside its visible category label. A request spanning categories
 uses the existing multi-service grid cue and retains every recorded category label;
 it does not infer a single service or change call classification. Discovery keeps
@@ -1606,8 +1665,8 @@ service details in that call's record without guessing from private text or chan
 
 Remaining `Unknown` activity is displayed as **Service not shown**, not a service failure.
 For a targetless `workiq-ask` with the existing `hosted-routing` evidence reason,
-Interactions and Calls cards instead name the known operation **Asked Copilot**,
-as the reader does. Existing category help and the sidebar's Technical details
+The reader and report-picker summaries instead name the known operation **Asked Copilot**.
+Existing category help and the call's secondary evidence
 explain that the recorded tool output does not identify a downstream service or
 API path. That is
 an evidence gap, not a service failure or a check of the current connection.
@@ -1895,12 +1954,10 @@ show named Median/P95 values; one shows a single measured sample, and none
 shows Not measured. Screen values preserve exact durations, including submillisecond
 values; the existing definitions panel retains the measurement details.
 
-Timing is contextual rather than a detached Analyze summary. Each Interactions
-prompt shows **Final response**, using that exact interaction's qualified metric.
-After each retained reader prompt, the same timing fact accompanies its
-Model/Models fact. Both use the shared
-single-colon key formatter. Each call retains its own
-start-to-completion **Tool latency** and existing duration ordering. Missing values say
+Timing is contextual rather than a detached Analyze summary. The reader's Source
+details retain **Prompt to final response**, using that exact interaction's qualified
+metric, beside its Model/Models context. Each call retains its own
+start-to-completion **Tool latency** in retained log order, not a global ranking. Missing values say
 **Not recorded**, genuine zero remains measured, and no duration receives a
 speed verdict or threshold color. No trace gaps are labelled as model thinking,
 waiting or retries.
@@ -1920,8 +1977,8 @@ The detached `#recordedTiming` and its redundant Calls link are removed.
 Saved reviews and the reader's former Reviews section are also retired. Current
 reader timing stays with its subject rather than in a separate metric panel.
 It never averages medians, sums concurrent calls or treats a duration as a
-quality percentage. The Search timing shortcut opens existing
-Calls instead of a removed widget. No new accordion or timing chart is added.
+quality percentage. The Search timing shortcut opens Activity, whose interactions
+contain those values. No replacement ranking, accordion or timing chart is added.
 **How to read these results** explains AI limitations and review origins
 once. Automatic-score processing status stays visible after the results, rather
 than preceding their scope. Partial-membership warnings remain visible.
@@ -1952,6 +2009,15 @@ Revocation/renewal consequences stay visible before confirmation. Errors,
 pending work and receipt recovery remain explicit. Local retention is not
 permission for remote model assessment and promises no accuracy/trust result.
 
+An uncertain response-saving operation has one complete notice and original-result
+reader inside its currently presented owning row. This reuses the existing global
+notice only when the control's retained action, mutation identity and full receipt
+match the sole current unchanged receipt slot. Away from the row, or for distinct,
+legacy, missing, malformed or multiple receipts, recovery remains global. A newer
+message from an away status read returns with that same notice. Existing render
+and navigation hooks preserve equivalent focus; there is no viewport observer,
+second recovery state, exposed token or change to receipt parsing/clearing.
+
 Benign source/preference notices belong to their originating Settings category
 and clear on departure; closing an unedited form has no cancellation banner.
 Discard messages name source or preference edits instead of saying only
@@ -1975,11 +2041,32 @@ their frozen facts is independent of creating a separately reviewed comparison
 copy. Format changes invalidate that copy's approval. Saved comparisons are
 self-contained; an original report's deletion does not rewrite them. Quiet
 contextual **Delete report** and **Delete saved comparison** actions name one
-managed object, preview its scope and require separate red-outline confirmation.
+managed object, preview its scope and require a separate named destructive confirmation.
 Source activity, other saved objects and external downloads are not a hidden
 cascade. Discarding a draft and withdrawing feedback remain different actions.
 
 ## Collected activity deletion
+
+Consequential native dialogs opt into `decision-frame` on the existing
+`#deleteDialog` or `.deletion-dialog`. Its direct children are `.delete-heading`
+(short phase-correct question), `.decision-body` (exact scope and consequences,
+the only scrolling region) and `.delete-actions` (safe dismiss then the named
+commit or original-result read). Only `[open]` uses grid layout; closed dialogs
+remain hidden. `.decision-scope` keeps Change scope beside the scope, not in a
+third fixed footer row. A long saved-object identity belongs in the body and
+must never be truncated to make the fixed heading fit.
+If a reloaded operation receipt does not retain the original scope, the body
+states that limitation instead of inventing members, dates or zero counts.
+Available preview scope remains mandatory before a fresh confirmation.
+
+Existing controllers set `data-decision-phase` for presentation; it is not an
+operation-state owner. `data-decision-kind="destructive"` is reserved for actual
+deletion. The shared `.deletion-dialog` class alone never selects danger color.
+Named commit/read buttons use `data-decision-action="commit"` or `"check"`;
+commit is destructive only inside the explicit destructive frame. All colors
+reuse semantic tokens. The frame uses the Settings button family: a 6px
+block inset separates the painted face from the native 44px-or-larger target.
+Light, dark and forced colors retain visible controls and focus.
 
 One shared flow is available from Settings > Privacy & saved data and a quiet Activity
 shortcut. Neither entry deletes anything. It begins with blank custom dates;
@@ -1996,19 +2083,20 @@ unchanged. Collection preferences use short field help; file limits, discovery
 cadence and continued collection after closing the panel live in Collection
 details. The selected values already show the interval and history window.
 
-The shared UI font, 24px dialog corners, Lucide warning glyph and light/navy
-tokens are reused. Destructive entries and confirmations share neutral surfaces
-with red text/outlines, alongside the warning rail and irreversible wording.
-The same restrained accent marks saved-object deletion, capture revocation and
-source renewal that purges prior optional evidence; ordinary first-time capture,
-preview, cancellation and recollection stay neutral. Its paired foreground passes 4.5:1 in both
-themes. **Cancel** receives initial focus; **Change scope** invalidates the preview.
+The shared UI font, dialog corners, Lucide glyphs and screen tokens are reused.
+Destructive entries retain red text/outlines; the actual confirmation has a
+danger-accented question and named filled commit action. Pending, checking and
+completion use their own headings and glyphs. The unknown-result frame retains
+the destructive context, but **Check deletion result** is a normal primary read,
+not another red mutation. Capture revocation and source renewal remain inline
+drafts with their existing deliberate Save; they do not acquire a modal.
+**Cancel** receives initial focus; **Change scope** invalidates the preview.
 The native modal prevents click-through, traps Tab/Shift+Tab, supports Escape
 before commit and restores focus to the entry. Controls remain 44px targets and
-wrap at 375px/200% text; long details scroll without hiding focus. No animation
-is needed, including in reduced motion. The local design-search interpreter was
-unavailable; the skill's built-in accessibility guidance and this existing
-product system were used, rather than claiming a catalog match.
+wrap at 375px/200% text. Only the scope/consequences body scrolls, leaving the
+question and footer reachable. Unknown deletion offers **Close** before **Check
+deletion result** in visual, DOM and keyboard order. Close retains the original
+receipt and never cancels or repeats an already-issued operation.
 
 Pending work disables duplicate confirmation and dismissal. Uncertain transport
 offers only a receipt read, never a repeated mutation. Completion refreshes the
@@ -2018,9 +2106,12 @@ storage, date-grain, recovery and recollection boundary is in README.md.
 
 ## Explicit recollection
 
-Data management pairs deletion with **Recollect activity**. Its
-**Recollect from approved sources** action opens the existing native dialog
-visual system, not a reset control. Labeled chat checkboxes reuse the existing
+Analyze's contextual **Read history again...** and Privacy & saved data's
+**Read history again > Choose chats** open the same recollection controller.
+Deletion is not added to the Analyze entry. The native dialog consumes the
+shared `decision-frame`: persistent question, body-only scroller and persistent
+Cancel/Close followed by the specifically named commit or receipt-read action.
+Labeled chat checkboxes reuse the existing
 local search matcher and paged-list renderer, rather than mounting the entire
 roster. Selection survives search/paging; a visible count and **Show selected**
 make hidden selections reviewable. Blank dates require a deliberate scope;
@@ -2037,15 +2128,21 @@ incomplete availability remain visible before confirmation.
 
 Cancel receives safe initial/confirmation focus. Change scope revokes the
 preview, Escape/Close before commit change nothing, and keyboard focus stays
-inside the modal. The existing sticky dialog header keeps Cancel/Close visible
-while long source lists or expanded details scroll. A pending receipt read can
+inside the modal. Scope and Change scope begin the reviewed body; the question
+and action region stay visible while long source lists or details scroll.
+A pending receipt read can
 be closed without cancelling/replaying the committed operation; a late result
 does not reopen the panel. During confirmation duplicate action and dismissal are
 disabled. Lost responses offer a receipt read, never retry. Completion names
-what was recollected and refreshes derived views; immutable saved reports remain
-unchanged. Light/navy tokens, 44px actions, 375px layout and 200% text are shared
-with deletion; this flow uses neutral outlined confirmation because it is not
-another destructive purge. This small addition uses the existing product system
+actual receipt counts and refreshes derived views when permitted; immutable saved
+reports remain unchanged. The earlier selected scope is retained only while known.
+After reload its absence is explicit: the receipt does not contain those chats,
+dates or member IDs. No exact outside-view count is inferred. Existing filters
+stay selected; records may be outside them. Deferred or failed view application
+offers a stored read, never a repeated effect. Shared light/dark screen roles,
+44px native targets, 375px layout and 200% text apply. Recollection uses neutral
+primary, not destructive color; disabled labels use the shared readable muted
+ink without lowering whole-control opacity. This small addition uses the existing product system
 and built-in accessibility guidance; no external design catalog match is claimed.
 
 WIRE (Work IQ Request Explorer) is a personal activity and learning app, not an operations
@@ -2584,8 +2681,8 @@ size has a restrained 5.25px gap. The button aligns with the owning heading on
 wide panes; narrow panes read title, purpose, then action. The stored-only recovery
 control visibly says **Read stored activity**, preserving that different effect.
 Both presentations reuse the original nodes, handlers, guards and pending glyph.
-Their original icon-only presentation outside Settings is unchanged. Strategic
-placement elsewhere remains a separate design decision requiring approved options.
+Analyze reuses this family within the approved contextual freshness disclosure,
+with explicit check/read labels rather than the former anonymous heading glyph.
 The full model and non-Settings detail presentation remain unchanged.
 Visible effects and hover/focus help share the action's stored-recovery guard,
 including recognized source failures in the error phase. The source-repair
@@ -3112,8 +3209,8 @@ truncated. Plain-text/JSON reports do not carry visual title styling.
 | Surface | Keep visible | Disclosure / list decision | User job |
 | --- | --- | --- | --- |
 | Analyze overview | Filters, totals, charts, result legend, coverage warning and Results link | Retain collapsed explanations and glossary. Exact data renders on opening, 24 rows per page with complete plotted/category totals. | Understand the slice and jump directly to its results. |
-| Analyze results | Interactions / Calls, local search, report controls, prompt/author, chat/project context, tools, categories and matching outcomes | Page eight interactions or canonical matching rows directly, without chat expansion. Reuse the existing interaction reader and recorded-action renderer. | Find and open a recorded interaction without learning chat grouping. |
-| Chat-filtered Analyze | Analyze heading, exact source context, project, ambiguous-name reference, canonical results, date/service/collection summary, coverage and chat report action | Technical source record retains exact IDs and provenance. Source outcome links switch to the same Calls list. Empty or unreadable sources retain coverage/recovery links. | Optionally narrow by chat without making it the entry gate. |
+| Analyze results | Activity, local search, report controls, prompt/author, matching outcomes and time | Page eight interactions directly. Keep full calls and exact evidence in the gliding reader. Unlinked records remain explicit without a fabricated owner. | Recognize a request and inspect its activity without choosing a second list mode. |
+| Chat-filtered Analyze | Analyze heading, exact source context, project, ambiguous-name reference, canonical results, date/service/collection summary, coverage and chat report action | Source outcome links filter Activity. Technical source records retain exact IDs/provenance; empty or unreadable sources retain coverage links. | Optionally narrow by chat without making it the entry gate. |
 | Request | Selected result marked within bounded retained prompts, calls, known failure reasons and authorized replies | Text opens immediately with original roles, inferred-association limits and missing evidence. Exact arguments and original per-group counts/verdicts remain secondary. | Follow the available back-and-forth without another context gate, guessed task boundaries or new source reads. |
 | Collection status | Collector state and next step, readable/eligible coverage, Chat history gap summary and compact search | Closed short reason groups, six chats per page; closed Technical details for inventory, exclusions, limits and stored refresh. Home check results and Activity link here. | Know whether collection is working, inspect missing activity when relevant and avoid treating every gap as a repair task. |
 | Settings | Connection & updates, Privacy & saved data, AI reviews, Display, Troubleshooting | Already-approved sources have one plain source summary, not a duplicate approval form. Review/Change source opens exact requested paths and a deliberate approval button. Operational results link to Collection status. | Understand and authorize scope once, edit deliberately, and keep evidence browsing independent. |
@@ -3132,14 +3229,18 @@ The list introduction gives one concise all-page population summary, without
 repeating filter instructions or how opening a record works. Partial-card
 boundaries, unlinked records, selection, empty and stale-state notices remain.
 
-Verified no-match results keep the Interactions / Calls heading and one brief
+Verified no-match results keep the Activity heading and one brief
 next action: **Change filters or reset Analyze.** A private-search mismatch
 instead says **Try another phrase or clear Search.** Supporting text wraps
 naturally at narrow widths or enlarged text sizes. Source setup, unavailable
 history and read-error guidance stay distinct; routine no-match copy does not
 repeat source-setting or historical-coverage caveats.
 
-Interactions and Calls share one card grammar. The actual prompt leads in bold
+The following card-detail treatment is historical and superseded by **Interaction
+reading** above. It does not define the current Activity card, reader or selection
+controls.
+
+Interactions and Calls previously shared one card grammar. The actual prompt led in bold
 italic Asta, for user, agent and unverified authors alike. Unknown authors show
 **Prompt**, retaining the truthful actor state and existing author-reason help;
 known **My prompt** and **Agent prompt** labels use the shared owner-facing vocabulary.
@@ -3865,57 +3966,39 @@ part of this reader. Focused proof is in `tests/request-context.test.mjs`,
 
 ### Exact recorded-call investigation
 
-Calls use the same prompt-first and stacked key/value grammar as Interactions.
-Each row names its individual tool, category/service and exact target, then
-duration, recorded-action time, result and original chat/project/message context.
-The single counted outcome pill is attached to its labeled result row; its
-full evidence unit remains in the accessible group label. Activity category is
-not relabeled Service: returned-entry service evidence retains its different
-meaning. Known failures and genuine missing duration/service/author evidence
-remain visible. Aggregate results and exact selected-call reader layouts are
-unchanged by this card-only treatment.
-
-**Tool latency** names the existing Slowest first / Fastest first control for
-tool calls; other evidence layers retain **Duration**. Current timing summaries,
-comparisons and newly rendered reports use the same term, with Median or P95
-where applicable. Source fields, saved files and Search match text stay unchanged.
-The primary sort row mentions unavailable durations only when present; the
-pager supplies the canonical record unit and total. The list names its source
-interaction population and explains once that tool completion is not answer
-correctness. Tie-breaking is an ordering contract below, not a paragraph
-beside the dropdown. No new disclosure hides those controls.
+Individual calls are inspected inside the one gliding interaction reader.
+There is no primary Calls mode or Slowest/Fastest control. Minimal Activity cards
+retain the matching unit/count; the full reader retains call identity, supported
+cause and exact evidence. Returned API-entry service evidence remains different
+from the parent call's service/category evidence. Timing summaries, comparisons
+and reports keep their existing boundaries and metrics; retiring the global
+ranking does not change stored values or analytical populations.
 
 The selected tool uses the same compact tool/result/duration hierarchy, with
 its targets immediately below and its separate tool-returned API count/results
-on one line. Matching counts are shown when the filtered and full group differ;
+on their own precise entries. Matching counts are shown when the filtered and full group differ;
 nonmatching context stays explicitly **Outside current view**. The selected
 anchor and timeline remain exact. **Technical details** is one drawer: exact
-arguments and their copy control are directly inside it, not behind another
-arguments disclosure. The original prompt reader and authorized replies keep
+arguments and their copy control are constructed directly inside it only while
+open, not hidden in another arguments disclosure. The original prompt reader and authorized replies keep
 their existing access, copy, Hide and consent behavior.
 
-The invented Archive example deliberately has no sender source. It goes through
-`promptRecord` as `missing-source`, while explicit user/agent sources retain their
-supported attribution. Calls keep the concise existing sender-gap text by the
-prompt, without a prominent provenance rail or guessed identity. This explains
-that fixture, not all unverified records: conflicting, unsupported, system and
-legacy gaps retain their distinct meanings.
+Unknown authors keep their concise retained provenance reason; missing,
+conflicting, unsupported, system and legacy gaps are not treated as the same cause.
 
-Analyze's existing `#analyze?mode=calls` list uses canonical `slice.rows`, across
-all pages. `callSort=slowest` (default) or `callSort=fastest` affects presentation
-only, not filters, report membership or assessment populations. The pure
-`createCallInvestigation().order(rows, sort, layer)` sorts finite nonnegative
-recorded durations, then canonical ID for ties; unavailable durations form a
-separate final group, also ID-ordered. Zero is measured, not missing. No start/end
-subtraction, concurrent-call sum or latency threshold is introduced. Tool calls,
+Legacy `#calls`, `#analyze?mode=calls` and `callSort` navigation now normalize to
+Activity with valid filters intact. Obsolete call-page offsets are discarded,
+not interpreted as interaction pages. Current interaction pages still restore
+normally. Zero is measured, not missing. No start/end subtraction, concurrent-call
+sum or latency threshold is introduced. Tool calls,
 returned API entries and owned HTTP records use only their own duration.
 Graph sites, visible-status sites and code references have no measured duration.
 
 Exact links use the existing request route with `request=<canonical scenarioId>`,
 `layer=<evidence layer>` and `call=<canonical row.id>`. They never build a target
 from a displayed position, optional source result index, tool name or nearby
-timestamp. Other route fields, including `mode`, `callSort`, filters and result
-page, survive the round trip; private search remains only in `history.state`.
+timestamp. Valid filters and interaction paging survive the round trip; obsolete
+call mode/sort/page state does not. Private search remains only in `history.state`.
 `call` is request-only and clears when leaving the reader or changing interaction.
 `resolve(requestActivity, authorizedScenarios, route, snapshotRevision)` returns `none`,
 `unavailable`, or `{ status: "available", row, source, actionId }`, preserving the
@@ -3933,7 +4016,7 @@ Returned API-entry canonical IDs currently contain offsets in retained parent
 metadata. Their links therefore also require `callRevision=<snapshot revision>`.
 A missing or different revision is explicitly unavailable before mounting any
 response reader, even if the same canonical offset exists in the newer snapshot.
-Reopen from Calls to obtain a current link. This intentionally conservative guard
+Reopen the exact result from the current Activity reader to obtain current context. This intentionally conservative guard
 also rejects such links after unrelated stored revisions; it does not invent
 stable source identities or change backend normalization. Stable tool/event,
 Graph and owned-HTTP identities do not need this extra revision guard.
@@ -3949,16 +4032,17 @@ Matching versus other context is independent of the selection highlight.
 Unresolvable targets render `#unavailableCall` before mounting response readers;
 they never silently open a generic interaction.
 
-Sort/navigation reuse the accepted snapshot; there are no backend, classifier,
+Navigation and the scoped first-failure gesture reuse the accepted snapshot; there are no backend, classifier,
 capture, consent or assessment changes. Deliberate valid interaction opening
 retains the existing independently authorized response reads, generation guards
 and Hide state. Focused evidence is in `tests/call-investigation.test.mjs` and
 `tests/call-investigation.browser.test.mjs`, using invented normal-source records,
-plus the existing context and Analyze tests. These fixtures establish application
+and `tests/activity-reader.browser.test.mjs`, plus focused context and Analyze tests. These fixtures establish application
 behavior, not production coverage or real-world latency.
-`tests/call-presentation.browser.test.mjs` adds the normal-root invented Harbor
-journey with native scrollbars, adjacent-result geometry, light/dark and narrow
-200% text, one-level technical reading, exact prompt/argument copy and Back.
+The Activity proof covers the full card/argument/report/return journey, native
+private-body/Copy lifetimes, desktop and narrow 200% timing-label continuity,
+filtered failure entry and explicit-target priority. The exact-call proof also
+covers API parents/revisions, mixed evidence boundaries and modified native links.
 
 Text-access audit boundaries:
 

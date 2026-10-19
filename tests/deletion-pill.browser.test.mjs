@@ -29,21 +29,22 @@ async function metrics(button) {
             range.selectNodeContents(walker.currentNode);
             texts.push(range.getBoundingClientRect());
         }
-        const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect(), style = getComputedStyle(node), paint = getComputedStyle(node, "::before");
         const left = Math.min(...texts.map(rect => rect.left)), right = Math.max(...texts.map(rect => rect.right));
         const top = Math.min(...texts.map(rect => rect.top)), bottom = Math.max(...texts.map(rect => rect.bottom));
         return {
             xOffset: (left + right - rect.left - rect.right) / 2,
             yOffset: (top + bottom - rect.top - rect.bottom) / 2,
             height: rect.height, overflow: node.scrollWidth > node.clientWidth,
-            foreground: style.color, background: style.backgroundColor, border: style.borderTopColor,
+            foreground: style.color, background: paint.backgroundColor, border: paint.borderTopColor,
+            faceInset: parseFloat(paint.top),
             paper: getComputedStyle(document.getElementById("deleteDialog")).backgroundColor,
             danger: style.getPropertyValue("--danger").trim(),
         };
     });
 }
 
-test("delete pill centers its label and uses a red outline, not a red fill, in every theme/size/state", { timeout: 60000 }, async t => {
+test("destructive confirmation keeps a readable filled face and separate native hit target in every theme/size/state", { timeout: 60000 }, async t => {
     const record = fixture("pill");
     record.toolCalls = Array.from({ length: 320 }, (_, index) => ({
         ...record.toolCalls[0], toolCallId: `pill-${index}`, startEventId: `pill-start-${index}`,
@@ -80,10 +81,10 @@ test("delete pill centers its label and uses a red outline, not a red fill, in e
                 assert.ok(Math.abs(value.yOffset) <= 2, `${label}: vertical label offset ${value.yOffset}`);
                 assert.ok(value.height >= 44, label);
                 assert.equal(value.overflow, false, label);
-                assert.notEqual(value.background, value.border, `${label}: no solid red fill`);
+                assert.equal(value.faceInset, 6, `${label}: visible face is inset from the native target`);
                 assert.ok(contrast(value.foreground, value.background) >= 4.5, `${label}: readable text`);
-                assert.ok(contrast(value.border, value.background) >= 3, `${label}: visible warning border`);
-                if (state === "rest") assert.equal(value.background, value.paper, `${label}: neutral surface`);
+                assert.ok(contrast(value.background, value.paper) >= 3, `${label}: visible destructive face`);
+                if (state === "rest") assert.equal(value.background, value.border, `${label}: the deliberate confirmation uses a filled danger action`);
                 if (state === "pressed") {
                     await page.mouse.move(1, 1);
                     await page.mouse.up();

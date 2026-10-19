@@ -1,5 +1,5 @@
 // Emits explicit packets; transport and lifecycle stay with the main client.
-export function mountConsentSetup(root, { control, sourceLabel, currentSource = null, onSubmit, onCheck, onCancel }) {
+export function mountConsentSetup(root, { control, sourceLabel, currentSource = null, onSubmit, onCheck, onCancel, onRender }) {
     const doc = root.ownerDocument;
     function el(tag, text, cls) {
         const node = doc.createElement(tag);
@@ -38,10 +38,12 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     status.tabIndex = -1;
+    const recoverySlot = el("div", undefined, "assessment-inline-recovery");
+    recoverySlot.hidden = true;
     const details = el("div", undefined, "assessment-capture-details");
     details.append(scope, boundary);
     actions.append(confirm, cancel, revokePrior, check);
-    form.append(option, applied, details, revoke, renewalImpact, actions, status);
+    form.append(option, applied, details, revoke, renewalImpact, actions, status, recoverySlot);
     section.append(form);
     root.replaceChildren(section);
     let localError = "";
@@ -49,6 +51,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     const currentEnabled = consent => consent?.state === "enabled" && (!currentSource || currentSource.available === true
         && consent.sourceConfigRef === currentSource.sourceConfigRef && consent.sourceConfigRevision === currentSource.sourceConfigRevision);
     function render() {
+        const finishPresentation = onRender?.();
         const snapshot = control.snapshot();
         const state = snapshot.applied?.state;
         const active = currentEnabled(snapshot.applied), inactiveGrant = state === "enabled" && !active;
@@ -84,6 +87,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
         status.setAttribute("role", localError || ["error", "unknown", "stale"].includes(snapshot.phase) ? "alert" : "status");
         form.setAttribute("aria-busy", String(["pending", "checking"].includes(snapshot.phase)));
         if (restoreChoiceFocus) input.focus();
+        finishPresentation?.();
     }
     input.addEventListener("change", () => {
         localError = "";
@@ -121,7 +125,19 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
         onCancel();
     });
     render();
-    return { render, focus: () => input.focus() };
+    return { render, focus: () => input.focus(), recoveryPresentation() {
+        const offered = ["unknown", "checking"].includes(control.snapshot().phase);
+        const visible = node => node.checkVisibility({ visibilityProperty: true, opacityProperty: true });
+        return { check, status, slot: recoverySlot, offered,
+            presented: offered && root.contains(section) && check.isConnected && status.isConnected
+                && Boolean(status.textContent.trim()) && visible(root) && !root.closest("[inert]")
+                && (visible(check) && visible(status) || recoverySlot.childElementCount > 0 && visible(recoverySlot)),
+            delegate(value) {
+                check.hidden = value || !offered;
+                status.hidden = value || !status.textContent;
+                recoverySlot.hidden = !value;
+            } };
+    } };
 }
 
 export function mountPersonalFeedback() {

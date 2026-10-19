@@ -11,9 +11,6 @@ export const analyzeLayoutStyles = `
 #analyzePopulation #filters {padding:0;background:none;border:0}
 .filter-heading {display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:var(--type-control);font-weight:var(--weight-regular)}
 .filter-heading>.wire-icon {width:20px;height:20px}
-#analyzeRefresh {display:inline-flex;align-items:center}
-#analyzeRefresh:empty {display:none}
-#workspace>.page-heading:has(#analyzeRefresh:not([hidden])) {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}
 #analyzePopulation .applied-filters {display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;min-width:0}
 #analyzePopulation .applied-filters>#filterChips {flex:0 1 auto;min-width:0;margin:0}
 #analyzePopulation .applied-filters:has(#filterChips:empty):has(#resetView:disabled) {display:none}
@@ -45,6 +42,31 @@ export const analyzeLayoutStyles = `
 #workspace>#periodFeedback.home-period-summary {margin:0 0 16px;gap:8px 24px;justify-content:space-between;max-width:none}
 #periodFeedback #periodResult {font-size:var(--type-data-value);line-height:var(--leading-data-value)}
 #periodFeedback #periodHint {margin-top:2px}
+#periodMeta {display:flex;align-items:center;flex-wrap:wrap;gap:4px 20px;min-width:0}
+#periodMeta #periodHint {margin:0}
+#activityUpdateToggle {margin-block:-12px;gap:.375em;font-weight:var(--weight-regular);color:var(--ink);text-align:left}
+#activityUpdateToggle>.wire-icon {width:1rem;height:1rem;color:var(--muted);flex:none}
+#activityUpdateToggle>.wire-icon:last-child {width:.75rem;height:.75rem}
+#activityUpdateLabel {text-decoration:underline;text-decoration-color:var(--control);text-underline-offset:3px}
+#activityUpdateSlot {flex-basis:100%;min-width:0;max-width:100%;overflow-anchor:none}
+#activityUpdateSlot:has(>#freshActivity[data-expanded=false] #freshResult[hidden]):not(:has(>#recollectionUpdateStatus:not([hidden]))) {display:none}
+#recollectionUpdateStatus {font-size:var(--type-small);line-height:1.5;margin:0 0 8px}
+#activityUpdateSlot .fresh-activity {margin:0;padding:0}
+#activityUpdateSlot .fresh-controls {display:flex;flex-wrap:wrap;align-items:center;gap:0 16px}
+#activityUpdateSlot .fresh-controls>.ux-disabled-help {flex:none}
+#activityUpdateSlot .fresh-activity[data-expanded=false] .fresh-controls>:not(#freshResult) {display:none}
+#activityUpdateSlot #freshScope {margin:4px 0 0;border-top:1px solid var(--surface-divider);font-size:var(--type-caption)}
+#activityUpdateSlot #freshScope>a {display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-underline-offset:3px}
+#activityUpdateSlot .fresh-details {flex-basis:100%;min-width:0}
+#activityUpdateSlot .fresh-result {flex-basis:100%;padding-top:4px}
+#activityUpdateSlot .fresh-result p {font-size:var(--type-small);font-weight:var(--weight-regular)}
+#activityUpdateSlot :is(#checkActivity,#refreshBtn,#freshStoredRead,#freshRecollect) {--pill-inset:10px;--action-radius:8px;--pill-border:var(--control);gap:.375em}
+#activityUpdateSlot :is(#checkActivity,#refreshBtn,#freshStoredRead,#freshRecollect)>.wire-icon {width:1rem;height:1rem}
+#activityUpdateSlot :is(#checkActivity,#refreshBtn,#freshStoredRead,#freshRecollect)::before {inset-block:6px}
+#activityUpdateSlot :is(#checkActivity,#refreshBtn,#freshStoredRead,#freshRecollect):focus-visible {outline:none}
+#activityUpdateSlot :is(#checkActivity,#refreshBtn,#freshStoredRead,#freshRecollect):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
+#activityUpdateSlot :is(#freshStoredRead,#freshRecollect) {--pill-border:transparent}
+#activityUpdateSlot :is(#freshStoredRead,#freshRecollect)>span {text-decoration:underline;text-decoration-color:var(--control);text-underline-offset:3px}
 #homeView {container:analyze-view / inline-size}
 .analyze-dashboard {min-width:0}
 .analyze-chart-grid {display:grid;grid-template-columns:minmax(20rem,24rem) minmax(0,1fr);gap:16px;align-items:stretch;min-width:0}

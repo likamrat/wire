@@ -19,6 +19,25 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
             sourceBlocked: Boolean(sourceWarning), sourceFailure, readFailed,
             recovery: readFailed || sourceUnknown || sourceWarning ? "stored" : sourceFailure ? "source" : null }),
         busy: () => ["checking", "applying", "waiting"].includes(phase),
+        entry({ approved = false, enabled, checked = "", readError = false, stale = false, collectionState } = {}) {
+            const pending = ["checking", "applying"].includes(phase);
+            return {
+                label: phase === "checking" ? "Checking local history..." : phase === "applying" ? "Reading stored activity..."
+                    : phase === "waiting" ? "Activity update waiting"
+                    : readFailed || readError || stale ? "Stored view not updated"
+                    : sourceUnknown ? "Local check unconfirmed"
+                    : sourceWarning ? "Source checks are read-only"
+                    : sourceFailure || collectionState === "error" ? "Local history needs attention"
+                    : !approved ? "Stored activity only"
+                    : phase === "partial" ? "Some history is incomplete"
+                    : enabled === false ? "Collection paused"
+                    : phase === "complete" && !check ? "Stored activity read"
+                    : checked ? `History checked ${checked}` : "Update recorded activity",
+                pending,
+                attention: pending || phase === "waiting" || sourceUnknown || Boolean(sourceWarning) || readFailed || readError || stale || Boolean(sourceFailure) || collectionState === "error",
+                storedOnly: !approved || sourceUnknown || Boolean(sourceWarning) || phase === "error" || readError || stale,
+            };
+        },
         blockSource(reason) {
             sourceWarning = reason;
             if (phase === "checking") {

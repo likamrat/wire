@@ -19,14 +19,18 @@ export function createSessionJourney() {
         if (value.localSearch) saved.localSearch = Object.fromEntries(["settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch"]
             .filter(key => typeof value.localSearch[key] === "string").map(key => [key, value.localSearch[key]]));
         if (includeSourceReturn && value.returnToSessions) saved.returnToSessions = returnRoute(value.returnToSessions);
-        return savedRoute(saved);
+        return savedRoute(canonical(saved));
     }
     function canonical(route) {
-        if (!["analyze", "home", "overview", "activity", "calls"].includes(route.view)) return route;
-        return { ...route, view: "analyze", ...(route.view === "calls" ? { mode: "calls" } : {}) };
+        const overview = ["analyze", "home", "overview", "activity", "calls"].includes(route.view);
+        if (!overview && route.view !== "request") return route;
+        const { mode, callSort, ...next } = route;
+        // A legacy call-page offset is not an interaction-page offset.
+        if (route.view === "calls" || mode === "calls" || callSort !== undefined) delete next.page;
+        return overview ? { ...next, view: "analyze" } : next;
     }
     function open(route, sessionId, result) {
-        if (result) return { ...route, view: "analyze", mode: "calls", session: sessionId, request: undefined, page: undefined, result, origin: undefined };
+        if (result) return canonical({ ...route, view: "analyze", session: sessionId, request: undefined, page: undefined, result, origin: undefined });
         const next = { view: "analyze", session: sessionId };
         for (const key of ["layer", "range", "from", "to", "service", "scope", "authors"]) if (route[key]) next[key] = route[key];
         return next;

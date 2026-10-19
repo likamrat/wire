@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { chromium } from "@playwright/test";
 import { createSavedArtifactDeletion } from "../web/saved-artifact-deletion.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
@@ -57,6 +59,113 @@ function preview(operationId = randomUUID()) {
     };
 }
 
+async function headingPaint(dialog) {
+    return dialog.evaluate(node => {
+        const heading = node.querySelector(".delete-heading"), title = heading.querySelector("h2");
+        const frame = node.getBoundingClientRect(), header = heading.getBoundingClientRect();
+        const clip = { left: frame.left + node.clientLeft, right: frame.left + node.clientLeft + node.clientWidth,
+            top: Math.max(frame.top + node.clientTop, header.top), bottom: Math.min(frame.bottom, header.bottom) };
+        const canvas = document.createElement("canvas"), context = canvas.getContext("2d"), ink = [];
+        const walker = document.createTreeWalker(title, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const text = walker.currentNode, css = getComputedStyle(text.parentElement);
+            context.font = `${css.fontStyle} ${css.fontWeight} ${css.fontSize} ${css.fontFamily}`;
+            for (let index = 0; index < text.length; index++) {
+                const character = text.textContent[index];
+                if (!character.trim()) continue;
+                const range = document.createRange();
+                range.setStart(text, index); range.setEnd(text, index + 1);
+                const rect = range.getBoundingClientRect(), metrics = context.measureText(character);
+                const baseline = rect.top + metrics.fontBoundingBoxAscent;
+                ink.push({ kind: "text", character, left: rect.left - metrics.actualBoundingBoxLeft,
+                    right: rect.left + metrics.actualBoundingBoxRight,
+                    top: baseline - metrics.actualBoundingBoxAscent, bottom: baseline + metrics.actualBoundingBoxDescent });
+            }
+        }
+        for (const shape of heading.querySelectorAll("svg path,svg line,svg polyline,svg polygon,svg circle,svg rect")) {
+            const bbox = shape.getBBox(), matrix = shape.getScreenCTM();
+            const stroke = getComputedStyle(shape).stroke === "none" ? 0 : parseFloat(getComputedStyle(shape).strokeWidth) / 2;
+            const points = [[bbox.x - stroke, bbox.y - stroke], [bbox.x + bbox.width + stroke, bbox.y - stroke],
+                [bbox.x - stroke, bbox.y + bbox.height + stroke], [bbox.x + bbox.width + stroke, bbox.y + bbox.height + stroke]]
+                .map(([x, y]) => new DOMPoint(x, y).matrixTransform(matrix));
+            ink.push({ kind: "icon", left: Math.min(...points.map(point => point.x)), right: Math.max(...points.map(point => point.x)),
+                top: Math.min(...points.map(point => point.y)), bottom: Math.max(...points.map(point => point.y)) });
+        }
+        const clipped = ink.filter(box => box.left < clip.left - .5 || box.right > clip.right + .5
+            || box.top < clip.top - .5 || box.bottom > clip.bottom + .5);
+        const button = node.querySelector(".delete-object-confirm"), buttonBox = button.getBoundingClientRect();
+        const range = document.createRange(); range.selectNodeContents(button);
+        const label = range.getBoundingClientRect();
+        return { title: title.textContent, clip, ink, clipped,
+            scrollLeft: { dialog: node.scrollLeft, heading: heading.scrollLeft, title: title.scrollLeft, document: scrollX },
+            dialogFits: node.scrollWidth <= node.clientWidth + 1 && frame.right <= innerWidth,
+            actionCenterOffset: Math.abs((label.left + label.right - buttonBox.left - buttonBox.right) / 2),
+            active: document.activeElement?.textContent };
+    });
+}
+
+test("native decision question paint survives fresh open and the recorded resize, scale and focus sequence", { timeout: 30000 }, async t => {
+    const proof = process.env.WIRE_DECISION_HEADING_PROOF_DIR, measurements = [];
+    if (proof) {
+        await mkdir(proof, { recursive: true });
+        t.after(() => writeFile(path.join(proof, "heading-paint.json"), JSON.stringify(measurements, null, 2)));
+    }
+    async function inspect(dialog, label) {
+        const paint = await headingPaint(dialog);
+        measurements.push({ label, ...paint });
+        assert.equal(paint.title, "Delete this report?");
+        assert.ok(paint.ink.some(value => value.kind === "icon"), `${label}: warning has painted paths`);
+        assert.deepEqual(paint.clipped, [], `${label}: ${JSON.stringify(paint)}`);
+        assert.deepEqual(paint.scrollLeft, { dialog: 0, heading: 0, title: 0, document: 0 }, label);
+    }
+    for (const theme of ["light", "dark"]) {
+        const { page, calls } = await setup(t, async endpoint => endpoint.endsWith("/preview") ? preview() : { cancelled: true });
+        await page.setViewportSize({ width: 375, height: 1000 });
+        await page.evaluate(theme => { document.documentElement.dataset.evidenceTheme = theme; document.documentElement.style.fontSize = "200%"; }, theme);
+        await page.locator("#open").click();
+        const dialog = page.locator(".deletion-dialog");
+        await page.waitForFunction(() => !document.querySelector(".delete-object-confirm").disabled);
+        await inspect(dialog, `fresh-${theme}-375-200`);
+        assert.equal(await dialog.locator(".decision-object").textContent(), artifact.label);
+        await dialog.getByRole("button", { name: "Cancel", exact: true }).focus();
+        await page.screenshot(proof ? { path: path.join(proof, `fresh-${theme}-375-200.png`) } : {});
+        await inspect(dialog, `fresh-${theme}-375-200-after-capture`);
+        await page.keyboard.press("Escape");
+        assert.equal(await dialog.isVisible(), false);
+        assert.equal(calls.some(value => value.path.endsWith("/confirm")), false);
+    }
+    const { page, calls } = await setup(t, async endpoint => endpoint.endsWith("/preview") ? preview() : { cancelled: true });
+    await page.locator("#open").click();
+    const dialog = page.locator(".deletion-dialog");
+    await page.waitForFunction(() => !document.querySelector(".delete-object-confirm").disabled);
+    for (const theme of ["light", "dark"]) for (const width of [320, 375, 414, 768, 820, 1200, 2560]) for (const scale of [100, 200]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(({ theme, scale }) => { document.documentElement.dataset.evidenceTheme = theme; document.documentElement.style.fontSize = `${scale}%`; }, { theme, scale });
+        await page.evaluate(() => document.fonts.ready);
+        const label = `sequence-${theme}-${width}-${scale}`;
+        await inspect(dialog, label);
+        if (width === 1200 && scale === 100 || width === 375 && scale === 200) {
+            await dialog.getByRole("button", { name: "Cancel", exact: true }).focus();
+            await inspect(dialog, label + "-focused");
+            await page.screenshot(proof ? { path: path.join(proof, label + ".png") } : {});
+            await inspect(dialog, label + "-after-capture");
+        }
+    }
+    await page.setViewportSize({ width: 375, height: 1000 });
+    await dialog.locator(".delete-heading").evaluate(node => { node.style.transform = "translateX(-120px)"; });
+    const clipped = await headingPaint(dialog);
+    assert.ok(clipped.clipped.some(value => value.kind === "icon"));
+    assert.ok(clipped.clipped.some(value => value.kind === "text" && value.character === "D"));
+    assert.equal(clipped.dialogFits, true, "The former dialog-fit invariant misses a clipped question.");
+    assert.ok(clipped.actionCenterOffset <= 1, "The former centered-action invariant also misses it.");
+    measurements.push({ label: "negative-control-clipped-heading", ...clipped });
+    await dialog.locator(".delete-heading").evaluate(node => { node.style.removeProperty("transform"); });
+    await inspect(dialog, "restored-negative-control");
+    await page.keyboard.press("Escape");
+    assert.equal(await dialog.isVisible(), false);
+    assert.equal(calls.some(value => value.path.endsWith("/confirm")), false);
+});
+
 test("named saved-object deletion has safe cancel, no cascade and centered accessible confirmation", { timeout: 30000 }, async t => {
     const pending = preview();
     const { page, calls } = await setup(t, async path => path.endsWith("/preview") ? pending : { cancelled: true });
@@ -66,6 +175,8 @@ test("named saved-object deletion has safe cancel, no cascade and centered acces
     assert.match(await dialog.textContent(), /3 managed files and 1 managed copies/);
     assert.match(await dialog.textContent(), /2 saved comparisons keep frozen information/);
     assert.equal(await dialog.getByRole("button", { name: "Cancel", exact: true }).evaluate(node => node === document.activeElement), true);
+    const proof = process.env.WIRE_DECISION_PROOF_DIR;
+    if (proof) await mkdir(proof, { recursive: true });
     for (const theme of ["light", "dark"]) for (const width of [320, 375, 414, 768, 820, 1200, 2560]) for (const scale of [100, 200]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(({ theme, scale }) => { document.documentElement.dataset.evidenceTheme = theme; document.documentElement.style.fontSize = `${scale}%`; }, { theme, scale });
@@ -77,15 +188,20 @@ test("named saved-object deletion has safe cancel, no cascade and centered acces
             const glyph = range.getBoundingClientRect();
             return {
                 fits: node.scrollWidth <= node.clientWidth + 1 && node.getBoundingClientRect().right <= innerWidth,
-                height: box.height, radius: parseFloat(style.borderRadius), controlRadius: parseFloat(style.getPropertyValue("--radius-control")), centered: Math.abs((glyph.left + glyph.right - box.left - box.right) / 2),
+                height: box.height, radius: parseFloat(style.borderRadius), faceInset: parseFloat(getComputedStyle(button, "::before").top), centered: Math.abs((glyph.left + glyph.right - box.left - box.right) / 2),
                 fill: style.backgroundColor, loaded: getComputedStyle(document.body).fontFamily.startsWith('"Asta Sans"') && document.fonts.check('14px "Asta Sans"'),
             };
         });
         assert.equal(geometry.fits, true, `${theme}/${width}/${scale}`);
         assert.ok(geometry.height >= 44);
-        assert.equal(geometry.radius, geometry.controlRadius, "Danger confirmation preserves the shared action corners");
+        assert.equal(geometry.radius, 8, "Confirmation uses the shared Settings button-family corners");
+        assert.equal(geometry.faceInset, 6, "The painted face stays separate from the native hit target");
         assert.ok(geometry.centered <= 1, `${theme}/${width}/${scale} label offset ${geometry.centered}`);
         assert.equal(geometry.loaded, true);
+        if (proof && (width === 1200 && scale === 100 || width === 375 && scale === 200)) {
+            await dialog.getByRole("button", { name: "Cancel", exact: true }).focus();
+            await page.screenshot({ path: path.join(proof, `saved-confirm-${theme}-${width}-${scale}.png`) });
+        }
     }
     await page.keyboard.press("Escape");
     assert.equal(await dialog.isVisible(), false);
@@ -107,10 +223,12 @@ test("lost delete response offers only original-operation status and returns foc
     await page.waitForFunction(() => !document.querySelector(".delete-object-confirm").disabled);
     await dialog.getByRole("button", { name: "Delete report", exact: true }).click();
     await dialog.getByRole("button", { name: "Check deletion result", exact: true }).waitFor();
+    assert.deepEqual(await dialog.locator(".delete-actions button:visible").allTextContents(), ["Close", "Check deletion result"]);
     assert.equal(await dialog.getByRole("button", { name: "Delete report", exact: true }).isVisible(), false);
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await page.locator("#open").click();
-    assert.match(await dialog.textContent(), /Check an earlier saved-object deletion/);
+    assert.equal(await dialog.getByRole("heading").innerText(), "Deletion result unknown");
+    assert.match(await dialog.textContent(), /previous operation needs checking/);
     await dialog.getByRole("button", { name: "Check deletion result", exact: true }).click();
     await page.waitForFunction(() => window.deleted.length === 1);
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
@@ -123,6 +241,42 @@ test("lost delete response offers only original-operation status and returns foc
     assert.deepEqual(calls.find(call => call.path.endsWith("/status")).input, { operationId: pending.operationId, receiptToken: pending.receiptToken });
     assert.equal(await page.locator("body").textContent().then(text => text.includes(pending.receiptToken)), false);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("wire.saved-artifact-deletion")), null);
+});
+
+test("long saved-object identity remains complete in the scrolling body, not the fixed question", async t => {
+    const named = { ...artifact, label: "Synthetic report identity with a precise date and scope. ".repeat(24) };
+    const pending = preview();
+    const { page, calls } = await setup(t, async endpoint => endpoint.endsWith("/preview") ? pending : { cancelled: true }, named);
+    await page.setViewportSize({ width: 375, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await page.locator("#open").click();
+    const dialog = page.locator(".deletion-dialog");
+    await page.waitForFunction(() => document.querySelector("dialog").dataset.decisionPhase === "confirm");
+    assert.equal(await dialog.getByRole("heading").innerText(), "Delete this report?");
+    assert.equal(await dialog.locator(".decision-object").textContent(), named.label);
+    for (const theme of ["light", "dark"]) for (const forcedColors of ["none", "active"]) {
+        await page.emulateMedia({ forcedColors });
+        await page.evaluate(theme => { document.documentElement.dataset.evidenceTheme = theme; }, theme);
+        const geometry = await dialog.evaluate(node => {
+            const body = node.querySelector(".decision-body"), bounds = node.getBoundingClientRect();
+            body.scrollTop = body.scrollHeight;
+            const heading = node.querySelector(".delete-heading").getBoundingClientRect();
+            const actions = node.querySelector(".delete-actions").getBoundingClientRect();
+            return { scroll: node.scrollTop, bodyScroll: body.scrollTop, bodyHeight: body.clientHeight,
+                questionVisible: heading.y >= bounds.y && heading.bottom <= bounds.bottom,
+                actionsVisible: actions.y >= bounds.y && actions.bottom <= bounds.bottom,
+                overflow: node.scrollWidth - node.clientWidth };
+        });
+        assert.equal(geometry.scroll, 0);
+        assert.ok(geometry.bodyScroll > 0);
+        assert.ok(geometry.bodyHeight > 100);
+        assert.equal(geometry.questionVisible, true);
+        assert.equal(geometry.actionsVisible, true);
+        assert.ok(geometry.overflow <= 1);
+    }
+    await page.keyboard.press("Escape");
+    assert.equal(await dialog.isVisible(), false);
+    assert.equal(calls.filter(value => value.path.endsWith("/confirm")).length, 0);
 });
 
 test("missing counts fail closed and never become zero-count deletion approval", { timeout: 30000 }, async t => {

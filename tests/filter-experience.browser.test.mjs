@@ -50,12 +50,13 @@ async function setup(t, options = {}, source, observeSnapshot = response => resp
 test("filters have one identity, separate refresh/reset jobs, and no collection administration", { timeout: 30000 }, async t => {
     const { page, choose, reads, runtime } = await setup(t);
     assert.equal(await page.locator("#filterHeading [data-lucide-icon=funnel]").count(), 1);
-    assert.equal(await page.locator("#analyzeRefresh #checkActivity").count(), 1);
+    assert.equal(await page.locator("#activityUpdateSlot #checkActivity").count(), 1);
     assert.equal(await page.locator("#appliedFilters #resetView").count(), 1);
     assert.equal(await page.locator("#resetView").getAttribute("aria-label"), "Reset Analyze");
     assert.equal(await page.locator("#activityDeleteShortcut, #activityCollectionLink, #freshSourceSetup, .fresh-links").count(), 0);
     assert.equal(await page.locator("#analyzePopulation #freshHelp").isVisible(), false);
-    assert.equal(await page.locator("#collectionNotice").isVisible(), true, "Paused coverage stays truthful");
+    assert.equal(await page.locator("#collectionNotice").isVisible(), false);
+    assert.match(await page.locator("#activityUpdateToggle").innerText(), /Collection paused/, "Paused state stays with activity updates");
     const before = reads.length;
     await page.locator("#promptAuthorFilter-control").click();
     const popup = page.locator(".select-popup:visible");
@@ -69,7 +70,8 @@ test("filters have one identity, separate refresh/reset jobs, and no collection 
     assert.equal(await page.locator("#outcomeFilter-control").getAttribute("data-filter-active"), "true");
     await page.locator("#resetView").click(); await ready(page);
     assert.equal(await page.locator("#outcomeFilter-control").getAttribute("data-filter-active"), null);
-    await page.locator("#collectionNoticeAction").click(); await ready(page);
+    await page.locator("#activityUpdateToggle").click();
+    await page.locator("#freshSourceSettings").click(); await ready(page);
     assert.match(page.url(), /settings.*section=connection/);
     await navigateSettings(page, "privacy");
     assert.equal(await page.locator("#deleteActivity:visible").count(), 1);

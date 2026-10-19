@@ -116,6 +116,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const requestTiming = createRequestTiming(time, authorship);
     const localSearch = createLocalSearch(), settingsNavigation = createSettingsNavigation(localSearch);
     let compactSettings, settingsSearchSignature, issueRows, deletionUI, recollectionUI, assessmentUI, liveSearchUI;
+    let recollectionNoticeVisible = true, recollectionNoticeKey = "";
     let semanticMembership, semanticQuery = null, semanticComplete = false, semanticBound = false, semanticStatus = "stale";
     let searchOpenedRequest = null, searchTargetInvalid = false;
     const chatCopy = createChatCopy();
@@ -186,12 +187,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let sidebarIdentity = null, sidebarOrigin = null, sidebarAnimation = null, sidebarAnimationFinish = null, sidebarExit = null, requestRenderKey = null, requestInvalidated = false, contextOwner = null;
     let sidebarColumnAnimation = null, sidebarColumnAnchor = null;
     let sidebarReadingFocus = null, cancelSidebarReading = null;
-    let readerSections = null, readerHeaderActions = null;
+    let readerSections = null, timingHeadingObserver = null, cardEntry = null;
+    const readerTextReleases = [];
     function clearReaderSections() {
+        timingHeadingObserver?.disconnect();
+        timingHeadingObserver = null;
+        for (const release of readerTextReleases.splice(0)) release();
         readerSections?.dispose();
         readerSections = null;
-        readerHeaderActions?.remove();
-        readerHeaderActions = null;
+        $("requestContent").classList.remove("tool-activity-log");
+        $("requestContent").style.removeProperty("--reader-timing-inset");
+        $("requestContent").style.removeProperty("--reader-timing-padding");
+        if ($("contextSidebarTitle").hasAttribute("data-interaction-identity")) {
+            $("contextSidebarTitle").removeAttribute("data-interaction-identity");
+            $("contextSidebarTitle").textContent = interactionTitle();
+        }
     }
     let reportSetupReturn = null;
     const savedEntries = new Map();
@@ -220,7 +230,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let periodReturnReading = null;
     const textAccess = createTextAccess(ux, presentation, authorship, metadata);
     const requestContext = createRequestContext();
-    const callInvestigation = createCallInvestigation();
+    const callInvestigation = createCallInvestigation(requestContext.compare);
     let detailOwner = "page";
     let collection, collectionSettings, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
     const sidebar = mountSidebarNavigation(ux);
@@ -242,6 +252,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ? "Read stored activity. No source check will be repeated."
         : collection?.config?.approved ? "Refresh approved local history. Paused collection stays paused." : "Refresh stored activity. No source is approved.");
     ux.tooltip($("refreshBtn"), "Read stored activity. No source check will be repeated.");
+    ux.tooltip($("freshStoredRead"), "Read stored activity and current status without checking source history.");
+    ux.tooltip($("freshRecollect"), () => recollectionUI?.snapshot().phase === "blocked"
+        ? "Review the unavailable recovery receipt. No source history will be read."
+        : recollectionUI?.snapshot().needsReceipt ? "Read the saved recollection result without repeating the operation."
+            : "Preview selected approved history before explicitly confirming a reread.");
+    ux.tooltip($("activityUpdateToggle"), "Open activity updates for approved local history and stored evidence.");
     for (const [id, label] of Object.entries({ clearDates: "Clear dates", clearActivitySearch: "Clear legacy search" })) ux.utility($(id), "close", label);
     ux.utility($("openAnalysisSearch"), "search", "Search this Analyze scope", "Search this view");
     for (const node of document.querySelectorAll("[data-chart]")) ux.tooltip(node, () =>
@@ -405,6 +421,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!sidebarIdentity || contextOwner?.identity === "report-setup" || cancelSidebarReading) return;
         for (const node of contextBody.querySelectorAll("details[data-disclosure-key]")) presentation.setOpen(node.dataset.disclosureKey, node.open);
         sidebarPositions.set(sidebarIdentity, { top: contextBody.scrollTop, revision: state?.revision, basis: JSON.stringify(state?.assessment?.basis),
+            identifyInteraction: $("contextSidebarTitle").hasAttribute("data-interaction-identity"),
             focus: sidebarReadingFocus,
             keys: [...contextBody.querySelectorAll("[data-disclosure-key],.full-text[data-view-key]")].map(node => node.dataset.disclosureKey || node.dataset.viewKey) });
     }
@@ -456,10 +473,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         } finally { main.style.removeProperty("width"); }
     }
+    function interactionTitle() {
+        if (route.call === undefined) return "Interaction";
+        return ({ tool: "Call in context", "reported-api": "API result in context", http: "HTTP record in context",
+            "direct-request": "Request site in context", "recorded-http": "Request site in context",
+            "code-reference": "Code reference in context" })[route.layer || "tool"] || "Record in context";
+    }
     function showInteractionSidebar() {
         ownSidebarHistory();
         if (contextOwner?.identity === "report-setup") rememberReportSetup(true);
-        showContextSidebar({ identity: requestIdentity(), title: route.call ? "Call in context" : "Interaction",
+        showContextSidebar({ identity: requestIdentity(), title: interactionTitle(),
             body: $("requestView"), anchor: sidebarAnchor() || document.activeElement?.closest("[data-view-key]"),
             requestClose: closeContextSidebar });
         updateActiveCard();
@@ -539,11 +562,46 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             node.closest(".request-row").toggleAttribute("data-detail-active", active);
         }
     }
+    function timingHeading(target) {
+        return $("requestContent").classList.contains("tool-activity-log")
+            ? target?.closest('[data-reader-section="activity"]')?.querySelector(":scope > .reader-section-heading") : null;
+    }
+    function timingInset(target) { return 16 + (timingHeading(target)?.getBoundingClientRect().height || 0); }
+    function identifyInteraction() {
+        const scenario = state.scenarios.find(item => item.scenarioId === route.request);
+        $("contextSidebarTitle").textContent = textAccess.excerpt(scenario?.userPrompt, 80);
+        $("contextSidebarTitle").setAttribute("data-interaction-identity", "");
+    }
     function focusSidebar() {
         cancelSidebarReading?.();
         const saved = sidebarPositions.get(sidebarIdentity);
         const valid = () => saved && saved.revision === state?.revision && saved.basis === JSON.stringify(state?.assessment?.basis);
+        const entry = cardEntry;
+        if (!valid() && entry?.pending && route.call === undefined && entry.target.request === route.request
+            && entry.navigation === navigationGeneration && entry.intent === readingIntent) {
+            entry.pending = false;
+            if (entry.revision === state.revision) {
+                const resolved = callInvestigation.resolve(state.requestActivity, state.scenarios, entry.target, state.revision);
+                if (resolved.status !== "available") { navigate(entry.target, true); return; }
+                const target = $("requestContent").querySelector(`[data-action-id="${CSS.escape(resolved.actionId)}"]`);
+                if (!target) { navigate(entry.target, true); return; }
+                if (resolved.row.outcome === "failure" && rowsFor(route.request).some(row => row.id === resolved.row.id && row.outcome === "failure")) {
+                    const reading = target.querySelector(".call-heading") || target;
+                    const box = reading.getBoundingClientRect(), viewport = contextBody.getBoundingClientRect();
+                    const heading = timingHeading(target)?.getBoundingClientRect();
+                    const top = Math.max(viewport.top + 4, heading ? heading.bottom + 4 : viewport.top + 4);
+                    const needsScroll = target.getBoundingClientRect().top < top || box.bottom > viewport.bottom - 4;
+                    if (needsScroll) identifyInteraction();
+                    target.tabIndex = -1;
+                    target.focus({ preventScroll: true });
+                    if (needsScroll) reading.scrollIntoView({ block: "nearest" });
+                    return;
+                }
+            }
+        }
         if (valid()) {
+            cardEntry = null;
+            if (saved.identifyInteraction) identifyInteraction();
             const identity = sidebarIdentity, navigation = navigationGeneration, intent = readingIntent;
             let frame;
             const stop = () => {
@@ -574,7 +632,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const anchor = $("selectedCall") || $("unavailableCall") || $("selectedContext")?.closest("[data-reader-section]") || $("selectedContext");
         readerSections?.reveal(anchor);
-        contextBody.scrollTop = anchor ? contextBody.scrollTop + anchor.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - 16 : 0;
+        contextBody.scrollTop = anchor ? contextBody.scrollTop + anchor.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - timingInset(anchor) : 0;
         const target = route.call ? $("selectedCall") || $("unavailableCall") : $("contextSidebarTitle");
         (target || $("contextSidebarTitle")).focus({ preventScroll: true });
         if (route.call) revealSessionResult();
@@ -868,19 +926,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let refreshHelpVisibility = null;
     function renderSettingsRefresh(connection, model) {
         const host = $("freshActivity"), help = $("freshHelp");
+        const analyze = route.view === "analyze", labelled = connection || analyze;
         const storedOnly = refreshUsesStoredRecovery(model);
         for (const [id, originalText] of [["checkActivity", "Refresh"], ["refreshBtn", "Read stored activity"]]) {
             const control = $(id);
-            const text = connection && id === "checkActivity" && (storedOnly || !collection?.config?.approved) ? "Read stored activity" : originalText;
+            const text = labelled && id === "checkActivity" ? storedOnly || !collection?.config?.approved
+                ? "Read stored activity" : analyze ? "Check local history" : originalText : originalText;
             let label = control.querySelector(":scope > .settings-action-label");
-            if (connection && !label) {
+            if (labelled && !label) {
                 label = el("span", "settings-action-label", text);
                 control.append(label);
             }
-            if (label) { setText(label, text); label.hidden = !connection; }
+            if (label) { setText(label, text); label.hidden = !labelled; }
             control.setAttribute("aria-label", text);
-            control.classList.toggle("icon-only", !connection);
-            control.classList.toggle("quiet", !connection);
+            control.classList.toggle("icon-only", !labelled);
+            control.classList.toggle("quiet", !labelled);
         }
         function checkedScope(check) {
             const checked = Number.isSafeInteger(check.sourcesChecked) && check.sourcesChecked >= 0;
@@ -1309,13 +1369,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     recollectionUI = assessmentFactories.mountRecollection({ api, time, timeContext: () => viewerTime, search: localSearch, ux, searchFields,
+        describe: assessmentFactories.describeRecollection,
+        canAct: recollectionGuard,
+        onNotice: message => announce(message, "error"),
+        onChanged: current => {
+            const key = `${current.phase}:${current.operationId || ""}`;
+            if (["pending", "uncertain"].includes(current.phase) || ["complete", "not-started"].includes(current.phase) && key !== recollectionNoticeKey) recollectionNoticeVisible = true;
+            recollectionNoticeKey = key;
+            renderFreshActivity();
+        },
         pageSources: (host, sources, renderItem, reset) => {
             if (reset) presentation.setPage("recollection-chats", 0);
             pagedList(host, sources, { key: "recollection-chats", size: pageSize, noun: "chats", renderItem });
         },
         onCommitted: async () => {
             clearDeletedDraft("changed by explicit recollection");
-            return load();
+            return load({ background: true });
         },
     });
     let ignoringStaleContextStatus = false;
@@ -1366,6 +1435,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         body.replaceChildren();
         delete body.dataset.recordedContext;
     }
+    function restorePeriodComparisonReading() {
+        const saved = periodReturnReading;
+        if (!saved) return;
+        if (saved.navigation !== navigationGeneration || saved.intent !== readingIntent
+            || route.view !== "analyze" || route.compare !== "periods") { periodReturnReading = null; return; }
+        if (periodComparisonUI.consumer()) { restoreReading(saved.position); periodReturnReading = null; }
+    }
     const periodComparisonUI = assessmentFactories.periodComparison.mount({
         root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, search: localSearch, categories, results,
         projection: createActivityProjection(time, categories, resultKeys),
@@ -1382,6 +1458,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onSearch: value => { $("activitySearch").value = value; $("activitySearch").dispatchEvent(new Event("input")); },
         openSearch: () => liveSearchUI.analysisScope(),
         syncFilters: () => selectControls?.sync(),
+        onAccepted: restorePeriodComparisonReading,
         createReport: function createPeriodReport(value, semanticSelection) {
             if (reportJourney?.snapshot().saveUnconfirmed) { announce(reportJourney.reason(1), "stale"); return; }
             if (exportWriting || isLoading || isStale) return;
@@ -1582,7 +1659,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function sessionRoute(sessionId, result) {
         return { ...filterState.scope(route, sessionJourney.open(route, sessionId, result)), search,
-            mode: result ? "calls" : route.mode, callSort: route.callSort,
             returnToSessions: sessionJourney.returnRoute({ ...route, search }) };
     }
     function sessionSource(sessionId = route.session || state?.scenarios.find(s => s.scenarioId === route.request)?.sourceSessionId) {
@@ -1632,12 +1708,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return scenario?.toolCalls?.find(tool => tool.toolCallId ? tool.toolCallId === row.toolCallId
             : (row.parentCallId || row.id) === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
     }
-    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, rows } = {}) {
+    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows } = {}) {
         const node = el("div", "recorded-results");
         node.dataset.resultLayer = layer;
         node.setAttribute("role", "group");
         node.setAttribute("aria-label", scope);
-        const entries = rows ? results.explainedEntries(layer, rows, sourceCallFor) : results.entries(layer, summary);
+        const entries = rows ? results.explainedEntries(layer, rows, sourceCallFor, { concise: singleRecord }) : results.entries(layer, summary);
         if (!entries) {
             const unavailable = el("span", "result-unavailable");
             unavailable.append(metadata.item(`${label || results.unit(layer, 2)}: result counts unavailable`, explanation ? { help: explanation } : {}));
@@ -1650,7 +1726,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const values = heading && !compact ? el("div", "result-values") : node;
         if (compact) {
             node.classList.add("result-inline");
-            const described = rows ? entries.map(entry => `${count(entry.count)} ${entry.label}${entry.reason ? ": " + entry.reason : ""}`).join("; ") : "";
+            const described = rows && !singleRecord ? entries.map(entry => `${count(entry.count)} ${entry.label}${entry.reason ? ": " + entry.reason : ""}`).join("; ") : "";
             node.setAttribute("aria-label", `${heading || scope}: ${results.countLabel(layer, summary.count, total)}${described ? ". " + described : ""}`);
         } else if (heading) {
             node.classList.add("result-with-heading");
@@ -1664,11 +1740,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const item = actionable ? routeLink("", sessionRoute(sessionId, entry.key), classes + " result-link") : el("span", classes);
             item.dataset.outcome = entry.key;
             item.dataset.count = entry.count;
-            item.append(ux.icon(`${entry.icon}-compact`), el("span", "recorded-result-label", `${count(entry.count)} ${entry.label}`));
+            item.append(ux.icon(`${entry.icon}-compact`), el("span", "recorded-result-label",
+                `${singleRecord && entry.count === 1 ? "" : count(entry.count) + " "}${singleRecord && summary.count === 1 && recordLabel ? recordLabel : entry.label}`));
             if (entry.reason) {
                 item.classList.add("result-explained");
                 const words = el("span", "result-explanation");
-                words.append(el("span", "result-cause", entry.reason), document.createTextNode(" \u00b7 "), item.lastElementChild);
+                const recital = item.lastElementChild;
+                words.append(el("span", "result-cause", entry.reason));
+                if (singleRecord && entry.reasonOnly) recital.remove();
+                else words.append(document.createTextNode(" \u00b7 "), recital);
                 item.append(words);
             }
             if (actionable) {
@@ -1798,13 +1878,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function returnedDetails(call, row, apiRows, selectedId) {
         if (!apiRows?.length) return null;
-        const paths = results.callPaths(call);
-        if (!selectedId && apiRows.length === 1 && paths.length === 1 && results.returnedPath(call, apiRows[0]).path === paths[0]) return null;
         const renderEntry = entry => {
             const item = viewKey(el("div", "api-result-entry"), "returned:" + entry.id);
             item.dataset.resultId = entry.id;
-            item.append(resultLine("reported-api", results.summarize([entry]), { heading: "Returned API result" }),
+            const retained = results.returnedResult(call, entry);
+            const code = retained?.errorCode;
+            const status = entry.status != null ? `Tool-reported HTTP ${entry.status}` : code ? "Tool-reported error" : null;
+            const recordLabel = (["partial", "unknown"].includes(entry.outcome)
+                ? results.labels("reported-api")[entry.outcome] + (status ? ": " + status : "")
+                : status || results.labels("reported-api")[entry.outcome]) + (code ? ": " + code : "");
+            item.append(resultLine("reported-api", results.summarize([entry]), {
+                heading: "Returned API result", compactSingle: true, singleRecord: true, recordLabel }),
                 actionFields(call, entry, { includeTool: false, returned: true }));
+            const duration = el("p", "reader-api-duration");
+            duration.append("API result duration: ", durationValue(callInvestigation.duration(retained, "reported-api")));
+            item.append(duration);
+            if (retained?.evidenceLevel) item.append(el("p", "context-help-note", "Result attribution: " + retained.evidenceLevel));
             if (entry.id === selectedId) {
                 item.id = "selectedCall";
                 item.tabIndex = -1;
@@ -1888,6 +1977,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return false;
         }
         const request = ++generation;
+        const recollectionReceipt = recollectionUI?.snapshot().result?.operationId;
         if (!background || fresh.snapshot().phase === "waiting") fresh.retryApply();
         syncTime();
         const config = query();
@@ -1954,6 +2044,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else collectionUnavailable("Collection status unavailable from this connection. Reconnect to the maintained runtime.");
             render();
             fresh.applied(state.revision, next.collection?.configVersion, analytics.rows);
+            recollectionUI?.viewApplied(recollectionReceipt);
             renderFreshActivity();
             restoreReading(reading);
             if (!mounted) revealSessionResult();
@@ -2008,7 +2099,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         }
     }
-    function applyRoute(next, { keepFocus = false, restorePosition = false, reset = false, paging = null, reportSetup = false } = {}) {
+    function applyRoute(next, { keepFocus = false, restorePosition = false, reset = false, paging = null, reportSetup = false, cardTarget = null } = {}) {
         if (exportWriting || collectionSettings?.isBusy()) {
             rememberRoute(route, true);
             announce("Wait for the current local save to finish before leaving this view.");
@@ -2016,6 +2107,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const navigation = ++navigationGeneration;
         const intent = readingIntent;
+        cardEntry = cardTarget && next.view === "request" && next.call === undefined && next.request === cardTarget.target.request
+            ? { ...cardTarget, navigation, intent, pending: true } : null;
         if (sidebarExit) {
             if (next.view === "request" && sidebarExit.request
                 || next.view === "reports" && next.inspect && !next.bundle && !next.task
@@ -2050,6 +2143,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && (route.view === "request" || readingKey(route) === readingKey(sessionJourney.underlying(next)))
             && JSON.stringify(applied) === JSON.stringify(query(next))) {
             if (route.view === "request" && requestIdentity(route) === requestIdentity(next)) {
+                cardEntry = null;
                 $("contextSidebarTitle").focus({ preventScroll: true }); return true;
             }
             if (route.view !== "request") readingPositions.set(readingKey(route), captureReading());
@@ -2291,12 +2385,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const reviewing = report?.hasPreview || report?.phase === "scanning";
         const editing = collectionSettings?.hasDraft() || collectionSettings?.isBusy();
         const blocked = isLoading || collectionBusy || exportWriting || reviewing || editing || ["checking", "applying"].includes(fresh.snapshot().phase);
-        for (const control of [$("refreshBtn"), $("collectionRetry"), ...document.querySelectorAll("[data-stored-refresh-retry]")]) control.disabled = blocked;
+        for (const control of [$("refreshBtn"), $("freshStoredRead"), $("collectionRetry"), ...document.querySelectorAll("[data-stored-refresh-retry]")]) control.disabled = blocked;
         $("checkActivity").disabled = blocked || fresh.busy() || collectionSettings?.canRefresh() === false;
-        ux.explainDisabled($("checkActivity"), editing ? "Save or cancel your Settings edits before refreshing."
+        const reason = editing ? "Save or cancel your Settings edits before refreshing."
             : reviewing ? "Finish this report, or change its choices in Setup, before refreshing."
             : collectionSettings?.canRefresh() === false ? collectionSettings.explain("collectNow")
-            : "Wait for the current activity update to finish.", { compact: true });
+            : "Wait for the current activity update to finish.";
+        ux.explainDisabled($("checkActivity"), reason, { compact: true });
+        ux.explainDisabled($("freshStoredRead"), reason, { compact: true });
         const model = fresh.snapshot(), localRecovery = model.recovery === "stored" || model.phase === "error" && !model.sourceFailure;
         const globalRecovery = !$("message").hidden && $("message").querySelector("[data-stored-refresh-retry]");
         const collectionRecovery = collectionReadError && $("collectionRetry").parentElement.checkVisibility();
@@ -2306,6 +2402,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("checkActivity").hidden = Boolean(globalRecovery) || !$("storedRefresh").hidden
             || !$("collectionRetry").hidden && $("collectionRetry").parentElement.checkVisibility();
         $("checkActivity").closest(".ux-disabled-help").hidden = $("checkActivity").hidden;
+        $("freshStoredRead").hidden = route.view !== "analyze" || !collection?.config?.approved
+            || Boolean(globalRecovery) || $("checkActivity").hidden || Boolean(model.recovery)
+            || model.phase === "error" || Boolean(collectionReadError) || isStale && !isLoading;
+        $("freshStoredRead").closest(".ux-disabled-help").hidden = $("freshStoredRead").hidden;
+        ux.pending($("freshStoredRead"), !model.check && model.phase === "applying");
         setText($("storedRefreshHelp"), reviewing
             ? "Finish this report, or change its choices in Setup, before refreshing."
             : editing ? "Save or cancel your Settings edits before refreshing."
@@ -2313,10 +2414,60 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : "Read stored activity and current status.");
         $("storedRefreshHelp").hidden = !reviewing && !editing && !exportWriting;
         renderDeferredReviewNotice();
+        renderRecollectionEntry();
+    }
+    function recollectionGuard(action) {
+        const report = reportJourney?.snapshot();
+        if (collectionSettings?.hasDraft() || collectionSettings?.isBusy()) return "Save or cancel your Settings edits before reading history again.";
+        if (report?.hasPreview || report?.phase === "scanning" || $("overlay").open) return "Finish this report, or change its choices in Setup, before updating activity.";
+        if (exportWriting || isLoading || collectionBusy || fresh.busy()) return "Wait for the current activity update or local save to finish.";
+        if (action === "receipt" || action === "view") return "";
+        if (!collection?.config?.approved) return "Approve a local source in Settings before reading its history again.";
+        if (isStale || collectionReadError || collectionSettings?.canRefresh() === false) return "Read the current stored activity and source status before previewing history again.";
+        return "";
+    }
+    function renderRecollectionEntry() {
+        const current = recollectionUI?.snapshot();
+        const reason = recollectionGuard(current?.needsReceipt ? "receipt" : "open");
+        const recoveryLabel = current?.phase === "blocked" ? "Review recollection recovery" : "Check recollection result";
+        const control = $("freshRecollect");
+        control.hidden = route.view !== "analyze";
+        control.disabled = Boolean(reason) || current?.phase === "pending";
+        setText(control.querySelector("span"), current?.needsReceipt ? recoveryLabel : "Read history again...");
+        ux.explainDisabled(control, reason || "Wait for the current history operation to finish.", { compact: true });
+        control.closest(".ux-disabled-help").hidden = control.hidden;
+        $("recollectActivity").disabled = Boolean(reason) || current?.phase === "pending";
+        setText($("recollectActivity"), current?.needsReceipt ? recoveryLabel : "Choose chats");
+        ux.explainDisabled($("recollectActivity"), reason || "Wait for the current history operation to finish.", { compact: true });
+        const notice = $("recollectionUpdateStatus");
+        const message = ["complete", "not-started"].includes(current?.phase) && !recollectionNoticeVisible ? "" : current?.message || "";
+        setText(notice, message + (current?.phase === "complete" && !current.viewNeedsRead
+            ? " Current filters are kept; reread records may be outside them." : ""));
+        notice.hidden = route.view !== "analyze" || !message;
+    }
+    function renderActivityUpdateEntry() {
+        const model = fresh.snapshot();
+        const entry = fresh.entry({ approved: collection?.config?.approved, enabled: collection?.config?.enabled,
+            checked: collection?.lastCheckedAt ? freshness(collection.lastCheckedAt) : "",
+            readError: Boolean(collectionReadError), stale: isStale && !isLoading, collectionState: collection?.state });
+        const reread = recollectionUI?.snapshot();
+        const expanded = presentation.isOpen("activity-update", entry.attention || reread?.needsReceipt);
+        $("freshActivity").dataset.expanded = String(route.view !== "analyze" || expanded);
+        const label = !entry.attention && reread?.phase === "pending" ? "Reading selected history..."
+            : !entry.attention && reread?.phase === "blocked" ? "Recollection recovery unavailable"
+            : !entry.attention && reread?.needsReceipt ? "History reread unconfirmed"
+            : !entry.attention && reread?.phase === "not-started" && recollectionNoticeVisible ? "No history reread committed"
+            : !entry.attention && reread?.phase === "complete" && recollectionNoticeVisible ? "History reread completed" : entry.label;
+        setText($("activityUpdateLabel"), label);
+        $("activityUpdateToggle").setAttribute("aria-expanded", String(expanded));
+        $("activityUpdateToggle").setAttribute("aria-label", `Activity updates: ${label}`);
+        ux.pending($("activityUpdateToggle"), entry.pending || reread?.phase === "pending");
+        return expanded;
     }
     async function refreshStoredData(event) {
         renderStoredRefresh();
         if ($("refreshBtn").disabled || ["checking", "applying"].includes(fresh.snapshot().phase)) return;
+        if (!recollectionUI?.snapshot().viewNeedsRead) recollectionNoticeVisible = false;
         const initiator = document.activeElement === event?.currentTarget ? event.currentTarget : null;
         const intent = readingIntent, navigation = navigationGeneration, context = route;
         fresh.retryApply();
@@ -2349,15 +2500,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         // An unrelated lastCheck cannot confirm or unlock a source request whose response was lost.
         renderFreshActivity();
         if (loaded && request === generation && navigation === navigationGeneration && context === route
-            && intent === readingIntent && initiator?.isConnected
+            && intent === readingIntent && initiator
             && (document.activeElement === document.body || document.activeElement === initiator)) {
             const fallback = $("checkActivity").checkVisibility() ? $("checkActivity")
-                : $("freshAwayLink").checkVisibility() ? $("freshAwayLink") : $("pageTitle");
-            ux.restoreFocus(initiator.checkVisibility() && !initiator.disabled ? initiator : fallback);
+                : $("activityUpdateToggle").checkVisibility() ? $("activityUpdateToggle")
+                    : $("freshAwayLink").checkVisibility() ? $("freshAwayLink") : $("pageTitle");
+            ux.restoreFocus(initiator.isConnected && initiator.checkVisibility() && !initiator.disabled ? initiator : fallback);
         }
         return loaded;
     }
     function renderNavigation() {
+        const finishRecoveryPresentation = assessmentUI?.prepareRecoveryPresentation();
         $("wireAnalysisSearchNotice").hidden = semanticQuery === null || route.view !== "analyze";
         const active = route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
         document.querySelectorAll("[data-nav]").forEach((node) => {
@@ -2374,12 +2527,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("filters").hidden = configurationOrStatus || route.view === "request" || route.view === "reports";
         $("filterHeading").hidden = $("filters").hidden;
         $("appliedFilters").hidden = $("filters").hidden;
-        $("analyzeRefresh").hidden = route.view !== "analyze";
         $("filterChips").hidden = configurationOrStatus || route.view === "reports" || route.view === "request";
         $("coverage").hidden = configurationOrStatus || route.view === "request";
         $("coverageNotice").hidden = configurationOrStatus;
         $("settingsDraftNotice").hidden = settings || !collectionSettings?.hasDraft();
         renderSettingsNavigation();
+        finishRecoveryPresentation?.();
         syncLocalSearchFields();
         renderCollectionNotice();
         renderFreshActivity();
@@ -2638,8 +2791,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function renderPeriodFeedback() {
-        $("periodFeedback").hidden = route.view !== "analyze" || semanticQuery !== null && !semanticBound;
+        $("periodFeedback").hidden = route.view !== "analyze";
         if ($("periodFeedback").hidden) return;
+        const unbound = semanticQuery !== null && !semanticBound;
+        $("periodResult").hidden = unbound;
+        $("periodHint").hidden = unbound;
+        $("periodActions").hidden = unbound;
+        if (unbound) { $("periodCoverage").hidden = true; return; }
         const rows = selectionRows();
         const model = periodFlow({ rows, filters: applied.filters, coverage: state.collection?.config?.approved ? state.collection.checkedWindow : state.coverage, timeContext: applied.timeContext, session: Boolean(route.session), stale: isStale, layer: applied.layer, unit: results.unit(applied.layer, rows.length) });
         $("periodFeedback").classList.add("home-period-summary");
@@ -2926,7 +3084,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 frame = requestAnimationFrame(() => {
                     if (navigation !== navigationGeneration || intent !== readingIntent
                         || !target.isConnected || document.activeElement !== target) { stop(); return; }
-                    contextBody.scrollTop += target.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - 16;
+                    contextBody.scrollTop += target.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - timingInset(target);
                     if (!body.querySelector('[aria-busy="true"]')) stop();
                 });
             };
@@ -2941,9 +3099,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             schedule();
             return true;
         }
-        if (route.view !== "analyze" || route.mode !== "calls") return false;
-        revealResults();
-        return true;
+        return false;
     }
     function sessionScopeText() {
         const coverage = state.sessionAnalysis?.coverage;
@@ -2997,32 +3153,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const scenarios = currentViewScenarios();
         scenarios.sort((a, b) => String(b.userPrompt?.sourceTimestamp || b.capturedAt || "").localeCompare(String(a.userPrompt?.sourceTimestamp || a.capturedAt || "")));
         const host = $("activityList");
-        const calls = route.mode === "calls";
-        const items = calls ? callInvestigation.order(selectionRows(), route.callSort, applied.layer)
-            : presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId);
-        $("callSortControls").hidden = !calls;
-        $("callSort").value = route.callSort || "slowest";
-        $("callSortLabel").textContent = applied.layer === "tool" ? "Tool latency" : "Duration";
-        selectControls?.sync();
-        const timed = items.filter(row => callInvestigation.duration(row, applied.layer) !== null).length;
-        const unavailable = items.length - timed;
-        $("callTimingScope").textContent = unavailable ? `${count(unavailable)} unavailable; listed last.` : "";
-        $("callTimingScope").hidden = unavailable === 0;
-        const noun = calls ? results.unit(applied.layer, 2) : applied.layer === "http" ? "record groups" : "interactions";
-        $("activityTitle").textContent = calls ? applied.layer === "tool" ? "Calls" : results.unit(applied.layer, 2) : applied.layer === "http" ? "Record groups" : "Interactions";
-        for (const node of document.querySelectorAll("[data-analyze-mode]")) {
-            const active = calls === (node.dataset.analyzeMode === "calls");
-            node.href = routeUrl(routeFor("analyze", { mode: node.dataset.analyzeMode === "calls" ? "calls" : undefined, page: undefined }));
-            if (active) node.setAttribute("aria-current", "true");
-            else node.removeAttribute("aria-current");
-        }
+        const orphaned = selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId));
+        const items = [...presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId)
+            .map(scenario => ({ scenario })), ...orphaned.map(record => ({ record }))];
+        const noun = orphaned.length ? "activity entries" : applied.layer === "http" ? "record groups" : "interactions";
+        $("activityTitle").textContent = "Activity";
         $("activityView").dataset.revision = String(state.revision);
-        const unlinked = selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId)).length;
+        const unlinked = orphaned.length;
         const groups = `${count(scenarios.length)} ${applied.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
-        $("activityListSummary").textContent = (calls
-            ? `${count(selectionRows().length)} ${results.unit(applied.layer, selectionRows().length)} from ${groups}.`
-            : `${groups} with ${count(selectionRows().length)} matching ${results.unit(applied.layer, selectionRows().length)}.`)
-            + (unlinked ? ` ${count(unlinked)} records have no retained interaction; they remain available in Calls.` : "");
+        $("activityListSummary").textContent = `${groups} with ${count(selectionRows().length)} matching ${results.unit(applied.layer, selectionRows().length)}.`
+            + (unlinked ? ` ${count(unlinked)} records have no retained interaction and are listed separately below.` : "");
         $("activityListSummary").hidden = selectionRows().length === 0;
         host.replaceChildren();
         activityPage = Math.min(activityPage, Math.max(0, Math.ceil(items.length / pageSize) - 1));
@@ -3034,7 +3174,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         : "Change a filter or use Reset Analyze. Source approval and collection settings stay unchanged."));
         }
         for (const item of items.slice(activityPage * pageSize, (activityPage + 1) * pageSize)) {
-            host.append(calls ? matchingAction(item) : requestCard(item));
+            host.append(item.scenario ? requestCard(item.scenario) : matchingAction(item.record));
         }
         const pager = viewKey($("activityPager"), "pager:activity");
         pager.hidden = !items.length;
@@ -3060,64 +3200,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function matchingAction(row) {
-        const scenario = state.scenarios.find(s => s.scenarioId === row.scenarioId);
         const card = viewKey(el("article", "matched-action activity-card"), "action:" + row.id);
         card.dataset.actionId = row.id;
         card.dataset.sessionId = row.sourceSessionId;
-        const call = sourceCallFor(row);
         const recordedLabel = applied.layer === "code-reference" ? "Reference recorded" : applied.layer === "reported-api" ? "Parent call recorded"
             : ["direct-request", "recorded-http"].includes(applied.layer) ? "Request site recorded" : "Action recorded";
-        if (scenario) card.append(textAccess.render(scenario.userPrompt, { key: "action:" + row.id, originKind: authorship.originKind(scenario), compactProvenance: true, inlinePreview: true,
-            navigationNode: link(applied.layer === "tool" ? "Open exact call in context" : "Open exact record in context",
-                "request", { request: scenario.scenarioId, call: row.id,
-                    callRevision: applied.layer === "reported-api" ? String(state.revision) : undefined }, "request-link text-link"),
-        }));
-        else card.append(el("p", "muted", "Full request details were not retained."));
-        const composition = el("div", "card-details"), activity = el("div", "card-activity");
-        const identities = el("dl", "activity-card-facts call-identity-facts"), details = el("dl", "activity-card-facts");
-        identities.append(cardFact("Tool", cardTools([row], false)));
-        let fields;
-        if (["tool", "reported-api"].includes(applied.layer)) fields = actionFields(call, row, { includeTool: false, returned: applied.layer === "reported-api" });
-        else {
-            fields = el("dl", "action-fields");
-            fields.append(el("dt", "", "Service"), serviceHeading("dd", row.workload));
-            fields.lastElementChild.classList.add("action-service");
-            const graph = scenario?.graphActivities?.find(item => item.activityId === row.activityId);
-            const http = scenario?.httpRecords?.find(item => item.recordId === row.recordId);
-            pathField(fields, applied.layer === "code-reference" ? "Referenced API path" : "API path",
-                results.pathText(graph?.endpoint ?? http?.responsePath ?? http?.path ?? http?.requestedPath ?? http?.requestShape?.path));
-        }
-        for (const term of [...fields.querySelectorAll(":scope > dt")]) {
-            const value = term.nextElementSibling, group = el("div");
-            term.textContent = cardKey(term.textContent);
-            group.append(term, value);
-            (value.classList.contains("action-service") ? identities : details).append(group);
-        }
-        const measured = callInvestigation.duration(row, applied.layer);
-        details.append(cardFact(applied.layer === "tool" ? "Tool latency" : applied.layer === "reported-api" ? "API result duration" : "Record duration",
-            durationValue(measured)),
-        cardFact(recordedLabel, time.formatMoment(row.startedAt, applied.timeContext)));
-        if (analytics.serviceInvolvement?.selection.contextOnlyIds.includes(row.id)) details.append(cardFact("Service scope",
-            el("span", "service-context-label", "Missing-service context, not a known match to the selected service.")));
-        const outcome = resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), pillsOnly: true, rows: [row] });
-        outcome.classList.add("card-outcomes");
-        activity.append(identities, outcome, details);
-        if (applied.layer !== "tool" && ["failure", "transport"].includes(row.outcome)) {
-            const code = applied.layer === "reported-api" ? results.returnedResult(call, row)?.errorCode : null;
-            const reason = applied.layer === "http" && row.outcome === "transport" ? "Connection failed; no HTTP response was recorded."
-                : row.status ? `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}${code ? ": " + code : ""}. Response body was not retained.`
-                    : code ? "Tool-reported error: " + code : "Failure reason unavailable.";
-            activity.append(el("p", "card-result-note action-error", reason));
-        } else if (row.status) {
-            activity.append(el("p", "card-result-note", `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}`));
-        }
-        composition.append(activity);
-        if (scenario) {
-            const context = el("dl", "activity-card-facts card-context");
-            appendCardSource(context, scenario, { callContext: true });
-            composition.append(context);
-        }
-        card.append(composition);
+        card.append(el("p", "", row.tool || results.unit(applied.layer, 1)),
+            el("p", "muted", "The owning interaction was not retained."),
+            resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), pillsOnly: true }));
+        const details = el("dl", "activity-card-facts");
+        if (row.status != null) details.append(cardFact(applied.layer === "reported-api" ? "Tool-reported HTTP" : "Recorded HTTP", String(row.status)));
+        if (["tool", "reported-api", "http"].includes(applied.layer)) details.append(cardFact(applied.layer === "tool" ? "Tool latency"
+            : applied.layer === "reported-api" ? "API result duration" : "Record duration", durationValue(callInvestigation.duration(row, applied.layer))));
+        details.append(cardFact(recordedLabel, time.formatMoment(row.startedAt, applied.timeContext)));
+        card.append(details);
         return card;
     }
     function cardKey(label) {
@@ -3239,15 +3335,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const author = el("span", "request-card-author", actor === "unknown" ? "Author unverified" : authorship.label(scenario.userPrompt));
         author.dataset.promptActor = actor;
         prompt.prepend(author, document.createTextNode(": "));
-        const facts = interactionSummary(rowsFor(scenario.scenarioId), applied.layer, "Matching this view");
+        const facts = resultLine(applied.layer, results.summarize(rowsFor(scenario.scenarioId)), { scope: "Matching this view", pillsOnly: true });
         facts.classList.add("request-card-summary");
-        facts.append(el("span", "request-card-time", requestTiming.entry(scenario, applied.timeContext).value));
+        const moment = requestTiming.entry(scenario, applied.timeContext);
+        facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
         action.append(prompt, facts);
         action.addEventListener("click", event => {
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             if (!window.getSelection()?.isCollapsed && action.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
             event.preventDefault();
-            go("request", { request: scenario.scenarioId });
+            const target = routeFor("request", { request: scenario.scenarioId });
+            const failure = underlyingRoute().view === "analyze" && !isLoading && !isStale
+                ? callInvestigation.firstFailure(state.requestActivity, state.scenarios, rowsFor(scenario.scenarioId),
+                    { ...target, layer: applied.layer }, state.revision) : null;
+            navigate(target, false, { cardTarget: failure ? { target: failure, revision: state.revision } : null });
         });
         row.append(action);
         return row;
@@ -3293,7 +3394,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         viewKey(body, detailOwner);
         if (target.status === "unavailable") {
             const notice = empty("This exact record is unavailable", target.reason === "snapshot-changed"
-                ? "This API-result link has no matching snapshot revision. Returned-entry identities are not stable across stored revisions. No other entry was substituted. Return to Calls and reopen the result from the current snapshot."
+                ? "This API-result link has no matching snapshot revision. Returned-entry identities are not stable across stored revisions. No other entry was substituted. Return to Activity and reopen the result from the current snapshot."
                 : "The selected record or its recorded parent is no longer available in this interaction. No nearby action was substituted. Return to results to choose another record.");
             notice.id = "unavailableCall";
             notice.tabIndex = -1;
@@ -3309,32 +3410,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : context.groups.length > 1 || context.messages.some(message => message.kind === "follow-up") ? "Linked messages may be separate work; this is not the whole chat."
                 : "Saved messages only; unsaved parts of the conversation may be missing.");
         const currentReader = () => route.view === "request" && requestRenderKey === renderKey && !requestInvalidated;
-        const headerActions = el("div", "reader-header-actions");
-        headerActions.setAttribute("role", "group");
-        headerActions.setAttribute("aria-label", "Section visibility");
-        let sections;
-        const collapse = button("", () => sections.setAll(false)), expand = button("", () => sections.setAll(true));
-        ux.utility(collapse, "collapse-sections", "Collapse all sections", "Collapse all");
-        ux.utility(expand, "expand-sections", "Expand all sections", "Expand all");
-        headerActions.append(collapse, expand);
-        $("closeContextSidebar").before(headerActions);
-        readerHeaderActions = headerActions;
-        ux.explainDisabled(collapse, "All sections are collapsed.", { compact: true });
-        ux.explainDisabled(expand, "All sections are expanded.", { compact: true });
-        sections = assessmentFactories.readerSections({
+        const sections = assessmentFactories.readerSections({
             root: body, presentation, ux, isCurrent: currentReader,
-            onChange: value => {
-                const focused = document.activeElement;
-                collapse.disabled = !value.canCollapse;
-                expand.disabled = !value.canExpand;
-                if (focused === collapse && collapse.disabled && !expand.disabled) ux.restoreFocus(expand);
-                else if (focused === expand && expand.disabled && !collapse.disabled) ux.restoreFocus(collapse);
-            },
         });
         readerSections = sections;
         const sectionKey = name => JSON.stringify(["reader", route.request, name]);
-        const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + route.request });
-        const activitySection = sections.add("activity", "Recorded activity", { key: sectionKey("activity") });
+        const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + route.request, collapsible: false });
+        const activitySection = sections.add("activity", "Recorded activity", { key: sectionKey("activity"), collapsible: false });
         const sourceSection = sections.add("source", "Source details", { key: sectionKey("source") });
         let responseSection, responseList;
         body.append(promptSection.element, activitySection.element, sourceSection.element);
@@ -3364,6 +3446,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sourceSection.visibility.subscribe(updateLinked);
         const copyNoticeId = "reader-copy-notice";
         const entries = [], seen = new Set(), rendered = [], responseHosts = [], sourceHomes = new Map(), entryLabels = new Map();
+        let commonToolTiming = false;
         const timeContext = applied.timeContext, selectedScenario = context.groups.find(group => group.relation === "selected").scenario;
         function field(label, value) {
             const node = cardFact(label, value ?? "Not recorded");
@@ -3403,6 +3486,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         function identifier(value) { return el("code", "reader-identifier", String(value)); }
         function readerText(source, options) {
             const node = textAccess.render(source, options), coverage = requestTiming.coverage(source);
+            readerTextReleases.push(() => textAccess.release(node));
             if (coverage === "Text completeness not verified") node.querySelector(".full-text-qualifiers")
                 .append(el("span", "reader-state", coverage));
             if (options.actionsHost === promptSection.actions) {
@@ -3425,20 +3509,33 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             return node;
         }
-        function callHeading(name, result, { tool = false, duration, durationLabel = "Tool latency" } = {}) {
+        function callHeading(name, result, { tool = false, duration, durationLabel = "Tool latency", timingColumn = false } = {}) {
             const heading = el("header", "call-heading"), identity = el("h3", "reader-call-identity");
-            if (tool) identity.append(document.createTextNode("Tool: "), el("span", "reader-tool-name", name));
+            if (tool) identity.append(el("span", "reader-tool-name", name));
             else identity.append(el("span", "reader-record-name", name));
             const summary = el("div", "reader-call-summary");
             summary.append(result);
             if (duration !== undefined) {
                 const elapsed = el("span", "reader-call-duration"), value = durationValue(duration);
                 if (duration !== null && duration < 1000) value.textContent = String(duration) + " ms";
-                elapsed.append(el("span", "reader-duration-label", durationLabel + ": "), value);
+                elapsed.append(el("span", "reader-duration-label" + (timingColumn ? " visually-hidden" : ""), durationLabel + ": "), value);
                 summary.append(elapsed);
             }
             heading.append(identity, summary);
             return heading;
+        }
+        function callDetails(item, heading, key, visibility, actionId, render) {
+            const identity = heading.querySelector(".reader-call-identity");
+            const toggle = el("button", "reader-call-toggle");
+            toggle.type = "button";
+            toggle.append(...identity.childNodes);
+            identity.append(toggle);
+            const detail = el("div", "technical-detail");
+            item.classList.add("reader-call-row");
+            item.append(detail);
+            sections.detail({ key: JSON.stringify(["call-detail", requestIdentity(), key]), toggle, body: detail, visibility,
+                initialOpen: target.status === "available" && target.actionId === actionId && applied.layer !== "reported-api",
+                render });
         }
         function identityValues(rows, layer) {
             const identities = serviceIdentity(rows?.length ? rows : undefined, layer), values = el("ul", "reader-values");
@@ -3452,7 +3549,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return ux.attachCopy(pre, { ...options,
                 getText: () => pre.isConnected && visibility.isCurrent() && visibility.isOpen() ? pre.textContent : null });
         }
-        function recordedInput(tool, identity, visibility) {
+        function recordedInput(tool, visibility) {
             const args = tool.requestArgs;
             const capabilityNames = {
                 Email: ["Email", "Mail"], TeamsMessages: ["Teams messages", "Teams"],
@@ -3473,17 +3570,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const block = recordedBlock(raw, { label: "Recorded input", copyLabel: "Copy recorded arguments" }, visibility);
                 block.classList.add("recorded-arguments");
                 const section = el("section", "reader-request-block");
-                identity.classList.add("reader-input-identity");
-                section.append(identity, block);
+                section.append(block);
                 return { node: section, targets: false };
             }
             const input = el("section", "reader-input recorded-arguments");
             const prose = args.question ?? args.query;
             const targetOnly = prose === undefined && Boolean(args.entityUrls);
             const heading = el("div", "reader-input-heading");
-            identity.classList.add("reader-input-identity");
             heading.append(el("span", "reader-input-label", targetOnly
-                ? args.entityUrls.length === 1 ? "Requested path" : "Requested paths" : "Recorded request"), identity);
+                ? args.entityUrls.length === 1 ? "Requested path" : "Requested paths" : "Recorded request"));
             input.append(heading);
             if (!targetOnly) {
                 input.classList.add("reader-input-copy");
@@ -3539,10 +3634,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const label = el(identity ? "span" : "p", "context-entry-label"), separator = labelText.indexOf(":");
             if (separator >= 0) label.append(el("strong", "", labelText.slice(0, separator + 1)), document.createTextNode(labelText.slice(separator + 1)));
             else label.textContent = labelText;
-            if (identity) identity.prepend(label, el("span", "reader-identity-separator", " \u00b7 "));
+            if (identity) (identity.querySelector(".reader-call-toggle") || identity).prepend(label, el("span", "reader-identity-separator", " \u00b7 "));
             else item.prepend(label);
             if (entry.hideLabel || entry.kind === "follow-up" || entry.kind === "prompt" && entry.relation !== "selected") label.remove();
             if (entry.kind === "action") label.classList.add("reader-entry-label");
+            const toggle = identity?.querySelector(".reader-call-toggle");
+            if (toggle) toggle.setAttribute("aria-label", "Inspect recorded evidence: " + toggle.textContent);
+            if (entry.actionId) item.id = "reader-record-" + encodeURIComponent(entry.actionId);
             if (entry.kind === "prompt" && entry.relation === "selected") {
                 item.id = "selectedContext";
                 if (target.status !== "available") item.setAttribute("aria-current", "true");
@@ -3575,16 +3673,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const rows = rowsFor(scenario.scenarioId);
         const full = fullRowsFor(scenario.scenarioId);
         const sameScope = full && full.length === rows.length && full.every(row => rows.some(match => match.id === row.id));
-        const outcome = el("section", "request-outcome");
-        const allResults = el("div", "full-request-results");
-        allResults.append(el("h3", "", "Recorded results"));
-        fullResults(allResults, scenario.scenarioId);
-        outcome.append(allResults);
-        if (!sameScope) {
-            const matching = el("div", "request-matching");
-            matching.append(el("p", "muted", "Matching this view"), matchingResults(scenario.scenarioId));
-            outcome.append(matching);
-        }
         const intro = el("div", "request-intro");
         const source = sessionSource(scenario.sourceSessionId);
         const sourceProject = source || scenario;
@@ -3610,7 +3698,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const term of sourceFacts.querySelectorAll("dt")) term.textContent = term.textContent.replace(/:$/, "");
         if (isSelected) readerFacts.append(sourceFacts);
         readerFacts.append(modelFact);
-        requestText.append(readerFacts);
+        (isSelected ? sourceSection.body : requestText).append(readerFacts);
         if (isSelected) {
             const timing = el("div", "reader-prompt-timing");
             timing.append(recordedAt(scenario.userPrompt?.sourceTimestamp));
@@ -3619,7 +3707,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 responseTiming.append(responseTime);
                 timing.append(responseTiming);
             }
-            requestText.append(timing);
+            sourceSection.body.append(timing);
         }
         const responseHost = el("section", "interaction-response");
         responseHost.classList.add("reader-response-availability");
@@ -3715,63 +3803,57 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? "Return to report Activity to change this scope." : "Add this interaction before continuing."), { compact: true });
         const entryStart = entries.length;
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (applied.layer === "tool" ? rows : undefined);
-        for (const tool of scenario.toolCalls || []) {
+        for (const [toolIndex, tool] of (scenario.toolCalls || []).entries()) {
             const row = canonical?.find(item => tool.toolCallId ? item.toolCallId === tool.toolCallId : item.id === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
             if (row && (seen.has(row.id) || row.id === target.actionId && !isSelected)) continue;
             if (row) seen.add(row.id);
-            const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || tool]);
+            const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || ["unidentified", state.revision, toolIndex]]);
             entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool",
                 identifiers: [["ID", tool.toolCallId], ["parent invocation", tool.parentToolCallId], ["parallel group", tool.parallelGroup],
                     ["error code", row?.outcome === "failure" && tool.failureEvidence?.version === 1
                         && tool.failureEvidence.reason === "error-code-recorded" ? tool.failureEvidence.code : null]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
-            const expert = el("div", "technical-detail");
             item.dataset.toolCallId = tool.toolCallId || "";
             const operation = categories.operation(tool.tool);
-            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, rows: row ? [row] : undefined });
+            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, rows: row ? [row] : undefined });
             result.classList.add("journey-result");
-            for (const value of result.querySelectorAll(".recorded-result")) {
-                if (value.dataset.count === "1") value.querySelector(".recorded-result-label").textContent = results.labels("tool")[value.dataset.outcome];
-            }
-            const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
+            const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool"),
+                timingColumn: isSelected && commonToolTiming });
             item.append(heading);
             const sourceCall = sourceCallFor(row) || tool;
             const serviceValues = identityValues(row ? [{ ...row, tool: tool.tool }] : undefined, "tool");
-            const input = recordedInput(tool, serviceValues, groupVisibility);
-            if (!input.targets) {
-                const targets = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });
-                if (targets.childElementCount) item.append(targets);
-            }
-            const serviceEvidence = categories.serviceEvidence(row ? { ...row, tool: tool.tool } : row, "tool");
-            const explanation = el("p", "reader-call-evidence", serviceEvidence?.reason === "missing-target" ? ""
-                : serviceEvidence?.reason === "hosted-routing"
-                ? serviceEvidence.description
-                : tool.tool === "workiq-ask" ? categories.operation(tool.tool).description
-                : (row ? categories.explainRows([row], "tool") : "") || serviceEvidence?.description || operation?.description);
-            const searchScope = categories.requestedSearchScope(sourceCall);
-            if (searchScope && !(input.requestedSources && searchScope.description === "This does not show which sources returned results.")) {
-                explanation.append(" " + searchScope.description);
-            }
+            serviceValues.classList.add("reader-call-services");
+            heading.append(serviceValues);
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
-            if (apiRows?.length) {
-                const apiSummary = resultLine("reported-api", results.summarize(apiRows));
-                apiSummary.classList.add("call-api-summary");
-                item.append(apiSummary);
-            }
-            else if (!apiRows && row?.workload !== "Discovery") explanation.append(" API result metadata is unavailable.");
-            if (explanation.textContent.trim()) expert.prepend(explanation);
             if (!sameScope) {
                 actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
                 const scope = item.querySelector(".action-context");
-                if (scope.textContent === "Outside current view") expert.append(scope);
-                else if (applied.layer === "tool" && row && rows.some(match => match.id === row.id)) scope.textContent = "Matches current view";
+                if (applied.layer === "tool" && row && rows.some(match => match.id === row.id)) scope.textContent = "Matches current view";
             }
             if (row) {
                 const returned = returnedDetails(sourceCall, row, apiRows,
                     applied.layer === "reported-api" && target.actionId === row.id ? target.row.id : undefined);
                 if (returned) item.append(returned);
             }
+            callDetails(item, heading, key, groupVisibility, row?.id, visibility => {
+            const expert = el("div");
+            expert.append(fields([["Recorded start", moment(tool.startedAt)],
+                ["Recorded end", tool.completedAt == null ? null : moment(tool.completedAt)]]));
+            const input = recordedInput(tool, visibility);
+            if (!input.targets) {
+                const targets = actionFields(sourceCall, row, { includeTool: false, includeService: false, includePurpose: false, includeMissing: false });
+                if (targets.childElementCount) expert.append(targets);
+            }
+            const serviceEvidence = categories.serviceEvidence(row ? { ...row, tool: tool.tool } : row, "tool");
+            const explanation = el("p", "reader-call-evidence", serviceEvidence?.reason === "missing-target" ? ""
+                : serviceEvidence?.reason === "hosted-routing" ? serviceEvidence.description
+                : tool.tool === "workiq-ask" ? categories.operation(tool.tool).description
+                : (row ? categories.explainRows([row], "tool") : "") || serviceEvidence?.description || operation?.description);
+            const searchScope = categories.requestedSearchScope(sourceCall);
+            if (searchScope && !(input.requestedSources && searchScope.description === "This does not show which sources returned results.")) explanation.append(" " + searchScope.description);
+            if (!apiRows && row?.workload !== "Discovery") explanation.append(" API result metadata is unavailable.");
+            if (explanation.textContent.trim()) expert.append(explanation);
             const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
                 || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
             const completion = fields([
@@ -3787,24 +3869,24 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }
             }
             expert.append(input.node);
-            for (const key of ["command", "code", "script"]) if (typeof tool.requestArgs?.[key] === "string") expert.append(recordedBlock(tool.requestArgs[key], { label: "Recorded " + key, copyLabel: "Copy " + key }, groupVisibility));
-            for (const result of tool.apiResults || []) expert.append(facts([["Result attribution", result.evidenceLevel], ["Reported status", result.statusCode], ["Reported error", result.errorCode]], { inlineHelp: false, omitMissing: true }));
-            item.append(expert);
+            for (const key of ["command", "code", "script"]) if (typeof tool.requestArgs?.[key] === "string") expert.append(recordedBlock(tool.requestArgs[key], { label: "Recorded " + key, copyLabel: "Copy " + key }, visibility));
+            return expert;
+            });
             return item;
             } });
         }
-        for (const graph of scenario.graphActivities || []) {
+        for (const [graphIndex, graph] of (scenario.graphActivities || []).entries()) {
             const layer = graph.evidenceLevel === "code-reference" ? "code-reference" : "direct-request";
             const graphRows = fullRowsFor(scenario.scenarioId, layer)?.filter(row => row.activityId === graph.activityId);
             if (graphRows?.[0] && (seen.has(graphRows[0].id) || graphRows[0].id === target.actionId && !isSelected)) continue;
             if (graphRows?.[0]) seen.add(graphRows[0].id);
-            const key = JSON.stringify([scenario.scenarioId, "graph", graph.activityId || graph]);
+            const key = JSON.stringify([scenario.scenarioId, "graph", graph.activityId || ["unidentified", state.revision, graphIndex]]);
             entries.push({ key, actionId: graphRows?.[0]?.id, startedAt: graph.startedAt, recordKind: layer === "code-reference" ? "reference" : "graph",
                 identifiers: [["ID", graph.activityId]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
             const heading = callHeading(layer === "code-reference" ? "Graph code reference" : "Direct Graph request site",
-                resultLine(layer, graphRows?.length ? results.summarize(graphRows) : null, { compactSingle: true }));
+                resultLine(layer, graphRows?.length ? results.summarize(graphRows) : null, { compactSingle: true, singleRecord: true }));
             item.append(heading, fields([[layer === "code-reference" ? "Referenced service" : "Service", identityValues(graphRows, layer)]]));
             const path = el("dl", "action-fields");
             pathField(path, layer === "code-reference" ? "Referenced API path" : "API path", results.pathText(graph.endpoint));
@@ -3812,22 +3894,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             actionContext(item, ["direct-request", "recorded-http", "code-reference"].includes(applied.layer) ? graphRows : []);
             const status = graph.evidenceLevel === "output-visible-http" ? graph.httpStatus : null;
             item.append(el("p", "", status != null ? "Visible HTTP status: " + status : graph.evidenceLevel === "code-reference" ? "Code reference only; execution is not established." : "No HTTP status observed in this record."));
-            const expert = el("div");
-            expert.append(recordedBlock(JSON.stringify(graph, null, 2), { label: "Recorded Graph evidence / local only", copyLabel: "Copy recorded Graph evidence" }, groupVisibility));
-            item.append(expert);
+            callDetails(item, heading, key, groupVisibility, graphRows?.[0]?.id, visibility =>
+                recordedBlock(JSON.stringify(graph, null, 2), { label: "Recorded Graph evidence / local only", copyLabel: "Copy recorded Graph evidence" }, visibility));
             return item;
             } });
         }
-        for (const record of scenario.httpRecords || []) {
+        for (const [recordIndex, record] of (scenario.httpRecords || []).entries()) {
             const httpRows = fullRowsFor(scenario.scenarioId, "http")?.filter(row => row.recordId === record.recordId);
             if (httpRows?.[0] && (seen.has(httpRows[0].id) || httpRows[0].id === target.actionId && !isSelected)) continue;
             if (httpRows?.[0]) seen.add(httpRows[0].id);
-            const key = JSON.stringify([scenario.scenarioId, "http", record.recordId || record]);
+            const key = JSON.stringify([scenario.scenarioId, "http", record.recordId || ["unidentified", state.revision, recordIndex]]);
             entries.push({ key, actionId: httpRows?.[0]?.id, startedAt: record.startedAt, recordKind: "http",
                 identifiers: [["ID", record.recordId]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
-            const heading = callHeading("Explicit HTTP recorder", resultLine("http", httpRows?.length ? results.summarize(httpRows) : null, { compactSingle: true }),
+            const heading = callHeading("Explicit HTTP recorder", resultLine("http", httpRows?.length ? results.summarize(httpRows) : null, { compactSingle: true, singleRecord: true }),
                 { duration: callInvestigation.duration(record, "http"), durationLabel: "Recorded duration" });
             item.append(heading, fields([["Service", identityValues(httpRows, "http")]]),
                 el("p", "", record.status == null ? "No HTTP response recorded." : "Recorded HTTP status " + record.status));
@@ -3835,9 +3916,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const path = el("dl", "action-fields");
             pathField(path, "API path", results.pathText(record.responsePath ?? record.path ?? record.requestedPath ?? record.requestShape?.path));
             item.append(path);
-            const expert = el("div");
-            expert.append(recordedBlock(JSON.stringify(record, null, 2), { label: "Recorder details / local only", copyLabel: "Copy recorder details" }, groupVisibility));
-            item.append(expert);
+            callDetails(item, heading, key, groupVisibility, httpRows?.[0]?.id, visibility =>
+                recordedBlock(JSON.stringify(record, null, 2), { label: "Recorder details / local only", copyLabel: "Copy recorder details" }, visibility));
             return item;
             } });
         }
@@ -3856,6 +3936,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         entries.sort(requestContext.compare);
         const actionsInOrder = entries.filter(entry => entry.kind === "action");
+        const selectedActions = actionsInOrder.filter(entry => entry.scenarioId === route.request);
+        commonToolTiming = applied.layer === "tool" && selectedActions.length > 0 && selectedActions.every(entry => entry.recordKind === "tool");
+        body.classList.toggle("tool-activity-log", commonToolTiming);
+        if (commonToolTiming) {
+            const heading = activitySection.element.querySelector(".reader-section-heading");
+            heading.append(el("span", "reader-timing-column", "Tool latency"));
+            const measureHeading = () => {
+                if (!currentReader() || !heading.isConnected) return;
+                body.style.setProperty("--reader-timing-padding", getComputedStyle(contextBody).paddingTop);
+                body.style.setProperty("--reader-timing-inset", timingInset(heading) + "px");
+            };
+            measureHeading();
+            timingHeadingObserver = new ResizeObserver(measureHeading);
+            timingHeadingObserver.observe(heading);
+        }
         const groupOrdinals = new Map();
         actionsInOrder.forEach(entry => {
             const ordinal = (groupOrdinals.get(entry.scenarioId) ?? 0) + 1;
@@ -3905,6 +4000,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         pick.disabled = membership.disabled || fixedScope;
         setText(next, reportOrigin ? reportSetupReturn?.peek ? "Back to report setup" : "Back to activity" : "Continue to report");
         next.disabled = reportOrigin ? exportWriting : membership.disabled || fixedScope || !membership.selected;
+        next.hidden = !reportOrigin && !membership.selected;
         setText(title, periodReport ? "This report uses fixed paired periods. Change the comparison in Analyze to change its activity."
             : fixedScope ? membership.included ? "Included by this report's activity scope. Change the scope in Activity."
                 : "Not included with this report's scope and author choices. Change them in Activity."
@@ -4822,13 +4918,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             renderRequest();
             if (entering) focusSidebar();
         }
-        periodComparisonUI.update().then(() => {
-            const saved = periodReturnReading;
-            if (!saved) return;
-            if (saved.navigation !== navigationGeneration || saved.intent !== readingIntent
-                || route.view !== "analyze" || route.compare !== "periods") { periodReturnReading = null; return; }
-            if (periodComparisonUI.consumer()) { restoreReading(saved.position); periodReturnReading = null; }
-        });
+        periodComparisonUI.update().then(restorePeriodComparisonReading);
         liveSearchUI?.changed();
     }
 
@@ -4958,6 +5048,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && collection.error === model.sourceFailure.error;
         host.hidden = ["settings", "collection-status"].includes(route.view) || !notice
             || ["reports", "request"].includes(route.view) && notice?.severity === "normal"
+            || route.view === "analyze" && notice?.severity === "normal" && collection?.state === "paused" && collection?.config?.approved
             || !$("message").hidden && $("message").dataset.connectionFailure === "true"
             || Boolean(collectionReadError) && refreshOwnsReadFailure()
             || recovery && notice?.severity === "normal" && collection?.state === "paused"
@@ -5000,20 +5091,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderFreshActivity() {
         const host = $("freshActivity"), model = fresh.snapshot(), approved = collection?.config?.approved;
+        const analyze = route.view === "analyze";
         const connection = route.view === "settings" && settingsNavigation.resolve(route).section === "connection";
-        const contextual = route.view === "analyze" || connection || route.view === "collection-status";
-        const anchor = route.view === "analyze" ? $("collectionNotice")
-            : route.view === "collection-status" ? $("collectionCoverageCounts") : $("connectionPreferences");
-        if (host.nextElementSibling !== anchor) anchor.before(host);
+        const contextual = analyze || connection || route.view === "collection-status";
+        if (analyze) {
+            if (host.parentElement !== $("activityUpdateSlot")) $("activityUpdateSlot").append(host);
+        } else {
+            const anchor = route.view === "collection-status" ? $("collectionCoverageCounts") : $("connectionPreferences");
+            if (host.nextElementSibling !== anchor) anchor.before(host);
+        }
         const details = host.querySelector(".fresh-details");
         const refresh = $("checkActivity").closest(".ux-disabled-help") || $("checkActivity");
-        const refreshHost = route.view === "analyze" ? $("analyzeRefresh") : host.querySelector(".fresh-controls");
+        const refreshHost = host.querySelector(".fresh-controls");
         if (refresh.parentElement !== refreshHost) refreshHost.prepend(refresh);
         if (host.querySelector(".fresh-controls").lastElementChild !== $("freshResult")) {
             host.querySelector(".fresh-controls").append($("freshResult"));
         }
         host.hidden = !contextual;
-        $("freshHeading").hidden = !contextual || route.view === "analyze";
+        $("freshHeading").hidden = !contextual || analyze;
+        const expanded = renderActivityUpdateEntry();
         const globalRecovery = !$("message").hidden && $("message").querySelector("[data-stored-refresh-retry]");
         const attention = ["checking", "applying", "waiting"].includes(model.phase) || model.recovery
             || refreshOwnsReadFailure() || !globalRecovery && (["error", "unconfirmed"].includes(model.phase) || collectionReadError || isStale && !isLoading);
@@ -5030,12 +5126,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const control = $("checkActivity");
         const text = "Refresh";
         if (control.lastChild?.nodeType === Node.TEXT_NODE) control.lastChild.textContent = text;
-        ux.pending(control, ["checking", "applying"].includes(model.phase));
+        ux.pending(control, model.phase === "checking" || model.phase === "applying" && (Boolean(model.check) || !approved || Boolean(model.recovery)));
         setText($("freshHelp").querySelector("summary"), connection ? "About Refresh" : "Update details");
-        details.hidden = route.view === "analyze" && model.phase === "idle" && !model.sourceWarning;
-        setText($("freshScope"), approved
+        details.hidden = analyze && (!expanded || model.phase !== "partial" && !model.sourceWarning);
+        setText($("freshSourceSettings"), approved
             ? `Local Copilot history · ${collection.config.windowDays}-day window`
-            : "Choose which local Copilot history this app can read.");
+            : "Choose local history in Settings");
+        $("freshScope").hidden = !analyze || !expanded;
         const completed = ["complete", "partial"].includes(model.phase) && Boolean(model.check);
         setText($("freshChecked"), completed ? `Manual check ${timestamp(model.check.completedAt)}` : "");
         $("freshChecked").hidden = !completed;
@@ -5053,6 +5150,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("freshIssues").href = model.phase === "partial" ? "#collection-status?setting=issues" : "#settings?section=connection&setting=source-paths";
         setText($("freshIssues"), model.phase === "partial" ? model.coverage : "Review source");
         $("freshResult").hidden = $("freshStatus").hidden && !model.context && !model.sourceWarning && !completed && !collectionReadError && !isStale;
+        const reread = recollectionUI?.snapshot();
+        if (analyze && recollectionNoticeVisible && ["pending", "uncertain", "complete"].includes(reread?.phase)
+            && model.phase === "complete" && !model.sourceWarning && !model.sourceFailure && !model.recovery && !collectionReadError && !isStale) {
+            $("freshResult").hidden = true;
+        }
         const gapDetails = $("freshCoverageDetails");
         gapDetails.hidden = model.phase !== "partial";
         if (!gapDetails.hidden && gapDetails.dataset.checkId !== model.check.id) {
@@ -5093,6 +5195,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const checkSource = collection?.config?.approved === true;
         const token = fresh.begin({ checkSource });
         if (token === null) return null;
+        recollectionNoticeVisible = false;
         const sourceIdentity = { configVersion: collection?.configVersion, revision: collection?.revision, lastCheckId: collection?.lastCheck?.id };
         collectionBusy = true;
         collectionReadGeneration++;
@@ -5771,6 +5874,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function handleVisibilityChange() {
         draft.clearContext({ writing: exportWriting });
         scrubContextPreview();
+        if (document.hidden && route.view === "request") {
+            if (!requestInvalidated) saveSidebarPosition();
+            requestInvalidated = true;
+            clearReaderSections();
+            requestRenderKey = null;
+        }
         if (exportWriting) return;
         invalidatePreview();
         invalidateDialog("The panel changed visibility. Close and prepare a new report preview before continuing.");
@@ -5782,11 +5891,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         event.preventDefault(); go(node.dataset.nav, { request: undefined, task: undefined });
     }));
     $("resultsLink").addEventListener("click", event => { event.preventDefault(); revealResults(); });
-    for (const node of document.querySelectorAll("[data-analyze-mode]")) node.addEventListener("click", event => {
-        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        go("analyze", { mode: node.dataset.analyzeMode === "calls" ? "calls" : undefined, page: undefined });
-    });
     for (const id of ["pageAction", "exploreLink", "reportLibraryLink", "reportCreateLink", "reportCompareLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
@@ -5924,6 +6028,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     settingsSize.observe($("settingsView"));
     $("refreshBtn").addEventListener("click", refreshStoredData);
+    $("freshStoredRead").addEventListener("click", refreshStoredData);
+    $("freshRecollect").addEventListener("click", event => {
+        presentation.setOpen("activity-update", true);
+        recollectionUI.open(event.currentTarget);
+    });
+    $("activityUpdateToggle").addEventListener("click", () => {
+        const expanded = $("activityUpdateToggle").getAttribute("aria-expanded") === "true";
+        presentation.setOpen("activity-update", !expanded);
+        renderFreshActivity();
+    });
     $("deleteAllReports").addEventListener("click", event => savedArtifactUI.open({ scope: "all-reports" }, event.currentTarget));
     $("collectionRetry").addEventListener("click", refreshStoredData);
     $("collectionRetry").setAttribute("aria-describedby", "storedRefreshHelp");
@@ -5939,7 +6053,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const changes = { section: target.section, setting: target.setting, issues: undefined };
         const mode = new URLSearchParams(node.hash.split("?")[1]).get("mode");
         if (target.view === "analyze" && ["calls", "interactions"].includes(mode)) {
-            changes.mode = mode === "calls" ? "calls" : undefined;
             changes.page = undefined;
         }
         go(target.view, changes);
@@ -6091,9 +6204,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
-    $("callSort").addEventListener("change", () => {
-        if (!restoring) navigate(routeFor("analyze", { callSort: $("callSort").value, page: undefined }), false, { keepFocus: true });
-    });
     selectControls = createSelectControls(ux, {
         decorateOption: (node, { id, value, label }) => {
             if (["promptAuthorFilter", "reportPromptAuthorFilter"].includes(id)) {

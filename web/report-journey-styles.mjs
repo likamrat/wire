@@ -176,8 +176,8 @@ export const reportJourneyStyles = `
 #bundleList .saved-library-row>.saved-report{min-width:0;margin:0}
 #bundleList .saved-report-summary{grid-column:1 / 3;display:grid;grid-template-columns:subgrid;align-items:start;padding:12px 0 12px 12px;border:0;border-inline-start:3px solid transparent;text-align:left;white-space:normal;min-height:44px;height:auto;font-weight:400;border-radius:0;background:transparent;-webkit-tap-highlight-color:transparent}
 .saved-report-summary::before{display:none}
-#bundleList .saved-report-summary:hover{background:var(--hover)}
-#bundleList .saved-report-summary:active{background:var(--pill-pressed)}
+#bundleList .saved-report-summary:is(:hover,:active){background:transparent}
+#bundleList .saved-report-summary:active .saved-report-name{text-decoration:underline;text-underline-offset:.2em;text-decoration-thickness:2px}
 #bundleList .saved-library-row[data-detail-active] .saved-report-summary{border-inline-start-color:var(--accent)}
 .saved-report-summary:is(:hover,:focus-visible) .saved-report-name{text-decoration:underline;text-underline-offset:.2em;text-decoration-thickness:1px}
 #bundles{container:saved-library / inline-size}

@@ -36,6 +36,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
     const setStatus = (message, error = false) => {
         $("deleteStatus").textContent = message;
         $("deleteStatus").classList.toggle("error", error);
+        $("deleteStatus").setAttribute("role", error ? "alert" : "status");
     };
     function scope() {
         const value = { scope: $("deleteAll").checked ? "all" : "range", timeContext: timeContext() };
@@ -51,7 +52,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         $("deleteScopeForm").hidden = false;
         $("deleteChangeScope").hidden = true;
         $("deleteCancel").textContent = "Cancel";
-        $("deleteTitle").textContent = "Delete collected activity";
+        dialog.querySelector(".decision-body").scrollTop = 0;
         setStatus("");
     }
     function cancelPreview(previous) {
@@ -62,14 +63,37 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
     }
     function update() {
         const state = flow.snapshot(), pending = state.phase === "pending", uncertain = state.phase === "uncertain";
+        const hasTargets = Boolean(state.preview?.counts.records || state.preview?.counts.localCopies);
+        const phase = pending ? "pending" : uncertain ? readBusy ? "checking" : "unknown"
+            : state.phase === "complete" ? "complete" : previewBusy ? "loading"
+                : state.phase === "preview" && hasTargets ? "confirm" : $("deleteStatus").classList.contains("error") ? "error" : "editing";
+        if (dialog.dataset.decisionPhase !== phase) {
+            const role = phase === "complete" ? "check" : ["pending", "checking", "loading"].includes(phase) ? "pending" : "warning";
+            const icon = ux.icon(role);
+            if (role === "pending") icon.classList.add("pending-indicator");
+            $("deleteWarningIcon").replaceChildren(icon);
+            dialog.dataset.decisionPhase = phase;
+        }
+        $("deleteTitle").textContent = {
+            editing: "Review activity deletion", loading: "Reading deletion scope", error: "Deletion review unavailable",
+            pending: "Deleting collected activity", unknown: "Deletion result unknown", checking: "Checking deletion result",
+            complete: "Collected activity deleted",
+            confirm: state.preview?.scope?.scope === "all" ? "Delete all collected activity?" : "Delete activity in this date range?",
+        }[phase];
+        $("deleteBoundary").hidden = phase === "complete";
+        dialog.setAttribute("aria-describedby", phase === "complete" || uncertain && !state.preview?.scope ? "deleteStatus"
+            : ["confirm", "pending", "unknown", "checking"].includes(phase) ? "deleteSummary" : "deleteBoundary");
         form.inert = pending || uncertain;
+        if (pending || uncertain) form.hidden = true;
         $("deletePreview").disabled = previewBusy || pending || uncertain;
         $("deleteConfirm").disabled = pending || uncertain || !state.preview || (!state.preview.counts.records && !state.preview.counts.localCopies);
-        $("deleteConfirm").hidden = !["preview", "pending", "uncertain"].includes(state.phase) || (!state.preview?.counts.records && !state.preview?.counts.localCopies);
+        $("deleteConfirm").hidden = !["preview", "pending"].includes(state.phase) || !hasTargets;
         $("deleteCancel").disabled = pending;
+        $("deleteCancel").textContent = ["unknown", "checking", "complete"].includes(phase) ? "Close" : "Cancel";
         $("deleteCheck").hidden = !uncertain;
         $("deleteCheck").disabled = readBusy;
         $("deleteChangeScope").disabled = pending || uncertain;
+        $("deleteChangeScope").hidden = phase !== "confirm";
         ux.pending($("deletePreview"), previewBusy);
         ux.pending($("deleteConfirm"), pending);
         ux.pending($("deleteCheck"), readBusy);
@@ -85,7 +109,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             $("deleteTitle").textContent = "Collected activity deleted";
             setStatus(`Deleted ${result.counts.records} records${result.linkedInsights?.interactions ? " and dependent local data" : ""}. Saved reports and comparisons, source files and collection preferences are unchanged. New activity can still be collected.`);
             update();
-            $("deleteCancel").focus();
+            if (dialog.open) $("deleteCancel").focus();
             if (!await onCommitted()) setStatus(`Deleted ${result.counts.records} records. The view could not refresh; use Retry. Do not repeat deletion. Saved reports are unchanged.`, true);
         } else if (result.phase === "not-started") {
             flow.edit(scope());
@@ -153,6 +177,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
                 $("deleteChangeScope").hidden = false;
                 $("deleteTitle").textContent = result.scope.scope === "all" ? "Delete all collected activity?" : "Delete activity in this date range?";
                 setStatus("");
+                dialog.querySelector(".decision-body").scrollTop = 0;
                 $("deleteCancel").focus();
             }
         } catch (error) {
@@ -226,7 +251,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         if (trigger?.isConnected) ux.restoreFocus(trigger);
     });
     $("deleteActivity").addEventListener("click", open);
-    $("deleteWarningIcon").append(ux.icon("warning"));
+    update();
     return { open, isOpen: () => dialog.open,
         invalidate() {
             if (flow.snapshot().phase === "preview") {

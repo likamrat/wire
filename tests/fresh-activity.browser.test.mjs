@@ -343,6 +343,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     await selectActivityOption(page, "dateFilter", "custom");
     await page.locator("#fromFilter").fill(date); await page.locator("#toFilter").fill(date);
     await page.locator("#applyDates").click(); await ready(page);
+    await revealStoredRefresh(page);
     const buttonBox = await page.locator("#checkActivity").boundingBox(), beforeChart = await page.locator("#chart").innerHTML();
     const beforeWeight = await page.locator("#checkActivity").evaluate(node => getComputedStyle(node).fontWeight);
     await appendFile(source.file, jsonl([dated(event("user.message", { content: "Invented date-switch source" }), other), dated(call("two"), other), dated(complete("two"), other)]));
@@ -350,7 +351,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
     await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter"); await check.pending;
     await proof("checking", "#checkActivity", true);
     await proof("checking-status", "#freshStatus", true);
-    assert.equal(await page.locator("#checkActivity").getAttribute("aria-label"), "Refresh");
+    assert.equal(await page.locator("#checkActivity").getAttribute("aria-label"), "Check local history");
     assert.equal(await page.locator("#checkActivity").evaluate(node => getComputedStyle(node).fontWeight), beforeWeight, "Pending state preserves the control's font weight.");
     assert.equal((await page.locator("#checkActivity").boundingBox()).width, buttonBox.width);
     assert.equal(await page.locator("#chart").innerHTML(), beforeChart);
@@ -375,7 +376,7 @@ test("real pending phases stay visible, stop on failure, and changing dates duri
         segments: [...node.querySelectorAll(".time-segment")].map(segment => ({ count: segment.dataset.count, height: segment.getAttribute("height"), classes: segment.getAttribute("class") })),
     })));
     const acceptedValues = await chartValues();
-    assert.match(await page.locator("#periodHint").innerText(), new RegExp(time.formatDate(other, { timeZone: "UTC", locale: "en-US" }, true)));
+    assert.match(await page.locator("#periodResult").innerText(), new RegExp(time.formatDate(other, { timeZone: "UTC", locale: "en-US" }, true)));
     applying.release();
     await page.waitForFunction(() => !document.querySelector("#checkActivity").disabled);
     assert.equal(await page.locator("#chart").innerHTML(), acceptedChart);
@@ -1000,7 +1001,7 @@ test("unapproved Refresh reads retained activity and leaves source review as a s
         const app = await fixture(t, false), { page } = app;
         await app.source([event("user.message", { content: "Synthetic unapproved activity" }), call("not-approved")]);
         await page.goto(app.runtime().url); await ready(page);
-        assert.equal(await page.locator("#checkActivity").getAttribute("aria-label"), "Refresh");
+        assert.equal(await page.locator("#checkActivity").getAttribute("aria-label"), "Read stored activity");
         await app.check();
         assert.match(page.url(), /#analyze/);
         assert.equal(await page.locator("#freshStatus").innerText(), "Stored activity refreshed.");
@@ -1170,14 +1171,15 @@ test("a completed Refresh with a lost stored read has one safe recovery entrance
             await retry.focus();
             await page.keyboard.press("Shift+Tab"); await page.keyboard.press("Tab");
             assert.equal(await retry.evaluate(node => node === document.activeElement), true);
-            assert.equal(await retry.evaluate(node => getComputedStyle(node).outlineStyle !== "none"), true);
+            assert.equal(await retry.evaluate(node => getComputedStyle(node, "::before").outlineStyle !== "none"), true);
             const beforeRetry = paths.length;
             await page.keyboard.press("Enter");
             await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete");
             await ready(page);
             assert.equal(await page.locator("#activityCount").innerText(), "2");
             assert.doesNotMatch(await page.locator("#periodResult").innerText(), /Previous results/);
-            assert.equal(await page.getByRole("button", { name: "Read stored activity", exact: true }).count(), 0);
+            assert.equal(await page.locator("#refreshBtn").isVisible(), false);
+            assert.equal(await page.locator("#freshStoredRead").isVisible(), true, "The ordinary stored-read choice returns after recovery");
             assert.equal(await page.locator("#checkActivity").evaluate(node => node === document.activeElement), true);
             assert.deepEqual(app.writes, ["/api/collection/now"]);
             assert.ok(paths.slice(beforeRetry).includes("/api/collection/status"));

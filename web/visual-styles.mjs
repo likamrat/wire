@@ -8,12 +8,12 @@ export const visualStyles = `
 .theme-trigger[aria-checked=true] .theme-thumb {transform:translateX(36px)}
 .theme-track svg {display:block;width:20px;height:20px;fill:none;flex:none}
 .theme-track svg {position:relative;color:var(--ink)}
-.theme-trigger[aria-checked=false] .theme-sun,.theme-trigger[aria-checked=true] .theme-moon {color:var(--toggle-thumb)}
+.theme-trigger[aria-checked=false] [data-lucide-icon=sun],.theme-trigger[aria-checked=true] [data-lucide-icon=moon] {color:var(--toggle-thumb)}
 @media(forced-colors:active) {
  .theme-track {background:Canvas;box-shadow:inset 0 0 0 1px ButtonText;forced-color-adjust:none}
  .theme-track svg {color:ButtonText}
  .theme-thumb {background:Highlight;box-shadow:none}
- .theme-trigger[aria-checked=false] .theme-sun,.theme-trigger[aria-checked=true] .theme-moon {color:HighlightText}
+ .theme-trigger[aria-checked=false] [data-lucide-icon=sun],.theme-trigger[aria-checked=true] [data-lucide-icon=moon] {color:HighlightText}
 }
 @media(prefers-reduced-motion:reduce) {.theme-thumb {transition:none}}
 .filters {border:0;box-shadow:none;background:transparent;padding:0;gap:12px}

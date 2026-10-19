@@ -11,7 +11,7 @@ import { assessmentPresentationStyles } from "../web/assessment-presentation.mjs
 
 const prior = () => ({ ...samples.enabledConsent(), categories: ["answer"] });
 const initialBasis = { ...samples.basis(), consentRevision: 1 };
-async function setup(t, source, consent = prior(), beforeWrite) {
+async function setup(t, source, consent = prior(), beforeWrite, options = {}) {
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1000, height: 1000 }, reducedMotion: "reduce" });
     const calls = [], errors = [], unexpected = [];
     const moduleSource = await readFile(new URL("../lib/assessment-contract.mjs", import.meta.url), "utf8");
@@ -35,6 +35,11 @@ async function setup(t, source, consent = prior(), beforeWrite) {
             contract.validateRequest("get_assessment_consent", input);
             return { schemaVersion: 1, basis: initialBasis, data: { consent, source, capabilities: snapshot.capabilities } };
         }
+        if (path === "/api/assessment/mutation/status") {
+            contract.validateRequest("get_mutation_status", input);
+            assert.equal(typeof options.status, "function", "Only explicitly simulated receipt reads are allowed.");
+            return options.status(input);
+        }
         assert.equal(path, "/api/assessment/consent/set");
         contract.validateRequest("set_assessment_consent", input);
         await beforeWrite?.();
@@ -53,7 +58,8 @@ async function setup(t, source, consent = prior(), beforeWrite) {
         window.makeControls = ${createAssessmentControls.toString()};
         window.mountConsent = ${mountConsentSetup.toString()};
     ` });
-    await page.evaluate(snapshot => {
+    await page.evaluate(({ snapshot, stored }) => {
+        for (const [key, value] of Object.entries(stored)) sessionStorage.setItem(key, value);
         window.refreshes = 0;
         window.experience = window.makeExperience({
             api: window.syntheticConsentApi, createPresentation: () => ({}), createControls: window.makeControls,
@@ -62,7 +68,7 @@ async function setup(t, source, consent = prior(), beforeWrite) {
         });
         window.experience.receive(snapshot);
         return window.experience.setup(document.getElementById("setup"));
-    }, snapshot);
+    }, { snapshot, stored: options.stored ?? {} });
     return { page, calls };
 }
 
@@ -184,10 +190,102 @@ test("response saving keeps pending and uncertain writes explicit without offeri
     assert.match(await pane.locator(".assessment-applied").textContent(), /Response saving is on/, "Pending drafts cannot claim to be the applied state");
     assert.equal(calls.filter(call => call.path.endsWith("/set")).length, 1);
     release();
-    await pane.getByRole("button", { name: "Check update result", exact: true }).waitFor();
+    await pane.getByRole("button", { name: "Check response-saving result", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Check response-saving result", exact: true }).count(), 1);
+    assert.equal(await pane.getByRole("button", { name: "Check update result", exact: true }).count(), 0);
     assert.equal(await input.isDisabled(), true);
     assert.equal(await pane.getByRole("button", { name: "Turn off and delete responses", exact: true }).isDisabled(), true);
     assert.equal(await pane.getByRole("button", { name: "Discard change", exact: true }).count(), 0);
     assert.match(await pane.getByRole("alert").textContent(), /Synthetic unconfirmed.*Check the original result; do not repeat/);
     assert.equal(calls.filter(call => call.path.endsWith("/set")).length, 1);
+});
+
+test("matching reply recovery follows its rendered owner, preserves focus and keeps the latest original-receipt read", { timeout: 30000 }, async t => {
+    const currentKey = "wire.responseCapture.pending", legacyKey = "wire.assessment.pending";
+    const { page, calls } = await setup(t, { available: true, sourceConfigRef: samples.id("config"), sourceConfigRevision: 1 },
+        prior(), () => { throw new Error("Synthetic unknown response-saving result."); }, {
+            status: input => ({ schemaVersion: 1, mutationRef: input.mutationRef, phase: "pending" }),
+        });
+    await page.setViewportSize({ width: 375, height: 1000 });
+    await page.evaluate(() => { document.documentElement.dataset.evidenceTheme = "dark"; document.documentElement.style.fontSize = "200%"; });
+    await page.getByRole("switch").uncheck();
+    assert.equal(calls.filter(call => call.path.endsWith("/set")).length, 0);
+    await page.getByRole("button", { name: "Turn off and delete responses", exact: true }).click();
+    const notice = page.locator(".assessment-recovery"), action = notice.getByRole("button");
+    await action.waitFor();
+    const raw = await page.evaluate(key => sessionStorage.getItem(key), currentKey);
+    assert.equal(await page.locator("#setup .assessment-recovery").count(), 1);
+    assert.equal(await page.getByRole("alert").count(), 1);
+    assert.equal(await page.getByRole("button", { name: "Check update result", exact: true }).count(), 0);
+    await action.focus();
+    const migration = await page.evaluate(() => {
+        const node = document.activeElement, host = document.getElementById("setup");
+        let finish = window.experience.prepareRecoveryPresentation();
+        host.hidden = true; finish();
+        const away = document.activeElement === node && !host.contains(node);
+        finish = window.experience.prepareRecoveryPresentation();
+        host.hidden = false; finish();
+        return { away, returned: document.activeElement === node && host.contains(node) };
+    });
+    assert.deepEqual(migration, { away: true, returned: true });
+    await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+    assert.equal(await page.locator("#setup .assessment-recovery").count(), 1, "Viewport scrolling never changes ownership.");
+    for (const value of [
+        { ...JSON.parse(raw), mutationRef: samples.id("mutation", 96) },
+        { ...JSON.parse(raw), receiptToken: "b".repeat(64) },
+        { ...JSON.parse(raw), receiptToken: undefined },
+    ]) {
+        await page.evaluate(async ({ key, value }) => {
+            sessionStorage.setItem(key, JSON.stringify(value));
+            await window.experience.setup(document.getElementById("setup"));
+        }, { key: currentKey, value });
+        assert.equal(await page.locator("#setup .assessment-recovery").count(), 0);
+        assert.equal(await notice.isVisible(), true);
+        assert.deepEqual(await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)), currentKey), JSON.parse(JSON.stringify(value)));
+    }
+    await page.evaluate(async ({ currentKey, legacyKey, raw }) => {
+        sessionStorage.setItem(currentKey, raw); sessionStorage.setItem(legacyKey, raw);
+        await window.experience.setup(document.getElementById("setup"));
+    }, { currentKey, legacyKey, raw });
+    assert.equal(await page.locator("#setup .assessment-recovery").count(), 0);
+    await page.evaluate(async ({ legacyKey }) => {
+        sessionStorage.removeItem(legacyKey);
+        const finish = window.experience.prepareRecoveryPresentation();
+        document.getElementById("setup").hidden = true; finish();
+    }, { legacyKey });
+    await action.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector(".assessment-recovery p").textContent.includes("still pending"));
+    await page.evaluate(() => {
+        const finish = window.experience.prepareRecoveryPresentation();
+        document.getElementById("setup").hidden = false; finish();
+    });
+    assert.equal(await page.locator("#setup .assessment-recovery").count(), 1);
+    assert.match(await notice.innerText(), /still pending/);
+    assert.equal(await page.evaluate(key => sessionStorage.getItem(key), currentKey), raw);
+    const reads = calls.filter(call => call.path.endsWith("/mutation/status"));
+    assert.equal(reads.length, 1);
+    assert.deepEqual(reads[0].input, { schemaVersion: 1, mutationRef: JSON.parse(raw).mutationRef, receiptToken: JSON.parse(raw).receiptToken });
+    assert.equal(calls.filter(call => call.path.endsWith("/set")).length, 1);
+    await page.evaluate(async () => {
+        window.experience.receive(null);
+        await window.experience.setup(document.getElementById("setup"));
+    });
+    assert.equal(await page.locator("#setup .assessment-recovery").count(), 0);
+    assert.equal(await notice.isVisible(), true, "Replacing unavailable inline content must not detach unresolved global recovery.");
+    assert.equal(await page.evaluate(key => sessionStorage.getItem(key), currentKey), raw);
+});
+
+for (const kind of ["legacy", "multiple", "missing-token", "malformed"]) test(`${kind} receipts stay global without automatic reads or writes`, async t => {
+    const value = { action: "set_assessment_consent", mutationRef: samples.id("mutation", 97), receiptToken: "c".repeat(64) };
+    const raw = JSON.stringify(value);
+    const stored = kind === "legacy" ? { "wire.assessment.pending": raw }
+        : kind === "multiple" ? { "wire.responseCapture.pending": raw, "wire.assessment.pending": raw }
+            : { "wire.responseCapture.pending": kind === "malformed" ? "not-json" : JSON.stringify({ ...value, receiptToken: undefined }) };
+    const { page, calls } = await setup(t, { available: true, sourceConfigRef: samples.id("config"), sourceConfigRevision: 1 }, prior(), undefined, { stored });
+    assert.equal(await page.locator(".assessment-recovery").isVisible(), true);
+    assert.equal(await page.locator("#setup .assessment-recovery").count(), 0);
+    assert.equal(await page.getByRole("switch").isDisabled(), true);
+    assert.deepEqual(calls.map(value => value.path), ["/api/assessment/consent"]);
+    for (const [key, value] of Object.entries(stored)) assert.equal(await page.evaluate(key => sessionStorage.getItem(key), key), value);
 });

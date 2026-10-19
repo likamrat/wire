@@ -65,6 +65,7 @@ async function fixture(t, problem, { clock = false, decodeResponse = response =>
         }
     });
     await page.goto(runtime.url); await ready(page); await page.evaluate(() => document.fonts.ready);
+    if (await page.locator("#activityUpdateToggle").getAttribute("aria-expanded") === "false") await page.locator("#activityUpdateToggle").click();
     return { ...app, runtime, page, requests, responses, before,
         restart: async () => { runtime = await startServer(app.context, createExportController(app.context), options); return runtime; } };
 }
@@ -187,11 +188,12 @@ test("a real rejected source path offers one source repair, not an uncertain che
     const initial = await page.locator("#checkActivity").boundingBox();
     await pointer(page, "#checkActivity");
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
-    assert.deepEqual(await page.locator("#checkActivity").boundingBox(), initial);
+    const after = await page.locator("#checkActivity").boundingBox();
+    assert.equal(after.x, initial.x); assert.equal(after.y, initial.y);
     assert.equal(await page.evaluate(() => scrollY), 0);
-    const help = await page.locator("#freshHelp > summary").boundingBox();
-    assert.ok(help.y > initial.y + initial.height, "Recovery details stay with filter status, below the page-header Refresh");
-    assert.equal(await page.locator("#analyzeRefresh #checkActivity").count(), 1);
+    const result = await page.locator("#freshResult").boundingBox();
+    assert.ok(result.y >= initial.y + initial.height, "Recovery stays below its contextual action");
+    assert.equal(await page.locator("#activityUpdateSlot #checkActivity").count(), 1);
     const live = page.locator("#freshResult [role=status]");
     assert.equal(await live.getAttribute("aria-live"), "polite");
     assert.equal(await live.getAttribute("aria-atomic"), "true");
@@ -215,12 +217,7 @@ test("a real rejected source path offers one source repair, not an uncertain che
     assert.deepEqual(await loadBoardState(app.context), app.before);
     assert.equal(await page.evaluate(() => sessionStorage.getItem("workiq-evidence.source-check.v1")), null);
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.locator("#freshHelp > summary").focus();
-    assert.equal(await page.locator("#freshHelp > summary").evaluate(node => node === document.activeElement), true);
-    await page.keyboard.press("Enter");
-    assert.equal(await page.locator("#freshHelp").evaluate(node => node.open), true);
-    await page.keyboard.press("Enter");
-    await page.keyboard.press("Tab");
+    await page.locator("#freshIssues").focus();
     assert.equal(await page.locator("#freshIssues").evaluate(node => node === document.activeElement), true);
     await page.keyboard.press("Enter"); await ready(page);
     assert.equal(await page.locator("#approvedSourceDetails").isVisible(), true);

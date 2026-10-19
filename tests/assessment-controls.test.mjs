@@ -12,6 +12,25 @@ const source = () => ({
 });
 const consent = () => controls.consent(contract.defaultConsent(), source());
 const answerConsent = () => ({ ...samples.enabledConsent(), categories: ["answer"] });
+test("recovery presentation matches only the retained uncertain operation and full receipt", () => {
+    const edit = consent();
+    edit.edit({ enabled: true, categories: ["answer"] });
+    const packet = edit.begin(mutation(92), "a".repeat(64));
+    const recovery = { action: packet.action, mutationRef: packet.input.mutationRef, receiptToken: packet.input.receiptToken };
+    assert.equal(edit.matchesRecovery(recovery), false);
+    edit.uncertain(packet.token, "The result is unknown.");
+    const before = edit.snapshot();
+    assert.equal(edit.matchesRecovery(recovery), true);
+    for (const value of [null, {}, { ...recovery, action: "set_personal_assessment" },
+        { ...recovery, mutationRef: mutation(93) }, { ...recovery, receiptToken: "b".repeat(64) },
+        { ...recovery, receiptToken: undefined }]) assert.equal(edit.matchesRecovery(value), false);
+    assert.deepEqual(edit.snapshot(), before, "Presentation identity reads do not change state.");
+    edit.check();
+    assert.equal(edit.matchesRecovery(recovery), true);
+    edit.invalidate("The source changed.");
+    assert.equal(edit.matchesRecovery(recovery), false);
+});
+
 test("response-saving controls distinguish unsent choices from pending, uncertain and invalidated operations", () => {
     const edit = consent();
     assert.equal(edit.hasUnsentDraft(), false);

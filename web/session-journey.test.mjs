@@ -20,17 +20,20 @@ test("Analyze aliases keep the exact filter, private query and paging state", ()
     for (const view of ["analyze", "home", "overview", "activity"]) {
         assert.deepEqual(journey.canonical({ ...scope, view }), { ...scope, view: "analyze" });
     }
-    assert.deepEqual(journey.canonical({ ...scope, view: "calls" }), { ...scope, view: "analyze", mode: "calls" });
+    const { page, ...withoutCallPage } = scope;
+    for (const legacy of [{ view: "calls" }, { view: "analyze", mode: "calls", callSort: "fastest" }]) {
+        assert.deepEqual(journey.canonical({ ...scope, ...legacy }), { ...withoutCallPage, view: "analyze" });
+    }
     assert.deepEqual(journey.canonical({ ...scope, view: "request", request: "invented-request" }),
         { ...scope, view: "request", request: "invented-request" });
 });
 
-test("chat context stays in Analyze and a result link opens matching Calls", () => {
+test("chat context and result links stay in unified Analyze", () => {
     const journey = createSessionJourney();
     const previous = { view: "activity", session: "a", project: "wrong-project", search: "private", result: "success", endpoint: "old-path", layer: "tool", range: "custom", from: "2026-09-01", to: "2026-09-30", service: "Calendar", scope: "all", page: "2" };
     assert.deepEqual(journey.open(previous, "b"), { view: "analyze", session: "b", layer: "tool", range: "custom", from: "2026-09-01", to: "2026-09-30", service: "Calendar", scope: "all" });
-    assert.deepEqual(journey.open(previous, "b", "failure"), { ...previous, session: "b", view: "analyze", mode: "calls", request: undefined, page: undefined, result: "failure", origin: undefined });
-    assert.deepEqual(journey.open(previous, "b", "success"), { ...previous, session: "b", view: "analyze", mode: "calls", request: undefined, page: undefined, result: "success", origin: undefined });
+    assert.deepEqual(journey.open(previous, "b", "failure"), { ...previous, session: "b", view: "analyze", request: undefined, page: undefined, result: "failure", origin: undefined });
+    assert.deepEqual(journey.open(previous, "b", "success"), { ...previous, session: "b", view: "analyze", request: undefined, page: undefined, result: "success", origin: undefined });
 });
 
 test("session report selects canonical owners across pages, never same-name sessions or aliases", () => {
@@ -50,7 +53,8 @@ test("return routes allow only existing local state and one bounded source retur
     const original = { view: "analyze", mode: "calls", page: 2, authors: "user", search: "legacy private phrase" };
     const nested = { ...original, session: "chat", returnToSessions: { ...original, returnToSessions: original },
         href: "https://elsewhere.invalid", capability: "secret", receipt: { id: "receipt" }, unknown: ["value"] };
-    assert.deepEqual(journey.returnRoute(nested, true), { ...original, session: "chat", returnToSessions: original });
+    const adapted = { view: "analyze", authors: "user", search: "legacy private phrase" };
+    assert.deepEqual(journey.returnRoute(nested, true), { ...adapted, session: "chat", returnToSessions: adapted });
     assert.equal(journey.returnRoute({ view: "https://elsewhere.invalid" }), null);
     assert.equal(journey.returnRoute(undefined), null);
 });

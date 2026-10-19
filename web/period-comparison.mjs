@@ -158,9 +158,10 @@ export function createPeriodComparisonState({ time, search, contract, projection
 }
 
 export function mountPeriodComparison({ root, setup = root, toggle, api, time, search, categories, results, projection, createState,
-    assessmentFactories, bindDetails, getContext, navigate, onSearch, recordLink, syncFilters, createReport, openSearch }) {
+    assessmentFactories, getContext, navigate, onSearch, recordLink, syncFilters, createReport, openSearch, onAccepted }) {
     const doc = root.ownerDocument;
-    let machine, presentation, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null, datesEdited = false;
+    let machine, metricSlotKey, contractPromise, contextKey = "", requestKey = "", generation = 0, lastRoute = "", shown = false, blockedSnapshot = null, outcomeObserver = null, datesEdited = false;
+    let selectedPeriod = "baseline", rosterKey = "";
     let completionIntent = null;
     const snapshotKey = context => JSON.stringify([context.snapshot?.revision, context.snapshot?.assessment?.basis, context.snapshot?.assessment?.source]);
     const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
@@ -173,11 +174,10 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const button = (label, action) => {
         const node = el("button", label, "quiet"); node.type = "button"; node.addEventListener("click", action); return node;
     };
-    const heading = el("div", undefined, "period-comparison-heading"), title = el("h2", "Compare periods");
+    const title = el("h2", "Compare periods", "visually-hidden");
     title.id = "periodComparisonTitle"; title.tabIndex = -1;
     const stop = button("Stop comparing", () => { navigate({ compare: undefined }); toggle.focus(); });
     stop.title = "Return to Analyze with your dates and filters kept";
-    heading.append(title, stop);
     const form = el("form", undefined, "period-comparison-controls");
     form.setAttribute("aria-label", "Comparison periods");
     const inputs = {};
@@ -195,7 +195,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         form.append(group);
     }
     const apply = el("button", "Compare periods", "primary"); apply.type = "submit"; apply.id = "applyPeriodComparison";
-    form.append(apply);
+    form.append(apply, stop);
     const dateHint = el("p", undefined, "context-help-note"); dateHint.id = "comparisonDateHint";
     const scopeRow = el("div", undefined, "period-comparison-scope");
     const scope = el("p", undefined, "context-help-note");
@@ -211,6 +211,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     status.hidden = true;
     function setStatus(message, className = "context-help-note") {
         status.textContent = message; status.className = className; status.hidden = !message;
+        if (status.classList.contains("comparison-progress")) output.append(status);
+        else setup.insertBefore(status, scopeRow);
     }
     const output = el("div"); output.id = "periodComparisonResults"; output.tabIndex = -1;
     const report = button("Create comparison report", () => {
@@ -223,9 +225,9 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
     const resultHeading = el("div", undefined, "period-comparison-heading");
     const resultTitle = el("h2", "What differs"); resultTitle.id = "periodComparisonResultsTitle"; resultTitle.tabIndex = -1;
     resultHeading.append(resultTitle, report); resultHeading.hidden = true;
-    scopeRow.append(scope);
+    scopeRow.append(dateHint, scope);
     if (typeof openSearch === "function") scopeRow.append(button("Search this comparison", openSearch));
-    setup.append(heading, form, dateHint, status, scopeRow, searchLabel);
+    setup.append(title, form, status, scopeRow, searchLabel);
     root.append(resultHeading, output);
     function syncReport(value = null) {
         report.disabled = !createReport || !value || !Object.values(value.periods).some(side => side.scenarioIds.length);
@@ -279,7 +281,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             import("/assets/assessment-contract.mjs"), import("/assets/period-comparison-math.mjs"),
         ]).then(([contract, { comparePeriodCohorts }]) => {
             machine = createState({ time, search, contract, projection, categories, comparePeriodCohorts });
-            presentation = assessmentFactories.createPresentation(contract);
+            metricSlotKey = contract.metricSlotKey;
         }).catch(error => { contractPromise = null; throw error; });
         return contractPromise;
     }
@@ -292,13 +294,14 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         const wrap = el("div", undefined, "period-comparison-table");
         wrap.tabIndex = 0; wrap.setAttribute("role", "region"); wrap.setAttribute("aria-label", caption);
         const node = el("table"), head = el("thead"), line = el("tr"), body = el("tbody");
-        node.append(el("caption", caption));
+        node.append(el("caption", caption, "visually-hidden"));
         for (const label of headers) { const th = el("th", label); th.scope = "col"; line.append(th); }
         head.append(line);
         for (const cells of rows) {
             const tr = el("tr");
             cells.forEach((value, index) => {
                 const cell = el(index ? "td" : "th"); if (!index) cell.scope = "row";
+                if (index) cell.dataset.label = headers[index];
                 if (value instanceof doc.defaultView.Node) cell.append(value); else cell.textContent = value;
                 tr.append(cell);
             });
@@ -307,14 +310,23 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         node.append(head, body); wrap.append(node); return wrap;
     }
     const signed = value => value === null ? "Not comparable" : `${value > 0 ? "+" : ""}${number(value)}`;
-    const share = (count, total) => `${number(count)} / ${number(total)} (${total ? number(count * 100 / total) + "%" : "Not applicable"})`;
-    function countFacts(entries) {
-        const facts = el("dl", undefined, "period-count-facts");
-        for (const [label, count] of entries) {
-            const fact = el("div");
-            fact.append(el("dt", label), el("dd", number(count))); facts.append(fact);
-        }
-        return facts;
+    const exactNumber = value => Number.isSafeInteger(value) ? number(value) : String(value);
+    const duration = value => `${exactNumber(value)} ms`;
+    const counted = (value, unit) => `${number(value)} ${unit}${value === 1 ? "" : "s"}`;
+    const numeric = text => el("span", text, "compare-number");
+    const identity = name => el("span", name, `compare-identity compare-identity-${name.toLowerCase()}`);
+    function deltaNode(value, unit, lowerIsBetter = false) {
+        const smallShare = value !== null && value !== 0 && Math.abs(value) < 0.01 && unit === "pp";
+        const text = value === null ? "Not comparable" : smallShare
+            ? `${value > 0 ? "+" : ""}${assessmentFactories.createReportComparison().formatValue(value, "percentage-points")}` : unit.startsWith("ms")
+            ? `${value > 0 ? "+" : ""}${exactNumber(value)} ${unit}` : `${signed(value)} ${unit}`;
+        const node = el("span", text, "compare-delta");
+        if (lowerIsBetter && value !== null && value !== 0) node.classList.add(value > 0 ? "compare-worse" : "compare-better");
+        return node;
+    }
+    function panel(name, className) {
+        const node = el("section", undefined, `compare-panel ${className}`);
+        node.append(el("h3", name)); return node;
     }
     function syncOutcomeChoices(value = null) {
         const control = doc.getElementById("outcomeFilter"), labels = results.labels(getContext().options.layer);
@@ -327,123 +339,212 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             if (count) option.dataset.count = count;
             else delete option.dataset.count;
         }
-        control.dataset.allLabel = a && b ? `All results (A: ${number(a.count)}; B: ${number(b.count)})` : "All results";
+        control.dataset.allLabel = "All results";
         // Ordinary renderControls must rebuild its own date-scoped labels on exit.
         delete control.dataset.optionsSignature;
         const serviceScope = doc.getElementById("serviceFocusScope");
         if (serviceScope) serviceScope.textContent = "Known service matches and missing-service context are counted separately in the results.";
         syncFilters();
     }
-    function paint(value) {
-        syncReport(value); resultHeading.hidden = false;
-        const { baseline: a, later: b } = value.periods;
-        syncOutcomeChoices(value);
-        const labels = results.labels(value.definitions.layer);
-        const totals = side => side.analytics.totals;
-        const rows = [
-            ["Matching records", number(a.rowIds.length), number(b.rowIds.length), signed(b.rowIds.length - a.rowIds.length) + " records"],
-            ["Selected interactions", number(a.interactionRefs.length), number(b.interactionRefs.length), signed(b.interactionRefs.length - a.interactionRefs.length) + " interactions"],
-            ...Object.entries(labels).map(([key, label]) => [label, share(totals(a)[key], a.rowIds.length), share(totals(b)[key], b.rowIds.length),
-                value.comparison.outcomes.change[key] === null ? "Not comparable" : signed(value.comparison.outcomes.change[key]) + " percentage points"]),
-        ];
-        const dateRange = side => side.range.from === side.range.to ? time.formatDate(side.range.from, value.timeContext, true)
-            : `${time.formatDate(side.range.from, value.timeContext, true)} - ${time.formatDate(side.range.to, value.timeContext, true)}`;
-        const summary = el("p", `A: ${dateRange(a)}. B: ${dateRange(b)}. Differences are B minus A.`, "period-comparison-basis");
-        output.replaceChildren(summary);
-        if (!a.rowIds.length && !b.rowIds.length) {
-            output.append(el("p", "No matching retained activity in either period. Change the dates or filters to compare.", "assessment-empty"));
-            return;
+    function outcomePanel(value, sides, labels) {
+        const node = panel("Recorded outcomes", "compare-outcomes"), finding = el("p", undefined, "compare-finding");
+        const change = value.comparison.outcomes.change.failure;
+        if (value.definitions.layer === "code-reference") finding.textContent = "Execution not observed";
+        else finding.append(deltaNode(change, "pp", true), el("span", change === null ? "failure-share comparison unavailable"
+            : change > 0 ? "higher failure share" : change < 0 ? "lower failure share" : "failure share unchanged"));
+        node.append(finding, el("p", `${value.definitions.layer === "tool" ? "Share of matching calls" : value.definitions.unit} · Change in percentage points`, "compare-caption"));
+        const percent = (count, eligible) => eligible ? `${(count * 100 / eligible).toFixed(2)}%` : "Not applicable";
+        for (const [, side, name] of sides) {
+            const row = el("div", undefined, "compare-outcome-row"), heading = el("div", undefined, "compare-bar-heading");
+            heading.append(identity(name), numeric(`${number(side.rowIds.length)} ${results.columnUnit(value.definitions.layer, side.rowIds.length)}`));
+            const bar = el("div", undefined, "compare-outcome-bar"); bar.setAttribute("role", "img");
+            bar.setAttribute("aria-label", `${name}: ` + Object.entries(labels).map(([key, label]) =>
+                `${label} ${side.analytics.totals[key]} (${percent(side.analytics.totals[key], side.rowIds.length)})`).join(", "));
+            for (const key of Object.keys(labels)) {
+                if (!side.analytics.totals[key]) continue;
+                const mark = el("span", undefined, "compare-mark-" + key); mark.dataset.outcome = key;
+                mark.style.width = `${side.analytics.totals[key] * 100 / side.rowIds.length}%`; bar.append(mark);
+            }
+            row.append(heading, bar);
+            if (!side.rowIds.length) row.append(el("p", "No matching records", "compare-caption"));
+            node.append(row);
         }
-        const measures = el("div", undefined, "period-comparison-measures");
-        measures.append(table(`Matching ${value.definitions.unit}`, ["Measure", "Period A", "Period B", "Difference"], rows));
-        output.append(measures);
-        const sharedInteractions = a.interactionRefs.filter(ref => b.interactionRefs.includes(ref)).length;
-        if (value.comparison.outcomes.overlap.sharedCount || sharedInteractions) output.append(el("p",
-            `Shared across periods: ${number(value.comparison.outcomes.overlap.sharedCount)} matching records; ${number(sharedInteractions)} whole interactions. Counts overlap.`, "notice"));
-        if (value.comparison.matchingCallTiming) {
-            const timingRows = ["median", "p95"].map(aggregation => {
-                const comparison = value.comparison.matchingCallTiming[aggregation];
-                const display = fact => `${aggregation === "p95" && fact.coverage.count < 2 ? "Not shown without multiple samples"
-                    : fact.state === "available" ? number(fact.value) + " ms" : "Not measured"}; ${fact.coverage.count} / ${fact.coverage.eligible} calls timed${fact.coverage.count === 1 ? "; single sample" : ""}`;
-                return [aggregation === "median" ? "Median tool latency" : "P95 tool latency", display(comparison.baseline), display(comparison.later),
-                    comparison.delta && (aggregation !== "p95" || Math.min(comparison.baseline.coverage.count, comparison.later.coverage.count) > 1)
-                        ? signed(comparison.delta.value) + " ms" : "Not comparable"];
-            });
-            const timing = el("div");
-            timing.append(table("Matching tool latency", ["Timing", "Period A", "Period B", "Difference"], timingRows),
-                el("p", "Recorded start to completion; timed calls only.", "context-help-note"));
-            measures.append(timing);
-        } else measures.append(el("p", "Tool latency is unavailable for this evidence type.", "context-help-note"));
-        const detailTitle = el("h2", "Whole interactions"); detailTitle.id = "periodInteractionDetailsTitle";
-        output.append(detailTitle, el("p", "Includes calls outside the selected dates or filters.", "context-help-note"));
-        const sides = el("div", undefined, "period-comparison-sides");
-        for (const [key, side, label] of [["baseline", a, "Period A"], ["later", b, "Period B"]]) {
-            const section = el("section", undefined, "period-comparison-side"); section.dataset.periodSide = key;
-            section.append(el("h3", label), countFacts([["Interactions", side.interactionRefs.length]]));
-            const service = side.analytics.serviceInvolvement;
-            const coverage = service.selection.services.length ? [
-                ["Known service matches", service.selection.knownMatchIds.length],
-                ["Missing-service context", service.selection.contextOnlyIds.length],
-            ] : service.missingDetailCount ? [["Missing service details", service.missingDetailCount]] : [];
-            if (coverage.length) {
-                const scope = el("div", undefined, "period-matching-coverage");
-                scope.append(el("h4", "Matching records"), countFacts(coverage)); section.append(scope);
-            }
-            if (side.unmappedScenarioIds.length) section.append(el("p", `${side.unmappedScenarioIds.length} request groups could not be linked to interactions. Findings unavailable.`, "notice"));
-            if (side.analytics.apiCoverage) section.append(countFacts([
-                ["Matching returned entries", side.analytics.apiCoverage.selectedResultUnits],
-                ["Parent calls before outcome/path filters", side.analytics.apiCoverage.eligibleToolCalls],
-            ]));
-            if (!side.rowIds.length) section.append(el("p", "No matching retained activity in this period. No findings or timing are inferred.", "assessment-empty"));
-            const insights = el("div");
-            section.append(insights);
-            if (side.interactionRefs.length) {
-                const model = presentation.summarize(side.assessment.metrics, {
-                    membershipStatus: side.unmappedScenarioIds.length ? "partial" : "complete-retained",
-                    reviewStatuses: side.assessment.reviewStatuses, assessmentAttempts: side.assessment.assessmentAttempts,
-                });
-                assessmentFactories.renderTiming(insights, model.evidence.timing);
-            }
-            if (side.rowIds.length) {
-                const exact = el("details", undefined, "reading-section"); exact.append(el("summary", `Exact matching records (${side.rowIds.length})`));
-                exact.append(table(`${label} exact record membership`, ["Tool or record", "Recorded start", "Outcome", value.definitions.layer === "tool" ? "Tool latency" : "Duration"], side.analytics.rows.map(row => [
-                    recordLink(row, side, value), time.formatTime(row.startedAt, value.timeContext), labels[row.outcome],
-                    Number.isFinite(row.durationMs) ? number(row.durationMs) + " ms" : "Not measured",
-                ])));
-                bindDetails(exact, "period-records:" + key + ":" + JSON.stringify(side.rowIds));
-                section.append(exact);
-            }
-            sides.append(section);
+        const a = sides[0][1], b = sides[1][1];
+        const legend = el("div", undefined, "compare-outcome-values"), header = el("div", undefined, "compare-outcome-value-row compare-caption");
+        header.append(el("span", "Outcome"), el("span", "A"), el("span", "B")); legend.append(header);
+        for (const [key, label] of Object.entries(labels)) {
+            if (!a.analytics.totals[key] && !b.analytics.totals[key]) continue;
+            const row = el("div", undefined, "compare-outcome-value-row"), name = el("span", undefined, "compare-outcome-label");
+            name.append(el("span", undefined, "compare-swatch compare-mark-" + key), label);
+            row.append(name, numeric(`${number(a.analytics.totals[key])} · ${percent(a.analytics.totals[key], a.rowIds.length)}`),
+                numeric(`${number(b.analytics.totals[key])} · ${percent(b.analytics.totals[key], b.rowIds.length)}`));
+            legend.append(row);
         }
-        output.append(sides);
-        const deltas = el("details", undefined, "reading-section"); deltas.append(el("summary", "Compare recorded timing"));
-        const formatter = assessmentFactories.createReportComparison();
-        const factLabel = (fact, peer) => {
-            if (!fact) return formatter.absentPeerLabel(peer);
-            const counts = `${fact.coverage.count} / ${fact.coverage.eligible} ${fact.kind === "pass-rate" ? "assessed" : fact.kind === "cost" ? "priced" : "timed"} ${formatter.coverageUnit(fact)}`;
-            if (fact.state !== "available") {
-                const view = formatter.metricPresentation(fact, fact.metric, { includeOrigin: false });
-                return `${view.value}; ${view.note}`;
-            }
-            return (fact.kind === "pass-rate" ? `${fact.numerator} / ${fact.denominator} passed (${number(fact.numerator * 100 / fact.denominator)}%)`
-                : `${number(fact.value)} ${fact.unit}`) + `; ${counts}`;
+        const volume = el("p", undefined, "compare-caption compare-volume");
+        volume.append("Volume change: ", deltaNode(b.rowIds.length - a.rowIds.length, results.columnUnit(value.definitions.layer, Math.abs(b.rowIds.length - a.rowIds.length))));
+        node.append(legend, volume); return node;
+    }
+    function matchingTimingPanel(value) {
+        const node = panel("Matching tool latency", "compare-latency");
+        node.append(el("p", "Call start to recorded completion", "compare-caption"));
+        const matching = value.comparison.matchingCallTiming;
+        if (!matching) {
+            node.append(el("p", "Unavailable for this evidence layer. These records are not timed tool calls.", "compare-empty"));
+            return node;
+        }
+        const svgNode = (tag, attributes, text) => {
+            const node = doc.createElementNS("http://www.w3.org/2000/svg", tag);
+            for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+            if (text !== undefined) node.textContent = text;
+            return node;
         };
-        deltas.append(table("Recorded timing", ["Measure and origin", "Period A", "Period B", "Observed difference"],
-            value.comparison.metrics.map(item => {
-                const shared = formatter.definitionLabel(item);
-                const label = formatter.comparisonLabel(item) + (shared ? " / " + shared : "");
-                const side = (name, peer) => {
-                    const detail = formatter.sideDefinitionLabel(item, name);
-                    return (detail ? detail + ". " : "") + factLabel(item[name], item[peer]);
-                };
-                const result = item.result;
-                const delta = result?.delta ? signed(result.delta.value) + " " + (result.delta.unit === "percentage-points" ? "percentage points" : result.delta.unit) : result?.status === "incompatible"
-                    ? "Incompatible definitions" : "Not comparable";
-                return [label, side("baseline", "later"), side("later", "baseline"),
-                    delta + (result?.warnings.length ? "; " + result.warnings.map(code => formatter.warningLabel(code, item)).join("; ") : "")];
-            })));
-        bindDetails(deltas, "period-deltas:" + JSON.stringify([a.interactionRefs, b.interactionRefs]));
-        output.append(deltas, el("p", "Retained history only. Undated records excluded.", "context-help-note"));
+        for (const [key, label] of [["median", "Median"], ["p95", "95th percentile"]]) {
+            const item = matching[key], metric = el("section", undefined, "compare-timing-metric"), heading = el("div", undefined, "compare-metric-heading");
+            const measurable = fact => fact.state === "available" && (key !== "p95" || fact.coverage.count > 1);
+            const delta = item.delta && measurable(item.baseline) && measurable(item.later) ? item.delta.value : null;
+            heading.append(el("h4", label), deltaNode(delta, "ms" + (delta > 0 ? " slower" : delta < 0 ? " faster" : ""), true));
+            const values = el("div", undefined, "compare-timing-values");
+            for (const [name, fact] of [["A", item.baseline], ["B", item.later]]) {
+                const cell = el("p");
+                cell.append(identity(name), numeric(measurable(fact) ? duration(fact.value)
+                    : key === "p95" && fact.coverage.count === 1 ? "One sample; not shown" : "Not measured"));
+                values.append(cell);
+            }
+            metric.append(heading, values);
+            const available = [item.baseline, item.later].filter(measurable);
+            if (available.length) {
+                const max = Math.max(...available.map(fact => fact.value)), magnitude = max ? Math.max(Number.MIN_VALUE, 10 ** Math.floor(Math.log10(max))) : 1;
+                const top = max ? Math.min(Number.MAX_VALUE, Math.ceil(max / magnitude + 0.01) * magnitude) : 1;
+                const x = fact => 14 + fact.value / top * 432;
+                const chart = svgNode("svg", { viewBox: "0 0 460 56", role: "img", "aria-label": `${label}; linear scale 0 to ${exactNumber(top)} ms. A hollow, B filled.` });
+                chart.append(svgNode("line", { x1: 14, y1: 18, x2: 446, y2: 18, class: "compare-axis" }));
+                if (available.length === 2) chart.append(svgNode("line", { x1: x(item.baseline), y1: 18, x2: x(item.later), y2: 18, class: "compare-connector" }));
+                for (const [name, fact] of [["a", item.baseline], ["b", item.later]]) if (measurable(fact)) {
+                    chart.append(svgNode("circle", { cx: x(fact), cy: 18, r: name === "a" ? 6 : 4, class: "compare-dot-" + name }));
+                }
+                for (const ratio of [0, 0.5, 1]) chart.append(svgNode("text", { x: 14 + ratio * 432, y: 47,
+                    "text-anchor": ratio === 0 ? "start" : ratio === 1 ? "end" : "middle" }, duration(top * ratio)));
+                metric.append(chart);
+            }
+            node.append(metric);
+        }
+        const coverage = matching.median;
+        const missing = [["A", coverage.baseline], ["B", coverage.later]].filter(([, fact]) => fact.coverage.count < fact.coverage.eligible)
+            .map(([name, fact]) => `${name}: ${fact.coverage.eligible - fact.coverage.count} missing`);
+        node.append(el("p", `Timed calls: A ${coverage.baseline.coverage.count}/${coverage.baseline.coverage.eligible} · B ${coverage.later.coverage.count}/${coverage.later.coverage.eligible}`
+            + (missing.length ? ` · ${missing.join("; ")} (excluded)` : ""), "compare-caption"));
+        return node;
+    }
+    function recordPanel(value, sides, labels, membershipKey) {
+        const node = panel("Evidence behind the comparison", "compare-evidence");
+        node.dataset.viewKey = "period-evidence:" + membershipKey;
+        const tabs = el("div", undefined, "compare-evidence-tabs"); tabs.setAttribute("role", "tablist"); tabs.setAttribute("aria-label", "Exact period records");
+        const entries = [], records = new Map(getContext().snapshot.scenarios.map(record => [record.scenarioId, record]));
+        const select = key => {
+            selectedPeriod = key;
+            for (const entry of entries) {
+                const current = entry.key === key;
+                entry.tab.setAttribute("aria-selected", String(current)); entry.tab.tabIndex = current ? 0 : -1;
+                entry.body.hidden = !current;
+            }
+        };
+        for (const [key, side, name] of sides) {
+            const tab = button(`${name} · ${counted(side.rowIds.length, "record")}`, () => select(key));
+            tab.id = "comparisonRecords" + name; tab.setAttribute("role", "tab");
+            const body = el("section", undefined, "compare-record-panel"); body.id = "comparisonExactRecords" + name;
+            body.dataset.periodSide = key; body.setAttribute("role", "tabpanel"); body.setAttribute("aria-labelledby", tab.id);
+            tab.setAttribute("aria-controls", body.id);
+            body.append(el("p", `Period ${name} · ${number(side.rowIds.length)} matching ${results.columnUnit(value.definitions.layer, side.rowIds.length)} in ${number(side.interactionRefs.length)} whole ${side.interactionRefs.length === 1 ? "interaction" : "interactions"}`, "compare-caption"));
+            if (side.rowIds.length) {
+                const exact = table(`Period ${name}: Exact matching records (${side.rowIds.length})`, ["Record / interaction", "Recorded start", "Outcome", value.definitions.layer === "tool" ? "Tool latency" : "Duration"],
+                    side.analytics.rows.map(row => {
+                        const nameCell = el("div"), link = recordLink(row, side, value); link.id = `comparison-record-${name}-${row.id}`;
+                        nameCell.append(link, el("span", records.get(row.scenarioId)?.title || "Retained interaction", "compare-record-context"));
+                        return [nameCell, time.formatTime(row.startedAt, value.timeContext),
+                            el("span", labels[row.outcome], "compare-record-outcome compare-record-" + row.outcome),
+                            row.durationMs === null ? el("span", "Not measured", "compare-caption") : numeric(duration(row.durationMs))];
+                    }));
+                exact.id = "comparison-record-scroll-" + name; body.append(exact);
+            } else body.append(el("p", "No matching retained activity in this period.", "compare-empty"));
+            if (side.unmappedScenarioIds.length) body.append(el("p", `${side.unmappedScenarioIds.length} request groups have no verified interaction association.`, "compare-scope-note"));
+            const services = side.analytics.serviceInvolvement;
+            if (services.selection.services.length) body.append(el("p", `${services.selection.knownMatchIds.length} known service matches · ${counted(services.selection.contextOnlyIds.length, "missing-service context record")}.`, "compare-caption"));
+            else if (services.missingDetailCount) body.append(el("p", `${services.missingDetailCount} matching records have missing service details.`, "compare-caption"));
+            if (side.analytics.apiCoverage) body.append(el("p", `${side.analytics.apiCoverage.selectedResultUnits} matching returned entries; ${side.analytics.apiCoverage.eligibleToolCalls} parent calls before outcome/path filters. Separate populations.`, "compare-caption"));
+            entries.push({ key, tab, body }); tabs.append(tab);
+            tab.addEventListener("keydown", event => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === "Home" ? entries[0] : event.key === "End" ? entries[1] : entries.find(entry => entry.key !== key);
+                select(next.key); next.tab.focus();
+            });
+        }
+        node.append(tabs, ...entries.map(entry => entry.body)); select(selectedPeriod); return node;
+    }
+    function wholeTimingPanel(value, sides) {
+        const node = panel("Whole-interaction timing", "compare-full-timing");
+        node.querySelector("h3").id = "periodInteractionDetailsTitle";
+        node.append(el("p", `A ${counted(sides[0][1].interactionRefs.length, "interaction")} · B ${counted(sides[1][1].interactionRefs.length, "interaction")} · Includes calls outside the selected dates or filters`, "compare-caption"));
+        const formatter = assessmentFactories.createReportComparison();
+        for (const item of value.comparison.metrics) {
+            const section = el("section", undefined, "compare-whole-measure");
+            const timed = sides.map(([key, side]) => {
+                const metric = side.assessment.metrics.find(metric => metricSlotKey(metric) === item.key);
+                return metric && item[key]?.kind === "duration" ? assessmentFactories.timing.fromMetric(metric) : null;
+            });
+            section.append(el("h4", timed.find(Boolean)?.label || formatter.comparisonLabel(item)));
+            const values = el("div", undefined, "compare-whole-values");
+            sides.forEach(([key, , name], index) => {
+                const fact = item[key], timing = timed[index], cell = el("div"); cell.append(identity(name));
+                if (fact?.state === "available" && timing) {
+                    cell.append(numeric(timing.timed > 1 ? `Median ${duration(timing.distribution.p50Ms)}` : `${duration(timing.measurement.value)} · single sample`));
+                    if (timing.timed > 1) cell.append(numeric(`P95 ${duration(timing.distribution.p95Ms)}`));
+                } else cell.append(el("span", fact ? formatter.metricPresentation(fact, fact.metric, { includeOrigin: false }).value
+                    : formatter.absentPeerLabel(item[key === "baseline" ? "later" : "baseline"])));
+                const definition = formatter.sideDefinitionLabel(item, key);
+                if (definition) cell.append(el("span", definition, "compare-caption"));
+                values.append(cell);
+            });
+            section.append(values);
+            const coverage = timed.map((timing, index) => timing ? `${index ? "B" : "A"} ${timing.timed}/${timing.eligible} ${timing.coverage.unit}` : null).filter(Boolean);
+            if (coverage.length) section.append(el("p", "Timed: " + coverage.join(" · "), "compare-caption"));
+            const change = el("p", undefined, "compare-caption");
+            change.append("Median change: ", item.result?.status === "incompatible" ? el("span", "Incompatible definitions")
+                : deltaNode(item.result?.delta?.value ?? null, item.result?.delta?.unit ?? "", true));
+            section.append(change);
+            const warnings = item.result?.warnings.filter(code => !["partial-coverage", "coverage-decreased"].includes(code)) ?? [];
+            if (warnings.length) section.append(el("p", warnings.map(code => formatter.warningLabel(code, item)).join("; "), "compare-caption"));
+            node.append(section);
+        }
+        return node;
+    }
+    function paint(value) {
+        syncReport(value); resultHeading.hidden = false; syncOutcomeChoices(value);
+        const { baseline: a, later: b } = value.periods, sides = [["baseline", a, "A"], ["later", b, "B"]];
+        const membershipKey = JSON.stringify([value.definitions.layer, a.rowIds, b.rowIds]);
+        if (membershipKey !== rosterKey) { rosterKey = membershipKey; selectedPeriod = "baseline"; }
+        const dayCount = side => Math.round((Date.parse(side.range.to) - Date.parse(side.range.from)) / 86400000) + 1;
+        const dateRange = side => side.range.from === side.range.to ? time.formatDate(side.range.from, value.timeContext, true)
+            : `${time.formatDate(side.range.from, value.timeContext, true)} – ${time.formatDate(side.range.to, value.timeContext, true)}`;
+        const pair = el("div", undefined, "compare-period-key");
+        for (const [, side, name] of sides) {
+            const line = el("p");
+            line.append(identity(name), el("span", `${dateRange(side)} · ${dayCount(side)} ${dayCount(side) === 1 ? "day" : "days"}`)); pair.append(line);
+        }
+        const collection = { history: "Current collection", legacy: "Earlier snapshot", all: "Both collections" }[value.options.filters.scope ?? "history"];
+        output.replaceChildren(pair, el("p", `${collection} · Both dates included · ${time.label(value.timeContext)} · Change is B minus A`, "compare-caption"));
+        const sharedInteractions = a.interactionRefs.filter(ref => b.interactionRefs.includes(ref)).length, sharedRecords = value.comparison.outcomes.overlap.sharedCount;
+        if (dayCount(a) !== dayCount(b)) output.append(el("p",
+            `Unequal windows: A ${dayCount(a)} ${dayCount(a) === 1 ? "day" : "days"}, B ${dayCount(b)} ${dayCount(b) === 1 ? "day" : "days"}. Counts are not normalized per day.`, "compare-scope-note"));
+        if (sharedRecords || sharedInteractions) output.append(el("p",
+            `Overlap: ${number(sharedRecords)} matching records and ${number(sharedInteractions)} whole ${sharedInteractions === 1 ? "interaction" : "interactions"} belong to both periods.`, "compare-scope-note"));
+        if (!a.rowIds.length && !b.rowIds.length) {
+            output.append(el("p", "No matching retained activity in either period. Change the dates or shared filters.", "compare-empty")); return;
+        }
+        const labels = results.labels(value.definitions.layer), answers = el("div", undefined, "compare-answer-grid");
+        answers.append(outcomePanel(value, sides, labels), matchingTimingPanel(value));
+        output.append(answers, recordPanel(value, sides, labels, membershipKey), wholeTimingPanel(value, sides),
+            el("p", "Retained history; undated records excluded. Recorded outcomes are not answer quality, and differences do not establish causes.", "compare-caption"));
     }
     async function update() {
         syncReport();
@@ -456,6 +557,8 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         }
         const context = getContext(), active = context.route.view === "analyze" && context.route.compare === "periods";
         const entering = active && !shown;
+        const pageTitle = doc.getElementById("pageTitle");
+        if (active && pageTitle) pageTitle.textContent = "Compare periods";
         shown = active; root.hidden = !active; setup.hidden = !active; toggle.hidden = context.route.view !== "analyze";
         toggle.setAttribute("aria-expanded", String(active));
         toggle.textContent = active ? "Close period comparison" : "Compare periods";
@@ -475,6 +578,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (entering && doc.activeElement === toggle) inputs.aFrom.focus();
         if (searchInput.value !== context.search) searchInput.value = context.search;
         dateHint.textContent = `Both dates included. ${time.label(context.options.timeContext)}.`;
+        scope.hidden = !context.semanticSearch && !context.search.trim();
         scope.textContent = "Filters below apply to both periods."
             + (context.semanticSearch ? " Search uses matching interactions and individual records across all pages."
                 + (context.semanticSearch.withinScenarioIds !== undefined ? " The private phrase filter narrows that selection further." : "")
@@ -505,7 +609,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (!Object.values(periods(context.route)).every(period => period.from && period.to)) {
             setStatus(""); return;
         }
-        setStatus("Reading both periods...");
+        setStatus("Reading both periods...", "context-help-note comparison-progress");
         output.setAttribute("aria-busy", "true");
         try {
             await ready();
@@ -519,6 +623,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             if (!machine.accept(token, value)) return;
             paint(value);
             setStatus("Comparison ready.", "visually-hidden");
+            onAccepted?.();
             const orient = submitted && completionIntent === submitted && submitted.readingIntent === current.readingIntent
                 && doc.activeElement === submitted.trigger;
             completionIntent = null;
@@ -557,64 +662,120 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
 }
 
 export const periodComparisonStyles = `
-.period-comparing #homeView,.period-comparing #activityView,.period-comparing #periodFeedback,
+.period-comparing #homeView,.period-comparing #activityView,
+.period-comparing #periodFeedback :is(#periodResult,#periodHint,#periodActions,#periodCoverage),
 .period-comparing #viewingContext,.period-comparing #serviceEvidenceSummary,.period-comparing #sessionAnalysis,
 .period-comparing #pageAction,.period-comparing #createSessionReport,.period-comparing #reportSelectionBar,
 .period-comparing #resultsLink,.period-comparing #filters .filter-field:has(#dateFilter),
 .period-comparing #dateFields,.period-comparing #filterChips [aria-label^="Remove date filter:"]{display:none!important}
-.period-comparison{margin-block:var(--space-lg);min-width:0;container:comparison-results / inline-size}
+.period-comparing #filterHeading{display:none}
+.period-comparing #analyzePopulation{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;padding:16px 20px;container:compare-scope / inline-size}
+.period-comparing #periodComparisonSetup,.period-comparing #filters{grid-column:1/-1}
+.period-comparing #filters{margin-block:0}
+.period-comparing #filters .period-controls{gap:8px}
+.period-comparing #collectionNotice{grid-column:1;grid-row:3;align-self:center;font-size:.75rem;margin-block:0;padding-block:4px}
+.period-comparing #appliedFilters{grid-column:2;grid-row:3;margin-block:0}
+.period-comparing #appliedFilters:has(#filterChips:not(:empty)){grid-column:1/-1;grid-row:4}
+.period-comparing .page-heading{margin-bottom:16px}
+.period-comparison{margin-block:20px var(--space-lg);min-width:0;container:comparison-results / inline-size}
 .period-comparison:has(>#periodComparisonResults:empty){margin:0}
-#periodComparisonSetup{min-width:0;container:comparison-setup / inline-size;border-bottom:1px solid var(--rule);padding-bottom:8px;margin-bottom:8px}
-.period-comparison-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px 16px;margin-bottom:12px}
+#periodComparisonSetup{min-width:0;container:comparison-setup / inline-size}
+.period-comparison-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px 16px;margin-bottom:8px}
 .period-comparison-heading h2{margin:0;font-size:var(--type-section)}
 .period-comparison-heading button{min-height:44px;max-width:100%;white-space:normal}
-.period-comparison-controls{display:flex;gap:12px 24px;align-items:end;flex-wrap:wrap;margin:0;max-width:66rem}
-.period-comparison-controls fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));flex:1 1 19rem;min-width:0;gap:8px;border:0;padding:0;margin:0}
-.period-comparison-controls legend{font-weight:var(--weight-strong);padding:0;margin-bottom:4px}
-.period-comparison-controls label{display:grid;gap:4px;min-width:0;font-size:var(--type-small)}
-.period-comparison-controls input{display:block;box-sizing:border-box;min-width:0;width:100%;min-height:44px;font:inherit}
+.period-comparison-controls{display:flex;gap:12px 20px;align-items:end;flex-wrap:wrap;margin:0}
+.period-comparison-controls fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));flex:1 1 16rem;min-width:0;gap:8px;border:0;padding:0;margin:0}
+.period-comparison-controls legend{font-size:.875rem;font-weight:var(--weight-strong);padding:0;margin:0}
+.period-comparison-controls label{display:grid;gap:2px;min-width:0;font-size:var(--type-small)}
+.period-comparison-controls input{display:block;box-sizing:border-box;min-width:0;width:100%;min-height:44px;font:inherit;padding-block:8px}
 .period-comparison-controls>button{min-height:44px;white-space:normal;max-width:100%}
+.period-comparison-controls>button.quiet{font-size:.8125rem}
 #periodComparisonSetup .search-label{max-width:32rem}
-#periodComparisonSetup .context-help-note{max-width:none;margin:8px 0}
+#periodComparisonSetup .context-help-note{max-width:none;margin:4px 0;font-size:.75rem}
 #periodComparisonStatus.error,#periodComparisonStatus.notice{margin:8px 0;overflow-wrap:anywhere}
 .period-comparison-scope{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0 16px;overflow-wrap:anywhere}
-.period-comparison-scope>p{flex:1 1 22rem}
-.period-comparison-scope>button{min-height:44px;max-width:100%;white-space:normal;text-align:start}
-.period-comparison-basis{overflow-wrap:anywhere;font-size:var(--type-small);color:var(--muted);margin:0}
-.period-comparison-measures{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:start}
-.period-comparison-measures>div{min-width:0}
-.period-comparison .context-help-note{max-width:90ch}
-.period-comparison-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;margin-block:16px}
-.period-comparison-side{min-width:0;border-top:1px solid var(--rule);padding-top:12px}
-.period-comparison-side h3{font-size:var(--type-section)}
-.period-comparison-side>p{font-size:var(--type-small);margin:8px 0}
-.period-count-facts{display:flex;flex-wrap:wrap;gap:8px 24px;margin:8px 0;font-size:var(--type-small)}
-.period-count-facts>div{display:flex;gap:8px;align-items:baseline}
-.period-count-facts dt{color:var(--muted)}
-.period-count-facts dd{margin:0;font-weight:var(--weight-strong);font-variant-numeric:tabular-nums}
-.period-matching-coverage{margin:12px 0}
-.period-matching-coverage h4{font-size:var(--type-small);margin:0;font-weight:var(--weight-regular)}
-.period-comparison-side .assessment-findings{font-size:var(--type-small);margin:16px 0}
-.period-outcome-heading{font-size:var(--type-small);font-weight:var(--weight-strong);margin:0 0 8px}
-.period-outcome-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 12px}
-.period-outcome-counts>div{display:grid;grid-template-rows:auto 1fr;gap:4px;min-width:0}
-.period-outcome-counts dt{grid-row:2;font-size:var(--type-small)}
-.period-outcome-counts dd{grid-row:1;margin:0;font-size:var(--type-data-value);font-weight:var(--weight-strong);font-variant-numeric:tabular-nums}
-.period-cause{display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-top:1px solid var(--rule);padding-top:8px}
-.period-cause-count{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
-.period-comparison-side .assessment-compact-verdicts{display:grid;grid-template-columns:fit-content(50%) minmax(0,1fr) auto;gap:8px 12px}
-.period-comparison-side .assessment-compact-verdicts li{display:grid;grid-column:1/-1;grid-template-columns:subgrid;gap:4px 12px;align-items:baseline}
-.period-review-result{display:flex;flex-wrap:wrap;gap:4px 8px;min-width:0}
-.period-review-coverage{color:var(--muted);font-size:var(--type-caption)}
-.period-comparison-side .assessment-summary{margin-block:8px}
-.period-comparison-table{overflow:auto;max-width:100%;margin-block:var(--space-lg)}
-.period-comparison-table table{width:100%;border-collapse:collapse;font-size:var(--type-small);font-variant-numeric:tabular-nums}
-.period-comparison-table caption{text-align:left;font-weight:var(--weight-strong);margin-block-end:var(--space-sm)}
-.period-comparison-table th,.period-comparison-table td{text-align:left;vertical-align:top;white-space:normal;overflow-wrap:anywhere;padding:8px;border-bottom:1px solid var(--rule)}
-.period-comparison-table thead{background:var(--canvas)}
-.period-comparison .assessment-dialog{max-width:min(52rem,calc(100vw - 2rem))}
-@container comparison-results (max-width:58rem){.period-comparison-measures{grid-template-columns:minmax(0,1fr);gap:0}}
-@container comparison-results (max-width:42rem){.period-comparison-sides{grid-template-columns:minmax(0,1fr)}.period-comparison-table table{min-width:30rem}}
-@container comparison-results (max-width:42rem){.period-comparison-side .assessment-compact-verdicts{grid-template-columns:fit-content(50%) minmax(0,1fr)}.period-review-coverage{grid-column:2}}
-@container comparison-setup (max-width:25rem){.period-comparison-controls fieldset{grid-template-columns:minmax(0,1fr)}}
+.period-comparison-scope #comparisonDateHint{flex:1 1 16rem;min-width:0}
+.period-comparison-scope>p:not(#comparisonDateHint){flex-basis:100%;order:1}
+.period-comparison-scope>button{min-height:44px;max-width:100%;white-space:normal;text-align:start;font-size:.75rem}
+#periodComparisonResultsTitle{scroll-margin-top:0}
+.compare-period-key{display:flex;flex-wrap:wrap;gap:8px 28px;align-items:center}
+.compare-period-key p,.compare-timing-values p{display:flex;align-items:center;gap:10px;margin:0}
+.compare-caption{font-size:.8125rem;line-height:1.5;color:var(--muted);margin:6px 0 0}
+.compare-period-key+.compare-caption{margin-top:8px}
+.compare-identity{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;flex:none;font-size:.75rem;font-weight:var(--weight-strong);border:1px solid var(--control);border-radius:4px;color:var(--ink)}
+.compare-identity-b{color:var(--paper);background:var(--ink);border-color:var(--ink)}
+.compare-answer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:18px 0}
+.compare-panel{min-width:0;padding:18px 20px;background:var(--paper);border-radius:var(--radius)}
+.compare-panel h3{font-size:1.125rem;margin:0 0 8px}
+.compare-panel h4{font-size:.875rem;margin:0}
+.compare-finding{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;margin:8px 0;font-size:1.1875rem}
+.compare-finding .compare-delta{font-size:1.5rem}
+.compare-number,.compare-delta{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.compare-worse{color:var(--chart-failure)}.compare-better{color:var(--chart-success)}
+.compare-outcome-row{margin-top:18px}
+.compare-bar-heading,.compare-metric-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.compare-bar-heading{margin-bottom:8px}
+.compare-outcome-bar{height:18px;display:flex;background:var(--canvas);border-radius:2px;overflow:hidden}
+.compare-mark-success{background:var(--chart-success)}.compare-mark-failure{background:var(--chart-failure)}
+.compare-mark-partial{background:var(--chart-partial)}.compare-mark-unknown{background:var(--chart-unknown)}
+.compare-mark-other{background:var(--warning)}.compare-mark-transport{background:var(--danger)}
+.compare-outcome-values{display:grid;grid-template-columns:minmax(0,1fr) repeat(2,minmax(7rem,auto));margin-top:16px}
+.compare-outcome-value-row{display:grid;grid-column:1/-1;grid-template-columns:subgrid;gap:12px;align-items:baseline;padding-block:5px}
+.compare-outcome-value-row>:not(:first-child){text-align:right}
+.compare-outcome-label{font-size:.875rem}
+.compare-swatch{width:8px;height:8px;display:inline-block;margin-right:8px}
+.compare-volume{margin-top:14px}
+.compare-scope-note{font-size:.8125rem;line-height:1.5;margin:12px 0 0;padding-left:10px;border-left:2px solid var(--control);color:var(--muted)}
+.compare-timing-metric{margin-top:16px}
+.compare-timing-values{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:10px}
+.compare-timing-values .compare-number{font-size:1.125rem}
+.compare-timing-metric svg{display:block;width:100%;height:auto;margin-top:4px;max-height:56px;overflow:visible}
+.compare-axis{stroke:var(--rule);stroke-width:1}.compare-connector{stroke:var(--control);stroke-width:2}
+.compare-dot-a{stroke:var(--ink);stroke-width:2;fill:var(--paper)}.compare-dot-b{stroke:var(--ink);stroke-width:2;fill:var(--ink)}
+.compare-timing-metric svg text{font-family:var(--font);font-size:12px;fill:var(--muted)}
+.compare-empty{padding:18px 0;color:var(--muted);font-size:.875rem}
+.compare-evidence,.compare-full-timing{margin-top:20px}
+.compare-evidence-tabs{display:flex;gap:16px;margin-top:6px}
+.compare-evidence-tabs button{min-height:44px;border-radius:0}
+.compare-evidence-tabs button[aria-selected=true]{box-shadow:inset 0 -2px var(--ink)}
+.period-comparison-table{overflow:auto;max-width:100%;max-height:340px;margin:12px 0 0}
+.period-comparison-table table{width:100%;border-collapse:collapse;font-size:.875rem;font-variant-numeric:tabular-nums}
+.period-comparison-table thead{background:var(--paper)}
+.period-comparison-table thead th{font-weight:var(--weight-regular);color:var(--muted);position:sticky;top:0;background:var(--paper);z-index:1}
+.period-comparison-table th,.period-comparison-table td{text-align:left;vertical-align:top;border-bottom:1px solid var(--surface-divider);padding:10px 8px;white-space:normal;overflow-wrap:anywhere}
+.period-comparison-table tr>:first-child{padding-left:0;width:36%}
+.period-comparison-table tr>:last-child{text-align:right;padding-right:0}
+.compare-record-context{display:block;font-size:.8125rem;color:var(--muted);font-weight:var(--weight-regular);margin-top:4px}
+.compare-record-failure,.compare-record-transport{color:var(--chart-failure)}.compare-record-success{color:var(--chart-success)}
+.compare-whole-measure{padding:14px 0;border-top:1px solid var(--surface-divider);margin-top:14px}
+.compare-whole-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:10px}
+.compare-whole-values>div{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px}
+.compare-whole-values>div>.compare-caption{flex-basis:100%}
+@container comparison-results (max-width:58rem){.compare-answer-grid{grid-template-columns:minmax(0,1fr)}.compare-panel{padding:16px}}
+@container comparison-results (max-width:42rem){
+ .period-comparison-table{max-height:420px}.period-comparison-table thead{display:none}
+ .period-comparison-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;border-bottom:1px solid var(--surface-divider);padding:12px 0}
+ .period-comparison-table tr>*{display:block;width:auto!important;border:0;padding:0}
+ .period-comparison-table tr>:first-child,.period-comparison-table tr>:last-child{grid-column:1/-1}
+ .period-comparison-table td[data-label]::before{content:attr(data-label);display:block;color:var(--muted)}
+}
+@container comparison-results (max-width:24rem){
+ .compare-outcome-values{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .compare-outcome-value-row>:first-child{grid-column:1/-1}.compare-outcome-value-row.compare-caption{display:none}
+ .compare-outcome-value-row>:nth-child(2)::before{content:"A ";color:var(--muted)}.compare-outcome-value-row>:nth-child(3)::before{content:"B ";color:var(--muted)}
+ .compare-timing-values{display:grid;gap:8px}
+}
+@media(max-width:600px){
+ .period-comparing #analyzePopulation{display:block;padding:12px}
+ .period-comparison-controls fieldset{flex-basis:100%}.period-comparison-controls>button{margin-left:auto}
+ .compare-outcome-value-row{gap:8px;font-size:.8125rem}.compare-panel h3{font-size:1.0625rem}
+ .compare-period-key{gap:10px}.compare-finding{font-size:1.0625rem}.compare-metric-heading{align-items:baseline;flex-wrap:wrap}
+ .period-comparing #filters .filter-scroll{overflow:visible}
+ .period-comparing #filters .period-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .period-comparing #filters .primary-single-fields,.period-comparing #filters .primary-multiple-fields{display:contents}
+ .period-comparing #filters .select-control,.period-comparing #filters .local-filter-row,.period-comparing #filters .select-control>button{min-width:0}
+ .period-comparing #appliedFilters{float:right}.period-comparing #collectionNotice{clear:both}
+}
+@container compare-scope (max-width:16rem){.period-comparison-controls fieldset,.period-comparing #filters .period-controls{grid-template-columns:minmax(0,1fr)}}
+@media(forced-colors:active){.compare-outcome-bar>span{border:1px solid CanvasText}.compare-evidence-tabs button[aria-selected=true]{border-bottom:2px solid Highlight}}
 `;

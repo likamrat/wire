@@ -105,12 +105,12 @@ test("current timing navigation indexes tool latency wording at its authoritativ
     assert.equal(result.matches.total, 1);
     const hit = result.matches.hits[0];
     assert.equal(hit.title, "Recorded timing");
-    assert.equal(hit.target.href, "#analyze?mode=calls");
+    assert.equal(hit.target.href, "#analyze");
     assert.equal(hit.target.focus, "activityView");
     const { start, end, excerptStart } = hit.textMatch;
     assert.equal(hit.textMatch.field, "content");
     assert.equal(hit.excerpt.slice(start - excerptStart, end - excerptStart), "tool latenc");
-    assert.ok(hit.excerpt.includes("Compare individual tool latencies in Calls"));
+    assert.ok(hit.excerpt.includes("Read individual tool latencies inside each interaction"));
     await panel.api("/api/search/query", { query: "recorded call durations", requestId: 2, types: ["view"] });
     const old = await panel.wait(event => event.event === "results" && event.requestId === 2);
     assert.equal(old.matches.total, 0, "No alias, display-only replacement or semantic rewrite remains.");

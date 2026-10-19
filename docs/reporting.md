@@ -851,12 +851,45 @@ subtype; only the two explicit frozen period bounds describe its date scope.
 Returned-entry reports also retain keyed eligible parent-call/result/status
 identities and recomputed broader API coverage, separately from selected rows.
 
-HTML/PDF/Markdown lead with supported differences, exact two-side counts and
-timing, then explicitly labelled full-interaction findings, context and definitions.
-They reuse native/shared typography and paint; PDF is generated from the supported
-light document with the existing offline embedded-font reader contract.
-JSON freezes the same facts, not a regenerated screen. Incompatible or absent
-lanes withhold deltas, overlap is explicit, and no causal improvement or blended
+Current HTML/PDF lead with outcome-share bars and the paired median/P95 tradeoff,
+with exact counts, milliseconds and timed/eligible coverage. The separate
+whole-interaction region uses concise paired facts and keeps its own boundary
+and population. Zero, missing, one-sided and incompatible measures remain
+distinct; a single timed sample does not acquire a P95.
+
+Exact evidence is grouped within each separately named period by the existing
+frozen interaction ordinal. Each period uses two sequential print columns,
+not paired A/B columns. Print reads down the left column, then down the right:
+native browser column fragmentation continues a long group into the next column
+before starting the next interaction, without a backwards page turn. Screen
+HTML retains its row-major group grid; narrow HTML uses one column. Frozen record arrays,
+keys and ordinals remain unchanged, and record-relative order is preserved
+inside each group. The grouped display order is explicitly not chronology.
+Unmapped rows stay separate unverified records. Tool and service commonality are
+tested independently, including missing/not-applicable service qualifications;
+only repeated fields in multi-record groups are hoisted. Single-record groups
+keep that context beside their record rather than adding a redundant header line.
+Variable context stays beside its actual record. Outcome and exact, right-aligned
+duration lead each record. Print identity headers repeat when a long group
+continues across a column or page; neither entire periods nor the coverage block
+are kept together.
+
+Coverage uses labelled actual filter/author/content policy, overlap, history and
+withheld-data facts, plus conditional service-context, unmapped and API-parent
+counts. It does not repeat primary population/timing figures or meaningless
+no-service-filter zero recitals. Print-only record padding and section rhythm
+keep the final qualifications/footer in a natural reading flow without smaller
+type, removed facts, a fixed page-count target or a pagination engine.
+
+The current renderer runs only after frozen validation and leaves
+`periodReportDisplay` unchanged for Markdown and verified JSON Search extraction.
+Metric projections2/3 retain their previous HTML presentation. Period-specific
+styles do not change other report kinds or shared native-report styles.
+PDF still renders the exact new `previewHtml` through the existing offline,
+script-disabled, network-blocked, embedded-font tagged-A4 path. All new
+`product-report.*` hashes are computed normally; no sealed preview is replaced.
+Screen theme roles never enter the report document. JSON freezes the same facts,
+and Markdown retains its existing meaning. No causal improvement or blended
 grade is inferred.
 
 Relevant source, permission, selected evidence, assessment, author or contextual
