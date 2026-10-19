@@ -570,13 +570,17 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .analyze-result-actions .report-selection-bar {margin:0}
 #activityList>.activity-card {container-type:inline-size;padding:16px 8px;border:0;border-bottom:1px solid transparent;border-radius:var(--radius-small);background:var(--paper);margin-top:8px}
 #activityList>.request-row {display:block;padding:0}
-.request-card-open {display:block;min-height:44px;padding:16px 12px;color:var(--ink);border-inline-start:3px solid transparent;border-radius:inherit}
+.request-card-open {display:block;min-height:44px;padding:12px;color:var(--ink);border-inline-start:3px solid transparent;border-radius:inherit}
 .request-card-open:hover {background:var(--hover)}
 .request-card-open:active {background:var(--pill-pressed)}
 .request-row[data-detail-active]>.request-card-open {border-inline-start-color:var(--accent);background:var(--accent-soft)}
-.request-card-prompt {font:var(--type-body)/var(--leading-reading) var(--font);max-width:68ch}
-.request-card-summary {display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:10px;font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
+.request-card-prompt {font:var(--type-body)/var(--leading-ui) var(--font);max-width:none;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.request-card-author {white-space:nowrap}
+.request-card-summary {display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:6px;font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
 .request-card-time {margin-inline-start:auto}
+@container(min-width:52rem) {
+ .request-card-prompt {-webkit-line-clamp:1}
+}
 .interaction-summary {display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-sm) var(--space-lg);margin-top:var(--space-sm);font-size:var(--type-small);line-height:var(--leading-ui);color:var(--muted)}
 .interaction-identity {display:grid;gap:var(--space-xs);flex-basis:100%;min-width:0;color:var(--ink)}
 .identity-group,.identity-list {min-width:0;max-width:100%;overflow-wrap:anywhere}

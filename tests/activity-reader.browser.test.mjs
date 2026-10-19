@@ -374,7 +374,7 @@ test("a success with missing service evidence, partial result and missing prompt
                 authorship: { actor: "unknown", basis: "missing-source" } };
             const { page } = await setup(t, record);
             await expect(page.locator(".request-card-open")).toContainText(label);
-            if (outcome === "unknown") await expect(page.locator(".request-card-open")).toContainText("Prompt not available");
+            if (outcome === "unknown") await expect(page.locator(".request-card-open")).toContainText("Prompt text unavailable");
             await page.locator(".request-card-open").click(); await settled(page);
             await expect(page.locator("#contextSidebarTitle")).toBeFocused();
             await expect(page.locator(".reader-call-services")).toContainText("Asked Copilot");

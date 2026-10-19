@@ -3330,13 +3330,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         action.href = routeUrl(target);
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", String(sidebarIdentity !== null && route.request === scenario.scenarioId));
-        const prompt = el("p", "request-card-prompt", textAccess.excerpt(scenario.userPrompt));
+        const description = textAccess.describePrompt(scenario.userPrompt);
+        const rows = rowsFor(scenario.scenarioId);
+        const prompt = el("p", "request-card-prompt");
+        prompt.append(description.hasText ? document.createTextNode(textAccess.excerpt(scenario.userPrompt))
+            : rows.some(row => row.tool) ? cardTools(rows, false, { compact: true })
+                : document.createTextNode(results.unit(applied.layer, rows.length)));
         const actor = authorship.read(scenario.userPrompt).actor;
-        const author = el("span", "request-card-author", actor === "unknown" ? "Author unverified" : authorship.label(scenario.userPrompt));
+        const author = el("span", "request-card-author", actor === "unknown" ? "Author unverified" : description.label);
         author.dataset.promptActor = actor;
         prompt.prepend(author, document.createTextNode(": "));
-        const facts = resultLine(applied.layer, results.summarize(rowsFor(scenario.scenarioId)), { scope: "Matching this view", pillsOnly: true });
+        const facts = resultLine(applied.layer, results.summarize(rows), { scope: "Matching this view", pillsOnly: true });
         facts.classList.add("request-card-summary");
+        if (!description.hasText) facts.append(el("span", "request-card-availability", description.notice));
         const moment = requestTiming.entry(scenario, applied.timeContext);
         facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
         action.append(prompt, facts);

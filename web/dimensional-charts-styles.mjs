@@ -49,7 +49,6 @@ ${dimensionalColumnStyles}
 @container(max-width:32rem) {.flat-comparison-action {grid-template-columns:minmax(0,1fr)}}
 @media(forced-colors:active) {.flat-comparison-segment {background:CanvasText}.flat-comparison-action:focus-visible {outline-color:Highlight}}
 .dimensional-scroll {overflow-x:auto;overflow-y:hidden;padding:8px 4px calc(max(16px,1rem) + 1px);scrollbar-width:thin;min-width:0;max-width:100%}
-.flat-time-scroll {overflow-x:scroll}
 .dimensional-count {position:absolute;bottom:calc(100% + 8px);left:var(--column-center,50%);transform:translateX(-50%);display:flex;align-items:center;justify-content:center;min-height:44px;padding:8px;color:var(--ink);font-size:1.125rem;line-height:1.2;font-weight:var(--weight-strong);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
 .time-column .dimensional-count {pointer-events:auto;color:var(--accent);text-decoration:none;cursor:pointer;border-radius:var(--radius-small)}
 .time-column:is(:hover,:active) .dimensional-count {background:transparent;color:var(--ink)}

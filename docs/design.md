@@ -169,9 +169,28 @@ PDF, JSON and Markdown content are not restyled.
 
 Analyze has one Activity list. Minimal cards lead with a regular Asta Sans
 prompt/author preview, matching recorded-outcome counts and recorded time.
+The preview uses the card's available width, not the reader's 68ch prose
+measure. At 52rem of card width it occupies one line; narrower cards allow two
+lines at the same font size. The excerpt is a recognition cue, not the full
+message: the native card link still opens the complete authorized text in the
+gliding reader. Outcomes and time share one compact metadata row and wrap when
+needed, without clipping labels or shrinking text.
+
+An empty retained string is not evidence of a lost prompt. Legacy `full` status
+can describe an empty message. A verified `autopilot` author basis with that
+empty string is named **Automatic continuation**, with the same interaction's
+matching tool names and **No prompt text retained**. Other empty messages use
+their verified author/activity label; unavailable text says **Prompt text
+unavailable**, never that it was recovered or that permission excluded it
+without evidence. The reader uses the same distinction. Nonempty automatic
+messages remain Agent prompts. Neither a neighboring message nor tool arguments
+are substituted for a prompt. No capture, retention, provenance or saved-report
+data is rewritten by this presentation.
+
 When only capture time is available it is named, not presented as message time.
 Tools, services, supported causes and per-call timing belong in the full gliding
-reader, not another primary Calls list. Report-picker summaries retain their
+reader, not another primary Calls list; matching tool names are the recognition
+fallback only when the card has no authorized prompt text. Report-picker summaries retain their
 full-interaction context and shared service vocabulary.
 Each call shows its own outcome and supported cause once. A specific retained
 cause such as **Sign-in was required** replaces a redundant **Tool failed**
@@ -2815,8 +2834,12 @@ count ratios as five daily bins. This is the plot's extent, not a widget
 min-height; empty and unavailable views do not paint a meaningless plot.
 
 Count headroom is measured in the existing label-resize handler for every density,
-so enlarged labels and 44px actions stay intact. Date-label spacing and native
-horizontal-scrollbar space stay consistent across grouping changes. Zero-gap
+so enlarged labels and 44px actions stay intact. Date-label spacing stays
+consistent across grouping changes. The time view inherits the shared
+`overflow-x:auto` scrollport: fitted columns do not reserve an empty native
+scrollbar track. The measured label minimum still allows genuine dense/narrow
+overflow, with every date, count and mark reachable without shrinking type,
+clipping content or changing bins. Zero-gap
 meaning and scrolling instructions live in the existing Chart data and definitions
 destination; overflowing scrollers also expose their keyboard/trackpad/touch
 description. Conditional instruction rows no longer resize the widget. Genuine
@@ -2838,7 +2861,10 @@ through the normal shell for bins/outcome shares, DST, partial bounds, scoped
 date click/Back, query/Author/Outcome/service context, empty/undated/extreme
 counts, light/dark and narrow 200% text. `responsive-charts.browser.test.mjs`
 retains dense dates, monthly baselines, hidden/container/font changes and
-observer disposal. Small-column, flat-outcome and pure geometry tests retain
+observer disposal. `time-chart-overflow.browser.test.mjs` checks native scrollbar
+geometry in the complete Analyze widget, fitted and dense bins, both sidebar
+widths, narrow/enlarged text, unchanged date targets and mode/Back navigation.
+Small-column, flat-outcome and pure geometry tests retain
 exact arithmetic and invalid-input safeguards. Historical files are never
 regenerated.
 

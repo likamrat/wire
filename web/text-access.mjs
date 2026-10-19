@@ -5,6 +5,17 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
     function retained(source) {
         return source?.status !== "unavailable" && typeof source?.text === "string" && source.text.trim() ? source.text : null;
     }
+    function describePrompt(source) {
+        if (retained(source) !== null) return { hasText: true, label: caption(source), notice: null };
+        const author = authorship?.read(source), empty = source?.status === "full"
+            && typeof source.text === "string" && !source.text.trim();
+        return {
+            hasText: false,
+            label: empty && author?.basis === "autopilot" ? "Automatic continuation"
+                : author?.actor === "user" ? "My activity" : author?.actor === "agent" ? "Agent activity" : "Author unverified",
+            notice: empty ? "No prompt text retained" : "Prompt text unavailable",
+        };
+    }
     function excerpt(source, limit = 170) {
         const text = retained(source);
         if (text === null) return "Prompt not available";
@@ -54,7 +65,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         const heading = document.createElement(visibility && subject === "response" && actionsHost ? "span"
             : subject === "response" && !contentFirst ? "h3" : "h2");
         heading.id = "text-heading-" + encodeURIComponent(key);
-        heading.textContent = headingLabel ?? (subject === "response" ? contentFirst ? "Recorded response" : "Retained response text" : promptLabel);
+        heading.textContent = headingLabel ?? (subject === "response" ? contentFirst ? "Recorded response" : "Retained response text"
+            : complete && text === null ? describePrompt(source).label : promptLabel);
         if (visibility && subject === "request" && authorship?.read(source).actor === "unknown") heading.textContent = "Author unverified";
         if (visibility && subject === "response" && actionsHost) heading.classList.add("visually-hidden");
         if (subject === "request") heading.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
@@ -78,7 +90,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         const reading = document.createElement("p");
         reading.id = "text-excerpt-" + encodeURIComponent(key);
         reading.classList.add(complete ? "full-text-unavailable" : "full-text-preview");
-        reading.textContent = complete && text !== null ? `${noun === "prompt" ? "Prompt" : "Response"} text is hidden.` : preview;
+        reading.textContent = complete && text !== null ? `${noun === "prompt" ? "Prompt" : "Response"} text is hidden.`
+            : complete && subject === "request" ? describePrompt(source).notice + "." : preview;
         const passage = inline ? document.createElement("div") : root;
         if (inline) {
             passage.className = "full-text-passage";
@@ -235,7 +248,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         paint();
         return root;
     }
-    return { excerpt, render, caption,
+    return { excerpt, render, caption, describePrompt,
         release(root) { bindings.get(root)?.(); bindings.delete(root); },
         isOpen: (key, initial = true) => presentation.isOpen("text:" + key, initial),
         setOpen: (key, open) => presentation.setOpen("text:" + key, open) };

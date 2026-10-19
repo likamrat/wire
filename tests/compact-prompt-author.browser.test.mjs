@@ -93,7 +93,7 @@ test("compact cards name the prompt author without inferring from text or replac
         await expect(row.locator("a,button,input")).toHaveCount(1);
         await expect(row.locator(".request-card-open")).toHaveAttribute("href", /#request\?/);
     }
-    await expect(card(page, "missing").locator(".request-card-prompt")).toContainText("Prompt not available");
+    await expect(card(page, "missing").locator(".request-card-open")).toContainText("Prompt text unavailable");
     const link = card(page, "mine").locator(".request-card-open");
     await link.locator(".request-card-prompt").evaluate(node => {
         const range = document.createRange(); range.selectNodeContents(node);
