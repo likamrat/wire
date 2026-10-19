@@ -416,7 +416,7 @@ test("reader distillation keeps a legible story without repeated empty fields or
     assert.doesNotMatch(visible, /API path\s+Not recorded|API metadata: None recorded/);
     await expect(timeline.getByText("Outside current view", { exact: true })).toHaveCount(6);
     await expect(timeline.getByText("Matches current view", { exact: true })).toHaveCount(1);
-    assert.match(visible, /No error details recorded/);
+    assert.match(visible, /Error detail not recorded/);
     assert.doesNotMatch(visible, /Historical call evidence only/);
     assert.match(await page.locator("#requestContent > .reader-response-availability").innerText(), /No saved response\. Capture is off\./);
     assert.match(await page.locator(".reader-scope").innerText(), /1 of 7.*match/);
@@ -477,8 +477,9 @@ test("reader failure copy is concise while sign-in signals and unknown outcomes 
             }
         }
     }
-    assert.deepEqual(await calls.locator(":scope > .reader-recorded-signal").allTextContents(),
-        ["No error details recorded.", "Recorded error signal: sign-in required.", "Recorded error signal: access denial."]);
+    assert.deepEqual(await calls.locator(".call-heading .result-cause").allTextContents(),
+        ["Error detail not recorded", "Sign-in was required", "Access was denied"]);
+    await expect(calls.locator(".reader-recorded-signal")).toHaveCount(0);
     assert.equal(await calls.locator(":scope > .context-help-note").count(), 0, "No repeated historical-access lecture between calls");
     for (const [index, call] of (await calls.all()).entries()) {
         const visible = await call.innerText();
@@ -495,8 +496,7 @@ test("reader failure copy is concise while sign-in signals and unknown outcomes 
             assert.doesNotMatch(visible, /source omitted|collection excluded|sign-in|access denial|Historical call evidence only/,
                 "The retained-record gap must not invent an omission/exclusion cause or historical access signal");
         } else {
-            await expect(call.locator(".reader-signal-label")).toHaveText("Recorded error signal: ");
-            await expect(call.locator(".reader-recorded-signal")).toContainText(index === 1 ? "sign-in required." : "access denial.");
+            await expect(call.locator(".call-heading .result-cause")).toHaveText(index === 1 ? "Sign-in was required" : "Access was denied");
         }
     }
 });

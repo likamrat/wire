@@ -15,14 +15,20 @@ async function paint(locator) {
     return locator.evaluate(node => {
         const style = getComputedStyle(node), marker = getComputedStyle(node, "::before");
         const surface = marker.content !== "none" && marker.zIndex === "-1" ? marker : style;
+        const focus = marker.outlineStyle !== "none" ? marker : style;
+        let background = surface.backgroundColor, ancestor = node.parentElement;
+        while (["transparent", "rgba(0, 0, 0, 0)"].includes(background) && ancestor) {
+            background = getComputedStyle(ancestor).backgroundColor;
+            ancestor = ancestor.parentElement;
+        }
         const { x, y, width, height } = node.getBoundingClientRect();
         const range = document.createRange();
         range.selectNodeContents(node);
         return {
             text: node.textContent.trim(), current: node.getAttribute("aria-current"),
             hover: node.matches(":hover"), focus: node.matches(":focus-visible"),
-            background: surface.backgroundColor, color: style.color, border: surface.borderColor,
-            outline: style.outlineStyle, outlineWidth: style.outlineWidth,
+            background, rawBackground: surface.backgroundColor, opacity: style.opacity, color: style.color, border: surface.borderColor,
+            outline: focus.outlineStyle, outlineWidth: focus.outlineWidth,
             danger: style.getPropertyValue("--danger").trim(), paper: style.getPropertyValue("--paper").trim(),
             marker: { content: marker.content, background: marker.backgroundColor, width: marker.width },
             bounds: { x, y, width, height }, clipped: node.scrollWidth > node.clientWidth,
@@ -319,8 +325,14 @@ test("pending destructive confirmation stays readable and locked without forward
         assert.equal(pending.bounds.width, beforePaint.bounds.width);
         assert.equal(pending.bounds.height, beforePaint.bounds.height);
         assert.equal(pending.textFits, true);
+        assert.equal(pending.opacity, "1");
         assert.ok(contrast(pending.color, pending.background) >= 4.5, "Disabled pending text remains readable");
-        await expect(confirm.locator(".pending-indicator")).toBeVisible();
+        if (proofs) await writeFile(path.join(proofs, `${theme}-pending-paint.json`), JSON.stringify({
+            before: beforePaint, pending, contrast: contrast(pending.color, pending.background),
+        }, null, 2));
+        await expect(confirm).toHaveAttribute("data-pending", "true");
+        await expect(page.locator("#deleteStatus")).toBeVisible();
+        await expect(page.locator("#deleteStatus")).toContainText("Deleting the confirmed records");
         if (proofs) await page.screenshot({ path: path.join(proofs, `${theme}-pending.png`) });
         await page.keyboard.press("Escape");
         await expect(page.locator("#deleteDialog")).toBeVisible();

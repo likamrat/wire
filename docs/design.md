@@ -37,6 +37,13 @@ Color/border transitions take 140ms with no scaling or positional movement and
 are omitted under reduced motion. Keyboard focus stays explicit; forced colors
 retain native control boundaries and selected markers.
 
+Settings action buttons and button-links use the existing theme-qualified
+`--control` boundary at rest, not the decorative `--surface-edge`. Their shapes
+must remain clearly visible on paper in both themes without relying on a shadow
+or hover to reveal them. The painted boundary keeps at least 3:1 contrast against
+the surrounding surface. Quiet actions, disabled states, primary/destructive
+roles, switches and the shared Search field retain their separate treatments.
+
 Persistent navigation/current, transient hover and keyboard focus are separate.
 Saved rows retain a leading selected edge without a persistent hover slab or
 selection-driven padding shift. Analyze cards retain their selected edge and
@@ -151,6 +158,14 @@ Calls, per-call sidebar details and report-picker inspection. Tools have a dedic
 row, services/purpose/evidence gaps a second row, and recorded call outcomes a third.
 Quiet timing appears once with its existing meaning. Tools to services keep a
 compact 4px gap; services to recorded outcomes use 8px of intentional breathing room.
+Failure outcomes lead with their retained cause: **Sign-in was required · Tool
+failed**, for example, rather than a generic failure followed by a secondary
+error paragraph. Compact cards include the count in the same outcome. Distinct
+causes split only the failed-call count; they never become a whole-interaction
+verdict or get assigned to the other calls. The same shared presentation serves
+Analyze, Calls and report-picker summaries, and the opened reader reached through
+any of them or Search. The exact call's tool stays above its outcome and latency.
+The reason is visible once, not repeated in a badge, warning and explanation.
 Outcome prefixes and pills align at their centers, so the first decorative SVG
 inside a pill does not set the row's baseline or add height in the report picker.
 The Asked Copilot bubble is optically 18px inside the same 20px metadata lane and
@@ -470,12 +485,20 @@ Local placeholders share an explanation only when their reason breakdowns,
 source basis, timing qualifications and memberships also match; each metric
 retains its own recorded reasons.
 
-Failures without a retained cause say **Failure cause unavailable.** in the
-reading flow. Existing technical details keep the exact source/collection
-qualification and the limit on inferring current sign-in or permissions.
+Failures without a retained cause say **Error detail not recorded** alongside
+the outcome. Known exclusion says **Error detail not retained**, or **Error detail
+excluded for privacy** when credential screening is recorded. Existing technical
+details keep the exact source/collection qualification; retained tool error codes
+remain in the existing per-call Source details. The shared screen helper consumes
+only qualified retained signals/codes, never error prose or prompt interpretation.
 Recorded sign-in requirements, access-denial wording, error codes and timeouts
 still appear as distinct failure statements, not as generic missing causes or
 instructions to sign in now. Unknown completion remains separate from failure.
+These are historical call facts, not current sign-in/permission checks. A returned
+API status belongs to that returned result, not an inferred cause of its parent
+call. Success, partial results, unobserved execution and unlike layer counts keep
+their existing meanings. Filtered summaries count only matching canonical rows;
+the reader still distinguishes those rows from the full interaction.
 
 These are screen presentation changes. Card preview options, evidence
 classification, model provenance, assessment logic, source collection and frozen
@@ -787,12 +810,23 @@ read-only, without an invented model filter or inexact drilldown.
 The widget extends the existing Tools/Services row to three columns when space
 allows, spans the two-column row at intermediate widths and stacks on narrow
 screens. It does not change source collection, stored evidence, report membership
-or frozen exports. The screen projection adds only distinct validated names to
-the existing model fact; it exposes no additional response linkage.
+or frozen exports. The screen projection supplies distinct validated names and
+the recording qualifications described below, never additional response linkage.
 
 The interaction sidebar includes a **Model/Models** row with chat, project and
 recorded time. Its semantic key/value structure uses equal regular screen
-typography, with no badge, control or extra explanation.
+typography, with no badge or control. Model identity is distinct from recording
+completeness: a short neutral note explains missing linked model names, an
+unverified final response boundary, or truncated model history. Truncation can
+mean a bounded source window or the retention limit; the retained flag does not
+distinguish them, and reaching the retained-response ceiling alone does not prove
+which caused it. It is not a model defect, tool failure or missing response text.
+Measured response timing can coexist with truncated model history.
+The additive screen-only `presentation` contains the qualified identity and closed
+completeness reasons, derived in the same validation/ordering path as the existing
+model fact. Its original value/status, distinct model list and stored evidence
+remain unchanged. No raw linkage or retained-response counts are added. Unverified,
+conflicting and excluded-only metadata cannot disclose model names through it.
 Calls labels this source-context fact **Interaction model**, not a property of
 the tool or returned API result. The reader shows the same fact beside each
 interaction's own prompt. Filtering calls does not narrow the interaction's model
@@ -2420,7 +2454,7 @@ cancellation without duplicate dispatch or late-response repaint.
 Secondary navigation actions, secondary buttons, format choices and filter chips
 use the shared 6px control corners; fields use 4px corners and result badges capsules.
 Ordinary text-action buttons (including primary, secondary, quiet and destructive
-actions) paint a 36px face inside a 44px native target at normal text size. The
+actions outside Settings) paint a 36px face inside a 44px native target at normal text size. The
 face is inset 4px vertically in every pointer/disabled state; its balanced padding
 grows with wrapped or enlarged text. Hover/press changes only that face, not the
 outer target. Text stays at the established control size with 12px horizontal
@@ -2515,10 +2549,18 @@ chats** starts the separate recollection review. Old setting IDs, aliases and
 search phrases remain valid and only locate controls, never approve actions.
 
 Asta Sans, pinned Lucide and the neutral light/dark tokens are unchanged.
-Settings uses 10px fields/actions, 8px category rows and one 12px content surface.
+Settings uses 10px fields, 8px action/category corners and one 12px content surface.
 Targets remain at least 44px, including the search input itself. Inputs retain
 visible focus; long paths, status explanations and options wrap. No shared select
 behavior or new motion policy is introduced.
+Settings text actions paint a compact 32px face around the normal 20px label line,
+with 6px visible vertical clearance and 10px horizontal insets. Their independent
+44px native target is still clickable outside that face. Enlarged or wrapped text
+grows the face and target naturally; no fixed-height clipping or smaller font is
+used. Keyboard focus follows the painted face, including the existing disabled
+explanation wrapper. Quiet, primary and destructive actions keep their distinct
+roles. These dimensions establish the current family, not an excuse to skip
+full-row optical review.
 Display's theme switch uses the header's existing track, thumb and sun/moon
 glyphs, one theme subscription and the same immediate browser-local action.
 Both switches mirror the applied theme, including cross-panel storage changes;
@@ -2531,6 +2573,15 @@ Rows align the actual label and control text baselines, not merely their outer
 they do not inherit a utility-sized empty line. The Refresh action and concise effect/current result form one task, without a
 parallel About Refresh gate. Partial checks lead with incompleteness and checked
 scope; canonical limits/reasons appear once beside one current-history action.
+Within its existing Settings group, Refresh is a visibly labelled button, not a
+bare glyph whose explanation looks like the action. The canonical Lucide refresh
+glyph scales with the label: its 12px painted ink beside 11px label ink at normal
+size has a restrained 5.25px gap. The button aligns with the owning heading on
+wide panes; narrow panes read title, purpose, then action. The stored-only recovery
+control visibly says **Read stored activity**, preserving that different effect.
+Both presentations reuse the original nodes, handlers, guards and pending glyph.
+Their original icon-only presentation outside Settings is unchanged. Strategic
+placement elsewhere remains a separate design decision requiring approved options.
 The full model and non-Settings detail presentation remain unchanged.
 Visible effects and hover/focus help share the action's stored-recovery guard,
 including recognized source failures in the error phase. The source-repair

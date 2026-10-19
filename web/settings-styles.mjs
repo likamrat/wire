@@ -1,10 +1,10 @@
 export const settingsStyles = `
 :is(.settings-view,#workspace:has(>#settingsView:not([hidden]))) {
  --settings-title-size:2rem;--settings-title-leading:1.25;--settings-title-tracking:-.025em;
- --settings-field-radius:10px;--settings-nav-radius:8px;--settings-action-radius:10px;
+ --settings-field-radius:10px;--settings-nav-radius:8px;--settings-action-radius:8px;
 }
 #workspace:has(>#settingsView:not([hidden]))>.page-heading #pageTitle {font-size:var(--settings-title-size);line-height:var(--settings-title-leading);letter-spacing:var(--settings-title-tracking)}
-.settings-view {max-width:70rem;container:settings / inline-size}
+.settings-view {--pill-border:var(--control);max-width:70rem;container:settings / inline-size}
 .settings-status-link {margin:8px 0 0;color:var(--muted)}
 .settings-status-link a {display:inline-flex;align-items:center;min-height:44px}
 #workspace>#collectionStatusView {max-width:64rem}
@@ -87,13 +87,22 @@ export const settingsStyles = `
 .settings-view label {font-size:var(--type-small);line-height:var(--leading-control)}
 .settings-view :is(input,select,button,.select-trigger) {font-size:var(--type-control);line-height:var(--leading-control)}
 .settings-view :is(button:not(.ux-help,.ux-copy,.select-trigger),a.button-link) {--action-radius:var(--settings-action-radius)}
+.settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy) {--pill-inset:10px}
+.settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {inset-block:6px}
+.settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible {outline:none}
+.settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
+.settings-view .ux-disabled-help:focus-visible:has(>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)) {outline:none}
+.settings-view .ux-disabled-help:focus-visible>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {outline:2px solid var(--focus);outline-offset:2px}
+.settings-view :is(#checkActivity,#refreshBtn) {gap:.375em}
+.settings-view :is(#checkActivity,#refreshBtn)>.wire-icon {width:1rem;height:1rem}
+.settings-view #reloadSettings {margin-bottom:16px}
 .settings-view :is(input[type=text],.select-trigger) {border-radius:var(--settings-field-radius)}
 .settings-section {padding:24px;background:var(--paper);border-radius:var(--radius);margin-bottom:20px}
 .settings-section h2 {font-size:var(--type-section);line-height:var(--leading-section)}
 .settings-section h3 {font-size:var(--type-body);line-height:var(--leading-ui)}
 .settings-view .settings-section {padding:0;background:transparent;border:0;border-radius:0;margin:0}
 .settings-view .settings-section>h2 {margin:0}
-.settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group) {margin-bottom:24px}
+.settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group) {margin-bottom:20px}
 .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.5rem;line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
 .settings-section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:24px}
@@ -135,7 +144,7 @@ export const settingsStyles = `
 .settings-preferences .select-control {width:100%}
 .settings-view .settings-subheading {font-size:var(--type-reading)}
 .settings-view p,.settings-view summary {overflow-wrap:anywhere}
-.settings-view :is(.settings-display-field,.settings-task-row) {display:grid;grid-template-columns:minmax(0,1fr) fit-content(45%);align-items:baseline;gap:8px 24px;padding-block:24px;border-top:1px solid var(--rule)}
+.settings-view :is(.settings-display-field,.settings-task-row) {display:grid;grid-template-columns:minmax(0,1fr) fit-content(45%);align-items:baseline;gap:8px 24px;padding-block:20px;border-top:1px solid var(--rule)}
 .settings-preferences .settings-field>label {padding:0;font-size:var(--type-small);font-weight:var(--weight-medium)}
 .settings-display-field>.select-control {align-self:baseline;justify-self:end;max-width:100%}
 .settings-display-field>:is(.settings-help,.notice) {grid-column:1/-1;margin:0}
@@ -148,21 +157,21 @@ export const settingsStyles = `
 #approvedConnection>.settings-actions {margin-top:8px}
 #unapprovedConnection>p {margin:0}
 .settings-group {margin:0;padding-block:20px;border-top:1px solid transparent}
-.settings-view .settings-group {padding-block:24px;border-top-color:var(--rule)}
+.settings-view .settings-group {padding-block:20px;border-top-color:var(--rule)}
 .settings-group-heading {display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px;margin-bottom:12px}
 .settings-view :is(.settings-group h3,.fresh-activity>h3) {font-size:var(--type-reading);font-weight:var(--weight-strong);margin:0}
 .settings-view #connectionSource {padding-top:0;border-top:0}
-.settings-view .fresh-activity {display:block;margin:0;padding-block:24px;border-top:1px solid var(--rule)}
-.settings-view .fresh-activity>h3 {margin:0 0 12px}
-.settings-view .fresh-controls {min-width:0;grid-template-columns:44px minmax(0,1fr);align-items:baseline;gap:8px 12px}
-.settings-view .fresh-controls>:is(#checkActivity,.ux-disabled-help) {grid-column:1;grid-row:1}
+.settings-view .fresh-activity {display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:24px;margin:0;padding-block:20px;border-top:1px solid var(--rule)}
+.settings-view .fresh-activity>h3 {display:flex;align-items:center;grid-column:1;grid-row:1;min-height:44px;margin:0}
+.settings-view .fresh-activity:has(#checkActivity[hidden])>h3 {min-height:0}
+.settings-view .fresh-controls {display:contents}
+.settings-view .fresh-controls>:is(#checkActivity,.ux-disabled-help) {grid-column:2;grid-row:1;justify-self:end;align-self:center}
 .settings-view .fresh-details {display:none}
-.settings-view .settings-refresh-context {grid-column:2;grid-row:1;margin:0;color:var(--muted)}
-.settings-view .fresh-result {grid-column:2;grid-row:1}
-.settings-view .fresh-controls:has(.settings-refresh-context:not([hidden])) .fresh-result {grid-row:2}
-.settings-view .fresh-controls:not(:has(>#checkActivity:not([hidden]),>.ux-disabled-help:not([hidden]))) {grid-template-columns:minmax(0,1fr)}
-.settings-view .fresh-controls:not(:has(>#checkActivity:not([hidden]),>.ux-disabled-help:not([hidden])))>:is(.settings-refresh-context,.fresh-result) {grid-column:1}
-.settings-view .settings-refresh-details {margin-top:12px;color:var(--muted)}
+.settings-view .settings-refresh-context {grid-column:1;grid-row:2;margin:0;color:var(--muted)}
+.settings-view .fresh-result {grid-column:1/-1;grid-row:3;margin-top:0}
+.settings-view .fresh-controls:has(.settings-refresh-context:not([hidden])) .fresh-result {margin-top:8px}
+.settings-view .settings-refresh-details {grid-column:1/-1;grid-row:4;margin-top:8px;color:var(--muted)}
+.settings-view .settings-refresh-details>p:first-child {margin-top:0}
 .settings-view .settings-refresh-details p {font-size:var(--type-small)}
 .settings-view .settings-refresh-details ul {margin:8px 0;padding-inline-start:20px}
 .settings-view .settings-refresh-details li {margin-block:4px}
@@ -170,12 +179,12 @@ export const settingsStyles = `
 #approvedConnection,#unapprovedConnection {padding:0;border:0}
 #connectionSource:has(#approvedConnection[hidden]) .source-editor {margin-top:0;padding-block:0;border-top:0}
 #connectionPreferences .settings-preferences .settings-field {padding-block:0;border:0}
-#connectionPreferences #preferenceActions {margin-top:20px;padding-top:12px}
+#connectionPreferences #preferenceActions {margin-top:16px;padding-top:0}
 .settings-view #connectionPreferences {padding-bottom:0}
 .settings-view .settings-group>.settings-task-row {padding:0;border:0;margin:0}
 .settings-view .settings-group>.settings-task-row h3 {margin:0}
 .settings-group>.collection-status-actions {margin-top:8px}
-.settings-reply-row {padding-block:0 24px;margin:0}
+.settings-reply-row {padding-block:0 20px;margin:0}
 .settings-reply-fallback {font-size:var(--type-reading);line-height:var(--leading-ui);font-weight:var(--weight-strong)}
 .settings-reply-row:has(.settings-choice-row)>.settings-reply-fallback {display:none}
 .settings-view #assessmentSetup {min-width:0}
@@ -201,6 +210,8 @@ export const settingsStyles = `
 .settings-view #assessmentSetup .settings-help {margin-top:0}
 .settings-view #assessmentSetup>section>p {max-width:70ch}
 @media(forced-colors:active) {
+ .settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible::before,
+ .settings-view .ux-disabled-help:focus-visible>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {outline-color:Highlight}
  .settings-view .settings-switch .select-toggle {background:Canvas;border-color:ButtonText;box-shadow:none;forced-color-adjust:none}
  .settings-view .settings-switch .select-toggle::after {background:ButtonText}
  .settings-view .settings-switch:has(input:checked) .select-toggle {background:Highlight;border-color:Highlight}
@@ -249,7 +260,12 @@ export const settingsStyles = `
  .settings-view .settings-preferences {grid-template-columns:minmax(0,1fr)}
  .settings-view .settings-task-row>:is(button,.button-link,.ux-disabled-help),.settings-display-field>.select-control {justify-self:start}
  .settings-display-field>.select-control {width:100%}
- .settings-view .fresh-controls {justify-self:start;max-width:100%}
+ .settings-view .fresh-activity {grid-template-columns:minmax(0,1fr)}
+ .settings-view .fresh-activity>h3 {min-height:0;margin-bottom:6px}
+ .settings-view .settings-refresh-context {grid-column:1;grid-row:2;margin-bottom:8px}
+ .settings-view .fresh-controls>:is(#checkActivity,.ux-disabled-help) {grid-column:1;grid-row:3;justify-self:start}
+ .settings-view .fresh-result {grid-row:4}
+ .settings-view .settings-refresh-details {grid-row:5}
  .settings-view :is(.settings-actions,.assessment-control-actions) {justify-content:flex-start}
 }
 @media(max-width:699px) {

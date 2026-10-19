@@ -416,7 +416,7 @@ test("unapproved source search stays read-only and stale AI status cannot restor
     const { page, automatic } = await setup(t, { approved: false });
     await category(page, "connection");
     await expect(page.locator("#reviewSource")).toBeEnabled();
-    await expect(page.locator("#checkActivity")).toHaveAccessibleName("Refresh");
+    await expect(page.locator("#checkActivity")).toHaveAccessibleName("Read stored activity");
     for (const query of ["source", "pause", "Refresh"]) {
         await page.locator("#settingsSearch").fill(query);
         const id = query === "pause" ? "collection-state" : query === "Refresh" ? "collect-now" : "source";
@@ -453,11 +453,13 @@ test("four current groups retain keyboard focus and readable geometry at 375 and
                 const pane = document.querySelector("[data-settings-section]:not([hidden])");
                 const nodes = [...pane.querySelectorAll("button,summary,label,p,h2,h3,a")].filter(node => node.checkVisibility());
                 const active = getComputedStyle(document.activeElement);
+                const face = getComputedStyle(document.activeElement.matches(".ux-disabled-help")
+                    ? document.activeElement.querySelector("button") : document.activeElement, "::before");
                 return {
                     overflow: document.documentElement.scrollWidth > innerWidth,
                     clipped: nodes.filter(node => node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1).map(node => node.id || node.tagName),
                     targets: nodes.filter(node => node.matches("button,summary,.button-link")).map(node => ({ id: node.id || node.textContent, height: node.getBoundingClientRect().height })),
-                    focus: active.outlineStyle,
+                    focus: active.outlineStyle !== "none" ? active.outlineStyle : face.outlineStyle,
                     sectionCount: document.querySelectorAll("[data-settings-section]:not([hidden])").length,
                 };
             });

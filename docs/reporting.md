@@ -261,6 +261,11 @@ text, including partial fragments, without reconstructing missing text. Optional
 show Copilot Chat and qualified time when known. Exact tool names, supported service
 cues and outcome pills share the Analyze/sidebar vocabulary, using full-interaction
 canonical Work IQ rows, not only the calls matching the current Analyze filter.
+Failed-call pills lead with the same retained cause as Analyze and the reader,
+splitting distinct causes by their own canonical call count. Unknown error detail
+is explicit, and one call's sign-in requirement never becomes the verdict for the
+whole interaction. This is picker/peek presentation only; saved formats, report
+facts and metric membership are unchanged.
 Tools, services/purpose/gaps and recorded call outcomes occupy separate compact
 rows, matching the interaction sidebar and Analyze cards. Metadata icons stay
 within the text line box without extra blank spacing; real controls keep their

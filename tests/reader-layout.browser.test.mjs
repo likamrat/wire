@@ -944,8 +944,9 @@ test("EC92 concise failure presentation retains distinct retention exclusions", 
     await expect(calls.nth(0)).toContainText("exceeded the 8 KiB inspection limit");
     await expect(calls.nth(1)).toContainText("matched credential screening");
     await expect(calls.nth(2)).toContainText("unsupported format");
-    for (const call of await calls.all()) {
-        await expect(call.locator(".reader-recorded-signal")).toHaveText("No error details recorded.");
+    for (const [index, call] of (await calls.all()).entries()) {
+        await expect(call.locator(".call-heading .result-cause")).toHaveText(index === 1 ? "Error detail excluded for privacy" : "Error detail not retained");
+        await expect(call.locator(".reader-recorded-signal")).toHaveCount(0);
         await expect(call.getByRole("button", { name: /sign in|retry|authenticate/i })).toHaveCount(0);
         assert.doesNotMatch(await call.innerText(), /Recorded error signal:|HTTP 401|HTTP 403/);
     }
@@ -1012,7 +1013,7 @@ test("reader story separates the recorded request, interaction response and opti
     await expect(reader.getByText("No saved response. Capture is off.", { exact: true })).toHaveCount(1);
     await expect(call.locator(".reader-input-value code")).toHaveText(requestPath);
     await expect(call.locator(".reader-input-heading .service-cue")).toHaveText("People");
-    await expect(call.locator(".reader-recorded-signal")).toHaveText("Recorded error signal: sign-in required.");
+    await expect(call.locator(".call-heading .result-cause")).toHaveText("Sign-in was required");
     const observations = [];
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
         await page.setViewportSize({ width: 1440, height: 1000 });

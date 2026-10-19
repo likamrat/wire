@@ -29,6 +29,42 @@ test("a mixed request describes matching canonical actions without a request-lev
     assert.deepEqual(results.entries("tool", summary), [{ key: "failure", label: "Tool failed", count: 1, icon: "result-failure" }]);
 });
 
+test("failure explanations use retained signals only and stay with their canonical call subset", () => {
+    const results = createRecordedResults();
+    const calls = new Map([
+        ["sign-in", { failureEvidence: { version: 1, reason: "error-code-recorded", code: "failure",
+            messageStatus: "text-excluded", messageSignal: "workiq-sign-in-required" } }],
+        ["denied", { failureEvidence: { version: 1, reason: "error-details-excluded",
+            messageStatus: "text-excluded", messageSignal: "access-denial" } }],
+        ["timeout", { failureEvidence: { version: 1, reason: "error-details-excluded",
+            messageStatus: "text-excluded", messageSignal: "request-timeout" } }],
+        ["code", { failureEvidence: { version: 1, reason: "error-code-recorded", code: "ResourceMissing" } }],
+        ["private", { failureEvidence: { version: 1, reason: "error-details-excluded",
+            messageStatus: "sensitive-excluded", messageSignal: "workiq-sign-in-required" } }],
+        ["unknown", { requestArgs: { query: "Sign-in required" }, apiResults: [{ statusCode: 401 }] }],
+        ["unretained", { failureEvidence: { version: 1, reason: "result-content-excluded", messageStatus: "text-excluded" } }],
+    ]);
+    assert.deepEqual([...calls.values()].map(call => results.failureReason(call)), [
+        "Sign-in was required", "Access was denied", "Request timed out (MCP -32001)", "Recorded error: ResourceMissing",
+        "Error detail excluded for privacy", "Error detail not recorded", "Error detail not retained",
+    ]);
+    const rows = [...calls.keys()].map(id => ({ id, outcome: "failure" }));
+    rows.push({ id: "worked", outcome: "success" }, { id: "partial", outcome: "partial" }, { id: "not-observed", outcome: "unknown" });
+    const source = row => calls.get(row.id) ?? calls.get("sign-in");
+    const full = results.explainedEntries("tool", [...rows, rows[0]], source);
+    assert.equal(full.reduce((sum, entry) => sum + entry.count, 0), rows.length);
+    assert.equal(full.filter(entry => entry.reason === "Sign-in was required").length, 1);
+    assert.ok(full.filter(entry => entry.key !== "failure").every(entry => !entry.reason));
+    const filtered = results.explainedEntries("tool", rows.filter(row => row.id === "unknown"), source);
+    assert.deepEqual(filtered, [{ key: "failure", label: "Tool failed", count: 1, icon: "result-failure", reason: "Error detail not recorded" }]);
+    for (const layer of results.layers.filter(layer => layer !== "tool")) {
+        assert.ok(results.explainedEntries(layer, rows, source).every(entry => !entry.reason), `${layer} never borrows a tool failure cause`);
+    }
+    assert.deepEqual(results.explainedEntries("tool", [rows[0], { id: "sign-in-2", outcome: "failure" }],
+        () => calls.get("sign-in")), [{ key: "failure", label: "Tool failed", count: 2, icon: "result-failure", reason: "Sign-in was required" }]);
+    assert.equal(results.explainedEntries("tool", [rows[0], { ...rows[0], outcome: "success" }], source), null);
+});
+
 test("pure, unknown, code-only and unavailable results never invent request success", () => {
     const results = createRecordedResults();
     for (const outcome of ["success", "failure", "unknown", "partial", "other", "transport"]) {

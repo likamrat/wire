@@ -90,6 +90,33 @@ async function inspectSourcePaths(page) {
     await page.locator("#settingsSearch").press("Escape");
 }
 
+async function actionBoundary(control) {
+    return control.evaluate(node => {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext("2d");
+        const rgba = value => {
+            context.clearRect(0, 0, 1, 1); context.fillStyle = value; context.fillRect(0, 0, 1, 1);
+            return [...context.getImageData(0, 0, 1, 1).data].map((channel, index) => index === 3 ? channel / 255 : channel);
+        };
+        const blend = (front, back) => front.slice(0, 3).map((channel, index) => channel * front[3] + back[index] * (1 - front[3]));
+        function background(element) {
+            if (!element) return [255, 255, 255];
+            const fill = rgba(getComputedStyle(element).backgroundColor);
+            return fill[3] === 1 ? fill.slice(0, 3) : blend(fill, background(element.parentElement));
+        }
+        const style = getComputedStyle(node), face = getComputedStyle(node, "::before");
+        const surface = face.content !== "none" && face.zIndex === "-1" ? face : style;
+        const outside = background(node.parentElement), fill = blend(rgba(surface.backgroundColor), outside);
+        const border = blend(rgba(surface.borderTopColor), fill), rect = node.getBoundingClientRect();
+        const rgb = value => `rgb(${value.join(",")})`;
+        return { label: node.textContent.trim(), boundary: rgb(border), outside: rgb(outside), fill: rgb(fill), ink: style.color,
+            borderWidth: parseFloat(surface.borderTopWidth), target: rect.height, focus: node.matches(":focus-visible"),
+            outline: surface.outlineStyle !== "none" ? surface.outlineStyle : style.outlineStyle,
+            bounds: { x: rect.x + scrollX, y: rect.y + scrollY, width: rect.width, height: rect.height } };
+    });
+}
+
 async function geometry(page, selector = "[data-settings-section]:visible") {
     return page.locator(selector).evaluate(root => {
         const box = node => {
@@ -130,12 +157,28 @@ async function geometry(page, selector = "[data-settings-section]:visible") {
             }
             return rect;
         }
-        const overlaps = [];
+        const overlaps = [], searchOverlays = [];
         for (let index = 0; index < controls.length; index++) for (const other of controls.slice(index + 1)) {
             const first = target(controls[index]), second = target(other);
             if (first.contains(second) || second.contains(first)) continue;
             const a = hitBox(first), b = hitBox(second);
             if (Math.min(a.right, b.right) - Math.max(a.x, b.x) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.y, b.y) > 1) {
+                const input = first.matches("input.search-capsule-input") ? first : second.matches("input.search-capsule-input") ? second : null;
+                const clear = input === first ? second : first;
+                // Clear occupies the native input's reserved inset, never its text region.
+                if (input && clear.matches("button.search-capsule-clear") && input.parentElement === clear.parentElement) {
+                    const field = box(input), button = box(clear), css = getComputedStyle(input);
+                    const textEnd = field.right - parseFloat(css.paddingRight) - parseFloat(css.borderRightWidth);
+                    const center = { x: button.x + button.width / 2, y: button.y + button.height / 2 };
+                    const onScreen = center.x >= 0 && center.x < innerWidth && center.y >= 0 && center.y < innerHeight;
+                    const reachable = !onScreen || clear.contains(document.elementFromPoint(center.x, center.y));
+                    if (button.width >= 44 && button.height >= 44 && button.x >= textEnd
+                        && button.right <= field.right && button.y >= field.y && button.bottom <= field.bottom && reachable) {
+                        searchOverlays.push({ input: input.id, clear: clear.id, textGap: button.x - textEnd,
+                            width: button.width, height: button.height, hitTested: onScreen });
+                        continue;
+                    }
+                }
                 overlaps.push([controls[index].id || controls[index].textContent, other.id || other.textContent]);
             }
         }
@@ -162,7 +205,7 @@ async function geometry(page, selector = "[data-settings-section]:visible") {
             heading: parseFloat(getComputedStyle(root.querySelector("h2")).fontSize),
             pageHeading: parseFloat(getComputedStyle(document.querySelector("#pageTitle")).fontSize),
             controls: controls.map(node => ({ id: node.id, text: node.textContent, ...box(target(node)) })),
-            overlaps,
+            overlaps, searchOverlays,
             icons: [...root.querySelectorAll(".wire-icon")].filter(visible).map(node => {
                 const owner = node.closest("button,a[href],summary"), style = getComputedStyle(node.parentElement);
                 return { role: node.dataset.lucideIcon, display: box(node), target: owner ? box(owner) : null,
@@ -202,6 +245,184 @@ test("Settings normal entry presents all four current sections with coherent hie
         for (const text of result.text) assert.ok(contrast(text.color, text.background) >= 4.5, context + ": " + text.text);
         for (const row of result.alignment) assert.ok(row.difference <= 4, `${context}: ${row.label} aligns with its control text (${row.difference}px)`);
     }
+});
+
+test("Settings action boundaries remain clearly visible against their surface in both themes", { timeout: 30000 }, async t => {
+    const { page } = await setup(t), measurements = [];
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        for (const [category, selectors] of [
+            ["privacy", ["#recollectActivity", '[data-settings-section=privacy] a.button-link']],
+            ["connection", ["#editSource", "#pauseCollection"]],
+            ["troubleshooting", ['[data-settings-section=troubleshooting] a.button-link']],
+        ]) {
+            await navigateSettings(page, category);
+            await capture(page, `action-boundaries-${category}-${theme}`);
+            for (const selector of selectors) for (const control of await page.locator(selector).all()) {
+                measurements.push({ theme, category, ...await actionBoundary(control) });
+            }
+        }
+    }
+    if (proofs) await writeFile(path.join(proofs, "action-boundaries.json"), JSON.stringify(measurements, null, 2));
+    const faint = measurements.filter(value => value.borderWidth < 1 || contrast(value.boundary, value.outside) < 3);
+    assert.deepEqual(faint.map(value => ({ theme: value.theme, label: value.label,
+        boundaryContrast: contrast(value.boundary, value.outside), borderWidth: value.borderWidth })), [],
+    "Enabled action shapes need a visible boundary, not a near-invisible shadow");
+    for (const value of measurements) {
+        assert.ok(contrast(value.ink, value.fill) >= 4.5, value.label);
+        assert.ok(value.target >= 44, value.label);
+    }
+});
+
+test("Settings action edges stay visible through real hover, press, focus and narrow layouts without changing roles", { timeout: 45000 }, async t => {
+    const { page, posts } = await setup(t), measurements = [];
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const settle = () => page.waitForFunction(() => !document.getAnimations().some(animation =>
+        animation.playState === "running" && Number.isFinite(animation.effect?.getComputedTiming().endTime)));
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale * 100 + "%"; }, scale);
+        await chooseTheme(page, theme);
+        await navigateSettings(page, "privacy");
+        for (const selector of ["#recollectActivity", '[data-settings-section=privacy] a.button-link']) {
+            const control = page.locator(selector), states = [];
+            await control.scrollIntoViewIfNeeded();
+            await page.mouse.move(0, 0); await settle();
+            states.push({ state: "rest", ...await actionBoundary(control) });
+            await control.hover(); await settle();
+            states.push({ state: "hover", ...await actionBoundary(control) });
+            await page.mouse.down(); await settle();
+            states.push({ state: "pressed", ...await actionBoundary(control) });
+            await page.mouse.move(0, 0); await page.mouse.up(); await settle();
+            await control.focus(); await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+            await expect(control).toBeFocused();
+            states.push({ state: "focus", ...await actionBoundary(control) });
+            assert.equal(states[3].focus, true);
+            assert.equal(states[3].outline, "solid");
+            assert.notEqual(states[0].fill, states[1].fill, "Hover remains distinct from rest");
+            assert.notEqual(states[1].fill, states[2].fill, "Pressed remains distinct from hover");
+            for (const state of states) {
+                assert.ok(contrast(state.boundary, state.outside) >= 3, `${theme}/${width}/${scale}/${state.label}/${state.state}`);
+                assert.ok(contrast(state.ink, state.fill) >= 4.5, state.label);
+                assert.deepEqual(state.bounds, states[0].bounds, "Interaction must not resize or move the button");
+            }
+            measurements.push({ theme, width, scale, states });
+        }
+        const danger = await actionBoundary(page.locator("#deleteActivity"));
+        assert.notEqual(danger.ink, measurements.at(-1).states[0].ink, "Destructive actions retain their distinct red treatment");
+        assert.ok(contrast(danger.boundary, danger.outside) >= 3);
+        await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
+        await capture(page, `action-states-${theme}-${width}-${scale}x`);
+        await page.locator("#recollectActivity").focus(); await page.keyboard.press("Space");
+        await expect(page.locator("#recollectDialog")).toBeVisible();
+        await expect(page.locator("#recollectSources input").first()).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.locator("#recollectDialog")).toBeHidden();
+        await expect(page.locator("#recollectActivity")).toBeFocused();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const reports = page.locator('[data-settings-section=privacy] a.button-link');
+        await reports.focus(); await expect(reports).toBeFocused(); await reports.press("Enter");
+        await expect(page.locator("#reportsView")).toBeVisible();
+        await navigateMain(page, "settings");
+        await navigateSettings(page, "connection");
+        await expect(page.locator("#saveCollection")).toBeDisabled();
+        const disabled = await actionBoundary(page.locator("#saveCollection"));
+        assert.ok(contrast(disabled.boundary, disabled.outside) < 3, "Disabled actions do not borrow an enabled boundary");
+        await page.locator("#saveCollection").locator("..").focus();
+        await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+        await expect(page.locator("#saveCollection").locator("..")).toBeFocused();
+        assert.equal(await page.locator("#saveCollection").evaluate(node => getComputedStyle(node, "::before").outlineStyle), "solid");
+        await openSourceEditor(page);
+        const cancel = await actionBoundary(page.locator("#cancelSource"));
+        assert.equal(contrast(cancel.boundary, cancel.outside), 1, "Quiet cancellation stays unboxed");
+        await page.locator("#cancelSource").click();
+        await navigateSettings(page, "display");
+        assert.deepEqual(await page.locator("#settingsThemePreference .theme-track").evaluate(node => {
+            const box = node.getBoundingClientRect(); return { width: box.width, height: box.height };
+        }), { width: 76, height: 36 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    }
+    await page.emulateMedia({ forcedColors: "active" });
+    await navigateSettings(page, "privacy");
+    const forced = await actionBoundary(page.locator("#recollectActivity"));
+    assert.ok(contrast(forced.boundary, forced.outside) >= 3);
+    await capture(page, "action-boundaries-forced-colors");
+    assert.equal(posts.some(value => /\/(?:confirm|approve|set|revoke|configure|enabled|now)$/.test(value)), false);
+    if (proofs) await writeFile(path.join(proofs, "action-states.json"), JSON.stringify(measurements, null, 2));
+});
+
+test("Settings button family keeps visible labels, compact faces and balanced icon/text geometry in complete rows", { timeout: 45000 }, async t => {
+    const { page, posts } = await setup(t), measurements = [];
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
+    await expect(page.locator("#checkActivity .settings-action-label")).toBeVisible();
+    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "idle");
+    const original = await page.locator("#checkActivity").elementHandle();
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale * 100 + "%"; }, scale);
+        await chooseTheme(page, theme);
+        await navigateSettings(page, "connection");
+        await expect(page.locator("#checkActivity")).toHaveAccessibleName("Refresh");
+        await expect(page.locator("#freshActivity")).toContainText("Collection stays paused.");
+        const value = await page.locator("#checkActivity").evaluate(node => {
+            const box = node.getBoundingClientRect(), style = getComputedStyle(node), face = getComputedStyle(node, "::before");
+            const label = node.querySelector(".settings-action-label"), labelBox = label.getBoundingClientRect();
+            const glyph = node.querySelector(".wire-icon"), glyphBox = glyph.getBoundingClientRect(), ink = glyph.getBBox();
+            const canvas = document.createElement("canvas"), context = canvas.getContext("2d");
+            context.font = style.font;
+            const textInk = context.measureText(label.textContent);
+            const heading = document.getElementById("freshHeading").getBoundingClientRect();
+            const description = document.getElementById("settingsRefreshContext").getBoundingClientRect();
+            const actions = document.getElementById("preferenceActions"), fields = document.getElementById("collectionPreferenceFields");
+            const symbolHeight = ink.height * glyphBox.height / glyph.viewBox.baseVal.height;
+            const line = parseFloat(style.lineHeight), inset = parseFloat(face.top), faceHeight = box.height - inset - parseFloat(face.bottom);
+            return { target: { width: box.width, height: box.height }, face: { height: faceHeight, inset, radius: parseFloat(face.borderRadius) },
+                text: { font: style.fontFamily, size: parseFloat(style.fontSize), line, ink: textInk.actualBoundingBoxAscent + textInk.actualBoundingBoxDescent },
+                symbol: { role: glyph.dataset.lucideIcon, box: glyphBox.height, ink: symbolHeight },
+                gap: labelBox.left - glyphBox.right, centering: Math.abs(glyphBox.y + glyphBox.height / 2 - (labelBox.y + labelBox.height / 2)),
+                horizontalPadding: [glyphBox.left - box.left, box.right - labelBox.right],
+                row: { headingY: heading.y, headingBottom: heading.bottom, buttonY: box.y, buttonRight: box.right,
+                    descriptionY: description.y, descriptionBottom: description.bottom, headingRight: heading.right },
+                footer: { gap: actions.getBoundingClientRect().top - fields.getBoundingClientRect().bottom, padding: parseFloat(getComputedStyle(actions).paddingTop) },
+                descriptionInsideButton: node.contains(document.getElementById("settingsRefreshContext")),
+                facePadding: (faceHeight - line) / 2 };
+        });
+        assert.ok(value.target.height >= 44);
+        assert.equal(value.face.inset, 6);
+        assert.equal(value.facePadding, 6, "Visible padding belongs to the label, not the entire hit target");
+        assert.equal(value.face.radius, 8);
+        assert.ok(value.centering <= 1);
+        assert.ok(value.symbol.ink / value.text.ink >= .9 && value.symbol.ink / value.text.ink <= 1.5,
+            "Painted Lucide ink stays proportional to the real label ink");
+        assert.ok(value.gap >= 5 * scale && value.gap <= 6 * scale);
+        for (const padding of value.horizontalPadding) assert.ok(padding >= 9 && padding <= 11);
+        assert.equal(value.descriptionInsideButton, false);
+        assert.deepEqual(value.footer, { gap: 16, padding: 0 }, "Form actions use one deliberate gap, not stacked padding");
+        if (width === 1440) {
+            assert.ok(value.row.buttonRight > value.row.headingRight);
+            assert.ok(Math.abs(value.row.buttonY - value.row.headingY) <= 1, "Action aligns with the owning heading row");
+        } else assert.ok(value.row.buttonY >= value.row.descriptionBottom + 7, "Narrow order is title, purpose, action");
+        await capture(page, `button-family-${theme}-${width}-${scale}x`);
+        measurements.push({ theme, width, scale, ...value });
+        await navigateSettings(page, "privacy");
+        for (const selector of ["#recollectActivity", '[data-settings-section=privacy] a.button-link']) {
+            const geometry = await page.locator(selector).evaluate(node => {
+                const box = node.getBoundingClientRect(), style = getComputedStyle(node), face = getComputedStyle(node, "::before");
+                return { target: box.height, face: box.height - parseFloat(face.top) - parseFloat(face.bottom), line: parseFloat(style.lineHeight) };
+            });
+            assert.ok(geometry.target >= 44);
+            assert.equal((geometry.face - geometry.line) / 2, 6);
+        }
+        await navigateMain(page, "analyze");
+        assert.equal(await original.evaluate(node => node === document.getElementById("checkActivity")), true);
+        await expect(page.locator("#checkActivity")).toHaveClass(/icon-only/);
+        await expect(page.locator("#checkActivity .settings-action-label")).toBeHidden();
+        assert.equal(await page.locator("#checkActivity").innerText(), "", "The unrelated Analyze placement/presentation is unchanged");
+        await navigateMain(page, "settings");
+    }
+    assert.equal(posts.some(value => /\/(?:configure|enabled|now|confirm)$/.test(value)), false);
+    if (proofs) await writeFile(path.join(proofs, "button-family-geometry.json"), JSON.stringify(measurements, null, 2));
 });
 
 test("Settings search locates without acting; source and preference drafts survive navigation and cancel", { timeout: 30000 }, async t => {
@@ -519,7 +740,8 @@ test("Settings utility and disabled-help hit areas preserve reading geometry thr
             await control.focus();
             await expect(control).toBeFocused();
             assert.deepEqual(await readingBoxes(), before, "Focus cannot add utility-sized spacing");
-            assert.equal(await control.evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+            assert.equal(await control.evaluate(node => node.matches(".ux-disabled-help")
+                ? getComputedStyle(node.querySelector("button"), "::before").outlineStyle : getComputedStyle(node).outlineStyle), "solid");
             const bounds = await control.boundingBox();
             assert.ok(bounds.height >= 44 && bounds.width >= 44);
         }
@@ -528,16 +750,33 @@ test("Settings utility and disabled-help hit areas preserve reading geometry thr
         assert.deepEqual(measure.clipped, []);
         measurements.push({ theme, width, scale, ...measure });
     }
+    const input = page.locator("#settingsSearch"), clear = page.locator("#clearSettingsSearch");
+    await clear.scrollIntoViewIfNeeded();
+    const safe = await geometry(page, "#settingsView");
+    assert.deepEqual(safe.overlaps, []);
+    assert.ok(safe.searchOverlays.some(value => value.input === "settingsSearch" && value.hitTested && value.textGap >= 0));
+    await input.evaluate(node => { node.style.paddingRight = "0px"; });
+    try {
+        const unsafe = await geometry(page, "#settingsView");
+        assert.ok(unsafe.overlaps.some(pair => pair.includes("settingsSearch") && pair.includes("clearSettingsSearch")),
+            "Missing text clearance must still fail the overlap check");
+    } finally { await input.evaluate(node => node.style.removeProperty("padding-right")); }
+    await clear.click();
+    await expect(input).toHaveValue("");
+    await expect(input).toBeFocused();
     if (proofs) await writeFile(path.join(proofs, "utility-geometry.json"), JSON.stringify(measurements, null, 2));
 });
 
 test("Settings Refresh is one task without a help gate and preserves read-only detail identity across navigation", { timeout: 60000 }, async t => {
     const { page, runtime, context } = await setup(t), observations = [];
-    let sourceChecks = 0, snapshotReads = 0;
+    let sourceChecks = 0, snapshotReads = 0, release;
+    const pending = new Promise(resolve => { release = resolve; });
+    t.after(() => release());
     page.on("request", request => { if (new URL(request.url()).pathname === "/api/snapshot") snapshotReads++; });
     const status = await runtime.collector.status(), state = await loadBoardState(context);
-    await page.route("**/api/collection/now", route => {
+    await page.route("**/api/collection/now", async route => {
         sourceChecks++;
+        await pending;
         return route.fulfill({ json: { ...status, check: {
             schemaVersion: 2, id: "settings-partial-check", revision: state.revision, configVersion: status.configVersion,
             startedAt: new Date(Date.now() - 500).toISOString(), completedAt: new Date().toISOString(),
@@ -548,7 +787,19 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
     });
     await expect(page.locator("#freshHelp")).not.toBeVisible();
     await expect(page.locator("#settingsRefreshContext")).toContainText("Collection stays paused");
-    await page.locator("#checkActivity").click();
+    const refreshBounds = await page.locator("#checkActivity").boundingBox();
+    await page.locator("#checkActivity").click({ position: { x: refreshBounds.width / 2, y: 2 } });
+    await expect(page.locator("#checkActivity")).toBeDisabled();
+    await expect(page.locator("#checkActivity")).toHaveAttribute("aria-busy", "true");
+    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
+    assert.equal((await page.locator("#checkActivity").boundingBox()).width, refreshBounds.width);
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        await capture(page, `connection-refresh-pending-${theme}`);
+        assert.equal(await page.locator("#checkActivity .wire-icon").evaluate(node => node.getBoundingClientRect().width), 16);
+    }
+    assert.equal(sourceChecks, 1);
+    release();
     await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "partial");
     await expect(page.locator("#freshCheckDetails")).toContainText("Partial check");
     await expect(page.locator("#freshCheckDetails")).not.toBeVisible();
@@ -693,14 +944,28 @@ for (const problem of ["unknown", "source-error"]) test(`Settings ${problem} Ref
     await expect(page.locator("#freshContextMessage")).toHaveText(original.context);
     assert.equal(await page.evaluate(() => window.settingsRecoveryNode === document.getElementById("freshResult")), true);
     await expect(page.locator("#freshActivity #checkActivity:visible,#freshActivity #refreshBtn:visible")).toHaveCount(1);
-    for (const theme of ["light", "dark"]) for (const width of [1440, 375]) {
+    const recovery = page.locator("#freshActivity #checkActivity:visible,#freshActivity #refreshBtn:visible");
+    await expect(recovery).toHaveText("Read stored activity");
+    await expect(recovery).toHaveAccessibleName("Read stored activity");
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 1], [375, 2]]) {
         await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale * 100 + "%"; }, scale);
         await chooseTheme(page, theme);
-        await capture(page, `connection-${problem}-${width}-${theme}`);
+        const layout = await geometry(page);
+        assert.equal(layout.overflow, false);
+        assert.deepEqual(layout.clipped, []);
+        assert.deepEqual(layout.overlaps, []);
+        await capture(page, `connection-${problem}-${width}-${scale}x-${theme}`);
     }
     assert.equal((await runtime.collector.status()).config.enabled, false);
+    const readsBeforeRecovery = snapshotReads;
+    await recovery.click();
+    await expect.poll(() => snapshotReads).toBeGreaterThan(readsBeforeRecovery);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    assert.equal(sourceChecks, original.sourceChecks, "The labelled stored-read recovery never repeats the source check");
     if (proofs) await writeFile(path.join(proofs, `refresh-${problem}-navigation.json`), JSON.stringify({
         ...original, finalSourceChecks: sourceChecks, finalSnapshotReads: snapshotReads,
+        explicitRecoveryReads: snapshotReads - readsBeforeRecovery,
     }, null, 2));
 });
 

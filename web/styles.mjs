@@ -446,6 +446,10 @@ ${selectStyles}
 .recorded-result {display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:3px 8px;border-radius:var(--radius-pill);background:color-mix(in srgb,var(--cue-color,var(--muted)) 8%,var(--paper));font-size:var(--type-caption);line-height:var(--leading-caption);font-variant-numeric:tabular-nums}
 .recorded-result:not(.result-link) {box-shadow:inset 0 0 0 1px var(--cue-color,var(--control))}
 .recorded-result-label {min-width:0;overflow-wrap:anywhere;text-transform:uppercase;font-weight:var(--weight-strong);letter-spacing:.02em}
+.result-explanation {min-width:0;overflow-wrap:anywhere}
+.result-explained .recorded-result-label {white-space:nowrap}
+.recorded-result.result-explained {align-items:flex-start}
+.recorded-result.result-explained>.wire-icon {margin-block-start:max(0px,calc((1lh - 16px)/2))}
 .result-unavailable {color:var(--muted)}
 .recorded-result .wire-icon {width:16px;height:16px;flex:0 0 16px}
 .recorded-result .wire-icon[data-lucide-icon=info] {width:16px;height:16px;flex-basis:16px}
@@ -616,6 +620,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 #requestContent .interaction-model-fact dt {font:inherit;overflow-wrap:anywhere;max-width:100%}
 #activityList>.activity-card .activity-card-facts dd,#requestContent .interaction-model-fact dd {font:inherit;margin:0;min-width:0;max-width:100%;overflow-wrap:anywhere}
 #activityList>.activity-card .activity-card-facts dd {color:var(--ink)}
+#activityList>.activity-card .activity-card-facts .model-recording-note {flex-basis:100%;color:var(--muted)}
 #activityList>.activity-card .activity-card-facts :is(.request-meta,.card-chat>.text-link,.source-reference,.service-context-label) {color:var(--ink)}
 #activityList>.activity-card .activity-card-facts dd .semantic-cue {font-weight:var(--weight-regular)}
 #activityList>.activity-card :is(.project-context,.request-meta,.recorded-results,.call-duration) {font-size:inherit;line-height:inherit;margin:0}

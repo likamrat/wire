@@ -142,6 +142,53 @@ test("snapshot aliases share the same model fact without exposing new private an
     assert.equal(JSON.stringify(records), before);
 });
 
+test("screen identity and completeness share core qualification without changing core fact bytes", () => {
+    const a = answer("a", "model-a"), b = answer("b", "model-b", 200), missing = answer("missing", undefined, 200),
+        again = answer("again", "model-a", 300), literal = answer("literal", "model (partial record)");
+    const complete = recordedInteractionModels([prompt, a, end(a)], record);
+    const cases = [
+        [complete, "model-a", []],
+        [{ ...complete, partial: true }, "model-a", ["unverified-final-boundary"]],
+        [{ ...complete, truncated: true }, "model-a", ["truncated-history"]],
+        [{ ...complete, truncated: true, responses: Array.from({ length: 256 }, (_, index) => ({
+            ...complete.responses[0], eventId: `retained-${index}`, apiCallId: `retained-api-${index}`, at: at(index + 1),
+        })) }, "model-a", ["truncated-history"]],
+        [{ ...complete, unlinked: true }, "model-a", ["missing-response-models"]],
+        [recordedInteractionModels([prompt, a, missing, end(missing)], record),
+            "model-a", ["missing-response-models"]],
+        [recordedInteractionModels([prompt, a, { ...b, timestamp: a.timestamp }, end(a)], record),
+            "model-a, model-b (order not recorded)", ["unverified-final-boundary"]],
+        [recordedInteractionModels([prompt, a, b, again, end(again)], record),
+            "model-a then model-b then model-a", []],
+        [recordedInteractionModels([prompt, literal, end(literal)], record),
+            "model (partial record)", []],
+    ];
+    for (const [evidence, identity, completeness] of cases) {
+        const value = { ...record, originalModelEvidence: evidence }, before = JSON.stringify(value);
+        const core = JSON.stringify(interactionModelFact(value));
+        const { presentation, models, ...projectedCore } = projectInteractionModels([value])[0].originalModel;
+        assert.equal(JSON.stringify(projectedCore), core);
+        assert.deepEqual(presentation, { identity, completeness });
+        assert.deepEqual(Object.keys(presentation), ["identity", "completeness"]);
+        assert.doesNotMatch(JSON.stringify(presentation), /api-a|message-one|source-one|promptEventId|responses|256/);
+        assert.equal(JSON.stringify(value), before);
+    }
+    for (const value of [
+        { ...record, originalModelEvidence: { ...complete, ambiguous: true } },
+        { ...record, originalModelEvidence: { ...complete, conflict: true } },
+        { ...record, originalModelEvidence: { ...complete, invalid: true } },
+        { ...record, originalModelEvidence: { ...complete, sourceSessionId: "wrong" } },
+        { ...record, toolCalls: [{ model: "unverified-tool-model" }] },
+        { ...record, originalModelEvidence: { ...complete, responses: [{ ...complete.responses[0], model: null, modelStatus: "excluded" }] } },
+        { ...record },
+    ]) {
+        const { presentation, models, ...projectedCore } = projectInteractionModels([value])[0].originalModel;
+        assert.equal(presentation, undefined);
+        assert.deepEqual(models, []);
+        assert.deepEqual(projectedCore, interactionModelFact(value));
+    }
+});
+
 test("contradictory ownership and unsupported projection versions never keep a previously verified model", () => {
     const response = answer("a", "model-a");
     const evidence = recordedInteractionModels([prompt, response, end(response)], record);

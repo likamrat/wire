@@ -54,10 +54,10 @@ test("one accepted slice drives date, service, tool, author, outcome and Search 
         assert.equal(model.total, members.length);
     }
     const input = snapshot(), row = input.analytics.rows.find(row => row.scenarioId === "model-request-1");
-    const receipt = { schemaVersion: 2, panelId: "11111111-1111-4111-8111-111111111111", epoch: 0, requestId: 1, generation: 1,
-        indexId: "1".repeat(64), modelId: "2".repeat(64), mode: "lexical-only", purpose: "strict-match-population",
+    const receipt = { schemaVersion: searchWireContract.schemaVersion, panelId: "11111111-1111-4111-8111-111111111111", epoch: 0, requestId: 1, generation: 1,
+        indexId: "1".repeat(64), mode: "text", purpose: "strict-match-population",
         queryPurpose: "analysis", queryTypes: [...searchWireContract.allTypes], matchPolicyId: searchWireContract.matchPolicyId, revision: input.revision };
-    const hit = { type: "action", match: "exact", target: { kind: "route",
+    const hit = { type: "action", match: "text", target: { kind: "route",
         href: "#request?" + new URLSearchParams({ request: row.scenarioId, layer: "tool", call: row.id }) } };
     const membership = createSearchMembership(input, modelOptions, [], [hit], receipt, searchWireContract);
     const slice = refine(input, modelOptions, "", [], membership);
@@ -69,6 +69,8 @@ test("one accepted slice drives date, service, tool, author, outcome and Search 
     const empty = createSearchMembership(input, modelOptions, [], [], receipt, searchWireContract);
     assert.deepEqual(charts.modelUsage(refine(input, modelOptions, "", [], empty).scenarios).rows, []);
     assert.throws(() => createSearchMembership(input, modelOptions, [], [hit], { ...receipt, revision: 6 }, searchWireContract), /current strict/);
+    assert.throws(() => createSearchMembership(input, modelOptions, [], [hit],
+        { ...receipt, schemaVersion: 2, mode: "lexical-only", modelId: "2".repeat(64) }, searchWireContract), /current strict/);
     assert.equal(charts.modelUsage(refine(input, modelOptions, "no-invented-match").scenarios).total, 0);
     assert.equal(charts.modelUsage(refine(input, modelOptions).scenarios).total, 9);
     const serviceSlice = refine(input, modelOptions, "", ["Mail"]);

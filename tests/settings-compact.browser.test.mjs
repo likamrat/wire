@@ -157,7 +157,7 @@ test("compact Settings keeps four current categories readable, bounded and actio
     await reports.focus();
     await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
     await expect(reports).toBeFocused();
-    assert.equal(await reports.evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+    assert.equal(await reports.evaluate(node => getComputedStyle(node, "::before").outlineStyle), "solid");
     await page.keyboard.press("Enter");
     await expect(page.locator("#reportsView")).toBeVisible();
     await page.goBack();

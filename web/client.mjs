@@ -868,6 +868,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let refreshHelpVisibility = null;
     function renderSettingsRefresh(connection, model) {
         const host = $("freshActivity"), help = $("freshHelp");
+        const storedOnly = refreshUsesStoredRecovery(model);
+        for (const [id, originalText] of [["checkActivity", "Refresh"], ["refreshBtn", "Read stored activity"]]) {
+            const control = $(id);
+            const text = connection && id === "checkActivity" && (storedOnly || !collection?.config?.approved) ? "Read stored activity" : originalText;
+            let label = control.querySelector(":scope > .settings-action-label");
+            if (connection && !label) {
+                label = el("span", "settings-action-label", text);
+                control.append(label);
+            }
+            if (label) { setText(label, text); label.hidden = !connection; }
+            control.setAttribute("aria-label", text);
+            control.classList.toggle("icon-only", !connection);
+            control.classList.toggle("quiet", !connection);
+        }
         function checkedScope(check) {
             const checked = Number.isSafeInteger(check.sourcesChecked) && check.sourcesChecked >= 0;
             const eligible = Number.isSafeInteger(check.eligibleSources) && check.eligibleSources >= 0;
@@ -888,7 +902,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (connection) {
             if (refreshHelpVisibility === null) refreshHelpVisibility = help.hidden;
             help.hidden = true;
-            const storedOnly = refreshUsesStoredRecovery(model);
             const approved = collection?.config?.approved;
             const explanation = storedOnly
                 ? "Read stored activity only. No new history check will be sent."
@@ -1619,12 +1632,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return scenario?.toolCalls?.find(tool => tool.toolCallId ? tool.toolCallId === row.toolCallId
             : (row.parentCallId || row.id) === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
     }
-    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false } = {}) {
+    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, rows } = {}) {
         const node = el("div", "recorded-results");
         node.dataset.resultLayer = layer;
         node.setAttribute("role", "group");
         node.setAttribute("aria-label", scope);
-        const entries = results.entries(layer, summary);
+        const entries = rows ? results.explainedEntries(layer, rows, sourceCallFor) : results.entries(layer, summary);
         if (!entries) {
             const unavailable = el("span", "result-unavailable");
             unavailable.append(metadata.item(`${label || results.unit(layer, 2)}: result counts unavailable`, explanation ? { help: explanation } : {}));
@@ -1637,7 +1650,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const values = heading && !compact ? el("div", "result-values") : node;
         if (compact) {
             node.classList.add("result-inline");
-            node.setAttribute("aria-label", `${heading || scope}: ${results.countLabel(layer, summary.count, total)}`);
+            const described = rows ? entries.map(entry => `${count(entry.count)} ${entry.label}${entry.reason ? ": " + entry.reason : ""}`).join("; ") : "";
+            node.setAttribute("aria-label", `${heading || scope}: ${results.countLabel(layer, summary.count, total)}${described ? ". " + described : ""}`);
         } else if (heading) {
             node.classList.add("result-with-heading");
             const description = el("div", "result-description");
@@ -1651,6 +1665,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             item.dataset.outcome = entry.key;
             item.dataset.count = entry.count;
             item.append(ux.icon(`${entry.icon}-compact`), el("span", "recorded-result-label", `${count(entry.count)} ${entry.label}`));
+            if (entry.reason) {
+                item.classList.add("result-explained");
+                const words = el("span", "result-explanation");
+                words.append(el("span", "result-cause", entry.reason), document.createTextNode(" \u00b7 "), item.lastElementChild);
+                item.append(words);
+            }
             if (actionable) {
                 viewKey(item, `session-result:${scope}:${sessionId}:${layer}:${entry.key}`);
                 const label = layer === "tool" ? `View ${count(entry.count)} Work IQ tool call${entry.count === 1 ? "" : "s"} ${entry.key === "success" ? "that worked" : "needing attention"}` : `View ${count(entry.count)} ${results.unit(layer, entry.count)}: ${entry.label}`;
@@ -3039,21 +3059,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             pager.append(prev, next);
         }
     }
-    function recordedFailure(tool, failed = false) {
-        const errors = (tool?.apiResults || []).filter(result => result.errorCode || result.statusCode >= 400)
-            .map(result => [result.statusCode ? `Reported HTTP ${result.statusCode}` : null, result.errorCode].filter(Boolean).join(": "));
-        const evidence = tool?.failureEvidence;
-        const signIn = (failed || tool?.toolSucceeded === false) && evidence?.version === 1
-            && evidence.messageStatus === "text-excluded" && evidence.messageSignal === "workiq-sign-in-required";
-        if (evidence?.version === 1 && evidence.reason === "error-code-recorded" && evidence.code
-            && (!signIn || evidence.code !== "failure")) errors.unshift("Tool error: " + evidence.code);
-        if (signIn) errors.unshift("Work IQ sign-in was required");
-        if (evidence?.version === 1 && evidence.messageSignal === "access-denial") errors.push("Tool error mentions access denial");
-        if (evidence?.version === 1 && evidence.messageSignal === "request-timeout") errors.push("Tool reported an MCP request timeout (-32001).");
-        if (errors.length) return errors.join("; ");
-        if (!failed && tool?.toolSucceeded !== false) return null;
-        return help.failureEvidence[evidence?.version === 1 ? evidence.reason : "unknown"] ?? help.failureEvidence.unknown;
-    }
     function matchingAction(row) {
         const scenario = state.scenarios.find(s => s.scenarioId === row.scenarioId);
         const card = viewKey(el("article", "matched-action activity-card"), "action:" + row.id);
@@ -3094,16 +3099,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         cardFact(recordedLabel, time.formatMoment(row.startedAt, applied.timeContext)));
         if (analytics.serviceInvolvement?.selection.contextOnlyIds.includes(row.id)) details.append(cardFact("Service scope",
             el("span", "service-context-label", "Missing-service context, not a known match to the selected service.")));
-        const outcome = resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), pillsOnly: true });
+        const outcome = resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), pillsOnly: true, rows: [row] });
         outcome.classList.add("card-outcomes");
         activity.append(identities, outcome, details);
-        if (["failure", "transport"].includes(row.outcome)) {
+        if (applied.layer !== "tool" && ["failure", "transport"].includes(row.outcome)) {
+            const code = applied.layer === "reported-api" ? results.returnedResult(call, row)?.errorCode : null;
             const reason = applied.layer === "http" && row.outcome === "transport" ? "Connection failed; no HTTP response was recorded."
-                : applied.layer === "tool" ? recordedFailure(call, true)
-                : row.status ? `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}. Response body was not retained.`
-                    : recordedFailure(call, true);
-            activity.append(el("p", "card-result-note action-error",
-                Object.values(help.failureEvidence).includes(reason) ? "Failure reason unavailable." : reason));
+                : row.status ? `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}${code ? ": " + code : ""}. Response body was not retained.`
+                    : code ? "Tool-reported error: " + code : "Failure reason unavailable.";
+            activity.append(el("p", "card-result-note action-error", reason));
         } else if (row.status) {
             activity.append(el("p", "card-result-note", `${applied.layer === "reported-api" ? "Tool-reported" : "Recorded"} HTTP ${row.status}`));
         }
@@ -3134,8 +3138,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function originalModelFact(scenario, { callContext = false } = {}) {
         const model = scenario.originalModel;
         const valid = model && ["Model", "Models"].includes(model.label) && typeof model.value === "string" && model.value.trim();
-        return cardFact(callContext ? "Interaction model" : valid ? model.label : "Model",
-            valid ? model.value : model ? "Not verified (invalid model metadata)" : "Not recorded");
+        const presentation = model?.presentation;
+        const explanations = {
+            "missing-response-models": "Some responses have no linked model name.",
+            "unverified-final-boundary": "Model history may be incomplete: the final response boundary was not verified.",
+            "truncated-history": "Model history is incomplete: a source window or retention limit cut it short.",
+        };
+        const validPresentation = valid && ["recorded", "partial"].includes(model.status)
+            && typeof presentation?.identity === "string" && presentation.identity.trim()
+            && Array.isArray(presentation.completeness) && presentation.completeness.every(reason => Object.hasOwn(explanations, reason));
+        const value = el("span", "model-identity", presentation && !validPresentation ? "Not verified (invalid model presentation)"
+            : validPresentation ? presentation.identity : valid ? model.value : model ? "Not verified (invalid model metadata)" : "Not recorded");
+        const row = cardFact(callContext ? "Interaction model" : valid ? model.label : "Model", value);
+        if (validPresentation && presentation.completeness.length) {
+            row.append(el("dd", "model-recording-note", presentation.completeness.map(reason => explanations[reason]).join(" ")));
+        }
+        return row;
     }
     function cardTools(rows, showCounts = true, { compact = false } = {}) {
         if (!Array.isArray(rows)) return el("span", "identity-gap", "Tool evidence unavailable");
@@ -3176,7 +3194,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             identity.append(tools, services);
             summary.append(identity);
         }
-        const outcomes = resultLine(layer, results.summarize(rows), { scope, pillsOnly: true });
+        const outcomes = resultLine(layer, results.summarize(rows), { scope, pillsOnly: true, rows });
         if (Array.isArray(rows) && !rows.length) outcomes.lastElementChild.textContent = `No recorded ${results.unit(layer, 0)}`;
         if (label) outcomes.prepend(el("span", "identity-key", label + ": "));
         summary.append(outcomes);
@@ -3698,13 +3716,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (row) seen.add(row.id);
             const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || tool]);
             entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool",
-                identifiers: [["ID", tool.toolCallId], ["parent invocation", tool.parentToolCallId], ["parallel group", tool.parallelGroup]], render: () => {
+                identifiers: [["ID", tool.toolCallId], ["parent invocation", tool.parentToolCallId], ["parallel group", tool.parallelGroup],
+                    ["error code", row?.outcome === "failure" && tool.failureEvidence?.version === 1
+                        && tool.failureEvidence.reason === "error-code-recorded" ? tool.failureEvidence.code : null]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
             const expert = el("div", "technical-detail");
             item.dataset.toolCallId = tool.toolCallId || "";
             const operation = categories.operation(tool.tool);
-            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true });
+            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, rows: row ? [row] : undefined });
             result.classList.add("journey-result");
             for (const value of result.querySelectorAll(".recorded-result")) {
                 if (value.dataset.count === "1") value.querySelector(".recorded-result-label").textContent = results.labels("tool")[value.dataset.outcome];
@@ -3742,20 +3762,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (scope.textContent === "Outside current view") expert.append(scope);
                 else if (applied.layer === "tool" && row && rows.some(match => match.id === row.id)) scope.textContent = "Matches current view";
             }
-            const failure = recordedFailure(tool, ["failure", "transport"].includes(row?.outcome));
-            if (failure) {
-                const missingCause = Object.values(help.failureEvidence).includes(failure);
-                const signal = [
-                    ["Work IQ sign-in was required", "sign-in required"],
-                    ["Tool error mentions access denial", "access denial"],
-                    ["Tool reported an MCP request timeout (-32001).", "MCP request timeout (-32001)"],
-                ].find(([label]) => label === failure)?.[1];
-                const note = el("p", "reader-recorded-signal");
-                if (missingCause) note.textContent = "No error details recorded.";
-                else note.append(el("span", "reader-signal-label", signal ? "Recorded error signal: " : "Recorded error: "),
-                    document.createTextNode(signal ? signal + "." : failure));
-                item.append(note);
-            }
             if (row) {
                 const returned = returnedDetails(sourceCall, row, apiRows,
                     applied.layer === "reported-api" && target.actionId === row.id ? target.row.id : undefined);
@@ -3768,9 +3774,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ]);
             if (completion.childElementCount) expert.append(completion);
             if (tool.observedGraphHttp) expert.append(el("p", "reader-record-limits", "HTTP directly observed."));
-            if (failure && tool.failureEvidence?.version === 1 && tool.failureEvidence.messageStatus !== "text-excluded") {
+            if (row?.outcome === "failure" && tool.failureEvidence?.version === 1) {
                 const evidence = tool.failureEvidence;
-                if (evidence.messageStatus != null) {
+                if (evidence.messageStatus != null && evidence.messageStatus !== "text-excluded") {
                     const reason = help.failureMessageStatus[evidence.messageStatus] ?? "Recorded error-text status: " + JSON.stringify(evidence.messageStatus);
                     expert.append(el("p", "context-help-note", reason));
                 }

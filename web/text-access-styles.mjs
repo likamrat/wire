@@ -286,6 +286,7 @@ body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px)
 #requestContent .reader-section .reader-facts>.reader-fields {display:grid;gap:12px;margin:0}
 #requestContent .reader-section .reader-facts>.reader-fields>div {display:flex;flex-wrap:wrap;gap:2px 8px}
 #requestContent .reader-section .reader-facts>.reader-fields dd {flex:1 1 14ch;margin:0}
+#requestContent .reader-section .reader-facts>.reader-fields .model-recording-note {flex-basis:100%;font-size:var(--type-small);color:var(--muted)}
 #requestContent .reader-recorded-at {margin:12px 0 0;color:var(--muted);font:inherit;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 #requestContent .reader-prompt-timing {margin-top:12px}
 #requestContent .reader-prompt-timing>.reader-recorded-at {margin:0}
@@ -312,8 +313,6 @@ body[data-context-docked]>main {width:calc(100% - var(--app-sidebar-width,196px)
 #requestContent .reader-call-duration .call-duration {font:inherit}
 #requestContent .reader-call-duration data {color:var(--ink)}
 #requestContent .reader-tool-name {font-weight:var(--weight-medium)}
-#requestContent .reader-recorded-signal {margin:8px 0 0;font:inherit;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
-#requestContent .reader-signal-label {color:var(--muted)}
 #requestContent :is(.request-context-timeline,.reader-context-list) .reader-call-identity .context-entry-label {display:inline;margin:0;font:inherit;color:var(--muted)}
 #requestContent .request-context-timeline .reader-call-identity .context-selected-label {color:var(--accent)}
 #requestContent .reader-entry-label {color:var(--ink);margin:0 0 12px}

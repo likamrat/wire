@@ -24,7 +24,8 @@ test("the real snapshot carries the original model without adding evaluator, exp
     const { context } = await privateFixture(t, [record]);
     const before = await loadBoardState(context);
     const payload = await currentStatePayload(context, before);
-    assert.deepEqual(payload.scenarios[0].originalModel, { label: "Model", value: "original-model", status: "recorded", models: ["original-model"] });
+    assert.deepEqual(payload.scenarios[0].originalModel, { label: "Model", value: "original-model", status: "recorded", models: ["original-model"],
+        presentation: { identity: "original-model", completeness: [] } });
     assert.equal(payload.revision, before.revision);
     assert.equal(payload.scenarios[0].scenarioId, record.scenarioId);
     const timing = payload.assessment.catalog.find(row => row.scenarioId === record.scenarioId);
