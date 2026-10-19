@@ -3140,9 +3140,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const valid = model && ["Model", "Models"].includes(model.label) && typeof model.value === "string" && model.value.trim();
         const presentation = model?.presentation;
         const explanations = {
-            "missing-response-models": "Some responses have no linked model name.",
-            "unverified-final-boundary": "Model history may be incomplete: the final response boundary was not verified.",
-            "truncated-history": "Model history is incomplete: a source window or retention limit cut it short.",
+            "missing-response-models": "some responses have no linked model name",
+            "unverified-final-boundary": "the final response boundary was not verified",
+            "truncated-history": "a source window or retention limit cut it short",
         };
         const validPresentation = valid && ["recorded", "partial"].includes(model.status)
             && typeof presentation?.identity === "string" && presentation.identity.trim()
@@ -3151,7 +3151,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : validPresentation ? presentation.identity : valid ? model.value : model ? "Not verified (invalid model metadata)" : "Not recorded");
         const row = cardFact(callContext ? "Interaction model" : valid ? model.label : "Model", value);
         if (validPresentation && presentation.completeness.length) {
-            row.append(el("dd", "model-recording-note", presentation.completeness.map(reason => explanations[reason]).join(" ")));
+            const reasons = presentation.completeness;
+            const qualifier = reasons.includes("missing-response-models") || reasons.includes("truncated-history") ? "is" : "may be";
+            const detail = reasons.map(reason => explanations[reason]).join("; ");
+            const note = reasons.length === 1 && reasons[0] === "missing-response-models"
+                ? detail[0].toUpperCase() + detail.slice(1) : `Model history ${qualifier} incomplete: ${detail}`;
+            row.append(el("dd", "model-recording-note", note + "."));
         }
         return row;
     }

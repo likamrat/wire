@@ -41,7 +41,7 @@ function clarityRecord() {
 
 async function setup(t, record = clarityRecord()) {
     const cleanup = [];
-    const { context } = await privateFixture({ after: fn => cleanup.push(fn) }, [record]);
+    const { context } = await privateFixture({ after: fn => cleanup.push(fn) }, Array.isArray(record) ? record : [record]);
     const before = await loadBoardState(context);
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
@@ -91,6 +91,73 @@ test("model identity is separate from an explained incomplete recording", async 
     await expect(page.locator(".interaction-model-fact .model-identity")).toHaveText("recorded-model");
     await expect(page.locator(".model-recording-note")).toContainText("final response");
     await expect(page.locator(".request-original")).not.toContainText("(partial record)");
+});
+
+test("model recording reasons compose one qualified statement without losing any retained reason", async t => {
+    const cases = [
+        { name: "boundary-truncated", reasons: ["unverified-final-boundary", "truncated-history"],
+            expected: "Model history is incomplete: the final response boundary was not verified; a source window or retention limit cut it short." },
+        { name: "all-three", reasons: ["missing-response-models", "unverified-final-boundary", "truncated-history"],
+            expected: "Model history is incomplete: some responses have no linked model name; the final response boundary was not verified; a source window or retention limit cut it short." },
+        { name: "missing", reasons: ["missing-response-models"],
+            expected: "Some responses have no linked model name." },
+        { name: "boundary", reasons: ["unverified-final-boundary"],
+            expected: "Model history may be incomplete: the final response boundary was not verified." },
+        { name: "truncated", reasons: ["truncated-history"],
+            expected: "Model history is incomplete: a source window or retention limit cut it short." },
+    ];
+    const records = cases.map(({ name, reasons }) => {
+        const record = clarityRecord();
+        record.scenarioId = `model-note-${name}`;
+        record.sourceSessionId = `model-note-session-${name}`;
+        Object.assign(record.originalModelEvidence, {
+            sourceSessionId: record.sourceSessionId, partial: reasons.includes("unverified-final-boundary"),
+            truncated: reasons.includes("truncated-history"), unlinked: reasons.includes("missing-response-models"),
+        });
+        return record;
+    });
+    const { page } = await setup(t, records), proof = process.env.WIRE_MODEL_NOTE_PROOFS, observations = [];
+    if (proof) await mkdir(proof, { recursive: true });
+    for (const { name, expected, reasons } of cases) {
+        await page.locator(`.request-row[data-view-key="request:model-note-${name}"] .request-card-open`).click();
+        const note = page.locator("#requestContent .model-recording-note");
+        await expect(note).toHaveCount(1);
+        await expect(note).toHaveText(expected);
+        await expect(page.locator("#requestContent .model-identity")).toHaveText("recorded-model");
+        await expect(page.locator(".call-heading .result-cause")).toHaveText("Sign-in was required");
+        assert.ok(((await note.textContent()).match(/Model history/g) ?? []).length <= 1);
+        if (reasons.length > 1) for (const theme of ["light", "dark"]) {
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await page.evaluate(() => document.documentElement.style.fontSize = "100%");
+            await chooseTheme(page, theme);
+            for (const [width, scale] of [[1440, 1], [375, 2]]) {
+                await page.setViewportSize({ width, height: 1000 });
+                await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
+                await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
+                await page.locator("#requestContent .interaction-model-fact").scrollIntoViewIfNeeded();
+                const geometry = await note.evaluate(node => ({
+                    width: node.getBoundingClientRect().width,
+                    rowWidth: node.parentElement.getBoundingClientRect().width,
+                    overflow: node.scrollWidth - node.clientWidth,
+                    weight: getComputedStyle(node).fontWeight,
+                    text: node.textContent,
+                }));
+                assert.ok(geometry.width > 0 && geometry.width >= geometry.rowWidth - 1);
+                assert.ok(geometry.overflow <= 1);
+                assert.equal(geometry.weight, "400");
+                assert.equal(geometry.text, expected);
+                assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+                assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+                observations.push({ name, theme, viewportWidth: width, textScale: scale, ...geometry });
+                if (proof) await page.screenshot({ path: path.join(proof, `${name}-${theme}-${width}-${scale}.png`) });
+            }
+        }
+        await page.locator("#closeContextSidebar").click();
+        await page.waitForFunction(() => !document.querySelector("#contextSidebar").open);
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        await page.evaluate(() => document.documentElement.style.fontSize = "100%");
+    }
+    if (proof) await writeFile(path.join(proof, "combined-note-proof.json"), JSON.stringify(observations, null, 2));
 });
 
 test("returned API failures keep their own codes without borrowing the parent sign-in cause", async t => {

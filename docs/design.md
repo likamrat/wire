@@ -817,8 +817,12 @@ The interaction sidebar includes a **Model/Models** row with chat, project and
 recorded time. Its semantic key/value structure uses equal regular screen
 typography, with no badge or control. Model identity is distinct from recording
 completeness: a short neutral note explains missing linked model names, an
-unverified final response boundary, or truncated model history. Truncation can
-mean a bounded source window or the retention limit; the retained flag does not
+unverified final response boundary, or truncated model history. Multiple reasons
+form one statement with a single qualification: known missing names or truncation
+say **is incomplete**; an unverified final boundary alone says **may be incomplete**.
+Every distinct reason remains a clause, without repeating the leading claim.
+Single-reason wording remains unchanged.
+Truncation can mean a bounded source window or the retention limit; the retained flag does not
 distinguish them, and reaching the retained-response ceiling alone does not prove
 which caused it. It is not a model defect, tool failure or missing response text.
 Measured response timing can coexist with truncated model history.
