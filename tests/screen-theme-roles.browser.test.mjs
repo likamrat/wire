@@ -11,8 +11,10 @@ import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
 import { privateFixture, fixture, chooseTheme } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
-test("screen roles resolve explicit and system dark without changing light, forced colors or semantic inks", { timeout: 45000 }, async t => {
-    const { context } = await privateFixture(t, [fixture("screen-role-calendar")]);
+test("screen roles preserve service inks while Agent authorship has its own explicit and system theme role", { timeout: 45000 }, async t => {
+    const record = fixture("screen-role-calendar");
+    record.userPrompt.authorship = { actor: "agent", basis: "source-agent" };
+    const { context } = await privateFixture(t, [record]);
     let providers = 0;
     const refuse = async () => { providers++; throw Error("No provider work in screen role proof."); };
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false },
@@ -51,13 +53,24 @@ test("screen roles resolve explicit and system dark without changing light, forc
             const root = getComputedStyle(document.documentElement);
             return Object.fromEntries(["--page", "--paper", "--navigation-paper", "--context-paper", "--floating-paper",
                 "--hover", "--accent-soft", "--pill-pressed", "--muted", "--danger", "--copilot-chat-title",
-                "--chart-service-calendar-label"].map(name => [name, root.getPropertyValue(name).trim()]));
+                "--chart-service-calendar-label", "--screen-prompt-agent",
+                ...["top", "mid", "base", "side", "cap", "label"].map(face => "--chart-service-teams-" + face)]
+                .map(name => [name, root.getPropertyValue(name).trim()]));
         });
         assert.equal(roles["--paper"], paper);
         assert.equal(roles["--navigation-paper"], inkBlue ? "#10161f" : paper);
         assert.equal(roles["--context-paper"], inkBlue ? "#1c2939" : paper);
         assert.equal(roles["--floating-paper"], inkBlue ? "#202c3b" : paper);
         assert.equal(roles["--danger"], entry.theme === "dark" ? "#f28b82" : "#b3261e");
+        assert.equal(roles["--chart-service-teams-label"], entry.theme === "dark" ? "#ad88f0" : "#6842ba");
+        for (const [face, color] of Object.entries(createDimensionalCharts().servicePalette.Teams[entry.theme])) {
+            assert.equal(roles["--chart-service-teams-" + face], color, `${entry.name}: unchanged Teams ${face}`);
+        }
+        assert.equal(roles["--screen-prompt-agent"], entry.theme === "dark" ? "#e2c27b" : "#806018");
+        assert.notEqual(roles["--screen-prompt-agent"], roles["--chart-service-teams-label"]);
+        for (const surface of ["--paper", "--context-paper", "--floating-paper", "--hover", "--accent-soft", "--pill-pressed"]) {
+            assert.ok(contrast(roles["--screen-prompt-agent"], roles[surface]) >= 4.5, `${entry.name}: Agent on ${surface}`);
+        }
         if (inkBlue) {
             assert.equal(roles["--copilot-chat-title"], "#ad88f0");
             assert.equal(roles["--chart-service-calendar-label"], "#5792fa");
@@ -70,6 +83,11 @@ test("screen roles resolve explicit and system dark without changing light, forc
         await card.hover();
         await card.click();
         await page.locator("#contextSidebar[open]").waitFor();
+        if (entry.forced === "none") {
+            const actual = await page.locator("#requestContent .reader-section-heading [data-prompt-actor=agent]")
+                .evaluate(node => getComputedStyle(node).color);
+            assert.ok(contrast(actual, roles["--context-paper"]) >= 4.5);
+        }
         await page.locator("#requestContent .reader-call-toggle").first().hover();
         const service = await page.locator("#requestContent .reader-call-services .service-cue").first().evaluate(node => {
             let parent = node;

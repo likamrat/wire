@@ -1078,7 +1078,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return list;
     }
-    function serviceIdentity(rows, layer, { compact = false } = {}) {
+    function serviceIdentity(rows, layer, { compact = false, separated = false } = {}) {
         if (!Array.isArray(rows)) return el("span", "identity-gap", "Service evidence unavailable");
         const services = new Set(), activity = new Map();
         let missing = false;
@@ -1105,7 +1105,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (compact && known.length > 2) items.push(el("span", "identity-overflow", "More services"));
         for (const entry of activity.values()) items.push(serviceCue("span", entry.id, entry));
         if (missing) items.push(el("span", "identity-gap", known.length ? "Service details incomplete" : "Service not shown"));
-        return identityList(items);
+        if (!separated) return identityList(items);
+        const list = el("ul", "service-label-list");
+        for (const item of items) {
+            const entry = el("li", item.classList.contains("identity-gap") ? "service-label-gap" : "");
+            entry.append(item);
+            list.append(entry);
+        }
+        return list;
+    }
+    function recordedCategory(rows, layer) {
+        const value = serviceIdentity(rows?.length ? rows : undefined, layer, { separated: true });
+        const multiple = value.querySelectorAll(".service-cue").length > 1;
+        const label = layer === "tool" ? multiple ? "Categories" : "Category" : multiple ? "Services" : "Service";
+        const field = el("div", "recorded-category");
+        field.append(el("span", "recorded-category-label", label + ":"), value);
+        return field;
     }
     function actionHeading(title, service, row, layer = "tool", { inlineHelp = true } = {}) {
         const heading = el("div", "action-heading");
@@ -1708,8 +1723,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return scenario?.toolCalls?.find(tool => tool.toolCallId ? tool.toolCallId === row.toolCallId
             : (row.parentCallId || row.id) === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
     }
-    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows } = {}) {
-        const node = el("div", "recorded-results");
+    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows, inline = false } = {}) {
+        const node = el(inline ? "span" : "div", "recorded-results");
         node.dataset.resultLayer = layer;
         node.setAttribute("role", "group");
         node.setAttribute("aria-label", scope);
@@ -1723,14 +1738,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const compact = pillsOnly || compactSingle && summary.count === 1;
         const unit = el("strong", "result-unit");
         unit.append(metadata.item(label || results.countLabel(layer, summary.count, total), explanation ? { helpLabel: "recorded tool result", help: explanation } : {}));
-        const values = heading && !compact ? el("div", "result-values") : node;
+        const values = heading && !compact ? el(inline ? "span" : "div", "result-values") : node;
         if (compact) {
             node.classList.add("result-inline");
             const described = rows && !singleRecord ? entries.map(entry => `${count(entry.count)} ${entry.label}${entry.reason ? ": " + entry.reason : ""}`).join("; ") : "";
             node.setAttribute("aria-label", `${heading || scope}: ${results.countLabel(layer, summary.count, total)}${described ? ". " + described : ""}`);
         } else if (heading) {
             node.classList.add("result-with-heading");
-            const description = el("div", "result-description");
+            const description = el(inline ? "span" : "div", "result-description");
             description.append(el("strong", "result-heading", heading), unit);
             node.append(description, values);
         } else node.append(unit);
@@ -3207,7 +3222,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : ["direct-request", "recorded-http"].includes(applied.layer) ? "Request site recorded" : "Action recorded";
         card.append(el("p", "", row.tool || results.unit(applied.layer, 1)),
             el("p", "muted", "The owning interaction was not retained."),
-            resultLine(applied.layer, results.summarize([row]), { heading: results.heading(applied.layer), pillsOnly: true }));
+            recordedCategory([row], applied.layer), activityCardProblem([row]).problem);
         const details = el("dl", "activity-card-facts");
         if (row.status != null) details.append(cardFact(applied.layer === "reported-api" ? "Tool-reported HTTP" : "Recorded HTTP", String(row.status)));
         if (["tool", "reported-api", "http"].includes(applied.layer)) details.append(cardFact(applied.layer === "tool" ? "Tool latency"
@@ -3291,7 +3306,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             tools.append(el("span", "identity-key", "Tools: "), cardTools(identities, false, { compact: true }));
             services.setAttribute("role", "group");
             services.setAttribute("aria-label", "Services and recorded activity");
-            services.append(serviceIdentity(identities, layer, { compact: true }));
+            services.append(el("span", "identity-key", layer === "tool" ? "Categories: " : "Services: "),
+                serviceIdentity(identities, layer, { compact: true }));
             identity.append(tools, services);
             summary.append(identity);
         }
@@ -3323,6 +3339,35 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (options.includeModel !== false) list.append(originalModelFact(scenario, options));
     }
+    function activityCardProblem(rows, { hasText = true, total } = {}) {
+        const presentation = results.activitySummary(applied.layer, rows, sourceCallFor);
+        const problem = el("p", "request-card-problem");
+        const summary = presentation?.summary;
+        const scope = total === undefined || total === summary?.count ? "Recorded" : "Matching";
+        let words;
+        if (!presentation) words = "Result counts unavailable.";
+        else if (!summary.count) words = `No recorded ${results.unit(applied.layer, 0)} in this view.`;
+        else if (applied.layer !== "tool") words = results.heading(applied.layer) + ": "
+            + results.entries(applied.layer, summary).map(entry => `${count(entry.count)} ${entry.label}`).join("; ") + ".";
+        else if (summary.failure) {
+            const tools = [...new Set(rows.filter(row => row.outcome === "failure").map(row => row.tool).filter(Boolean))];
+            const subject = !hasText && tools.length === 1 ? tools[0] : summary.failure === 1 ? "Tool call" : "Tool calls";
+            words = subject + " failed. " + presentation.reasons.map(entry => entry.reason).join("; ") + ".";
+            const uncertain = results.entries("tool", summary).filter(entry => !["success", "failure"].includes(entry.key));
+            if (uncertain.length) words += " " + uncertain.map(entry => entry.label).join("; ") + ".";
+        } else if (summary.success === summary.count) words = scope + " tool " + (summary.count === 1 ? "call worked." : "calls worked.");
+        else words = scope + " tool calls: " + results.entries("tool", summary)
+            .map(entry => `${count(entry.count)} ${entry.label.toLowerCase()}`).join("; ") + ".";
+        if (presentation?.outcome) {
+            problem.classList.add("result-tone-" + presentation.outcome);
+            problem.dataset.outcome = presentation.outcome;
+            problem.dataset.count = String(presentation.entries.filter(entry => entry.key === presentation.outcome)
+                .reduce((total, entry) => total + entry.count, 0));
+            problem.append(ux.icon(results.icon(presentation.outcome) + "-compact"));
+        }
+        problem.append(el("span", "", words));
+        return { presentation, problem };
+    }
     function requestCard(scenario) {
         const row = viewKey(el("article", "request-row activity-card"), "request:" + scenario.scenarioId);
         const target = routeFor("request", { request: scenario.scenarioId });
@@ -3332,21 +3377,43 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         action.setAttribute("aria-expanded", String(sidebarIdentity !== null && route.request === scenario.scenarioId));
         const description = textAccess.describePrompt(scenario.userPrompt);
         const rows = rowsFor(scenario.scenarioId);
-        const prompt = el("p", "request-card-prompt");
-        prompt.append(description.hasText ? document.createTextNode(textAccess.excerpt(scenario.userPrompt))
-            : rows.some(row => row.tool) ? cardTools(rows, false, { compact: true })
-                : document.createTextNode(results.unit(applied.layer, rows.length)));
+        const ordered = applied.layer === "tool" ? rows.map(row => ({ row, source: sourceCallFor(row) }))
+            .sort((a, b) => !a.source || !b.source ? a.source ? 1 : b.source ? -1 : 0
+                : requestContext.compare({ at: a.source.startedAt }, { at: b.source.startedAt })
+                    || scenario.toolCalls.indexOf(a.source) - scenario.toolCalls.indexOf(b.source))
+            .map(entry => entry.row) : rows;
+        const prompt = el("p", "request-card-prompt", description.hasText ? textAccess.excerpt(scenario.userPrompt)
+            : (/\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice);
         const actor = authorship.read(scenario.userPrompt).actor;
-        const author = el("span", "request-card-author", actor === "unknown" && description.label !== "Automatic continuation"
+        const author = el("p", "request-card-origin request-card-author", actor === "unknown" && description.label !== "Automatic continuation"
             ? "Author unverified" : description.label);
         author.dataset.promptActor = actor;
-        prompt.prepend(author, document.createTextNode(": "));
-        const facts = resultLine(applied.layer, results.summarize(rows), { scope: "Matching this view", pillsOnly: true });
-        facts.classList.add("request-card-summary");
-        if (description.notice) facts.append(el("span", "request-card-availability", description.notice));
+        const categories = recordedCategory(rows, applied.layer);
+        categories.classList.add("request-card-categories");
+        const full = results.summarize(fullRowsFor(scenario.scenarioId));
+        const { presentation, problem } = activityCardProblem(ordered, { ...description, total: full?.count ?? null });
+        const summary = presentation?.summary;
+        const facts = el("div", "request-card-summary");
         const moment = requestTiming.entry(scenario, applied.timeContext);
         facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
-        action.append(prompt, facts);
+        if (summary) {
+            const values = results.entries(applied.layer, summary);
+            const counts = full?.count === summary.count ? `${count(summary.count)} recorded ${results.columnUnit(applied.layer, summary.count)}`
+                : results.countLabel(applied.layer, summary.count, full?.count ?? null);
+            const breakdown = applied.layer === "tool" && summary.failure && values.length > 1
+                ? " / " + values.map(entry => `${count(entry.count)} ${entry.key === "failure" ? "failed" : entry.label.toLowerCase()}`).join(" / ") : "";
+            facts.append(el("span", "request-card-count", counts + breakdown));
+        }
+        action.append(author, prompt);
+        if (description.hasText && description.notice) action.append(el("p", "request-card-availability", description.notice));
+        action.append(categories, problem);
+        if (presentation?.moreReasons) {
+            const more = el("span", "request-card-more-problems");
+            more.append(el("span", "", `${count(presentation.moreReasons)} more failure ${presentation.moreReasons === 1 ? "reason" : "reasons"} in the reader`),
+                ux.icon("forward"));
+            action.append(more);
+        }
+        action.append(facts);
         action.addEventListener("click", event => {
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             if (!window.getSelection()?.isCollapsed && action.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
@@ -3424,7 +3491,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const sectionKey = name => JSON.stringify(["reader", route.request, name]);
         const promptSection = sections.add("prompt", "Prompt", { key: "text:request:" + route.request, collapsible: false });
         const activitySection = sections.add("activity", "Recorded activity", { key: sectionKey("activity"), collapsible: false });
-        const sourceSection = sections.add("source", "Source details", { key: sectionKey("source") });
+        const sourceSection = sections.add("source", "Source details", { key: sectionKey("source"), initialOpen: false });
         let responseSection, responseList;
         body.append(promptSection.element, activitySection.element, sourceSection.element);
         const promptList = el("ol", "journey reader-prompt-list");
@@ -3516,26 +3583,31 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             return node;
         }
-        function callHeading(name, result, { tool = false, duration, durationLabel = "Tool latency", timingColumn = false } = {}) {
+        function callHeading(name, result, { tool = false, duration, durationLabel = "Tool latency" } = {}) {
             const heading = el("header", "call-heading"), identity = el("h3", "reader-call-identity");
             if (tool) identity.append(el("span", "reader-tool-name", name));
             else identity.append(el("span", "reader-record-name", name));
-            const summary = el("div", "reader-call-summary");
+            const summary = el("span", "reader-call-summary"), secondary = el("div", "reader-call-secondary");
             summary.append(result);
             if (duration !== undefined) {
                 const elapsed = el("span", "reader-call-duration"), value = durationValue(duration);
                 if (duration !== null && duration < 1000) value.textContent = String(duration) + " ms";
-                elapsed.append(el("span", "reader-duration-label" + (timingColumn ? " visually-hidden" : ""), durationLabel + ": "), value);
-                summary.append(elapsed);
+                elapsed.append(el("span", "reader-duration-label", durationLabel + ": "), value);
+                secondary.append(elapsed);
             }
-            heading.append(identity, summary);
+            heading.append(identity, summary, secondary);
             return heading;
         }
         function callDetails(item, heading, key, visibility, actionId, render) {
             const identity = heading.querySelector(".reader-call-identity");
             const toggle = el("button", "reader-call-toggle");
             toggle.type = "button";
-            toggle.append(...identity.childNodes);
+            const line = el("span", "reader-call-identity-line");
+            line.append(...identity.childNodes);
+            const disclosure = ux.icon("disclosure");
+            disclosure.classList.add("reader-call-disclosure");
+            line.append(disclosure);
+            toggle.append(line, heading.querySelector(".reader-call-summary"));
             identity.append(toggle);
             const detail = el("div", "technical-detail");
             item.classList.add("reader-call-row");
@@ -3641,7 +3713,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const label = el(identity ? "span" : "p", "context-entry-label"), separator = labelText.indexOf(":");
             if (separator >= 0) label.append(el("strong", "", labelText.slice(0, separator + 1)), document.createTextNode(labelText.slice(separator + 1)));
             else label.textContent = labelText;
-            if (identity) (identity.querySelector(".reader-call-toggle") || identity).prepend(label, el("span", "reader-identity-separator", " \u00b7 "));
+            if (identity) (identity.querySelector(".reader-call-identity-line") || identity).prepend(label, el("span", "reader-identity-separator", " \u00b7 "));
             else item.prepend(label);
             if (entry.hideLabel || entry.kind === "follow-up" || entry.kind === "prompt" && entry.relation !== "selected") label.remove();
             if (entry.kind === "action") label.classList.add("reader-entry-label");
@@ -3823,15 +3895,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const item = viewKey(el("li", "journey-item"), key);
             item.dataset.toolCallId = tool.toolCallId || "";
             const operation = categories.operation(tool.tool);
-            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, rows: row ? [row] : undefined });
+            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, rows: row ? [row] : undefined, inline: true });
             result.classList.add("journey-result");
-            const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool"),
-                timingColumn: isSelected && commonToolTiming });
+            const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
             item.append(heading);
             const sourceCall = sourceCallFor(row) || tool;
-            const serviceValues = identityValues(row ? [{ ...row, tool: tool.tool }] : undefined, "tool");
+            const serviceValues = recordedCategory(row ? [{ ...row, tool: tool.tool }] : undefined, "tool");
             serviceValues.classList.add("reader-call-services");
-            heading.append(serviceValues);
+            heading.querySelector(".reader-call-secondary").prepend(serviceValues);
             const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
             if (!sameScope) {
                 actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
@@ -3893,7 +3964,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
             const heading = callHeading(layer === "code-reference" ? "Graph code reference" : "Direct Graph request site",
-                resultLine(layer, graphRows?.length ? results.summarize(graphRows) : null, { compactSingle: true, singleRecord: true }));
+                resultLine(layer, graphRows?.length ? results.summarize(graphRows) : null, { compactSingle: true, singleRecord: true, inline: true }));
             item.append(heading, fields([[layer === "code-reference" ? "Referenced service" : "Service", identityValues(graphRows, layer)]]));
             const path = el("dl", "action-fields");
             pathField(path, layer === "code-reference" ? "Referenced API path" : "API path", results.pathText(graph.endpoint));
@@ -3915,7 +3986,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 identifiers: [["ID", record.recordId]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
-            const heading = callHeading("Explicit HTTP recorder", resultLine("http", httpRows?.length ? results.summarize(httpRows) : null, { compactSingle: true, singleRecord: true }),
+            const heading = callHeading("Explicit HTTP recorder", resultLine("http", httpRows?.length ? results.summarize(httpRows) : null, { compactSingle: true, singleRecord: true, inline: true }),
                 { duration: callInvestigation.duration(record, "http"), durationLabel: "Recorded duration" });
             item.append(heading, fields([["Service", identityValues(httpRows, "http")]]),
                 el("p", "", record.status == null ? "No HTTP response recorded." : "Recorded HTTP status " + record.status));
@@ -3948,7 +4019,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         body.classList.toggle("tool-activity-log", commonToolTiming);
         if (commonToolTiming) {
             const heading = activitySection.element.querySelector(".reader-section-heading");
-            heading.append(el("span", "reader-timing-column", "Tool latency"));
             const measureHeading = () => {
                 if (!currentReader() || !heading.isConnected) return;
                 body.style.setProperty("--reader-timing-padding", getComputedStyle(contextBody).paddingTop);

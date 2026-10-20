@@ -76,7 +76,8 @@ test("legacy Calls becomes scoped Activity without interpreting its old sort or 
         assert.deepEqual(await elapsed.locator(".call-duration").evaluateAll(nodes => nodes.map(node => node.getAttribute("value"))),
             ["0", "7", "900", null]);
         await expect(elapsed).toHaveText(["Tool latency: 0 ms", "Tool latency: 7 ms", "Tool latency: 900 ms", "Tool latency: Not recorded"]);
-        await expect(page.locator(".reader-timing-column")).toHaveText("Tool latency");
+        await expect(page.locator(".reader-timing-column")).toHaveCount(0);
+        await expect(elapsed.locator(".reader-duration-label")).toHaveText(["Tool latency:", "Tool latency:", "Tool latency:", "Tool latency:"]);
         await page.locator("#closeContextSidebar").click(); await settled(page);
     }
 });

@@ -82,6 +82,7 @@ const screenLight = `
  --chart-failure:#b3261e;--screen-failure-high:#c17169;--screen-failure-low:#9e403a;
  --screen-service-files:#007357;
  --screen-prompt-user:#365f7a;
+ --screen-prompt-agent:#806018;
  --search-interaction:#235eaa;--search-context:#795997;--search-reply:#006c74;
  --search-action:#845b00;--search-tool:#943981;--search-service:#5b690b;
  --search-report:#236c45;--search-comparison:#a34c1c;--search-view:#3330bd;--search-setting:#545454;
@@ -107,6 +108,7 @@ const screenDark = `
  --screen-service-files:#10b981;
  --chart-fade-strength:74%;
  --screen-prompt-user:#95b9d2;
+ --screen-prompt-agent:#e2c27b;
  --search-interaction:#79b6ff;--search-context:#c4a9e1;--search-reply:#66d0d7;
  --search-action:#e2b455;--search-tool:#e791ce;--search-service:#becb6b;
  --search-report:#7cce97;--search-comparison:#eea276;--search-view:#9f9bff;--search-setting:#abbbc7;

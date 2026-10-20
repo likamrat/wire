@@ -93,11 +93,10 @@ test("one minimal card opens the full log with private input owned by its exact 
     await expect(card).not.toContainText("workiq-fetch");
     const metadataType = await card.evaluate(node => {
         const time = getComputedStyle(node.querySelector(".request-card-time"));
-        return [...node.querySelectorAll(".recorded-result-label")].map(label => ({
-            size: getComputedStyle(label).fontSize, timeSize: time.fontSize, weight: getComputedStyle(label).fontWeight,
-        }));
+        const problem = getComputedStyle(node.querySelector(".request-card-problem"));
+        return { size: problem.fontSize, timeSize: time.fontSize, weight: problem.fontWeight };
     });
-    for (const value of metadataType) { assert.equal(value.size, value.timeSize); assert.equal(value.weight, "400"); }
+    assert.deepEqual(metadataType, { size: "14px", timeSize: "12px", weight: "400" });
     await capture(page, "analyze-dark", true);
     await card.click();
     await settled(page);
@@ -210,6 +209,7 @@ test("changing the applied outcome dismisses private detail and preserves readin
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
     await expect(page.locator(".request-card-open [data-outcome=success]")).toHaveAttribute("data-count", "4");
+    await expect(page.locator(".request-card-problem")).toHaveText("Matching tool calls worked.");
     await expect(page.locator(".request-card-open [data-outcome=failure]")).toHaveCount(0);
     await page.locator(".request-card-open").click(); await settled(page);
     await expect(page.locator('[data-tool-call-id="activity-3"]')).not.toBeFocused();
@@ -291,7 +291,9 @@ test("forced colors retain keyboard focus and readable failure text without a se
     const outline = await target.evaluate(node => ({ style: getComputedStyle(node).outlineStyle, width: parseFloat(getComputedStyle(node).outlineWidth) }));
     assert.notEqual(outline.style, "none"); assert.ok(outline.width >= 2);
     await expect(target).toContainText("Request timed out (MCP -32001)");
-    await expect(page.locator(".reader-timing-column")).toHaveCount(1);
+    await expect(target.locator(".reader-duration-label")).toHaveText("Tool latency:");
+    await expect(target.locator(".reader-duration-label")).toBeVisible();
+    await expect(page.locator(".reader-timing-column")).toHaveCount(0);
     await expect(page.locator("[data-analyze-mode]")).toHaveCount(0);
     await capture(page, "forced-reader");
 });
@@ -311,7 +313,7 @@ test("unidentified retained calls do not put private arguments into disclosure i
     assert.ok(!decodeURIComponent(attributes).includes("PRIVATE_UNIDENTIFIED_ARGUMENT"));
 });
 
-test("late entry retains one tool timing label, identity and exact target without taking user scroll", async t => {
+test("late entry retains labelled per-call timing, identity and exact target without taking user scroll", async t => {
     const { page, runtime } = await setup(t, activityRecord(26)), evidence = [];
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 2]]) {
         await page.goto("about:blank");
@@ -328,7 +330,7 @@ test("late entry retains one tool timing label, identity and exact target withou
         await expect(page.locator(".reader-call-row")).toHaveCount(26);
         const box = await page.locator("#contextSidebarBody").evaluate(body => {
             const rect = node => { const box = node.getBoundingClientRect(); return { top: box.top, bottom: box.bottom }; };
-            return { viewport: rect(body), label: rect(body.querySelector(".reader-timing-column")),
+            return { viewport: rect(body), label: rect(body.querySelector('[data-tool-call-id="activity-26"] .reader-duration-label')),
                 heading: rect(body.querySelector('[data-reader-section=activity]>.reader-section-heading')),
                 target: rect(body.querySelector('[data-tool-call-id="activity-26"]')),
                 identity: rect(document.querySelector("#contextSidebarTitle")), scroll: body.scrollTop };
@@ -337,7 +339,8 @@ test("late entry retains one tool timing label, identity and exact target withou
         assert.ok(box.heading.top >= box.identity.bottom && box.target.top >= box.heading.bottom + 4);
         assert.ok(box.target.bottom <= box.viewport.bottom - 4);
         await expect(target.locator("data.call-duration")).toHaveAttribute("value", "975");
-        await expect(page.locator(".reader-timing-column")).toHaveCount(1);
+        await expect(page.locator(".reader-timing-column")).toHaveCount(0);
+        await expect(page.locator(".reader-call-row .reader-duration-label")).toHaveCount(26);
         await capture(page, `late-${theme}-${width}-${scale}`);
         await page.locator("#contextSidebarBody").hover();
         await page.mouse.wheel(0, -220);
@@ -355,7 +358,8 @@ test("late entry retains one tool timing label, identity and exact target withou
             viewportBottom: document.querySelector("#contextSidebarBody").getBoundingClientRect().bottom,
         }));
         assert.ok(exact.targetTop >= exact.headingBottom + 4 && exact.readingBottom <= exact.viewportBottom);
-        await expect(page.locator(".reader-timing-column")).toHaveCount(1);
+        await expect(page.locator(".reader-timing-column")).toHaveCount(0);
+        await expect(page.locator("#selectedCall .reader-duration-label")).toHaveText("Tool latency:");
         evidence.push({ theme, width, scale, entry: "explicit", ...exact });
         await capture(page, `late-explicit-${theme}-${width}-${scale}`);
     }
@@ -373,7 +377,7 @@ test("a success with missing service evidence, partial result and missing prompt
             if (outcome === "unknown") record.userPrompt = { text: null, status: "unavailable",
                 authorship: { actor: "unknown", basis: "missing-source" } };
             const { page } = await setup(t, record);
-            await expect(page.locator(".request-card-open")).toContainText(label);
+            await expect(page.locator(".request-card-open .request-card-problem")).toContainText(new RegExp(label, "i"));
             if (outcome === "unknown") await expect(page.locator(".request-card-open")).toContainText("Prompt text unavailable");
             await page.locator(".request-card-open").click(); await settled(page);
             await expect(page.locator("#contextSidebarTitle")).toBeFocused();
@@ -390,16 +394,22 @@ test("the whole interaction continues through report reading and returns with sc
     const { page, runtime } = await setup(t);
     await chooseTheme(page, "dark");
     await page.goto(runtime.url + "#analyze?tool=workiq-fetch&result=failure"); await ready(page);
-    await expect(page.locator(".request-card-open [data-outcome=failure]")).toContainText("1 Tool failed");
+    await expect(page.locator(".request-card-open [data-outcome=failure]")).toContainText("Access was denied");
+    await expect(page.locator(".request-card-open [data-outcome=failure]")).toHaveAttribute("data-count", "1");
+    await expect(page.locator(".request-card-count")).toContainText("1 of 6");
     const originURL = page.url();
     await page.locator(".request-card-open").focus();
     const origin = (await page.locator(".request-card-open").boundingBox()).y;
     await page.keyboard.press("Enter"); await settled(page);
     await page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle').click();
     await page.locator("#contextSidebarBody").hover();
+    const beforeWheel = await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop);
     await page.mouse.wheel(0, 180);
-    await expect.poll(() => page.locator("#contextSidebarBody").evaluate(node => node.scrollTop)).toBeGreaterThan(0);
-    const top = await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop);
+    await expect.poll(() => page.locator("#contextSidebarBody").evaluate(node => node.scrollTop)).toBeGreaterThan(beforeWheel);
+    const beforeReading = await page.locator("#contextSidebarBody").evaluate(node => ({
+        top: node.scrollTop, height: node.scrollHeight, viewport: node.clientHeight,
+    }));
+    const top = beforeReading.top;
     await page.locator("#requestReportToggle").click();
     await page.locator("#requestReportContinue").click(); await ready(page);
     await expect(page.locator('input[data-report-request="activity-reader"]')).toBeChecked();
@@ -419,7 +429,10 @@ test("the whole interaction continues through report reading and returns with sc
     await expect(page.locator("#requestReportContinue")).toBeFocused();
     await expect(page.locator("#toolFilter")).toHaveValue("workiq-fetch");
     await expect(page.locator("#outcomeFilter")).toHaveValues(["failure"]);
-    assert.ok(Math.abs(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop) - top) <= 1);
+    const afterReading = await page.locator("#contextSidebarBody").evaluate(node => ({
+        top: node.scrollTop, height: node.scrollHeight, viewport: node.clientHeight,
+    }));
+    assert.ok(Math.abs(afterReading.top - top) <= 1, JSON.stringify({ beforeReading, afterReading }));
     await expect(page.locator('[data-tool-call-id="activity-3"]')).toContainText("PRIVATE_CALL_ARGUMENT_3");
     await page.locator("#closeContextSidebar").click(); await settled(page);
     await expect(page.locator(".request-card-open")).toBeFocused();

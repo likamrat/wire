@@ -1,9 +1,9 @@
 export const promptAuthorStyles = `
-:root {--prompt-author-user:#006580}
+:root {--prompt-author-user:#006580;--prompt-author-agent:var(--screen-prompt-agent,var(--copilot-chat-title))}
 @media(prefers-color-scheme:dark) {:root:not([data-evidence-theme]) {--prompt-author-user:#06b6d4}}
 :root[data-evidence-theme=dark] {--prompt-author-user:#06b6d4}
 [data-prompt-actor=user] {--prompt-author-ink:var(--prompt-author-user)}
-[data-prompt-actor=agent] {--prompt-author-ink:var(--copilot-chat-title)}
+[data-prompt-actor=agent] {--prompt-author-ink:var(--prompt-author-agent)}
 [data-prompt-actor=unknown] {--prompt-author-ink:var(--muted)}
 [data-prompt-actor] {color:var(--prompt-author-ink)}
 .full-text-preview-label[data-prompt-actor] {border-inline-start:3px solid currentColor;padding-inline-start:6px;font-weight:var(--weight-medium,500)}

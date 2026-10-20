@@ -253,7 +253,7 @@ export const reportJourneyStyles = `
 .report-prompt-heading .full-text-preview-label[data-prompt-actor]{border:0;padding:0;color:var(--prompt-author-ink,var(--muted));font:inherit}
 #reportList .full-text>:is(.full-text-preview,.full-text-body){order:1;grid-column:1;grid-row:2;min-width:0;max-width:none;margin:0;padding:2px 0 2px 12px;border-inline-start:2px solid var(--control);border-radius:0;background:var(--paper);color:var(--ink);font:var(--weight-regular) var(--type-body)/var(--leading-reading) var(--font);font-style:normal}
 #reportList .full-text:has([data-prompt-actor=user])>:is(.full-text-preview,.full-text-body){border-inline-start-color:var(--screen-prompt-user)}
-#reportList .full-text:has([data-prompt-actor=agent])>:is(.full-text-preview,.full-text-body){border-inline-start-color:var(--copilot-chat-title)}
+#reportList .full-text:has([data-prompt-actor=agent])>:is(.full-text-preview,.full-text-body){border-inline-start-color:var(--prompt-author-agent)}
 #reportList .full-text>:is(.full-text-preview-state,.full-text-availability){order:2;grid-column:1;margin:0}
 #reportList .full-text-body .ux-code-block{margin:0;border:0;border-radius:0;background:transparent}
 #reportList .full-text-body .ux-code-toolbar{padding:0 0 8px;background:transparent}

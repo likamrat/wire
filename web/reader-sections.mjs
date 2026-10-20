@@ -11,7 +11,10 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         return node;
     }
     const present = () => views.filter(view => root.contains(view.element));
-    const snapshot = () => presentation.openSummary(present().filter(view => view.collapsible).map(view => view.key), true);
+    const snapshot = () => {
+        const sections = present().filter(view => view.collapsible), open = sections.filter(view => view.isOpen()).length;
+        return { total: sections.length, open, canExpand: open < sections.length, canCollapse: open > 0 };
+    };
     function refresh() { if (active) onChange?.(snapshot()); }
     function finishAll() { for (const view of views) view.finish(); }
     const motionChanged = () => { if (reducedMotion.matches) finishAll(); };
@@ -28,7 +31,7 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         if (!open && requestClose) requestClose(changed, commit);
         else commit();
     }
-    function add(name, title, { key, metadata, collapsible = true } = {}) {
+    function add(name, title, { key, metadata, collapsible = true, initialOpen = true } = {}) {
         if (views.some(view => view.key === key)) throw new Error("Reader sections require distinct presentation owners.");
         const section = element("section", "reader-section");
         section.dataset.readerSection = name;
@@ -60,7 +63,7 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         section.append(heading, notice, clip);
         const listeners = new Set();
         let animation = null;
-        const isOpen = () => !collapsible || presentation.isOpen(key, true);
+        const isOpen = () => !collapsible || presentation.isOpen(key, initialOpen);
         function finish() {
             animation?.cancel();
             animation = null;
@@ -126,6 +129,8 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         const unsubscribe = visibility.subscribe(paint);
         toggle.addEventListener("click", () => {
             if (!owned.isCurrent() || !visibility.isOpen()) return;
+            const selection = doc.defaultView.getSelection();
+            if (selection && !selection.isCollapsed && toggle.contains(selection.anchorNode)) return;
             presentation.setOpen(key, !presentation.isOpen(key, initialOpen));
             paint();
         });

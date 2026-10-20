@@ -24,9 +24,18 @@ Dark service/tool bar fades retain enough of their existing identity color to
 contrast with the recessed track across both gradient stops. This does not change
 service glyph/text colors, outcome stops or saved report paint.
 Generic semantic-bearing grounds never exceed the floating role: existing
-Calendar text remains above 4.5:1, not just the brighter violet author cue.
+Calendar text remains above 4.5:1, not just a brighter author cue.
 Primary and destructive filled controls use their own contrasting label pairs.
 Disabled controls retain readable secondary ink without an active-looking face.
+
+Agent authorship has its own screen role: `#806018` in light and `#e2c27b`
+in dark. Author text, reader prompt edges and onscreen report-picker prompt
+edges consume that one role. Teams retains its service purple (`#6842ba`
+light, `#ad88f0` dark) throughout category cues, widgets, legends and chart
+materials. The Agent role is not borrowed from `--copilot-chat-title`;
+chat-title, other service, outcome and saved-document colors do not change.
+My prompt stays in its blue role; unverified authors stay neutral. Color
+does not establish authorship or event kind.
 
 The left navigation marks the current destination with a restrained neutral
 surface and inset keyline,
@@ -167,14 +176,33 @@ PDF, JSON and Markdown content are not restyled.
 
 ## Interaction reading
 
-Analyze has one Activity list. Minimal cards lead with a regular Asta Sans
-prompt/author preview, matching recorded-outcome counts and recorded time.
-The preview uses the card's available width, not the reader's 68ch prose
-measure. At 52rem of card width it occupies one line; narrower cards allow two
-lines at the same font size. The excerpt is a recognition cue, not the full
-message: the native card link still opens the complete authorized text in the
-gliding reader. Outcomes and time share one compact metadata row and wrap when
-needed, without clipping labels or shrinking text.
+Analyze has one Activity list. Each card uses the same vertical structure:
+origin/author heading, authorized prompt excerpt or explicit prompt-availability
+text, a labelled Category/Categories (or Service/Services) row, the recorded
+problem or result, any more-reasons cue, then quiet time/count metadata.
+Categories never share the author heading or sit beside the prompt in a wide
+context lane. Regular 16px Asta Sans recognition uses the available card width
+without CSS line clamps; the existing grapheme-safe excerpt remains bounded.
+Full authorized text stays in the native gliding reader.
+
+There is 8px between the origin heading and recognition, 16px before the category
+row and before the result, and 12px before supporting metadata. Cards use 20px
+insets (16px in narrow containers) and 16px between cards; their height follows
+the content. Category values are noninteractive semantic list items with visible
+separation, not pills or filter buttons. The owning card remains one native link.
+An unavailable author/category is explicitly qualified, not filled from prose,
+tool arguments or a neighboring record.
+
+The result sentence uses only the same matching canonical rows and exact owning
+call's already-qualified reason. At most two distinct failure reasons appear
+in stable retained-call order; repeated reasons are grouped. If more exist,
+a standalone underlined, medium-weight **N more failure reasons in the reader**
+cue with a trailing arrow sits above the time/count footer. Its count is the
+number of omitted distinct reasons, not failed calls. It is part of the same
+card link, never a nested target or a tooltip-only notice. Unknown/partial
+results do not become successes, and all-worked wording is about recorded tool
+completion, never the quality of the whole task. Non-tool layers retain their
+own units and do not borrow a parent tool cause.
 
 An empty retained string alone does not prove why text is absent. Legacy `full`
 status can describe an empty message. Observed automatic continuation with an
@@ -192,11 +220,16 @@ never claims a recording failure. Nonempty automatic messages remain prompts.
 Changed source text keeps the first saved original and shows a qualification.
 Neither neighboring text, tool arguments nor transformed host instructions
 are substituted for an original. Saved historical files/reports are not rewritten.
+The card adds a **Prompt:** field label only when the availability notice does
+not already name the prompt, giving normal continuation an explicit
+**Prompt: No new message was sent.** body. A same-record tool name may identify
+failed activity but never masquerades as original text. Qualifications remain
+visible even when an immutable first-saved prompt is present.
 
 When only capture time is available it is named, not presented as message time.
-Tools, services, supported causes and per-call timing belong in the full gliding
-reader, not another primary Calls list; matching tool names are the recognition
-fallback only when the card has no authorized prompt text. Report-picker summaries retain their
+Exact call input, identities and per-call timing belong in the full gliding
+reader, not another primary Calls list. Cards expose supported category and
+bounded problem meaning without reproducing the call log. Report-picker summaries retain their
 full-interaction context and shared service vocabulary.
 Each call shows its own outcome and supported cause once. A specific retained
 cause such as **Sign-in was required** replaces a redundant **Tool failed**
@@ -213,7 +246,7 @@ its 20px bubble stays centered in the unchanged 24px service lane.
 Noninteractive service glyphs fit the text line box instead of adding baseline
 slack or a 44px control-sized row. Wrapped names add real text lines, not empty
 spacers. Tools and services are separate sets of evidence, not assumed pairs.
-Report-picker compact summaries show up to two
+Report-picker compact summaries visibly label their category/service group and show up to two
 distinct tool names and two known service names; More tools and More services
 continue within their own row's comma-separated group in the same typography, not as a button,
 badge or separate panel. All outcomes and missing/partial-evidence qualifiers remain
@@ -243,8 +276,19 @@ interaction itself. Its reading order is **My/Agent prompt (or Author unverified
 Recorded activity, Recorded response (when retained text exists), Source details**.
 There is no separate Timing, Reviews, personal editor or replacement score panel.
 Prompt and Recorded activity stay open without duplicate global collapse/expand
-controls. Response and Source details retain their keyed section visibility.
-Call identities open secondary exact evidence in place. These native disclosure
+controls. Source details starts collapsed only for a new reading state; prior
+open/closed intent wins, and an exact reveal opens the required owner. Response
+retains its existing keyed visibility. A call's identity and full-width result
+share one 44px-or-larger disclosure target with a 6px gap between their text
+rows, rather than reserving an empty clickable line. A disclosure chevron and
+identity hover treatment identify the action. Its category is explicitly
+labelled in a secondary row alongside its named latency, outside the button;
+category names do not filter or navigate. The same separated category-list
+presentation is used by cards and call headers.
+Selecting result text does not toggle its disclosure.
+An unavailable response is a compact labelled row, with any existing
+capture/retention reason or read error intact; it is not a second summary panel.
+Call disclosures open secondary exact evidence in place. These native disclosure
 owners build authorized bodies only while visible, scrub them on close, and
 invalidate detached Copy getters. No hidden argument body or argument-derived
 presentation key is retained in the DOM. Visibility loss, invalidation and
@@ -312,11 +356,12 @@ Reader-formatted absolute timestamps display whole seconds while retaining the
 unaltered raw value in `datetime` and title; raw payload copying keeps precision.
 Each call's secondary evidence retains its recorded start and any retained end
 timestamp; an end is never reconstructed from a duration.
-Pure tool logs keep one visible **Tool latency** column heading through late
-entry and scrolling, with per-value accessible boundary labels. Its measured
-height and the existing scrollport padding keep targets, focus and identity
-uncovered at narrow/enlarged sizes. Mixed and non-tool layers keep their own
-explicit boundaries. Each value uses the existing admitted duration. Below one second that
+Each tool call keeps a visible **Tool latency:** label beside its own value
+in the secondary metadata row. There is no competing global latency column.
+The measured Recorded activity heading and existing scrollport padding keep
+targets, focus and identity uncovered through late entry and at enlarged
+sizes. Mixed and non-tool layers keep their own explicit boundaries.
+Each value uses the existing admitted duration. Below one second that
 summary shows milliseconds, so **7 ms** never becomes **0 ms**. Missing duration
 stays Not recorded. Returned entries retain API result duration, status and safe
 error code on their own canonical result, never a borrowed parent cause. Their

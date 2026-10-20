@@ -87,6 +87,15 @@ export function createRecordedResults() {
             ? [...failures].map(([reason, detail]) => ({ ...entry, count: detail.count, reason,
                 ...concise ? { reasonOnly: detail.reasonOnly } : {} })) : [entry]);
     }
+    function activitySummary(layer, rows, callFor) {
+        const summary = summarize(rows), values = explainedEntries(layer, rows, callFor);
+        if (!values) return null;
+        const reasons = values.filter(entry => entry.reason).map(({ reason, count }) => ({ reason, count }));
+        const outcome = ["failure", "transport", "partial", "unknown", "other", "success"]
+            .find(key => values.some(entry => entry.key === key)) ?? null;
+        return { summary, entries: values, outcome, reasons: reasons.slice(0, 2),
+            moreReasons: Math.max(0, reasons.length - 2) };
+    }
     function unit(layer, count) { return units[layer]?.[count === 1 ? 0 : 1] || "records"; }
     function columnUnit(layer, count) {
         const name = unit(layer, count);
@@ -133,5 +142,5 @@ export function createRecordedResults() {
             ? { path: paths[0], source: "call" }
             : { path: null, source: paths.length > 1 ? "unattributed" : "missing" };
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, failureReason, explainedEntries, unit, columnUnit, canInspect, countLabel, heading, pathText, callPaths, returnedResult, returnedPath, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, failureReason, explainedEntries, activitySummary, unit, columnUnit, canInspect, countLabel, heading, pathText, callPaths, returnedResult, returnedPath, layers: Object.keys(units) };
 }

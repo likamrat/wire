@@ -86,6 +86,35 @@ test("pure, unknown, code-only and unavailable results never invent request succ
     assert.equal(results.canInspect("unavailable", "success"), false);
 });
 
+test("Activity summarizes two distinct matching failure reasons and counts omitted reasons, not calls", () => {
+    const results = createRecordedResults();
+    const rows = [
+        { id: "denied", outcome: "failure" },
+        { id: "worked", outcome: "success" },
+        { id: "sign-in", outcome: "failure" },
+        { id: "denied-again", outcome: "failure" },
+        { id: "timeout", outcome: "failure" },
+    ];
+    const signals = { denied: "access-denial", "denied-again": "access-denial",
+        "sign-in": "workiq-sign-in-required", timeout: "request-timeout" };
+    const callFor = row => ({ failureEvidence: {
+        version: 1, reason: "error-details-excluded", messageStatus: "text-excluded",
+        messageSignal: signals[row.id],
+    } });
+    const presentation = results.activitySummary("tool", [...rows, rows[0]], callFor);
+    assert.equal(presentation.summary.count, 5);
+    assert.equal(presentation.summary.failure, 4);
+    assert.equal(presentation.outcome, "failure");
+    assert.deepEqual(presentation.reasons, [
+        { reason: "Access was denied", count: 2 },
+        { reason: "Sign-in was required", count: 1 },
+    ]);
+    assert.equal(presentation.moreReasons, 1);
+    assert.equal(results.activitySummary("tool", [rows[4]], callFor).moreReasons, 0);
+    assert.deepEqual(results.activitySummary("tool", [rows[4]], callFor).reasons,
+        [{ reason: "Request timed out (MCP -32001)", count: 1 }]);
+});
+
 test("report all/current/selected retain full-group results and disclose missing counts", () => {
     const source = fixture("report-mixed"), other = fixture("report-other");
     source.toolCalls.push({ ...structuredClone(source.toolCalls[0]), toolCallId: "failure", startEventId: "failure-start", toolSucceeded: false, apiResults: [] });
@@ -103,6 +132,28 @@ test("report all/current/selected retain full-group results and disclose missing
     assert.equal(broken.available, false);
     assert.equal(broken.counts.workIqActions, null);
     assert.match(scopes.summary(broken), /unavailable.*not zero/);
+});
+
+test("Activity result gaps and non-tool layers never inherit a tool cause or a success-shaped fallback", () => {
+    const results = createRecordedResults();
+    const unexpected = () => { throw new Error("A nonfailure row must not request a tool cause."); };
+    assert.equal(results.activitySummary("tool", undefined, unexpected), null);
+    assert.equal(results.activitySummary("tool", [{ id: "invalid" }], unexpected), null);
+    const empty = results.activitySummary("tool", [], unexpected);
+    assert.equal(empty.outcome, null);
+    assert.equal(empty.summary.count, 0);
+    for (const outcome of ["success", "partial", "unknown", "transport", "other"]) {
+        const value = results.activitySummary("tool", [{ id: outcome, outcome }], unexpected);
+        assert.equal(value.outcome, outcome);
+        assert.deepEqual(value.reasons, []);
+        assert.equal(value.moreReasons, 0);
+    }
+    for (const layer of results.layers.filter(layer => layer !== "tool")) {
+        const value = results.activitySummary(layer, [{ id: "result", outcome: "failure" }], unexpected);
+        assert.deepEqual(value.reasons, [], layer);
+        assert.equal(value.moreReasons, 0, layer);
+        assert.equal(value.outcome, layer === "code-reference" ? "unknown" : "failure", layer);
+    }
 });
 
 test("full-request context uses canonical identities and keeps batched API units separate", () => {
