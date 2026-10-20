@@ -28,7 +28,14 @@ All extracted content is plain text. Consumers must use text rendering, never `i
 
 Interaction/context/reply display titles use a bounded, at-most-120-grapheme
 original slice of already-admitted text. No summary, ellipsis or role label is
-added to searchable content; empty/unavailable text retains its generic fallback.
+added to searchable content; empty/unavailable text retains its generic fallback,
+except a supported automatic continuation is titled **Automatic continuation**.
+Its content stays empty. `coverage.activityState` and `availabilityNote` preserve
+the shared explanation **No new message was sent** without a `text-unavailable`
+source issue. Text completeness remains separate from activity availability:
+this does not claim a saved prompt body, index host instructions, or manufacture
+an original. Known gaps and source conflicts carry their actual qualifications;
+unexplained older absence stays unknown.
 Full content and coverage are unchanged, and the title remains part of the entry
 revision. Saved report titles come from their verified document, not this preview.
 

@@ -291,12 +291,13 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
                 const li = document.createElement("li");
                 const gaps = [[row.droppedBytes, "earlier bytes outside the bounded tail"], [row.unreadBytes, "unread bytes"],
                     [row.malformedLines, "malformed lines"], [row.oversizedLines, "oversized lines"],
-                    [row.credentialExclusions, "credential exclusions"], [row.missingResults, "calls without a recorded result"]]
+                    [row.credentialExclusions, "credential exclusions"], [row.unsupportedPromptContents, "unsupported message formats"],
+                    [row.missingResults, "calls without a recorded result"]]
                     .filter(([count]) => count).map(([count, label]) => `${count} ${label}`).join("; ");
                 li.textContent = `${row.name}: ${row.problem || "Available history read."}${gaps ? ` ${gaps}.` : ""}`;
                 return li;
             }));
-            const partial = result.availability.some(row => row.problem || row.droppedBytes || row.unreadBytes || row.malformedLines || row.oversizedLines || row.credentialExclusions || row.missingResults);
+            const partial = result.availability.some(row => row.problem || row.droppedBytes || row.unreadBytes || row.malformedLines || row.oversizedLines || row.credentialExclusions || row.unsupportedPromptContents || row.missingResults);
             preview = result; phase = "preview";
             status(view.records === null ? "The preview did not return a usable record count. Change scope and preview again; nothing was recollected."
                 : view.records ? (partial ? "Some history is unavailable or incomplete. Only the records shown will be recollected. See source details."

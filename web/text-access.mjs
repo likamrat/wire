@@ -6,19 +6,20 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         return source?.status !== "unavailable" && typeof source?.text === "string" && source.text.trim() ? source.text : null;
     }
     function describePrompt(source) {
-        if (retained(source) !== null) return { hasText: true, label: caption(source), notice: null };
+        const availability = authorship?.availability?.(source);
+        if (retained(source) !== null) return { hasText: true, label: caption(source), notice: availability?.notice ?? null };
         const author = authorship?.read(source), empty = source?.status === "full"
             && typeof source.text === "string" && !source.text.trim();
         return {
             hasText: false,
-            label: empty && author?.basis === "autopilot" ? "Automatic continuation"
+            label: (availability ? availability.state === "automatic" : empty && author?.basis === "autopilot") ? "Automatic continuation"
                 : author?.actor === "user" ? "My activity" : author?.actor === "agent" ? "Agent activity" : "Author unverified",
-            notice: empty ? "No prompt text retained" : "Prompt text unavailable",
+            notice: availability?.notice ?? (empty ? "No prompt text retained" : "Prompt text unavailable"),
         };
     }
     function excerpt(source, limit = 170) {
         const text = retained(source);
-        if (text === null) return "Prompt not available";
+        if (text === null) return authorship?.availability?.(source).state === "automatic" ? "Automatic continuation" : "Prompt not available";
         const compact = text.replace(/\s+/gu, " ").trim();
         const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(compact);
         let end = compact.length, count = 0;
@@ -67,7 +68,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         heading.id = "text-heading-" + encodeURIComponent(key);
         heading.textContent = headingLabel ?? (subject === "response" ? contentFirst ? "Recorded response" : "Retained response text"
             : complete && text === null ? describePrompt(source).label : promptLabel);
-        if (visibility && subject === "request" && authorship?.read(source).actor === "unknown") heading.textContent = "Author unverified";
+        if (visibility && subject === "request" && authorship?.read(source).actor === "unknown"
+            && authorship?.availability?.(source).state !== "automatic") heading.textContent = "Author unverified";
         if (visibility && subject === "response" && actionsHost) heading.classList.add("visually-hidden");
         if (subject === "request") heading.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
         if (complete) {
@@ -91,13 +93,19 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         reading.id = "text-excerpt-" + encodeURIComponent(key);
         reading.classList.add(complete ? "full-text-unavailable" : "full-text-preview");
         reading.textContent = complete && text !== null ? `${noun === "prompt" ? "Prompt" : "Response"} text is hidden.`
-            : complete && subject === "request" ? describePrompt(source).notice + "." : preview;
+            : complete && subject === "request" ? describePrompt(source).notice.replace(/\.?$/, ".") : preview;
         const passage = inline ? document.createElement("div") : root;
         if (inline) {
             passage.className = "full-text-passage";
             root.append(passage);
         }
         passage.append(reading);
+        if (complete && subject === "request" && text !== null && describePrompt(source).notice) {
+            const note = document.createElement("p");
+            note.className = "full-text-availability";
+            note.textContent = describePrompt(source).notice;
+            root.append(note);
+        }
         let previewState;
         if (!complete) {
             const provenance = document.createElement("div");

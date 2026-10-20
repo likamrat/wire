@@ -401,8 +401,8 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             const destination = ["interaction", "context", "reply"].includes(hit.type) ? "Open interaction" : ["action", "tool", "service"].includes(hit.type)
                 ? call ? "Open recorded call" : "Open in Analyze"
                 : ({ report: "Open saved report", comparison: "Open saved comparison", setting: "Open setting", view: "Open view" })[hit.type];
-            const limitation = hit.coverage?.completeness === "partial" || hit.coverage?.completeness === "bounded-fragment" ? "Only part of this text was saved."
-                : hit.coverage?.completeness === "unavailable" ? "Saved text is unavailable." : "";
+            const limitation = hit.coverage?.availabilityNote ?? (hit.coverage?.completeness === "partial" || hit.coverage?.completeness === "bounded-fragment" ? "Only part of this text was saved."
+                : hit.coverage?.completeness === "unavailable" ? "Saved text is unavailable." : "");
             const primary = sourceTitle ? hit.title : shown.title.map(part => part.text).join("");
             target.setAttribute("aria-label", [`${destination}: ${shorten(primary)}; ${kindLabel}`,
                 sourceTitle ? "Source match" : shown.source.map(part => part.text).join(""),

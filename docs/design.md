@@ -176,16 +176,22 @@ message: the native card link still opens the complete authorized text in the
 gliding reader. Outcomes and time share one compact metadata row and wrap when
 needed, without clipping labels or shrinking text.
 
-An empty retained string is not evidence of a lost prompt. Legacy `full` status
-can describe an empty message. A verified `autopilot` author basis with that
-empty string is named **Automatic continuation**, with the same interaction's
-matching tool names and **No prompt text retained**. Other empty messages use
-their verified author/activity label; unavailable text says **Prompt text
-unavailable**, never that it was recovered or that permission excluded it
-without evidence. The reader uses the same distinction. Nonempty automatic
-messages remain Agent prompts. Neither a neighboring message nor tool arguments
-are substituted for a prompt. No capture, retention, provenance or saved-report
-data is rewritten by this presentation.
+An empty retained string alone does not prove why text is absent. Legacy `full`
+status can describe an empty message. Observed automatic continuation with an
+empty original is normal **Automatic continuation** activity: **No new message
+was sent.** An older verified `autopilot` author basis plus an empty retained
+string also supports that label, but not a claim about unsaved host context.
+An observed automatic kind does not turn conflicting/system authorship into a
+verified Agent author. The card and reader use the same shared availability
+presenter; author provenance stays independently qualified.
+
+New capture facts distinguish normal continuation, an empty original, a known
+read/context gap, an unsupported format, privacy exclusion, unknown absence and
+source/link conflicts. Known gaps explain the actual limit; unknown absence
+never claims a recording failure. Nonempty automatic messages remain prompts.
+Changed source text keeps the first saved original and shows a qualification.
+Neither neighboring text, tool arguments nor transformed host instructions
+are substituted for an original. Saved historical files/reports are not rewritten.
 
 When only capture time is available it is named, not presented as message time.
 Tools, services, supported causes and per-call timing belong in the full gliding
@@ -922,7 +928,9 @@ eligible source chats inside the approved date window.
 Qualification reuses the timing scanner with a separate metadata projection and
 the existing original-model association rules. It has one 32 MiB accounted read
 budget, 4 MiB chunks, the existing bounded history tail, and at most 2,000
-metadata events / 512 KiB context per source. Full response metadata is limited
+metadata events / 512 KiB general context per source. A newly observed pending
+original has a separate 1 MiB plus 2 KiB allowance within the same event-count cap;
+this does not enlarge response-metadata or general correlation limits. Full response metadata is limited
 to explicitly linked selected messages, including late responses after a
 neighboring prompt; timing events are kept only in selected prompt intervals.
 Other prompts and assistant responses retain identity/ownership guards, not

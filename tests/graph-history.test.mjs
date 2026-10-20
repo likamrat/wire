@@ -43,8 +43,22 @@ test("Graph history preserves mode-free host authorship when merging an exact re
     for (const mismatch of [{ sourceTimestamp: stamp(4) }, { text: "Invented replacement prompt" }]) {
         const changed = { ...record, userPrompt: { ...record.userPrompt, ...mismatch } };
         assert.deepEqual(mergeGraphScenarios([record], [changed])[0].userPrompt,
-            { ...record.userPrompt, authorship: { actor: "unknown", basis: "conflicting-source" } });
+            { ...record.userPrompt, authorship: { actor: "unknown", basis: "conflicting-source" },
+                capture: { ...record.userPrompt.capture, conflict: true } });
     }
+});
+
+test("Graph import preserves a newly unlinked group's identity when exact late message evidence arrives", () => {
+    const call = start(1, "curl 'https://graph.microsoft.com/v1.0/me/messages'", "powershell", { turnId: "turn-one" });
+    const before = extract([call]).scenarios;
+    const message = prompt(); message.data.messageId = "message-one";
+    const response = { id: "response", type: "assistant.message", timestamp: "2026-10-01T00:00:59Z",
+        data: { originatingMessageId: "message-one", turnId: "turn-one", toolRequests: [{ toolCallId: "call-1" }] } };
+    const after = mergeGraphScenarios(before, extract([call, response, message]).scenarios);
+    assert.equal(after.length, 1);
+    assert.equal(after[0].scenarioId, before[0].scenarioId);
+    assert.equal(after[0].graphActivities[0].scenarioId, before[0].scenarioId);
+    assert.equal(after[0].userPrompt.text, message.data.content);
 });
 
 for (const prefix of ["complete", "malformed", "oversized", "tail", "malformed-after-first", "windowed"]) {

@@ -972,6 +972,22 @@ Only existing bounded collection participates: no click-triggered scans,
 response capture or inspection, discovery expansion or new source grant. Correlation retains at most 2,000 keyed
 text fingerprints locally; reports carry only the normalized actor and basis.
 
+New prompt copies also carry the shared, bounded availability classification.
+An automatic continuation with no original text is **Automatic continuation /
+No new message was sent**, not an unavailable-message error. It remains one
+recorded interaction, but prompt/context coverage counts it separately as
+`noNewMessage`, not as an unavailable prompt or included text. Original,
+masked, omitted and reply-capture choices remain independent. Known gaps and
+source conflicts retain their specific qualification; unknown absence stays
+unknown. Host-generated instruction payloads are never report prompt text.
+
+The closed v1 recorded-context schema accepts optional `activityState` and its
+availability note, with matching optional `noNewMessage` coverage. Existing
+frozen entries without those fields retain their recorded interpretation;
+saved file bytes, manifests and report histories are not rewritten. Search
+of saved JSON reports uses these same admitted display facts, not raw host
+history or newly inferred text.
+
 Field absence alone is **not** positive human evidence. Older retained records also lost source
 and transformed-envelope metadata; legacy `human-authored`
 or `coordinator-message` strings alone are not promoted to verified attribution. Existing checkpoints

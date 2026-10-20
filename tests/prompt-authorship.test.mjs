@@ -453,7 +453,8 @@ for (const changed of ["timestamp", "text"]) test(`source replacement with chang
     const after = await loadBoardState(app.context);
     const record = after.evidence.find(row => row.scenarioId === human.scenarioId);
     assert.deepEqual(record.userPrompt.authorship, { actor: "unknown", basis: "conflicting-source" });
-    assert.deepEqual(record.userPrompt, { ...retained.userPrompt, authorship: record.userPrompt.authorship });
+    assert.deepEqual(record.userPrompt, { ...retained.userPrompt, authorship: record.userPrompt.authorship,
+        capture: { ...retained.userPrompt.capture, conflict: true } });
     assert.deepEqual(record.toolCalls, retained.toolCalls);
     assert.equal(evaluationRecordFingerprint({ ...retained, userPrompt: record.userPrompt }), evaluationRecordFingerprint(retained),
         "Author invalidation does not change scoring identity; source replacement may independently change timing or Graph availability");

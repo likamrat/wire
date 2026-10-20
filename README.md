@@ -712,10 +712,41 @@ are re-read until a newline completes them, without persisting raw fragments.
 Unchanged tails are not re-read, and no-op checks update in-memory status without
 rewriting durable checkpoints or evidence snapshots.
 Oversized (>1 MiB) or malformed events, truncated initial tails and bounded
-correlation-context evictions are reported. Per-source context is capped at
-2,000 events/512 KiB; Graph script/fallback correlation cannot see evicted or
-unrecorded context. Original prompts are retained privately under the existing
-credential exclusions; entity response bodies are not retained.
+correlation-context evictions are reported. Unreadable entries leave a gap
+boundary: a later call cannot borrow an earlier message across it without an
+explicit, unique original-message/tool-request link. A complete first line
+exactly at the byte-window boundary is read, not discarded as a partial line.
+Per-source context still has a 2,000-event total cap and 512 KiB general context
+budget. One newly observed pending original has a separate, bounded allowance
+of 1 MiB plus 2 KiB metadata, so an accepted original is not lost merely because
+its first call arrives in a later collection cycle. This is a deliberate
+pending-message budget, not a larger line, history or general-context limit.
+Graph script/fallback correlation cannot see evicted or unrecorded context.
+Original prompts remain private under existing credential exclusions; entity
+response bodies and transformed host instructions are not retained.
+
+**Automatic continuation is normal activity, not a missing-message error.**
+An observed continuation with an empty original says **No new message was sent**.
+New prompt records distinguish original text, an empty original, unavailable
+text, known read/context gaps and source conflicts. They record only whether
+host-added context existed and was not collected, never that context's payload.
+Author evidence stays independent: a system/conflicting author is not promoted
+to Agent by an automatic-event label. Older records gain no inferred capture
+metadata; an already-verified `autopilot` origin with an empty retained string
+can support the normal-activity label, while unexplained absence stays unknown.
+
+Original text and timestamps remain immutable after saving. Changed deliveries
+are qualified as conflicts, not silently substituted. A previously unlinked,
+new-format record can gain an original only through unique explicit assistant
+tool-request/originating-message evidence with compatible timestamps and turn
+ownership; a matching turn or adjacent text alone is insufficient. Saved call
+identities retain their groups across context eviction, without duplicate calls.
+Known conflicting links preserve the first saved association with a warning.
+An oversized whole source entry can still prevent capture of a short original
+inside it; WIRE records the specific gap instead of parsing beyond its bound or
+claiming that another message is the original. No backfill or historical rewrite
+is performed by these changes. Search, the reader and new reports use the same
+availability facts; automatic continuations are not counted as missing prompts.
 
 Durable checkpoints follow atomic evidence commits. Replays after interruption
 deduplicate source/call/event identities, and late completions upgrade unknown

@@ -143,7 +143,7 @@ test("An empty retained agent message remains recognizable without pretending it
     const card = page.locator('.request-card-open[href*="card-clarity-1"]');
     await expect(card).not.toContainText("Prompt not available");
     await expect(card.locator(".request-card-author")).toHaveText("Automatic continuation");
-    await expect(card).toContainText("No prompt text retained");
+    await expect(card).toContainText("No new message was sent.");
     await expect(card).toContainText("workiq-retrieve");
     await expect(card).not.toContainText("SYNTHETIC_ARGUMENT_NOT_A_PROMPT");
     await card.click();
@@ -153,7 +153,7 @@ test("An empty retained agent message remains recognizable without pretending it
     await expect(page.locator("#requestContent")).not.toContainText(longPrompt);
     const prompt = page.locator('[data-reader-section="prompt"]');
     await expect(prompt).toContainText("Automatic continuation");
-    await expect(prompt).toContainText("No prompt text retained.");
+    await expect(prompt).toContainText("No new message was sent.");
     await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
     await capture(page, "automatic-reader", []);
     await page.goBack();
@@ -188,6 +188,37 @@ test("unavailable and empty nonautomatic records retain their own identity witho
         await expect(prompt).toContainText(notice + ".");
         await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
         await expect(page.locator("#requestContent")).not.toContainText("EXCLUDED_TEXT_MUST_NOT_APPEAR");
+        await page.goBack();
+    }
+});
+
+test("cards and the reader distinguish observed automatic control, known gaps and unknown absence", async t => {
+    const evidence = records();
+    evidence[1].userPrompt = { ...evidence[1].userPrompt,
+        authorship: { actor: "unknown", basis: "conflicting-source" },
+        capture: { version: 1, kind: "automatic-continuation", original: "empty", hostContext: "not-collected", reason: null } };
+    evidence[0].userPrompt = { text: null, status: "unavailable", authorship: { actor: "unknown", basis: "missing-source" },
+        capture: { version: 1, kind: "unknown", original: "unavailable", hostContext: "unknown", reason: "malformed-line" } };
+    evidence[2].userPrompt = { text: "", status: "full", authorship: { actor: "unknown", basis: "legacy-missing" } };
+    const { page } = await setup(t, evidence);
+    for (const [index, label, notice] of [
+        [1, "Automatic continuation", "No new message was sent."],
+        [0, "Author unverified", "Prompt unavailable: a saved history entry could not be read."],
+        [2, "Author unverified", "No prompt text retained"],
+    ]) {
+        const card = page.locator(`.request-card-open[href*="card-clarity-${index}"]`);
+        await expect(card.locator(".request-card-author")).toHaveText(label);
+        await expect(card.locator(".request-card-author")).toHaveAttribute("data-prompt-actor", "unknown");
+        await expect(card).toContainText(notice);
+        await card.click();
+        const prompt = page.locator('[data-reader-section="prompt"]');
+        await expect(prompt).toContainText(notice);
+        await expect(prompt.locator("pre, .ux-copy")).toHaveCount(0);
+        if (index === 1) {
+            await expect(prompt.locator("h2")).toHaveText("Automatic continuation");
+            await expect(prompt).not.toContainText("Prompt unavailable");
+        } else await expect(prompt).not.toContainText("No new message was sent");
+        await capture(page, `capture-state-${index}`, []);
         await page.goBack();
     }
 });

@@ -3337,12 +3337,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : rows.some(row => row.tool) ? cardTools(rows, false, { compact: true })
                 : document.createTextNode(results.unit(applied.layer, rows.length)));
         const actor = authorship.read(scenario.userPrompt).actor;
-        const author = el("span", "request-card-author", actor === "unknown" ? "Author unverified" : description.label);
+        const author = el("span", "request-card-author", actor === "unknown" && description.label !== "Automatic continuation"
+            ? "Author unverified" : description.label);
         author.dataset.promptActor = actor;
         prompt.prepend(author, document.createTextNode(": "));
         const facts = resultLine(applied.layer, results.summarize(rows), { scope: "Matching this view", pillsOnly: true });
         facts.classList.add("request-card-summary");
-        if (!description.hasText) facts.append(el("span", "request-card-availability", description.notice));
+        if (description.notice) facts.append(el("span", "request-card-availability", description.notice));
         const moment = requestTiming.entry(scenario, applied.timeContext);
         facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
         action.append(prompt, facts);
@@ -5314,13 +5315,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ["Entries skipped because their format was invalid", count(m.malformedLines)],
             ["Older context records dropped from working memory", count(m.contextEvictions)],
             ["Credential-related exclusions", count(m.credentialExclusions)],
+            ["Messages with an unsupported text format", count(m.unsupportedPromptContents)],
             ["Chats waiting for an unfinished entry", count(m.partialSources)],
             ["History data read in the last check (bytes)", count(m.lastBytesRead)],
             ["Time spent in the last check (milliseconds)", count(m.lastDurationMs)],
         ], { inlineHelp: false }));
         diagnostics.append(el("p", "", "The initial read covers at most the last 64 MiB per history file within the selected history window. Older saved activity outside that window is not newly collected; previously collected evidence stays."),
             el("p", "", "Each check reads at most 32 MiB in 4 MiB portions. Pending history needs further checks; an unfinished entry is read after Copilot finishes saving it."),
-            el("p", "", "Working context is limited to 2,000 records and 512 KiB, so links to later actions can be incomplete. Credential-related exclusions protect sensitive content and are not tool failures."),
+            el("p", "", "Up to 2,000 context records are kept: 512 KiB of linking context plus one accepted original message, capped at 1 MiB plus 2 KiB of metadata. Older links can still be incomplete. Privacy exclusions are not tool failures; older exclusion totals may also include unsupported message formats."),
             el("p", "", "Closing this panel does not stop collection. Pausing does not erase evidence. Remote-only history and Work IQ's internal network requests are not visible to this local collector."));
         renderCoverageDetails();
         renderCollectionIssues(status);

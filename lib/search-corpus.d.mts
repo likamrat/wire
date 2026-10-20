@@ -24,6 +24,8 @@ export interface CorpusEntry {
     readonly target: CorpusTarget;
     readonly coverage: Readonly<{
         completeness?: "full" | "partial" | "unavailable" | "full-record" | "bounded-fragment";
+        activityState?: "automatic" | "empty" | "gap" | "unavailable" | "recorded";
+        availabilityNote?: string;
         author?: "user" | "agent" | "unknown" | "assistant";
         authorBasis?: string;
         finality?: "unverified";

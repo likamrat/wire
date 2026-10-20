@@ -45,7 +45,7 @@ test("empty automatic message survives retained-event, snapshot and reader proje
         assert.equal(source.sourceEventId, "automatic-prompt");
         assert.deepEqual(source.authorship, { actor: "agent", basis: "autopilot" });
         assert.deepEqual(textAccess.describePrompt(source), { hasText: false, label: "Automatic continuation",
-            notice: "No prompt text retained" });
+            notice: "No new message was sent." });
     }
     assert.deepEqual(await loadBoardState(context), state, "Presentation must not rewrite retention or provenance.");
 });
@@ -53,7 +53,7 @@ test("empty automatic message survives retained-event, snapshot and reader proje
 test("availability respects authorized text, partial retention and unavailable permission states", () => {
     const automatic = { status: "full", text: "", authorship: { actor: "agent", basis: "autopilot" } };
     assert.deepEqual(textAccess.describePrompt({ ...automatic, text: " \n " }),
-        { hasText: false, label: "Automatic continuation", notice: "No prompt text retained" });
+        { hasText: false, label: "Automatic continuation", notice: "No new message was sent." });
     for (const status of ["full", "partial", "truncated"]) {
         const source = { ...automatic, status, text: "Retained automatic instruction." };
         assert.equal(textAccess.describePrompt(source).hasText, true);
