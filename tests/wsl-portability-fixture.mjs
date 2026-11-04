@@ -75,7 +75,8 @@ if (action === "init") {
             console.log(JSON.stringify({ platform: process.platform, status: result.status, code: result.body.code,
                 records: rows.length, sessions: rows.map(row => row.sourceSessionId),
                 indexHash: digest(bytes), stateHash: digest(await readFile(path.join(dataDir, "workiq-evidence-board-v1.state.json"))),
-                cursors: Object.values(index.sources).map(row => row.cursor?.identity), owner: index.ownerHost }));
+                cursors: Object.values(index.sources).map(row => row.cursor?.identity), owner: index.ownerHost,
+                indexVersion: index.schemaVersion }));
         } finally { await runtime?.close(); await access?.close(); }
     } else throw new Error("Unknown owned source-reader fixture action.");
 }

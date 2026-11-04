@@ -321,7 +321,7 @@ test("maintenance preserves supported index versions and refuses unknown bounded
     for (const version of ["legacy", "current", "unknown", "invalid-barrier"]) await t.test(version, async t => {
         const f = await fixture(t), index = await readJson(f.indexFile);
         if (version === "legacy") { index.schemaVersion = 1; delete index.boundedHistoryVersion; }
-        if (version === "unknown") index.schemaVersion = 3;
+        if (version === "unknown") index.schemaVersion = 4;
         if (version === "invalid-barrier") index.boundedHistoryVersion = 2;
         await atomicJson(f.indexFile, index);
         const before = await readFile(f.indexFile);

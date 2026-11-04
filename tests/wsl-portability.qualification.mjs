@@ -74,8 +74,10 @@ test("independent Windows and WSL instances consume one live Windows WAL source,
     assert.equal(first.records, 1);
     assert.deepEqual(first.sessions, [app.sessionId]);
     assert.equal(first.owner.platform, "linux");
+    assert.equal(first.indexVersion, 3);
     const windowsIndex = JSON.parse(await readFile(path.join(app.context.dataDir, "collector/index.json"), "utf8"));
     assert.equal(windowsIndex.ownerHost.platform, "win32");
+    assert.equal(windowsIndex.schemaVersion, 3);
     assert.notEqual(windowsIndex.sources[app.sessionId].cursor.identity, first.cursors[0]);
     const again = await app.native("collect", app.linuxData);
     assert.equal(again.records, 1);
@@ -110,6 +112,7 @@ test("independent instances cannot take a live foreign store or adopt its releas
     assert.deepEqual(await readFile(indexFile), before);
     const legacy = JSON.parse(before);
     delete legacy.ownerHost;
+    legacy.schemaVersion = 2;
     await writeFile(indexFile, JSON.stringify(legacy));
     const legacyBytes = await readFile(indexFile);
     assert.equal((await app.native("foreign", target)).refused, "source_store_foreign");

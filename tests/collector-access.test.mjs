@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createCollector } from "../lib/collector.mjs";
-import { TAIL_LIMITS } from "../lib/collector-io.mjs";
+import { TAIL_LIMITS, collectorHostIdentity } from "../lib/collector-io.mjs";
 import { createMicrosoftSession } from "../lib/microsoft-session.mjs";
 import { createFixtureRuntimeAccess, createNativeRuntimeAccess, createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createMicrosoftNativeReadTransport } from "../lib/microsoft-native-transport.mjs";
@@ -497,9 +497,13 @@ async function legacyIndex(app) {
     await app.restart();
     return { file, value };
 }
+async function ownedBarrier(index) {
+    const { platform, machine } = await collectorHostIdentity();
+    return { ...index, schemaVersion: 3, boundedHistoryVersion: 1, ownerHost: { platform, machine } };
+}
 
 for (const point of ["barrier-fsync", "barrier-rename", "checkpoint-rename", "final-index-rename"]) {
-    test(`index2 barrier survives ${point} failure without exposing prospective progress ahead of evidence`, async t => {
+    test(`owned index barrier survives ${point} failure without exposing prospective progress ahead of evidence`, async t => {
         const app = await fixture(t, { signedIn: true }), legacy = await legacyIndex(app);
         await app.append(interaction("barrier-call"));
         let fail = true, indexWrites = 0, observedBarrier;
@@ -520,7 +524,7 @@ for (const point of ["barrier-fsync", "barrier-rename", "checkpoint-rename", "fi
                 indexWrites++;
                 if (indexWrites === 1) {
                     observedBarrier = JSON.parse(await readFile(from, "utf8"));
-                    assert.deepEqual(observedBarrier, { ...legacy.value, schemaVersion: 2, boundedHistoryVersion: 1 });
+                    assert.deepEqual(observedBarrier, await ownedBarrier(legacy.value));
                     assert.equal((await loadBoardState(app.context)).evidence?.length ?? 0, 0);
                 }
                 if (point === "final-index-rename" && indexWrites === 2 && fail) {
@@ -541,7 +545,7 @@ for (const point of ["barrier-fsync", "barrier-rename", "checkpoint-rename", "fi
         await assert.rejects(app.collector.collectNow(), { code: "wire_access_admission_failed" });
         const durable = JSON.parse(await readFile(legacy.file));
         assert.deepEqual(durable, point === "barrier-fsync" ? legacy.value
-            : { ...legacy.value, schemaVersion: 2, boundedHistoryVersion: 1 });
+            : await ownedBarrier(legacy.value));
         assert.equal((await loadBoardState(app.context)).evidence?.length ?? 0,
             ["checkpoint-rename", "final-index-rename"].includes(point) ? 1 : 0);
         fail = false;
@@ -550,7 +554,7 @@ for (const point of ["barrier-fsync", "barrier-rename", "checkpoint-rename", "fi
         const recovered = await app.collector.collectNow();
         assert.equal(recovered.config.schemaVersion, 1);
         const after = await checkpoint(app);
-        assert.equal(after.index.schemaVersion, 2);
+        assert.equal(after.index.schemaVersion, 3);
         assert.equal(after.index.boundedHistoryVersion, 1);
         assert.equal(after.index.sources[app.sourceId].cursor.offset, (await readFile(app.sourceFile)).length);
         assert.equal((await loadBoardState(app.context)).evidence.length, 1);
@@ -595,7 +599,7 @@ for (const point of ["barrier", "checkpoint", "recovery-evidence"]) {
         assert.equal(requests, 1, "No lost/expired mutation is automatically replayed");
         const durable = JSON.parse(await readFile(legacy.file));
         assert.deepEqual(durable, point === "barrier" ? legacy.value
-            : { ...legacy.value, schemaVersion: 2, boundedHistoryVersion: 1 });
+            : await ownedBarrier(legacy.value));
         assert.equal((await loadBoardState(app.context)).evidence?.length ?? 0, point === "checkpoint" ? 1 : 0);
         await assert.rejects(readFile(path.join(path.dirname(legacy.file), "last-check.json")), { code: "ENOENT" });
     });
@@ -616,7 +620,7 @@ test("barrier-only restart accepts existing schema1 event checkpoints without ch
     interceptRenames(t, async (from, to, rename) => {
         if (to === indexFile && fail) {
             const barrier = JSON.parse(await readFile(from));
-            assert.deepEqual(barrier, { ...legacy, schemaVersion: 2, boundedHistoryVersion: 1 });
+            assert.deepEqual(barrier, await ownedBarrier(legacy));
             await rename();
             throw Object.assign(new Error("Synthetic barrier-only restart"), { code: "EIO" });
         }
@@ -633,10 +637,10 @@ test("barrier-only restart accepts existing schema1 event checkpoints without ch
     assert.equal((await loadBoardState(app.context)).evidence.length, 2);
     assert.equal(JSON.parse((await checkpoint(app)).bytes).schemaVersion, 1);
     await app.collector.setEnabled(false);
-    assert.equal(JSON.parse(await readFile(indexFile)).schemaVersion, 2);
+    assert.equal(JSON.parse(await readFile(indexFile)).schemaVersion, 3);
     await app.collector.setEnabled(true);
     await app.collector.collectNow();
-    assert.equal(JSON.parse(await readFile(indexFile)).schemaVersion, 2);
+    assert.equal(JSON.parse(await readFile(indexFile)).schemaVersion, 3);
     assert.equal((await loadBoardState(app.context)).evidence.length, 2);
 });
 

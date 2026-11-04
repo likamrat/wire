@@ -217,7 +217,7 @@ test("extended pending metadata survives unchanged checks and restart without bo
     await collector.collectNow();
     const indexFile = path.join(app.context.dataDir, "collector", "index.json");
     const before = JSON.parse(await readFile(indexFile)), cursor = before.sources[id].cursor;
-    assert.equal(before.schemaVersion, 2);
+    assert.equal(before.schemaVersion, 3);
     assert.ok(cursor.partialBytes > 1024 ** 2 && cursor.partialBytes < 4 * 1024 ** 2);
     assert.equal((await collector.collectNow()).metrics.lastBytesRead, 0);
     const deletion = createDeletionController(app.context);

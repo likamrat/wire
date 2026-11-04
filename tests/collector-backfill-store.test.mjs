@@ -5,7 +5,7 @@ import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
-import { acquireCollectorLock, atomicJson, hash } from "../lib/collector-io.mjs";
+import { acquireCollectorLock, atomicJson, hash, collectorHostIdentity } from "../lib/collector-io.mjs";
 import { installCollectorIndexBarrier } from "../lib/collector-index.mjs";
 import { BACKFILL_DIRECTORY, backfillCheckpointPath } from "../lib/collector-backfill.mjs";
 import { loadBackfillCheckpoint, publishBackfillCheckpoint, BACKFILL_CHECKPOINT_BYTES } from "../lib/collector-backfill-store.mjs";
@@ -29,7 +29,7 @@ async function fixture(t, barrier = true) {
     return { dataDir, root, directory: path.join(root, BACKFILL_DIRECTORY) };
 }
 
-test("storage primitive requires the durable index2 barrier and publishes one canonical bounded cache", async t => {
+test("storage primitive requires a supported durable index barrier and publishes one canonical bounded cache", async t => {
     const { root, directory } = await fixture(t, false), next = checkpoint(), before = structuredClone(next);
     await assert.rejects(publishBackfillCheckpoint(root, null, next, { assertCurrent: check }), { code: "BACKFILL_INDEX_BARRIER_REQUIRED" });
     assert.equal(await loadBackfillCheckpoint(root), null);
@@ -41,6 +41,10 @@ test("storage primitive requires the durable index2 barrier and publishes one ca
     assert.deepEqual(await readdir(directory), [next.backfillSource + ".json"]);
     assert.deepEqual(next, before);
     assert.deepEqual(await readFile(path.join(root, "index.json")), index);
+    const { platform, machine } = await collectorHostIdentity();
+    await installCollectorIndexBarrier(root, check, { platform, machine });
+    assert.equal(JSON.parse(await readFile(path.join(root, "index.json"))).schemaVersion, 3);
+    assert.equal((await publishBackfillCheckpoint(root, saved, next, { assertCurrent: check })).hash, saved.hash);
 });
 
 test("stale cache membership/hash cannot overwrite a concurrent checkpoint", async t => {

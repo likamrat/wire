@@ -109,8 +109,9 @@ The reader follows this order:
 
 Restart deduplicates canonical identities. A late completion can update an
 unknown result without adding a call; rotation/truncation cannot erase
-retained evidence. The schema-2 index barrier preserves committed progress
-and refuses silent downgrade.
+retained evidence. The bounded-history index barrier preserves committed
+progress. Source-reader instances use schema 3 to bind the store to its host
+and make older readers refuse rather than ignore that ownership.
 
 ## Evidence fidelity
 
