@@ -31,6 +31,16 @@ Browser tests set up temporary stores through
 [`tests/helpers.mjs`](../tests/helpers.mjs) and close their own resources.
 Reuse that pattern for tests and image capture.
 
+Windows and WSL have separate default stores. Reusing an existing Windows store
+from native WSL requires stopping its Windows writer and a reviewed, one-time
+file-identity mapping; changing the data path alone is not enough. The bounded
+handover in `lib/host-handover.mjs` preserves saved positions, cached evidence,
+source approvals and report registrations. Its only persistent change is
+`collector/host-handover.json`, one atomic, sealed mapping that also records the
+operation's outcome. Resolve a lost response by reading that record, not by
+repeating Apply. Unqualified paths, changed verification ranges and foreign or
+unqualified writer locks refuse rather than reset history or take ownership.
+
 ## Changing the local port
 
 WIRE listens on `127.0.0.1:4000` by default. To choose another port:
@@ -62,6 +72,12 @@ node --test tests/search-text.test.mjs
 input contracts. Use `npm test` for the default suite when a change needs
 broader coverage. In your pull request, describe the scenario checked and any
 failures or skips.
+
+The opt-in Windows/WSL fixture lane is
+`node --test --test-concurrency=1 tests/wsl-portability.qualification.mjs`.
+Set `WIRE_WSL_DISTRO`, `WIRE_WSL_NODE` and `WIRE_WSL_SOURCE` to an owned native
+Linux installation of the same candidate with separate Linux dependencies.
+It uses disposable invented stores, never the default store or original history.
 
 Packaging changes have a separate lane:
 
