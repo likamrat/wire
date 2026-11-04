@@ -26,11 +26,22 @@ disclosure do not grant collection or reply-saving permission.
 
 ## Store ownership
 
-On Windows, private state defaults to `%LOCALAPPDATA%\WorkIQEvidence\data`.
-`WORKIQ_EVIDENCE_DATA_DIR` can select another absolute location outside the
-maintained source directory. The store is independent of a conversation or
-checkout; a second checkout can select the same store. Only one runtime may
-write it, even on a different port.
+The default data folder follows the environment running Node.js:
+
+| Environment | Default data folder |
+| --- | --- |
+| Windows with `LOCALAPPDATA` set | `%LOCALAPPDATA%\WorkIQEvidence\data` |
+| Linux, macOS or Linux Node in WSL, with `LOCALAPPDATA` unset | `~/.local/share/WorkIQEvidence/data` |
+
+WIRE uses `LOCALAPPDATA` when set; otherwise it uses `.local/share` under the
+current user's home directory. In WSL, that is the Linux user's home, not the
+Windows profile. These are storage defaults, not a guarantee that Copilot
+history is available in that environment; source paths still need review and approval.
+
+Set `WORKIQ_EVIDENCE_DATA_DIR` to an absolute path outside the source directory
+to choose another folder. The store is independent of a conversation or checkout;
+a second checkout can use the same store. Only one runtime may write it, even
+on a different port.
 
 Content-addressed evidence snapshots are separate from atomic state
 metadata. A process lock rejects a live writer; an unverified owner is not

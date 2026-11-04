@@ -28,16 +28,21 @@ npm ci
 npm start
 ```
 
-Open [WIRE](http://127.0.0.1:4000/) and keep the terminal running.
+WIRE runs locally on **port 4000 by default**. Open
+[http://127.0.0.1:4000/](http://127.0.0.1:4000/) and keep the terminal running.
+You can [choose a different port](docs/development.md#changing-the-local-port).
+
 In **Settings > Connection & updates**, choose **Review source & connect**.
 Check the local Copilot paths and history window, then approve collection.
 The [first-run guide](docs/user-guide.md#connect-local-history) walks through
 these choices. Starting WIRE alone does not approve a source.
 
-Private data is stored outside the checkout, by default at
-`%LOCALAPPDATA%\WorkIQEvidence\data` on Windows. Run only one WIRE instance per
-data store. Saving Copilot replies needs separate approval; review report
-copies before sharing because local masking can miss confidential information.
+Collected activity and saved reports stay in a per-user folder outside the
+repository. See [data locations](docs/collection.md#store-ownership) for
+Windows, Linux, macOS and WSL defaults and how to choose another folder.
+Run only one WIRE instance per data store. Saving Copilot replies needs separate
+approval; review report copies before sharing because local masking can miss
+confidential information.
 
 ## Comparisons and reports
 
