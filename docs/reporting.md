@@ -4,8 +4,8 @@ A report preserves the evidence you chose, as you reviewed it. Use it to
 explain recorded tool and service patterns, failures and timings. It does not
 rate answer quality.
 
-This guide covers the released GitHub Copilot experience. For schemas,
-membership, privacy and historical formats, see the [report contract](report-contract.md).
+For report schemas, membership and privacy, see the
+[report contract](report-contract.md).
 
 ## Choose the activity
 
