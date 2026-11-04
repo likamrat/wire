@@ -1,9 +1,11 @@
 # Collection and private data
 
-The released runtime reads approved local GitHub Copilot app metadata and
-history. It does not rerun Work IQ/Graph requests, enumerate remote-only chats
-through a provider API or initialize an evaluator. Microsoft 365 Chat and
-Cowork are not supported sources in this release.
+WIRE reads approved local GitHub Copilot app metadata and history. This
+reference explains collection permissions, read limits and saved-data operations.
+For setup, see [Connect local history](user-guide.md#connect-local-history).
+
+Collection does not rerun Work IQ requests or read remote-only chats through a
+provider. Microsoft 365 Chat and Cowork are not supported sources.
 
 ## Operations and permissions
 
@@ -20,9 +22,7 @@ Cowork are not supported sources in this release.
 | Sign out of WIRE | Stops collection and hides private retained content without deleting it or signing other apps out. |
 
 View dates, Search, opening an interaction, report selection and report
-disclosure do not grant collection or reply-saving permission. Model evaluation,
-automatic scoring and personal ratings are retired; old approvals cannot
-reactivate them.
+disclosure do not grant collection or reply-saving permission.
 
 ## Store ownership
 
@@ -32,12 +32,11 @@ maintained source directory. The store is independent of a conversation or
 checkout; a second checkout can select the same store. Only one runtime may
 write it, even on a different port.
 
-Content-addressed evidence snapshots are separate from atomic review/state
+Content-addressed evidence snapshots are separate from atomic state
 metadata. A process lock rejects a live writer; an unverified owner is not
-permission to remove a lock. Existing private state, approvals, unresolved
-receipts, pseudonym keys and frozen output must survive ordinary upgrades.
-Copilot-only startup explicitly refuses incompatible protected Microsoft state
-rather than stripping it, downgrading it or bypassing it with an empty store.
+permission to remove a lock. Preserve approvals, unresolved receipts, pseudonym
+keys and saved output when changing storage code. Incompatible stores must
+fail explicitly, not be stripped, reset or bypassed with empty data.
 
 ## Source mapping and bounded reads
 
@@ -48,8 +47,7 @@ and schema validation precede history reads.
 
 The current adapter checks the consumed ordinary `sessions`, `workspaces` and
 `projects` mapping, required text/null values and sole `id` primary keys.
-Inspected schema generations 156, 166 and 174 share that mapping. Generation
-156 is the minimum; a later number alone neither grants nor denies
+Schema generation 156 is the minimum; a later number alone neither grants nor denies
 compatibility. Additive fields/indexes can remain compatible. Optional creator
 fields qualify authorship only as a compatible pair with valid recorded
 evidence. Unknown host/location/workspace values do not establish local scope.
@@ -92,17 +90,15 @@ and refuses silent downgrade.
 | Fact | Preserve |
 | --- | --- |
 | Original prompt and timestamp | Never replace them with a conflicting later delivery or host-transformed instructions. New associations need unique explicit message/tool-request links and compatible ownership. |
-| Automatic continuation | No new message is distinct from a missing/excluded prompt. Event kind does not establish author; old unknown records do not default to User. |
+| Automatic continuation | No new message is distinct from a missing/excluded prompt. Event kind does not establish author; unknown records do not default to User. |
 | Tool diagnostic | Screened message/code/status/details stay with their original call or returned entry, separately from optional assistant replies. |
 | Model and final-response timing | Require qualified source/message/response/turn links. Tool hints, deployment names and the current account cannot fill missing provenance. |
 
 Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
 and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain
 complete entries before malformed syntax, marked partial with an unknown
-supplied total. An update does not restore omitted historical errors.
-
-Exact-target metadata qualification is a separate bounded operation, not
-click-triggered backfill or permission to save response bodies.
+supplied total. Missing diagnostics remain unavailable; the reader does not
+reconstruct them from other calls.
 
 ## Optional replies
 
@@ -119,11 +115,9 @@ cleanup, not base activity or independently saved reports. Source/scope changes
 require a new deliberate approval; browsing filters and ordinary collection
 within that approved scope do not.
 
-Response-saving recovery keeps its original operation and token. Recognized
-legacy consent receipts retain their original storage owner; historical
-personal-rating receipts are not cleared or replayed. Malformed, unreadable or
-multiple unresolved receipt state blocks new changes rather than choosing a
-convenient default.
+Response-saving recovery keeps its original operation, token and storage owner.
+Malformed, unreadable or multiple unresolved receipts block new changes rather
+than choosing a convenient default.
 
 ## Deletion
 
@@ -192,8 +186,8 @@ and owned HTTP diagnostics cannot be recovered through this source reread.
 Confirmation rechecks source stamps, mapping, approval, revision, expiry and
 canonical membership. It atomically publishes evidence, narrowly scoped
 hash-only restoration grants and its receipt. Shared event/context suppression
-is not cleared broadly. Deleted optional replies and historical feedback do
-not return. Saved reports, source files, cursors and settings stay unchanged.
+is not cleared broadly. Deleted optional replies do not return.
+Saved reports, source files, cursors and settings stay unchanged.
 
 The result check neither rescans nor repeats confirmation. Missing remembered
 scope is stated, not reconstructed from receipt counts. Malformed/unreadable
@@ -217,27 +211,3 @@ Settings configuration uses its last-read version and rejects stale writes.
 **Read current connection** reconciles saved settings without claiming a lost
 write's original receipt. Unsent safe preferences can survive withdrawal;
 private source-path drafts cannot. See [runtime access](runtime-access.md).
-
-## Migration and guarded maintenance
-
-Migration is an explicit offline operation, not normal startup:
-
-```powershell
-npm run migrate -- --source C:\Private\old-data --imports C:\Private\approved-import --session-root C:\Private\session-state --app-db C:\Private\app.db
-```
-
-These are placeholders for separately approved paths. Stop writes first.
-The importer needs the approved inventory/window files, refuses an existing
-destination, creates a hashed write-once backup, preserves pseudonym/export
-bytes and writes no original source. Failure leaves its named staging/backup
-for review, never a silent merge. Native-state stores are not admitted by the
-legacy version-3 migration/maintenance path.
-
-Historical repair is not Refresh or an ordinary upgrade. It requires a
-separately reviewed exact-target plan, explicit authorization and a stopped
-or quiescent runtime. Preserve report bytes, consent, cursors, checkpoint
-bounds and unresolved receipts.
-
-After an uncertain repair, keep the runtime stopped and recover the original
-operation against its recorded before/after state. Do not retry with a new
-plan or use an older reader to bypass changed state.

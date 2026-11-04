@@ -2,8 +2,8 @@
 
 `lib/search-corpus.mjs` supplies process-private admitted text to
 [literal retrieval](live-search.md); `lib/search-corpus.d.mts` defines its
-consumer interface. The corpus does not install models, collect original
-history, grant permission, render UI or persist an index.
+consumer interface. It reads authorized retained content; it does not collect
+original history, grant permission, render UI or persist an index.
 
 ## Admitted sources
 
@@ -17,9 +17,7 @@ history, grant permission, render UI or persist an index.
 | Saved comparison | Verified frozen manifest and compatibility reader | Exact independent saved comparison, not its source reports' current contents |
 | View/setting | Fixed current navigation/settings registry | Reveal/navigate only; never click a control or open approval |
 
-Retired review/feedback operations are absent from navigation, while their
-wording in an independently authorized historical saved document can remain
-searchable. No source-path or live permission DOM values become setting text.
+No source-path or live permission DOM values become setting text.
 
 | Text or identity | Rule |
 | --- | --- |
@@ -54,9 +52,9 @@ to try a lower format.
 
 Optional recorded context requires the matching closed schema, identical
 snapshot/manifest copies and context hash as well as ordinary hashes/privacy
-checks. Result-text copies and historical facts retain their original
-representation, coverage, membership and interpretation. Absence does not
-invent current facts. No extraction rewrites saved bytes.
+checks. Result-text copies retain their saved representation, coverage,
+membership and interpretation. Missing facts stay unavailable.
+Extraction never rewrites saved bytes.
 
 The selected file's size limit remains 32 MiB. PDF.js runs in a short-lived
 owned Node child using `--disallow-code-generation-from-strings` and a minimal
@@ -128,8 +126,6 @@ copy; a removed saved artifact cannot be opened through either path.
 
 ## Validation
 
-The current corpus and format suites exercise invented stores, real readers,
-ownership/privacy/deletion fences, full populations, saved formats and parser
-closure. Packaging qualification is a separate
-[production-only lane](development.md#check-a-change). Tests and screenshots
-must not be described as real provider or private-data acceptance.
+Use the corpus and format suites to check source/consent/deletion fences,
+complete populations, saved-file verification and parser closure.
+Packaging changes also need the [production-only check](development.md#check-a-change).

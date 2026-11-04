@@ -20,15 +20,7 @@ not additional setup steps.
 | Change | Contract |
 | --- | --- |
 | Screen layout, controls, reading or navigation | [Product design](design.md) |
-| Report membership, formats, privacy, frozen facts or compatibility | [Report contract](report-contract.md) |
+| Report membership, formats, privacy or frozen facts | [Report contract](report-contract.md) |
 | Search matching, highlights, receipts or Open | [Local text Search](live-search.md) |
 | Searchable content, admission or saved-file extraction | [Authorized search corpus](search-corpus.md) |
 | Access, collection admission, withdrawal or uncertain operations | [Runtime access](runtime-access.md) |
-| Desktop-selected GitHub identity and profile presentation | [GitHub profile boundary](github-profile.md) |
-
-## Historical Search notes
-
-The [semantic Search](semantic-retrieval.md) and
-[linguistic Search](search-linguistics.md) notes explain retired experiments.
-They link to the complete published research text. That preserves the
-documentation, not the unavailable historical code or runnable setup.

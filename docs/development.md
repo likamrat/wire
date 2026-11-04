@@ -6,18 +6,15 @@ on the source, checking a change and troubleshooting a local installation.
 
 ## Run locally
 
-Use Node.js 24 or newer and npm 11.17.0, as declared in
-[`package.json`](../package.json). Git access to this repository is separate
-from Copilot authentication, local source approval and desktop-selected identity.
+Use Node.js 24 or newer.
 
-```powershell
+```text
 npm ci
 npm start
 ```
 
 Open `http://127.0.0.1:4000/` and keep the terminal running. Use **Ctrl+C** in
-that terminal to stop WIRE; closing the browser tab leaves it running. No build,
-data migration or model download is needed for startup.
+that terminal to stop WIRE; closing the browser tab leaves it running.
 
 To update an existing checkout, stop its WIRE process, pull the changes, run
 `npm ci` and restart. If the port is already in use, check whether WIRE is
@@ -30,47 +27,45 @@ provide an explicit owned data directory outside source, disable collection
 timers and use invented source paths. Never point a fixture at the normal store,
 an existing browser profile or original history.
 
-`--port 0` chooses an available port; it does not isolate data. Existing browser
-tests set up temporary stores through [`tests/helpers.mjs`](../tests/helpers.mjs)
-and close their own resources. Reuse that pattern for tests and image capture.
+Browser tests set up temporary stores through
+[`tests/helpers.mjs`](../tests/helpers.mjs) and close their own resources.
+Reuse that pattern for tests and image capture.
 
 ## Changing the local port
 
-The default is `4000`, bound only to `127.0.0.1`. Use
-`npm start -- --port 47831` to keep the previous address, or pass another explicit
-port. WIRE refuses an occupied port instead of silently choosing another.
-`WORKIQ_EVIDENCE_DATA_DIR` still selects the store; a port change does not move
-retained evidence, collection settings or saved reports.
+WIRE listens on `127.0.0.1:4000` by default. To choose another port:
 
-1. Finish drafts and resolve pending/unconfirmed operations in the existing tab.
-   Browser-local recovery markers and memory-only drafts do not transfer;
-   leave the old instance in place if recovery is unresolved.
-2. Stop your instance and restart it with the chosen port.
-3. Open the printed URL and update bookmarks. Existing tabs still use the old address.
+```text
+npm start -- --port 4100
+```
 
-Do not repeat an uncertain Save, deletion or collection operation at the new
-address. Theme, sidebar and display-time-zone preferences belong to the browser
-origin and may need setting again. Do not copy capabilities or browser storage
-to carry a session across.
+Use `--port 0` for an available port, then open the URL printed in the terminal.
+An occupied explicit port is an error. The port does not isolate or move data;
+`WORKIQ_EVIDENCE_DATA_DIR` selects the store.
+
+Before restarting on a different port, finish drafts and resolve unconfirmed
+operations in the current tab. Browser preferences, drafts and recovery markers
+belong to that address and do not transfer. Never repeat an uncertain operation
+at a new address.
 
 ## Check a change
 
 Run the syntax check and the tests for the behavior you changed. For example,
 a literal Search matching change can start with:
 
-```powershell
+```text
 npm run check
 node --test tests/search-text.test.mjs
 ```
 
-`check` validates JavaScript syntax, not TypeScript types. Runtime validators
-and focused tests cover input contracts. Check that the selected tests actually
-ran. Use `npm test` for the default suite when a change needs broader coverage.
-In your pull request, describe the scenario checked and any failures or skips.
+`check` validates JavaScript syntax. Runtime validators and focused tests cover
+input contracts. Use `npm test` for the default suite when a change needs
+broader coverage. In your pull request, describe the scenario checked and any
+failures or skips.
 
 Packaging changes have a separate lane:
 
-```powershell
+```text
 npm run test:packaging
 ```
 
@@ -83,24 +78,21 @@ installation or browser checks. `npm test` does not include it.
 PDF generation uses the pinned Playwright runtime dependency and a local
 Chromium browser:
 
-```powershell
+```text
 npx playwright install chromium
 ```
 
-This is an optional browser download, not a startup prerequisite. HTML, JSON
-and Markdown do not need it. PDF preview fails explicitly if its browser is
-unavailable; deselect PDF and prepare a new review rather than silently
-substituting another format.
+This is an optional browser download. HTML, JSON and Markdown do not need it.
+If Chromium is unavailable, install it or deselect PDF and prepare a new review.
 
-The pinned PDF.js dependency supports local saved-PDF text extraction and
-reading. Extraction is not OCR and does not require the PDF-generation browser.
-No remote conversion service or signed-in browser profile is used.
+Saved-PDF reading uses PDF.js locally and does not require Chromium. It reads
+the text layer, not OCR; no remote conversion service is used.
 
 For documentation images, use an existing synthetic fixture, ordinary
 Playwright interactions and the unmodified normal renderer. Capture only
 useful states, inspect every image for readability and private data, and close
 the owned runtime/browser and remove its temporary store. Keep fixture provenance
-with the capture evidence. Add a caption only when it helps explain the task.
+with capture evidence, and add a visible caption only when it helps explain the task.
 
 ## Troubleshoot a local run
 
@@ -121,35 +113,9 @@ with the capture evidence. Add a caption only when it helps explain the task.
 | Search | `lib/search-text.mjs`, `search-retrieval.mjs`, `search-corpus.mjs`, `live-search.mjs`; [Search](live-search.md) and [corpus](search-corpus.md) |
 | Reports | `lib/export.mjs`, `report-facts.mjs`, `report-artifacts.mjs`, `product-report.mjs`, `pdf.mjs`; [report contract](report-contract.md) |
 | Screens | `lib/render.mjs`, `web/client.mjs` and existing surface owners; [design](design.md) |
-| GitHub profile | `lib/github-profile*.mjs`, `copilot-account-snapshot.mjs`; [host identity boundary](github-profile.md) |
 
 Read the contract for the boundary you change. Use source and tests for exact
 schemas rather than copying them into another guide.
 
-## Historical compatibility and publication
-
-The display name changed from Work IQ Evidence to WIRE without a storage
-migration. Existing package/folder names, environment variables, storage keys,
-`workiq-evidence` extension identity and `workiq-evidence-board` canvas ID remain.
-Historical records and saved report bytes are not renamed or regenerated.
-
-| Material | Publication boundary |
-| --- | --- |
-| Reviewed source and safe illustrative assets | Eligible for source review/publication |
-| Private histories, prompts, reports, profiles, credentials, receipts, local configuration and machine-specific paths | Keep out of published source |
-| Old identifying ancestry | Do not merge it to repair an unavailable historical link |
-| Sanitized reachable history | Does not prove erasure from earlier objects, caches or other clones |
-
-Publication and deployment are separate operations.
-
-Current Search needs no model setup. The retained
-[semantic](semantic-retrieval.md) and [linguistic](search-linguistics.md)
-research documents explain former behavior, not current commands. Their
-referenced development revisions are not available through the published
-repository. Do not reinstall removed inference dependencies to run old examples.
-
-Keep the bundled [Asta Sans OFL](../assets/fonts/OFL.txt), embedded Lucide
-ISC/Feather MIT notices and any applicable resource notices intact. The
-historical semantic document retains its ONNX notice while that document
-remains. Dependency/font notices do not establish an application or artwork
-publishing license; this repository does not supply a root application license.
+When changing bundled assets, keep their license notices intact, including the
+[Asta Sans OFL](../assets/fonts/OFL.txt) and Lucide ISC/Feather MIT notices.

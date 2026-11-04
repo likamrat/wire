@@ -1,15 +1,14 @@
 # Local text Search
 
 Search is deterministic, on-device literal matching over the
-[authorized corpus](search-corpus.md). It uses no AI, embeddings, inference
-tokenizer, provider/SDK session, credit budget, semantic Related set or intent
-veto. Missing model assets have no effect on current Search.
+[authorized corpus](search-corpus.md). Queries and saved content stay on-device,
+without AI, provider calls or credit spending.
 
 For the user task, see [Find saved text](user-guide.md#find-saved-text).
 
 ## Matching and original-text ranges
 
-`lib/search-text.mjs` owns the versioned policy:
+`lib/search-text.mjs` owns matching:
 
 1. Apply JavaScript `trim()` only to query ends.
 2. Independently normalize query and fields with
@@ -50,15 +49,14 @@ matcher or injected HTML.
 
 `createSearchRetrieval` builds an in-memory index through corpus `index` and
 discloses only through freshly revalidated `deliver`. `search` and `discover`
-use the same text population; discover returns only `matches`, not Related.
+use the same text population; `discover` returns `matches`.
 Index identity binds text policy, corpus generation and canonical revisions.
 
 The shared serializable wire contract uses schema 3 for handshake/query.
 Purpose is `navigation | analysis`; type sets remain closed, unique and
 canonical. A receipt binds panel, epoch, request, generation, index, revision,
-purpose, effective types and text policy. There are no current model,
-linguistic, chunk or Related status fields. Old schemas/enums/policies and
-malformed ranges reject rather than upgrade.
+purpose, effective types and text policy. Unsupported schemas, enums, policies
+and malformed ranges reject rather than being silently converted.
 
 Analysis requires a current stored analysis-purpose receipt and complete
 coverage of its analytical types. Exact interactions/actions then narrow
@@ -67,7 +65,6 @@ before paging. Navigation hits cannot become analytical membership by editing
 a purpose string. Partial navigation results remain useful but do not prove
 a complete analytical population.
 
-Private names such as `semanticSelection` remain compatible without inference.
 Saved reports use their own frozen schemas, not a current live receipt.
 
 ## Corpus authority and Open
@@ -132,7 +129,7 @@ history and readers. Resume enables only new intent.
 | Return to the page | One fresh read/query; a released owner gets a fresh stream |
 | Same-owner/epoch `idle`, `session-released` or `runtime-stopped` fence | Automatic EOF recovery is allowed |
 | Protocol/network/parsing failure, unfenced EOF or explicit cancellation | Visibility changes do not restart work |
-| Validated unbound-to-unbound renewal | Limited legacy intent may continue through a new owner/read |
+| Validated unbound-to-unbound renewal | That mode's limited reading intent may continue through a new owner/read |
 | Enforced renewal | Withdraw old intent and require fresh authority |
 | `collected` fence after committed collection | May coalesce a fresh visible navigation query; not recovery from deletion, permission loss or integrity failure |
 
@@ -143,22 +140,10 @@ ownership, and check before their own effects.
 Back restores Search focus only after reader closure and underlying reading
 restoration settle. Newer user input takes precedence.
 
-## Retired Search research
+## Check a Search change
 
-Semantic, embedding, linguistic, Related and explicit-denial experiments are
-retired, not alternative backends or acceptance gates. Their former opposite
-expectation for `did not repair the car` is intentionally not current behavior.
-Inference dependencies and provisioning npm scripts are already absent from
-the current manifest.
-
-The [semantic](semantic-retrieval.md) and [linguistic](search-linguistics.md)
-history notes link to the complete published research text. The old code pins
-remain unavailable. Those archived commands are not runnable here; restoring
-private ancestry or provisioning resources is not part of current Search.
-
-Current lifecycle/privacy coverage remains active in `search-text.test.mjs`,
-`live-search-text.test.mjs`, `live-search-text-lifecycle.test.mjs`,
-`search-corpus*.test.mjs` and the current Search browser suites. Retiring
-model/recall expectations does not retire ownership, complete-population,
-Unicode, exact Open, saved-file integrity or cancellation requirements.
-Run the relevant current tests; their presence alone is not a passing result.
+Use `search-text.test.mjs` for matching and Unicode ranges,
+`live-search-text*.test.mjs` for lifecycle, and `search-corpus*.test.mjs` for
+admission and saved-file integrity. Browser suites cover typed results and
+exact Open/Back behavior. Include complete-population and cancellation cases
+when changing retrieval or delivery.

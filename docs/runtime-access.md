@@ -1,15 +1,12 @@
 # Runtime access
 
-Normal `npm start` reserves its loopback endpoint, then constructs
-`createCopilotRuntimeAccess`. It reuses the local gate, leases and receipts in
-`createMicrosoftSession` without a Microsoft transport, profile or acquisition
-owner. The descriptor is enforced with `collectionMode: "copilot-only"`.
+`createCopilotRuntimeAccess` owns the local WIRE access gate. Normal startup
+reserves the loopback endpoint before initializing it, with enforced
+`collectionMode: "copilot-only"`.
 
-An ordinary previously unbound store starts locally signed in; a saved explicit
-logout remains signed out. Protected native retention/report/account state
-requires its matched runtime and is refused, not migrated, stripped or reset.
-Saved Microsoft configuration alone is ignored and preserved. See
-[collection](collection.md) for private storage and source permission.
+A new store starts locally signed in; an explicit sign-out remains saved.
+This gate does not approve a source. Incompatible stored state is refused
+without resetting it. See [collection](collection.md) for storage and source permission.
 
 ## Authority and operation effects
 
@@ -21,7 +18,7 @@ Saved Microsoft configuration alone is ignored and preserved. See
 | Account/generation replacement | Old publication is retired; new reads must requalify | Old leases cannot be rebound |
 
 Presentation identity is not source permission. Browser data, a copied lease,
-configuration, a successful page load or a historical capture generation cannot
+configuration, a successful page load or a recorded capture generation cannot
 grant backend authority.
 
 ## Bootstrap and capabilities
@@ -72,8 +69,7 @@ control observations, not independent private-read grants.
 | Failure, expiry, logout or generation loss | Clear private owners, including hidden ones |
 | Readiness returns | Allow new authorized reads; do not restore old DOM, queries or mutations |
 
-Frozen native-renderer pixels and external copies already disclosed cannot
-be retroactively erased.
+Withdrawal cannot erase copies already made outside WIRE.
 
 ## Client publication and withdrawal
 
@@ -104,7 +100,7 @@ Static navigation, headings, safe preferences and original opaque recovery
 identities can remain; resume permits fresh intent, not cached private data.
 
 Enforced reconnection never retries an old private path. Validated
-unbound-to-unbound renewal keeps its limited legacy read behavior, but Search
+unbound-to-unbound renewal keeps that mode's limited reading intent, but Search
 still retires its old stream/receipt and uses a fresh read. Neither mode
 automatically retries a mutation. Canonical routes are navigation intent, not
 permission; lost private narrowing requires explicit recovery or an explicit
@@ -177,7 +173,6 @@ client withdrawal is independently required.
 | Reports and comparisons | Minimal original Save identity/fingerprint and uncertainty | Titles, masking terms, copy overrides, prepared bytes and private frames |
 | Deletion/recollection | Original opaque operation/token and unknown result | Targets, counts, source lists, previews and return-focus references |
 | Recorder | Original attempt recovery | Confirmation body, timers and detached Send callbacks |
-| Profile | Minimal unrelated gate recovery | Names, handles, initials, image tickets, image callbacks and lease timers |
 | Search | Only intent allowed by its current explicit lifecycle contract | Results, receipts, private history/preparations, open documents and obsolete callbacks |
 
 Collection configuration has no owner-local opaque receipt; preserve its
@@ -191,17 +186,15 @@ history reads must be fenced too.
 `createFixtureRuntimeAccess` is explicitly temporary, with matched source/store
 paths and disabled timers. A top-level read binding alone does not qualify
 fixture writers; the joined collector must use the same access object.
-Legacy withheld routes remain withheld in that fixture. This restriction is
-not the current normal Copilot-only startup policy.
+Routes withheld by the fixture policy remain withheld.
 
-Fixture descriptors cannot activate unsupported sources in the release.
+Fixture descriptors cannot activate unsupported sources.
 An unavailable source dependency is not an empty or GitHub-only all-source cohort.
 
-## Focused proof
+## Check an access change
 
-Use the existing runtime-access/watch, collector-access, client-access,
-account-gate and owner-withdrawal suites for affected seams. Real backend
-publication, client clearance, cross-panel behavior, provider qualification
-and live deployment are different proof boundaries. Do not substitute a
-fabricated unbound descriptor for an enforced fixture or treat a green
-owner-local test as full application acceptance.
+Use runtime-access/watch, collector-access, client-access, account-gate and
+owner-withdrawal suites for the affected boundary. Check backend admission and
+client clearance together, including late responses and a second open panel.
+Use the enforced fixture when testing enforced access, not a substitute
+unbound descriptor.
