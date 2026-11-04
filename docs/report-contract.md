@@ -1,41 +1,22 @@
 # Report contract
 
 For the user workflow, see [Create and compare reports](reporting.md). This
-reference owns evidence membership, disclosure, frozen output and historical
-interpretation for the supported GitHub Copilot experience.
+reference defines evidence membership, disclosure and frozen output for the
+supported GitHub Copilot experience.
 
-## Current and historical facts
+## Report facts
 
-| Version | Meaning |
-| --- | --- |
-| Current report envelope 3 | Recorded outcomes, source/service facts, canonical membership and observed timing |
-| Metric projection 2 | Omitted Cost |
-| Metric projection 3 | Also excluded generated review facts |
-| Current metric projection 4 | Also excludes personal-rating lanes |
-| Presentation 3 | Milliseconds first, with a seconds equivalent from 1,000 ms; zero is distinct from unavailable |
+Reports contain recorded outcomes, source/service facts, canonical membership
+and observed timing. They do not judge answer correctness, personal permission
+or overall task success.
 
-New reports contain no AI/personal judgments, review-status recitals, grading
-bands or placeholder quality measures. Removing a measure does not establish
-that past spending was zero or settled.
+The current format uses report-envelope schema 3, `metricProjectionVersion: 4`
+and presentation version 3. `lib/report-facts.mjs`, `assessment-contract.mjs`
+and the saved-file readers validate these contracts. Read a saved report using
+its declared definitions; never rewrite its files or hashes to change meaning.
 
-Supported historical versions retain their definitions and saved bytes.
-`lib/report-facts.mjs`, `assessment-contract.mjs` and frozen readers validate
-them; files, manifests and hashes are not rewritten to make them current.
-
-| Retired operation | Response / surviving boundary |
-| --- | --- |
-| AI evaluation execution/setup | Authenticated stale requests return `AI_REVIEW_RETIRED` (410) |
-| Personal-feedback writes | Authenticated stale requests return `PERSONAL_FEEDBACK_RETIRED` (410) |
-| Historical receipt read | Exact owner/token-bound reads preserve pending/unknown states without replay |
-| Legacy ready-ID export | `captured`, `reviewing`, `ready_to_export` remain workflow classifications, separate from ratings |
-
-Historical reviews distinguish answer correctness, answer support, tool use
-versus the request, and personal permission feedback. Tool completion, citation
-presence and action matching never prove those other meanings. Saved
-check/version/origin selects interpretation; absent/conflicting identity shows
-a meaning gap rather than borrowing a modern definition. Unknown billing and
-old consent/receipt identities remain preserved, not revoked or reconciled by
-retirement.
+Timing displays milliseconds first, with a seconds equivalent from 1,000 ms.
+Zero and unavailable are different.
 
 ## Evidence and membership
 
@@ -66,9 +47,8 @@ unavailable identity or incomplete coverage.
 
 Current Search membership requires the existing analysis-purpose receipt and
 complete admitted population. Interaction hits admit their matching records;
-action hits admit exact layer records. Legacy `semanticSelection` is a
-compatibility property name, not permission for inference. Query text is not
-frozen into report prose or receipt metadata. Selected and All remain separate.
+action hits admit exact layer records. Query text is not frozen into report
+prose or receipt metadata. Selected and All remain separate.
 
 ## Service, outcome and time meaning
 
@@ -82,8 +62,8 @@ Activity-category v3 remains an exclusive grouping. Discovery/schema inspection
 is preparation, not execution of the described operation. The supported shared
 file path belongs to Files without disclosing its opaque token. Returned
 entries use their own qualified path or the explicit single-target fallback,
-not every batch target. Historical category/pattern definitions remain distinct
-from current involvement facts.
+not every batch target. Category grouping and service involvement have
+different definitions and must not be substituted for one another.
 
 | Measure | Interpretation |
 | --- | --- |
@@ -93,16 +73,15 @@ from current involvement facts.
 | Item/page totals | Arbitrary response bodies do not establish them |
 | Timing | Keep unit, boundary and timed/eligible population; never blend prompt/tool/HTTP intervals or sum concurrent calls |
 | Comparison timing | Compatible raw samples, not means of percentages or medians of medians; nearest-rank median/P95 and one-sample limits stay explicit |
-| Historical review pass share | Passed / (passed + failed); unassessed, insufficient and error coverage is outside that denominator |
 
 Missing timing remains unavailable, not zero.
 
 ## Preparation, disclosure and Save
 
-The existing controller owns the sequence:
+The report controller owns the sequence:
 
 1. Select the activity. Browsing, selecting and cancelling before confirmation
-   write no export and change no source classifications.
+   write no export.
 2. Prepare a preview. Freeze membership, options, source facts, time context
    and prepared bytes.
 3. Review the disclosure and approve it.
@@ -117,11 +96,9 @@ Later collection can add follow-ups without changing reviewed copies.
 | Material scope, author, text or format change | Fresh preparation and disclosure |
 | Material source/configuration, consent, deletion, key or owner change | Fresh preparation/disclosure under current authority; old preparation cannot bypass it |
 
-`collectedSourceFrozen` is a private transport qualification, not a saved-file
-schema field or reusable approval. Original evidence-file identity also keys
-the report read model, so validating an older report cannot replace current
-Analyze facts. Publication appends to current state; it never restores an old
-evidence snapshot over newer collection.
+Original evidence-file identity also keys the report read model, so reading
+a saved report cannot replace current Analyze facts. Saving appends to current
+state; it never restores the preview's evidence snapshot over newer collection.
 
 | Text choice | Required treatment |
 | --- | --- |
@@ -136,9 +113,8 @@ Names and confidential meaning require human review; masking is not complete
 DLP or privacy certification. Result copies keep original entry/fact
 associations and edited/omitted/disclosure status.
 
-Snapshot, manifest and index must agree on a declared title. Old absent titles
-keep a factual fallback. `canonicalTitle` comes only from the verified
-declared manifest binding.
+Snapshot, manifest and index must agree on a declared title. `canonicalTitle`
+comes only from the verified declared manifest binding.
 
 ### Prepared bytes and recovery
 
@@ -152,8 +128,8 @@ snapshot identity, exact file SHA-256 values and attestation. It contains no
 matched private snippets or masking terms. Report JSON is an object, not JSONL.
 
 Staging reserves a new bundle, writes every selected format, atomically
-publishes its files, then separately appends history. Earlier bundles and
-classifications stay unchanged.
+publishes its files, then separately appends the saved-report index.
+Existing bundles stay unchanged.
 
 | Save state | Recovery meaning |
 | --- | --- |
@@ -214,10 +190,9 @@ Verified Open follows the saved artifact:
    fetching cited resources. Format selectors and downloads use the same
    registered inventory, not regenerated DOM.
 
-The separate legacy-original action is explicitly unverified. It requires the
-supported old manifest/index shape and an explicit choice; it is not automatic
-downgrade from failed verified Open, historical approval proof or eligibility
-for comparison. Missing legacy facts are not reconstructed from today's history.
+Failed verification cannot silently downgrade to an unchecked reading path.
+Unsupported schemas and missing facts remain explicit; current activity cannot
+fill gaps in a saved report.
 
 Saved metadata search does not read prompt/report bodies. Global Search
 extracts only permitted text from independently verified saved files through
@@ -234,11 +209,10 @@ interchangeable with library authority on reload or invalidation.
 | Technical pattern | Normalized operation structure, not prompt similarity |
 | Rate change | Traffic mix may change an overall rate without changing a matched pattern |
 | Missing pattern | Not proof of a fix; no generated causality/significance claim |
-| Historical review | Keep that lane's saved origin/model/rubric and meaning |
 
-New comparisons preserve supported outcomes and timing, not retired quality
-lanes. Separately selected result copies must already be frozen and masked;
-additional masking is allowed, but fetching missing source text is not.
+Comparisons use recorded outcomes and timing. Separately selected result copies
+must already be frozen and masked; additional masking is allowed, but fetching
+missing source text is not.
 
 Reading a pair is independent of preparation, disclosure, separate Save and
 original-identity recovery.
@@ -270,7 +244,7 @@ review; unrelated accepted activity need not.
 | Deletion | Included / preserved |
 | --- | --- |
 | One report | Remove managed bundle, recognized copies and index entry; preserve source activity and external downloads |
-| Input to a saved comparison | Saved comparison survives with an unavailable historical source link; dependent unsaved comparisons/approval are invalidated |
+| Input to a saved comparison | Saved comparison survives with an unavailable input link; dependent unsaved comparisons/approval are invalidated |
 | All saved reports | Counted, membership/hash-bound two-minute preview across all pages/search |
 | Excluded from bulk deletion | Later reports, saved comparisons, activity, drafts and external downloads |
 
@@ -281,7 +255,7 @@ An interruption may leave files; recovery finishes only the sealed exact plan
 and never repeats confirmation or grants new scope. Hash-only reservations
 prevent stale writes from resurrecting deleted artifacts.
 
-Historical artifacts retain their source/account dependency checks; unavailable
+Saved artifacts retain their source/account dependency checks; unavailable
 dependencies must not be bypassed to open or delete them. A saved-read lease or
 activity-deletion grant is not saved-artifact mutation permission. A per-target
 eligibility hint is not confirmation or bulk authority.
@@ -291,6 +265,5 @@ eligibility hint is not confirmation or bulk authority.
 Use the existing report-journey, report-format/privacy, frozen-reader,
 comparison and deletion tests for the changed boundary. Inspect actual generated
 formats when output changes; an on-screen preview or screenshot is not
-cross-format correctness. Preserve legacy bytes and interpretations in
-regressions. Source definitions and shared validators, not copies of schema
-tables in multiple documents, remain the executable authority.
+cross-format correctness. Check that existing saved bytes and definitions stay
+unchanged. Source definitions and shared validators remain the executable authority.

@@ -4,9 +4,9 @@ WIRE helps a person recognize a recorded request, inspect what happened and
 choose evidence for a report. Design around those reading and decision tasks,
 not around the implementation's status objects.
 
-The released source policy is GitHub Copilot-only. Settings should expose only
-supported connections. Account keeps the local WIRE sign-in/out action and
-stays neutral without a qualified desktop-selected GitHub profile.
+The supported source is local GitHub Copilot app history. Settings should expose
+only supported connections. Account keeps the local WIRE sign-in/out action
+and stays neutral without a qualified desktop-selected GitHub profile.
 
 ## One coherent workspace
 
@@ -17,10 +17,6 @@ stays neutral without a qualified desktop-selected GitHub profile.
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
 | Right contextual surface | Interaction reading, report setup and saved-item inspection; one header, scroll area and fixed action region |
 | Main workspace | Prepared and saved report reading |
-
-Analyze has no separate Calls mode, fastest/slowest view, duplicate-records
-shortcut or extra Search launcher. Old routes retain valid filters while
-discarding obsolete call sorting/page offsets.
 
 Opening the contextual surface reduces the main column's actual width.
 It does not scale content or mount a second reader; narrow/enlarged layouts
@@ -53,15 +49,14 @@ author and outcome are different meanings and must not share inferred labels.
 
 Current palette, material roles, font scale and geometry live in
 [`web/tokens.mjs`](../web/tokens.mjs) and the existing component styles.
-Ordinary dark screens use the current ink-blue material override; earlier
-charcoal/navy/marketing-reference palettes are not competing instructions.
+Dark screens use the ink-blue material roles.
 Screen-only `screenTokens` and `screenFontStack` stay separate from
 report-facing tokens, typography and frozen output.
 
 Decorative glyphs fit their text line without acquiring control-sized
-whitespace. Utility, navigation and
-compact roles use their existing 20/24/16px geometry. Interactive targets stay
-usable independently of their smaller painted face; preserve the established
+whitespace. Utility, navigation and compact roles use their 20/24/16px geometry.
+Interactive targets stay usable independently of their smaller painted face;
+preserve the established
 44px targets, focus indications and wrapping labels.
 
 Outcome words/icons accompany color. Completed calls use the current success
@@ -172,8 +167,7 @@ of silently switching to Selected.
 
 ## Search
 
-Keep one stationary rounded capsule with typed results, no Submit, enlargement,
-ghost completion, separate Search screen or Related results.
+Use one stationary rounded capsule with results as the user types.
 Scope and type choices stay together beneath it. Clear belongs to the field;
 Escape/outside dismissal does not silently clear the query.
 
@@ -202,9 +196,9 @@ picker. Inspecting an interaction temporarily replaces that panel without
 discarding the draft. Close retains memory-only choices and does not invent a
 Save/Discard gate.
 
-Prepare opens the actual document in the main reading workspace with flat
-Report/Text/Files views. Original/copy text is selectable; do not add automatic
-Copy toolbars or scanner-counter recitals. Edits and omissions require rebuild.
+Prepare opens the actual document in the main reading workspace with
+Report/Text/Files views. Original/copy text is selectable.
+Edits and omissions require rebuild.
 Disclosure approval and Save stay separate actions in the same workspace.
 
 Saved reading uses actual files, a clear title/format toolbar and one Download
@@ -231,13 +225,12 @@ metadata and navigates; it never clicks an action or reads private path values.
 | Display preference | Apply immediately, separately from permission |
 | Recorded replies | Its own draft and confirmation |
 
-Source review keeps paths and preferences in one draft. There is no AI-review
-category.
+Source review keeps paths and preferences in one draft.
 
-Refresh sits in Analyze and the existing connection/status task, using one
-dispatcher and its real pending state. There is no sidebar Activity updates
-menu. Read stored activity is a different, clearly named effect. Completion
-and coverage stay separate; a no-change receipt does not prove complete history.
+Refresh sits in Analyze and the connection/status task, using one
+dispatcher and its real pending state. Read stored activity is a different,
+clearly named effect. Completion and coverage stay separate; a no-change
+receipt does not prove complete history.
 Do not promise that retry recreates a missing file or removes a read limit.
 
 Deletion/recollection dialogs keep the question, body-only scroller and fixed
@@ -249,7 +242,7 @@ identity and cannot be dismissed into a new mutation.
 ## Motion, focus and text
 
 The left rail, narrow drawer, Filters, Chart guide and right contextual surface
-share the existing reversible 320ms glide. This explicit navigation policy runs
+share a reversible 320ms glide. This navigation policy runs
 under either browser motion preference and has no separate user setting.
 Other controls and reader folding retain their own reduced-motion behavior;
 do not change operating-system preferences.
@@ -274,16 +267,12 @@ independent of the navigation drawer.
 Never shorten source content to satisfy a layout assertion or shrink typography
 and targets to make a screenshot fit.
 
-## Finish a change
+## Check a screen change
 
-Use the real renderer and invented data for the affected journey, including
-its Back/Close/return and relevant failure or unavailable state. Check actual
-paint, text edges, glyphs, focus and in-flight geometry where they matter,
-not only CSS values or a green test.
+Use the normal renderer and invented data. Follow the affected task through
+Back/Close and any failure or unavailable state. Check focus, scrolling and
+layout during transitions, plus both themes and a narrow or enlarged-text view.
 
-Relevant existing owners include activity-reader, report-sidebar, Search,
-period-comparison, navigation, Settings and withdrawal browser suites.
-Choose representative widths/themes/text enlargement, not a Cartesian gallery.
-A screenshot proves its visible state, not motion, provider acquisition,
-full source coverage or frozen-file correctness. Preserve those distinctions
-when reporting completion.
+Activity-reader, report-sidebar, Search, period-comparison, navigation, Settings
+and withdrawal browser suites cover these paths. For report-output changes,
+also inspect the saved files using the [report contract](report-contract.md).
