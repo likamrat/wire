@@ -72,6 +72,12 @@ History files are still read through qualified filesystem paths. An unavailable
 reader, changed metadata or unsupported mapping refuses without copying the
 database, bypassing SQLite locks or replacing last good evidence.
 
+During publication, unrelated metadata changes are re-read through the same
+bounded projection. Publication continues only if the selected sources retain
+their eligibility, membership and provenance. Source-file changes, authority
+expiry and conflicting store changes still refuse; an interrupted write is
+not relabeled as success.
+
 The current adapter checks the consumed ordinary `sessions`, `workspaces` and
 `projects` mapping, required text/null values and sole `id` primary keys.
 Schema generation 156 is the minimum; a later number alone neither grants nor denies

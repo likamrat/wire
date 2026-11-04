@@ -13,6 +13,7 @@ import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createCollector } from "../lib/collector.mjs";
 import { TAIL_LIMITS, collectorHostIdentity } from "../lib/collector-io.mjs";
+import { BACKFILL_DIRECTORY } from "../lib/collector-backfill.mjs";
 import { createMicrosoftSession } from "../lib/microsoft-session.mjs";
 import { createFixtureRuntimeAccess, createNativeRuntimeAccess, createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createMicrosoftNativeReadTransport } from "../lib/microsoft-native-transport.mjs";
@@ -1354,6 +1355,130 @@ async function waitForNativeRecords(app, expected) {
         assert.ok(performance.now() < until, "Native scheduling must acquire and commit the expected actual fixture records.");
         await nativeWait(5);
     }
+}
+
+async function appendOmittedPrefix(app, id) {
+    await app.append(interaction(id));
+    const padding = await fs.open(app.sourceFile, "a");
+    try {
+        await padding.writeFile(`{"id":"churn-padding","type":"assistant.message","timestamp":"${new Date().toISOString()}","data":{"content":"`);
+        const chunk = Buffer.alloc(1024 ** 2, 120);
+        for (let offset = 0; offset < TAIL_LIMITS.initialFileBytes; offset += chunk.length) await padding.write(chunk);
+        await padding.writeFile('"}}\n');
+    } finally { await padding.close(); }
+}
+
+for (const churnPoint of ["board", "prefix", "unrelated-tail"]) test(`automatic prefix publication persists across unrelated live changes at ${churnPoint}`, async t => {
+    shortenNativePolling(t);
+    const app = await fixture(t, { timers: true });
+    await appendOmittedPrefix(app, "prefix-metadata-churn");
+    const db = new DatabaseSync(app.config.appDbPath);
+    db.exec("PRAGMA journal_mode=WAL");
+    const unrelated = randomUUID();
+    db.prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(unrelated, "Unrelated archived fixture", "chat", "2026-01-01", "local");
+    const unrelatedFile = path.join(app.config.sessionRoot, unrelated, "events.jsonl");
+    await mkdir(path.dirname(unrelatedFile));
+    await writeFile(unrelatedFile, lines([event("session.start", { sessionId: unrelated, version: 1 })]));
+    const update = db.prepare("UPDATE sessions SET title=? WHERE id=?");
+    const originalOpen = fs.open, failures = [];
+    let changes = 0;
+    t.mock.method(console, "error", (...args) => {
+        if (args[0] === "[workiq-collector] collection failed") failures.push(args[1]?.code);
+    });
+    t.mock.method(fs, "open", async (file, ...args) => {
+        const handle = await originalOpen(file, ...args);
+        const selected = churnPoint === "board" ? path.dirname(String(file)) === app.context.dataDir && path.basename(String(file)).startsWith(".state-")
+            : String(file).includes(path.sep + BACKFILL_DIRECTORY + path.sep);
+        if (selected && String(file).endsWith(".tmp")) {
+            const sync = handle.sync.bind(handle);
+            handle.sync = async () => {
+                await sync();
+                changes++;
+                if (churnPoint === "unrelated-tail") await appendFile(unrelatedFile, lines(interaction(`unrelated-${changes}`)));
+                else update.run(`Unrelated change ${changes}`, unrelated);
+            };
+        }
+        return handle;
+    });
+    syncBuiltinESMExports();
+    try {
+        await app.command("wire-sign-in");
+        const deadline = performance.now() + 5000;
+        let status;
+        do {
+            await nativeWait(10);
+            status = await app.collector.status();
+            if (status.state !== "collecting" && status.backfill?.visitedSources === 1 || failures.length >= 2) break;
+        } while (performance.now() < deadline);
+        assert.ok(changes > 0, `The fixture must change unrelated live-WAL metadata at prefix publication; failures=${JSON.stringify(failures)}.`);
+        assert.deepEqual([...failures], [], "Harmless metadata churn must not create unknown publication outcomes.");
+        assert.equal(status.backfill?.visitedSources, 1, "The actual automatic prefix progress must be durable.");
+        const prefix = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, app.sourceId + ".json")));
+        assert.equal(prefix.backfill.sources[0].phase, "visited");
+        assert.equal((await loadBoardState(app.context)).evidence.length, 1);
+        await app.restart();
+        assert.equal((await app.collector.status()).backfill.visitedSources, 1);
+        await app.append(interaction("after-prefix-churn"));
+        await waitForNativeRecords(app, ["prefix-metadata-churn", "after-prefix-churn"]);
+        assert.deepEqual([...failures], []);
+    } finally {
+        await app.collector.close();
+        t.mock.restoreAll(); syncBuiltinESMExports();
+        db.close();
+    }
+});
+
+for (const change of ["selected-membership", "source-tail-growth", "source-identity"]) {
+    test(`automatic prefix publication still refuses ${change} after fsync`, async t => {
+        shortenNativePolling(t);
+        const app = await fixture(t, { timers: true });
+        await appendOmittedPrefix(app, "prefix-guard-refusal");
+        const db = new DatabaseSync(app.config.appDbPath);
+        db.exec("PRAGMA journal_mode=WAL");
+        db.prepare("UPDATE sessions SET title=? WHERE id=?").run("Invented guarded prefix", app.sourceId);
+        const originalOpen = fs.open, failures = [];
+        let changed = false;
+        t.mock.method(console, "error", (...args) => {
+            if (args[0] === "[workiq-collector] collection failed") failures.push(args[1]?.code);
+        });
+        t.mock.method(fs, "open", async (file, ...args) => {
+            const handle = await originalOpen(file, ...args);
+            if (String(file).includes(path.sep + BACKFILL_DIRECTORY + path.sep) && String(file).endsWith(".tmp")) {
+                const sync = handle.sync.bind(handle);
+                handle.sync = async () => {
+                    await sync();
+                    if (changed) return;
+                    changed = true;
+                    if (change === "selected-membership") db.prepare("UPDATE sessions SET archived_at=? WHERE id=?")
+                        .run(new Date().toISOString(), app.sourceId);
+                    else if (change === "source-tail-growth") await app.append(interaction("later-source-tail"));
+                    else {
+                        await fs.rename(app.sourceFile, app.sourceFile + ".old");
+                        await writeFile(app.sourceFile, lines([event("session.start", { sessionId: app.sourceId, version: 1 })]));
+                    }
+                };
+            }
+            return handle;
+        });
+        syncBuiltinESMExports();
+        try {
+            await app.command("wire-sign-in");
+            const deadline = performance.now() + 5000;
+            while (!failures.length && performance.now() < deadline) await nativeWait(5);
+            assert.equal(changed, true, `The source change must reach the guarded prefix write; failures=${JSON.stringify(failures)}.`);
+            assert.equal(failures[0], "wire_access_admission_failed");
+            await app.collector.close();
+            await assert.rejects(readFile(path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, app.sourceId + ".json")),
+                { code: "ENOENT" });
+            const index = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", "index.json")));
+            assert.equal(index.sources[app.sourceId]?.backfill?.phase, undefined,
+                "The failed prefix publication must not claim committed progress.");
+        } finally {
+            await app.collector.close();
+            t.mock.restoreAll(); syncBuiltinESMExports();
+            db.close();
+        }
+    });
 }
 
 test("native timers backfill after WIRE sign-in and Resume, and stop acquiring after signout", async t => {
