@@ -6,10 +6,9 @@ on the source, checking a change and troubleshooting a local installation.
 
 ## Run locally
 
-Use Node.js 24 or newer and npm 11.17.0, as declared in
-[`package.json`](../package.json).
+Use Node.js 24 or newer.
 
-```powershell
+```text
 npm ci
 npm start
 ```
@@ -36,7 +35,7 @@ Reuse that pattern for tests and image capture.
 
 WIRE listens on `127.0.0.1:4000` by default. To choose another port:
 
-```powershell
+```text
 npm start -- --port 4100
 ```
 
@@ -54,7 +53,7 @@ at a new address.
 Run the syntax check and the tests for the behavior you changed. For example,
 a literal Search matching change can start with:
 
-```powershell
+```text
 npm run check
 node --test tests/search-text.test.mjs
 ```
@@ -66,7 +65,7 @@ failures or skips.
 
 Packaging changes have a separate lane:
 
-```powershell
+```text
 npm run test:packaging
 ```
 
@@ -79,7 +78,7 @@ installation or browser checks. `npm test` does not include it.
 PDF generation uses the pinned Playwright runtime dependency and a local
 Chromium browser:
 
-```powershell
+```text
 npx playwright install chromium
 ```
 
@@ -92,8 +91,8 @@ the text layer, not OCR; no remote conversion service is used.
 For documentation images, use an existing synthetic fixture, ordinary
 Playwright interactions and the unmodified normal renderer. Capture only
 useful states, inspect every image for readability and private data, and close
-the owned runtime/browser and remove its temporary store. Label invented
-content clearly.
+the owned runtime/browser and remove its temporary store. Keep fixture provenance
+with capture evidence, and add a visible caption only when it helps explain the task.
 
 ## Troubleshoot a local run
 
