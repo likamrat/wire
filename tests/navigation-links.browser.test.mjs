@@ -203,6 +203,66 @@ test("standalone lockups preserve painted artwork and legible descriptor bounds 
     }
 });
 
+test("integrated lockup stays readable and unclipped across navigation sizes", async t => {
+    const { page } = await setup(t);
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1200, 1], [820, 2], [320, 1], [320, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        await chooseTheme(page, theme);
+        if (width < 700) {
+            await page.locator("#navigationToggle").click();
+            await page.locator("#navigationDrawer").evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+        }
+        const logo = page.locator("#shellBrand .brand-logo:visible");
+        assert.equal(await logo.count(), 1, "Exactly one theme lockup is visible");
+        const metrics = await logo.evaluate(async svg => {
+            await document.fonts.ready;
+            const text = svg.querySelector('[id$="-descriptor"]'), css = getComputedStyle(text);
+            const rect = node => node.getBoundingClientRect().toJSON();
+            const matrix = svg.getScreenCTM();
+            const glyphs = Array.from({ length: text.getNumberOfChars() }, (_, index) => {
+                const box = text.getExtentOfChar(index);
+                const first = new DOMPoint(box.x, box.y).matrixTransform(matrix);
+                const last = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(matrix);
+                return { left: first.x, right: last.x, top: first.y, bottom: last.y,
+                    baseline: text.getStartPositionOfChar(index).y };
+            });
+            const surface = svg.closest("dialog") || document.querySelector(".app-header");
+            return { text: text.textContent, family: css.fontFamily, weight: css.fontWeight,
+                loaded: [...document.fonts].some(face => face.family === "Asta Sans" && face.status === "loaded"),
+                fontPixels: parseFloat(css.fontSize) * matrix.a, fill: css.fill,
+                background: getComputedStyle(surface).backgroundColor, glyphs, logo: rect(svg),
+                target: rect(svg.closest("a")), viewport: { width: innerWidth, height: innerHeight },
+                overflow: document.documentElement.scrollWidth > innerWidth };
+        });
+        const label = `${theme}/${width}/${scale}x`;
+        assert.equal(metrics.text, "Work IQ Request Explorer", `${label}: complete descriptor`);
+        assert.equal(metrics.family.replaceAll('"', ""), "Asta Sans", `${label}: descriptor uses Asta Sans`);
+        assert.equal(metrics.loaded, true, `${label}: the actual bundled face is loaded`);
+        assert.equal(metrics.weight, "400", `${label}: regular descriptor weight`);
+        assert.ok(metrics.fontPixels >= 11, `${label}: readable descriptor size`);
+        assert.ok(contrast(metrics.fill, metrics.background) >= 4.5, `${label}: descriptor contrast`);
+        assert.equal(new Set(metrics.glyphs.map(glyph => glyph.baseline)).size, 1, `${label}: one uninterrupted baseline`);
+        for (const glyph of metrics.glyphs) {
+            assert.ok(glyph.left >= metrics.logo.left && glyph.right <= metrics.logo.right,
+                `${label}: every descriptor glyph stays inside the logo horizontally`);
+            assert.ok(glyph.top >= metrics.logo.top && glyph.bottom <= metrics.logo.bottom,
+                `${label}: every descriptor glyph stays inside the logo vertically`);
+        }
+        assert.ok(metrics.logo.left >= 0 && metrics.logo.right <= metrics.viewport.width
+            && metrics.logo.top >= 0 && metrics.logo.bottom <= metrics.viewport.height, `${label}: visible logo stays in the viewport`);
+        assert.ok(metrics.target.width >= 44 && metrics.target.height >= 44, `${label}: full native hit target`);
+        assert.ok(metrics.target.left <= metrics.logo.left && metrics.target.right >= metrics.logo.right
+            && metrics.target.top <= metrics.logo.top && metrics.target.bottom >= metrics.logo.bottom,
+            `${label}: the link contains the complete lockup`);
+        assert.equal(metrics.overflow, false, `${label}: no page overflow`);
+        if (width < 700) {
+            await page.keyboard.press("Escape");
+            await page.locator("#navigationDrawer").waitFor({ state: "hidden" });
+        }
+    }
+});
+
 test("authored chart, detail, Settings and dialog links have decoration-free native states", { timeout: 60000 }, async t => {
     const { page, runtime } = await setup(t);
     await capture(page, "home-links", "#homeView");
@@ -251,10 +311,6 @@ test("authored chart, detail, Settings and dialog links have decoration-free nat
         await capture(page, `dialog-${theme}-narrow-focus`, "#navigationDrawer");
         await page.keyboard.press("Escape");
         await capture(page, `header-${theme}-narrow-200`, ".app-header");
-        assert.equal(await page.locator(".brand-caption").evaluate(node => {
-            const range = document.createRange(); range.selectNodeContents(node);
-            return new Set([...range.getClientRects()].map(rect => rect.top)).size;
-        }), 1, "Subtitle stays on one line at enlarged text");
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
         await page.setViewportSize({ width: 1200, height: 1000 });
         await page.evaluate(() => document.documentElement.style.fontSize = "100%");
