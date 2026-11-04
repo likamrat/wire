@@ -630,7 +630,8 @@ test("final save survives read/lifecycle events, while an uncertain export is ne
     }, { times: 1 });
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
-    assert.match(await page.locator("#reportJourneyError").textContent(), /not replayed|No action was replayed/);
+    assert.match(await page.locator("#reportJourneyError").textContent(), /check its result instead of repeating it/);
+    assert.doesNotMatch(await page.locator("#reportJourneyError").textContent(), /then retry|try again/);
     assert.match(await page.locator("#reportJourneyError").textContent(), /may have completed/);
     assert.equal(await page.locator("#reportSaveBody .report-save-success").count(), 0);
     assert.equal(requests.filter(request => request.path === "/api/export").length, 2);

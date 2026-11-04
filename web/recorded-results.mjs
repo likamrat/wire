@@ -75,7 +75,12 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         if (evidence.diagnostic?.version === 1 && evidence.diagnostic.code != null && evidence.diagnostic.code !== "failure") {
             return (contextual ? "" : "Recorded error: ") + diagnosticSummary(evidence.diagnostic);
         }
-        if (evidence.diagnostic?.version === 1 && evidence.diagnostic.statusCode != null) return "Tool-reported status: " + evidence.diagnostic.statusCode;
+        if (evidence.diagnostic?.version === 1 && evidence.diagnostic.statusCode != null) {
+            if (evidence.diagnostic.source === "workiq-error-json" && evidence.diagnostic.status === "recorded") {
+                return reportedStatus(evidence.diagnostic.statusCode, "Work IQ") + ". No further error details are retained.";
+            }
+            return "Tool-reported status: " + evidence.diagnostic.statusCode;
+        }
         if (evidence.diagnostic?.version === 1 && (evidence.diagnostic.message && !genericMessage(evidence.diagnostic)
             || evidence.diagnostic.details?.length)) return "Recorded error details";
         return null;
@@ -87,9 +92,24 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         return [primaryFailureCause(call, contextual), result && !duplicate ? (contextual ? "Result error: " : "Recorded result error: ") + result : null,
             includeReturned ? returnedErrorSummary(call) : null].filter(Boolean).join("\n") || null;
     }
+    function reportedStatus(status, subject = "The tool") {
+        const name = { 400: "Bad request", 401: "Unauthorized", 403: "Forbidden", 404: "Not found",
+            408: "Request timeout", 409: "Conflict", 412: "Precondition failed", 429: "Too many requests",
+            500: "Internal server error", 502: "Bad gateway", 503: "Service unavailable", 504: "Gateway timeout" }[status];
+        return `${subject} reported HTTP ${status}${name ? ` (${name})` : ""}`;
+    }
     function failureReason(call, { contextual = false, includeReturned = true } = {}) {
         const cause = failureCause(call, contextual, includeReturned);
         if (cause) return cause;
+        const result = call?.resultEvidence;
+        if (result?.version === 1 && !result.statusConflict && Number.isInteger(result.statusCode)
+            && result.statusCode >= 100 && result.statusCode <= 599) {
+            const status = call?.failureEvidence?.diagnostic?.status ?? call?.failureEvidence?.messageStatus;
+            const gap = status === "sensitive-excluded" ? "Error details were excluded for privacy."
+                : status === "size-excluded" ? "Error details exceeded the saving limit."
+                : "No further error details are retained.";
+            return reportedStatus(result.statusCode) + ". " + gap;
+        }
         if (!includeReturned && returnedErrorSummary(call)) return null;
         const evidence = call?.failureEvidence;
         if (evidence?.version !== 1) return "Failure reason was not saved";
@@ -100,11 +120,11 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             if (diagnostic.status === "recorded" && diagnostic.code === "failure") return "The source supplied only a generic failure marker";
             if (diagnostic.status === "sensitive-excluded") return "Error details excluded for privacy";
             if (diagnostic.status === "size-excluded") return "Error details exceeded the saving limit";
-            if (diagnostic.status === "unsupported-format") return "Error details were in an unsupported format";
+            if (diagnostic.status === "unsupported-format") return "WIRE could not extract a readable reason from the recorded error";
         }
         if (evidence.messageStatus === "sensitive-excluded") return "Error text excluded for privacy";
         if (evidence.messageStatus === "size-excluded") return "Error text exceeded the saving limit";
-        if (evidence.reason === "unsupported-error-format" || evidence.messageStatus === "unsupported-format") return "Error format was not supported";
+        if (evidence.reason === "unsupported-error-format" || evidence.messageStatus === "unsupported-format") return "WIRE could not extract a readable reason from the recorded error";
         if (["error-details-excluded", "result-content-excluded"].includes(evidence.reason)
             || evidence.messageStatus === "text-excluded") return "Error text was not saved";
         return evidence.messageStatus === "not-supplied" ? "The source did not supply a failure reason" : "Failure reason unavailable";
@@ -236,7 +256,7 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             redacted: "Identifying information was redacted.",
             "sensitive-excluded": "Error text was excluded for privacy.",
             "size-excluded": "Some error details exceeded the saving limit.",
-            "unsupported-format": "Some error details were not in a supported format.",
+            "unsupported-format": "WIRE could not extract all error details into readable text.",
             "not-supplied": "The source did not supply error details.",
         }[value.status];
         if (note) rows.push(["Error details", note]);

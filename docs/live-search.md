@@ -73,6 +73,8 @@ Index publication, hit delivery and Open recheck current owner, source,
 permission, exact identity/revision and saved-file integrity. Missing,
 corrupt, unreadable and changed content remain partial/unavailable/stale,
 not a complete no-match or an alternate target.
+The same known coverage cause is shown with or without matches: a missing report
+or a report that cannot be verified does not become an unexplained empty search.
 
 Query replacement, Clear, cancellation, source/permission/deletion changes,
 disconnect and expiry retire owned results and their actions. Closing waits

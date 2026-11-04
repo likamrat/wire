@@ -386,6 +386,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         const current = state.snapshot(), status = current.status;
         panel.dataset.searchState = current.state;
         const partial = Boolean(current.matches.receipt && !contract.completeCoverage(status?.corpus, current.matches.receipt.queryTypes));
+        const coverage = coverageMessage(status?.corpus, current.matches.receipt?.queryTypes ?? types());
         const labels = { queued: "Searching...",
             refreshing: "Updating search...",
             building: "Preparing search...",
@@ -393,9 +394,8 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             changing: "Saved content changed. Search again.",
             unavailable: "Search is unavailable. Try again.",
             disconnected: failure || "Search disconnected. Reconnect to read current items.", closed: "Local search closed.", superseded: "A newer query replaced this read.",
-            incomplete: coverageMessage(status?.corpus, current.matches.receipt?.queryTypes ?? types()) === "Saved GitHub replies are unavailable for Search."
-                ? "Saved GitHub replies are unavailable for Search."
-                : "Search is incomplete. Some saved content could not be searched.",
+            incomplete: coverage === "Saved GitHub replies are unavailable for Search."
+                ? coverage : "Search is incomplete. " + coverage,
             "no-match": nativeSearch?.active() ? "No GitHub, saved or navigation matches. Microsoft results are separate." : "No matches. Try different words." };
         replaceSearchText($("wireSearchStatus"), !input.value.trim() ? ""
             : current.matches.receipt ? current.matches.total
@@ -403,8 +403,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 : partial ? labels.incomplete : labels["no-match"]
                 : labels[current.state] || "Ready for a local search.");
         $("wireSearchStatus").classList.toggle("visually-hidden", Boolean(current.matches.total));
-        replaceSearchText($("wireSearchCoverage"), partial && current.matches.total
-            ? coverageMessage(status?.corpus, current.matches.receipt.queryTypes) : "");
+        replaceSearchText($("wireSearchCoverage"), partial && current.matches.total ? coverage : "");
         $("wireSearchCoverage").hidden = !$("wireSearchCoverage").textContent;
         $("wireSearchRetry").hidden = !input.value.trim() || !["disconnected", "stale", "unavailable", "closed", "changing"].includes(current.state);
         $("wireSearchRetry").textContent = connected ? "Retry search" : "Reconnect search";

@@ -235,7 +235,7 @@ test("offline activation stays uncertain, can read after reconnect, and never re
     await page.context().setOffline(true);
     await begin(page);
     await page.waitForFunction(() => document.querySelector("#recordBtn").textContent === "Check saved result");
-    assert.match(await page.locator("#recorderStatus").innerText(), /local runtime could not be reached or timed out/);
+    assert.match(await page.locator("#recorderStatus").innerText(), /WIRE did not respond.*action may have completed/);
     await page.context().setOffline(false);
     await page.locator("#recordBtn").click();
     await page.waitForFunction(() => document.querySelector("#recorderStatus").textContent.includes("No saved result"));

@@ -220,7 +220,7 @@ test("every Search category has its own readable rendered color, Lucide identity
     await expect(report.locator(".wire-search-title")).toHaveText(app.bundles[1].title);
     await expect(report.locator(".wire-search-meta")).toHaveCount(0);
     await input.fill("unmatched invented phrase");
-    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is incomplete. Some saved content could not be searched.");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is incomplete. A saved report file is missing.");
     const entered = Promise.withResolvers(), release = Promise.withResolvers();
     t.after(() => release.resolve());
     await page.route("**/api/search/query", async route => {

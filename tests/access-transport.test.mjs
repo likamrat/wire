@@ -11,6 +11,38 @@ const seed = (changes = {}) => ({ ...bootstrap, authorizationRevision: 0, genera
     wire: "signed-out", retained: false, collection: "enabled", ...changes });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
+test("lost action responses never advise repeating Save, collection or settings changes", async t => {
+    const calls = [];
+    let unreadable = false;
+    t.mock.method(globalThis, "fetch", async path => {
+        calls.push(path);
+        if (unreadable) return new Response("Not JSON", { status: 200 });
+        throw new TypeError("Invented lost local response");
+    });
+    const api = createBoardTransport(capability, () => {}, unbound);
+    for (const invalid of [false, true]) {
+        unreadable = invalid;
+        for (const path of ["/api/export", "/api/collection/now", "/api/collection/configure", "/api/report-comparison/save"]) {
+            const count = calls.length;
+            await assert.rejects(api(path, {}), error => {
+                assert.equal(error.code, "request_outcome_unknown");
+                assert.equal(error.outcome, "unknown");
+                assert.equal(error.reason, invalid ? "invalid_response" : "runtime_unavailable");
+                assert.match(error.message, /may have completed/);
+                assert.doesNotMatch(error.message, /then retry|try again|start.*again/i);
+                return true;
+            });
+            assert.equal(calls.length, count + 1);
+        }
+        await assert.rejects(api("/api/report/open", {}), error => {
+            assert.equal(error.code, undefined);
+            assert.doesNotMatch(error.message, /action may have completed/);
+            assert.match(error.message, /read.*again/i);
+            return true;
+        });
+    }
+});
+
 test("enforced first false or absent grant sends no private request; only explicit unbound preserves legacy reads", async t => {
     const paths = [];
     t.mock.method(globalThis, "fetch", async path => {

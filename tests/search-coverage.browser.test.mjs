@@ -135,7 +135,7 @@ test("Search count and coverage are distinct readable facts through partial, sco
         measurements.push({ theme, viewport: width, scale, ...facts });
     }
     await input.fill("invented query without any match");
-    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is incomplete. Some saved content could not be searched.");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is incomplete. Changed report files could not be verified.");
     await expect(page.locator("#wireSearchMatches")).toBeHidden();
     await selectActivityOption(page, "wireSearchType", "interaction");
     await expect(page.locator("#wireSearchStatus")).toHaveText("No matches. Try different words.");
