@@ -64,7 +64,7 @@ test("source changes during the metadata read invalidate its stamp before public
         const result = await app.run(...args);
         if (args[0] === "node.exe") await writeFile(app.file, "Invented changed source.");
         return result;
-    } }), { code: "COLLECTION_SOURCE_CHANGED" });
+    } }), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-read" });
 });
 
 test("helper timeout, missing runtime, excessive output and unsuccessful exit never fall back to local SQLite", async t => {

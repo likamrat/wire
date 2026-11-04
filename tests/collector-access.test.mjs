@@ -507,6 +507,10 @@ for (const point of ["barrier-fsync", "barrier-rename", "checkpoint-rename", "fi
     test(`owned index barrier survives ${point} failure without exposing prospective progress ahead of evidence`, async t => {
         const app = await fixture(t, { signedIn: true }), legacy = await legacyIndex(app);
         await app.append(interaction("barrier-call"));
+        const diagnostics = [];
+        t.mock.method(console, "error", (...args) => {
+            if (args[0] === "[workiq-collector] collection failed") diagnostics.push(args[1]);
+        });
         let fail = true, indexWrites = 0, observedBarrier;
         const originalOpen = fs.open, originalRename = fs.rename;
         t.mock.method(fs, "open", async (file, ...args) => {
@@ -544,6 +548,9 @@ for (const point of ["barrier-fsync", "barrier-rename", "checkpoint-rename", "fi
         syncBuiltinESMExports();
         t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
         await assert.rejects(app.collector.collectNow(), { code: "wire_access_admission_failed" });
+        assert.deepEqual(diagnostics[0].causeCodes, ["EIO"], "Admission translation must not erase the private I/O cause.");
+        assert.equal(diagnostics[0].stage, point.startsWith("barrier") ? "index-barrier"
+            : point === "checkpoint-rename" ? "checkpoint" : "index");
         const durable = JSON.parse(await readFile(legacy.file));
         assert.deepEqual(durable, point === "barrier-fsync" ? legacy.value
             : await ownedBarrier(legacy.value));
@@ -1436,10 +1443,13 @@ for (const change of ["selected-membership", "source-tail-growth", "source-ident
         const db = new DatabaseSync(app.config.appDbPath);
         db.exec("PRAGMA journal_mode=WAL");
         db.prepare("UPDATE sessions SET title=? WHERE id=?").run("Invented guarded prefix", app.sourceId);
-        const originalOpen = fs.open, failures = [];
+        const originalOpen = fs.open, failures = [], diagnostics = [];
         let changed = false;
         t.mock.method(console, "error", (...args) => {
-            if (args[0] === "[workiq-collector] collection failed") failures.push(args[1]?.code);
+            if (args[0] === "[workiq-collector] collection failed") {
+                failures.push(args[1]?.code);
+                diagnostics.push(args[1]);
+            }
         });
         t.mock.method(fs, "open", async (file, ...args) => {
             const handle = await originalOpen(file, ...args);
@@ -1467,6 +1477,11 @@ for (const change of ["selected-membership", "source-tail-growth", "source-ident
             while (!failures.length && performance.now() < deadline) await nativeWait(5);
             assert.equal(changed, true, `The source change must reach the guarded prefix write; failures=${JSON.stringify(failures)}.`);
             assert.equal(failures[0], "wire_access_admission_failed");
+            assert.deepEqual(diagnostics[0], {
+                code: "wire_access_admission_failed", stage: "prefix",
+                sourceChange: change === "selected-membership" ? "membership" : change === "source-tail-growth" ? "history-size" : "history-identity",
+                causeCodes: ["COLLECTION_SOURCE_CHANGED"],
+            }, "Only fixed stage/reason and recognized codes may be logged, never source text, paths or stacks.");
             await app.collector.close();
             await assert.rejects(readFile(path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, app.sourceId + ".json")),
                 { code: "ENOENT" });
