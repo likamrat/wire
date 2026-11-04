@@ -1,10 +1,10 @@
 # Development
 
-WIRE is a private, source-only Node application. The delivered route is the
-ordinary browser at `http://127.0.0.1:4000/` by default; native canvas delivery remains
-deferred. See [README](../README.md) for the current source-availability notice.
+WIRE runs as a local Node server with a browser interface. Start with the
+[README](../README.md#start) to clone and install it. This guide covers working
+on the source, checking a change and troubleshooting a local installation.
 
-## Run from the intended checkout
+## Run locally
 
 Use Node.js 24 or newer and npm 11.17.0, as declared in
 [`package.json`](../package.json). Git access to this repository is separate
@@ -15,19 +15,24 @@ npm ci
 npm start
 ```
 
-Keep the terminal running. Startup requires no copied private state, evidence
-migration, build output or model assets. It does not install a scheduled task
-or startup service. Closing a page or canvas does not stop the runtime.
+Open `http://127.0.0.1:4000/` and keep the terminal running. Use **Ctrl+C** in
+that terminal to stop WIRE; closing the browser tab leaves it running. No build,
+data migration or model download is needed for startup.
 
-For an existing checkout, stop only its own runtime before pulling the intended
-published source, reinstalling locked dependencies and restarting. A fixed-port
-conflict is an error, not permission to stop another process. `--port 0` is an
-explicit isolated-port option; it does not isolate the private data directory.
+To update an existing checkout, stop its WIRE process, pull the changes, run
+`npm ci` and restart. If the port is already in use, check whether WIRE is
+already running rather than stopping an unfamiliar process.
+
+## Keep development data separate
 
 All checkouts default to the same per-user store. A disposable fixture must
 provide an explicit owned data directory outside source, disable collection
 timers and use invented source paths. Never point a fixture at the normal store,
 an existing browser profile or original history.
+
+`--port 0` chooses an available port; it does not isolate data. Existing browser
+tests set up temporary stores through [`tests/helpers.mjs`](../tests/helpers.mjs)
+and close their own resources. Reuse that pattern for tests and image capture.
 
 ## Changing the local port
 
@@ -37,28 +42,31 @@ port. WIRE refuses an occupied port instead of silently choosing another.
 `WORKIQ_EVIDENCE_DATA_DIR` still selects the store; a port change does not move
 retained evidence, collection settings or saved reports.
 
-Before switching, finish any drafts and resolve pending or unconfirmed operations
-in the existing tab. Do not repeat an uncertain Save, deletion or collection
-operation at the new address. Browser-local recovery markers and in-memory drafts
-do not transfer between ports; leave the old instance in place if recovery is
-unresolved.
+1. Finish drafts and resolve pending/unconfirmed operations in the existing tab.
+   Browser-local recovery markers and memory-only drafts do not transfer;
+   leave the old instance in place if recovery is unresolved.
+2. Stop your instance and restart it with the chosen port.
+3. Open the printed URL and update bookmarks. Existing tabs still use the old address.
 
-After a controlled restart, open the printed URL and update bookmarks. Already-open
-tabs keep using the old address. Theme, sidebar and display-time-zone preferences
-belong to the browser origin and may need setting again. Do not copy capabilities
-or browser storage to carry a session across.
+Do not repeat an uncertain Save, deletion or collection operation at the new
+address. Theme, sidebar and display-time-zone preferences belong to the browser
+origin and may need setting again. Do not copy capabilities or browser storage
+to carry a session across.
 
 ## Check a change
 
+Run the syntax check and the tests for the behavior you changed. For example,
+a literal Search matching change can start with:
+
 ```powershell
 npm run check
-npm test
+node --test tests/search-text.test.mjs
 ```
 
 `check` validates JavaScript syntax, not TypeScript types. Runtime validators
-and focused tests cover input contracts. Use the smallest relevant test set
-before a broader run; a skipped or zero-selected lane is not qualification.
-There is no blanket claim here that every historical baseline test passes.
+and focused tests cover input contracts. Check that the selected tests actually
+ran. Use `npm test` for the default suite when a change needs broader coverage.
+In your pull request, describe the scenario checked and any failures or skips.
 
 Packaging changes have a separate lane:
 
@@ -67,13 +75,8 @@ npm run test:packaging
 ```
 
 It creates a disposable production-only installation and verifies saved-PDF
-text extraction without development dependencies. Run it serially with other
-installation/browser qualification. It is outside the default test glob.
-
-Browser tests reuse the normal renderer and owned temporary stores through
-[`tests/helpers.mjs`](../tests/helpers.mjs). Collection, provider, fixture,
-headless browser and live-product evidence are different scopes. An invented
-response proves the exercised code path, not genuine acquisition.
+text extraction without development dependencies. Run it separately from other
+installation or browser checks. `npm test` does not include it.
 
 ## PDF and browser tools
 
@@ -100,6 +103,15 @@ the owned runtime/browser and remove its temporary store. Caption invented
 content clearly; screenshots do not prove report-file integrity or live
 collection.
 
+## Troubleshoot a local run
+
+| What you see | What to check |
+| --- | --- |
+| WIRE cannot start because the port is owned | Use the existing WIRE window, or stop the WIRE process you started before restarting. |
+| The page opens but no activity appears | Review the source paths and history window in Settings. Open Collection status for missing or unsupported history. See [Connect local history](user-guide.md#connect-local-history). |
+| PDF preparation cannot find a browser | Install Chromium with the command above, or deselect PDF and prepare a new review. Other formats do not need that browser. |
+| A save or deletion has an uncertain result | Use its status/result check. Do not repeat the action to see whether it worked. See [collection and recovery](collection.md#refresh-and-uncertain-outcomes) or [report saving](reporting.md#approve-save-and-reopen). |
+
 ## Find the owning code
 
 | Work | Entry points and contract |
@@ -112,12 +124,12 @@ collection.
 | Screens | `lib/render.mjs`, `web/client.mjs` and existing surface owners; [design](design.md) |
 | GitHub profile | `lib/github-profile*.mjs`, `copilot-account-snapshot.mjs`; [host identity boundary](github-profile.md) |
 
-These are task pointers, not instructions to load every document. Keep stable
-rules with their owner, and use source/tests for mechanical schema details
-rather than copying a changing implementation inventory into each guide.
+Read the contract for the boundary you change. Use source and tests for exact
+schemas rather than copying them into another guide.
 
 ## Deferred canvas integration
 
+The browser is the supported interface; native canvas delivery remains deferred.
 The repository retains `extension.mjs` and `scripts/install-canvas.mjs`.
 A compatible Copilot host supplies `@github/copilot-sdk/extension`; it is not
 a normal npm dependency or a machine-specific SDK folder to add to this project.
@@ -142,11 +154,13 @@ migration. Existing package/folder names, environment variables, storage keys,
 `workiq-evidence` extension identity and `workiq-evidence-board` canvas ID remain.
 Historical records and saved report bytes are not renamed or regenerated.
 
-Publish only reviewed source and safe illustrative assets. Do not include
-private histories, prompts, reports, profiles, credentials, operational receipts,
-local configuration or machine-specific paths. Do not merge old identifying
-ancestry to make an unavailable historical link work. Sanitized reachable
-history does not prove erasure from earlier objects, caches or other clones.
+| Material | Publication boundary |
+| --- | --- |
+| Reviewed source and safe illustrative assets | Eligible for source review/publication |
+| Private histories, prompts, reports, profiles, credentials, receipts, local configuration and machine-specific paths | Keep out of published source |
+| Old identifying ancestry | Do not merge it to repair an unavailable historical link |
+| Sanitized reachable history | Does not prove erasure from earlier objects, caches or other clones |
+
 Publication and deployment are separate operations.
 
 Current Search needs no model setup. The retained

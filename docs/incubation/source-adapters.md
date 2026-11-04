@@ -51,10 +51,12 @@ Unavailable facts have no hidden value.
 | Provider Progress | Screened intermediate source text under recorded updates, not authored reply/finality |
 | Unknown completion/trigger shape | Explicit limitation; no generic inferred enterprise result |
 
-Only exact, unambiguous native invocation IDs qualify calls. `callId` is not
-aliased into `id`; array position, tool name and proximity do not bind inputs.
-Unknown fields, duplicate IDs, credentials or unsupported input shapes refuse
-the corresponding projection. Missing input never becomes `{}`.
+Before projecting a call, require:
+
+- An exact, unambiguous native invocation `id`. Do not alias `callId` or bind
+  input by array position, tool name or proximity.
+- A supported input shape without unknown fields, duplicate IDs or credentials.
+  Refuse the affected projection on failure; missing input never becomes `{}`.
 
 Task arrays preserve every supported indexed element. The historical UI's
 first-element behavior is recorded as qualification, not used to drop later
@@ -70,16 +72,23 @@ task IDs, invocation IDs and widget IDs are not renamed to each other.
 CompletePlugin/CompleteExtension/ExecuteAction/InvokeAction labels alone
 do not supply a result schema.
 
-Card-text fallback requires absent plain text and exactly one supported bounded
-TextBlock leaf. Present/null/empty/excluded plain text cannot be bypassed.
-Progress requires original `messageType: "Progress"` and its exact `/text`
-pointer; structured-control text is not accepted as prose.
+| Text path | Admission condition |
+| --- | --- |
+| Card-text fallback | Plain text is absent and exactly one supported bounded TextBlock leaf exists |
+| Present/null/empty/excluded plain text | Cannot be bypassed by fallback |
+| Progress | Original `messageType: "Progress"` and exact `/text` pointer; no structured-control text as prose |
 
-Current outer input uses the shared native byte bound; text/decoded fact layers
-remain 64 KiB, output 1 MiB, depth 24, 10,000 expanded input values, 100-entry
-lists and 1,800-byte pointers. Bounds apply before whole serialization and
-after each supported decode. Accessors, custom serializers, cycles, sparse or
-non-JSON objects are not executed. Fixed errors contain no source payload.
+| Chat decoder bound | Maximum |
+| --- | --- |
+| Outer input | Shared native byte bound |
+| Text / decoded fact layer | 64 KiB |
+| Output | 1 MiB |
+| Depth / expanded input values | 24 / 10,000 |
+| List / pointer | 100 entries / 1,800 bytes |
+
+Check bounds before whole serialization and after each supported decode.
+Never execute accessors, custom serializers, cycles, sparse or non-JSON objects.
+Fixed errors contain no source payload.
 
 `retainNativeChatSourceObservations` attaches the separately validated source
 bundle to exactly one matching carrier. It preserves parser/source/ordering
@@ -113,14 +122,18 @@ context from current time or a runtime lease.
 | `tx.data.wr` | Reference-array cardinality/type facts, not entities, API requests or outcomes |
 | CallGraph input requests | Declared start-observation count, not returned-member or successful-request count |
 
-Starts/completions join by original native call identity. Twenty declared
-requests plus `ok:true` cannot become twenty observed successes. A completion
-with no observed members keeps unknown result coverage. Response-array position
-does not correlate requested targets.
+Starts and completions join by original native call identity. Twenty declared
+requests plus `ok:true` cannot become twenty observed successes. No observed
+members means unknown result coverage; array position does not identify a target.
 
-`ts/th.aid` is an agent reference; `ta/taa.aid` is approval identity; `sa/sx.tid`
-is an agent announcement. A `ta.tid` link is not a start/completion. Unknown
-event types retain qualified identity/coverage without guessed relationships.
+| Identifier | Meaning |
+| --- | --- |
+| `ts/th.aid` | Agent reference |
+| `ta/taa.aid` | Approval identity |
+| `sa/sx.tid` | Agent announcement |
+| `ta.tid` | A link, not a start/completion |
+
+Unknown events retain qualified identity/coverage without guessed relationships.
 Runtime-injected `fr` content cannot become an original reply.
 
 V3/v4 retain unknown authors because the earlier public client did not establish
@@ -157,16 +170,15 @@ become empty success. `applicationError`, singleton `statusCode` and
 Tool completion, task state and separately admitted returned API results remain
 independent.
 
-Cowork time uses original `data.ts` only with its producer-qualified unit and
-exact event/source reference. The legacy and matched raw handlers establish
-epoch milliseconds; magnitude does not. Missing source values do not inherit
-native `Date.now()` defaults. Only an unambiguous current `ts` dates a call;
-`tx`, list recency and capture time cannot supply a missing start.
+| Clock | Qualified meaning |
+| --- | --- |
+| Cowork `data.ts` | Exact event/source reference and producer-qualified unit; legacy/matched handlers establish epoch milliseconds, not magnitude |
+| Cowork call date | Only an unambiguous current `ts`; never `tx`, list recency, capture time or a `Date.now()` default |
+| Chat `createdAt` / `timestamp` | Message-scoped; creation may qualify ordinary-message Dates context, not a call clock |
+| Chat update time | Provenance |
 
-Chat's original `createdAt`/`timestamp` are message-scoped. Creation can qualify
-ordinary-message context in Dates, not a call clock; update time is provenance.
-The shared read model validates exact original explicit-offset timestamps and
-recomputes calendar instants without rewriting their source strings.
+The shared model validates exact explicit-offset timestamps and recomputes
+calendar instants without rewriting original strings.
 
 ## Shared privacy and integration
 

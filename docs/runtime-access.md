@@ -27,10 +27,13 @@ grant backend authority.
 
 ## Bootstrap and capabilities
 
-`GET /` serves the current renderer with one newly issued panel capability.
-Independent clients use `POST /api/session` with exactly `{}` and
-`X-Wire-Session-Protocol: 1`. Missing/duplicate/unsupported protocols return
-409 `WIRE_CLIENT_UPDATE_REQUIRED` before allocating authority.
+| Entry | Contract |
+| --- | --- |
+| `GET /` | Current renderer with one newly issued panel capability |
+| `POST /api/session` | Independent-client handshake; exactly `{}` and `X-Wire-Session-Protocol: 1` |
+| Invalid/missing/duplicate protocol | 409 `WIRE_CLIENT_UPDATE_REQUIRED`, before allocating authority |
+| `/health` | Readiness check without allocating a panel |
+| `/api/session/release` | Release the API helper's own capability after its work/recovery ends |
 
 The handshake returns exactly `{capability,runtimeId,accessBootstrap}` with
 matching runtime IDs. The descriptor is immutable for that runtime, with
@@ -38,12 +41,9 @@ schema 1, enforced/unbound mode and, when applicable, the exact collection
 mode. Explicit unbound is a validated compatibility mode, never inferred from
 a missing or failed watch. Enforced renewal cannot silently downgrade.
 
-Protocol metadata is not authentication. Existing host/origin/JSON/fetch-site
-checks, random capabilities, TTL and 128-panel limit still apply. Reuse an
-API helper's own capability and release it through `/api/session/release`
-after its work/recovery ends. Readiness uses `/health`; repeated `GET /`
-allocates panels. Closing a tab alone does not release server authority before
-its TTL.
+Protocol metadata is not authentication. Host/origin/JSON/fetch-site checks,
+random capabilities, TTL and the 128-panel limit still apply. Repeated `GET /`
+allocates panels; closing a tab does not release authority before its TTL.
 
 The separately loaded canvas adapter must match this protocol and its runtime
 client. Server restart does not reload extensions. Native delivery remains
@@ -67,11 +67,14 @@ response receipt. Check monotonic freshness on dispatch, decode, publication
 and resume; late timers/responses cannot extend it. Status/watch are safe
 control observations, not independent private-read grants.
 
-Ordinary hidden-tab transitions keep the same watch and accepted content while
-authority stays current. Page departure suspends publication. Failure, expiry,
-logout or generation loss clears private owners, including while hidden.
-Readiness allows new authorized reads, not old DOM, queries or mutations.
-Frozen native-renderer pixels and already-disclosed external copies cannot
+| Transition | Client effect |
+| --- | --- |
+| Hidden tab with current authority | Keep the watch and accepted content |
+| Page departure | Suspend publication |
+| Failure, expiry, logout or generation loss | Clear private owners, including hidden ones |
+| Readiness returns | Allow new authorized reads; do not restore old DOM, queries or mutations |
+
+Frozen native-renderer pixels and external copies already disclosed cannot
 be retroactively erased.
 
 ## Client publication and withdrawal
@@ -81,24 +84,26 @@ The callable transport owns `publicationToken`, `isCurrent`, `accessState`,
 non-null and synchronous; only literal `true` from the current check admits.
 Missing methods, promises and truthy objects are not an unbound fallback.
 
-Capture authority before asynchronous work. Recheck after each await and
-reentrant callback before private paint, errors/finalizers, navigation,
-focus/scroll, image/frame completion or Search delivery. Successful private
-responses carry matching `X-Wire-Runtime` and `X-Wire-Generation` stamps.
-A new token cannot make an old continuation current.
+For each asynchronous read:
 
-Shared mount closes publication before owner teardown. Each existing owner
-provides local, synchronous, idempotent withdrawal: abort owned reads/timers,
-retire callbacks, scrub private text/attributes and drop models, selections,
-queries, previews, object URLs and return preparations. Clear actual held
-`Text.data` and `Attr.value` before detaching; removing a parent is not erasure.
-Retire private select options and Copy/tooltip getters as well.
+1. Capture the original authority before starting work.
+2. Recheck after every await and reentrant callback, before paint, error/finalizer
+   effects, navigation, focus/scroll, image/frame completion or Search delivery.
+3. Require matching `X-Wire-Runtime` and `X-Wire-Generation` response stamps.
+   A new token cannot make an old continuation current.
 
-Withdrawal must not invoke ordinary Back, Cancel, Save, recollection, deletion
-or remote-preview cancellation. Clearance failure keeps publication closed.
-Resume merely permits fresh intent; it cannot restore cached private data.
+Withdrawal closes publication **before** owner teardown. Each owner must
+synchronously and idempotently:
+
+- Abort owned reads/timers and retire callbacks.
+- Clear held `Text.data` and `Attr.value` before detaching nodes; removing a
+  parent alone is not erasure. Retire private select options and Copy/tooltip getters.
+- Drop models, selections, queries, previews, object URLs and return preparations.
+
+Withdrawal invokes no ordinary Back, Cancel, Save, recollection, deletion or
+remote-preview cancellation. Clearance failure keeps publication closed.
 Static navigation, headings, safe preferences and original opaque recovery
-identities can remain.
+identities can remain; resume permits fresh intent, not cached private data.
 
 Enforced reconnection never retries an old private path. Validated
 unbound-to-unbound renewal keeps its limited legacy read behavior, but Search
@@ -141,23 +146,18 @@ recorder coordination, where required
       -> board writer
 ```
 
-Obtain a genuine acquisition lease before source discovery/reads. Source I/O
-does not hold lifecycle admission. Recheck source configuration, operation
-epoch and original request authority inside final admission, then commit
-evidence, consented replies, checkpoints, index and manual receipt in order.
-The whole admitted commit precedes acknowledgement of queued sign-out.
+1. Obtain a genuine acquisition lease before discovery or source reads.
+   Source I/O stays outside lifecycle admission.
+2. Inside final admission, recheck source configuration, operation epoch and
+   original request authority.
+3. Commit evidence, consented replies, checkpoints, index and manual receipt
+   in that order. Finish the whole admitted commit before acknowledging queued sign-out.
 
-Admission provides ordering, not rollback or a multi-file transaction.
-Evidence can commit before a later reply/checkpoint failure. Report that
-uncertainty; do not claim nothing was written. Existing canonical identities
-support continuation without duplicating evidence.
-
-Settings serialize against collection, persist first, and synchronize lifecycle
-from the actual committed pair. A possible post-write failure poisons stale
-acquisition authority; status recovery reads committed state instead of
-replaying configuration. Deferred scheduler work must not inherit lifecycle
-listener reentry context; the existing collector-owned async resource separates
-that scheduling from admission. No second queue, timer or writer is added.
+| Failure boundary | Required response |
+| --- | --- |
+| Evidence commits but reply/checkpoint work fails | Report uncertainty. Admission orders work; it is not rollback or a multi-file transaction. Canonical identities support deduplicated continuation. |
+| Settings may have persisted before failure | Close stale acquisition authority and read committed status; do not replay configuration. Settings persist before lifecycle adopts the committed pair. |
+| Deferred scheduler work | Use the existing collector-owned async resource, outside listener reentry context. Add no second queue, timer or writer. |
 
 Callbacks inside lifecycle admission must not reenter it or acquire an inverse
 lock. HTTP request checks run after body parsing and again at actual queued

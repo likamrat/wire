@@ -125,25 +125,23 @@ focus restoration or requests. Clear actual held Text/Attr values before
 detachment. Shared owners independently clear analytical membership, private
 history and readers. Resume enables only new intent.
 
-The runtime releases idle Search owners after 120 seconds. While shared access
-remains current, hidden/pagehide/window-blur transitions clear displayed
-authority but may keep in-memory reading intent. Return issues one fresh
-read/query; a released owner gets a fresh stream. Only a same-owner/epoch
-`idle`, `session-released` or `runtime-stopped` fence qualifies automatic EOF
-recovery. Protocol/network/parsing failures, unfenced EOF and explicit
-cancellation do not restart on visibility changes.
+| Event | Permitted continuation |
+| --- | --- |
+| Idle for 120 seconds | Runtime releases the Search owner |
+| Hidden/pagehide/window blur, shared access still current | Clear displayed authority; in-memory reading intent may remain |
+| Return to the page | One fresh read/query; a released owner gets a fresh stream |
+| Same-owner/epoch `idle`, `session-released` or `runtime-stopped` fence | Automatic EOF recovery is allowed |
+| Protocol/network/parsing failure, unfenced EOF or explicit cancellation | Visibility changes do not restart work |
+| Validated unbound-to-unbound renewal | Limited legacy intent may continue through a new owner/read |
+| Enforced renewal | Withdraw old intent and require fresh authority |
+| `collected` fence after committed collection | May coalesce a fresh visible navigation query; not recovery from deletion, permission loss or integrity failure |
 
-Validated unbound-to-unbound renewal preserves its limited legacy intent through
-a new owner/read. Enforced renewal withdraws old intent and requires fresh
-authority. Neither path retries a mutation. A `collected` fence can coalesce a
-fresh visible navigation query after a committed collector advance; it is not
-recovery from deletion, permission loss or integrity failure.
+Neither renewal path retries mutations. Late query, error, document and
+return-focus callbacks retain both original Search sequence and publication
+ownership, and check before their own effects.
 
-Late query, error, document and return-focus continuations retain both original
-Search sequence and shared publication ownership. Navigation/document callbacks
-must check before their own side effects, not only after returning.
 Back restores Search focus only after reader closure and underlying reading
-restoration settle, unless newer user input supersedes it.
+restoration settle. Newer user input takes precedence.
 
 ## Retired Search research
 
@@ -153,18 +151,17 @@ expectation for `did not repair the car` is intentionally not current behavior.
 Inference dependencies and provisioning npm scripts are already absent from
 the current manifest.
 
-The full [semantic](semantic-retrieval.md) and
-[linguistic](search-linguistics.md) notes remain temporarily because their cited
-development revisions are not accessible through the published repository.
-Do not treat their commands as runnable here, publish old ancestry to repair
-the links, provision assets or delete private historical resources.
+The [semantic](semantic-retrieval.md) and [linguistic](search-linguistics.md)
+history notes link to the complete published research text. The old code pins
+remain unavailable. Those archived commands are not runnable here; restoring
+private ancestry or provisioning resources is not part of current Search.
 
 Current lifecycle/privacy coverage remains active in `search-text.test.mjs`,
 `live-search-text.test.mjs`, `live-search-text-lifecycle.test.mjs`,
 `search-corpus*.test.mjs` and the current Search browser suites. Retiring
 model/recall expectations does not retire ownership, complete-population,
 Unicode, exact Open, saved-file integrity or cancellation requirements.
-Existing assertions are not a blanket passing-suite claim.
+Run the relevant current tests; their presence alone is not a passing result.
 
 ## Optional Microsoft consumer
 

@@ -7,26 +7,28 @@ interpretation. Microsoft-native report assembly is preserved as
 
 ## Current and historical facts
 
-New ordinary reports use report-envelope schema 3 and independent
-`metricProjectionVersion: 4`. They contain recorded outcomes, source/service
-facts, canonical membership and observed timing. They do not contain new AI
-or personal judgments, review-status recitals, grading bands or placeholder
-quality measures. Presentation version 3 uses milliseconds first, with a
-seconds equivalent from 1,000 ms; zero and unavailable remain different.
+| Version | Meaning |
+| --- | --- |
+| Current report envelope 3 | Recorded outcomes, source/service facts, canonical membership and observed timing |
+| Metric projection 2 | Omitted Cost |
+| Metric projection 3 | Also excluded generated review facts |
+| Current metric projection 4 | Also excludes personal-rating lanes |
+| Presentation 3 | Milliseconds first, with a seconds equivalent from 1,000 ms; zero is distinct from unavailable |
 
-Historical supported projection/presentation versions retain their original
-definitions. V2 omitted Cost; v3 additionally excluded generated review facts;
-v4 excludes personal-rating lanes. None means past spending was zero or
-settled. `lib/report-facts.mjs`, `assessment-contract.mjs` and the frozen
-readers own validation. Old saved files, manifests and hashes are never
-rewritten to make them current.
+New reports contain no AI/personal judgments, review-status recitals, grading
+bands or placeholder quality measures. Removing a measure does not establish
+that past spending was zero or settled.
 
-AI evaluation execution/setup and personal-feedback writes are retired.
-Authenticated stale requests return `AI_REVIEW_RETIRED` or
-`PERSONAL_FEEDBACK_RETIRED` (410). Exact owner/token-bound historical receipt
-reads preserve pending and unknown states without replay. Legacy workflow
-classification (`captured`, `reviewing`, `ready_to_export`) is separate from
-ratings and remains relevant to the old ready-ID export API.
+Supported historical versions retain their definitions and saved bytes.
+`lib/report-facts.mjs`, `assessment-contract.mjs` and frozen readers validate
+them; files, manifests and hashes are not rewritten to make them current.
+
+| Retired operation | Response / surviving boundary |
+| --- | --- |
+| AI evaluation execution/setup | Authenticated stale requests return `AI_REVIEW_RETIRED` (410) |
+| Personal-feedback writes | Authenticated stale requests return `PERSONAL_FEEDBACK_RETIRED` (410) |
+| Historical receipt read | Exact owner/token-bound reads preserve pending/unknown states without replay |
+| Legacy ready-ID export | `captured`, `reviewing`, `ready_to_export` remain workflow classifications, separate from ratings |
 
 Historical reviews distinguish answer correctness, answer support, tool use
 versus the request, and personal permission feedback. Tool completion, citation
@@ -84,34 +86,37 @@ entries use their own qualified path or the explicit single-target fallback,
 not every batch target. Historical category/pattern definitions remain distinct
 from current involvement facts.
 
-Tool completion does not prove application or task success. `resultFacts` v1
-(`wire-recorded-result-facts-v1`) separately freezes explicit application errors,
-singleton/returned statuses, codes, supplied/retained entry counts,
-pagination presence and content availability. Partial Work IQ prefixes retain
-their original positions and an unknown supplied total, never an exhaustive
-parent cause. Arbitrary bodies do not establish item/page totals.
+| Measure | Interpretation |
+| --- | --- |
+| Tool completion | Not application or task success |
+| `resultFacts` v1 (`wire-recorded-result-facts-v1`) | Separate explicit application errors, singleton/returned statuses, codes, supplied/retained counts, pagination presence and content availability |
+| Partial Work IQ prefix | Original positions and unknown supplied total; not an exhaustive parent cause |
+| Item/page totals | Arbitrary response bodies do not establish them |
+| Timing | Keep unit, boundary and timed/eligible population; never blend prompt/tool/HTTP intervals or sum concurrent calls |
+| Comparison timing | Compatible raw samples, not means of percentages or medians of medians; nearest-rank median/P95 and one-sample limits stay explicit |
+| Historical review pass share | Passed / (passed + failed); unassessed, insufficient and error coverage is outside that denominator |
 
-Timing keeps units, boundaries and timed/eligible populations. Tool latency,
-request-to-recorded-final-response and HTTP response/error intervals are not
-blended or summed across concurrent calls. Comparisons use compatible raw
-samples, not means of percentages or medians of medians. Nearest-rank
-median/P95 and one-sample limitations remain explicit. Missing is not zero.
-Historical review pass shares use passed divided by passed plus failed,
-with unassessed/insufficient/error coverage outside that denominator.
+Missing timing remains unavailable, not zero.
 
 ## Preparation, disclosure and Save
 
-The existing controller owns selection -> preparation -> disclosure approval
--> separate confirmation -> saved readback. Selecting, browsing or cancelling
-before confirmation does not write an export or change source classifications.
+The existing controller owns the sequence:
 
-An admitted preview freezes membership, options, source facts, time context
-and prepared bytes. Qualified GitHub previews pin the original content-addressed
-evidence file; later collection can add follow-ups without changing reviewed
-copies. Current source/configuration, consent, deletion, key and owner authority
-still apply. An unchanged preview can survive ordinary Back/browsing, while
-material scope, author, text, format or authority changes require fresh
-preparation and disclosure.
+1. Select the activity. Browsing, selecting and cancelling before confirmation
+   write no export and change no source classifications.
+2. Prepare a preview. Freeze membership, options, source facts, time context
+   and prepared bytes.
+3. Review the disclosure and approve it.
+4. Confirm Save separately, then verify saved readback.
+
+Qualified GitHub previews pin the original content-addressed evidence file.
+Later collection can add follow-ups without changing reviewed copies.
+
+| Change after preparation | Effect |
+| --- | --- |
+| Ordinary Back/browsing with unchanged facts and authority | Preview can survive |
+| Material scope, author, text or format change | Fresh preparation and disclosure |
+| Material source/configuration, consent, deletion, key or owner change | Fresh preparation/disclosure under current authority; old preparation cannot bypass it |
 
 `collectedSourceFrozen` is a private transport qualification, not a saved-file
 schema field or reusable approval. Original evidence-file identity also keys
@@ -119,40 +124,45 @@ the report read model, so validating an older report cannot replace current
 Analyze facts. Publication appends to current state; it never restores an old
 evidence snapshot over newer collection.
 
-Prompt modes are None, Masked and Original. Masked retains source wording with
-local pattern masking, not a generated summary. Mandatory credential removal
-applies even in Original and after edits. Exact additional terms affect copies,
-not source records. Names and confidential meaning still require human review;
-the scanner is not complete DLP or privacy certification.
+| Text choice | Required treatment |
+| --- | --- |
+| None | Omit prompt prose without changing membership |
+| Masked | Retain source wording with local pattern masking, not generated summaries |
+| Original | Retain wording, still removing credentials |
+| Additional terms and manual edits | Affect copies, not source records; credential removal still applies |
+| Title | One line, at most 200 characters, always masked metadata |
+| Include recorded result text (masked) | Starts off, independently of prompt/reply choices; admits screened diagnostics and qualified descriptions, never raw response bodies |
 
-Titles are one-line input up to 200 characters, always masked metadata.
-Snapshot, manifest and index must agree on a declared title; absent old titles
-keep a factual fallback rather than gaining a new canonical title.
-`canonicalTitle` comes only from the verified declared manifest binding.
+Names and confidential meaning require human review; masking is not complete
+DLP or privacy certification. Result copies keep original entry/fact
+associations and edited/omitted/disclosure status.
 
-`Include recorded result text (masked)` starts off and is independent of
-prompt mode and reply saving. It admits already-screened diagnostics and
-qualified descriptions, not raw response bodies. Each copy keeps its original
-entry/fact association, edited/omitted status and disclosure treatment.
+Snapshot, manifest and index must agree on a declared title. Old absent titles
+keep a factual fallback. `canonicalTitle` comes only from the verified
+declared manifest binding.
+
+### Prepared bytes and recovery
 
 Selected and contextual copies share the existing 3,000-copy/4 MiB budget.
 Oversize or unreadable output refuses as a whole; no silent truncation,
 format omission or weakened file limit. PDF is generated locally before review,
 not swapped for HTML after a failure.
 
-The version-3 coverage/redaction manifest freezes source/prompt coverage,
-transformations, snapshot identity, exact file SHA-256 values and attestation.
-It contains no matched private snippets or masking terms. The report JSON is
-an object, not JSONL. Staging reserves a new bundle, writes every selected
-format, atomically publishes its files and separately appends history. Earlier
-bundles and classifications remain unchanged.
+The version-3 manifest freezes source/prompt coverage, transformations,
+snapshot identity, exact file SHA-256 values and attestation. It contains no
+matched private snippets or masking terms. Report JSON is an object, not JSONL.
 
-A dispatched or uncertain Save has an outcome independent of later draft
-invalidation. Retain the original bundle identity and use saved-history/status
-readback; do not export again. Only a proved pre-dispatch refusal establishes
-no write. For qualified native publication, a one-use not-published disposition
-is likewise distinct from an arbitrary HTTP conflict. Partial files or an
-absent receipt are not rollback proof.
+Staging reserves a new bundle, writes every selected format, atomically
+publishes its files, then separately appends history. Earlier bundles and
+classifications stay unchanged.
+
+| Save state | Recovery meaning |
+| --- | --- |
+| Proved pre-dispatch refusal | Establishes no write |
+| Dispatched or uncertain | Retain original bundle identity and read saved history/status; do not export again |
+| Later draft invalidation | Does not settle the dispatched Save |
+| Partial files or absent receipt | Not rollback proof |
+| Qualified native one-use not-published disposition | Distinct from an arbitrary HTTP conflict |
 
 Ordinary reports and saved comparisons share one preview owner. New Prepare
 retires the other transient preparation/approval but preserves its ordinary
@@ -174,32 +184,37 @@ Replies use current retained-response consent, source, membership and integrity
 checks; missing/no-longer-authorized text stays unavailable, while malformed
 or corrupted payloads block preparation.
 
-The optional closed context schema v1 freezes anchors, original relationships,
-ordered entry keys, projected text/null, representation, availability, omission,
-masking changes, gaps and separate context coverage. Source timestamps support
-ordering but are withheld from this text projection. Pseudonymous event and
-observation references do not disclose raw source IDs or paths.
-
-Snapshot and manifest context copies must agree, with `recordedContextHash`
-and ordinary snapshot/file hashes. Shared messages use one edit key without
-merging interactions; conflicts fail rather than select convenient wording.
-Context never expands analytical membership, metric denominators or period
-cohorts. Revoked reply-copy overrides cannot survive as reusable text.
+| Context binding | Rule |
+| --- | --- |
+| Closed context schema v1 | Freeze anchors, original relationships, ordered entry keys, text/null, representation, availability, omissions, masking changes, gaps and separate context coverage |
+| Source timestamps | Support ordering; withheld from the text projection |
+| Event/observation references | Pseudonymous; no raw source IDs or paths |
+| Snapshot and manifest | Agree on context copies, `recordedContextHash` and ordinary snapshot/file hashes |
+| Shared message edits | One edit key without merging interactions; conflicts fail |
+| Analytical scope | Context adds no membership, metric denominator or period cohort |
+| Revoked reply-copy override | Cannot remain reusable text |
 
 ## Frozen files and saved reading
 
-HTML is escaped and self-contained, without scripts or remote assets. PDF
-uses the local HTML rendering path with embedded fonts; Markdown retains
-portable text; JSON and the manifest retain complete typed facts. Human
-summaries may omit redundant prose, not selected evidence or qualifications.
-Current screen tokens, icons and typography cannot restyle frozen documents.
+| Format | Saved representation |
+| --- | --- |
+| HTML | Escaped and self-contained; no scripts or remote assets |
+| PDF | Local HTML rendering with embedded fonts |
+| Markdown | Portable text |
+| JSON and manifest | Complete typed facts and bindings |
 
-Verified Open checks registered ownership, managed paths, manifest, inventory,
-file hash/length and current retained access. A declared broken preferred file
-does not fall back silently to another format. File selectors/downloads use
-the registered inventory and original bytes, not regenerated DOM.
-HTML uses an opaque network-free sandbox. Text/PDF viewing remains local and
-cannot fetch cited resources.
+Human summaries may omit redundant prose, not selected evidence or
+qualifications. Screen tokens, icons and typography cannot restyle frozen files.
+
+Verified Open follows the saved artifact:
+
+1. Check ownership, managed paths, manifest, inventory, file hash/length and
+   current retained access.
+2. Read the registered original bytes. A broken declared preferred file does
+   not silently fall back to another format.
+3. Render HTML in an opaque network-free sandbox, or text/PDF locally without
+   fetching cited resources. Format selectors and downloads use the same
+   registered inventory, not regenerated DOM.
 
 The separate legacy-original action is explicitly unverified. It requires the
 supported old manifest/index shape and an explicit choice; it is not automatic
@@ -213,42 +228,39 @@ interchangeable with library authority on reload or invalidation.
 
 ## Comparisons
 
-Saved-report comparison uses exact frozen identities, definitions and
-source-qualified populations. Equal arbitrary identifiers do not establish
-namespace compatibility or overlap. Snapshot, non-overlapping and later-additions
-cohorts must remain distinguishable; absent, unavailable and zero are different.
-An incompatible or one-sided measure has no invented delta or counterpart.
+| Comparison fact | Required interpretation |
+| --- | --- |
+| Identity and overlap | Exact frozen identities, definitions and source-qualified populations; equal arbitrary IDs do not prove compatibility |
+| Cohort | Distinguish snapshot, non-overlapping and later-additions populations |
+| Missing/incompatible/one-sided measure | No invented delta or counterpart; absent, unavailable and zero differ |
+| Technical pattern | Normalized operation structure, not prompt similarity |
+| Rate change | Traffic mix may change an overall rate without changing a matched pattern |
+| Missing pattern | Not proof of a fix; no generated causality/significance claim |
+| Historical review | Keep that lane's saved origin/model/rubric and meaning |
 
-Technical patterns use normalized operation structure, not prompt similarity.
-Different traffic mixes can change an overall rate without changing a matched
-pattern. A missing pattern does not prove a fix; no causal/significance claim
-is generated. Each historical review lane retains its own saved origin/model/
-rubric and meaning, rather than borrowing the other side's definition.
+New comparisons preserve supported outcomes and timing, not retired quality
+lanes. Separately selected result copies must already be frozen and masked;
+additional masking is allowed, but fetching missing source text is not.
 
-New comparisons preserve current supported outcomes and timing, not retired
-quality lanes. They may include only already-frozen masked result copies when
-separately selected, with additional masking; they never fetch missing source
-text. Preparation, disclosure, separate Save and original-identity recovery
-remain independent from merely reading a pair.
+Reading a pair is independent of preparation, disclosure, separate Save and
+original-identity recovery.
 
 ### Report a retained-period comparison
 
-The accepted live pair freezes A/B ranges, shared non-date filters, current
-source/revision and exact matching rows. The comparison's dates replace the
-ordinary Analyze range; Search, source/group and other selectors remain.
-One empty side is valid; two empty sides cannot create a report.
+1. Freeze accepted A/B ranges, shared non-date filters, source/revision and
+   exact matching rows. Replace the ordinary Analyze dates while retaining
+   Search, source/group and other selectors.
+2. Keep each period's measured cohort and compatible raw timing samples.
+   One empty side is valid; two empty sides cannot create a report.
+3. Bind facts in schema-3 `periodComparison` and its matching manifest hash.
+   This subtype omits the ordinary single date-range envelope.
+4. Revalidate accepted fields through shared comparison math. Caller hit lists
+   cannot supply receipt authority.
 
-Each period owns its measured cohort and compatible raw timing samples.
-Complete parent interactions can support copies and full-interaction timing
-without expanding matching-call denominators. A shared context union is not
-a third measured population. Undated rows remain explicitly outside dated
-cohorts. B-minus-A share changes use percentage points, not relative percent.
-
-The optional schema-3 `periodComparison` namespace and matching manifest hash
-bind those facts. The ordinary single date-range envelope is absent for that
-subtype. `records` supplies permitted supporting copies, not a union metric
-denominator. Actual shared comparison math revalidates the accepted fields;
-caller-supplied hit lists are not receipt authority.
+Complete parent interactions support copies and full-interaction timing without
+expanding matching-call denominators. `records` supplies those permitted copies,
+not a union metric denominator or third cohort. Undated rows stay outside dated
+cohorts; B-minus-A shares use percentage points, not relative percent.
 
 A saved period report is one artifact with two cohorts, not an ordinary
 single-source input to saved-report comparison. New preparation never
@@ -257,15 +269,14 @@ review; unrelated accepted activity need not.
 
 ## Saved-artifact deletion
 
-Deleting one report removes that managed bundle, recognized copies and index
-entry, not source activity or external downloads. A saved comparison survives
-deletion of its input; its historical source link becomes unavailable.
-Dependent unsaved comparisons and their approval are invalidated.
+| Deletion | Included / preserved |
+| --- | --- |
+| One report | Remove managed bundle, recognized copies and index entry; preserve source activity and external downloads |
+| Input to a saved comparison | Saved comparison survives with an unavailable historical source link; dependent unsaved comparisons/approval are invalidated |
+| All saved reports | Counted, membership/hash-bound two-minute preview across all pages/search |
+| Excluded from bulk deletion | Later reports, saved comparisons, activity, drafts and external downloads |
 
-Delete all saved reports binds a counted, membership/hash-bound two-minute
-preview across all pages/search. Later reports, saved comparisons, activity,
-drafts and external downloads are excluded. It is not a directory purge or
-a loop of independent deletes.
+Bulk deletion is not a directory purge or a loop of independent deletes.
 
 Logical removal, tombstones and the pending journal precede file cleanup.
 An interruption may leave files; recovery finishes only the sealed exact plan

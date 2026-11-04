@@ -1,18 +1,31 @@
 # Use WIRE
 
-WIRE reads supported, approved local GitHub Copilot app history. It helps you
-inspect recorded Work IQ activity, find retained text and prepare reviewed
-reports. It does not rerun your prompts or judge answer correctness.
+Use WIRE to inspect recorded Work IQ activity, find saved text and prepare
+reports from your local GitHub Copilot app history.
 
-Follow [setup](../README.md#start) first. The examples below use invented data,
-not a person's account or workplace history.
+Follow [setup](../README.md#start) first. All examples below use invented data.
+
+## Connect local history
+
+1. Open **Settings > Connection & updates** and choose **Review source & connect**.
+2. Check **Copilot metadata database** and **Chat history folder**. These must
+   point to the supported local Copilot installation whose history you want to read.
+3. Choose **History to include** and **Check frequency**, then select
+   **Approve source and start collection**.
+4. Open **Analyze** to read the collected activity. If expected calls are missing,
+   open **Collection status** in Settings to see known history gaps.
+
+Approval lets WIRE read that local history; it does not rerun prompts or make
+new Work IQ requests. Microsoft 365 Chat and Cowork are not supported connections
+in this release. Saving Copilot reply text is a separate choice under
+**Settings > Privacy & saved data > Recorded replies** and starts off.
 
 ## Read the overview
 
 **Analyze** shows recorded outcomes, activity over time, tools, services and
-available response-model names. The interactions below use the same accepted
-filters. Open **Filters** to change Dates, Tool, Service involved, Outcome or
-Prompt author; **More filters** holds the additional choices.
+available response-model names. The interaction list below follows the same
+filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
+Outcome or Prompt author; **More filters** holds the additional choices.
 
 ![Analyze showing 10 calls in 8 interactions, tool outcomes and separate service associations.](images/analyze.png)
 
@@ -20,15 +33,17 @@ Prompt author; **More filters** holds the additional choices.
 unavailable evidence, not zero model usage. Retained activity remains readable
 even while collection is disconnected.*
 
-Start with the count and unit. One interaction can contain several calls; a
-call can involve more than one service. Service shares can therefore overlap.
-Tool completion means the source recorded completion, not that the answer was
-correct. Returned API entries, Graph call sites and HTTP recorder captures
-have their own units and must not be added to tool-call totals.
+An interaction groups a prompt with its recorded calls. One interaction can
+contain several calls, and one call can involve several services. Service
+shares can therefore overlap. Tool completion means the source recorded
+completion, not that the answer was correct. Returned API entries, Graph call
+sites and HTTP recorder captures have their own units; do not add them to
+tool-call totals.
 
 Dates filter retained activity; they do not approve older source reads.
-Custom dates include both days in the selected display time zone. Missing
-history and records without qualified times remain explicit. No matches means
+Custom dates include both days in the time zone chosen under
+**Settings > Display > Time zone**. Missing history and records without qualified
+times remain explicit. No matches means
 no matching retained evidence, not proof that no activity occurred.
 
 Author and Outcome choices remain a draft until **Apply**. **Reset filters**
@@ -58,13 +73,13 @@ origin evidence, not who executed or authorized every call. Choosing My and
 Agent is not the same as All, which also includes unverified authors.
 
 **Tool latency** is the recorded call interval. **Prompt to final response**
-has a separate qualified message-to-response boundary; concurrent calls are
-not added into a task duration. Missing timing is not zero.
+measures from the originating message to its recorded final response when
+that link is available. Concurrent calls are not added into a task duration.
+Missing timing is not zero.
 
 Copy controls copy the exact retained original, unmasked. A saved Copilot reply
-is the assistant's text, not a tool result. Reply saving starts off and requires
-separate approval in **Settings > Privacy & saved data > Recorded replies**.
-Enabling it does not restore previously omitted replies.
+is the assistant's text, not a tool result. Enabling reply saving does not
+restore previously omitted replies.
 
 **Add to report** changes selection only. To choose contents and create a
 file, continue with [Create and compare reports](reporting.md).

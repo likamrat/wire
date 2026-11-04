@@ -1,10 +1,9 @@
 # GitHub profile boundary
 
-The default account entry is neutral. WIRE has a source-level existing-host
-snapshot bridge and an integrated presenter, but no qualified facility binding
-the desktop-selected GitHub account to its separate Node runtime.
-Reloading an extension or logging in through `gh` does not supply that proof.
-Profile absence never blocks already-approved local GitHub history.
+The default account entry is neutral. WIRE has a host snapshot bridge and
+profile presenter, but its Node runtime cannot yet verify which GitHub account
+the desktop selected. Reloading an extension or logging in through `gh` does
+not supply that proof. Profile absence never blocks approved local GitHub history.
 
 ## Required host integration
 
@@ -14,19 +13,22 @@ The tool accepts `{}` only and checks the invoking session before and after
 the read. It creates no SDK client/model session, reads no credentials and
 does not open a canvas or connect to WIRE.
 
-The snapshot reader obtains the joined host's active account, checks session
-auth for conflicts, then reads active account again. An observed active
-`githubDotCom` user with matching credential-free user auth can be reported;
-environment, CLI, explicit-token, conflicting and non-GitHub sources cannot
-be promoted. A session observation is not independently verified desktop
-selection.
+The snapshot reader must:
 
-Read ownership is bounded: one coalesced in-flight operation, a 1.8-second
-deadline and at most a 15-second presentation lease from read start. Handle,
-selection or account changes rotate WIRE's generation, including same-login
-reselection. A hung or late RPC cannot install identity or start later work.
-Opaque selection IDs remain memory-only; raw auth/status/account-roster
-responses, email, quota and credentials are not forwarded.
+1. Read the joined host's active account.
+2. Check session auth for conflicts, using credential-free user auth.
+3. Read the active account again and report only a matching active `githubDotCom` user.
+
+Environment, CLI, explicit-token, conflicting and non-GitHub sources cannot
+be promoted. A session observation alone does not verify desktop selection.
+
+| Boundary | Limit / effect |
+| --- | --- |
+| In-flight read | One coalesced operation; 1.8-second deadline |
+| Presentation lease | At most 15 seconds from read start |
+| Handle, selection or account change | Rotate generation, including same-login reselection |
+| Hung or late RPC | Cannot install identity or start later work |
+| Projection | Memory-only opaque selection IDs; no raw auth/status/roster responses, email, quota or credentials |
 
 A qualified host must establish both the desktop/session relationship and a
 trusted runtime initialization or separately reviewed transport. Only then can
@@ -62,23 +64,24 @@ source/freshness, avatar ticket, fallback and sanitized issues distinct.
 Initials come only from a verified handle; a neutral fallback is not a
 personal name or missing-photo diagnosis.
 
-Only a qualified github.com user triggers an unauthenticated public profile
-lookup. The returned login/user type/numeric ID must match. Avatar requests
-are limited to that user's approved GitHub avatar path, bounded redirects,
-numeric size/version query fields, 256 KiB and PNG/JPEG dimensions up to 512.
-Profile JSON is bounded to 32 KiB and combined public lookup to five seconds.
-No authorization, cookies, referrer, private context or email permission is sent.
+Only a qualified github.com user triggers a public lookup. Returned login,
+user type and numeric ID must match. Requests send no authorization, cookies,
+referrer, private context or email permission.
 
-One atomic private cache is keyed to provider/host/login. Freshness is six
-hours; a failed public read may use matching stale data for up to seven days,
-explicitly marked cached, with 15-minute failure backoff. Identity is still
-revalidated. Corruption or unknown identity cannot expose a cached profile.
-This presentation cache is not evidence, source configuration or report data.
+| Resource | Bound |
+| --- | --- |
+| Profile JSON | 32 KiB; combined public lookup deadline five seconds |
+| Avatar | Approved user-specific path, bounded redirects, numeric size/version fields; PNG/JPEG up to 256 KiB and 512-pixel dimensions |
+| Cache | Atomic provider/host/login key; six-hour freshness |
+| Failed public read | Matching cached data up to seven days, labeled cached; 15-minute failure backoff |
+| Avatar ticket | Same-origin, panel-bound, one per owner within the panel limit; at most 60 seconds |
 
-Avatar tickets are same-origin, panel-bound, one per owner within the panel
-limit, and valid for at most 60 seconds. Delivery rechecks owner, generation,
-expiry and retained access with no-store/nosniff/same-origin protections.
-Remote/data/blob URL substitution and unbounded image retry are not supported.
+Revalidate identity even for cached presentation. Corrupt/unknown identity
+cannot expose a cache; it is not evidence, source configuration or report data.
+
+Avatar delivery rechecks owner, generation, expiry and retained access, with
+no-store/nosniff/same-origin protections. No remote/data/blob substitution or
+unbounded image retry is supported.
 
 ## Presenter and withdrawal
 
@@ -87,10 +90,13 @@ shared publication token to `mountAccountSettingsPresentation`.
 The presenter requires the real access/publication/control API; omission is not
 a preview or unbound fallback. Only literal synchronous current checks admit.
 
-Visible verified presentation rereads before the earliest lease/ticket/15-second
-bound and on focus. Heartbeats do not refetch. Hidden, signed-out or withdrawn
-owners stop reading; unavailable identity does not poll indefinitely.
-Current read failures offer a deliberate read-only retry.
+| Presentation state | Read behavior |
+| --- | --- |
+| Visible and verified | Reread before the earliest lease/ticket/15-second bound and on focus |
+| Heartbeat | Does not refetch |
+| Hidden, signed out or withdrawn | Stop reading |
+| Identity unavailable | No indefinite polling |
+| Current read failure | Offer a deliberate read-only retry |
 
 Withdrawal scrubs actual held name/handle/initial/image Text/Attr values,
 retires image callbacks and timers, and preserves only unrelated original

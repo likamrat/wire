@@ -4,10 +4,13 @@ Start with [installation](../README.md), then choose the task you need.
 
 | I want to... | Read |
 | --- | --- |
+| Connect local Copilot history for the first time | [Connect local history](user-guide.md#connect-local-history) |
 | Understand recorded activity, inspect a call or find saved text | [Use WIRE](user-guide.md) |
 | Choose report contents, review, save, reopen or compare | [Create and compare reports](reporting.md) |
 | Work on the source or troubleshoot a local installation | [Development](development.md) |
 | Understand source approval, retention, deletion or recovery | [Collection and private data](collection.md) |
+
+To propose a fix or improvement, see [Contributing](../README.md#contributing).
 
 ## Contributor references
 
@@ -36,8 +39,7 @@ provider access or establish a working integration.
 - [Retention and storage compatibility](incubation/native-retention.md)
 - [Bounded retained views](incubation/native-retained-views.md)
 
-The [semantic retrieval](semantic-retrieval.md) and
-[linguistic Search](search-linguistics.md) documents are retained historical
-research, not current Search options. Their old source revisions are not
-available from the published repository, so their commands are not current
-reproduction instructions.
+The [semantic Search](semantic-retrieval.md) and
+[linguistic Search](search-linguistics.md) notes explain retired experiments.
+They link to the complete published research text. That preserves the
+documentation, not the unavailable historical code or runnable setup.

@@ -12,21 +12,21 @@ qualified desktop-selected GitHub profile. Experimental surfaces belong to
 
 ## One coherent workspace
 
-Keep the sliding left sidebar: Analyze and Reports under Workspace, the existing
-Analyze tools in their own group, and Account plus Settings at the bottom.
-Expanded/collapsed and narrow-drawer states use the same nodes and destinations.
-Settings remains reachable when no profile is available.
+| Surface | Reading and navigation role |
+| --- | --- |
+| Sliding left sidebar | Analyze/Reports under Workspace; Analyze tools in their own group; Account/Settings at the bottom |
+| Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
+| Analyze | Charts and one interaction list; report selection stays independent of browsing |
+| Right contextual surface | Interaction reading, report setup and saved-item inspection; one header, scroll area and fixed action region |
+| Main workspace | Prepared and saved report reading |
 
-Analyze contains its charts and one interaction list. There is no separate
-Calls mode, fastest/slowest view, duplicate records shortcut or additional
-Search launcher. Old routes keep valid filters while discarding obsolete call
-sorting/page offsets. Report selection is independent of browsing.
+Analyze has no separate Calls mode, fastest/slowest view, duplicate-records
+shortcut or extra Search launcher. Old routes retain valid filters while
+discarding obsolete call sorting/page offsets.
 
-The right contextual surface serves interaction reading, report setup and
-saved-item inspection, with one header, scroll area and fixed action region.
-Opening it reduces the actual main-column width; it does not scale content or
-mount a second reader. Narrow/enlarged layouts use the same native modal.
-Prepared and saved report reading use the main workspace.
+Opening the contextual surface reduces the main column's actual width.
+It does not scale content or mount a second reader; narrow/enlarged layouts
+use the same native modal.
 
 Keep existing route, reading-position and focus owners. A return restores the
 actual origin only while its authority and reading intent remain current.
@@ -35,10 +35,13 @@ Private Search state never becomes a copied public URL or a broader fallback.
 
 ## Reading hierarchy
 
-Use the current bundled Asta Sans, official Lucide icons and shared screen
-roles. Metadata labels and values share regular weight and size; hierarchy
-comes from placement and neutral label contrast. Prompts are regular, not
-bold italic. Exact code and API paths keep their deliberate monospace role.
+| Element | Visual treatment |
+| --- | --- |
+| Screen type | Bundled Asta Sans and shared screen roles |
+| Metadata label/value | Same regular weight and size; use placement and neutral label contrast for hierarchy |
+| Prompt | Regular, not bold italic |
+| Exact code and API path | Deliberate monospace |
+| Icon | Official Lucide paths/viewBox, unchanged |
 
 Keep the label with its value, the explanation with its evidence and the action
 with its task. Missing optional facts need no empty row. Missing or conflicting
@@ -57,8 +60,8 @@ charcoal/navy/marketing-reference palettes are not competing instructions.
 Screen-only `screenTokens` and `screenFontStack` stay separate from
 report-facing tokens, typography and frozen output.
 
-Lucide's original paths/viewBox remain unchanged. Decorative glyphs fit their
-text line without acquiring control-sized whitespace. Utility, navigation and
+Decorative glyphs fit their text line without acquiring control-sized
+whitespace. Utility, navigation and
 compact roles use their existing 20/24/16px geometry. Interactive targets stay
 usable independently of their smaller painted face; preserve the established
 44px targets, focus indications and wrapping labels.
@@ -76,16 +79,17 @@ and right-side legend share a row when the widget has sufficient width; small
 layouts stack without squeezing values. Model, tool and service widgets use
 content-sized layout, not equal-height filler or hidden rows for symmetry.
 
-Filters opens one panel containing the existing controls, applied chips and
-separate View group. Dates governs the complete analytical slice; Over time,
-By category and By path or operation only regroup it. There is no second date
-picker on a widget. Outcome/Author choices remain drafts until Apply;
-Cancel/Escape/outside dismissal leaves the accepted selection unchanged.
+Filters opens one panel with the existing controls, applied chips and separate
+View group. Fields/labels wrap; accepting a restriction must not move focus.
 
-Applied chips provide the settled removal action. Inline cancellation is only
-for a first pending restriction without an applied chip. Reset filters remains
-beside applied restrictions and preserves report selection/data/preferences.
-Fields and labels wrap; accepting a restriction must not move the focused field.
+| Control or action | Effect |
+| --- | --- |
+| Dates | Governs the complete analytical slice; no second widget date picker |
+| Over time, By category, By path or operation | Regroup that same slice |
+| Outcome/Author | Draft until Apply; Cancel/Escape/outside dismissal preserves accepted selection |
+| Applied chip | Settled removal action |
+| Inline cancellation | Only a first pending restriction without an applied chip |
+| Reset filters | Stays beside restrictions; preserves report selection, data and preferences |
 
 The count, scope caption, charts, rows and current-view report membership use
 one accepted population. Pending or failed ordinary reads retain its prior
@@ -98,11 +102,15 @@ are inclusive civil days; buckets are clipped to that scope. Undated records
 stay explicit. Missing history cannot be assigned to the current filtered
 slice from source-wide diagnostics.
 
-Chart marks encode exact linear amounts from zero, without perspective,
-minimum visible slices or inflated tiny bars. Zero has no data paint.
-Service associations overlap and therefore use bars, not a 100% composition.
-Recorded outcomes can form an exclusive ring. Exact counts and accessible
-table links remain usable even when a mark is too small to hit.
+### Chart reading
+
+| Measure | Encoding |
+| --- | --- |
+| Amount | Linear from zero, without perspective, minimum slices or inflated tiny bars |
+| Zero | No data paint |
+| Overlapping service associations | Bars, not a 100% composition |
+| Exclusive recorded outcomes | May use a ring |
+| Tiny mark | Exact counts and accessible table links remain usable |
 
 The Chart guide has one stable reading panel and exact-data destination.
 Definitions and table counts use the same accepted facts. A row finder filters
@@ -121,23 +129,32 @@ A card is one native link without nested Copy, checkbox or duplicate Open
 controls. Report-picker checkboxes remain separate. Native modified-click and
 text selection keep their established behavior.
 
-Each failed call owns its reasons and stable full-interaction ordinal.
-Different calls never merge because their prose matches. Equivalent complete
-returned diagnostics within one call may share a reason only with all original
-entry identities preserved; missing/redacted/ambiguous facts cannot qualify
-that grouping. All supported failure reasons remain visible on both compact
-cards and ordinary readers, grouped under the owning call, without a first-N
-cap, separate "one more reason" disclosure or extra failure page. Expanding
-technical details for exact input and provenance is a distinct action.
-Partial-response coverage is separate from failure reasons and matching-call
-counts.
+Failure presentation keeps three boundaries:
 
-The reader leads with the selected prompt, Recorded activity, an available
-Copilot reply and Source details. Exact call arguments are built only when
-their disclosure is open and cleared when it closes. Returned entries retain
-their own path/status/identity, never a sibling's input or inferred parent cause.
-Linked context belongs in its existing separate disclosure and cannot
-transfer intent or outcomes between interactions.
+- Each call owns its reasons and stable full-interaction ordinal. Matching prose
+  does not merge different calls.
+- Equivalent complete returned diagnostics within one call may share a reason
+  only if all original entry identities remain. Missing/redacted/ambiguous facts
+  cannot qualify that grouping.
+- Cards and readers show all supported reasons under their call, without a
+  first-N cap, "one more reason" disclosure or extra failure page.
+
+Exact input/provenance disclosure is a separate action. Partial-response
+coverage is separate from failure reasons and matching-call counts.
+
+The reader's order follows the user's question:
+
+1. Selected prompt: what was requested.
+2. Recorded activity: calls and their own results, timing and errors.
+3. Available Copilot reply.
+4. Source details.
+
+Build exact call arguments only while their disclosure is open; clear them
+when it closes. Returned entries keep their own path/status/identity, never
+a sibling's input or inferred parent cause.
+
+Linked context stays in its existing separate disclosure. It cannot transfer
+intent or outcomes between interactions.
 
 Tool latency and qualified prompt-to-final-response timing stay beside their
 subjects. Display milliseconds first, preserve zero/precision, and do not sum
@@ -208,11 +225,16 @@ and Troubleshooting. Keep one task-oriented pane and the same narrow category
 disclosure, not another application sidebar. Search finds fixed setting
 metadata and navigates; it never clicks an action or reads private path values.
 
-Source review combines the actual paths and preferences in one draft. Same-source
-changes use Save preferences; changed paths require Approve and switch source.
-Cancel discards the draft. Display preferences apply immediately and are
-separate from permission changes. Recorded replies has its own draft and
-confirmation. No AI-review category remains.
+| Settings change | Commit boundary |
+| --- | --- |
+| Same-source paths/preferences draft | Save preferences |
+| Changed source paths | Approve and switch source |
+| Cancel source review | Discard the draft |
+| Display preference | Apply immediately, separately from permission |
+| Recorded replies | Its own draft and confirmation |
+
+Source review keeps paths and preferences in one draft. There is no AI-review
+category.
 
 Refresh sits in Analyze and the existing connection/status task, using one
 dispatcher and its real pending state. There is no sidebar Activity updates
@@ -244,11 +266,15 @@ the current visible text anchor and mounted disclosure/focus owners; report
 setup and saved inspection do not inherit them. Narrow modal focus remains
 independent of the navigation drawer.
 
-Hover, persistent selection/current page and keyboard focus are different states.
-Tooltips use one dismissible, hoverable owner and do not obscure actions.
-Activation dismisses old help without stealing focus. Long labels/values wrap;
-code can scroll locally. Source content is never shortened to satisfy a layout
-assertion, and typography/target sizes are not shrunk to make a screenshot fit.
+| Interaction state | Treatment |
+| --- | --- |
+| Hover, persistent selection/current page, keyboard focus | Visually distinct meanings |
+| Tooltip | One dismissible, hoverable owner; no obscured action |
+| Activation | Dismiss old help without stealing focus |
+| Long text | Labels/values wrap; code may scroll locally |
+
+Never shorten source content to satisfy a layout assertion or shrink typography
+and targets to make a screenshot fit.
 
 ## Finish a change
 

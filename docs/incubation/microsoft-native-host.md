@@ -51,23 +51,24 @@ delete an existing profile to continue.
 
 ## Connect, Enable and collection
 
-Ordinary incubation Connect lets Microsoft/Edge own sign-in in a separate,
-sandboxed owned window. The user operates account selection, password, PIN,
-MFA, consent and browser warnings. There is no enterprise registration,
-credential copying or corporate-VPN requirement.
+Connect has a narrower scope than collection:
 
-The ordinary Connect interval does not install the general collection
-request/capture gate. It installs the narrow execution refusal described below
-and passively observes only the original nonsecret account projection.
-Microsoft's own page may make requests and cache data during sign-in;
-Connected is not a promise of an empty browser cache.
+1. Microsoft/Edge opens sign-in in a separate sandboxed owned window.
+   The user handles account selection, password, PIN, MFA, consent and warnings.
+   No enterprise registration, credential copying or corporate VPN is required.
+2. The host installs the narrow execution refusal described below, not the
+   general collection request/capture gate. It passively observes the original
+   nonsecret account projection.
+3. Accept the principal only with a current owned main realm, a completed
+   original noncached successful app document, matching frame/loader/origin
+   before and after projection, and a qualified AAD production account.
 
-Principal acceptance needs the current owned main realm, completed original
-noncached successful app document, matching frame/loader/origin before and
-after projection, and a qualified AAD production account. Display text, a
-callback or a loaded page is insufficient. The active native bootstrap branch
-chooses TanStack loader data or background-loader data; do not probe unrelated
-stores when the selected branch is absent.
+The selected bootstrap branch uses TanStack loader data or background-loader
+data. If that branch is absent, do not probe unrelated stores. Display text,
+a callback or a loaded page cannot replace principal qualification.
+
+Microsoft's page may request and cache data during sign-in. Connected does
+not promise an empty browser cache.
 
 Account staging survives native bootstrap cleanup only as the minimal
 projection, never as new authority. Owner/navigation/deadline/conflict changes
@@ -75,12 +76,12 @@ retire it. Late assignment/protocol replies cannot extend the original
 90-second authentication deadline. Retirement and browser closure run without
 waiting indefinitely on each other; failed closure retains custody/recovery.
 
-Connect does not Enable, Resume or Collect. After verification and durable
-lifecycle admission, the same owned window is minimized without claiming
-OS foreground visibility or changing its truthful owner mode. Later collection
-requires explicit source/history permission and a genuine `microsoft-read`
-lease. A fresh collection document independently verifies the same principal;
-pending sign-in requests do not become collection requests.
+| Stage | Authority |
+| --- | --- |
+| Connected | Verified principal and durable lifecycle admission; not Enable, Resume or Collect |
+| After connection | Minimize the same owned window without claiming OS foreground visibility or changing owner mode |
+| Collection | Explicit source/history permission, genuine `microsoft-read` lease and fresh document verification of the same principal |
+| Pending sign-in request | Never promoted to a collection request |
 
 Source history/window settings record permission and retention intent, not
 proof that native responses contain only those dates. Inventory/MRU/messages
@@ -100,11 +101,12 @@ requires fresh qualified ownership rather than reusing an old client.
 | Chat | Existing native router/store/query client; the original history query function and primary conversation server function, without route-store updater or QueryClient retry/cache substitution | 16 inventory calls, 8 primary detail calls, 24 logical invocations; projected returns are not original HTTP captures |
 | Cowork | Original independent client hook with `ownsPageHooks:false`; its genuine `ic3LiveClient.listTasks/listMessages` | 16 inventory pages, 8 histories, 16 message pages/history, 144 logical invocations; no getTaskDetail, task-open, mutation or tool methods |
 
-Each source has 2 MiB/page and 12 MiB/cycle projected-return bounds. Both share
-one five-minute acquisition deadline and the existing envelope budget, split
-so one cannot consume the other's publication allowance. UI captures the
-deadline before asynchronous preparation; the server caps rather than extends
-it. Registration/setup/native credential waits consume that budget.
+| Shared scheduling boundary | Rule |
+| --- | --- |
+| Projected returns | 2 MiB/page and 12 MiB/cycle per source |
+| Deadline | One five-minute acquisition deadline, captured before UI async preparation and capped by the server |
+| Budget use | Registration, setup and native credential waits consume that same deadline |
+| Envelope allowance | Split so one source cannot consume the other's publication allowance |
 
 A repeated operation ID reads its original receipt, not a new invocation.
 Timeout or lost UI reply is uncertainty, not confirmed cancellation. Closing
@@ -112,18 +114,13 @@ the owned context prevents future work there but cannot undo remote work
 already received. Original receipt, lease, owner, configuration, privacy and
 deletion fences survive cleanup.
 
-Chat begins an unfiltered native reset, not pre-Enable cached history.
-Pinned-only and ordinary rows need consistent original identities.
-Primary details keep their message/call/source-time provenance; connected
-conversation context remains unqualified rather than merged. Reset/null
-cursor alone does not establish All-chats completeness.
-
-Cowork history IDs must come from the same acquisition's inventory. Original
-cursors advance only within that owner, with cycles refused. Native normalized
-null cursors can hide absent values or filtered malformed rows, so they do not
-establish complete history. Budget stops preserve pending work without
-handled-through claims. Fair rotation can progress to other histories without
-pretending a truncated history is complete.
+| Source | Continuation and coverage |
+| --- | --- |
+| Chat start | Unfiltered native reset, not pre-Enable cache. Pinned and ordinary rows need consistent original identities. |
+| Chat details | Keep message/call/source-time provenance. Connected conversation context remains unqualified, not merged. Reset/null cursor does not prove All-chats completeness. |
+| Cowork membership | History IDs come from that acquisition's inventory. Original cursors stay with their owner; cycles refuse. |
+| Cowork exhaustion | Normalized null cursors may hide absent/malformed rows; they do not establish completeness. |
+| Budget stop / fair rotation | Preserve pending work and allow other histories to progress without marking the truncated history handled. |
 
 The genuine provider boundary remains mounted across cycles; per-cycle
 Cowork client/bridge ownership is retired after commitment/comparison.
@@ -146,11 +143,14 @@ Customize dependencies is not executing its returned factory.
 `ownsPageHooks:false` avoids page/identity registration; the reader calls no
 connector connect/setIdentity/postMessage or MRU/plugin subscriptions.
 
-False native consent/capability flags alone are not protection: pending work
-could drain before asynchronous teardown. Both HTTP refusal and original
-consumer exclusion are required. Denial remains through retirement until
-target close; an uncertain failRequest acknowledgement is not retried or
-released by detach. No source binding can undo an already-dispatched tool.
+Both protections are required:
+
+- HTTP refusal remains active through retirement until confirmed target close.
+  An uncertain `failRequest` acknowledgement is not retried or released by detach.
+- Original consumer exclusion prevents the tool-connecting shell from executing.
+  False consent/capability flags alone cannot stop work draining before async teardown.
+
+Neither protection can undo an already-dispatched tool.
 
 The reviewed Cowork registration selects
 `https://res.cdn.office.net/s01-copilotstudio/cowork/v/20261101.72.0-6507b83d/coworker-manifest.json`
@@ -191,12 +191,15 @@ permissions or complete-history claims. Raw cursors do not survive ownership
 loss/restart; rediscovery uses new authorized original behavior and retained
 identities deduplicate.
 
-This branch's one eligible recovery from an original 503 is not a general retry:
-it requires no Retry-After, exact current owner/document/lease, genuine ACK and
-terminal completion, no other pending/failed work, no writer entry and enough
-of the same deadline. It reinitializes once without resetting budgets.
+An original 503 permits one reinitialization only when **all** conditions hold:
+
+- No Retry-After, and exact current owner/document/lease.
+- Genuine ACK and terminal completion.
+- No other pending/failed work and no writer entry.
+- Enough of the original deadline remains; budgets are not reset.
+
 Uncertain writes, repeated 503s, authentication errors and failed provenance
-do not use that path.
+do not use this recovery path.
 
 Legacy selected-source/account-only/visibility and
 `scripts/investigate-native-history.mjs` paths are separately scoped
@@ -209,11 +212,16 @@ authority. Do not copy capability-bearing custody into logs or documentation.
 
 ## Transport and failure invariants
 
-The original-request observer binds request-time phase, owner, document,
-frame/loader, original IDs and lease before asynchronous checks.
-Continuation acknowledgement, network terminal, body completion, source
-acceptance, storage commitment and visible readback remain different facts.
-Selection or an ACK is not proof of provider completion.
+The observer binds request-time phase, owner, document, frame/loader,
+original IDs and lease before async checks.
+
+| Observation | What it establishes |
+| --- | --- |
+| Selection or continuation ACK | Not provider completion |
+| Network terminal / body completion | Their own transport stage |
+| Source acceptance | Qualified source input, not stored commitment |
+| Storage commitment | Retained write, not visible readback |
+| Visible readback | The separately verified reading result |
 
 Keep the existing finite request/correlation/byte/deadline limits. Capacity
 waiting retains original custody and FIFO slot accounting; it cannot rebind

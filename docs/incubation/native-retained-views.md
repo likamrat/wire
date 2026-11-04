@@ -7,15 +7,18 @@ The normal release remains Copilot-only.
 
 ## Requests, pages and authority
 
-Protected `/api/retained/microsoft/query`, `/detail` and `/search` requests use
-schema 1, latest or exact board revision, an explicit nonempty native-source
-subset and `{limit,after}` page input. Limits are 1-100; cursors are opaque
-returned values, never client-generated offsets.
+Protected `/api/retained/microsoft/query`, `/detail` and `/search` share schema 1:
 
-Query also takes validated analytics. Detail takes a source-issued conversation
-ID. Search takes nonblank text up to 4,000 UTF-16 code units and the closed type
-subset. Unknown fields, duplicate sources, foreign/stale cursors and invalid
-revisions reject.
+| Input | Requirement |
+| --- | --- |
+| Revision | Latest or exact board revision |
+| Sources | Explicit nonempty native-source subset |
+| Page | `{limit,after}`; limit 1-100, opaque returned cursor rather than client offset |
+| Query-specific | Validated analytics |
+| Detail-specific | Source-issued conversation ID |
+| Search-specific | Nonblank text up to 4,000 UTF-16 code units and closed type subset |
+
+Unknown fields, duplicate sources, foreign/stale cursors and invalid revisions reject.
 
 The actual response guard supplies original owner/generation. Cursors bind that
 owner, root/revisions, exact selector and limit; a bounded 128-entry registry
@@ -75,12 +78,15 @@ identity, keeping each original input/evidence variant beside its call.
 Returned results cannot borrow a sibling's input or become the parent's
 failure verdict.
 
-Exact Search Open adds original `at` ordinal and sourceRevision with an exact
-board revision and null initial cursor. It checks that ordinal's actual
-conversation membership before seeking, without traversing earlier pages.
-Following pages keep the accepted root and cursor, not the original seek.
-Stale/missing membership refuses rather than selecting the same ordinal in
-a different root.
+Exact Search Open follows this sequence:
+
+1. Supply original `at` ordinal, sourceRevision, exact board revision and a
+   null initial cursor.
+2. Check the ordinal's actual conversation membership before seeking.
+   Do not traverse earlier pages or select the same ordinal in a different root.
+3. Continue with the accepted root and returned cursor, not the original seek.
+
+Stale or missing membership refuses.
 
 The server can pin accepted immutable detail roots across ordinary collection
 updates, bounded to 128 offered/active frames. Every read still rechecks
@@ -119,17 +125,18 @@ Hits identify exact conversation and original ordinal. Messages, admitted
 source facts and qualified action text retain their units; missing text
 coverage is not a complete empty search.
 
-Navigation Search is not Analyze Dates/facet membership and does not mint
-ordinary in-memory Search receipts. The separate `analyze` route takes the
-original **unrefined** Current/group view plus query/types and exact revision.
-Each replacement uses that base, not its previous result as a new authority.
+Navigation Search neither establishes Analyze Dates/facet membership nor
+mints ordinary in-memory Search receipts.
 
-Only complete eligible text coverage yields a source-owned analytical selection.
-Context/reply/interaction hits select their parent conversation; action hits
-select exact canonical rows within the original layer and predicates.
-The private membership commitment binds root, original selector/group,
-query/policy/types and full row/conversation digest/totals. Query text and raw
-member inventories are not returned.
+For analytical Search:
+
+1. Pass the original **unrefined** Current/group view, query/types and exact
+   revision to `analyze`. Each replacement starts from that base, not the prior result.
+2. Require complete eligible text coverage before issuing a source-owned selection.
+3. Select parent conversations for context/reply/interaction hits; select exact
+   canonical rows for action hits, within original layer/predicate bounds.
+4. Bind root, original selector/group, query/policy/types and full row/conversation
+   digest/totals in the private commitment. Return no query text or raw member inventory.
 
 Widgets keep exact matching rows. Ordinary Current reports intentionally
 include each matching parent's complete retained evidence, so matching-row
@@ -149,11 +156,17 @@ history, and grants no repeat Collect.
 
 ## Report and comparison admission
 
-The backend `nativeReportViewFor` supplies the existing controller a genuine
-resolver for the original complete view. Current refolds its original selector;
-Selected additionally validates each exact native ID; All requires allViewId.
-Membership and interpretation expectations come from the original root, not
-a recaptured page or normalized copy.
+The backend `nativeReportViewFor` supplies a genuine resolver for the original
+complete view:
+
+| Report scope | Resolution |
+| --- | --- |
+| Current | Refold the original selector |
+| Selected | Also validate each exact native ID |
+| All | Require allViewId |
+
+Membership and interpretation come from the original root, not a recaptured
+page or normalized copy.
 
 All/Current and refined periods keep explicit zero-member source frames when
 membership is genuinely empty. Missing/unavailable/foreign source is not null,
@@ -174,20 +187,22 @@ undated canonical row membership plus a separate supporting-parent frame.
 Conversation-only Search has no exact matching-message relation and therefore
 remains context, not a guessed message-date cohort.
 
+| Artifact case | Version / dependency |
+| --- | --- |
+| New native period report | period-report v2 |
+| Refined Search/group period | Also native-period namespace v2 and explicit replace-original-dates/predicate commitment |
+| Empty-only native source frame | nativeEvidence v2; v1 remains nonempty |
+| Explicit GitHub-only Selected | Does not inherit a native dependency from the surrounding view |
+
 Source-qualified tool/result/message/task populations are not pooled with
 GitHub outcome denominators. Missing/incompatible identity or interpretation
-withholds deltas and overlap. New native period reports use period-report v2;
-refined Search/group periods additionally use native-period namespace v2 and
-an explicit replace-original-dates/predicate commitment. Conversation-only
-matches remain supporting context, not matching message-date rows.
+withholds deltas and overlap. Conversation-only matches remain context, not
+matching message-date rows.
 
-An empty-only native source frame uses nativeEvidence v2 while v1 remains
-nonempty. Its original root, definitions, account and owner remain dependencies
-through Save even when only GitHub rows supply measured facts. Explicit
-GitHub-only Selected does not gain that dependency from its surrounding view.
-An entirely empty report is still not authorized by an empty source frame.
-Older strict readers must refuse unsupported versions, not drop these bindings.
-Existing frozen files are not regenerated.
+An empty native frame retains its original root, definitions, account and owner
+through Save, even if only GitHub rows supply measures. It does not authorize an
+entirely empty report. Older readers refuse unsupported versions rather than
+dropping bindings; frozen files are not regenerated.
 
 Saved comparisons bind actual original source-index/account dependencies
 through their own frame and `nativeComparisonHash`, alongside the original

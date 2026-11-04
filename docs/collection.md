@@ -54,61 +54,55 @@ compatibility. Additive fields/indexes can remain compatible. Optional creator
 fields qualify authorship only as a compatible pair with valid recorded
 evidence. Unknown host/location/workspace values do not establish local scope.
 
-Discovery pages contain 250 mappings, bounded to 10,000 chats and 20,000
-workspaces. Reconciliation occurs every 30 seconds and on an approved manual
-check. Only verified local mappings qualify. Ambiguous, archived, missing,
-unmapped and nonlocal sources retain distinct dispositions; directory presence
-alone is insufficient.
+| Read boundary | Limit |
+| --- | --- |
+| Discovery | 250 mappings/page; at most 10,000 chats and 20,000 workspaces |
+| Reconciliation | Every 30 seconds and on an approved manual check |
+| Approved history window | 7, 30 or 90 days; changing it does not prune older retained evidence |
+| Initial log region | Last 64 MiB, read in 4 MiB chunks |
+| Per-cycle event budget | 32 MiB, shared by reads and rereads |
+| Ordinary entry | 1 MiB |
+| Correlation context | 2,000 events / 512 KiB; one newly observed pending original has a separate 1 MiB + 2 KiB allowance within the event cap |
 
-The initial reader starts within the last 64 MiB of each log, uses 4 MiB chunks
-and accounts for at most 32 MiB of event bytes per cycle. The approved window
-is 7, 30 or 90 days; older retained evidence is not pruned by changing it.
-Live tails have priority, with bounded earlier-prefix continuation when
-capacity remains. Every read/reread charges the same cycle budget.
+Only verified local mappings qualify. Ambiguous, archived, missing, unmapped
+and nonlocal sources keep distinct dispositions; a directory alone proves none.
+Live tails take priority over bounded earlier-prefix continuation.
 
-Ordinary entries are bounded to 1 MiB. Complete tool-result lines fitting
-4 MiB can supply a supported successful completion only with the exact original
-start in that same read; omitted result bodies cannot supply inferred failures
-or API outcomes. Partial UTF-8/JSONL tails wait for completion without storing
-raw fragments. Unchanged tails need only file-stamp checks; changed sources
-verify startup and cursor-boundary identity.
+A complete tool-result line up to 4 MiB can supply a supported successful
+completion only with its exact original start in the same read. Omitted
+bodies cannot supply inferred failures or API outcomes.
 
-Correlation context has a 2,000-event/512 KiB general bound. One newly observed
-pending original has a separate 1 MiB plus 2 KiB allowance within the event cap.
-Gaps, malformed/oversize events and evictions remain explicit. Association
-cannot cross a gap merely by choosing the nearest earlier text.
+The reader follows this order:
 
-Evidence and consented replies commit before checkpoints/index/manual-check
-receipts advance. Restart deduplicates canonical identities; late completions
-can update unknown results without adding calls. Rotation or truncation does
-not erase captured evidence. The index's schema-2 compatibility barrier
-preserves the last committed progress and never silently downgrades.
+1. Check unchanged tails by file stamp. For changed sources, verify startup
+   and cursor-boundary identity. Partial UTF-8/JSONL tails wait for completion
+   without storing raw fragments.
+2. Correlate only qualified events. Gaps, malformed/oversize events and
+   evictions remain explicit; nearest earlier text cannot bridge a gap.
+3. Commit evidence and consented replies before advancing checkpoints, index
+   and manual-check receipts.
+
+Restart deduplicates canonical identities. A late completion can update an
+unknown result without adding a call; rotation/truncation cannot erase
+retained evidence. The schema-2 index barrier preserves committed progress
+and refuses silent downgrade.
 
 ## Evidence fidelity
 
-Original text and timestamps are not silently replaced by later conflicting
-deliveries. A new association needs unique explicit message/tool-request
-linkage and compatible ownership, not adjacent prose or similar wording.
-Host-transformed instructions are not retained as the original prompt.
+| Fact | Preserve |
+| --- | --- |
+| Original prompt and timestamp | Never replace them with a conflicting later delivery or host-transformed instructions. New associations need unique explicit message/tool-request links and compatible ownership. |
+| Automatic continuation | No new message is distinct from a missing/excluded prompt. Event kind does not establish author; old unknown records do not default to User. |
+| Tool diagnostic | Screened message/code/status/details stay with their original call or returned entry, separately from optional assistant replies. |
+| Model and final-response timing | Require qualified source/message/response/turn links. Tool hints, deployment names and the current account cannot fill missing provenance. |
 
-An automatic continuation can have no new message. Keep that state separate
-from a missing or excluded prompt, and keep author evidence independent from
-event kind. Older unknown records do not become User by default.
+Diagnostics exclude credentials, sensitive/payload-shaped text, stacks, headers
+and inner identifiers. Text is bounded to 8 KiB. Envelope inspection may retain
+complete entries before malformed syntax, marked partial with an unknown
+supplied total. An update does not restore omitted historical errors.
 
-Recorded tool errors are distinct from optional assistant replies. Supported
-diagnostics preserve screened message/code/status/details with their original
-call or returned-entry association. Credentials, sensitive/payload-shaped
-text, stacks, headers and inner identifiers remain excluded. Diagnostic text
-has an 8 KiB bound. The Work IQ envelope parser has separate bounded inspection
-and may preserve only complete entries before malformed syntax, explicitly
-partial with unknown supplied total. Installing an update does not restore
-historically omitted errors.
-
-Original response-model and final-response timing metadata require their
-qualified source/message/response/turn links. Model names are not guessed
-from tool hints, deployment names or the current account. Optional exact-target
-metadata qualification is a separate bounded operation, not a click-triggered
-backfill or permission to save response bodies.
+Exact-target metadata qualification is a separate bounded operation, not
+click-triggered backfill or permission to save response bodies.
 
 ## Optional replies
 
@@ -133,11 +127,17 @@ convenient default.
 
 ## Deletion
 
-**Review deletion** begins with blank custom dates or an explicit All choice.
-Preview counts canonical calls, Graph records and HTTP diagnostics once,
-disclosing retained-only copies separately. Filters, Reset and Clear selection
-never delete. Confirmation is panel-bound, expires after two minutes and
-revalidates revision, exact membership and supporting-file hashes.
+Deletion has three stages:
+
+1. **Review deletion** begins with blank custom dates or an explicit All choice.
+   Preview counts canonical calls, Graph records and HTTP diagnostics once,
+   with retained-only copies disclosed separately.
+2. Confirm the exact scope. Confirmation is panel-bound, expires after two
+   minutes and revalidates revision, membership and supporting-file hashes.
+3. If interrupted, use **Check deletion result** for the original receipt.
+   Cleanup finishes only the sealed, hash-guarded plan after restart.
+
+Filters, Reset and Clear selection never delete.
 
 Ranges include both civil dates in the applied IANA zone, including 23/25-hour
 DST days. Calls use start time or their established group-capture fallback;
@@ -145,41 +145,48 @@ other layers do not borrow that clock. Unknown/invalid times stay for ranges;
 All includes them. Spanning groups preserve surviving records and shared
 prompts without changing their metadata.
 
-The sealed plan covers active evidence, checkpoints/context, dependent reply
-payloads/annotations, unsaved caches and known managed recovery/migration
-copies. Source configuration, approval, cursors, roster and reading receipts
-remain. Saved reports/comparisons and their managed copies, external downloads
-and unmanaged original sources remain. This is logical/filesystem deletion,
-not forensic erasure or an undoable backup operation.
+| Scope | Treatment |
+| --- | --- |
+| Active evidence, checkpoints/context, dependent replies/annotations, unsaved caches, known managed recovery/migration copies | Included in the sealed plan |
+| Source configuration, approval, cursors, roster and reading receipts | Preserved |
+| Saved reports/comparisons and their managed copies, external downloads and original sources | Preserved; artifact deletion is separate |
+
+This is logical/filesystem deletion, not forensic erasure or an undoable backup.
 
 Only hash-based suppression of the confirmed identities/events remains.
 Polling, rotation, restart and later results cannot automatically reimport
 them. Genuinely new calls remain collectible; previously unread history was
 not part of the confirmed set.
 
-A durable journal precedes cleanup. Interrupted cleanup blocks affected reads
-and finishes only that exact hash-guarded plan after restart. Changed, linked,
-unrecognized or ambiguously identified files/records refuse rather than guess.
-**Check deletion result** reads the original receipt, not another confirmation.
-Limits are 20,000 files, 2 GiB total, 16 MiB per file, 64 MiB unique records and
-32 MiB compact metadata. Exceeding them refuses before mutation.
+A durable journal precedes cleanup. An interruption blocks affected reads;
+changed, linked, unrecognized or ambiguous files/records refuse rather than guess.
+
+| Cleanup bound | Maximum |
+| --- | --- |
+| Files / total bytes | 20,000 / 2 GiB |
+| One file | 16 MiB |
+| Unique records / compact metadata | 64 MiB / 32 MiB |
+
+Exceeding a bound refuses before mutation.
 
 Saved-artifact deletion has its own [scope and recovery contract](report-contract.md#saved-artifact-deletion);
 activity permission is not artifact mutation permission.
 
 ## Explicit recollection
 
-**Read history again > Choose chats** searches/paginates eligible approved
-local chats. Selection survives those pages. Inclusive dates intersect the
-existing approved window; this is not new source or wider-history permission.
-Preview distinguishes deleted, newly available, already-present and unavailable
-records. It is bounded to 128 chats, 32 MiB per preview/confirmation, the last
-64 MiB per file and 20,000 candidate records.
+1. Open **Read history again > Choose chats** and select eligible approved local
+   chats. Selection survives paging. Inclusive dates intersect the approved
+   window; they do not grant wider history or a new source.
+2. Read the preview's deleted, newly available, already-present and unavailable
+   counts. Bounds are 128 chats, 32 MiB per preview/confirmation, the last
+   64 MiB per file and 20,000 candidate records.
+3. Choose separately whether to **Also restore original prompts for these
+   requests**. It starts unchecked; without it, deleted prompt text stays unavailable.
+4. Confirm. If the result is uncertain, use **Check recollection result**,
+   including after reload/restart, rather than confirming again.
 
-**Also restore original prompts for these requests** starts unchecked.
-Without it, deleted prompt text stays unavailable. With it, only exact
-source-qualified selected prompt/call associations can return. Host envelopes
-alone do not promote an agent-created kickoff to User. Anonymous local records
+Restored prompts need exact source-qualified selected prompt/call associations.
+Host envelopes cannot promote an agent kickoff to User. Anonymous local records
 and owned HTTP diagnostics cannot be recovered through this source reread.
 
 Confirmation rechecks source stamps, mapping, approval, revision, expiry and
@@ -188,8 +195,7 @@ hash-only restoration grants and its receipt. Shared event/context suppression
 is not cleared broadly. Deleted optional replies and historical feedback do
 not return. Saved reports, source files, cursors and settings stay unchanged.
 
-An uncertain result uses **Check recollection result**, including after reload
-or restart. It neither rescans nor repeats confirmation. Missing remembered
+The result check neither rescans nor repeats confirmation. Missing remembered
 scope is stated, not reconstructed from receipt counts. Malformed/unreadable
 recovery storage remains untouched and blocks new recollection. If the stored
 view fails after commitment, read stored activity instead of recollecting again.
@@ -243,13 +249,17 @@ consent, cursor and unresolved-ledger state.
 | `maintain-tail-retrieve-diagnostic.mjs` | Record-only retrieve inside a proved consumed tail with a visited, matching prefix fence. |
 | `maintain-failure-cohort.mjs` | One to nine exact eligible failures, additive diagnostics only; existing returned identities/statuses must agree. |
 
-Read each entry and `lib/historical-maintenance.mjs` for its closed plan and
-CLI schema before preparing an operation. Preparation writes only the private
-journal/review seal; apply requires that reviewed seal and identical source
-manifest. Preserve all unchanged fields and checkpoint bounds. This is not an
-all-files transaction: after uncertainty keep the runtime stopped, recover only
-the same plan/source/journal, and accept only exact preimages or postimages.
-Do not swap to an older reader, create a fresh operation to bypass drift,
-invent a target or replay a consumed evaluator attempt. Restart and later
-append preservation need separate real-store proof when an actual repair is
-authorized. Documentation or synthetic success supplies no such authorization.
+For an authorized repair:
+
+1. Read the script and `lib/historical-maintenance.mjs` for the closed plan
+   and CLI schema.
+2. Prepare only the private journal/review seal.
+3. Apply only with that reviewed seal and identical source manifest. Preserve
+   unchanged fields and checkpoint bounds.
+4. After uncertainty, keep the runtime stopped and recover only the same
+   plan/source/journal, accepting exact preimages or postimages.
+
+This is not an all-files transaction. Do not bypass drift with an older reader
+or fresh operation, invent a target or replay a consumed evaluator attempt.
+An authorized repair still needs separate real-store proof of restart and
+later append preservation; documentation or synthetic success grants no operation.

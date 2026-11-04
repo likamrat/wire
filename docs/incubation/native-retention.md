@@ -37,9 +37,10 @@ Content-addressed files are verified byte-for-byte before reuse.
 
 A branded persistence instance belongs to one context/lifecycle. Its exact
 `readAuthorized` function is not replaceable with a shape-compatible callback.
-Metadata-only pre-account mode is an explicit backend policy: no native
-partition can produce unavailable metadata without reading source content.
-Known-account failures never become empty/not-configured success.
+Explicit metadata-only pre-account mode can report that no Microsoft account
+is configured without reading retained source content. It still requires
+current WIRE retained access and validated metadata. Known-account failures
+never become empty/not-configured success.
 
 Explicit configuration intents use the original offer's generation,
 authorization/configuration revision and source choices. First Enable needs
@@ -52,12 +53,17 @@ Enrollment and ordinary saves cannot create running state, remove Pause or
 resume another source. Committed settings are adopted inside the same
 lifecycle turn; uncertain post-write failures close stale authority.
 
-`begin` durably registers the original owner, account, intent and configuration/
-privacy/write-generation basis before acquisition. Only its genuine new ticket
-can call the source. `commit` screens, rebases, stages/fsyncs, publishes the
-pointer and receipt, then validates actual disk readback. `retire` permanently
-fences unused/queued work. Registered pending/unknown operations never become
-a fresh acquisition under the same ID.
+The acquisition lifecycle is:
+
+1. `begin` durably registers original owner, account, intent and
+   configuration/privacy/write-generation basis before acquisition.
+   Only its genuine new ticket may call the source.
+2. `commit` screens, rebases, stages/fsyncs, publishes the pointer and receipt,
+   then validates actual disk readback.
+3. `retire` permanently fences unused/queued work.
+
+Registered pending/unknown operations cannot become fresh acquisition under
+the same ID.
 
 Native schema-1 public receipts keep observations, variants, provenance, reuse
 and suppressed-observation changes separate. Registration/HTTP 202 is not
@@ -66,16 +72,18 @@ there is no fabricated legacy GitHub last-check receipt.
 
 ## Operation receipts
 
-The 1,024-entry live acquisition limit is not a lifetime successful-cycle quota.
-Near 128 live entries, old committed receipts may move to the indexed
-metadata-only SQLite archive. Latest 64, current-pointer, live-ticket and
-unresolved receipts stay inline; protected entries can still exhaust capacity.
+| Receipt storage | Rule |
+| --- | --- |
+| Live acquisition entries | Limit 1,024; not a lifetime successful-cycle quota |
+| Archive trigger | Near 128 live entries, old committed receipts may move to metadata-only indexed SQLite |
+| Always inline | Latest 64, current-pointer, live-ticket and unresolved receipts; these can still exhaust capacity |
+| Archive identity | One existing collector-owned file and schema, bound by the private marker |
+| Row | At most 16 KiB |
 
-The private archive marker binds one existing collector-owned file and schema.
-Creation commits/reopens its identity before anchoring it with original receipts
-still inline. Receipt copies are FULL-synchronized and reread before compaction.
-Exact original owner/account/ID lookup consults both locations; corrupt or missing
-archives cannot become permission to replay. Rows are bounded to 16 KiB.
+Archive creation commits and reopens its identity before anchoring it, with
+original receipts still inline. FULL-synchronize and reread copies before
+compaction. Exact owner/account/ID lookup checks both locations; a missing
+or corrupt archive never permits replay.
 
 Rollback-journal recovery, if needed, requires the existing writer custody and
 an existing canonical archive opened read-write without creation. SQLite
@@ -111,10 +119,14 @@ capture/facts; additional provenance does not duplicate content. Observation
 ordinal ranges, current variant, call/conversation membership and capture-use
 witnesses must agree. Missing/dangling/foreign/duplicate rows fail before use.
 
-Staging retains bounded segment/page buffers and reopens the completed graph,
-checking its ordered length-prefixed row digest before returning a candidate.
-V1 adoption reads only one validated bounded v1 document and a new bounded
-capture; v2 append streams old rows with bounded incoming indexes/lookahead.
+Staging must:
+
+1. Keep bounded segment/page buffers.
+2. For v1 adoption, read one validated bounded v1 document and a new bounded
+   capture. For v2 append, stream old rows with bounded indexes/lookahead.
+3. Reopen the completed graph and check its ordered length-prefixed row digest
+   before returning a candidate.
+
 It does not rebuild a whole-history array.
 
 Inserting variants can shift current root ordinals while preserving each older
@@ -186,18 +198,16 @@ Selection events are start, bounded tagged conversation parts and end.
 Only exact totals/digest plus final authority can emit successful end.
 An abandoned or partial iterator is not a complete selection.
 
-`reportSource.captureSelection` binds exact revision/sources/IDs, including an
-explicit empty selection, under a genuine source frame. Its original-view HMAC
-expectations and interpretation definitions come from the complete authorized
-root, never from redacted copies or returned pages.
-Selected report assembly remains bounded by existing native and tighter
-report/privacy/format limits; it is not permission for whole-history UI arrays.
+| Report reader operation | Required binding |
+| --- | --- |
+| `reportSource.captureSelection` | Exact revision/sources/IDs, including explicit empty selection, under a genuine source frame |
+| Original-view expectations | HMAC and interpretation definitions from the complete authorized root, not redacted copies or returned pages |
+| `iterateSelection` / `validate` | Reopen and verify the original frame/source across awaits |
+| Pinned snapshot | May survive new collection, but account/configuration/privacy/deletion/owner authority must stay current |
+| Entry projection | Keep global original ordinals; never renumber a selected subset |
 
-`iterateSelection` and `validate` reopen and verify the original frame and
-source across awaits. Source snapshots can stay pinned across new collection,
-while account/configuration/privacy/deletion/owner authority remains current.
-The bounded entry projector preserves global original ordinals; renumbering a
-selected subset would break its accepted identity.
+Selected report assembly keeps existing native and tighter report/privacy/
+format limits. It does not authorize whole-history UI arrays.
 
 Native report commit needs the existing controller's private reviewed
 `{bundle,validate}` publication argument. The older three-argument path remains
@@ -216,11 +226,14 @@ source frame and saved-artifact mutation remain different capabilities.
 
 ## Deletion boundaries
 
-Whole-local activity deletion uses WIRE retained authority, not the current
-Microsoft account lease. Its explicit All scope includes locally collected
-signed-out partitions, historical/recovery roots and interrupted staging.
-It excludes provider conversations and saved reports. Public counts do not
-expose hidden account identities or raw inventory.
+| Deletion scope | Authority and extent |
+| --- | --- |
+| Whole-local activity, explicit All | WIRE retained authority; includes signed-out local partitions, historical/recovery roots and interrupted staging |
+| Provider conversations and saved reports | Excluded from whole-local activity deletion |
+| Segmented date range | Explicitly unavailable; never substitute All |
+| Saved artifact | Separate `artifactMutationAdmission`, exact account/index/dependencies, preview and confirmation |
+
+Public counts expose no hidden account identities or raw inventory.
 
 The existing preview/confirmation binds owner, revision, exact scope and
 inventory hashes. After collector/recorder coordination, lifecycle then board
@@ -230,9 +243,8 @@ adoption, new acquisition or broader confirmation.
 
 V2 intrinsic/index aliases suppress all content variants/provenance, including
 incomplete orphan staging. Saved reports, old collection receipts, consent,
-source/global settings and version floors remain. Segmented date-range
-deletion stays explicitly unavailable rather than becoming All.
-Existing inventory/file/metadata bounds are not waived.
+source/global settings and version floors remain. Existing inventory/file/
+metadata bounds are not waived.
 
 Interrupted collector staging is recognized only by the exact canonical
 source UUID/operation UUIDv4 temporary filename and qualified checkpoint

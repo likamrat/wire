@@ -8,18 +8,27 @@ See [source adapters](source-adapters.md), [retention](native-retention.md) and
 
 ## Raw-v0 admission and bounds
 
-`projectNativeReadModel(envelopes)` is pure and synchronous.
-The `m365-native-v0-review-only` raw writer remains withheld on three distinct
-source gaps: missing qualified Cowork input/no-input provenance, the original
-batch's unobserved member outcomes, and qualified Chat enterprise execution/
-result coverage. A successful projection or fixture cannot clear those gates.
-The separate screened retention contract does not relabel raw-v0 as admitted.
+`projectNativeReadModel(envelopes)` is pure and synchronous. The
+`m365-native-v0-review-only` raw writer remains withheld:
 
-The shared native bound is 10,000 envelopes/16 MiB, 1 MiB per recorded fact,
-depth 64 and one million expanded values. Preflight measures escaped UTF-8
-JSON before full serialization; every aliased occurrence charges the expanded
-budget. Cycles, accessors, custom serializers/prototypes, sparse/nonfinite or
-non-JSON values reject without execution.
+| Unresolved source fact | Why raw-v0 remains blocked |
+| --- | --- |
+| Cowork input/no-input | Missing qualified provenance |
+| Original batch members | Outcomes were not observed |
+| Chat enterprise execution/results | Coverage is not qualified |
+
+A successful projection/fixture cannot clear those gates. Separate screened
+retention does not relabel raw-v0 as admitted.
+
+| Shared bound | Maximum |
+| --- | --- |
+| Envelopes / expanded bytes | 10,000 / 16 MiB |
+| Recorded fact | 1 MiB |
+| Depth / expanded values | 64 / one million |
+
+Preflight measures escaped UTF-8 JSON before full serialization, charging every
+alias occurrence. Cycles, accessors, custom serializers/prototypes,
+sparse/nonfinite or non-JSON values reject without execution.
 
 Each supported decoding layer is independently bounded, including invocation
 arrays, serialized entries and argument strings. Invalid input throws a fixed
@@ -61,11 +70,12 @@ Observation keys additionally bind capture, source coordinates and representatio
 Reordering input does not create identity; exact modeled duplicates deduplicate;
 conflicting content at one observation identity rejects.
 
-Separate captures/variants retain their original facts without multiplying
-canonical calls. A task completed state is not aggregate tool success.
-Cowork tool outcome requires the supported explicit `tx.data.ok`; conflicting
-known completions stay unknown with both observations. Chat message/image
-completion and invocation presence alone do not prove call success.
+| Observation | Outcome meaning |
+| --- | --- |
+| Separate capture or variant | Preserve original facts without multiplying canonical calls |
+| Completed task | Not aggregate tool success |
+| Cowork tool completion | Requires supported explicit `tx.data.ok`; conflicting known completions stay unknown with both observations |
+| Chat message/image completion or invocation presence | Does not prove call success |
 
 Observed returned results have their own bounded array positions, supported
 status/code/pagination facts and intermediary provenance. At most 100 are
@@ -115,26 +125,22 @@ text as context, preserving the exact fact focus target and incomplete coverage.
 
 ## Time, model and service qualification
 
-Original Chat creation/update values stay message-scoped. The shared predicate
-accepts calendar-valid explicit-offset ISO timestamps with bounded fractional
-precision. A derived calendar instant may truncate beyond milliseconds for
-comparison, but the original value remains exact. Stored derived values must
+| Fact | Qualified use |
+| --- | --- |
+| Chat creation/update time | Message-scoped; not a call clock |
+| Ordinary message creation | Can admit dated conversation context when no call-specific restriction excludes it; adds no call, timeline point, outcome denominator or latency sample |
+| Cowork `observationTime` | Requires original `data.ts`, exact event reference, qualified unit/basis and matching carrier |
+| Call start | Current unambiguous `ts` only; completion, capture, update and reconnect cannot fill it |
+| Returned-result time | Its own observation clock |
+| Native elapsed time | Its recorded boundary; do not pool with GitHub prompt/tool/HTTP latency |
+| Snapshot model / tool name | Not per-call model attribution / proof of service targets or business outcomes |
+
+The shared timestamp predicate requires calendar-valid explicit-offset ISO
+values with bounded fractional precision. Comparison may truncate beyond
+milliseconds, but retains the original string. Stored derived values must
 recompute exactly; unavailable facts have no derived time.
 
-Ordinary qualified message creation can admit conversation context to a dated
-tool view when no call-specific restriction excludes it. It adds no call row,
-timeline point, outcome denominator or latency sample. Updates, captures and
-reconnect times never substitute for call starts.
-
-Cowork `observationTime` needs its original `data.ts`, exact event reference,
-qualified unit/basis and matching carrier value. Only a current unambiguous
-`ts` observation supplies a call start; returned results use their own
-observation clock. A completion cannot fill a missing start.
-
-Native provider elapsed time keeps its recorded boundary and is not pooled
-with GitHub prompt/tool/HTTP latency by convenience. Snapshot model names are
-not per-call attribution. Tool names do not establish service targets or
-business outcomes. Missing/unsupported metadata remains unavailable.
+Missing or unsupported metadata stays unavailable.
 
 ## Consumer population
 
@@ -166,11 +172,16 @@ inside lifecycle admission. A process-owned frame binds account, content,
 original owner and generation; copied frames or frontend booleans fail.
 Source callbacks receive authorized leases, not historical capture approval.
 
-An optional synchronous immutable source revision can cache one deeply frozen
-projection per account/content. It binds captured bytes and decoder/projection
-identity, not object identity alone. Every read still obtains current authority,
-and revision is checked around awaits and at publication. Missing support
-uses the uncached path; malformed or asynchronous revisions fail.
+To use the optional projection cache:
+
+1. Supply a synchronous immutable revision binding captured bytes and
+   decoder/projection identity, not object identity alone.
+2. Cache at most one deeply frozen projection per account/content.
+3. Obtain current authority for every read; check revision around awaits and
+   again at publication.
+
+Missing revision support uses the uncached path. Malformed or asynchronous
+revisions fail.
 
 Sign-out, replacement, generation loss and closure retire caches and late work.
 Pause or natural provider expiry can permit fresh retained reads without

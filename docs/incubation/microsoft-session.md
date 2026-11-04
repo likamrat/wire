@@ -28,21 +28,23 @@ private HTTP delivery still requires the separate current response guard.
 
 ## Commands and receipts
 
-WIRE sign-in opens the local gate only. Sign-out persists closure before cleanup,
-retires leases and stops owned work without deleting evidence or signing out
-other applications. A failed durable write is an error, not successful sign-out.
+| Command | Effect |
+| --- | --- |
+| WIRE sign-in | Open the local gate only |
+| WIRE sign-out | Persist closure before cleanup, retire leases and stop owned work; keep evidence and other apps signed in |
+| Microsoft Connect/Cancel/Recover | Native binding only; Connect uses the configured expectation and genuine verifier, without Configure, Resume or Collect |
 
-Microsoft Connect/Cancel/Recover are available only in the explicitly native
-binding. Connect uses the configured expected account and genuine verifier;
-it does not configure, Resume or Collect. HTTP input remains the closed
-schema/action/operation/generation shape, with identity/replacement choices
-kept backend-owned.
+A failed durable write is an error, not successful sign-out. HTTP input keeps
+the closed schema/action/operation/generation shape; identity and replacement
+choices stay backend-owned.
 
-The same owner and exact operation ID/input returns its original receipt.
-Different owners cannot adopt it; changed input conflicts. Legacy ownerless
-receipts remain validated historical data without a public adoption path.
-Pending operations become ambiguous after restart and are not resumed.
-Missing or mismatched receipt is not evidence of no effect.
+| Receipt case | Required result |
+| --- | --- |
+| Same owner, exact operation ID/input | Return the original receipt |
+| Different owner / changed input | Refuse adoption / report conflict |
+| Legacy ownerless receipt | Validated historical data, no public adoption path |
+| Pending at restart | Ambiguous; do not resume |
+| Missing or mismatched receipt | No conclusion that the operation had no effect |
 
 The lifecycle's bounded command journal refuses at capacity rather than evict
 unresolved ownership proof to allow replay. Acquisition receipts have a
@@ -72,18 +74,21 @@ source-aware GitHub manual acquisition and Microsoft read.
 A capture generation or historical verification field is not a lease.
 Pause disables acquisition while retained reading remains available.
 
-Final publication/commit must occur inside admission, not after a standalone
-lease check followed by unrelated awaits. Include the whole admitted side
-effect. Do not reenter any method on that lifecycle instance from its callback
-or async descendants. The common lifecycle-before-board order avoids deadlock;
-long provider reads stay outside admission.
+For final publication:
 
-Authorization notifications carry one coherent safe revision/generation/gate
-projection, not profile/account/content or receipts. Listeners are synchronous,
-nonthrowing and nonreentrant. Listener failure poisons authority rather than
-leaving one consumer permissive. A previously readable generation cannot
-regain retained authority under the same runtime key after losing it;
-initially negative generations and transport-only failures are different.
+1. Keep long provider reads outside admission.
+2. Enter lifecycle admission before board admission and include the whole
+   committed side effect, not just a standalone lease check.
+3. Avoid lifecycle reentry from the callback or any async descendant.
+
+Authorization notifications contain one coherent safe revision/generation/gate
+projection, never profile/account/content or receipts. Listeners must be
+synchronous, nonthrowing and nonreentrant; failure closes authority rather
+than leaving a consumer permissive.
+
+A previously readable generation cannot regain retained authority under the
+same runtime key after losing it. Initially negative generations and
+transport-only failures are different cases.
 
 Latest-state watches rely on that invariant but still enforce independent
 client freshness. Control status and private publication remain separate.
@@ -131,11 +136,13 @@ or capture generation. Provider expiry can retire acquisition while a new
 retained lease remains valid. An unresolved Microsoft owner does not force
 GitHub source authentication or erase its already-approved evidence.
 
-A dead Node PID does not prove its browser exited. Startup retains an unresolved
-owner marker and requires explicit supported recovery; it does not open or kill
-a browser automatically. Stop must establish owned process exit and profile
-release. Unsettled launches/failed cleanup keep the lock and recovery marker.
-Late cleanup cannot grant access or settle another operation.
+| Custody state | Recovery rule |
+| --- | --- |
+| Node PID is dead | Browser exit is still unproved |
+| Unresolved owner at startup | Keep its marker; require explicit supported recovery, without automatic browser launch/kill |
+| Stop | Establish owned process exit and profile release |
+| Unsettled launch or failed cleanup | Keep lock and recovery marker |
+| Late cleanup | Cannot grant access or settle another operation |
 
 ## Failure metadata and proof boundaries
 

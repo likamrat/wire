@@ -21,21 +21,18 @@ Retired review/feedback operations are absent from navigation, while their
 wording in an independently authorized historical saved document can remain
 searchable. No source-path or live permission DOM values become setting text.
 
-IDs use the typed canonical identity hash; revisions bind content, source,
-coverage and target. IDs can survive content changes, revisions cannot.
-Only admitted title, content and readable source label are matched. Operational
-IDs, hashes, private paths, target descriptors and raw source fields are not
-searchable text.
+| Text or identity | Rule |
+| --- | --- |
+| Canonical ID | Typed identity hash; can survive content changes |
+| Revision | Binds content, source, coverage and target; changes with them |
+| Matched fields | Admitted title, content and readable source label only |
+| Excluded from matching | Operational IDs, hashes, private paths, target descriptors and raw source fields |
+| Interaction/context/reply title | Original slice up to 120 graphemes; empty/unavailable stays qualified |
+| Automatic continuation | May have that title and an empty body; no invented missing-prompt error or retained host instructions |
 
-Titles for interactions/context/replies are original slices up to 120 graphemes.
-Empty/unavailable text stays qualified. An observed automatic continuation can
-have an Automatic continuation title and empty body without becoming a
-missing-prompt error or retaining host instructions.
-
-The derived-text screen removes recognized credentials, private URLs, local
-paths and opaque identifiers. It is not complete DLP or permission to include
-another field. Validated canonical report titles use their verified
-manifest-declared provenance, not a title-shaped string as a bypass.
+Derived text removes recognized credentials, private URLs, local paths and
+opaque identifiers. Screening is not complete DLP or permission to add a field.
+Report titles require verified manifest provenance, not just a title-shaped string.
 
 Recorded actions may include their already-retained screened diagnostics.
 A tool call and its exact returned entry keep their own scopes/revision;
@@ -48,14 +45,12 @@ genuinely not saved. A declared missing/corrupt file, inconsistent inventory,
 unsupported schema/encoding or failed extraction is an error, not permission
 to try a lower format.
 
-- HTML extracts inert visible body text and the verified document title,
-  excluding scripts, styles, hidden content and attributes.
-- JSON validates the complete frozen snapshot/manifest identity and extracts
-  allowlisted projected facts and copies, not arbitrary fields.
-- Markdown remains inert source text, including literal code/prompt lines;
-  no links or resources are followed.
-- PDF reads the verified saved text layer locally. Images have no OCR;
-  encrypted, unsupported, textless and failed parses remain unavailable.
+| Saved format | Extraction |
+| --- | --- |
+| HTML | Inert visible body text and verified title; exclude scripts, styles, hidden content and attributes |
+| JSON | Validate frozen snapshot/manifest identity, then read allowlisted projected facts and copies |
+| Markdown | Inert source text, including code/prompt lines; follow no links/resources |
+| PDF | Read the verified text layer locally, without OCR; encrypted, unsupported, textless and failed parses stay unavailable |
 
 Optional recorded context requires the matching closed schema, identical
 snapshot/manifest copies and context hash as well as ordinary hashes/privacy
@@ -69,12 +64,16 @@ system/temp environment. Preloads, debugger/NODE_OPTIONS/provider/data-dir
 variables and inherited stdout/stderr are excluded. Only verified bytes cross
 local IPC.
 
-The byte/text-only parser disables external resources, font loading, Wasm,
-XFA, GPU/image/rendering and other active paths. It checks the code-generation
-restriction before loading PDF.js. Any decoder diagnostic rejects extraction
-rather than presenting repaired success; diagnostic text is not retained.
-Cancellation terminates the owned parser and waits for closure. This is a
-constrained parsing path, not an OS sandbox or secure-erasure guarantee.
+The byte/text-only parser:
+
+1. Checks the code-generation restriction before loading PDF.js.
+2. Disables external resources, font loading, Wasm, XFA, GPU/image/rendering
+   and other active paths.
+3. Rejects extraction on any decoder diagnostic, without retaining its text
+   or presenting repaired success.
+4. On cancellation, terminates the owned parser and waits for closure.
+
+This constrained path is not an OS sandbox or a secure-erasure guarantee.
 
 ## Index, delivery and invalidation
 
@@ -102,11 +101,12 @@ Store reads use the internal read-only path: absent or migration-required state
 fails before initialization/directories/writes, and save callbacks reject.
 That is a guarantee about owned store operations, not arbitrary supplied code.
 
-Source/consent/deletion/evidence/artifact changes must invalidate before their
-acknowledgement. Consumers synchronously clear index references, queued/displayed
-excerpts and targets, and invalidate on failed status/transport. Old builder
-results are not render/Open authority. JavaScript cannot erase content already
-disclosed to another process or the user.
+Invalidation must precede acknowledgement of source, consent, deletion,
+evidence or artifact changes. Consumers synchronously clear index references,
+queued/displayed excerpts and targets; failed status/transport also invalidates.
+
+Old builder results cannot authorize render/Open. JavaScript cannot erase
+content already disclosed to another process or the user.
 
 Ready/partial describes retained availability, not complete source history.
 Stale, superseded, unavailable and closed are not no-match. Type-qualified issues

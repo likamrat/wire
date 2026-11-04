@@ -11,6 +11,8 @@ All screenshots use invented data.
 ## Choose the activity
 
 Open **Reports > Create a report**. New drafts start with an empty selection.
+To report a few interactions, select their checkboxes in the activity picker.
+You can open an interaction to inspect it without selecting it.
 
 | Scope | Includes |
 | --- | --- |
@@ -23,10 +25,16 @@ whole interactions are included. My prompts plus Agent prompts excludes
 unverified authors; All includes them. Changing prompt-text mode later does
 not change membership.
 
+For a report on a particular week or service, first set those filters in
+**Analyze**, then choose **Current Analyze view** in the report picker.
+Use **Selected interactions** instead when you want individual examples rather
+than everything matching those filters.
+
 ## Choose the contents
 
 Select **Continue to contents**. The report setup opens beside the picker.
-Give the report a recognizable title, then choose its text and formats.
+Give it a title you will recognize in the saved library, such as
+`Northstar launch review`, then choose its text and formats.
 
 ![Report setup beside the activity picker, with two selected interactions and masked prompts plus HTML, JSON and Markdown chosen.](images/report-setup.png)
 
@@ -57,7 +65,8 @@ No saved bundle exists yet.
 *An additional masking term removes "open risks" from this mock report copy.
 The original retained text stays unchanged.*
 
-Edit or omit a copy, or return to Contents to add exact masking terms.
+If a copy includes a name or phrase you do not want to share, edit or omit
+that copy, or return to Contents to add exact masking terms.
 Use **Rebuild preview** and review again after changes. Partial, unavailable
 and credential-excluded text stays qualified; editing cannot recover missing
 source text or bypass credential removal.
@@ -68,8 +77,9 @@ After checking the copies, select the disclosure checkbox and **Approve for
 local saving**. Then use the separate **Save report** action. Approval alone
 does not save.
 
-Choose **Open saved report** to read the saved file. The file selector changes
-formats; **Download** retrieves the original saved bytes.
+Choose **Open saved report** to read the saved file. To find it later, open
+**Reports** and choose the report in the library. The file selector changes
+formats; **Download** retrieves the original saved file.
 
 ![The saved HTML report open in WIRE with its title, selected scope, separate evidence counts and Download action.](images/saved-report.png)
 
@@ -88,13 +98,14 @@ masking cannot recognize every confidential detail.
 
 ## Read the findings
 
-Read scope and coverage before comparing numbers. Tool/service patterns describe
-the selected recorded work. A completed tool call does not establish a correct
-answer, and a returned API error does not automatically explain its parent
-call's outcome. Service associations can overlap.
+Start with which activity the report includes and which facts were available.
+Then read the tool and service patterns, failures and timings. A completed
+tool call does not establish a correct answer, and a returned API error does
+not automatically explain its parent call's outcome. Service associations
+can overlap.
 
 Timing keeps its recorded boundary and measured population. Missing model
-names, timing or application-result facts remain unavailable, not zero.
+names, timing or recorded application results remain unavailable, not zero.
 Examples connect permitted prompt copies with recorded calls; they are not
 generated explanations of intent or task success.
 
