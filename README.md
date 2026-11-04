@@ -40,7 +40,9 @@ these choices. Starting WIRE alone does not approve a source.
 Collected activity and saved reports stay in a per-user folder outside the
 repository. See [data locations](docs/collection.md#store-ownership) for
 Windows, Linux, macOS and WSL defaults and how to choose another folder.
-Run only one WIRE instance per data store. Saving Copilot replies needs separate
+Independent instances can read the same approved Copilot source using distinct
+data folders and ports; each store has one writer. Settings and saved reports
+are not synchronized. Saving Copilot replies needs separate
 approval; review report copies before sharing because local masking can miss
 confidential information.
 

@@ -63,7 +63,7 @@ test("synthetic: fresh approved app enumeration pages past 500 and uses authorit
     const workspace = randomUUID(), project = randomUUID();
     app.db.prepare("INSERT INTO projects VALUES(?,?)").run(project, "Synthetic project");
     app.db.prepare("INSERT INTO workspaces VALUES(?,?,?,?,?,?,?)").run(workspace, mapped, project, "Synthetic workspace", null, "local", "folder");
-    const discovered = discoverSources(app.config);
+    const discovered = await discoverSources(app.config);
     assert.equal(discovered.counts.sessions, 513);
     assert.equal(discovered.counts.eligible, 511);
     assert.ok(discovered.counts.pages > 2);
@@ -669,7 +669,7 @@ test("compatible version changes do not interpret unfamiliar workspace types as 
     app.db.prepare("INSERT INTO projects VALUES(?,?)").run(project, "Invented future mapping");
     app.db.prepare("INSERT INTO workspaces VALUES(?,?,?,?,?,?,?)")
         .run(randomUUID(), id, project, "Invented unknown workspace", null, "local", "new-unverified-type");
-    const discovered = discoverSources(app.config);
+    const discovered = await discoverSources(app.config);
     assert.equal(discovered.roster[0].eligible, false);
     assert.equal(discovered.roster[0].disposition, "unmapped-workspace-type");
 });
@@ -794,9 +794,9 @@ test("approved schema156 collection continues after compatible schema166 upgrade
     assert.equal(unchanged.check.changes.added, 0);
     assert.equal(unchanged.check.changes.updated, 0);
     app.db.exec("PRAGMA user_version=167");
-    assert.equal(discoverSources(app.config).schemaVersion, 167, "Version-only changes still require the same validated mapping");
+    assert.equal((await discoverSources(app.config)).schemaVersion, 167, "Version-only changes still require the same validated mapping");
     app.db.exec("PRAGMA user_version=166; ALTER TABLE sessions RENAME COLUMN execution_location TO removed_location");
-    assert.throws(() => discoverSources(app.config), /Unsupported sessions mapping/);
+    await assert.rejects(discoverSources(app.config), /Unsupported sessions mapping/);
 });
 
 test("deleted activity stays absent through late completion, rotation, window change, eligibility and restart; new same-chat call survives", async t => {

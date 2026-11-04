@@ -496,7 +496,7 @@ test("manual Graph scan cannot promote an agent-created first prompt whose creat
     const indexFile = path.join(app.context.dataDir, "collector", "index.json");
     const index = JSON.parse(await readFile(indexFile, "utf8"));
     assert.equal(index.sources[app.child].promptQualification.reason, "creator-history-missing");
-    const source = discoverSources(app.config).roster.find(row => row.sessionId === app.child);
+    const source = (await discoverSources(app.config)).roster.find(row => row.sessionId === app.child);
     const since = new Date(Date.now() - 86400000).toISOString(), until = new Date().toISOString();
     const inventoryPath = path.join(app.root, "invented-inventory.json");
     await writeFile(inventoryPath, JSON.stringify([{ id: app.child, name: "Invented mapped agent child" }]));
@@ -575,7 +575,7 @@ test("targeted qualification stops at its byte budget and resumes rather than re
     const filler = Array.from({ length: 6 }, () => ({ id: randomUUID(), type: "session.info",
         timestamp: parentEvents[0].timestamp, data: { message: "Invented padding only. ".repeat(40000) } }));
     await writeFile(app.sourceFiles[0], [parentEvents[0], ...filler, ...parentEvents.slice(1)].map(event => JSON.stringify(event) + "\n").join(""));
-    const roster = discoverSources(app.config).roster, source = roster.find(row => row.sessionId === app.child), creator = roster.find(row => row.sessionId === app.parent);
+    const roster = (await discoverSources(app.config)).roster, source = roster.find(row => row.sessionId === app.child), creator = roster.find(row => row.sessionId === app.parent);
     const events = (await readFile(app.sourceFiles[1], "utf8")).trim().split("\n").map(line => JSON.parse(line));
     const records = extractScenarios(events, source, new Date(Date.now() - 86400000).toISOString(), new Date().toISOString()).scenarios;
     const budget = TAIL_LIMITS.chunkBytes + 131328;
@@ -597,7 +597,7 @@ test("ordinary retained-message qualification resumes within its shared byte bud
     const filler = Array.from({ length: 6 }, () => ({ id: randomUUID(), type: "session.info",
         timestamp: events[0].timestamp, data: { message: "Invented padding only. ".repeat(40000) } }));
     await writeFile(app.sourceFiles[1], [...events.slice(0, position), ...filler, ...events.slice(position)].map(event => JSON.stringify(event) + "\n").join(""));
-    const source = discoverSources(app.config).roster.find(row => row.sessionId === app.child);
+    const source = (await discoverSources(app.config)).roster.find(row => row.sessionId === app.child);
     const record = { userPrompt: { sourceEventId: human.promptId, text: human.data.content, sourceTimestamp: events[position].timestamp } };
     const budget = TAIL_LIMITS.chunkBytes + 131328;
     const first = await qualifyRetainedPromptEvents(app.config, source, [record], undefined, budget);
@@ -624,7 +624,7 @@ test("a retained early event outside the byte tail is qualified within the same 
         }
     } finally { await handle.close(); }
     assert.ok((await stat(app.sourceFiles[1])).size > TAIL_LIMITS.initialFileBytes);
-    const source = discoverSources(app.config).roster.find(row => row.sessionId === app.child);
+    const source = (await discoverSources(app.config)).roster.find(row => row.sessionId === app.child);
     const records = [{ userPrompt: { sourceEventId: target.id, sourceTimestamp: target.timestamp, text: target.data.content } }];
     const result = await qualifyRetainedPromptEvents(app.config, source, records, undefined, TAIL_LIMITS.cycleBytes);
     assert.equal(result.checkpoint.status, "complete");

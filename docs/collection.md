@@ -43,6 +43,12 @@ to choose another folder. The store is independent of a conversation or checkout
 a second checkout can use the same store. Only one runtime may write it, even
 on a different port.
 
+For simultaneous instances, choose distinct data directories and reachable
+ports. They may independently approve the same Copilot input, but their cached
+activity, settings, consent and saved reports remain separate. Existing cursors
+are not adopted across hosts; no store copying or report synchronization is
+performed.
+
 Content-addressed evidence snapshots are separate from atomic state
 metadata. A process lock rejects a live writer; an unverified owner is not
 permission to remove a lock. Preserve approvals, unresolved receipts, pseudonym
@@ -55,6 +61,16 @@ The suggested source comes from `COPILOT_HOME`, otherwise the documented
 `.copilot` home: `data.db` and `session-state`. WIRE checks those named paths,
 not repositories, credentials or arbitrary home-directory contents. Approval
 and schema validation precede history reads.
+
+Native source access uses the local read-only SQLite projection. When WSL reads
+a Windows-owned source, Linux cannot safely open the live Windows WAL shared
+memory. WIRE instead runs that same fixed metadata projection in a short-lived
+Windows Node 24+ process through existing WSL interop (`node.exe`). This is a
+source-native subprocess, not another WIRE instance or a persistent service.
+It accepts only the approved database path, returns bounded metadata and exits.
+History files are still read through qualified filesystem paths. An unavailable
+reader, changed metadata or unsupported mapping refuses without copying the
+database, bypassing SQLite locks or replacing last good evidence.
 
 The current adapter checks the consumed ordinary `sessions`, `workspaces` and
 `projects` mapping, required text/null values and sole `id` primary keys.

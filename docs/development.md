@@ -31,15 +31,11 @@ Browser tests set up temporary stores through
 [`tests/helpers.mjs`](../tests/helpers.mjs) and close their own resources.
 Reuse that pattern for tests and image capture.
 
-Windows and WSL have separate default stores. Reusing an existing Windows store
-from native WSL requires stopping its Windows writer and a reviewed, one-time
-file-identity mapping; changing the data path alone is not enough. The bounded
-handover in `lib/host-handover.mjs` preserves saved positions, cached evidence,
-source approvals and report registrations. Its only persistent change is
-`collector/host-handover.json`, one atomic, sealed mapping that also records the
-operation's outcome. Resolve a lost response by reading that record, not by
-repeating Apply. Unqualified paths, changed verification ranges and foreign or
-unqualified writer locks refuse rather than reset history or take ownership.
+Windows and WSL have separate default stores. Concurrent instances use distinct
+data directories and reachable ports, even when they read the same approved
+Copilot source. A store's existing cursors belong to its host; a different host
+must not adopt them or remove its writer lock. There is no automatic data move,
+report synchronization or shared writable store.
 
 ## Changing the local port
 
@@ -78,6 +74,10 @@ The opt-in Windows/WSL fixture lane is
 Set `WIRE_WSL_DISTRO`, `WIRE_WSL_NODE` and `WIRE_WSL_SOURCE` to an owned native
 Linux installation of the same candidate with separate Linux dependencies.
 It uses disposable invented stores, never the default store or original history.
+It covers a live Windows WAL source, separate Windows/WSL stores, restart,
+incremental reads and refusals. WSL must have an existing Windows Node 24+
+executable available as `node.exe`; the fixed source reader uses it briefly,
+without starting a Windows WIRE server.
 
 Packaging changes have a separate lane:
 
@@ -123,7 +123,7 @@ with capture evidence, and add a visible caption only when it helps explain the 
 
 | Work | Entry points and contract |
 | --- | --- |
-| Collection and persistence | `lib/source-discovery.mjs`, `collector.mjs`, `collector-io.mjs`, `store.mjs`, `paths.mjs`; [collection](collection.md) |
+| Collection and persistence | `lib/source-discovery.mjs`, `source-reader.mjs`, `source-metadata.mjs`, `collector.mjs`, `collector-io.mjs`, `store.mjs`, `paths.mjs`; [collection](collection.md) |
 | Access and uncertain effects | `lib/runtime-access.mjs`, `client-transport.mjs`, `web/client.mjs`; [runtime access](runtime-access.md) |
 | Canonical evidence and filters | `lib/analytics.mjs`, `activity-analytics.mjs`, `activity-projection.mjs`, `service-categories.mjs`; [report meanings](report-contract.md#evidence-and-membership) |
 | Search | `lib/search-text.mjs`, `search-retrieval.mjs`, `search-corpus.mjs`, `live-search.mjs`; [Search](live-search.md) and [corpus](search-corpus.md) |
