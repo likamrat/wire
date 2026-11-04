@@ -3,7 +3,7 @@
 Use WIRE to inspect recorded Work IQ activity, find saved text and prepare
 reports from your local GitHub Copilot app history.
 
-Follow [setup](../README.md#start) first. All examples below use invented data.
+Follow [setup](../README.md#start) first.
 
 ## Connect local history
 
@@ -29,16 +29,12 @@ Outcome or Prompt author; **More filters** holds the additional choices.
 
 ![Analyze showing 10 calls in 8 interactions, tool outcomes and separate service associations.](images/analyze.png)
 
-*Mock data: 8 interactions contain 10 calls. The missing model names are
-unavailable evidence, not zero model usage. Retained activity remains readable
-even while collection is disconnected.*
-
 An interaction groups a prompt with its recorded calls. One interaction can
 contain several calls, and one call can involve several services. Service
 shares can therefore overlap. Tool completion means the source recorded
 completion, not that the answer was correct. Returned API entries, Graph call
 sites and HTTP recorder captures have their own units; do not add them to
-tool-call totals.
+tool-call totals. Missing model names mean no name was recorded, not zero usage.
 
 Dates filter retained activity; they do not approve older source reads.
 Custom dates include both days in the time zone chosen under
@@ -65,9 +61,6 @@ uses a single-pane reader and hides the sizing controls.
 
 ![An interaction reader beside its card, showing a failed call and its separately attributed returned HTTP results.](images/interaction.png)
 
-*The failed call and its returned HTTP entries are different evidence.
-WIRE does not reconstruct error details that were not saved.*
-
 **My prompt**, **Agent prompt** and **Author unverified** describe supported
 origin evidence, not who executed or authorized every call. Choosing My and
 Agent is not the same as All, which also includes unverified authors.
@@ -92,14 +85,11 @@ that literal sequence, not scattered words, inferred intent or synonyms.
 
 ![Search for POWER returning two interaction matches and a matching excerpt from a saved report.](images/literal-search.png)
 
-*Everywhere finds items without narrowing Analyze. This example also says saved
-replies are unavailable for Search; three matches do not establish complete
-coverage of those replies.*
-
 **Everywhere** searches authorized retained content and navigation destinations
 across pages. **Current Analyze scope** deliberately narrows the analytical
 population and current-view report membership. Selected interactions and All
-collected activity report scopes remain separate.
+collected activity report scopes remain separate. Availability notices identify
+content Search cannot include.
 
 Open a result to inspect its exact verified destination. Back restores the
 Search context while it remains authorized. Missing, changed or unreadable

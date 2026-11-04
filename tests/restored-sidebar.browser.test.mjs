@@ -862,9 +862,9 @@ test(`normal-root repeated sidebar motion is vertically stable at ${width}px in 
     t.diagnostic(JSON.stringify({ samples: trace.length, header, main }));
     assert.ok(header.max - header.min < 1, `Header bounces during sidebar motion: ${JSON.stringify(header)}`);
     assert.ok(main.max - main.min < 1, `Main bounces during sidebar motion: ${JSON.stringify(main)}`);
-    assert.ok(trace.every(frame => frame.artwork.layoutWidth === 148 && frame.artwork.layoutHeight === 46),
+    assert.ok(trace.every(frame => frame.artwork.layoutWidth === 148 && frame.artwork.layoutHeight === 60),
         "The wordmark retains its layout geometry while its paint transforms without reflow");
-    assert.ok(trace.every(frame => Math.abs(frame.artwork.width / frame.artwork.height - 148 / 46) < .001),
+    assert.ok(trace.every(frame => Math.abs(frame.artwork.width / frame.artwork.height - 500 / 204) < .001),
         "Logo motion scales uniformly, never distorting the approved artwork");
     assert.ok(trace.every(frame => Math.abs(frame.search.x + frame.search.width / 2 - frame.main.x - frame.main.width / 2) < 1),
         "Search stays centered on the moving content, not on the whole viewport");
@@ -924,7 +924,7 @@ test("enlarged text and reduced motion keep a stable header without squeezing th
         const geometry = () => page.locator(".app-header").evaluate(node => ({
             height: node.getBoundingClientRect().height,
             mainY: document.querySelector("#main").getBoundingClientRect().y,
-            captionHeight: document.querySelector(".brand-caption").getBoundingClientRect().height,
+            lockupHeight: document.querySelector(`.brand-logo[data-brand-theme=${document.documentElement.dataset.evidenceTheme}]`).getBoundingClientRect().height,
         }));
         const before = await geometry();
         await collapse(page).click();
@@ -935,10 +935,10 @@ test("enlarged text and reduced motion keep a stable header without squeezing th
         await collapse(page).click();
         await settled(page);
         assert.deepEqual(await geometry(), before);
-        const caption = await page.locator(".brand-caption").evaluate(node => ({
+        const lockup = await page.locator(`.brand-logo[data-brand-theme=${theme}]`).evaluate(node => ({
             width: node.clientWidth, content: node.scrollWidth, visible: node.checkVisibility({ visibilityProperty: true }),
         }));
-        assert.ok(caption.visible && caption.content <= caption.width, "Enlarged caption wraps inside its reserved width without truncation");
+        assert.ok(lockup.visible && lockup.content <= lockup.width, "The integrated artwork stays intact during text enlargement");
         await capture(page, `enlarged-text-${theme}`);
     }
 });

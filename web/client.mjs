@@ -2138,7 +2138,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     function cloneReportBrand() {
-        const originals = $("shellBrand").querySelectorAll(".brand-logo");
+        const originals = $("reportBrand").content.querySelectorAll(".brand-logo");
         if (originals.length !== 2) throw new Error("WIRE's report wordmark assets are unavailable.");
         const mark = el("span", "saved-report-mark");
         mark.setAttribute("role", "img"); mark.setAttribute("aria-label", "WIRE");

@@ -143,6 +143,10 @@ test("saved files preview every format and switch without changing bytes or down
             if (format === "pdf") await preview.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
             if (format === "markdown") {
                 assert.deepEqual(await preview.locator(".saved-report-mark .brand-logo").evaluateAll(nodes =>
+                    nodes.map(node => node.getAttribute("viewBox"))), ["24 62 500 158", "24 62 500 158"]);
+                assert.equal(await preview.locator(".saved-report-mark text").count(), 0,
+                    "Screen lockups never change report-reader branding");
+                assert.deepEqual(await preview.locator(".saved-report-mark .brand-logo").evaluateAll(nodes =>
                     nodes.filter(node => node.checkVisibility()).map(node => node.dataset.brandTheme)), [theme]);
                 assert.equal(await preview.locator(".saved-report-mark [id]").evaluateAll(nodes =>
                     nodes.every(node => document.querySelectorAll("#" + CSS.escape(node.id)).length === 1)), true, "Cloned wordmarks have isolated paint IDs");

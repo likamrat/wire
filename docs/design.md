@@ -58,6 +58,13 @@ charcoal/navy/marketing-reference palettes are not competing instructions.
 Screen-only `screenTokens` and `screenFontStack` stay separate from
 report-facing tokens, typography and frozen output.
 
+The screen and README use the same self-contained `wire-lockup` SVGs: the
+unchanged cable wordmark and its integrated Asta Sans descriptor. Regenerate
+them with `node scripts/build-brand-lockups.mjs` after an intentional asset
+change. The font and its license are embedded so GitHub does not substitute
+another face. Keep the compact W and the report-only `wire-wordmark` assets
+unchanged; report readers clone those from their own template, not the header.
+
 Decorative glyphs fit their text line without acquiring control-sized
 whitespace. Utility, navigation and
 compact roles use their existing 20/24/16px geometry. Interactive targets stay

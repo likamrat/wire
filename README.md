@@ -1,39 +1,29 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/wire-wordmark-dark.svg">
-    <img src="assets/wire-wordmark.svg" alt="WIRE" width="316">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/wire-lockup-dark.svg">
+    <img src="assets/wire-lockup.svg" alt="WIRE - Work IQ Request Explorer" width="316">
   </picture>
-  <br>
-  <sub>Work IQ Request Explorer</sub>
 </p>
 
-WIRE is a local browser app for exploring Work IQ activity from your GitHub
-Copilot app chats. Follow a request through its recorded calls, search saved
-text and turn selected activity into a report.
+I built WIRE (Work IQ Request Explorer) to understand real Work IQ interactions.
+Curated evals are valuable, but real people phrase requests differently,
+leave context unstated and change direction. Their agents generate prompts too.
 
-[![WIRE showing recorded outcomes, response models, tools and services beside an open interaction.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
-
-*Invented activity: an overview of 25 calls alongside the three calls behind a
-launch-review request. Completed calls describe tool execution, not answer quality.*
-
-Curated evals help improve agents. Everyday prompts bring another perspective:
-people phrase requests differently, leave context unstated and change direction.
-Agents generate prompts of their own.
-
-I built WIRE to understand those real interactions. It puts recorded human
-and agent-generated prompts beside their tool calls and results, so you can
+WIRE puts those prompts beside their recorded tool calls and results, so you can
 find patterns and failures, improve your agents and build better evaluation cases.
+
+[![WIRE showing weekly activity, outcomes, models, tools and services beside an interaction with completed and failed calls.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
 Search runs on-device without AI or provider calls. Review report text before
 saving HTML, PDF, JSON or Markdown.
 
 ## Start
 
-You need Node.js 24 or newer, npm 11.17.0 and access to this repository.
+You need Node.js 24 or newer and access to this repository.
 
-```powershell
+```sh
 git clone https://github.com/likamrat/wire.git
-Set-Location wire
+cd wire
 npm ci
 npm start
 ```
@@ -43,10 +33,6 @@ In **Settings > Connection & updates**, choose **Review source & connect**.
 Check the local Copilot paths and history window, then approve collection.
 The [first-run guide](docs/user-guide.md#connect-local-history) walks through
 these choices. Starting WIRE alone does not approve a source.
-
-For an existing instance, read the
-[port-change notes](docs/development.md#changing-the-local-port) before
-switching addresses.
 
 Private data is stored outside the checkout, by default at
 `%LOCALAPPDATA%\WorkIQEvidence\data` on Windows. Run only one WIRE instance per

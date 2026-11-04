@@ -6,7 +6,6 @@ rate answer quality.
 
 This guide covers the released GitHub Copilot experience. For schemas,
 membership, privacy and historical formats, see the [report contract](report-contract.md).
-All screenshots use invented data.
 
 ## Choose the activity
 
@@ -38,9 +37,6 @@ Give it a title you will recognize in the saved library, such as
 
 ![Report setup beside the activity picker, with two selected interactions and masked prompts plus HTML, JSON and Markdown chosen.](images/report-setup.png)
 
-*Two selected interactions stay included while you choose contents.
-Prepare report opens a review; it does not save.*
-
 | Choice | Effect |
 | --- | --- |
 | No prompts | Omits originating request, follow-up and tool-question text. |
@@ -62,7 +58,7 @@ No saved bundle exists yet.
 
 ![Text review with the original on the left, a manually masked phrase on the right, and an unchecked disclosure attestation.](images/report-review.png)
 
-*An additional masking term removes "open risks" from this mock report copy.
+*An additional masking term removes "open risks" from the report copy.
 The original retained text stays unchanged.*
 
 If a copy includes a name or phrase you do not want to share, edit or omit
@@ -83,9 +79,6 @@ formats; **Download** retrieves the original saved file.
 
 ![The saved HTML report open in WIRE with its title, selected scope, separate evidence counts and Download action.](images/saved-report.png)
 
-*This report contains 2 interactions with 4 tool calls. Its 5 returned API
-entries are a separate unit, not five more tool calls.*
-
 Saved reports retain their reviewed facts, text choices and time context.
 Later collection, browsing filters or screen-theme changes do not rewrite them.
 In the Reports library, search finds saved metadata; global Search can also
@@ -99,6 +92,7 @@ masking cannot recognize every confidential detail.
 ## Read the findings
 
 Start with which activity the report includes and which facts were available.
+Read interaction, tool-call and returned-API counts separately.
 Then read the tool and service patterns, failures and timings. A completed
 tool call does not establish a correct answer, and a returned API error does
 not automatically explain its parent call's outcome. Service associations
@@ -119,8 +113,7 @@ Contents, review and separate Save workflow.
 
 ![Two retained periods showing a higher failed-call share alongside faster recorded tool latencies, with unequal-length and unavailable-result qualifications.](images/compare-periods.png)
 
-*The later mock period has faster calls but a higher failed-call share.
-Unequal periods and incomplete evidence do not establish improvement or cause.*
+Different period lengths or incomplete evidence can limit what a change means.
 
 For existing reports, open **Reports > Compare saved reports**, choose
 **Earlier report** and **Later report**, then **Compare reports**. This uses

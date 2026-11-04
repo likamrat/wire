@@ -8,6 +8,7 @@ import { buildSanitizedBundle, createExportController } from "../lib/export.mjs"
 import { loadBoardState } from "../lib/store.mjs";
 import { fixture, privateFixture, chooseTheme, navigateMain, openActivitySessions, revealStoredRefresh } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
+import { wordmarkSvg, darkWordmarkSvg, lockupSvg, darkLockupSvg } from "../lib/branding.mjs";
 
 const proofs = process.env.WIRE_LINK_PROOFS;
 const slice = "layer=tool&scope=all&from=2026-09-30&to=2026-09-30&service=Calendar&project=test-project";
@@ -86,16 +87,11 @@ async function assertLinkStates(page, link, label, focusSelector) {
     assert.equal(await link.evaluate(node => node.tagName === "A" && node.hasAttribute("href") && node.tabIndex === 0), true, `${label}: native link`);
 }
 
-test("only the full graphical wordmark is the native Analyze target, not its subtitle", { timeout: 60000 }, async t => {
+test("the integrated graphical lockup is one native Analyze target", { timeout: 60000 }, async t => {
     const { page, runtime } = await setup(t);
     await navigateMain(page, "reports");
     await ready(page);
-    await page.locator(".brand-caption").hover();
-    await capture(page, "header-subtitle-hover", ".app-header");
-    const caption = page.locator(".brand-caption");
-    const interactive = await caption.evaluate(node => Boolean(node.closest("a,button,[role=link],[tabindex]")));
-    if (proofs) await writeFile(path.join(proofs, "subtitle.json"), JSON.stringify({ interactive }, null, 2));
-    assert.equal(interactive, false, "Subtitle must be plain text outside the Home anchor");
+    assert.equal(await page.locator(".brand-caption").count(), 0, "No detached or duplicate caption");
     const brand = page.locator(".brand a[data-nav=analyze]");
     assert.equal(await brand.count(), 1, "One Home link around both theme variants");
     assert.match(await brand.getAttribute("aria-label"), /WIRE.*Analyze/);
@@ -104,8 +100,8 @@ test("only the full graphical wordmark is the native Analyze target, not its sub
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         const activity = page.url();
-        await caption.click();
-        assert.equal(page.url(), activity, "Clicking the subtitle does not navigate");
+        const descriptor = brand.locator('.brand-logo:visible [id$="-descriptor"]');
+        assert.equal(await descriptor.textContent(), "Work IQ Request Explorer");
         const href = await brand.getAttribute("href");
         assert.equal(href, await page.locator("nav [data-nav=analyze]").getAttribute("href"), "Shared scoped Analyze route");
         const paint = () => brand.evaluate(node => [node, ...node.querySelectorAll("*")]
@@ -134,6 +130,11 @@ test("only the full graphical wordmark is the native Analyze target, not its sub
             await ready(page);
             assert.equal(page.url(), activity);
         }
+        const label = await descriptor.boundingBox(), target = await brand.boundingBox();
+        await brand.click({ position: { x: label.x - target.x + label.width / 2, y: label.y - target.y + label.height / 2 } });
+        await ready(page);
+        assert.equal(new URL(page.url()).hash, href, "The integrated descriptor shares the same Analyze target");
+        await page.goBack(); await ready(page);
         await page.locator(".skip-link").focus();
         await page.keyboard.press("Tab");
         assert.equal(await brand.evaluate(node => node === document.activeElement), true, "Wordmark is one native Tab stop");
@@ -158,6 +159,48 @@ test("only the full graphical wordmark is the native Analyze target, not its sub
         } finally { await popup.close(); }
     }
     assert.ok(page.url().startsWith(runtime.url));
+});
+
+test("standalone lockups preserve painted artwork and legible descriptor bounds without host fonts", async t => {
+    const browser = await chromium.launch();
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    for (const [theme, original, lockup] of [["light", wordmarkSvg, lockupSvg], ["dark", darkWordmarkSvg, darkLockupSvg]]) {
+        const geometry = await page.evaluate(async ({ original, lockup }) => {
+            const parsed = new DOMParser().parseFromString(lockup, "image/svg+xml");
+            if (parsed.querySelector("parsererror")) throw new Error(parsed.querySelector("parsererror").textContent);
+            async function pixels(svg, width, height) {
+                const image = new Image();
+                image.src = "data:image/svg+xml;base64," + btoa(svg);
+                await image.decode();
+                const canvas = document.createElement("canvas");
+                canvas.width = width; canvas.height = height;
+                const context = canvas.getContext("2d");
+                context.drawImage(image, 0, 0, width, height);
+                return context.getImageData(0, 0, width, height).data;
+            }
+            const before = await pixels(original, 500, 158), after = await pixels(lockup, 500, 204);
+            const bounds = (bytes, start, end) => {
+                const points = [];
+                for (let y = start; y < end; y++) for (let x = 0; x < 500; x++)
+                    if (bytes[(y * 500 + x) * 4 + 3] > 32) points.push([x, y]);
+                return { left: Math.min(...points.map(p => p[0])), right: Math.max(...points.map(p => p[0])),
+                    top: Math.min(...points.map(p => p[1])), bottom: Math.max(...points.map(p => p[1])) };
+            };
+            return { sameArtwork: before.every((value, index) => value === after[index]),
+                artwork: bounds(after, 0, 158), descriptor: bounds(after, 158, 204) };
+        }, { original, lockup });
+        assert.equal(geometry.sameArtwork, true, `${theme}: original drawing remains pixel-identical`);
+        assert.ok(geometry.descriptor.left >= 8 && geometry.descriptor.right <= 490, "Paint stays within the canvas");
+        assert.ok(Math.abs(geometry.descriptor.left - geometry.artwork.left) <= 3, "Descriptor follows the painted left edge");
+        assert.ok(Math.abs(geometry.descriptor.right - geometry.artwork.right) <= 12, "Descriptor spans the painted wordmark");
+        const gap = (geometry.descriptor.top - geometry.artwork.bottom) * 148 / 500;
+        assert.ok(gap >= 2 && gap <= 6, "The real app has a compact optical gap, not an independent caption row");
+        assert.ok(geometry.descriptor.bottom < 202, "Descenders are not clipped");
+        assert.ok((geometry.descriptor.bottom - geometry.descriptor.top) * 148 / 500 >= 10,
+            "The 11.84px descriptor retains at least 10px of painted glyph height");
+        t.diagnostic(JSON.stringify({ theme, ...geometry }));
+    }
 });
 
 test("authored chart, detail, Settings and dialog links have decoration-free native states", { timeout: 60000 }, async t => {

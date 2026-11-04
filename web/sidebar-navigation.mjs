@@ -67,7 +67,6 @@ export function mountSidebarNavigation(ux, preference) {
         return {
             link, bounds,
             inset: bounds.x - brand.getBoundingClientRect().x - parseFloat(getComputedStyle(brand).paddingLeft),
-            caption: brand.querySelector(".brand-caption"), captionOpacity: getComputedStyle(brand.querySelector(".brand-caption")).opacity,
             layers: [...link.querySelectorAll("svg")].filter(node => getComputedStyle(node).display !== "none").map(node => ({
                 node, bounds: node.getBoundingClientRect(), matrix: node.getScreenCTM(), opacity: getComputedStyle(node).opacity,
             })),
@@ -158,10 +157,6 @@ export function mountSidebarNavigation(ux, preference) {
                 { opacity: target.opacity, transform: transform(visibleTarget, targetBrand.bounds) },
             ]);
         }
-        animate(targetBrand.caption, [
-            { opacity: originBrand.captionOpacity, visibility: "visible" },
-            { opacity: targetBrand.captionOpacity, visibility: "visible" },
-        ]);
         for (const [index, target] of to.labels.entries()) {
             const origin = from.labels[index];
             const first = { width: origin.width + "px" }, last = { width: target.width + "px" };

@@ -26,8 +26,7 @@ p {max-width:72ch}
 .brand-home {display:block;max-width:100%}
 .brand-home:is(:hover,:active) {background:transparent}
 .brand-home:focus-visible {outline-offset:0}
-.brand .brand-logo {display:block;flex:none;width:165px;height:52px;max-width:100%}
-.brand .brand-caption {display:block;font-size:min(.8125rem,calc((100vw - 40px)/12));line-height:1.25;font-weight:600;letter-spacing:0;color:var(--ink);padding-inline-start:3px;white-space:nowrap}
+.brand .brand-logo {display:block;flex:none;width:148px;height:auto;max-width:100%}
 .brand .brand-logo[data-brand-theme=dark] {display:none}
 :root[data-evidence-theme=dark] .brand .brand-logo[data-brand-theme=light] {display:none}
 :root[data-evidence-theme=dark] .brand .brand-logo[data-brand-theme=dark] {display:block}

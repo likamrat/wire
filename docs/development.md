@@ -99,9 +99,8 @@ No remote conversion service or signed-in browser profile is used.
 For documentation images, use an existing synthetic fixture, ordinary
 Playwright interactions and the unmodified normal renderer. Capture only
 useful states, inspect every image for readability and private data, and close
-the owned runtime/browser and remove its temporary store. Caption invented
-content clearly; screenshots do not prove report-file integrity or live
-collection.
+the owned runtime/browser and remove its temporary store. Keep fixture provenance
+with the capture evidence. Add a caption only when it helps explain the task.
 
 ## Troubleshoot a local run
 
