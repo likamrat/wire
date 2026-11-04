@@ -1131,7 +1131,7 @@ test("service identity is stated once for an inherited target and keeps independ
         assert.deepEqual(returned.returned.map(value => value.path),
             ["/me/messages/invented-reply", "/me/calendar/events/invented-visit"]);
         assert.equal(byId.get("service-batch").identity, "Services: Mail Files");
-        assert.match(byId.get("service-batch").attribution, /cannot classify.*Other identified targets keep their attribution/);
+        assert.match(byId.get("service-batch").attribution, /recorded path does not identify a named app.*call still counts.*result is shown separately/);
         assert.equal(byId.get("service-batch").returned[0].service, "Files");
         assert.match(byId.get("service-batch").returned[1].service, /Returned target not identified/);
         assert.equal(byId.get("service-batch").returned[1].path, "Not attributed to a target in this batch");

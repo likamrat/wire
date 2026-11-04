@@ -111,6 +111,21 @@ complete entries before malformed syntax, marked partial with an unknown
 supplied total. Missing diagnostics remain unavailable; the reader does not
 reconstruct them from other calls.
 
+A Work IQ error envelope may supply only an HTTP status, with no error text.
+WIRE retains and displays that status without treating the envelope as unreadable
+or inventing a cause. An older record's saved status remains readable without
+rewriting its evidence. A reported 503 means Service unavailable; it does not
+establish which downstream service failed or whether an operation took effect.
+
+Prompt authorship comes from supported host provenance, not the `user.message`
+role or the wording. Host-added image references must match the event's attachment
+metadata; they do not supply an author themselves. Reading saved activity never
+rereads original author envelopes. Correcting an already-qualified unverified
+author requires a separately reviewed, bounded original-event lookup and repair;
+the image-envelope classifier does not trigger that repair automatically.
+Literal image-reference examples in the original prompt or a supported canvas
+attachment remain content, not host provenance.
+
 ## Optional replies
 
 **Settings > Privacy & saved data > Recorded replies** has a draft switch and

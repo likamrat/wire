@@ -268,7 +268,7 @@ test("network loss is classified consistently at the first read, renewal and ren
         };
         try {
             await assert.rejects(createBoardTransport(capability, undefined, accessBootstrap)("/api/state"), error =>
-                error.reason === "runtime_unavailable" && /No action was replayed/.test(error.message));
+                error.reason === "runtime_unavailable" && /WIRE did not respond.*read this view again/.test(error.message));
             assert.equal(calls.length, failure === "first" ? 1 : failure === "renewal" ? 2 : 3);
         } finally { globalThis.fetch = nativeFetch; }
     }

@@ -124,8 +124,9 @@ test("attribution reading explains basis, counting significance and action witho
     assert.match(reader(search).text, /counts the search request, not the apps searched/);
     assert.match(reader(search).text, /not a failed search/);
     assert.match(reader(missing).text, /source omission or a capture problem/);
-    assert.match(reader(missing).text, /still counts.*service counts/);
-    assert.match(reader(unknown).text, /path is present.*cannot classify.*Inspect the recorded request/);
+    assert.match(reader(missing).text, /still counts.*result is shown separately/);
+    assert.equal(reader(unknown).text,
+        "The recorded path does not identify a named app. The call still counts; its result is shown separately.");
     assert.match(reader(unsupported).text, /metadata is present.*cannot interpret.*service or sign-in failure/);
     assert.equal(reader(files), null);
     assert.equal(reader(row("workiq-get_schema")), null);
@@ -137,6 +138,28 @@ test("attribution reading explains basis, counting significance and action witho
     assert.deepEqual(records, before);
     const serialized = Function(`return (${createServiceCategories.toString()})()`)();
     assert.deepEqual(serialized.attributionReading(ask), reader(ask));
+});
+
+test("routing attribution limits stay separate from call failure and preserved service memberships", () => {
+    const record = fixture("routing-attribution");
+    Object.assign(record.toolCalls[0], { tool: "workiq-do_action", requestArgs: { actionUrl: "/businessapps/me" },
+        requestedApiPath: "/businessapps/me", toolSucceeded: false, reportedOutcome: "failed" });
+    const analytics = buildActivityAnalytics([record]), before = structuredClone(analytics);
+    const call = analytics.rows[0], explanation = serviceCategories.attributionReading(call);
+    assert.equal(explanation.text,
+        "The recorded path does not identify a named app. The call still counts; its result is shown separately.");
+    assert.doesNotMatch(explanation.text, /investigat|supported service|named-app service counts|Dataverse|retry/i);
+    assert.equal(call.outcome, "failure");
+    assert.equal(call.workload, "Unknown");
+    assert.deepEqual(call.serviceAssociation.services, []);
+    assert.equal(analytics.rows.length, 1);
+    const returned = { ...row("workiq-fetch", "/businessapps/me") };
+    returned.serviceAssociation = serviceCategories.associate(returned, "reported-api", classifyWorkload);
+    assert.equal(serviceCategories.attributionReading(returned, "reported-api").text,
+        "The recorded path does not identify a named app. The returned result and its status still count.");
+    const serialized = Function(`return (${createServiceCategories.toString()})()`)();
+    assert.deepEqual(serialized.attributionReading(call), explanation);
+    assert.deepEqual(analytics, before);
 });
 
 test("screen service descriptions preserve chart gap counts and canonical service memberships", () => {
