@@ -26,18 +26,7 @@ not additional setup steps.
 | Access, collection admission, withdrawal or uncertain operations | [Runtime access](runtime-access.md) |
 | Desktop-selected GitHub identity and profile presentation | [GitHub profile boundary](github-profile.md) |
 
-## Parked development
-
-Microsoft 365 Chat/Cowork is not a released connection. Its code and protected
-state remain preserved. A fixture result or development launch does not authorize
-provider access or establish a working integration.
-
-- [Host and acquisition](incubation/microsoft-native-host.md)
-- [Session lifecycle](incubation/microsoft-session.md)
-- [Chat and Cowork adapters](incubation/source-adapters.md)
-- [Normalized evidence model](incubation/native-read-model.md)
-- [Retention and storage compatibility](incubation/native-retention.md)
-- [Bounded retained views](incubation/native-retained-views.md)
+## Historical Search notes
 
 The [semantic Search](semantic-retrieval.md) and
 [linguistic Search](search-linguistics.md) notes explain retired experiments.

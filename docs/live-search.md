@@ -162,12 +162,3 @@ Current lifecycle/privacy coverage remains active in `search-text.test.mjs`,
 model/recall expectations does not retire ownership, complete-population,
 Unicode, exact Open, saved-file integrity or cancellation requirements.
 Run the relevant current tests; their presence alone is not a passing result.
-
-## Optional Microsoft consumer
-
-The incubation retained-reader uses this literal matcher and its own genuine
-account/source lease, not GitHub reply consent. Native source observations
-remain context, not fabricated authored messages or calls. Bounded native
-navigation pages do not mint ordinary full-population analysis receipts.
-Use the [retained-view contract](incubation/native-retained-views.md) for its
-separate original-view membership and report admission.

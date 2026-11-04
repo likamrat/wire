@@ -2,8 +2,8 @@
 
 The released runtime reads approved local GitHub Copilot app metadata and
 history. It does not rerun Work IQ/Graph requests, enumerate remote-only chats
-through a provider API or initialize an evaluator. Microsoft source work is
-[parked incubation](incubation/microsoft-native-host.md).
+through a provider API or initialize an evaluator. Microsoft 365 Chat and
+Cowork are not supported sources in this release.
 
 ## Operations and permissions
 
@@ -233,33 +233,11 @@ bytes and writes no original source. Failure leaves its named staging/backup
 for review, never a silent merge. Native-state stores are not admitted by the
 legacy version-3 migration/maintenance path.
 
-Historical repair is not Refresh. The scripts below share the existing
-collector/activity/board custody and a reviewed, source-pinned pre/postimage
-journal. They require explicit real-target authorization, a stopped/quiescent
-runtime, exact current evidence/checkpoint/source guards and preserved report,
-consent, cursor and unresolved-ledger state.
+Historical repair is not Refresh or an ordinary upgrade. It requires a
+separately reviewed exact-target plan, explicit authorization and a stopped
+or quiescent runtime. Preserve report bytes, consent, cursors, checkpoint
+bounds and unresolved receipts.
 
-| Entry in `scripts` | Narrow policy |
-| --- | --- |
-| `maintain-historical-metadata.mjs` | Exactly two attested prompt/call metadata pairs; no source scan. |
-| `maintain-failure-signal.mjs` | One unassessed eligible failure gaining only the qualified sign-in signal. |
-| `maintain-failure-evidence.mjs` | One known oversized failed-fetch omission, using exact authorized original source regions. |
-| `maintain-retrieve-diagnostic.mjs` | One small eligible failed-retrieve diagnostic, not a fetch or arbitrary editor. |
-| `maintain-evicted-fetch-evidence.mjs` | Record-only fetch repair after real context eviction; intact checkpoint/index and prompt boundary, no inserted events. |
-| `maintain-tail-retrieve-diagnostic.mjs` | Record-only retrieve inside a proved consumed tail with a visited, matching prefix fence. |
-| `maintain-failure-cohort.mjs` | One to nine exact eligible failures, additive diagnostics only; existing returned identities/statuses must agree. |
-
-For an authorized repair:
-
-1. Read the script and `lib/historical-maintenance.mjs` for the closed plan
-   and CLI schema.
-2. Prepare only the private journal/review seal.
-3. Apply only with that reviewed seal and identical source manifest. Preserve
-   unchanged fields and checkpoint bounds.
-4. After uncertainty, keep the runtime stopped and recover only the same
-   plan/source/journal, accepting exact preimages or postimages.
-
-This is not an all-files transaction. Do not bypass drift with an older reader
-or fresh operation, invent a target or replay a consumed evaluator attempt.
-An authorized repair still needs separate real-store proof of restart and
-later append preservation; documentation or synthetic success grants no operation.
+After an uncertain repair, keep the runtime stopped and recover the original
+operation against its recorded before/after state. Do not retry with a new
+plan or use an older reader to bypass changed state.

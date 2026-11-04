@@ -107,12 +107,6 @@ The footer keeps one Account target and the independent Settings target.
 Long names can truncate in that compact footer but wrap in the menu.
 Local WIRE sign-in/out changes the local gate, not GitHub or Microsoft login.
 
-In source-aware incubation, Microsoft profile presentation belongs only in
-Settings through its separately qualified retained lease. Its observed matched
-UPN is not the typed expectation or a substitute for the GitHub footer.
-Names/photos without a qualified producer remain unavailable. This source is
-not enabled by the Copilot-only release.
-
 Existing profile, account-snapshot/bridge, account-profile and account-gate
 tests use invented identities and injected public responses. They establish
 the exercised implementation and withdrawal, not live desktop-account binding.

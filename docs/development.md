@@ -127,26 +127,6 @@ collection.
 Read the contract for the boundary you change. Use source and tests for exact
 schemas rather than copying them into another guide.
 
-## Deferred canvas integration
-
-The browser is the supported interface; native canvas delivery remains deferred.
-The repository retains `extension.mjs` and `scripts/install-canvas.mjs`.
-A compatible Copilot host supplies `@github/copilot-sdk/extension`; it is not
-a normal npm dependency or a machine-specific SDK folder to add to this project.
-The source adapter is not proof of working native delivery on a particular host.
-
-For a separately authorized host-integration task, `npm run install:canvas`
-writes a user-scoped shim under `.copilot\extensions\workiq-evidence`, pointing
-at this checkout's `extension.mjs`. It backs up a different entry before
-replacement. Moving the checkout requires reinstalling that pointer; changing
-the HTTP server does not reload an already-loaded extension.
-
-The adapter connects over HTTP and cannot create a second store writer.
-Its separately loaded `lib/runtime-client.mjs` must match the runtime and
-handshake protocol. Reloading extensions is a host operation, not a setup
-workaround to perform during ordinary documentation or source review.
-Desktop-selected profile binding remains [independently unresolved](github-profile.md).
-
 ## Historical compatibility and publication
 
 The display name changed from Work IQ Evidence to WIRE without a storage

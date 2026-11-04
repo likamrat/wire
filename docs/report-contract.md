@@ -2,8 +2,7 @@
 
 For the user workflow, see [Create and compare reports](reporting.md). This
 reference owns evidence membership, disclosure, frozen output and historical
-interpretation. Microsoft-native report assembly is preserved as
-[incubation](incubation/native-retained-views.md), not released source support.
+interpretation for the supported GitHub Copilot experience.
 
 ## Current and historical facts
 
@@ -162,7 +161,6 @@ classifications stay unchanged.
 | Dispatched or uncertain | Retain original bundle identity and read saved history/status; do not export again |
 | Later draft invalidation | Does not settle the dispatched Save |
 | Partial files or absent receipt | Not rollback proof |
-| Qualified native one-use not-published disposition | Distinct from an arbitrary HTTP conflict |
 
 Ordinary reports and saved comparisons share one preview owner. New Prepare
 retires the other transient preparation/approval but preserves its ordinary
@@ -283,9 +281,10 @@ An interruption may leave files; recovery finishes only the sealed exact plan
 and never repeats confirmation or grants new scope. Hash-only reservations
 prevent stale writes from resurrecting deleted artifacts.
 
-Microsoft-dependent artifacts require their own current-account/dependency
-mutation admission. A saved-read lease or activity-deletion grant is not that
-permission; a per-target eligibility hint is not confirmation or bulk authority.
+Historical artifacts retain their source/account dependency checks; unavailable
+dependencies must not be bypassed to open or delete them. A saved-read lease or
+activity-deletion grant is not saved-artifact mutation permission. A per-target
+eligibility hint is not confirmation or bulk authority.
 
 ## Validation pointers
 

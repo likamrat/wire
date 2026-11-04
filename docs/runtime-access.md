@@ -18,7 +18,6 @@ Saved Microsoft configuration alone is ignored and preserved. See
 | Current WIRE access | Still needs the relevant source/account and response authority | Still needs the source's approval and enabled policy |
 | Pause | Preserved | Automatic acquisition stops; approved explicit GitHub manual checks remain separate |
 | WIRE sign-out | Withdrawn across panels | Stopped without deleting evidence or signing other apps out |
-| Natural Microsoft expiry in incubation | Fresh retained leases may remain available | Old source acquisition is retired; no automatic reconnect |
 | Account/generation replacement | Old publication is retired; new reads must requalify | Old leases cannot be rebound |
 
 Presentation identity is not source permission. Browser data, a copied lease,
@@ -45,9 +44,8 @@ Protocol metadata is not authentication. Host/origin/JSON/fetch-site checks,
 random capabilities, TTL and the 128-panel limit still apply. Repeated `GET /`
 allocates panels; closing a tab does not release authority before its TTL.
 
-The separately loaded canvas adapter must match this protocol and its runtime
-client. Server restart does not reload extensions. Native delivery remains
-[deferred](development.md#deferred-canvas-integration).
+Every client must match this protocol and its runtime client. A successful
+server start does not make an incompatible adapter safe to use.
 
 ## One latest-state watch
 
@@ -188,7 +186,7 @@ old success do not settle an unknown write. Report Save recovery fingerprints
 the original identity without keeping raw private titles/bodies; shared
 history reads must be fenced too.
 
-## Incubation and fixture bindings
+## Fixture bindings
 
 `createFixtureRuntimeAccess` is explicitly temporary, with matched source/store
 paths and disabled timers. A top-level read binding alone does not qualify
@@ -196,12 +194,8 @@ fixture writers; the joined collector must use the same access object.
 Legacy withheld routes remain withheld in that fixture. This restriction is
 not the current normal Copilot-only startup policy.
 
-Source-aware Microsoft controls, native retained leases, configuration offers,
-report publication and whole-local versus account-specific deletion have
-separate [incubation contracts](incubation/microsoft-session.md).
-Their descriptors are not frontend switches to activate them in the release.
-No unavailable native dependency becomes an empty or GitHub-only all-source
-cohort.
+Fixture descriptors cannot activate unsupported sources in the release.
+An unavailable source dependency is not an empty or GitHub-only all-source cohort.
 
 ## Focused proof
 

@@ -4,11 +4,9 @@ WIRE helps a person recognize a recorded request, inspect what happened and
 choose evidence for a report. Design around those reading and decision tasks,
 not around the implementation's status objects.
 
-The released source policy is GitHub Copilot-only. Settings has no Microsoft
-Connect/Enable/Collect controls, source-mode chooser or incubation tutorial.
-Account keeps the local WIRE sign-in/out action and stays neutral without a
-qualified desktop-selected GitHub profile. Experimental surfaces belong to
-[incubation](incubation/microsoft-native-host.md), not ordinary onboarding.
+The released source policy is GitHub Copilot-only. Settings should expose only
+supported connections. Account keeps the local WIRE sign-in/out action and
+stays neutral without a qualified desktop-selected GitHub profile.
 
 ## One coherent workspace
 

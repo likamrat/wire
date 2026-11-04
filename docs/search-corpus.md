@@ -126,26 +126,6 @@ Do not put capabilities, query text or private paths in URLs. A source change
 can retire Search authority without revoking an independently approved library
 copy; a removed saved artifact cannot be opened through either path.
 
-## Native source-fact text
-
-Optional incubation source facts use existing context hits, not new authored
-messages, services or outcomes. Only qualified recorded literal task/step/action
-names, clarification wording/options and supported provider-progress text enter.
-Raw IDs, timestamps, coordinates, hashes, structured payloads and excluded
-reasoning/control bodies do not become text.
-
-Facts retain original and decoded source pointers, source-qualified keys and
-their own availability. Their exact `native-source-fact-...` destination focuses
-the retained fact in its conversation; no call ID or author is invented.
-Missing text/unsupported facts remain incomplete context coverage. Navigation
-can remain possible without a complete analysis receipt.
-
-Native reply authority uses the actual retained account lease, not GitHub's
-separate reply-saving flag. Index, delivery and Open recheck current lease/root/
-revision. Boundaries for paged native Search, exact ordinal Open and analytical
-membership are in [retained views](incubation/native-retained-views.md).
-This does not activate the source or qualify real acquisition.
-
 ## Validation
 
 The current corpus and format suites exercise invented stores, real readers,
