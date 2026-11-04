@@ -114,6 +114,17 @@ test("canvas compatibility refusal remains explicit and does not replay an attem
     assert.deepEqual(calls, ["/health", "/api/session"]);
 });
 
+test("canvas incompatibility identifies the requested origin without allocating a session", async t => {
+    const origin = "http://127.0.0.1:54321", calls = [];
+    t.mock.method(globalThis, "fetch", async url => {
+        calls.push(url);
+        return Response.json({ service: "unrelated-fixture", protocol: 1 });
+    });
+    await assert.rejects(createRuntimeClient(origin).open("wrong-service"),
+        { message: `${origin} is not a compatible WIRE runtime.` });
+    assert.deepEqual(calls, [origin + "/health"]);
+});
+
 test("registered canvas uses the current adapter and surfaces update-required without hiding it as server downtime", async t => {
     const { runtime, origin } = await fixture(t), key = `wireCanvasFixture_${randomUUID()}`;
     const sdk = `export class CanvasError extends Error {

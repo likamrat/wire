@@ -29,7 +29,9 @@ npm ci
 npm start
 ```
 
-Open [WIRE](http://127.0.0.1:47831/) and keep the terminal running.
+Open [WIRE](http://127.0.0.1:4000/) and keep the terminal running.
+An existing instance keeps its current port until restarted. See the
+[port-change notes](docs/development.md#changing-the-local-port) before switching.
 In **Settings > Connection & updates**, review and approve the local Copilot
 metadata and history paths before collection. Starting WIRE does not approve
 a source. Only supported local histories can be read.

@@ -3,12 +3,13 @@ import { startServer } from "../lib/server.mjs";
 import { defaultDataDir } from "../lib/paths.mjs";
 import { PRODUCT_NAME } from "../lib/branding.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
+import { DEFAULT_RUNTIME_PORT } from "../lib/runtime-endpoint.mjs";
 import path from "node:path";
 
 const context = { dataDir: process.env.WORKIQ_EVIDENCE_DATA_DIR || defaultDataDir(), sessionId: null };
 let runtime, nativeHost, copilotAccess, stopping = false, closing;
 function startupOptions(args) {
-    const options = { port: 47831, developmentMicrosoft: false, microsoftConfig: null, microsoftRetained: false, microsoftAccountOnly: false,
+    const options = { port: DEFAULT_RUNTIME_PORT, developmentMicrosoft: false, microsoftConfig: null, microsoftRetained: false, microsoftAccountOnly: false,
         microsoftVisibleSignIn: false, microsoftVisibilityExperiment: false, microsoftManualCollection: false };
     const seen = new Set();
     const invalid = () => { throw Object.assign(new Error(

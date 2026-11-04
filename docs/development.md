@@ -1,7 +1,7 @@
 # Development
 
 WIRE is a private, source-only Node application. The delivered route is the
-ordinary browser at `http://127.0.0.1:47831/`; native canvas delivery remains
+ordinary browser at `http://127.0.0.1:4000/` by default; native canvas delivery remains
 deferred. See [README](../README.md) for the current source-availability notice.
 
 ## Run from the intended checkout
@@ -28,6 +28,25 @@ All checkouts default to the same per-user store. A disposable fixture must
 provide an explicit owned data directory outside source, disable collection
 timers and use invented source paths. Never point a fixture at the normal store,
 an existing browser profile or original history.
+
+## Changing the local port
+
+The default is `4000`, bound only to `127.0.0.1`. Use
+`npm start -- --port 47831` to keep the previous address, or pass another explicit
+port. WIRE refuses an occupied port instead of silently choosing another.
+`WORKIQ_EVIDENCE_DATA_DIR` still selects the store; a port change does not move
+retained evidence, collection settings or saved reports.
+
+Before switching, finish any drafts and resolve pending or unconfirmed operations
+in the existing tab. Do not repeat an uncertain Save, deletion or collection
+operation at the new address. Browser-local recovery markers and in-memory drafts
+do not transfer between ports; leave the old instance in place if recovery is
+unresolved.
+
+After a controlled restart, open the printed URL and update bookmarks. Already-open
+tabs keep using the old address. Theme, sidebar and display-time-zone preferences
+belong to the browser origin and may need setting again. Do not copy capabilities
+or browser storage to carry a session across.
 
 ## Check a change
 
