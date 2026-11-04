@@ -39,6 +39,17 @@ Private data is stored outside the checkout, by default at
 data store. Saving Copilot replies needs separate approval; review report
 copies before sharing because local masking can miss confidential information.
 
+## Comparisons and reports
+
+Compare recorded call outcomes and timings across two periods.
+
+[![A comparison of two periods showing call outcomes and tool latency side by side.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
+
+Open a saved report to read its selected activity, tool and service patterns,
+and recorded results.
+
+[![A saved HTML report open in WIRE, showing its scope, activity counts, tools and services.](docs/images/saved-report.png)](docs/images/saved-report.png)
+
 ## Guides
 
 - [Use WIRE](docs/user-guide.md)
