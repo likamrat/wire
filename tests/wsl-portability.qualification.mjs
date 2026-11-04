@@ -222,6 +222,17 @@ test("a sealed saved-prefix range is verified even when the primary tail anchor 
     await assert.rejects(applyHostHandover(app.context, plan, { ...app.options, reviewedPlanHash: plan.planHash }),
         { code: "HOST_HANDOVER_REFUSED" });
     assert.equal((await hostHandoverStatus(app.context, plan)).outcome, "not-applied");
+    for (const previousGeneration of [{ fingerprint: "0".repeat(64), deletionVersion: 0 },
+        { fingerprint: app.policy.sourceFingerprint, deletionVersion: 1 }]) {
+        Object.assign(checkpoint.backfill, previousGeneration);
+        const preserved = JSON.stringify(checkpoint);
+        await writeFile(path.join(folder, `${app.sessionId}.json`), preserved);
+        const current = await prepareHostHandover(app.context, app.policy, app.options);
+        assert.equal(current.mapping.backfillReferences[0].classification, "preserved-stale-generation");
+        assert.equal(current.mapping.rows[0].verificationRanges, undefined,
+            "An old generation must not authorize reading its obsolete verification ranges.");
+        assert.equal(await readFile(path.join(folder, `${app.sessionId}.json`), "utf8"), preserved);
+    }
 });
 
 test("a lost handover response is resolved by reading the single committed mapping without a recovery write", async t => {
