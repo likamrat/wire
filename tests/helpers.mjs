@@ -6,6 +6,11 @@ import { buildExportCatalog } from "../lib/export-selection.mjs";
 import { collectorFor } from "../lib/collector.mjs";
 import { AUTOMATIC_SCORE_METHOD, planAutomaticScore } from "../lib/automatic-score-policy.mjs";
 
+// Fake-HTTP UI fixtures only; real runtimes must provide their own handshake descriptor.
+export const UNBOUND_FIXTURE_BOOTSTRAP = Object.freeze({
+    schemaVersion: 1, mode: "unbound", runtimeId: "00000000-0000-4000-8000-000000000001",
+});
+
 export function automaticScoreOffSummary() {
     return {
         schemaVersion: 1, approvalRevision: 0, source: null, method: AUTOMATIC_SCORE_METHOD,
@@ -19,7 +24,29 @@ export function exportCatalogFor(records) {
     return { requests, excluded };
 }
 
+export async function completeNativeScroll(page, scroll, action) {
+    const completion = await scroll.evaluateHandle(node => {
+        const start = node.scrollLeft, state = { done: false };
+        const finish = () => {
+            if (node.scrollLeft === start) return;
+            state.done = true;
+            node.removeEventListener("scrollend", finish);
+        };
+        state.dispose = () => node.removeEventListener("scrollend", finish);
+        node.addEventListener("scrollend", finish);
+        return state;
+    });
+    try {
+        await action();
+        await page.waitForFunction(state => state.done, completion);
+    } finally {
+        await completion.evaluate(state => state.dispose());
+        await completion.dispose();
+    }
+}
+
 export async function navigateMain(page, view) {
+    await closeAnalyzeFilters(page);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     async function revealNavigation() {
         const trigger = page.locator("#navigationToggle");
@@ -40,11 +67,14 @@ export async function navigateMain(page, view) {
 }
 
 export async function revealStoredRefresh(page) {
-    // Legacy callers now use the one Refresh journey, or its read-only recovery.
+    // Collection actions live in the existing Settings task, never in navigation.
     const retry = page.locator("#refreshBtn:visible, #collectionRetry:visible, [data-stored-refresh-retry]:visible").first();
     if (await retry.count()) return retry;
-    const entry = page.locator("#activityUpdateToggle");
-    if (await entry.isVisible() && await entry.getAttribute("aria-expanded") !== "true") await entry.click();
+    if (!await page.locator("#checkActivity").isVisible()) {
+        await navigateMain(page, "settings");
+        await navigateSettings(page, "connection");
+    }
+    if (await retry.count()) return retry;
     return page.locator("#checkActivity");
 }
 
@@ -74,6 +104,7 @@ export async function openSourceEditor(page) {
 
 // Compatibility helper: Analyze already renders matching interactions directly.
 export async function openActivitySessions(page) {
+    await closeAnalyzeFilters(page);
     if (!await page.locator("#activityView").isVisible()) return;
     const closed = page.locator(".session-toggle[aria-expanded=false]");
     while (await closed.count()) await closed.first().click();
@@ -82,10 +113,52 @@ export async function openActivitySessions(page) {
 export async function chooseTheme(page, value) {
     const theme = value.toLowerCase();
     if (!["light", "dark"].includes(theme)) throw new TypeError("Theme fixtures require light or dark.");
+    const filterOpen = await page.locator("#analyzeFilterDialog").count() && await page.locator("#analyzeFilterDialog").evaluate(node => node.open);
+    if (filterOpen) await closeAnalyzeFilters(page);
     if (await page.locator("html").getAttribute("data-evidence-theme") !== theme) {
         await page.getByRole("switch", { name: "Dark theme", exact: true }).click();
     }
     await page.waitForFunction((expected) => document.documentElement.dataset.evidenceTheme === expected, theme);
+    if (filterOpen) await openAnalyzeFilters(page);
+}
+
+export async function openAnalyzeFilters(page) {
+    const trigger = page.locator("#openAnalyzeFilters");
+    if (await trigger.count() && await trigger.isVisible() && await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
+}
+
+export async function closeAnalyzeFilters(page) {
+    const close = page.locator("#closeAnalyzeFilters");
+    if (await close.count() && await close.isVisible()) {
+        await close.click();
+        await page.locator("#analyzeFilterDialog").waitFor({ state: "hidden" });
+    }
+}
+
+export async function revealAnalyzeRecords(page) {
+    await closeAnalyzeFilters(page);
+    if (!await page.locator("#activityView").isVisible()
+        || await page.locator("#contextSidebar").evaluate(node => node.open)
+        || await page.locator("#navigationDrawer").evaluate(node => node.open)) {
+        await navigateMain(page, "analyze");
+        await page.waitForFunction(() => !document.querySelector("#contextSidebar").open
+            && !document.querySelector("#navigationDrawer").open);
+    }
+    const summary = page.locator("#activityListSummary");
+    await summary.focus();
+    await page.locator("#activityListContext").evaluate(node => node.scrollIntoView({ block: "start" }));
+}
+
+export async function revealSavedDataRead(page) {
+    if (!await page.locator("#collectionStatusView").isVisible()) {
+        await navigateMain(page, "settings");
+        await navigateSettings(page, "connection");
+        await page.locator("#settingsStatusLink a").click();
+    }
+    if (!await page.locator("#collectionSetup").evaluate(node => node.open)) {
+        await page.locator("#collectionSetup > summary").click();
+    }
+    return page.locator("#freshStoredRead");
 }
 
 export async function selectActivityOption(page, id, value) {
@@ -94,6 +167,7 @@ export async function selectActivityOption(page, id, value) {
         if (await page.locator("#" + id).inputValue() === value) return;
         await openSearchFilters(page);
     }
+    if (!await trigger.isVisible() && await page.locator("#filters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await openAnalyzeFilters(page);
     if (!await trigger.isVisible() && await page.locator("#moreFilters").locator(`[data-select-id=${JSON.stringify(id)}]`).count()) await page.locator("#moreFilters > summary").click();
     if (!await trigger.isVisible() && ["collectionWindow", "collectionCadence"].includes(id)) await navigateSettings(page, "connection");
     await trigger.click();
@@ -126,6 +200,7 @@ export async function setLegacyTimeBucket(page, bucket) {
 }
 
 export async function openSearchFilters(page) {
+    await closeAnalyzeFilters(page);
     await page.locator("#wireSearch").focus();
     await page.locator(".wire-search-filters").waitFor({ state: "visible" });
 }

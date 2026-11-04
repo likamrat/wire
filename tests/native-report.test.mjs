@@ -35,11 +35,11 @@ for (const measured of [false, true]) test(`timing method narration requires sam
         assert.match(text, /0 of 1 requests? timed/);
         if (measured) {
             assert.match(text, /2 of 2 calls timed/);
-            assert.match(text, /0 s \(0 ms\)/);
+            assert.match(text, /0 ms/);
         } else {
             assert.match(text, /0 of 2 calls timed/);
             assert.match(text, /Not measured/);
-            assert.doesNotMatch(text, /0 s \(0 ms\)/);
+            assert.doesNotMatch(text, /0 ms/);
         }
     }
     assert.deepEqual(facts, before);
@@ -295,7 +295,7 @@ test("zero, missing timing, single sample and unavailable assessments stay disti
     assert.match(renderHtmlReport([]), /No qualifying records/);
     assert.doesNotMatch(renderHtmlReport([]), /calls failed \(0%/);
     for (const [records, expected] of [
-        [matrixRecords("single-zero", ["success"], { durations: [0] }), /0 s \(0 ms\).*Not shown for one sample/],
+        [matrixRecords("single-zero", ["success"], { durations: [0] }), /0 ms.*Not shown for one sample/],
         [matrixRecords("single-missing", ["unknown"]), /Not measured/],
     ]) {
         const bundle = await buildSanitizedBundle(records, key, { promptMode: "none", formats: ["html", "json", "markdown"] });

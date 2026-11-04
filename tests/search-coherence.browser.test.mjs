@@ -50,7 +50,7 @@ test("Search removes caption recitals without merging the interaction and its re
         await expect(action.locator(".wire-search-source")).toHaveText(records[0].sourceSessionName);
         await expect(action.locator(".wire-search-source mark")).toHaveText("NOVA");
         await expect(action.locator(".wire-search-kind")).toHaveText("Work IQ tool call");
-        await expect(action.locator(".wire-search-outcome")).toHaveText("Worked");
+        await expect(action.locator(".wire-search-outcome")).toHaveText("Tool completed");
         await openSearchFilters(page);
         await expect(page.locator("#wireSearchOptions,#wireSearchFilterSummary")).toHaveCount(0);
         const filterLayout = await page.evaluate(() => {
@@ -140,7 +140,7 @@ test("Search removes caption recitals without merging the interaction and its re
 });
 
 test("Search action labels and glyphs use the real recorded-result layer contract", { timeout: 20000 }, async t => {
-    const records = searchRecords(3), cleanup = [], results = createRecordedResults(), errors = [];
+    const records = searchRecords(3), cleanup = [], results = createRecordedResults({ screen: true }), errors = [];
     records[0].toolCalls[0].toolSucceeded = false; records[0].toolCalls[0].reportedOutcome = "failed";
     records[1].toolCalls[0].toolSucceeded = null; records[1].toolCalls[0].reportedOutcome = "partial";
     records[2].toolCalls[0].toolSucceeded = null; records[2].toolCalls[0].reportedOutcome = "unknown";
@@ -154,7 +154,7 @@ test("Search action labels and glyphs use the real recorded-result layer contrac
     t.after(async () => {
         await browser.close(); for (const fn of cleanup) await fn(); assert.deepEqual(errors, []);
     });
-    await page.goto(app.runtime.url + "#analyze?mode=calls");
+    await page.goto(app.runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     for (const [query, layer, key] of [["403", "http", "failure"], ["partial", "tool", "partial"], ["unknown", "tool", "unknown"]]) {
         await page.locator("#wireSearch").fill(query);
@@ -165,10 +165,9 @@ test("Search action labels and glyphs use the real recorded-result layer contrac
         await expect(row.locator(".wire-search-outcome")).toHaveText(expected.label);
         await expect(row.locator(".wire-search-outcome .wire-icon")).toHaveAttribute("data-lucide-icon", uxIconSources[expected.icon]);
         await expect(row.locator(".wire-search-outcome .wire-icon")).toHaveAttribute("data-icon-size", "16");
-        const shared = page.locator(`#activityList .recorded-result.${key} .wire-icon`).first();
-        await expect(shared).toHaveAttribute("data-icon-size", "16");
-        assert.equal(await row.locator(".wire-search-outcome .wire-icon").innerHTML(), await shared.innerHTML());
         await expect(row).toHaveAccessibleName(new RegExp(results.unit(layer, 1)));
+        await expect(row).not.toContainText("#request");
+        await expect(row).not.toContainText("call%3A");
         await expect(row.locator("mark")).not.toHaveCount(0);
     }
     await page.locator("#wireSearch").fill("success");
@@ -223,23 +222,30 @@ test("Search retires current review navigation without suppressing authorized fr
         await expect(page.locator("#wireSearchType")).toHaveValue("report");
         assert.deepEqual(await readFile(file), bytes);
     }
-    await input.press("Escape");
-    await selectActivityOption(page, "layerFilter", "http");
+    await page.goto(app.runtime.url + "#analyze?layer=http");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#layerFilter")).toHaveValue("http");
+    await expect(page.locator("#activityListSummary")).toContainText("owned HTTP record");
+    await input.focus();
     await input.fill("Failed calls"); await selectActivityOption(page, "wireSearchType", "view");
     await expect(rows).toHaveCount(1);
     await expect(rows.locator(".wire-search-title")).toHaveText("Failed calls");
     await rows.click();
+    await expect(page).toHaveURL(/#analyze\?.*\bresult=failure/);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await expect(page.locator("#activityList .matched-action")).toHaveCount(1);
+    await expect(page.locator("#activityList .request-card-open")).toHaveCount(1);
     const destination = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
-    assert.equal(destination.get("mode"), "calls"); assert.equal(destination.get("result"), "failure");
+    assert.equal(destination.has("mode"), false); assert.equal(destination.get("result"), "failure");
     await expect(page.locator("#layerFilter")).toHaveValue("tool");
     const call = `call:${JSON.stringify([records[0].sourceSessionId, records[0].toolCalls[0].toolCallId])}`;
-    await expect(page.locator("#activityList .matched-action")).toHaveAttribute("data-action-id", call);
+    await expect(page.locator("#activityList .request-card-open")).toHaveAttribute("href", /request=search-0/);
     await expect(page.locator("#activityView")).toBeFocused();
     await expect(page.locator("#homeFindings")).toHaveCount(0);
     await page.goBack(); await expect(rows).toBeFocused();
     await expect(input).toHaveValue("Failed calls");
+    await rows.click();
+    await expect(page).toHaveURL(/#analyze\?.*\bresult=failure/);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await page.locator("#activityList .request-card-open").click();
+    await expect(page.locator(`[data-action-id='${call}']`).first()).toBeVisible();
 });

@@ -9,7 +9,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
 import { buildSanitizedBundle } from "../lib/export.mjs";
-import { fixture as sourceFixture, exportCatalogFor, chooseTheme, openActivitySessions } from "./helpers.mjs";
+import { fixture as sourceFixture, exportCatalogFor, chooseTheme, openActivitySessions, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { selectExportSnapshot } from "../lib/export-selection.mjs";
 
 const proofDir = process.env.WORKIQ_CATEGORY_PROOFS;
@@ -29,7 +29,7 @@ async function fixture(run, contextOptions = {}) {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-category-fixture'; style-src 'unsafe-inline'; connect-src 'self'; frame-src 'self'; base-uri 'none'");
-            return res.end(renderHtmlShell("a".repeat(64), "category-fixture"));
+            return res.end(renderHtmlShell("a".repeat(64), "category-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         let text = ""; for await (const part of req) text += part;
         const input = JSON.parse(text);

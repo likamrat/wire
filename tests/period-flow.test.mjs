@@ -28,9 +28,20 @@ test("period feedback counts exact distinct canonical request owners and source 
     assert.equal(result.sessions, 2);
     assert.equal(result.requests, 2);
     assert.equal(result.summary, "2 Copilot chats / 2 request groups with 3 Work IQ tool calls.");
+    assert.deepEqual(result.countParts, ["2 interactions", "2 Copilot chats"]);
+    assert.equal(result.countText, "2 interactions; 2 Copilot chats");
     assert.match(result.next, /^Jul 29, 2026 - Oct 5, 2026.*Current filters/);
     assert.equal(result.warning, "Some of this period is outside checked history; activity may be missing.");
     assert.equal(result.historyLink, true);
+});
+
+test("scope count peers retain separate recorder and unknown-source populations", () => {
+    const recorder = describe({ rows, filters: {}, timeContext, layer: "http", unit: "owned HTTP records" });
+    assert.deepEqual(recorder.countParts, ["2 record groups", "2 recorder sources"]);
+    assert.equal(recorder.countText, "2 record groups; 2 recorder sources");
+    const unknown = describe({ rows: [{ scenarioId: "unknown" }], filters: {}, timeContext });
+    assert.deepEqual(unknown.countParts, ["1 interaction", "0 Copilot chats"]);
+    assert.match(unknown.summary, /1 record has no source identity/);
 });
 test("coverage boundaries use local IANA days without claiming full-day or complete collection", () => {
     const result = describe({ rows, filters: { from: "2026-09-04", to: "2026-10-04" }, coverage: { since: "2026-09-05T00:00:00Z", until: "2026-10-05T00:00:00Z" }, timeContext });

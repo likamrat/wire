@@ -19,6 +19,7 @@ export function createSearchMembership(snapshot, options, withinServices, hits, 
             actionIds.add(row.id); parents.add(id);
         } else { scenarios.add(id); parents.add(id); }
     }
-    return { revision: snapshot.revision, scopeKey: JSON.stringify([options, withinServices]), receipt,
+    return { revision: snapshot.revision, ...(snapshot.nativeRead ? { nativeRevision: snapshot.nativeRead.revision } : {}),
+        scopeKey: JSON.stringify([options, withinServices]), receipt,
         scenarioIds: [...scenarios].sort(), actionIds: [...actionIds].sort(), parentScenarioIds: [...parents].sort() };
 }

@@ -7,10 +7,10 @@ import { DatabaseSync } from "node:sqlite";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords, streamPanel, saveSearchComparison } from "./live-search-fixture.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { chooseTheme, selectActivityOption, openSearchFilters } from "./helpers.mjs";
+import { chooseTheme, selectActivityOption, openSearchFilters, openAnalyzeFilters } from "./helpers.mjs";
 import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
 import { readSavedReportFile, readSavedComparisonFile, readSavedComparison, reportHash } from "../lib/report-artifacts.mjs";
-import { mountPeriodComparison } from "../web/period-comparison.mjs";
+import { mountPeriodComparison, createPeriodComparisonPresentation } from "../web/period-comparison.mjs";
 
 async function setup(t, options) {
     const app = await searchFixture(t, options);
@@ -25,6 +25,13 @@ async function setup(t, options) {
         requests.push({ url: request.url(), method: request.method() });
         capability = request.headers()["x-board-capability"] ?? capability;
     });
+    if (options?.ownerApi) await page.route(new URL("/", app.runtime.url).href, async route => {
+        const response = await route.fetch(), html = await response.text();
+        const binding = "const periodComparisonUI = assessmentFactories.periodComparison.mount({";
+        assert.ok(html.includes(binding));
+        await route.fulfill({ response, body: html.replace(binding,
+            "const periodComparisonUI = window.periodComparisonOwner = assessmentFactories.periodComparison.mount({") });
+    });
     await page.goto(app.runtime.url);
     await expect(page.locator('#workspace[aria-busy="false"]')).toBeVisible();
     const api = (route, data = {}) => page.request.post(new URL(route, app.runtime.url).href, {
@@ -36,35 +43,19 @@ async function find(page, query, type = "") {
     await page.locator("#wireSearch").focus();
     await page.locator("#wireSearch").fill(query);
     await selectActivityOption(page, "wireSearchType", type);
-    await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|Search is incomplete\. Some saved content could not be searched\.)$/, { timeout: 30000 });
+    await expect(page.locator("#wireSearchStatus")).toHaveText(/^(?:\d+ (?:available )?match(?:es)?|No matches\. Try different words\.|Search is incomplete\. Some saved content could not be searched\.|Saved GitHub replies are unavailable for Search\.)$/, { timeout: 30000 });
     return page.locator("#wireSearchResults button");
 }
-
-test("Search View, Comparison and Report glyphs stay independent of left navigation", { timeout: 30000 }, async t => {
-    const app = await setup(t, { formats: ["json", "html"], reply: false });
-    await saveSearchComparison(app, ["json"]);
-    const before = await loadBoardState(app.context);
-    for (const [type, query, asset, size] of [
-        ["view", "Recorded timing", "chart-no-axes-combined", "24"],
-        ["comparison", "Saved comparison", "chart-no-axes-combined", "24"],
-        ["report", "physician", "file-text", "20"],
-    ]) {
-        const rows = await find(app.page, query, type);
-        await expect(rows.first()).toBeVisible();
-        for (const row of await rows.all()) {
-            const icon = row.locator(".wire-search-type-icon .wire-icon");
-            await expect(icon).toHaveAttribute("data-lucide-icon", asset);
-            await expect(icon).toHaveAttribute("data-icon-size", size);
-            await expect(icon).toHaveAttribute("aria-hidden", "true");
-            const box = await icon.boundingBox();
-            assert.equal(box.width, 16); assert.equal(box.height, 16);
-        }
+async function jsonValues(page) {
+    const tree = page.locator("#savedReportReader .saved-json-tree");
+    await tree.waitFor();
+    while (await tree.locator("details:not([open])").count()) {
+        await tree.locator("details:not([open])").first().evaluate(node => new Promise(resolve => {
+            node.addEventListener("toggle", resolve, { once: true }); node.open = true;
+        }));
     }
-    assert.deepEqual(app.errors, []);
-    assert.ok(app.requests.every(request => new URL(request.url).origin === new URL(app.runtime.url).origin));
-    const after = await loadBoardState(app.context);
-    for (const key of ["evidence", "exports", "cards", "personalEvaluation"]) assert.deepEqual(after[key], before[key]);
-});
+    return tree.locator(".saved-json-scalar").allTextContents();
+}
 
 test("normal literal fragments and exact anchors open all types and restore Back", { timeout: 120000 }, async t => {
     const app = await setup(t, { formats: ["html", "json", "markdown", "pdf"] });
@@ -125,19 +116,24 @@ test("normal literal fragments and exact anchors open all types and restore Back
         items: typedStatus.items }));
     for (const [index, kind] of ["html", "json", "markdown", "pdf"].entries()) {
         const row = page.locator(`#wireSearchResults button[data-search-bundle="${bundles[index].bundleId}"]`);
-        const download = kind === "pdf" ? page.waitForEvent("download") : null;
         await row.click();
         const dialog = page.locator("#savedReportReader");
         await expect(dialog).toBeVisible();
         if (kind === "html") await expect(dialog.locator("iframe")).toHaveCount(1);
-        if (kind === "json" || kind === "markdown") await expect(dialog.locator("pre")).toContainText("physician");
-        if (download) assert.equal((await download).suggestedFilename(), "product-report.pdf");
+        if (kind === "json") assert.ok((await jsonValues(page)).some(value => value.includes("physician")));
+        if (kind === "markdown") await expect(dialog.locator(".saved-markdown")).toContainText("physician");
+        if (kind === "pdf") {
+            await expect(dialog.locator(".saved-pdf-pages")).toHaveAttribute("aria-busy", "false");
+            const download = page.waitForEvent("download");
+            await dialog.getByRole("button", { name: "Download", exact: true }).click();
+            assert.equal((await download).suggestedFilename(), "product-report.pdf");
+        }
         await dialog.getByRole("button", { name: "Back to search" }).click();
         await expect(page.locator("#wireSearchResults button")).toHaveCount(4);
     }
-    await find(page, "Saved comparison", "comparison");
+    await find(page, preview.title, "comparison");
     await page.locator("#wireSearchResults button").first().click();
-    await expect(page.locator("#savedReportReader")).toContainText("Saved comparison");
+    await expect(page.locator("#pageTitle")).toHaveText(preview.title);
     await page.goBack();
     const storage = await page.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), history.state]));
     assert.doesNotMatch(storage, /PHYS|physician|lab results|GET \/me|workiq-fet/);
@@ -194,9 +190,10 @@ test("partial searchable coverage blocks only current-view reports, preserving h
     await page.locator("#activityList .request-card-open").nth(1).click();
     await page.locator("#requestReportToggle").click();
     await page.locator("#closeContextSidebar").click();
-    await page.locator("#openAnalysisSearch").click();
     await page.locator("#wireSearch").fill("PHYS");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Partial searchable coverage");
+    await selectActivityOption(page, "wireSearchScope", "analysis");
+    await page.locator("#wireSearch").focus();
+    await expect(page.locator("#wireAnalysisSearchNotice")).toHaveText("Some saved text could not be searched. Counts and Current reports are unavailable.");
     await expect(page.locator("#homeView")).toBeHidden();
     await expect(page.locator("#activityView")).toBeHidden();
     await page.locator('nav [data-nav="reports"]').click();
@@ -206,19 +203,22 @@ test("partial searchable coverage blocks only current-view reports, preserving h
     await expect(page.locator("#reportPromptAuthorSummary")).toContainText("counts are unavailable");
     await chooseReportScope(page, "selected");
     await expect(page.locator("#exportBtn")).toBeEnabled();
-    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 1 interaction");
+    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 1 interaction");
+    await expect(page.locator("#previewSelectionSummary > span")).toHaveText(["1 chat", "1 interaction"]);
     await expect(page.locator("#reportMatchingContext")).toBeHidden();
     await chooseReportScope(page, "all");
     await expect(page.locator("#exportBtn")).toBeEnabled();
-    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 3 interactions");
+    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 3 interactions");
+    await expect(page.locator("#previewSelectionSummary > span")).toHaveText(["1 chat", "3 interactions"]);
 });
 
 for (const [name, query, hits] of [["nonempty", "physician", 1], ["empty", "NONEXISTENT_MATCH_77319", 0]]) {
     test(`correction: partial ${name} matches never display analytical populations`, { timeout: 30000 }, async t => {
         const { page } = await setup(t, { reply: false });
-        await page.locator("#openAnalysisSearch").click();
         await page.locator("#wireSearch").fill(query);
-        await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Partial searchable coverage");
+        await selectActivityOption(page, "wireSearchScope", "analysis");
+        await page.locator("#wireSearch").focus();
+        await expect(page.locator("#wireAnalysisSearchNotice")).toHaveText("Some saved text could not be searched. Counts and Current reports are unavailable.");
         await expect(page.locator("#wireSearchResults button")).toHaveCount(hits);
         for (const id of ["homeView", "activityView", "periodFeedback", "sessionAnalysis"]) {
             await expect(page.locator("#" + id)).toBeHidden();
@@ -240,15 +240,18 @@ test("correction: legacy phrase intersects literal membership and survives remov
         dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
     });
     await expect(page.locator("#activityCount")).toHaveText("1");
-    await page.locator("#openAnalysisSearch").click();
     await page.locator("#wireSearch").fill("mechanic");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await selectActivityOption(page, "wireSearchScope", "analysis");
+    await page.locator("#wireSearch").focus();
+    await expect(page.locator("#activityListScope")).toContainText("Search applied");
     await expect(page.locator("#activityCount")).toHaveText("0");
     await expect(page.locator("#wireSearchResults button")).toHaveCount(1);
+    await openAnalyzeFilters(page);
     await page.getByRole("button", { name: "Remove private search", exact: true }).click();
     await expect(page.locator("#activityCount")).toHaveText("1");
     await page.goBack();
     await expect(page.locator("#activityCount")).toHaveText("0");
+    await openAnalyzeFilters(page);
     await expect(page.getByRole("button", { name: "Remove private search", exact: true })).toBeVisible();
     await expect(page.locator("#wireSearch")).toHaveValue("mechanic");
     const stored = await page.evaluate(() => history.state.evidenceView.search);
@@ -267,8 +270,9 @@ test("correction: page-two cross-layer action Back retains result page and focus
         await new Promise(resolve => setTimeout(resolve, 400));
         await route.fulfill({ response });
     });
-    await page.locator("#openAnalysisSearch").click();
     await page.locator("#wireSearch").fill("403");
+    await selectActivityOption(page, "wireSearchScope", "analysis");
+    await page.locator("#wireSearch").focus();
     await expect(page.locator("#wireSearchStatus")).toHaveText("24 matches", { timeout: 30000 });
     await page.getByRole("button", { name: "Next results", exact: true }).click();
     const hit = page.locator("#wireSearchResults button").first(), id = await hit.getAttribute("data-search-id");
@@ -282,6 +286,22 @@ test("correction: page-two cross-layer action Back retains result page and focus
     await expect(page.locator("#layerFilter")).toHaveValue("tool");
     await expect(page.locator("#wireSearchPaging")).toContainText("Page 2 of 2");
     await expect(page.locator(`#wireSearchResults button[data-search-id="${id}"]`)).toBeFocused();
+    await hit.click();
+    await expect(page.locator("#selectedCall")).toBeVisible();
+    const entered = Promise.withResolvers(), release = Promise.withResolvers();
+    t.after(() => release.resolve());
+    await page.route("**/api/search/query", async route => {
+        entered.resolve(); await release.promise; await route.continue();
+    });
+    await page.goBack(); await entered.promise;
+    await page.locator('nav [data-nav="settings"]').click();
+    await expect(page.locator("#pageTitle")).toHaveText("Settings");
+    const focus = await page.evaluate(() => ({ id: document.activeElement.id, text: document.activeElement.textContent }));
+    const completed = page.waitForResponse(response => response.url().endsWith("/api/search/query"));
+    release.resolve(); await (await completed).finished();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.deepEqual(await page.evaluate(() => ({ id: document.activeElement.id, text: document.activeElement.textContent })), focus);
+    assert.equal(await page.locator("#wireSearchResults").evaluate(node => node.contains(document.activeElement)), false);
 });
 
 test("scope is explicit, selection is retained, themes and narrow text remain usable", { timeout: 60000 }, async t => {
@@ -289,10 +309,11 @@ test("scope is explicit, selection is retained, themes and narrow text remain us
     await page.locator("#activityList .request-card-open").first().click();
     await page.locator("#requestReportToggle").click();
     await page.locator("#closeContextSidebar").click();
-    await page.locator("#openAnalysisSearch").click();
     await page.locator("#wireSearch").fill("PHYS");
+    await selectActivityOption(page, "wireSearchScope", "analysis");
+    await page.locator("#wireSearch").focus();
     await expect(page.locator("#homeView")).toBeHidden();
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await expect(page.locator("#activityListScope")).toContainText("Search applied");
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#activityCount")).toHaveText("1");
     await expect(page.locator("#activityList .request-row")).toHaveCount(1);
@@ -304,7 +325,7 @@ test("scope is explicit, selection is retained, themes and narrow text remain us
     await changedScope;
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#activityCount")).toHaveText("1");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await expect(page.locator("#activityListScope")).toContainText("Search applied");
     await openSearchFilters(page);
     await page.locator("#wireSearchClear").click();
     await expect(page.locator("#activityCount")).toHaveText("3");
@@ -362,7 +383,7 @@ test("two visible panels clear on revocation, artifact deletion and source repla
         await expect(current.locator("#wireSearchStatus")).toHaveText("Saved content changed. Search again.");
         await find(current, "lab results", "reply");
         await expect(current.locator("#wireSearchResults button")).toHaveCount(0);
-        await expect(current.locator("#wireSearchStatus")).toHaveText("Search is incomplete. Some saved content could not be searched.");
+        await expect(current.locator("#wireSearchStatus")).toHaveText("Saved GitHub replies are unavailable for Search.");
         await find(current, "physician", "report");
         await expect(current.locator("#wireSearchResults button")).toHaveCount(1);
     }
@@ -393,9 +414,10 @@ test("two visible panels clear on revocation, artifact deletion and source repla
 
 test("complete literal analytical membership is independent of navigation paging", { timeout: 60000 }, async t => {
     const { page } = await setup(t, { records: searchRecords(63) });
-    await page.locator("#openAnalysisSearch").click();
     await page.locator("#wireSearch").fill("PHYS");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches", { timeout: 30000 });
+    await selectActivityOption(page, "wireSearchScope", "analysis");
+    await page.locator("#wireSearch").focus();
+    await expect(page.locator("#activityListScope")).toContainText("Search applied", { timeout: 30000 });
     await expect(page.locator("#wireSearchResults button")).toHaveCount(20);
     await expect(page.locator("#activityCount")).toHaveText("21");
     await page.getByRole("button", { name: "Next results", exact: true }).click();
@@ -443,9 +465,10 @@ async function jointSearch(page, query, layer = "tool") {
         dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
     }, layer);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await page.locator("#openAnalysisSearch").click();
     await page.locator("#wireSearch").fill(query);
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches", { timeout: 30000 });
+    await selectActivityOption(page, "wireSearchScope", "analysis");
+    await page.locator("#wireSearch").focus();
+    await expect(page.locator("#activityListScope")).toContainText("Search applied", { timeout: 30000 });
 }
 async function compareJointPeriods(page) {
     await page.locator("#comparePeriods").click();
@@ -486,8 +509,7 @@ test("joint: literal matching and legacy scope span both periods through Review 
     assert.equal(admissions, 1);
     await expect(page.locator("#comparisonSearch")).toBeHidden();
     await expect(page.locator('input[type=search]:visible')).toHaveCount(1);
-    await page.getByRole("button", { name: "Search this comparison", exact: true }).focus();
-    await page.keyboard.press("Enter");
+    await page.locator("#wireSearch").focus();
     await expect(page.locator("#wireSearch")).toBeFocused();
     await expect(page.getByLabel("Period A from", { exact: true })).toHaveValue("2026-09-30");
     await expect(page.getByLabel("Period B to", { exact: true })).toHaveValue("2026-10-01");
@@ -553,10 +575,30 @@ test("joint: literal matching and legacy scope span both periods through Review 
     assert.deepEqual(app.errors, []);
 });
 
+test("joint: accepted pair captures bound Search presence without a private phrase or query text", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, { records: jointRecords(), ownerApi: true });
+    await page.locator("#wireSearch").fill("PHYS");
+    await selectActivityOption(page, "wireSearchScope", "analysis");
+    await expect(page.locator("#activityListScope")).toContainText("Search applied");
+    await page.keyboard.press("Escape");
+    const { value, input } = await compareJointPeriods(page);
+    assert.ok(input.semanticSelection);
+    assert.equal(input.semanticSelection.withinScenarioIds, undefined);
+    const pair = await page.evaluate(() => window.periodComparisonOwner.acceptedPair());
+    assert.deepEqual(pair.comparison, value);
+    assert.deepEqual(pair.scope, { hasSearch: true, projects: [], sessions: [], endpoints: [] });
+    assert.doesNotMatch(JSON.stringify(pair.scope), /PHYS/i);
+});
+
 test("joint: exact action receipt keeps broad API parents and a stale fence blocks the paired consumer", { timeout: 60000 }, async t => {
     const { page, api, context, errors } = await setup(t, { records: jointRecords() });
     await jointSearch(page, "403", "reported-api");
     const { value } = await compareJointPeriods(page);
+    await expect(page.locator("#periodComparisonResults > .compare-caption").filter({ hasText: /^tool-returned API results$/ })).toHaveCount(1);
+    await expect(page.locator("#comparisonAcceptedScope")).toHaveText("Search applied");
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription("Search applied");
+    await expect(page.locator(".compare-latency .compare-empty")).toContainText("not timed tool calls");
+    await expect(page.locator(".compare-latency table")).toHaveCount(0);
     assert.deepEqual(value.selection.semanticMembership.scenarioIds, []);
     for (const [side, id] of [["baseline", "search-0"], ["later", "search-3"]]) {
         assert.deepEqual(value.periods[side].scenarioIds, [id]);
@@ -605,7 +647,7 @@ test("joint: partial search cannot dispatch a complete paired population or enab
     await page.locator("#wireSearch").focus();
     await page.locator("#wireSearch").fill("physician");
     await selectActivityOption(page, "wireSearchScope", "analysis");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Partial searchable coverage");
+    await expect(page.locator("#wireAnalysisSearchNotice")).toHaveText("Some saved text could not be searched. Counts and Current reports are unavailable.");
     for (const [label, value] of [
         ["Period A from", "2026-09-30"], ["Period A to", "2026-09-30"],
         ["Period B from", "2026-10-01"], ["Period B to", "2026-10-01"],
@@ -623,21 +665,26 @@ test("joint: absent openSearch callback preserves the standalone legacy field", 
     t.after(() => browser.close());
     const page = await browser.newPage();
     await page.setContent("<select id='outcomeFilter'><option value='success'>Worked</option></select><button id='toggle'>Compare</button><section id='comparison'></section>");
-    await page.evaluate(async source => {
+    await page.evaluate(async ({ source, presenter }) => {
         const mount = (0, eval)("(" + source + ")");
         const context = { route: { view: "analyze", compare: "periods" }, search: "legacy phrase",
             options: { layer: "tool", filters: {}, timeContext: { timeZone: "UTC", locale: "en-US" } },
             snapshot: { revision: 1, scenarios: [] }, isLoading: false, isStale: false };
+        const token = Object.freeze({});
+        const api = Object.assign(() => { throw new Error("No request expected without periods."); }, {
+            publicationToken: () => token, isCurrent: value => value === token,
+        });
         const component = mount({
             root: document.getElementById("comparison"), toggle: document.getElementById("toggle"),
             getContext: () => context, time: { label: () => "UTC" }, results: { labels: () => ({ success: "Worked" }) },
+            assessmentFactories: { periodComparison: { createPresentation: (0, eval)("(" + presenter + ")") } },
             onSearch: value => { window.legacySearchValue = value; },
-            api: () => { throw new Error("No request expected without periods."); }, navigate: () => {},
+            api, navigate: () => {},
             syncFilters: () => {}, bindDetails: value => value,
         });
 
         await component.update();
-    }, mountPeriodComparison.toString());
+    }, { source: mountPeriodComparison.toString(), presenter: createPeriodComparisonPresentation.toString() });
     await expect(page.locator("#comparisonSearch")).toBeVisible();
     await expect(page.locator("#comparisonSearch")).toHaveValue("legacy phrase");
     await page.locator("#comparisonSearch").fill("edited legacy phrase");
@@ -663,7 +710,7 @@ test("frozen-reader: search opens actual historical comparison HTML and JSON-onl
     assert.equal(JSON.stringify(structured.comparison).includes(marker), false, "Current structured rendering cannot recreate this frozen note");
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
-    await find(page, "Saved comparison", "comparison");
+    await find(page, html.title, "comparison");
     const beforeRead = await (await api("/api/search/status")).json();
     const response = await api("/api/artifact-file", { kind: "comparison", bundleId: html.bundleId, format: "html" });
     assert.equal(response.status(), 200);
@@ -672,7 +719,7 @@ test("frozen-reader: search opens actual historical comparison HTML and JSON-onl
     assert.equal(file.sha256, reportHash(frozen));
     assert.equal((await (await api("/api/search/status")).json()).indexId, beforeRead.indexId, "A verified file read is not a mutation fence");
     await page.locator(`#wireSearchResults button[data-search-bundle="${html.bundleId}"]`).click();
-    await expect(page.getByRole("region", { name: "Saved comparison", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: html.title, exact: true })).toBeVisible();
     await expect(page.frameLocator("#savedReportReader iframe").locator("#frozen-layout-proof")).toHaveText(marker);
     assert.equal(await readFile(htmlPath, "utf8"), frozen);
     if (process.env.WIRE_SEARCH_PROOFS) {
@@ -683,8 +730,9 @@ test("frozen-reader: search opens actual historical comparison HTML and JSON-onl
     await expect(page.locator(`#wireSearchResults button[data-search-bundle="${html.bundleId}"]`)).toBeFocused();
     await page.locator(`#wireSearchResults button[data-search-bundle="${json.bundleId}"]`).click();
     const jsonBytes = await readFile(json.files["comparison-report.json"], "utf8");
-    await expect(page.locator("#savedReportReader pre")).toHaveText(jsonBytes);
-    assert.equal(await page.locator("#savedReportReader pre").textContent(), jsonBytes);
+    const leaves = value => value !== null && typeof value === "object" ? Object.values(value).flatMap(leaves)
+        : [typeof value === "string" ? JSON.stringify(value) : String(value)];
+    assert.deepEqual(await jsonValues(page), leaves(JSON.parse(jsonBytes)));
     await expect(page.locator("#savedReportReader iframe")).toHaveCount(0);
     await page.getByRole("button", { name: "Back to search", exact: true }).click();
     await expect(page.locator(`#wireSearchResults button[data-search-bundle="${json.bundleId}"]`)).toBeFocused();

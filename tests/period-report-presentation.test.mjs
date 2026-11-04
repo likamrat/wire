@@ -46,6 +46,24 @@ test("current period HTML presents validated visuals and grouped evidence withou
     assert.equal(JSON.stringify(snapshot), before);
 });
 
+test("period volume changes and service context use singular counts without changing frozen values", () => {
+    const { baseline, later } = periodFixture().input.periods;
+    for (const [periods, change] of [
+        [undefined, "+1 record"],
+        [{ baseline: later, later: baseline }, "-1 record"],
+        [{ baseline, later: baseline }, "0 records"],
+    ]) {
+        const snapshot = snapshotFixture(periods), before = JSON.stringify(snapshot);
+        const html = output.renderPeriodReportHtml(snapshot);
+        assert.ok(html.includes(`Volume change: ${change}</p>`), change);
+        for (const side of Object.values(snapshot.periodComparison.periods)) {
+            const count = side.serviceSelection.contextOnlyRefs.length;
+            assert.ok(html.includes(`${count} missing-service context record${count === 1 ? "" : "s"}</dd>`));
+        }
+        assert.equal(JSON.stringify(snapshot), before);
+    }
+});
+
 test("service qualifications prevent hoisting and unmapped records never become a common interaction", () => {
     const snapshot = snapshotFixture(), side = snapshot.periodComparison.periods.baseline;
     const scenarioRef = side.rows[0].scenarioRef;

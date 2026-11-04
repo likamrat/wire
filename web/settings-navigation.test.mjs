@@ -15,6 +15,19 @@ test("settings canonical routes preserve legacy display/history/issues and expli
     assert.equal(model.resolve({ section: "display", setting: "cadence" }).section, "connection");
 });
 
+test("Microsoft connection uses the existing Settings registry and one non-mutating destination", () => {
+    const model = createSettingsNavigation(createLocalSearch());
+    const entry = model.entries.find(entry => entry.id === "microsoft-connection");
+    assert.equal(entry.target, "wireMicrosoftConnection");
+    assert.deepEqual(model.resolve({ section: "privacy", setting: entry.id }), {
+        section: "connection", setting: entry.id, warning: "",
+    });
+    for (const query of ["Microsoft 365", "Chat", "Cowork", "Reconnect", "Cancel", "expired", "Edge"]) {
+        assert.ok(model.find(query).some(result => result.id === entry.id), query);
+    }
+    assert.match(entry.context, /does not sign in or change collection/);
+});
+
 test("retired sidebar motion has no current setting, search result or deep-link destination", () => {
     const model = createSettingsNavigation(createLocalSearch());
     assert.equal(model.entries.some(entry => entry.id === "sidebar-motion"), false);
@@ -42,6 +55,7 @@ test("operational destinations leave Settings and preserve named legacy targets"
 
 test("settings search finds control descriptions and synonyms across categories without private paths", () => {
     const model = createSettingsNavigation(createLocalSearch());
+    assert.ok(model.find("GitHub Copilot app").some(entry => entry.id === "source"));
     for (const [query, id] of [["TIME-zone", "time-zone"], ["city", "time-zone"], ["pause", "collection-state"], ["resume", "collection-state"], ["permission", "source"], ["cadence", "cadence"], ["window", "history-window"], ["missing history", "issues"]]) {
         assert.ok(model.find(query).some(entry => entry.id === id), query);
     }

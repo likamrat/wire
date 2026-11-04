@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { setImmediate } from "node:timers/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { searchFixture, searchRecords, streamPanel, saveSearchComparison } from "./live-search-fixture.mjs";
 import { searchWireContract as wire, createSearchWireContract } from "../lib/search-wire-contract.mjs";
 import { SEARCH_MATCH_POLICY_ID, SEARCH_TYPES } from "../lib/search-text.mjs";
@@ -9,9 +10,52 @@ import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 import { acceptPeriodReport, freezePeriodReport } from "../lib/period-report.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
-import { createSavedArtifactDescriptor } from "../lib/report-artifacts.mjs";
+import { createSavedArtifactDescriptor, reportHash } from "../lib/report-artifacts.mjs";
 import { createSearchMembership } from "../web/search-membership.mjs";
 import { forbidSearchAi as forbidAi } from "./search-text-guards.mjs";
+
+test("selected masked result copies reach literal HTTP Search and verified report/comparison Open", { timeout: 30000 }, async t => {
+    const guard = forbidAi(t), records = searchRecords(1);
+    records[0].toolCalls[0].resultEvidence = { version: 1, source: "sdk-result", applicationError: true,
+        statusCode: null, resultCount: null, contentStatus: "body-excluded",
+        diagnostic: { version: 1, source: "mcp-result-text", status: "recorded",
+            message: "Retained ferrite marigold. Omitted result phrase." } };
+    const app = await searchFixture(t, { records, reply: false });
+    guard.connect(app.runtime);
+    const saved = [];
+    for (const resultText of [false, true]) {
+        const preview = await app.exports.preview("result-search-proof", undefined,
+            { promptMode: "none", resultText, manualTerms: ["Omitted result phrase"], formats: ["json"] },
+            { kind: "all", revision: (await loadBoardState(app.context)).revision });
+        await app.exports.review("result-search-proof", preview.previewId, true);
+        saved.push((await app.exports.confirm("result-search-proof", preview.previewId, true)).bundle);
+    }
+    const compared = await app.exports.previewComparison("result-search-proof", saved[0].bundleId, saved[1].bundleId,
+        { formats: ["json"], resultText: true });
+    await app.exports.reviewComparison("result-search-proof", compared.previewId, true);
+    const comparison = (await app.exports.confirmComparison("result-search-proof", compared.previewId, true)).bundle;
+    const panel = await streamPanel(app.runtime);
+    t.after(() => panel.close());
+    await panel.api("/api/search/query", { query: "FERRITE MARIGOLD", requestId: 1, types: ["report", "comparison"] });
+    const found = await panel.wait(event => event.event === "results" && event.requestId === 1);
+    assert.equal(wire.validResults(found), true);
+    assert.deepEqual(new Set(found.matches.hits.map(hit => hit.target.bundleId)), new Set([saved[1].bundleId, comparison.bundleId]));
+    assert.equal(found.matches.total, 2, "The report without selected result copies does not disclose original diagnostics.");
+    for (const [index, hit] of found.matches.hits.entries()) {
+        assert.equal(hit.match, "text");
+        assert.equal(hit.textMatch.field, "content");
+        const { start, end, excerptStart } = hit.textMatch;
+        assert.equal(hit.excerpt.slice(start - excerptStart, end - excerptStart).toLowerCase(), "ferrite marigold");
+        assert.equal((await panel.api("/api/search/open", { id: hit.id, receipt: found.matches.receipt, openId: index + 1 })).code, 200);
+        const opened = await panel.wait(event => event.event === "opened" && event.openId === index + 1);
+        assert.match(opened.document.text, /ferrite marigold/);
+        assert.doesNotMatch(opened.document.text, /Omitted result phrase/);
+    }
+    await panel.api("/api/search/query", { query: "Omitted result phrase", requestId: 2, types: ["report", "comparison"] });
+    const redacted = await panel.wait(event => event.event === "results" && event.requestId === 2);
+    assert.equal(redacted.matches.total, 0);
+    guard.verify();
+});
 
 test("real HTTP text search covers every existing type and opens only its verified current target", { timeout: 60000 }, async t => {
     const guard = forbidAi(t);
@@ -118,9 +162,19 @@ test("current timing navigation indexes tool latency wording at its authoritativ
 
 test("an indexed title without saved manifest authority never becomes searchable report text", { timeout: 15000 }, async t => {
     const { runtime, context, bundles } = await searchFixture(t, { formats: ["html"] });
+    const manifestFile = bundles[0].files["coverage-and-redaction-manifest.json"];
+    const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
+    delete manifest.title;
+    const bytes = JSON.stringify(manifest);
+    await writeFile(manifestFile, bytes);
+    await updateBoardState(context, state => {
+        const entry = state.exports.find(artifact => artifact.bundleId === bundles[0].bundleId);
+        delete entry.title;
+        entry.manifestHash = reportHash(bytes);
+    });
     const panel = await streamPanel(runtime);
     t.after(() => panel.close());
-    await panel.api("/api/search/query", { query: "activity report", requestId: 1, types: ["report"] });
+    await panel.api("/api/search/query", { query: bundles[0].title, requestId: 1, types: ["report"] });
     const legacy = await panel.wait(event => event.event === "results" && event.requestId === 1);
     assert.equal(legacy.matches.total, 1);
     assert.equal(legacy.matches.hits[0].textMatch.field, "title", "An absent canonical title preserves the real extracted legacy title.");

@@ -12,10 +12,12 @@ import { exportCatalogFor } from "./helpers.mjs";
 import { scopeRecords, scopeOptions, privateQuery } from "./analysis-scope-fixture.mjs";
 import { createSearchMembership as mapSearchMembership } from "../web/search-membership.mjs";
 import { searchWireContract } from "../lib/search-wire-contract.mjs";
+import { projectRetainedNativeRecords } from "../lib/retained-population.mjs";
+import { chatFixture } from "./native-read-model-fixtures.mjs";
 
 const createSearchMembership = (snapshot, options, within, hits, receipt) => mapSearchMembership(snapshot, options, within, hits, {
-    schemaVersion: 2, panelId: "11111111-1111-4111-8111-111111111111", epoch: 0, requestId: 1, generation: 1,
-    indexId: "1".repeat(64), modelId: "2".repeat(64), mode: "hybrid", purpose: "strict-match-population",
+    schemaVersion: 3, panelId: "11111111-1111-4111-8111-111111111111", epoch: 0, requestId: 1, generation: 1,
+    indexId: "1".repeat(64), mode: "text", purpose: "strict-match-population",
     queryPurpose: "analysis", queryTypes: [...searchWireContract.allTypes], matchPolicyId: searchWireContract.matchPolicyId,
     ...receipt,
 }, searchWireContract);
@@ -24,7 +26,7 @@ const projection = createActivityProjection(createTimeContext(), createServiceCa
 const refine = createAnalysisSlice(createLocalSearch(), projection);
 const sorted = values => [...values].sort();
 const rowId = (i, j = 0) => `call:${JSON.stringify([`parity-chat-${i}`, `parity-call-${i}-${j}`])}`;
-const hit = (type, request, layer, call) => ({ type, match: "exact", target: { kind: "route",
+const hit = (type, request, layer, call) => ({ type, match: "text", target: { kind: "route",
     href: "#request?" + new URLSearchParams({ request, ...(layer ? { layer, call } : {}) }) } });
 function snapshot(options = scopeOptions) {
     const scenarios = scopeRecords();
@@ -47,21 +49,41 @@ function exact(slice, ids, scenarioIds) {
     }
 }
 
-test("verified empty, stale and full-page semantic membership never falls back to lexical or global hits", () => {
+test("accepted no-call native conversations survive list and literal Search without becoming widget calls", () => {
+    const input = snapshot(), nativeRecord = projectRetainedNativeRecords(chatFixture()).records[0];
+    const native = nativeRecord.nativeConversation;
+    input.scenarios.push(nativeRecord);
+    const existing = [...new Set(input.analytics.rows.map(row => row.scenarioId))];
+    input.analytics = { ...buildActivityAnalytics(input.scenarios, scopeOptions), revision: input.revision };
+    const unsearched = refine(input, scopeOptions);
+    assert.deepEqual(unsearched.scenarioIds, [...existing, native.key]);
+    assert.equal(unsearched.rowIds.length, input.analytics.rows.length);
+    const membership = { revision: input.revision, scopeKey: JSON.stringify([scopeOptions, []]),
+        scenarioIds: [native.key], actionIds: [], parentScenarioIds: [native.key] };
+    const searched = refine(input, scopeOptions, "", [], membership);
+    assert.deepEqual(searched.scenarioIds, [native.key]);
+    assert.equal(searched.analytics.totals.count, 0);
+    assert.deepEqual(refine(input, scopeOptions, "invented question").scenarioIds, [native.key]);
+    assert.deepEqual(refine(input, scopeOptions, "", [], { ...membership, scenarioIds: [] }).scenarioIds, []);
+    input.analytics.population = buildActivityAnalytics(input.scenarios.filter(record => record !== nativeRecord), scopeOptions).population;
+    assert.equal(refine(input, scopeOptions).scenarioIds.includes(native.key), false, "UI cannot readmit a conversation excluded by Dates or other backend scope.");
+});
+
+test("verified empty, stale and full-page literal membership never falls back to legacy or global hits", () => {
         const input = snapshot(), receipt = { revision: 17 };
         const empty = createSearchMembership(input, scopeOptions, [], [], receipt);
         exact(refine(input, scopeOptions, privateQuery, [], empty), [], []);
         assert.throws(() => createSearchMembership(input, scopeOptions, [], [], { revision: 16 }), /current strict analysis receipt/);
         assert.throws(() => refine(input, { ...scopeOptions, bucket: "month" }, "", [], empty), /scope/);
         const hits = input.scenarios.map(row => hit("interaction", row.scenarioId));
-        hits.push(hit("report", "not-a-scenario"), { type: "view", match: "exact", target: { kind: "route", href: "#analyze" } });
+        hits.push(hit("report", "not-a-scenario"), { type: "view", match: "text", target: { kind: "route", href: "#analyze" } });
         const all = createSearchMembership(input, scopeOptions, [], hits, receipt);
         exact(refine(input, scopeOptions, "", [], all), input.analytics.rows.map(row => row.id),
             [...new Set(input.analytics.rows.map(row => row.scenarioId))]);
         assert.equal(refine(input, scopeOptions).analytics, input.analytics);
 });
 
-test("semantic action membership keeps pre-outcome facets, broader API parents and complete report interactions", () => {
+test("literal action membership keeps pre-outcome facets, broader API parents and complete report interactions", () => {
         const options = { ...scopeOptions, layer: "reported-api", filters: { services: ["Files"], includeMissingService: true, outcomes: ["failure"] } };
         const input = snapshot(options), allEntries = input.requestActivity["reported-api"];
         const action = allEntries.find(row => row.scenarioId === "parity-request-0" && row.outcome === "failure");
@@ -78,7 +100,7 @@ test("semantic action membership keeps pre-outcome facets, broader API parents a
         assert.equal(report.requests.find(row => row.scenarioId === action.scenarioId).counts.workIqActions, 3);
 });
 
-test("correction: legacy qualifier uses full roster and intersects semantic facets and API parents", () => {
+test("legacy qualifier uses full roster and intersects literal facets and API parents", () => {
     const options = { ...scopeOptions, layer: "reported-api", filters: { services: ["Files"], includeMissingService: true, outcomes: ["failure"] } };
     const input = snapshot(options), legacy = `${privateQuery} request 2`;
     const membership = createSearchMembership(input, options, [], [

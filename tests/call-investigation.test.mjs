@@ -2,6 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCallInvestigation } from "../web/call-investigation.mjs";
 import { createRequestContext } from "../web/request-context.mjs";
+import { projectNativeReadModel } from "../lib/native-read-model.mjs";
+import { multiCallChatFixture } from "./native-read-model-fixtures.mjs";
+
+test("native readers preserve literal call identity without legacy toolCalls or sibling substitution", () => {
+    const calls = createCallInvestigation(), native = projectNativeReadModel([multiCallChatFixture()]).conversations[0];
+    const record = { recordKind: "native-conversation", scenarioId: native.key, nativeConversation: native };
+    const rows = native.calls.map(call => ({ id: call.key, scenarioId: native.key, toolCallId: call.nativeCallId }));
+    const route = { view: "request", request: native.key, layer: "tool", call: rows[1].id };
+    const resolved = calls.resolve({ tool: rows }, [record], route, 1);
+    assert.equal(resolved.source, native.calls[1]);
+    assert.equal(resolved.actionId, native.calls[1].key);
+    assert.equal(calls.resolve({ tool: rows }, [record], { ...route, call: "1" }, 1).status, "unavailable");
+    assert.equal(calls.resolve({ tool: rows }, [{ ...record, nativeConversation: { ...native, calls: native.calls.slice(0, 1) } }], route, 1).status, "unavailable");
+    assert.equal(record.toolCalls, undefined);
+});
 
 test("homepage failure entry selects the first matching canonical failure in retained log order", () => {
     const calls = createCallInvestigation(createRequestContext().compare);

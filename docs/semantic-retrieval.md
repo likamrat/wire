@@ -6,9 +6,15 @@
 > The implementation/qualification notes below describe the former contract;
 > its source baseline is `8dab98f4e847186c2606efb3fe2ada87c609db98`.
 > Its old model setup and semantic expectations are not current setup/gates.
-> Former backend test files are preserved as same-directory `.historical.mjs`
-> snapshots; see [the retirement/coverage map](search-history.md). Commands below
+> Former `.historical.mjs` suites and the linguistic fixture are preserved in
+> Git at `b1ccf65e8d79534b35a347c992e947d067837858`, not in the current working
+> tree; see [current Search and retirement](live-search.md#retired-search-research). Commands below
 > refer to the historical source baseline, not the current text product.
+>
+> Those development revisions are not available through the published
+> repository. This document is retained until accessible sanitized references
+> are established. Its npm provisioning scripts and historical suites are not
+> current checkout commands; do not install resources to make them run.
 
 `lib/search-retrieval.mjs` is a private, in-memory retrieval facade over the [authorized corpus](search-corpus.md). `lib/search-retrieval.d.mts` is its consumer contract. It implements actual pretrained embeddings plus independent lexical precision. It does **not** attach itself to the running collector, expose HTTP routes, change the browser's existing analytical search, render results, or open targets.
 

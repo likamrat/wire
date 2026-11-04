@@ -40,6 +40,16 @@ async function indexedReport(corpus, bundleId) {
     return { report, status };
 }
 
+function legacyFacts(facts) {
+    return freezeEvaluationFacts({ ...facts, metricProjectionVersion: 2, reviewStatuses: [{
+        interactionRef: facts.memberships[0].interactionRef,
+        reviewStatus: { schemaVersion: 1,
+            execution: { calls: 4, succeeded: 2, failed: 1, other: 1, causes: [{ cause: "workiq-sign-in-required", count: 1 }] },
+            assessment: { result: "none", unavailableReason: null, latestAttempt: "none", inAutomaticScope: false, personalFeedback: false },
+        },
+    }] });
+}
+
 // Corrupt/legacy inputs are sealed only inside this test's owned ephemeral artifact.
 async function reseal(context, artifact, original, change, { copyFacts = true } = {}) {
     const snapshot = structuredClone(original.snapshot), manifest = structuredClone(original.manifest);
@@ -79,10 +89,9 @@ test("native corpus: verified JSON indexes only closed status and overlapping se
     assert.ok(report, JSON.stringify(status));
     assert.equal(report.target.format, "json");
     assert.equal(report.target.documentHash, document.sha256);
-    assert.match(report.content, /Saved review-status coverage: 1 of 1 interactions/);
-    assert.match(report.content, /Recorded tool status: calls 4; succeeded 2; failed 1; other 1/);
-    assert.match(report.content, /Recorded operational cause: workiq-sign-in-required; count 1/);
-    assert.match(report.content, /Saved assessment status: none/);
+    assert.equal(facts.metricProjectionVersion, 4);
+    assert.equal(Object.hasOwn(facts, "reviewStatuses"), false);
+    assert.doesNotMatch(report.content, /Saved review-status coverage|Saved assessment status/);
     assert.match(report.content, /Saved service involvement v1/);
     assert.match(report.content, /Service Files: 2 of 4 tool calls/);
     assert.match(report.content, /Service Mail: 1 of 4 tool calls/);
@@ -97,12 +106,22 @@ test("native corpus: verified JSON indexes only closed status and overlapping se
     }
     assert.equal(document.snapshot.records.length, 1);
     assert.deepEqual(await Promise.all(Object.values(artifact.files).map(file => readFile(file))), before);
+    await reseal(context, artifact, document, snapshot => { snapshot.evaluationFacts = legacyFacts(facts); });
+    const frozen = await Promise.all(Object.values(artifact.files).map(file => readFile(file)));
+    const historical = await indexedReport(corpus, artifact.bundleId);
+    assert.ok(historical.report, JSON.stringify(historical.status));
+    assert.match(historical.report.content, /Saved review-status coverage: 1 of 1 interactions/);
+    assert.match(historical.report.content, /Recorded tool status: calls 4; succeeded 2; failed 1; other 1/);
+    assert.match(historical.report.content, /Recorded operational cause: workiq-sign-in-required; count 1/);
+    assert.match(historical.report.content, /Saved assessment status: none/);
+    assert.deepEqual(await Promise.all(Object.values(artifact.files).map(file => readFile(file))), frozen);
 });
 
 test("native corpus: legacy optional absence stays absent without current-data reconstruction or changed bytes", async t => {
     const { context } = await privateFixture(t, nativeRecords()), artifact = await save(context);
     const original = await readSavedReportFile(context, await loadBoardState(context), artifact.bundleId);
     await reseal(context, artifact, original, snapshot => {
+        snapshot.evaluationFacts = structuredClone(legacyFacts(snapshot.evaluationFacts));
         delete snapshot.evaluationFacts.reviewStatuses;
         delete snapshot.evaluationFacts.serviceInvolvement;
     });
@@ -125,17 +144,22 @@ test("native corpus: closed shape, membership, hashes and privacy tampering fail
     const original = await readSavedReportFile(context, await loadBoardState(context), artifact.bundleId);
     const corpus = createSearchCorpus(context, { source: inventedSource, onInvalidate: () => {} });
     t.after(() => corpus.close());
-    const changes = [
+    const legacyChanges = [
         facts => { facts.reviewStatuses[0].reviewStatus.execution.privateText = "PRIVATE_STATUS_PAYLOAD"; },
         facts => { facts.reviewStatuses[0].interactionRef = `interaction-${"f".repeat(32)}`; },
         facts => { facts.reviewStatuses[0].reviewStatus.execution.causes[0].cause = "invented-rationale"; },
+    ];
+    const changes = [
         facts => { facts.serviceInvolvement.groups[0].service = "C:\\PRIVATE_SERVICE_PATH"; },
         facts => { facts.serviceInvolvement.groups[0].count++; },
         facts => { facts.serviceInvolvement.notApplicableRefs.push(facts.serviceInvolvement.groups[0].memberRefs[0]); },
         facts => { facts.serviceInvolvement.missingDetailRefs = []; },
     ];
-    for (const change of changes) {
-        await reseal(context, artifact, original, snapshot => change(snapshot.evaluationFacts));
+    for (const [historical, change] of [...legacyChanges.map(change => [true, change]), ...changes.map(change => [false, change])]) {
+        await reseal(context, artifact, original, snapshot => {
+            if (historical) snapshot.evaluationFacts = structuredClone(legacyFacts(snapshot.evaluationFacts));
+            change(snapshot.evaluationFacts);
+        });
         const file = await readSavedReportFile(context, await loadBoardState(context), artifact.bundleId);
         await assert.rejects(extractReportFile(file), { code: "report-invalid-facts" });
         const { report, status } = await indexedReport(corpus, artifact.bundleId);
@@ -143,7 +167,7 @@ test("native corpus: closed shape, membership, hashes and privacy tampering fail
         assert.ok(status.issues.some(issue => issue.code === "report-invalid-facts"));
         assert.doesNotMatch(JSON.stringify(status), /PRIVATE_|invented-rationale/);
     }
-    await reseal(context, artifact, original, snapshot => { snapshot.evaluationFacts.reviewStatuses = []; }, { copyFacts: false });
+    await reseal(context, artifact, original, snapshot => { delete snapshot.evaluationFacts.serviceInvolvement; }, { copyFacts: false });
     const mismatched = await readSavedReportFile(context, await loadBoardState(context), artifact.bundleId);
     await assert.rejects(extractReportFile(mismatched), { code: "report-facts-integrity" });
     await reseal(context, artifact, original, (_, manifest) => { manifest.evaluationFactsHash = "0".repeat(64); }, { copyFacts: false });
@@ -171,8 +195,8 @@ test("native corpus: contextual native PDF remains readable with masked replies 
     const { report, status } = await indexedReport(corpus, artifact.bundleId);
     assert.ok(report, JSON.stringify(status));
     assert.equal(report.target.format, "pdf");
-    assert.match(report.content, /Activity report/);
-    assert.match(report.content, /At a glance/);
+    assert.ok(report.content.includes(artifact.title));
+    assert.match(report.content, /Activity/);
     assert.match(report.content, /Recorded context/);
     assert.match(report.content, /CONTEXT_NATIVE_REPLY/);
     assert.match(report.content, /finality unverified/);

@@ -148,7 +148,7 @@ test("absent paths, unknown completion, API absence and inapplicable tool eviden
     assert.match(await page.locator(".request-outcome").innerText(), /Execution not observed/);
     assert.equal(await page.locator(".journey-item .api-path").textContent(), "/me/messages?Keep=Case");
     assert.match(await page.locator(".journey-item").innerText(), /Referenced API path/);
-    assert.doesNotMatch(await page.locator(".request-outcome").innerText(), /Worked|HTTP 2xx/);
+    assert.doesNotMatch(await page.locator(".request-outcome").innerText(), /Tool completed|HTTP 2xx/);
     await page.route("**/api/snapshot", async route => {
         const response = await route.fetch(), data = await response.json();
         delete data.requestActivity["reported-api"];

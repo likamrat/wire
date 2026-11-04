@@ -32,8 +32,12 @@ async function setup(t, api, onDeleted = async () => true, stored = null) {
     await page.evaluate(({ artifact, receipt, icons }) => {
         if (receipt) sessionStorage.setItem("wire.saved-artifact-deletion", JSON.stringify(receipt));
         window.applied = false;
+        const token = Object.freeze({});
+        const api = Object.assign((...args) => window.fakeApi(...args), {
+            publicationToken: () => token, isCurrent: value => value === token,
+        });
         window.flow = window.makeFlow({
-            api: window.fakeApi, ux: window.makeUx(icons),
+            api, ux: window.makeUx(icons),
             onDeleted: async value => { const result = await window.refreshSaved(value); window.applied = true; return result; },
             onError: message => { throw new Error(message); }, fallbackFocus: () => document.getElementById("destination"),
         });

@@ -258,7 +258,7 @@ test("HTTP boundaries reject invalid zones, naive instants and impossible dates 
     const origin = runtime.url.slice(0, -1), before = await loadBoardState(context);
     const post = (route, body, capability) => fetch(origin + route, {
         method: "POST",
-        headers: { Origin: origin, "Content-Type": "application/json", ...(capability ? { "X-Board-Capability": capability } : {}) },
+        headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1", ...(capability ? { "X-Board-Capability": capability } : {}) },
         body: JSON.stringify(body),
     });
     const capability = (await (await post("/api/session", {})).json()).capability;

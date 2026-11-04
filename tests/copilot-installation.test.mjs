@@ -4,10 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { privateFixture } from "./helpers.mjs";
 import { resolveCopilotInstallation } from "../lib/copilot-installation.mjs";
-import { createEvaluationController } from "../lib/evaluation-controller.mjs";
-import { loadBoardState } from "../lib/store.mjs";
 
-test("historical installation resolver stays filesystem-only and strict; retired execution never consults it", async t => {
+test("historical installation resolver stays filesystem-only and strict", async t => {
     const { context } = await privateFixture(t), local = path.join(context.dataDir, "invented-installation");
     const sdkPath = path.join(local, "Programs", "GitHub Copilot", "copilot-sdk", "index.js");
     const cliPath = path.join(local, "Microsoft", "WinGet", "Links", "copilot.exe");
@@ -24,10 +22,4 @@ test("historical installation resolver stays filesystem-only and strict; retired
     }
     await assert.rejects(resolveCopilotInstallation({ ...environment, COPILOT_PROVIDER_TEST: "invented" }),
         error => error.code === "copilot-provider-unapproved");
-    const before = await loadBoardState(context);
-    let sourceCalls = 0;
-    const controller = createEvaluationController(context, { getSourceConfig: () => { sourceCalls++; throw new Error("No source access"); } });
-    assert.throws(() => controller.start("panel", { confirmed: true }), error => error.code === "AI_REVIEW_RETIRED");
-    assert.equal(sourceCalls, 0);
-    assert.deepEqual(await loadBoardState(context), before);
 });

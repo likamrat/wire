@@ -5,11 +5,10 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { buildSanitizedBundle, createExportController } from "../lib/export.mjs";
-import { buildReportFacts, buildAssessmentModel, assessmentDependencies } from "../lib/assessment-read-model.mjs";
+import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 import { acceptPeriodReport, freezePeriodReport } from "../lib/period-report.mjs";
 import { periodReportDisplay } from "../lib/period-report-output.mjs";
-import { nativeReportEvidence, nativeQualityHtml, nativeQualityMarkdown } from "../lib/native-report-output.mjs";
 import { createReportComparison } from "../web/report-comparison.mjs";
 import { pdfDocumentText } from "../lib/search-corpus-pdf.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -76,9 +75,10 @@ async function inspect(t, name, bundle) {
     const compact = value => value.replace(/\s+/g, "").toLowerCase();
     const pdfPages = pages.map(compact);
     const samePage = texts => pdfPages.some(text => texts.every(part => text.includes(compact(part))));
-    const nativeTimingNote = page.locator("#timing > .reading-note").last();
-    const timingWarning = await nativeTimingNote.count() ? await nativeTimingNote.textContent() : createReportComparison().readingNotes[3];
-    assert.ok(samePage([timingWarning]), "A complete timing warning must not leave its final sentence on another page");
+    const timingWarnings = (await page.locator("#timing > .reading-note,.comparison-document .reading-notes p,#definitions dd").allTextContents())
+        .filter(text => /timing|timed|concurrent|latency/i.test(text));
+    assert.ok(timingWarnings.length > 0, "The document includes its own timing qualification.");
+    for (const warning of timingWarnings) assert.ok(samePage([warning]), "A complete timing warning must not leave its final sentence on another page");
     const groups = await page.evaluate(() => ({
         tables: [...document.querySelectorAll(".native-table,.comparison-metrics,.comparison-patterns")].filter(table => table.tBodies[0]?.rows.length)
             .map(table => [table.caption?.textContent, table.tBodies[0].rows[0].cells[0].textContent].filter(Boolean)),
@@ -88,17 +88,19 @@ async function inspect(t, name, bundle) {
         charts: [...document.querySelectorAll(".native-breakdowns section")].filter(section => section.querySelector(".native-bar-heading"))
             .map(section => [section.querySelector("h3").textContent, section.querySelector(".native-bar-heading").textContent]),
         coverage: [...document.querySelectorAll("#coverage ul>li")].map(item => item.textContent),
-        notes: [...document.querySelectorAll(".reading-notes p,#definitions>p")].map(item => item.textContent),
+        coverageLead: [...document.querySelectorAll("#coverage>summary,#coverage>p:first-of-type")].map(item => item.textContent),
+        notes: [...document.querySelectorAll(".reading-notes p,#definitions>p,#definitions dd")].map(item => item.textContent),
         noteLeads: [...document.querySelectorAll(".comparison-document .reading-notes")].filter(section => section.querySelector("h2") && section.querySelector("p"))
             .map(section => [section.querySelector("h2").textContent, section.querySelector("p").textContent]),
     }));
     for (const group of [...groups.tables, ...groups.charts, ...groups.disclosures, ...groups.noteLeads]) assert.ok(samePage(group), `A heading/caption must stay with first data: ${group.join(" / ")}`);
     if (groups.coverage.length) {
-        assert.ok(samePage(["Coverage and reading notes", "Recorded numbers"]), "Coverage starts with its actual data rather than an orphaned heading");
+        assert.equal(groups.coverageLead.length, 2);
+        assert.ok(samePage(groups.coverageLead), "Coverage starts with its actual data rather than an orphaned heading");
         for (const note of groups.coverage) assert.ok(samePage([note]), "Each short coverage note stays intact while the section can flow naturally");
     }
     for (const note of groups.notes) assert.ok(samePage([note]), `Keep the complete short reading note together: ${note}`);
-    const semanticText = await page.locator("p,li,pre,th,td,h2,h3,h4,summary").evaluateAll(nodes => nodes.map(node => {
+    const semanticText = await page.locator("p,li,pre,th,td,dt,dd,h2,h3,h4,summary").evaluateAll(nodes => nodes.map(node => {
         const copy = node.cloneNode(true);
         copy.querySelectorAll(".comparison-mobile-label").forEach(label => label.remove());
         return copy.textContent;
@@ -115,20 +117,20 @@ async function inspect(t, name, bundle) {
             const section = page.locator(selector);
             if (await section.count()) await section.screenshot({ path: path.join(directory, `html-${selector.slice(1)}.png`) });
         }
-        await page.setViewportSize({ width: 390, height: 1000 });
-        await page.evaluate(() => {
-            document.documentElement.dataset.evidenceTheme = "dark";
-            document.documentElement.style.fontSize = "200%";
-        });
-        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Human output remains readable at narrow 200% text");
-        await page.screenshot({ path: path.join(directory, "dark-390-200-opening.png") });
-        await page.setViewportSize({ width: 1280, height: 1000 });
-        await page.evaluate(() => {
-            document.documentElement.dataset.evidenceTheme = "light";
-            document.documentElement.style.fontSize = "100%";
-        });
         await writeFile(path.join(directory, "pdf-extraction.json"), JSON.stringify({ pages, pageCount: pages.length, strictPages: strict.pages, fonts }, null, 2));
     }
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.evaluate(() => {
+        document.documentElement.dataset.evidenceTheme = "dark";
+        document.documentElement.style.fontSize = "200%";
+    });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Human output remains readable at narrow 200% text");
+    if (directory) await page.screenshot({ path: path.join(directory, "dark-390-200-opening.png") });
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await page.evaluate(() => {
+        document.documentElement.dataset.evidenceTheme = "light";
+        document.documentElement.style.fontSize = "100%";
+    });
     assert.deepEqual(external, []);
     return { page, browser, directory, pdfPages: pages, texts: [htmlText, bundle.files["product-report.md"], pages.join("\n")] };
 }
@@ -150,7 +152,7 @@ test("F11 default formatter is unchanged while explicit origin omission retains 
     assert.match(format.metricPresentation(missing, "accuracy", { includeOrigin: false }).note, /^Not enough saved evidence.*0 of 4 assessed/);
 });
 
-test("F11 normal outputs retain metric origins once per row and use singular service counts", async t => {
+test("current normal outputs retain recorded timing and singular service counts without historical ratings", async t => {
     const records = matrixRecords("editorial-documents", ["failure", "success", "success"], { groups: 3, durations: [0, 400, 900] });
     records.forEach((record, index) => {
         record.userPrompt.text = ["Find the research documents; report any access problem.", "Summarize the three documents we can access.", "Inspect the file lookup schema, without making another request."][index];
@@ -160,39 +162,26 @@ test("F11 normal outputs retain metric origins once per row and use singular ser
     Object.assign(records[1].toolCalls[0], { tool: "workiq-ask", requestedApiPath: null, requestArgs: { question: records[1].userPrompt.text } });
     Object.assign(records[2].toolCalls[0], { tool: "workiq-get_schema", requestedApiPath: null, requestArgs: { path: "/me/drive/root" } });
     const { state } = qualityDisplayFixture({ records, judgments: ["fail", "pass", "unassessed"] });
-    const first = [...buildAssessmentModel(state).details.values()][0];
-    state.personalEvaluation.feedback.records.push({
-        schemaVersion: 1, dependencies: assessmentDependencies(first),
-        assessment: { ...first.assessments.find(item => item.checkId === "action-authorization-compliance"),
-            origin: "user-personal", assessmentRef: "assessment-" + "e".repeat(32), verdict: "pass", reason: "user-verdict" },
-    });
-    state.personalEvaluation.feedback.revision = 1;
-    state.personalEvaluation.overrideRevision = 1;
+    const historical = JSON.stringify(state.personalEvaluation);
     const facts = buildReportFacts(records, state, { preparedAt }).facts, before = JSON.stringify(facts);
     const bundle = await buildSanitizedBundle(records, key, { promptMode: "masked", formats }, undefined, undefined, facts);
     const { page, texts } = await inspect(t, "normal-metrics", bundle);
     for (const text of texts.map(text => text.replace(/-\s+/g, "-").replace(/\s+/g, " "))) {
         assert.match(text, /1 call with missing or partial service details/);
         assert.match(text, /1 preparation call with no applicable data service/);
-        assert.match(text, /Recorded access denial/);
-        assert.match(text, /1 of 2 passed/);
-        assert.match(text, /2 of 3 assessed/);
-        assert.match(text, /Tool use vs\. request/);
-        assert.match(text, /Permission for tool use/);
-        assert.match(text, /Your feedback/);
-        assert.doesNotMatch(text, /AI action trust|Action trust|Trust: actions/);
+        assert.match(text, /1 failed/);
+        assert.match(text, /400 ms/);
+        assert.doesNotMatch(text, /synthetic-quality-fixture|Tool use vs\. request|Permission for tool use|Your feedback|AI action trust|Action trust|Trust: actions/);
         assert.doesNotMatch(text, /1 calls\b|1 preparation calls\b|All calls timed/);
     }
-    const rows = await page.locator("#quality tbody tr").allTextContents();
-    for (const row of rows.filter(row => row.includes("synthetic-quality-fixture"))) {
-        assert.equal(row.split("synthetic-quality-fixture").length - 1, 1);
-        assert.equal(row.split("wire-recorded-interaction-review").length - 1, 1);
-    }
+    assert.equal(await page.locator("#quality").count(), 0);
+    assert.equal(facts.metricProjectionVersion, 4);
+    assert.equal(JSON.stringify(state.personalEvaluation), historical);
     assert.equal(JSON.stringify(bundle.snapshot.evaluationFacts), before);
     assert.equal(JSON.stringify(facts), before);
 });
 
-test("F11 period outputs explain each unavailable reason and unequal samples beside unchanged deltas", async t => {
+test("current period outputs preserve separate sample counts and deltas without historical review placeholders", async t => {
     const fixture = periodFixture();
     fixture.records[0].toolCalls.find(call => call.toolCallId === "period-calendar").requestArgs = { entityUrls: ["/me/calendarView"] };
     fixture.records.forEach((record, index) => { record.userPrompt.text = `Review the available project documents for recorded lookup ${index + 1}; report missing access rather than guess.`; });
@@ -205,31 +194,21 @@ test("F11 period outputs explain each unavailable reason and unequal samples bes
     const bundle = await buildSanitizedBundle(fixture.records.filter(record => selected.has(record.scenarioId)), key,
         { promptMode: "masked", formats, timeContext: value.timeContext }, undefined, undefined, undefined, undefined, frozen);
     const { texts, page } = await inspect(t, "period-metrics", bundle);
-    for (const text of texts.map(text => text.replace(/-\s+/g, "-").replace(/\s+/g, " "))) {
-        assert.doesNotMatch(text, /unsupported-check|unverified-association|missing-evidence|\+1 records\b|1 missing-service context records\b|percentage-points/);
-        assert.match(text, /Tool outcomes do not tell us whether the answer was correct/);
-        assert.match(text, /No verified request-to-final-answer timing/);
-        assert.match(text, /Not enough saved evidence/);
-        assert.match(text, /Tool use vs\. request/);
-        assert.doesNotMatch(text, /AI action trust|Action trust|Trust: actions/);
-        assert.match(text, /\+1 record\b/);
-        assert.match(text, /1 missing-service context record\b/);
-        assert.match(text, /2 of 2 assessed/);
-        assert.match(text, /1 of 4 assessed/);
-        assert.match(text, /\+50 percentage points/);
-        assert.match(text, /2 \/ 3 calls timed/);
-        assert.match(text, /2 \/ 4 calls timed/);
-        assert.match(text, /different.*assessed|unequal.*coverage/i);
-        assert.match(text, /do not establish causal improvement/);
-        assert.match(text, /current retained collection/);
-        assert.match(text, /Files/);
-        assert.match(text, /missing or unusable service details.*context.*not.*confirmed/i);
-    }
-    assert.doesNotMatch(await page.locator("#full-interaction").innerText(), /\bcovered\b/);
+    assert.match(await page.locator("#definitions").innerText(), /Missing timing is not zero.*concurrent calls are not summed/);
+    assert.match(await page.locator("#definitions").innerText(), /not causal improvement/);
+    assert.deepEqual(frozen.comparison.matchingCallTiming.median.baseline.coverage, { count: 2, eligible: 3, missing: 1 });
+    assert.deepEqual(frozen.comparison.matchingCallTiming.median.later.coverage, { count: 2, eligible: 4, missing: 2 });
     assert.equal(JSON.stringify(bundle.snapshot.periodComparison), before);
     assert.equal(JSON.stringify(frozen), before);
-    for (const reason of ["unsupported-check", "unverified-association", "missing-evidence"]) assert.ok(bundle.files["product-report.json"].includes(reason));
+    assert.doesNotMatch(bundle.files["product-report.json"], /unsupported-check|synthetic-quality-fixture/);
     assert.equal(periodReportDisplay(frozen).rows[0][3], "+1 record");
+    assert.match(bundle.files["product-report.md"], /Not enough saved evidence; 0 of 4 requests timed/);
+    for (const text of texts.map(text => text.replace(/-\s+/g, "-").replace(/\s+/g, " "))) {
+        assert.match(text, /Matching tool latency/);
+        assert.doesNotMatch(text, /Tool use vs\. request|AI action trust|Action trust|Trust: actions|synthetic-quality-fixture/);
+        assert.match(text, /Files/);
+        assert.doesNotMatch(text, /unsupported-check|unverified-association|missing-evidence|\+1 records\b|1 missing-service context records\b|percentage-points/);
+    }
 });
 
 function changedDefinitionComparison() {
@@ -486,7 +465,7 @@ test("F11 explicitly selected unknown service rows are matches, not optional mis
     }
 });
 
-test("F11 period lanes keep distinct saved model and rubric origins on the correct side", async t => {
+test("current period output omits historical model lanes without altering their stored origins", async t => {
     const fixture = periodFixture();
     fixture.records[0].toolCalls.find(call => call.toolCallId === "period-calendar").requestArgs = { entityUrls: ["/me/calendarView"] };
     fixture.records = JSON.parse(JSON.stringify(fixture.records));
@@ -497,6 +476,7 @@ test("F11 period lanes keep distinct saved model and rubric origins on the corre
             ...assessment.evaluator, model: "later-saved-model", rubricVersion: 7,
         };
     }
+    const historical = JSON.stringify(evaluation);
     const value = buildPeriodComparison(state, fixture.input);
     const frozen = freezePeriodReport(state, acceptPeriodReport(state, value), preparedAt).frozen;
     const frozenBefore = Buffer.from(JSON.stringify(frozen));
@@ -512,34 +492,19 @@ test("F11 period lanes keep distinct saved model and rubric origins on the corre
     const bundle = await buildSanitizedBundle(fixture.records.filter(record => selected.has(record.scenarioId)), key,
         { promptMode: "none", formats, timeContext: value.timeContext }, undefined, undefined, undefined, undefined, frozen);
     const { page, texts } = await inspect(t, "different-origins", bundle);
-    assert.equal(await page.locator("#full-interaction caption").textContent(), "Saved reviews and measurements by source and method");
-    for (const text of [texts[0], texts[2]]) assert.match(text.replace(/\s+/g, " "), /Saved reviews and measurements by source and method/);
+    assert.equal(await page.locator("#full-interaction h2").textContent(), "Whole-interaction timing");
     for (const text of texts) {
-        assert.ok(text.replace(/\s/g, "").includes("later-saved-model"));
-        assert.ok(text.replace(/\s/g, "").includes("rubricwire-recorded-interaction-reviewv7"));
-        assert.ok(text.replace(/\s/g, "").includes("synthetic-quality-fixture"));
+        assert.doesNotMatch(text.replace(/\s/g, ""), /later-saved-model|rubricwire-recorded-interaction-reviewv7|synthetic-quality-fixture/);
     }
-    const cells = await page.locator("#full-interaction tbody tr").evaluateAll(rows =>
-        rows.map(row => [...row.children].map(cell => cell.textContent)));
-    const later = cells.find(row => row[2].includes("later-saved-model"));
-    const earlier = cells.find(row => row[1].includes("synthetic-quality-fixture"));
-    assert.ok(later && earlier, "Different origins remain separate comparison lanes");
-    assert.equal(later[1], "No comparable saved review on this side");
-    assert.match(later[2], /1 of 4 assessed/);
-    assert.match(earlier[1], /2 of 2 assessed/);
-    assert.equal(earlier[2], "No comparable saved review on this side");
-    assert.ok(!later[1].includes("later-saved-model"));
-    assert.ok(!earlier[2].includes("synthetic-quality-fixture"));
-    assert.equal(later[3], "Not comparable");
+    assert.ok(frozen.comparison.metrics.length > 0);
+    assert.ok(frozen.comparison.metrics.every(metric => (metric.baseline ?? metric.later).metric === "speed"));
+    assert.equal(JSON.stringify(evaluation), historical);
     assert.deepEqual(bundle.snapshot.periodComparison, frozen);
     assert.deepEqual(Buffer.from(JSON.stringify(frozen)), frozenBefore);
-    for (const text of texts.map(text => text.replace(/\s+/g, " "))) {
-        assert.match(text, /No comparable saved review on this side/);
-        assert.doesNotMatch(text, /No compatible saved lane/);
-    }
+    for (const text of texts) assert.doesNotMatch(text, /No comparable saved review on this side|No compatible saved lane/);
 });
 
-test("period export missing peers distinguish reviews from timing without changing frozen values", async t => {
+test("current period export keeps absent timing peers unavailable without changing frozen values", async t => {
     const fixture = periodFixture();
     fixture.records[0].toolCalls.find(call => call.toolCallId === "period-calendar").requestArgs = { entityUrls: ["/me/calendarView"] };
     fixture.records = JSON.parse(JSON.stringify(fixture.records));
@@ -550,7 +515,7 @@ test("period export missing peers distinguish reviews from timing without changi
     const oldBytes = Buffer.from(JSON.stringify(frozen));
     const display = periodReportDisplay(frozen);
     assert.equal(frozen.periods.later.rows.length, 0);
-    assert.ok(frozen.comparison.metrics.some(item => item.baseline?.kind === "pass-rate"));
+    assert.equal(frozen.comparison.metrics.some(item => item.baseline?.kind === "pass-rate"), false);
     assert.ok(frozen.comparison.metrics.some(item => item.baseline?.kind === "duration"));
     assert.ok(frozen.comparison.metrics.every(item => item.baseline?.kind !== "cost"), "Current period reports do not introduce a retired cost measure");
     frozen.comparison.metrics.forEach((item, index) => {
@@ -563,15 +528,14 @@ test("period export missing peers distinguish reviews from timing without changi
     const bundle = await buildSanitizedBundle(fixture.records.filter(record => selected.has(record.scenarioId)), key,
         { promptMode: "none", formats, timeContext: value.timeContext }, undefined, undefined, undefined, undefined, frozen);
     const { page, texts } = await inspect(t, "missing-period-peers", bundle);
-    assert.equal(await page.locator("#full-interaction caption").textContent(), "Saved reviews and measurements by source and method");
+    assert.equal(await page.locator("#full-interaction h2").textContent(), "Whole-interaction timing");
     for (const text of texts.map(text => text.replace(/\s+/g, " "))) {
-        assert.match(text, /No comparable saved review on this side/);
+        assert.doesNotMatch(text, /No comparable saved review on this side/);
         assert.match(text, /No comparable saved measure on this side/);
         assert.doesNotMatch(text, /No compatible saved lane/);
     }
-    const rows = await page.locator("#full-interaction tbody tr").evaluateAll(rows =>
-        rows.map(row => [...row.children].map(cell => cell.textContent)));
-    assert.deepEqual(rows, display.metrics);
+    const missingPeers = await page.locator("#full-interaction .comparison-whole-values > div:last-child .comparison-whole-numbers").allTextContents();
+    assert.deepEqual(missingPeers, frozen.comparison.metrics.map(() => "No comparable saved measure on this side"));
     assert.deepEqual(bundle.snapshot.periodComparison, frozen);
     assert.deepEqual(Buffer.from(JSON.stringify(frozen)), oldBytes);
     const formatter = createReportComparison();
@@ -613,7 +577,7 @@ test("F11 revised requests and bounded no-JSON reports give honest evidence path
         assert.match(text, /11 earlier/);
         assert.match(text.replace(/\s+/g, " "), /not.*full.*records|not.*omitted.*records/i);
     }
-    assert.match(bounded.files["product-report.md"], /18\. [^\n]+\n\n11 earlier/);
+    assert.match(bounded.files["product-report.md"], /\| 18 \| [^\n]+\n\n11 earlier/);
     const noPdf = await buildSanitizedBundle(many, key, { promptMode: "original", formats: ["html", "markdown"] });
     await boundedProof.page.setContent(noPdf.previewHtml);
     const noPdfText = await boundedProof.page.locator("body").innerText();
@@ -629,24 +593,19 @@ test("F11 revised requests and bounded no-JSON reports give honest evidence path
     for (const [name, file] of Object.entries(saved.files)) assert.deepEqual(await readFile(file), bytes[name]);
 });
 
-test("F11 print grouping permits natural oversized tables and long preserved copies", async t => {
+test("current print grouping permits long preserved copies without inventing legacy review rows", async t => {
     const records = matrixRecords("oversized-editorial", ["success"], { durations: [100] });
     const paragraphs = Array.from({ length: 72 }, (_, index) =>
         `Retained paragraph ${index + 1}: review the available research notes without inventing omitted source material.`);
     records[0].userPrompt.text = ["Long retained copy begins.", ...paragraphs, "Long retained copy ends."].join("\n");
     const { state } = qualityDisplayFixture({ records, judgments: ["pass"] });
     const facts = structuredClone(buildReportFacts(records, state, { preparedAt }).facts);
-    const metric = facts.metrics.find(item => item.origin === "model-assessed" && item.dimension === "accuracy");
-    for (let index = 0; index < 18; index++) facts.metrics.push({
-        ...structuredClone(metric), metricRef: "metric-" + (500 + index).toString(16).padStart(32, "0"),
-        evaluator: { ...metric.evaluator, model: `archived-review-${index + 1}`, rubricVersion: index + 2 },
-    });
     const bundle = await buildSanitizedBundle(records, key, { promptMode: "original", formats }, undefined, undefined, facts);
     const output = await inspect(t, "oversized-control", bundle);
     assert.equal(bundle.records[0].prompts[0].text, records[0].userPrompt.text);
     assert.deepEqual(bundle.snapshot.evaluationFacts, facts);
     for (const paragraph of paragraphs) assert.ok(output.texts[2].replace(/\s/g, "").includes(paragraph.replace(/\s/g, "")));
-    for (let index = 1; index <= 18; index++) assert.ok(output.texts[2].replace(/\s/g, "").includes(`archived-review-${index}`));
-    assert.ok(output.texts[2].split("Measure / origin").length > 2, "Oversized tables must continue with repeated column headers");
+    assert.ok(output.pdfPages.length > 1, "The retained copy crosses a real page boundary.");
+    assert.doesNotMatch(output.texts[2], /archived-review|Measure \/ origin/);
     assert.match(output.texts[2], /Long retained copy ends/);
 });

@@ -4,7 +4,7 @@ import { mkdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
-import { chooseTheme, openSearchFilters, selectActivityOption, navigateMain } from "./helpers.mjs";
+import { chooseTheme, openSearchFilters, selectActivityOption, navigateMain, revealAnalyzeRecords } from "./helpers.mjs";
 import { replaceEvidence } from "../lib/store.mjs";
 
 const proof = process.env.WIRE_TEXT_SEARCH_PROOFS;
@@ -250,6 +250,7 @@ test("Search frozen reading retains its receipt fence without borrowing the inde
     const reads = requests.filter(item => item.path === "/api/report/open").length;
     await page.reload();
     await expect(page.locator("#savedReportReader .error")).toContainText("Search destination is no longer current");
+    await expect(page.locator("#savedReportReader iframe,#savedReportReader .report-file-action")).toHaveCount(0);
     assert.equal(requests.filter(item => item.path === "/api/report/open").length, reads, "Reload cannot upgrade Search into a library read");
     assert.deepEqual(await readFile(bundles[0].files["product-report.html"]), bytes);
 });
@@ -412,7 +413,7 @@ test("saved Search Back restores its exact interaction origin with native histor
 test("animated modal Close restores Search focus only after the sidebar releases its original page", { timeout: 30000 }, async t => {
     const { page } = await setup(t, { touch: true });
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const before = await page.evaluate(() => scrollY);
     await page.locator("#wireSearch").fill("POWER");
     const row = page.locator(".wire-search-hit[data-search-type=interaction]").first();

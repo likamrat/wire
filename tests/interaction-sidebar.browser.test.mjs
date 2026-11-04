@@ -6,7 +6,7 @@ import path from "node:path";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain, navigateSettings, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain, navigateSettings, restoreLegacySearch, revealAnalyzeRecords } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { reportContents } from "./report-journey-helpers.mjs";
 import { openPersonalFeedback } from "./assessment-ui-fixtures.mjs";
@@ -90,7 +90,7 @@ test("built-in motion glides both sidebars without changing the native host poli
         browserOptions: { channel: process.platform === "win32" ? "msedge" : undefined },
     });
     const nativeReduced = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const frames = await page.evaluate(async () => {
         const rail = document.querySelector("#sidebar"), panel = document.querySelector("#contextSidebar"), trace = [];
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -404,7 +404,7 @@ for (const theme of ["light", "dark"]) test(`sidebar command icons keep separate
         for (const destination of ["analyze", "reports", "settings"]) await control(`.primary-navigation [data-nav="${destination}"]`, `${label}/${destination}`, true);
         assert.deepEqual(await rows.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON())), before,
             `${label}: focusing one row cannot move its neighbors`);
-        const metrics = await page.locator(".primary-navigation").evaluate(nav => [...nav.querySelectorAll("a")].map(node => {
+        const metrics = await rows.evaluateAll(nodes => nodes.map(node => {
             const label = node.querySelector(".navigation-label"), range = document.createRange();
             range.selectNodeContents(label);
             return { target: node.getBoundingClientRect().toJSON(), label: range.getBoundingClientRect().toJSON(),
@@ -423,7 +423,7 @@ for (const theme of ["light", "dark"]) test(`sidebar command icons keep separate
                 if (await page.locator("html").getAttribute("data-navigation") !== state) await edgeClick("navigationCollapse");
                 await control("#navigationCollapse", `${label}/${state}/toggle`, true);
                 await navigation(`${label}/${state}`);
-                const gap = await page.evaluate(() => document.querySelector(".primary-navigation").getBoundingClientRect().top
+                const gap = await page.evaluate(() => document.querySelector("#navigationContent").getBoundingClientRect().top
                     - document.querySelector("#navigationCollapse").getBoundingClientRect().bottom);
                 assert.equal(gap, 12, "The collapse toolbar keeps its deliberate 12px separation");
             }
@@ -551,7 +551,7 @@ test("opening during an actual pending overview resumes the retained Analyze sum
         await restoreLegacySearch(page, "release checklist 0.");
         await pending;
         await expect(page.locator("#homeInsights")).toHaveAttribute("aria-busy", "true");
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         await page.locator(".request-card-open").first().click();
         assert.deepEqual(errors, [], "Pending overview must not throw during sidebar entry");
         await expect(page.locator("#contextSidebar[open]")).toBeVisible();
@@ -581,7 +581,7 @@ test("closing while the background overview is pending resumes it after exit cle
         await restoreLegacySearch(page, "release checklist 0.");
         await pending;
         await page.emulateMedia({ reducedMotion: "no-preference" });
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         await page.locator(".request-card-open").first().click();
         await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
         await expect(page.locator("#homeInsights")).toHaveAttribute("aria-busy", "true");
@@ -604,7 +604,7 @@ for (const action of ["Measure definitions", "Automatic scores"]) test(`an origi
     await page.locator("#analyzeReviewDetails>summary").click();
     const trigger = page.locator("#homeInsights").getByRole("button", { name: action, exact: true });
     await expect(trigger).toBeVisible();
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     await expect(page.locator(".request-original pre")).toContainText("checklist 0.");
     await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -650,7 +650,7 @@ for (const action of ["Measure definitions", "Automatic scores"]) test(`an origi
 
 test("minimal native card opens an anchored sidebar without replacing the Analyze DOM", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const card = page.locator("#activityList>.request-row").first();
     assert.equal(await card.locator('input,button,.card-context,.request-meta,.full-text-toggle').count(), 0);
     assert.equal(await card.getByRole("link").count(), 1);
@@ -681,7 +681,7 @@ test("minimal native card opens an anchored sidebar without replacing the Analyz
 
 for (const sidebarMotion of ["system", "on"]) test(`personal feedback stays inline and holds a dirty card switch until discarded (${sidebarMotion})`, { timeout: 30000 }, async t => {
     const { page } = await setup(t, { sidebarMotion });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const first = page.locator(".request-card-open").first(), second = page.locator(".request-card-open").nth(1);
     await first.click();
     await openPersonalFeedback(page);
@@ -719,7 +719,7 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
         await chooseTheme(page, theme);
         if (await page.locator("#navigationCollapse").isVisible()
             && await page.locator("html").getAttribute("data-navigation") !== navigation) await page.locator("#navigationCollapse").click();
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         const link = page.locator(".request-card-open").first();
         await link.scrollIntoViewIfNeeded();
         const entry = await link.boundingBox();
@@ -790,7 +790,7 @@ test("sidebar adapts the actual columns and remains readable with fixed actions 
 
 test("switching restores current disclosure and scroll state while filters dismiss the interaction", { timeout: 30000 }, async t => {
     const { page, requests } = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
     await a.click();
     const first = page.url();
@@ -822,7 +822,7 @@ test("inline feedback recovers an uncertain committed write without replay after
         await route.abort("connectionreset");
     });
 
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     await openPersonalFeedback(page);
     const feedback = page.locator("#requestContent .assessment-feedback-dialog");
@@ -846,7 +846,7 @@ test("inline feedback recovers an uncertain committed write without replay after
 
 test("all personal-feedback dimensions save and withdraw inline, with explicit unsent Cancel", { timeout: 45000 }, async t => {
     const { page, context } = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     let count = 0;
     async function openFeedback(check) {
@@ -889,7 +889,7 @@ test("all personal-feedback dimensions save and withdraw inline, with explicit u
 
 test("contextual automatic-score setup is inline and never grants approval on entry", { timeout: 30000 }, async t => {
     const { page, requests } = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     await page.locator("#requestContent [data-automatic-scores]").first().click();
     await expect(page.locator("#requestContent .automatic-score-dialog")).toContainText("Connect a supported local Copilot source");
@@ -910,7 +910,7 @@ test("inline automatic approval keeps explicit scope and consent fields without 
         method: { provider: "github-copilot", model: "synthetic-model", rubricId: "wire-recorded-interaction-review", rubricVersion: 1 },
         chats: [{ chatRef: "chat-" + "b".repeat(32), name: "Invented approval chat", outsideWindow: 1, requestGroups: 2, shortId: "invented" }],
     } }));
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     await page.locator("#requestContent [data-automatic-scores]").first().click();
     const form = page.locator("#requestContent .automatic-score-dialog");
@@ -940,7 +940,7 @@ test("inline automatic approval keeps explicit scope and consent fields without 
 
 test("touch Copy activates once, uses a 44px target and reports clipboard denial inline", { timeout: 30000 }, async t => {
     const { page, records } = await setup(t, { touch: true });
-    await page.locator("#resultsLink").tap();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().tap();
     const copy = page.locator('[data-reader-section="prompt"] .ux-copy');
     const before = await copy.boundingBox();
@@ -959,7 +959,7 @@ test("touch Copy activates once, uses a 44px target and reports clipboard denial
 test("motion glides only the sidebar and interrupted close settles to the newest card", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
     await a.scrollIntoViewIfNeeded();
     await page.evaluate(() => {
@@ -1121,7 +1121,7 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
         await chooseTheme(page, theme);
         if (await page.locator("html").getAttribute("data-navigation") !== navigation) await page.locator("#navigationCollapse").click();
         await page.emulateMedia({ reducedMotion: "no-preference" });
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         const a = page.locator(".request-card-open").first(), b = page.locator(".request-card-open").nth(1);
         await a.scrollIntoViewIfNeeded();
         const entry = await a.boundingBox(), width = await page.locator("#main").evaluate(node => node.clientWidth);
@@ -1222,7 +1222,7 @@ test("four-state panel motion keeps anchors, fixed regions and content replaceme
 test("a host reduced-motion change does not cancel built-in contextual glide", { timeout: 20000 }, async t => {
     const { page } = await setup(t);
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const link = page.locator(".request-card-open").first();
     await link.scrollIntoViewIfNeeded();
     const box = await link.boundingBox();
@@ -1249,7 +1249,7 @@ test("owned sidebar history keeps Close, Escape, Back and Forward anchored and r
     const measurements = [];
     for (const mode of ["auto", "manual"]) for (const action of ["Close", "Escape", "Back"]) {
         await page.evaluate(mode => history.scrollRestoration = mode, mode);
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         const link = page.locator(".request-card-open").first();
         await link.scrollIntoViewIfNeeded();
         const entry = await link.boundingBox();
@@ -1303,7 +1303,7 @@ test("owned sidebar history keeps Close, Escape, Back and Forward anchored and r
     await expect(page.locator("#homeView")).toBeVisible();
     assert.ok(page.url().startsWith(runtime.url), "Direct entry closes locally rather than navigating out of WIRE");
     assert.equal(await page.evaluate(() => history.scrollRestoration), "auto");
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
     await navigateMain(page, "settings");
@@ -1322,7 +1322,7 @@ test("owned sidebar history keeps Close, Escape, Back and Forward anchored and r
 test("host media change and newer keyboard intent preserve the current exit owner", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const link = page.locator(".request-card-open").first();
     await link.click();
     await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length === 0);
@@ -1349,7 +1349,7 @@ test("host media change and newer keyboard intent preserve the current exit owne
 test("resizing during entry or exit settles the latest layout without a stale overlay", { timeout: 20000 }, async t => {
     const { page } = await setup(t);
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     assert.ok(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length > 0));
     await page.setViewportSize({ width: 375, height: 820 });
@@ -1378,7 +1378,7 @@ for (const sidebarMotion of ["system", "on"]) test(`leaving during a pending fee
         deliveries.push(delivery); return delivery;
     });
     try {
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         await page.locator(".request-card-open").first().click();
         await openPersonalFeedback(page);
         const form = page.locator("#requestContent .assessment-feedback-dialog");
@@ -1404,7 +1404,7 @@ for (const sidebarMotion of ["system", "on"]) test(`leaving during a pending fee
 
 test("report continuation retains choices and returns to the original sidebar with current canonical membership", { timeout: 30000 }, async t => {
     const { page } = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const card = page.locator(".request-card-open").first();
     await card.click();
     await page.locator("#requestReportToggle").click();
@@ -1427,7 +1427,7 @@ test("report continuation retains choices and returns to the original sidebar wi
 
 for (const sidebarMotion of ["system", "on"]) test(`source invalidation scrubs the old prompt, copy getter and held unsent-feedback transition (${sidebarMotion})`, { timeout: 30000 }, async t => {
     const { page, context, records } = await setup(t, { sidebarMotion });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     const copy = await page.locator('[data-reader-section="prompt"] .ux-copy').elementHandle();
     await openPersonalFeedback(page);
@@ -1463,7 +1463,7 @@ for (const sidebarMotion of ["system", "on"]) test(`a delayed interaction read c
         return delivered;
     });
     try {
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         await page.locator(".request-card-open").first().click();
         await pending;
         await page.locator(".request-card-open").nth(1).click();

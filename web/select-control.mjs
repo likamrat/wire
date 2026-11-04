@@ -1,9 +1,9 @@
 // Serialized into the nonce-authorized shell; keep this factory self-contained.
-export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
+export function createSelectControls(ux, { decorateOption = () => {}, pagingFor = () => null, onClose = () => {} } = {}) {
     const controls = new Map();
     const events = new AbortController();
     let sequence = 0, active = null, typeBuffer = "", typeTime = 0, frame = 0;
-    let dismissedPointer = null;
+    let dismissedPointer = null, popupRevision = 0, withdrawalRevision = 0;
     const popup = document.createElement("div");
     const list = document.createElement("div");
     popup.className = "select-popup";
@@ -17,10 +17,34 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
     function listen(node, name, handler, options = {}) {
         node.addEventListener(name, handler, { ...options, signal: events.signal });
     }
+    function clearAttribute(node, name) {
+        const attribute = node.getAttributeNode(name);
+        if (!attribute) return;
+        // Only SVG geometry needs detaching first; private values stay blank before removal.
+        if (node.namespaceURI !== "http://www.w3.org/2000/svg" || !(node.localName === "svg" && ["width", "height", "viewBox"].includes(name))
+            && !(node.localName === "rect" && ["width", "height", "x", "y", "rx", "ry"].includes(name))
+            && !(node.localName === "circle" && ["cx", "cy", "r"].includes(name))
+            && !(node.localName === "ellipse" && ["cx", "cy", "rx", "ry"].includes(name))
+            && !(["line", "linearGradient"].includes(node.localName) && ["x1", "x2", "y1", "y2"].includes(name))
+            && !(node.localName === "stop" && name === "offset")) attribute.value = "";
+        node.removeAttribute(name);
+        attribute.value = "";
+    }
+    function clearRendered(node, retained) {
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) text.data = "";
+        for (const child of node.querySelectorAll("*")) {
+            if (child === retained) continue;
+            for (const attribute of [...child.attributes]) clearAttribute(child, attribute.name);
+        }
+    }
     function attribute(node, name, value) {
         if (value == null) {
-            if (node.hasAttribute(name)) node.removeAttribute(name);
-        } else if (node.getAttribute(name) !== String(value)) node.setAttribute(name, String(value));
+            clearAttribute(node, name);
+        } else if (node.getAttribute(name) !== String(value)) {
+            clearAttribute(node, name);
+            node.setAttribute(name, String(value));
+        }
     }
     function optionsFor(select) {
         return [...select.options].filter((option) => !option.hidden && !option.parentElement.hidden).map((option) => ({
@@ -29,7 +53,8 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
             disabled: option.disabled || option.parentElement.matches("optgroup:disabled"),
             group: option.parentElement.matches("optgroup") ? option.parentElement.label : "",
             detail: [option.dataset.detail,
-                option.disabled || option.parentElement.matches("optgroup:disabled") ? option.dataset.disabledReason : ""].filter(Boolean).join(" · "),
+                (option.disabled || option.parentElement.matches("optgroup:disabled")) && option.dataset.disabledReason
+                    ? `Unavailable: ${option.dataset.disabledReason}` : ""].filter(Boolean).join("; "),
         }));
     }
     function selectedValues(entry) { return entry.options.filter(option => option.node.selected).map(option => option.value); }
@@ -41,6 +66,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         return entry.trigger.isConnected && entry.trigger.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: true });
     }
     function close(restore = false) {
+        popupRevision++;
         const entry = active;
         active = null;
         typeBuffer = "";
@@ -48,12 +74,17 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         popup.hidden = true;
         if (entry) {
             entry.draft = null;
+            entry.updateDraft = null;
             attribute(entry.trigger, "aria-expanded", "false");
             attribute(entry.trigger, "aria-activedescendant", null);
             attribute(entry.trigger, "aria-describedby", entry.select.getAttribute("aria-describedby"));
             if (restore && visible(entry) && !entry.trigger.disabled) entry.trigger.focus({ preventScroll: true });
         }
+        clearRendered(popup, list);
+        list.replaceChildren();
+        popup.replaceChildren(list);
         ux.hideTooltip();
+        if (entry) onClose(entry.select);
     }
     function position(keepActive = true) {
         frame = 0;
@@ -92,7 +123,10 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
     }
     function schedulePosition(event) {
         if (event?.target instanceof Node && (event.target === popup || popup.contains(event.target))) return;
-        if (active && !frame) frame = requestAnimationFrame(() => position());
+        if (active && !frame) {
+            const revision = popupRevision;
+            frame = requestAnimationFrame(() => { if (revision === popupRevision) position(); });
+        }
     }
     function highlight(index, scroll = true) {
         if (!active || index < 0 || active.options[index]?.disabled) return;
@@ -114,6 +148,8 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         if (entry.trigger.disabled || !visible(entry)) return;
         close();
         active = entry;
+        const revision = popupRevision;
+        const current = () => active === entry && revision === popupRevision;
         entry.index = -1;
         list.replaceChildren();
         popup.replaceChildren(list);
@@ -167,6 +203,29 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
             }
             list.append(row);
         });
+        const paging = pagingFor(entry.select);
+        if (paging) {
+            const footer = document.createElement("div"), note = document.createElement("p");
+            footer.className = "select-footer";
+            note.className = "select-draft-hint";
+            note.textContent = paging.label;
+            footer.append(note);
+            for (const [label, action] of [["Next Microsoft options", paging.next], ["First Microsoft options", paging.first]]) {
+                if (typeof action !== "function") continue;
+                const button = document.createElement("button");
+                button.type = "button"; button.className = "quiet"; button.textContent = label;
+                button.addEventListener("click", async () => {
+                    if (!current()) return;
+                    close(true);
+                    const turn = popupRevision, access = withdrawalRevision;
+                    await action();
+                    if (access === withdrawalRevision && turn === popupRevision && document.activeElement === entry.trigger
+                        && visible(entry) && !entry.trigger.disabled) open(entry);
+                }, { signal: events.signal });
+                footer.append(button);
+            }
+            popup.append(footer);
+        }
         if (entry.multiple) {
             const all = document.createElement("button"), footer = document.createElement("div");
             const apply = document.createElement("button"), cancel = document.createElement("button"), hint = document.createElement("p");
@@ -194,6 +253,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
             popup.prepend(all);
             popup.append(hint, footer);
             entry.updateDraft = () => {
+                if (!current()) return;
                 const eligible = entry.options.filter(option => !option.disabled);
                 const count = eligible.filter(option => entry.draft.has(option.value)).length;
                 all.setAttribute("aria-checked", count === eligible.length ? "true" : count ? "mixed" : "false");
@@ -208,13 +268,14 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
                 if (!popup.hidden) position(false);
             };
             all.addEventListener("click", () => {
+                if (!current()) return;
                 const eligible = entry.options.filter(option => !option.disabled);
                 if (eligible.every(option => entry.draft.has(option.value))) entry.draft.clear();
                 else eligible.forEach(option => entry.draft.add(option.value));
                 entry.updateDraft();
             });
-            apply.addEventListener("click", () => applyDraft(entry));
-            cancel.addEventListener("click", () => close(true));
+            apply.addEventListener("click", () => { if (current()) applyDraft(entry); });
+            cancel.addEventListener("click", () => { if (current()) close(true); });
             entry.updateDraft();
         }
         attribute(list, "aria-labelledby", entry.trigger.getAttribute("aria-labelledby"));
@@ -230,8 +291,28 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         const selected = entry.options.findIndex((option) => option.node.selected && !option.disabled);
         position();
         highlight(edge === "first" ? enabled[0] : edge === "last" ? enabled.at(-1) : selected >= 0 ? selected : enabled[0]);
+        if (typeof paging?.load === "function") {
+            const access = withdrawalRevision;
+            Promise.resolve(paging.load()).then(loaded => {
+                if (loaded === false || !current() || access !== withdrawalRevision) return;
+                const draft = entry.draft && new Set(entry.draft), focused = entry.options[entry.index]?.value;
+                close(true);
+                const turn = popupRevision;
+                // Let the existing close callback apply the completed option page first.
+                queueMicrotask(() => {
+                    if (access !== withdrawalRevision || turn !== popupRevision || document.activeElement !== entry.trigger
+                        || !visible(entry) || entry.trigger.disabled) return;
+                    open(entry);
+                    if (active !== entry) return;
+                    if (draft) { entry.draft = draft; entry.updateDraft?.(); }
+                    const index = entry.options.findIndex(option => option.value === focused && !option.disabled);
+                    if (index >= 0) highlight(index);
+                });
+            });
+        }
     }
     function commit(index) {
+        const revision = withdrawalRevision;
         const entry = active, option = entry?.options[index];
         if (!entry || !option || option.disabled) return;
         // A replaced option cannot commit a stale value into a newer snapshot.
@@ -249,13 +330,17 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         if (changed) {
             entry.select.selectedIndex = option.node.index;
             entry.select.dispatchEvent(new Event("input", { bubbles: true }));
+            if (revision !== withdrawalRevision) return;
             entry.select.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        if (revision !== withdrawalRevision) return;
         sync();
+        if (revision !== withdrawalRevision) return;
         if (visible(entry) && !entry.trigger.disabled) entry.trigger.focus({ preventScroll: true });
         ux.hideTooltip();
     }
     function applyDraft(entry) {
+        const revision = withdrawalRevision;
         if (active !== entry || !entry.draft?.size || unavailable(entry)) return;
         if (entry.options.some(option => !entry.select.contains(option.node))) { close(); sync(); return; }
         const values = entry.options.filter(option => entry.draft.has(option.value)).map(option => option.value);
@@ -266,9 +351,12 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         if (changed) {
             for (const option of entry.options) option.node.selected = values.includes(option.value);
             entry.select.dispatchEvent(new Event("input", { bubbles: true }));
+            if (revision !== withdrawalRevision) return;
             entry.select.dispatchEvent(new Event("change", { bubbles: true }));
         }
+        if (revision !== withdrawalRevision) return;
         sync();
+        if (revision !== withdrawalRevision) return;
         if (visible(entry) && !entry.trigger.disabled) entry.trigger.focus({ preventScroll: true });
         ux.hideTooltip();
     }
@@ -324,6 +412,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
         const signature = JSON.stringify(options.map((option) => [option.value, option.label, option.displayLabel, option.count, option.disabled, option.group, option.detail]));
         const replaced = options.some((option, index) => option.node !== entry.options[index]?.node);
         if (entry.sizer && signature !== entry.signature) {
+            clearRendered(entry.sizer);
             entry.sizer.replaceChildren(...options.map(option => {
                 const size = document.createElement("span");
                 size.textContent = option.label;
@@ -342,6 +431,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
                 : select.selectedOptions[0]?.label || (options.length ? "Choose an option" : "No options available");
         const presentation = JSON.stringify([text, selectedKey, state]);
         if (entry.presentation !== presentation) {
+            clearRendered(value);
             value.textContent = text;
             if (!["loading", "stale"].includes(state)) decorateOption(value, { id: select.id, value: entry.multiple && selected.length !== 1 ? "all" : select.value, label: text });
             entry.presentation = presentation;
@@ -432,19 +522,55 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
             }
         }
     }
+    function withdrawAccess() {
+        withdrawalRevision++;
+        close(false);
+        cancelAnimationFrame(frame);
+        frame = 0;
+        typeBuffer = "";
+        typeTime = 0;
+        dismissedPointer = null;
+        clearRendered(popup, list);
+        list.replaceChildren();
+        for (const name of ["aria-labelledby", "aria-label", "aria-multiselectable"]) clearAttribute(list, name);
+        popup.replaceChildren(list);
+        clearAttribute(popup, "style");
+        clearAttribute(popup, "data-side");
+        popup.classList.remove("select-popup-multiple", "select-popup-filter");
+        for (const entry of controls.values()) {
+            entry.options.length = 0;
+            entry.options = [];
+            entry.draft?.clear();
+            entry.draft = null;
+            entry.updateDraft = null;
+            entry.signature = "";
+            entry.selectedValue = null;
+            entry.presentation = null;
+            entry.index = -1;
+            if (entry.sizer) { clearRendered(entry.sizer); entry.sizer.replaceChildren(); }
+            clearRendered(entry.value);
+            entry.value.replaceChildren();
+            for (const attribute of [...entry.value.attributes]) {
+                if (attribute.name !== "class") clearAttribute(entry.value, attribute.name);
+            }
+            entry.value.className = "select-value";
+            attribute(entry.trigger, "aria-activedescendant", null);
+        }
+        sync();
+    }
     listen(popup, "pointerdown", (event) => event.preventDefault());
     listen(popup, "keydown", (event) => {
         if (event.key === "Escape" && active) { event.preventDefault(); event.stopPropagation(); close(true); }
     });
     listen(popup, "pointermove", (event) => {
         const row = event.target.closest(".select-option");
-        if (row) highlight(Number(row.dataset.optionIndex), false);
+        if (row && list.contains(row)) highlight(Number(row.dataset.optionIndex), false);
     });
     listen(popup, "click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         const row = event.target.closest(".select-option");
-        if (row) commit(Number(row.dataset.optionIndex));
+        if (row && list.contains(row)) commit(Number(row.dataset.optionIndex));
     });
     listen(document, "pointerdown", (event) => {
         dismissedPointer = null;
@@ -480,7 +606,7 @@ export function createSelectControls(ux, { decorateOption = () => {} } = {}) {
     observer.observe(document.body, { childList: true, subtree: true, attributes: true,
         attributeFilter: ["disabled", "hidden", "selected", "label", "value", "class", "aria-label", "aria-labelledby", "aria-describedby", "aria-invalid", "required", "data-select-state", "data-all-label", "data-detail", "data-disabled-reason", "data-option-label", "data-count", "open"] });
     sync();
-    return { sync, close, destroy() {
+    return { sync, close, withdrawAccess, destroy() {
         close();
         observer.disconnect();
         events.abort();

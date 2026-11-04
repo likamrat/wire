@@ -11,7 +11,7 @@ import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions } from "./helpers.mjs";
+import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { renderHtmlReport } from "../lib/product-report.mjs";
 
 const proofDir = process.env.WORKIQ_UX_PROOF_DIR;
@@ -96,7 +96,7 @@ async function fixture(run) {
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-ux-fixture'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-src 'self'");
             if (req.url === "/print-report") return res.end(renderHtmlReport(printableRecords));
             if (req.url === "/primitives") return res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles}${uxStyles}</style></head><body><main><h1>Synthetic interaction fixtures</h1></main><script nonce="ux-fixture">const createEvidenceUX=${createEvidenceUX.toString()};const uxIcons=${JSON.stringify(uxIcons)};window.syntheticCommand=${JSON.stringify(exactCommand)};(${primitives.toString()})();</script></body></html>`);
-            return res.end(renderHtmlShell("a".repeat(64), "ux-fixture"));
+            return res.end(renderHtmlShell("a".repeat(64), "ux-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         let text = ""; for await (const chunk of req) text += chunk;
         const input = JSON.parse(text);
@@ -151,6 +151,122 @@ async function shot(page, name) {
         await page.screenshot({ path: path.join(proofDir, name + ".png"), fullPage: await modal.count() === 0 });
     }
 }
+
+test("withdrawal synchronously retires connected copy getters and held clipboard feedback before removal observers", async () => fixture(async ({ context, url }) => {
+    const page = await context.newPage();
+    await page.goto(url + "/primitives");
+    const result = await page.evaluate(async () => {
+        let reads = 0, release;
+        navigator.clipboard.writeText = () => new Promise(resolve => { release = resolve; });
+        const root = document.createElement("section");
+        const control = fixtureUX.copyButton({ label: "Private copy", getText: () => { reads++; return "PRIVATE_COPY"; } });
+        root.append(control); document.body.append(root);
+        control.click();
+        fixtureUX.withdrawAccess([root]);
+        control.click();
+        const before = { reads, status: root.querySelector(".ux-copy-status")?.textContent ?? "",
+            busy: control.hasAttribute("aria-busy"), label: control.getAttribute("aria-label") };
+        release(); await Promise.resolve(); await Promise.resolve();
+        return { before, after: { reads, status: root.querySelector(".ux-copy-status")?.textContent ?? "",
+            state: control.dataset.copyState ?? null, tooltip: control.dataset.uxTooltip ?? null }, connected: control.isConnected };
+    });
+    assert.equal(result.connected, true);
+    assert.deepEqual(result.before, { reads: 1, status: "", busy: false, label: null });
+    assert.deepEqual(result.after, { reads: 1, status: "", state: null, tooltip: null });
+    await page.locator("#preview").hover();
+    await page.waitForFunction(() => document.getElementById("evidence-tooltip").textContent.includes("Choose a request"));
+    await page.clock.install();
+    await page.evaluate(async () => {
+        navigator.clipboard.writeText = async () => {};
+        const root = document.createElement("section");
+        window.retiredResetCopy = fixtureUX.copyButton({ label: "Private timer", getText: () => "PRIVATE_TIMER" });
+        root.append(window.retiredResetCopy); document.body.append(root);
+        window.retiredResetCopy.click();
+        await Promise.resolve(); await Promise.resolve();
+        fixtureUX.withdrawAccess([root]);
+    });
+    await page.clock.runFor(2500);
+    assert.deepEqual(await page.evaluate(() => ({ state: retiredResetCopy.dataset.copyState ?? null,
+        label: retiredResetCopy.getAttribute("aria-label") })), { state: null, label: null });
+}));
+
+test("a withdrawing copy producer cannot dispatch its result or erase a successor control", async () => fixture(async ({ context, url }) => {
+    const page = await context.newPage();
+    await page.goto(url + "/primitives");
+    const result = await page.evaluate(async () => {
+        const root = document.createElement("section");
+        document.body.append(root);
+        let next;
+        const control = fixtureUX.copyButton({ label: "PRIVATE_COPY_LABEL", getText: () => {
+            fixtureUX.withdrawAccess([root]);
+            next = fixtureUX.copyButton({ label: "Fresh copy", getText: () => "FRESH_COPY" });
+            root.append(next);
+            return "PRIVATE_RETIRED_VALUE";
+        } });
+        root.append(control);
+        const label = control.getAttributeNode("aria-label");
+        control.click();
+        await Promise.resolve(); await Promise.resolve();
+        const before = { writes: [...clipboardWrites], retired: control.disabled, label: label.value,
+            nextLabel: next.getAttribute("aria-label"), nextDisabled: next.disabled };
+        next.click();
+        await Promise.resolve(); await Promise.resolve();
+        return { before, after: [...clipboardWrites] };
+    });
+    assert.deepEqual(result.before, { writes: [], retired: true, label: "", nextLabel: "Fresh copy", nextDisabled: false });
+    assert.deepEqual(result.after, ["FRESH_COPY"]);
+}));
+
+for (const activation of ["initial focus", "help activation", "active refresh"]) test(`a withdrawing tooltip producer cannot replace a newer registration (${activation})`, async () => fixture(async ({ context, url }) => {
+    const page = await context.newPage();
+    await page.goto(url + "/primitives");
+    const results = await page.evaluate(activation => [false, true].map(successor => {
+        const refreshing = activation === "active refresh", help = activation === "help activation";
+        const root = document.createElement("section"), next = document.createElement("button");
+        const control = help ? fixtureUX.helpButton("Fixture control", "") : document.createElement("button");
+        if (!help) control.textContent = "Fixture control";
+        next.textContent = "Next control";
+        root.append(control, next); document.body.append(root);
+        const bubble = document.getElementById("evidence-tooltip");
+        let held, withdrew = false;
+        if (refreshing) {
+            fixtureUX.tooltip(control, "PRIVATE_PREVIOUS_HELP"); control.focus();
+            held = bubble.firstChild;
+        }
+        fixtureUX.tooltip(control, () => {
+            fixtureUX.withdrawAccess([root]); withdrew = true;
+            if (successor) { fixtureUX.tooltip(next, "FRESH_HELP"); next.focus(); }
+            return "PRIVATE_RETIRED_HELP";
+        });
+        if (help) control.click();
+        else if (!refreshing) control.focus();
+        const result = { withdrew, text: bubble.textContent, hidden: bubble.hidden, oldText: held?.data ?? "",
+            oldRegistered: control.hasAttribute("data-ux-tooltip"), nextRegistered: next.hasAttribute("data-ux-tooltip") };
+        fixtureUX.withdrawAccess([root]); root.remove();
+        return result;
+    }), activation);
+    assert.deepEqual(results, [
+        { withdrew: true, text: "", hidden: true, oldText: "", oldRegistered: false, nextRegistered: false },
+        { withdrew: true, text: "FRESH_HELP", hidden: false, oldText: "", oldRegistered: false, nextRegistered: true },
+    ]);
+}));
+
+test("tooltip withdrawal erases held Text and description Attr handles while preserving static controls", async () => fixture(async ({ context, url }) => {
+    const page = await context.newPage();
+    await page.goto(url + "/primitives");
+    const result = await page.evaluate(() => {
+        const root = document.createElement("section"), control = document.createElement("button");
+        control.textContent = "Static control"; root.append(control); document.body.append(root);
+        fixtureUX.tooltip(control, "PRIVATE_VISIBLE_HELP"); control.focus();
+        const bubble = document.getElementById("evidence-tooltip"), text = bubble.firstChild;
+        const description = control.getAttributeNode("aria-describedby"), before = text.data;
+        fixtureUX.withdrawAccess([root]);
+        return { before, text: text.data, description: description.value, bubble: bubble.textContent,
+            hidden: bubble.hidden, control: control.textContent };
+    });
+    assert.deepEqual(result, { before: "PRIVATE_VISIBLE_HELP", text: "", description: "", bubble: "",
+        hidden: true, control: "Static control" });
+}));
 
 test("clipboard icons copy exact Unicode, whitespace and marked display text, never reading clipboard", { timeout: 30000 }, async () => fixture(async ({ context, url }) => {
     const page = await context.newPage();

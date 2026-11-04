@@ -89,6 +89,14 @@ test("imported execution and recovery entry points cannot dispatch or alter stor
     const evaluation = createEvaluationController(f.context, { getSourceConfig: forbidden, evaluatorFactory: forbidden, readSource: forbidden, discover: forbidden });
     const automatic = createAutomaticScoreController(f.context, { evaluation, getSourceConfig: forbidden, onChanged: forbidden });
     for (const method of ["setup", "start", "revoke", "recover", "sealSourceDeletion"]) assert.throws(() => evaluation[method]("owner", f.input), retired);
+    for (const maxAiCredits of [0, 1, 10, 29.999, 30, 60]) {
+        assert.throws(() => evaluation.start("owner", { ...f.input, maxAiCredits }), retired);
+    }
+    const uncertain = before.personalEvaluation.modelEvaluation.runs.find(run => run.phase === "uncertain");
+    const receipt = await evaluation.status("reconnected-panel", { runRef: uncertain.runRef, receiptToken: f.receiptToken });
+    assert.equal(receipt.phase, "uncertain");
+    assert.equal(receipt.costUnknown, true);
+    assert.equal(receipt.spentAiCredits, 0.125);
     for (const method of ["setup", "summary", "approve", "revoke", "reconcile", "recover"]) assert.throws(() => automatic[method]("owner", f.input), retired);
     assert.throws(() => createCopilotEvaluator({ createClient: forbidden, baseDirectory: f.context.dataDir }), retired);
     await evaluation.close(); await automatic.close();

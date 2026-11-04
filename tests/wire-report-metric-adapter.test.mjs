@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as contract from "../lib/assessment-contract.mjs";
-import { makeRatio, makeDuration, makeCost, id } from "./report-comparison-fixtures.mjs";
+import { makeRatio, makeDuration, makeCost, id } from "./assessment-contract-fixtures.mjs";
 import { createWireMetricAdapter } from "../lib/wire-report-metric-adapter.mjs";
 import { compareMetricFacts } from "../lib/report-metric-comparison.mjs";
 

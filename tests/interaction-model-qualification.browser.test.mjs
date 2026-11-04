@@ -67,7 +67,7 @@ test("explicit guarded model qualification updates the exact interaction, call a
     await expect(fact(card, "Model").locator("dd")).toHaveText("Not verified (tool metadata only)");
     const before = await loadBoardState(context), origin = new URL(runtime.url).origin;
     const input = { operationId: randomUUID(), scenarioIds: [records[0].scenarioId], expectedSourceRevision: before.evidenceRevision };
-    const headers = { Origin: origin, "Content-Type": "application/json" };
+    const headers = { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
     const endpoint = origin + "/api/collection/models/qualify";
     const unauthorized = await page.request.post(endpoint, { headers, data: input });
     assert.equal(unauthorized.status(), 403);

@@ -4,8 +4,15 @@
 > [local text search](live-search.md) does not initialize this adjunct, load its
 > resources or interpret intent. The semantic qualification notes below remain
 > evidence of the former contract, not requirements for the current product.
-> Former backend suites are `.historical.mjs` snapshots; their commands below
-> refer to the old source baseline. See [the active coverage map](search-history.md).
+> Former `.historical.mjs` suites and `tests/search-linguistics-fixture.mjs`
+> remain in Git at `b1ccf65e8d79534b35a347c992e947d067837858`, not in the current
+> working tree. Commands below refer to the old source baseline.
+> See [current Search and retirement](live-search.md#retired-search-research).
+>
+> Those development revisions are not available through the published
+> repository. This document is retained until accessible sanitized references
+> are established. Its npm provisioning scripts and historical suites are not
+> current checkout commands; do not install resources to make them run.
 
 This adjunct is **disabled by default and unqualified for activation**. Its
 dictionary-backed matching code remains available for corrective safety testing,
@@ -181,7 +188,8 @@ safety checks do not requalify the feature or waive its original positive cases.
 Provisioning tests use controlled in-process responses and already approved
 bytes, never a network acquisition. Long core inputs remain complete; the live
 HTTP query limit remains 65,536 bytes.
-`tests/search-linguistics-fixture.mjs` is the canonical expected-set ledger.
+At the pinned Git revision above, `tests/search-linguistics-fixture.mjs` is the
+historical expected-set ledger; it is no longer a maintained test helper.
 Qualification requires `MUST ⊆ actual ⊆ ALLOWED`: the three original car queries
 require the automobile repair and permit, but do not require, the ambulance
 engine repair. Default and optional results are checked independently, including

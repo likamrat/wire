@@ -8,8 +8,11 @@ import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { comparisonBodyHtml, renderComparisonMarkdown } from "../lib/report-presentation.mjs";
-import { privateFixture, fixture, chooseTheme } from "./helpers.mjs";
+import { privateFixture, fixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { mountReportComparisonJourney } from "../web/report-comparison-journey.mjs";
+import { createReportSaveIdentity } from "../web/report-draft.mjs";
+import { createSavedFilePreview, createPreparedFileInspection } from "../web/saved-file-preview.mjs";
+import { createFrozenReportFrame } from "../web/live-search.mjs";
 import { chooseReportScope, reportContents, scanReport, findReportCopy, openReportLibrary, openReportComparison, openReportCreation } from "./report-journey-helpers.mjs";
 
 const timeContext = { timeZone: "America/Los_Angeles", locale: "en-US" };
@@ -86,6 +89,125 @@ async function inspectSavedPair(page, bundles, row) {
     await page.locator("#comparisonWorkspace").getByRole("button", { name: "Compare reports", exact: true }).click();
 }
 
+async function captureComparison(page, name) {
+    const output = process.env.WIRE_SAVED_COMPARISON_LAYOUT_PROOFS;
+    if (!output) return;
+    await mkdir(output, { recursive: true });
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: path.join(output, name + ".png"), fullPage: true });
+}
+
+test("saved comparison pending, invalid and failed choices keep their compact form and existing recovery", { timeout: 30000 }, async t => {
+    const { page, bundles, calls } = await setup(t);
+    await openReportComparison(page);
+    const root = page.locator("#comparisonWorkspace"), compare = root.getByRole("button", { name: "Compare reports", exact: true });
+    await selectReport(page, "Earlier report", bundles[0].bundleId);
+    await selectReport(page, "Later report", bundles[0].bundleId);
+    assert.equal(await compare.isDisabled(), true);
+    assert.match(await root.innerText(), /Choose two different saved reports/);
+    await captureComparison(page, "invalid-same-report");
+    await selectReport(page, "Later report", bundles[1].bundleId);
+    const arrived = Promise.withResolvers(), release = Promise.withResolvers();
+    t.after(() => release.resolve());
+    await page.route("**/api/report-comparison/inspect", async route => {
+        arrived.resolve(); await release.promise;
+        await route.fulfill({ status: 503, json: { error: "Saved comparison read is temporarily unavailable." } });
+    }, { times: 1 });
+    await compare.click(); await arrived.promise;
+    assert.equal(await compare.isDisabled(), true);
+    assert.equal(await root.getByRole("combobox", { name: "Earlier report", exact: true }).isDisabled(), true);
+    await root.getByText("Reading the two selected reports...", { exact: true }).waitFor();
+    await captureComparison(page, "pending-read");
+    release.resolve();
+    await root.getByRole("alert").filter({ hasText: "Saved comparison read is temporarily unavailable." }).waitFor();
+    assert.equal(await compare.isEnabled(), true);
+    await captureComparison(page, "failed-read");
+    await compare.click();
+    await root.locator(".report-comparison").waitFor();
+    const trailing = locator => locator.evaluate(node => {
+        const root = node.closest("#comparisonWorkspace"), style = getComputedStyle(root);
+        return Math.abs(node.getBoundingClientRect().right - root.getBoundingClientRect().right + parseFloat(style.paddingRight) + parseFloat(style.borderRightWidth)) < 1;
+    });
+    assert.equal(await trailing(root.getByRole("button", { name: "Prepare comparison copy", exact: true })), true);
+    await captureComparison(page, "comparison-facts");
+    await root.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
+    await root.locator(".comparison-prepared-files iframe").waitFor();
+    assert.equal(await trailing(root.getByRole("button", { name: "Approve for local saving", exact: true })), true);
+    await captureComparison(page, "prepared-review");
+    await root.getByRole("button", { name: "Back to comparison choices", exact: true }).click();
+    assert.equal(await root.getByRole("combobox", { name: "Earlier report", exact: true }).evaluate(node => node === document.activeElement), true);
+    assert.deepEqual(await root.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
+    assert.equal(calls.some(call => ["/api/report-comparison/review", "/api/report-comparison/save"].includes(call.path)), false);
+});
+
+test("saved comparison choices share a balanced task frame without duplicate headings or dead control lanes", { timeout: 45000 }, async t => {
+    const { page, bundles } = await setup(t);
+    const originals = await Promise.all(bundles.map(hashes)), measurements = [], failures = [];
+    const output = process.env.WIRE_SAVED_COMPARISON_LAYOUT_PROOFS;
+    if (output) await mkdir(output, { recursive: true });
+    await openReportComparison(page);
+    for (const selected of [false, true]) {
+        if (selected) {
+            await selectReport(page, "Earlier report", bundles[0].bundleId);
+            await selectReport(page, "Later report", bundles[1].bundleId);
+        }
+        for (const theme of ["light", "dark"]) for (const [width, scale, collapsed] of [
+            [2000, 100, false], [1440, 100, true], [768, 100, true], [390, 100, false],
+            [1440, 200, true], [390, 200, false],
+        ]) {
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+            if (await page.locator("#navigationCollapse").getAttribute("aria-expanded") === String(collapsed))
+                await page.locator("#navigationCollapse").click();
+            await chooseTheme(page, theme);
+            await page.setViewportSize({ width, height: width === 2000 ? 1220 : 1000 });
+            await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
+            await page.evaluate(() => document.fonts.ready);
+            await page.waitForFunction(() => !document.querySelector("#sidebar").hasAttribute("data-navigation-moving"));
+            await page.evaluate(() => scrollTo(0, 0));
+            const name = `${selected ? "selected" : "initial"}-${theme}-${width}-${scale}-${collapsed ? "collapsed" : "expanded"}`;
+            const metrics = await page.locator("#comparisonWorkspace").evaluate(root => {
+                const box = node => {
+                    const { x, y, width, height, right, bottom } = node.getBoundingClientRect();
+                    return { x, y, width, height, right, bottom };
+                };
+                const css = getComputedStyle(root), actions = root.querySelector(".assessment-control-actions");
+                return {
+                    frame: box(root), heading: box(document.querySelector("#workspace > .page-heading")), padding: parseFloat(css.paddingLeft),
+                    duplicateHeading: root.querySelector(".comparison-task-heading h2").checkVisibility(),
+                    hasIntro: Boolean(root.querySelector(".comparison-task-intro")),
+                    choices: [...root.querySelectorAll(".comparison-report-choice")].map(node => ({
+                        group: box(node), label: box(node.querySelector("label")), control: box(node.querySelector(".select-trigger")),
+                    })),
+                    action: box(actions.querySelector(".primary")), actions: box(actions),
+                    controls: [...root.querySelectorAll("button")].filter(node => node.checkVisibility()).map(node => ({
+                        text: node.textContent, ...box(node), clipped: node.scrollWidth > node.clientWidth + 1,
+                    })),
+                    overflow: document.documentElement.scrollWidth > innerWidth,
+                };
+            });
+            measurements.push({ name, ...metrics });
+            if (output) await page.screenshot({ path: path.join(output, name + ".png"), fullPage: true });
+            const check = (ok, message) => { if (!ok) failures.push(`${name}: ${message}`); };
+            check(!metrics.duplicateHeading, "one visible page title");
+            check(!metrics.hasIntro, "no tutorial repeating the Compare controls");
+            check(!metrics.overflow, "no horizontal page overflow");
+            check(Math.abs(metrics.heading.x - metrics.frame.x) < 1 && Math.abs(metrics.heading.width - metrics.frame.width) < 1,
+                "header and task share edges");
+            check(metrics.choices.every(choice => Math.abs(choice.control.width - choice.group.width) < 1
+                && Math.abs(choice.label.x - choice.control.x) < 1), "fields fill their equal columns and labels align");
+            check(Math.abs(metrics.action.right - (metrics.frame.right - metrics.padding)) <= 2, "Compare action follows the trailing content edge");
+            check(metrics.frame.bottom - metrics.actions.bottom <= metrics.padding + 2, "no empty footer band");
+            check(metrics.controls.every(control => control.height >= 44 && control.x >= 0 && control.right <= width + 1 && !control.clipped),
+                "full targets and complete bounded control labels");
+            if (!selected && width >= 1400 && scale === 100) check(metrics.frame.height <= 210, "initial form is proportional to two fields and one action");
+        }
+    }
+    if (output) await writeFile(path.join(output, "geometry.json"), JSON.stringify(measurements, null, 2));
+    assert.deepEqual(await Promise.all(bundles.map(hashes)), originals);
+    assert.deepEqual(failures, []);
+});
+
 test("comparison title follows its reviewed copy through editing, approval, save and opened output", async t => {
     const { page, calls, bundles, context } = await setup(t);
     await inspectSavedPair(page, bundles);
@@ -115,7 +237,8 @@ test("comparison title follows its reviewed copy through editing, approval, save
     await workspace.getByRole("button", { name: "Approve for local saving" }).click();
     await workspace.getByRole("button", { name: "Save comparison", exact: true }).waitFor();
     await workspace.getByRole("button", { name: "Back to comparison choices" }).click();
-    assert.equal(await workspace.locator(".comparison-task-heading").isVisible(), true);
+    assert.equal(await workspace.locator(".comparison-task-heading h2").isVisible(), false);
+    assert.equal(await page.locator("#pageTitle").isVisible(), true);
     assert.equal(await title.inputValue(), "Planning changes");
     await title.fill("Planning changes - final");
     await workspace.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
@@ -270,14 +393,16 @@ test("an empty comparison task has an honest prerequisite, explicit read errors 
     const origin = new URL(page.url()).origin;
     await openReportComparison(page);
     const workspace = page.locator("#comparisonWorkspace");
-    await workspace.getByText("Two saved reports with structured facts are needed.", { exact: false }).waitFor();
+    await workspace.getByText("Two saved reports with comparison data are needed.", { exact: false }).waitFor();
+    await captureComparison(page, "empty-prerequisite");
     assert.equal(await workspace.getByRole("button", { name: "Compare reports", exact: true }).isDisabled(), true);
     await page.goto(origin + "/#reports?task=compare");
-    await workspace.getByText("Two saved reports with structured facts are needed.", { exact: false }).waitFor();
+    await workspace.getByText("Two saved reports with comparison data are needed.", { exact: false }).waitFor();
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), false);
     await page.route("**/api/report-artifacts/list", route => route.fulfill({ status: 503, json: { error: "Invented saved choices unavailable" } }), { times: 1 });
     await page.reload();
     await workspace.getByRole("alert").filter({ hasText: "Invented saved choices unavailable" }).waitFor();
+    await captureComparison(page, "unavailable-inventory");
     assert.doesNotMatch(await workspace.innerText(), /Two saved reports with structured facts are needed/);
     await page.goto(origin + "/#reports?task=not-a-report-task");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
@@ -482,9 +607,11 @@ test("a dispatched comparison keeps its exact recovery identity through replacem
     t.after(() => browser.close());
     const page = await browser.newPage();
     page.setDefaultTimeout(5000);
-    await page.route("**/*", route => route.abort());
-    await page.setContent('<main id="comparison"></main>');
-    await page.addScriptTag({ content: mountReportComparisonJourney.toString() });
+    await page.route("**/*", route => route.request().url() === "http://127.0.0.1/report-comparison-owner"
+        ? route.fulfill({ contentType: "text/html", body: '<main id="comparison"></main>' }) : route.abort());
+    await page.goto("http://127.0.0.1/report-comparison-owner");
+    await page.addScriptTag({ content: [createReportSaveIdentity, mountReportComparisonJourney, createSavedFilePreview,
+        createPreparedFileInspection, createFrozenReportFrame].map(fn => fn.toString()).join("\n") });
     await page.evaluate(() => {
         window.calls = [];
         window.prepares = 0;
@@ -493,8 +620,13 @@ test("a dispatched comparison keeps its exact recovery identity through replacem
             requestGroupCount: 2, formats: ["html"], comparisonEligibility: "available",
         }));
         window.available = [...window.sources];
+        window.reportPublication = {};
         window.journey = mountReportComparisonJourney(document.querySelector("#comparison"), {
-            api: async (path, body) => {
+            createSaveIdentity: createReportSaveIdentity,
+            createFileInspection: (host, files, options) => createPreparedFileInspection(host, files, { ...options,
+                createPreview: (target, value, settings) => createSavedFilePreview(target, value, { ...settings, frozenFrame: createFrozenReportFrame }),
+            }),
+            api: Object.assign(async (path, body) => {
                 window.calls.push({ path, body });
                 if (path.endsWith("/list")) return { artifacts: window.available };
                 if (path.endsWith("/inspect")) return { comparison: {} };
@@ -514,7 +646,7 @@ test("a dispatched comparison keeps its exact recovery identity through replacem
                 if (path.endsWith("/save")) return new Promise((resolve, reject) => { window.settleSave = { resolve, reject }; });
                 if (path.endsWith("/cancel")) return {};
                 throw Error("Unexpected synthetic route " + path);
-            },
+            }, { publicationToken: () => window.reportPublication, isCurrent: token => token === window.reportPublication }),
             renderer: { render(root) { root.textContent = "Invented frozen facts"; }, clear(root) { root.replaceChildren(); } },
             timeContext: () => ({ timeZone: "UTC", locale: "en-US" }),
             refresh: async () => { window.journey.syncPresence(window.available); return window.available; },
@@ -624,7 +756,7 @@ for (const mismatch of ["identity", "kind", "title", "shape"]) test(`comparison 
         await refreshed;
         await page.locator('#workspace[aria-busy="false"]').waitFor();
         await openReportLibrary(page);
-        assert.match(await page.locator("#bundleList").innerText(), /No local reports have been saved/);
+        assert.match(await page.locator("#bundleList").innerText(), /No saved reports/);
         await openReportComparison(page);
         assert.equal(await recovery.isVisible(), true, "An empty library cannot hide a dispatched save's recovery task");
         await recovery.click();
@@ -670,12 +802,15 @@ test("comparison choices describe saved scope and useful results precede unavail
     const workspace = page.locator("#comparisonWorkspace");
     await workspace.locator("select").first().locator("option").nth(1).waitFor({ state: "attached" });
     const options = await workspace.locator("select").first().locator("option").allTextContents();
+    const earlierOption = workspace.locator("select").first().locator(`option[value="${bundles[0].bundleId}"]`);
     assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.dataset.selectPresentation)), ["filter", "filter"]);
-    assert.ok(options[1].startsWith(`${bundles[0].title} · ${bundles[0].preparedAtDisplay}`), "Title leads and the preparation time distinguishes saved versions");
-    assert.match(options[1], /1 interaction.*No prompts/);
+    assert.ok((await earlierOption.textContent()).startsWith(bundles[0].title), "Title leads the saved identity.");
+    assert.ok((await earlierOption.getAttribute("data-detail")).startsWith(`Prepared ${bundles[0].preparedAtDisplay}`));
+    assert.match(await earlierOption.getAttribute("data-detail"), /1 interaction/);
     assert.doesNotMatch(options.join(" "), /export-[a-f0-9-]{36}/, "Identity is not the primary option label");
     await workspace.getByRole("combobox", { name: "Earlier report", exact: true }).click();
-    assert.match(await page.locator(`.select-option[data-value="${bundles[0].bundleId}"] .select-option-detail`).innerText(), new RegExp(bundles[0].bundleId));
+    assert.equal(await page.locator(`.select-option[data-value="${bundles[0].bundleId}"]`).getAttribute("data-value"), bundles[0].bundleId);
+    assert.ok((await page.locator(`.select-option[data-value="${bundles[0].bundleId}"] .select-option-detail`).innerText()).includes(bundles[0].preparedAtDisplay));
     await page.keyboard.press("Escape");
     await selectReport(page, "Earlier report", bundles[0].bundleId);
     await selectReport(page, "Later report", bundles[1].bundleId);
@@ -777,12 +912,33 @@ test("two explicit saved reports produce a separately reviewed comparison withou
     assert.equal(await workspace.getByRole("tab", { name: "Files (5)", exact: true }).count(), 1);
     assert.equal(await workspace.locator('.comparison-prepared-files iframe').count(), 1, "Disclosure review shows the actual frozen preview, not just the current live presenter");
     assert.equal(await workspace.locator(".report-comparison").isVisible(), false, "Prepared file review replaces rather than duplicates the inspected result");
-    await workspace.frameLocator(".comparison-prepared-files iframe").getByRole("heading", { name: "Recorded tool results", exact: true }).waitFor();
+    await workspace.frameLocator(".comparison-prepared-files iframe").getByRole("heading", { name: "Recorded tool completion", exact: true }).waitFor();
     await workspace.getByRole("tab", { name: "Files (5)", exact: true }).click();
-    const jsonFile = workspace.locator(".comparison-prepared-files details").filter({ has: page.locator("summary", { hasText: /^\s*comparison-report\.json$/ }) }).last();
-    await jsonFile.locator(":scope > summary").click();
-    assert.equal(await jsonFile.locator("pre").textContent(), data.files["comparison-report.json"]);
-    assert.equal(await workspace.locator(".comparison-prepared-files details details").count(), 0, "Files have one disclosure level, not a second exact-files gate");
+    const files = workspace.locator(".comparison-exact-files");
+    assert.equal(await files.getByRole("button", { name: /Download/ }).count(), 0);
+    for (const [name, value] of Object.entries(data.files)) {
+        await page.locator(`#preparedComparisonFile [data-file-name="${name}"]`).click();
+        if (name.endsWith(".pdf")) await files.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
+        else {
+            await files.locator(name.endsWith(".html") ? ".report-frame" : name.endsWith(".md") ? ".saved-markdown" : ".saved-json-tree").waitFor();
+            await files.getByRole("button", { name: "Source", exact: true }).click();
+            assert.equal(await files.locator(`pre[aria-label="${name}"]`).textContent(), value);
+            await files.getByRole("button", { name: name.endsWith(".json") ? "Tree" : "Preview", exact: true }).click();
+        }
+        if (process.env.WIRE_COMPARISON_USABILITY_PROOFS) {
+            await mkdir(process.env.WIRE_COMPARISON_USABILITY_PROOFS, { recursive: true });
+            if (name.endsWith(".html")) await files.frameLocator("iframe").locator("h1").waitFor();
+            else if (!name.endsWith(".pdf")) await files.locator(name.endsWith(".md") ? ".saved-markdown" : ".saved-json-tree").waitFor();
+            await workspace.locator(".report-inspection-tabs").evaluate(node =>
+                scrollTo(0, scrollY + node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom));
+            await page.screenshot({ path: path.join(process.env.WIRE_COMPARISON_USABILITY_PROOFS, `prepared-${name}.png`) });
+        }
+    }
+    assert.equal(calls.some(call => call.path.endsWith("/review") || call.path.endsWith("/save")), false);
+    await page.locator('#preparedComparisonFile [data-file-name="comparison-report.json"]').click();
+    await files.getByRole("button", { name: "Source", exact: true }).click();
+    const jsonFile = files.locator('pre[aria-label="comparison-report.json"]');
+    assert.equal(await jsonFile.textContent(), data.files["comparison-report.json"]);
     await workspace.locator(".comparison-prepared-files iframe").evaluate(node => { window.comparisonFrameBeforeReturn = node; });
     await workspace.getByRole("button", { name: "Back to comparison choices", exact: true }).click();
     assert.deepEqual(await workspace.locator(".comparison-selectors select").evaluateAll(nodes => nodes.map(node => node.value)), bundles.map(bundle => bundle.bundleId));
@@ -808,7 +964,7 @@ test("two explicit saved reports produce a separately reviewed comparison withou
             await mkdir(process.env.WIRE_COMPARISON_USABILITY_PROOFS, { recursive: true });
             await workspace.locator(".comparison-prepared-files").evaluate(node =>
                 scrollTo(0, scrollY + node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().height - 12));
-            await workspace.frameLocator(".comparison-prepared-files iframe").getByRole("heading", { name: "Recorded tool results", exact: true }).waitFor();
+            await workspace.frameLocator(".comparison-prepared-files iframe").getByRole("heading", { name: "Recorded tool completion", exact: true }).waitFor();
             await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
             await page.screenshot({ path: path.join(process.env.WIRE_COMPARISON_USABILITY_PROOFS, `review-${theme}-${width}-${scale}.png`) });
             await workspace.getByRole("tab", { name: "Files (5)", exact: true }).click();
@@ -817,14 +973,16 @@ test("two explicit saved reports produce a separately reviewed comparison withou
     await page.emulateMedia({ forcedColors: "active" });
     await workspace.getByRole("tab", { name: "Files (5)", exact: true }).click();
     await page.keyboard.press("Tab");
-    await jsonFile.locator(":scope > summary").focus();
-    assert.equal(await jsonFile.locator(":scope > summary").evaluate(node => getComputedStyle(node).outlineStyle), "solid");
+    await files.getByRole("button", { name: "Tree", exact: true }).focus();
+    assert.equal(await files.getByRole("button", { name: "Tree", exact: true }).evaluate(node => getComputedStyle(node).outlineStyle), "solid");
     await page.emulateMedia({ forcedColors: "none" });
     await page.setViewportSize({ width: 1200, height: 1000 }); await chooseTheme(page, "light");
     await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     assert.equal(await workspace.getByRole("button", { name: "Save comparison", exact: true, includeHidden: true }).isVisible(), false);
     assert.equal((await loadBoardState(context)).exports.length, 2);
+    await workspace.getByRole("button", { name: "Disclosure & save", exact: true }).click();
     await workspace.getByRole("checkbox", { name: "I reviewed this frozen comparison for disclosure.", exact: true }).check();
+    const manifestNode = await workspace.locator('pre[aria-label="coverage-and-redaction-manifest.json"]').elementHandle();
     const review = page.waitForResponse(response => response.url().endsWith("/api/report-comparison/review"));
     await workspace.getByRole("button", { name: "Approve for local saving", exact: true }).click();
     const reviewedResponse = await review;
@@ -832,6 +990,7 @@ test("two explicit saved reports produce a separately reviewed comparison withou
     const reviewedCopy = await reviewedResponse.json();
     assert.equal(await workspace.locator('pre[aria-label="coverage-and-redaction-manifest.json"]').textContent(),
         reviewedCopy.files["coverage-and-redaction-manifest.json"], "Files shows the actual manifest updated by disclosure approval");
+    assert.equal(await workspace.locator('pre[aria-label="coverage-and-redaction-manifest.json"]').evaluate((node, prior) => node === prior, manifestNode), true);
     await workspace.getByRole("button", { name: "Save comparison", exact: true }).waitFor();
     assert.equal(await workspace.getByRole("button", { name: "Save comparison", exact: true }).evaluate(node => node === document.activeElement), true);
     const approvals = calls.filter(call => call.path.endsWith("/review")).length;
@@ -852,7 +1011,7 @@ test("two explicit saved reports produce a separately reviewed comparison withou
     await openReportLibrary(page);
     await row(saved.bundleId).getByRole("button", { name: "Open saved comparison", exact: true }).click();
     await page.locator("#savedReportReader iframe").waitFor();
-    await page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: "Recorded tool results", exact: true }).waitFor();
+    await page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: "Recorded tool completion", exact: true }).waitFor();
     for (const [name, file] of Object.entries(saved.files)) {
         if (name === "coverage-and-redaction-manifest.json") continue;
         const value = data.files[name], expected = typeof value === "string" ? Buffer.from(value) : Buffer.from(value.data, "base64");
@@ -887,6 +1046,8 @@ test("contextual report deletion cancels safely and preserves a saved comparison
     assert.equal(deletedResponse.status(), 200, await deletedResponse.text());
     await dialog.getByRole("button", { name: "Close", exact: true }).waitFor();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await page.locator("#contextSidebar").getByText("This saved item is no longer available. Return to the library and refresh.", { exact: true }).waitFor();
+    await page.locator("#closeContextSidebar").click();
     await page.waitForFunction(() => document.activeElement === document.querySelector("#savedLibraryTitle"));
     const state = await loadBoardState(context);
     assert.equal(state.exports.some(bundle => bundle.bundleId === bundles[0].bundleId), false);
@@ -899,7 +1060,7 @@ test("contextual report deletion cancels safely and preserves a saved comparison
     const keptComparison = row(savedComparison.bundleId);
     await keptComparison.locator(".saved-report-summary").click();
     const opened = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
-    await keptComparison.getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await page.locator("#contextSidebar").getByRole("button", { name: "Open saved comparison", exact: true }).click();
     const openedResponse = await opened;
     assert.equal(openedResponse.status(), 200, await openedResponse.text());
     assert.equal((await openedResponse.json()).artifact.sourceReports.some(source => source.available === false), true);
@@ -978,6 +1139,8 @@ test("uncertain saved-object deletion recovers after page renewal without anothe
     assert.equal(await page.locator("body").textContent().then(text => text.includes(preview.receiptToken)), false);
     await page.reload();
     await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await page.locator("#contextSidebar").getByText("This saved item is no longer available. Return to the library and refresh.", { exact: true }).waitFor();
+    await page.locator("#closeContextSidebar").click();
     const recovered = page.waitForResponse(response => response.url().endsWith("/api/artifact-deletion/status"));
     await page.getByRole("button", { name: "Check earlier saved-item deletion", exact: true }).click();
     const recoveredResponse = await recovered;
@@ -1006,6 +1169,9 @@ test("library comparison Open reads its actual frozen HTML rather than today's c
     await page.waitForFunction(() => document.querySelector("#savedReportReader iframe,#comparisonWorkspace .report-comparison,#savedReportReader .error"));
     assert.equal(await page.locator("#savedReportReader iframe").count(), 1, "Open must read a verified frozen file, not re-render its manifest facts");
     await page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: "Independently reviewed historical comparison typography", exact: true }).waitFor();
+    assert.equal(await page.frameLocator("#savedReportReader iframe").locator("body").getAttribute("class"), "comparison-document");
+    assert.equal(await page.frameLocator("#savedReportReader iframe").locator("body").evaluate(node => getComputedStyle(node).paddingLeft), "32px",
+        "Frozen document classes and their original layout survive the inert preview");
     assert.equal(await page.frameLocator("#savedReportReader iframe").locator("script,a[href]").count(), 0);
     assert.equal(await page.evaluate(() => window.savedComparisonExecuted), undefined);
     await page.getByRole("button", { name: "Back to report library", exact: true }).click();
@@ -1091,9 +1257,12 @@ test("a comparison without saved HTML opens its verified JSON and exposes only i
     assert.equal(await entry.getByRole("button", { name: "Open saved comparison", exact: true }).count(), 1);
     assert.match(await entry.innerText(), /JSON/);
     await entry.getByRole("button", { name: "Open saved comparison", exact: true }).click();
-    await page.locator("#savedReportReader pre").waitFor();
+    const tree = page.locator("#savedReportReader .saved-json-tree");
+    await tree.waitFor();
     assert.equal(await page.locator("#pageTitle").textContent(), savedComparison.title);
-    assert.equal(await page.locator("#savedReportReader pre").textContent(), await readFile(savedComparison.files["comparison-report.json"], "utf8"));
+    const frozen = JSON.parse(await readFile(savedComparison.files["comparison-report.json"], "utf8"));
+    assert.deepEqual(await tree.locator(":scope > .saved-json-row > .saved-json-key, :scope > details > summary > .saved-json-key").allTextContents(),
+        Object.keys(frozen));
     assert.deepEqual(await page.locator("#savedReportReader select option").allTextContents(), ["JSON", "Manifest"]);
     const response = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
     await page.locator("#savedReportReader").getByRole("button", { name: "Download", exact: true }).click();

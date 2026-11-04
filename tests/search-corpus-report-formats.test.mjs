@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile, writeFile, mkdir, copyFile, unlink } from "node:fs/promises";
-import { execFile, fork } from "node:child_process";
+import { readFile, writeFile, unlink } from "node:fs/promises";
+import { fork } from "node:child_process";
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
-import { promisify } from "node:util";
 import path from "node:path";
 import { fixture, privateFixture } from "./helpers.mjs";
 import { inventedSource, seedRetainedReply } from "./search-corpus-fixture.mjs";
@@ -31,33 +30,6 @@ async function corpusItems(corpus) {
     assert.ok(items, JSON.stringify(status));
     return { items, receipt, status };
 }
-async function isolatedRuntime(root, bytes) {
-    const directory = path.join(root, "omit-dev");
-    await mkdir(directory);
-    for (const name of ["package.json", "package-lock.json"]) await copyFile(new URL(`../${name}`, import.meta.url), path.join(directory, name));
-    const worker = path.join(directory, "parser.mjs");
-    await copyFile(new URL("../lib/search-corpus-pdf-worker.mjs", import.meta.url), worker);
-    const npmArgs = ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"];
-    const run = promisify(execFile);
-    if (process.platform === "win32") await run(process.env.ComSpec, ["/d", "/s", "/c", `npm ${npmArgs.join(" ")}`], { cwd: directory });
-    else await run("npm", npmArgs, { cwd: directory });
-    const installed = JSON.parse(await readFile(path.join(directory, "node_modules", "pdfjs-dist", "package.json")));
-    assert.equal(installed.version, "6.3.289");
-    await assert.rejects(readFile(path.join(directory, "node_modules", "@playwright", "test", "package.json")), { code: "ENOENT" });
-    return new Promise((resolve, reject) => {
-        const child = fork(worker, [], { cwd: directory, execPath: process.execPath, execArgv: ["--disallow-code-generation-from-strings"],
-            serialization: "advanced", stdio: ["ignore", "ignore", "ignore", "ipc"], env: pdfParserEnvironment() });
-        let result;
-        child.once("message", value => { result = value; });
-        child.once("error", reject);
-        child.once("close", code => {
-            if (code !== 0 || result?.ok !== true) reject(new Error(`Isolated production parser failed (${result?.code ?? "process"}).`));
-            else resolve(result);
-        });
-        child.send({ bytes, maxBytes: 32 * 1024 * 1024 });
-    });
-}
-
 async function corpusParserCancellation(t, context) {
     for (const action of ["invalidate", "close", "supersede"]) {
         const started = Promise.withResolvers(), originalFork = childProcess.fork;
@@ -91,7 +63,7 @@ async function corpusParserCancellation(t, context) {
     }
 }
 
-test("nine real single-format bundles retain reviewed mode/content and parse in an isolated omit-dev runtime", { timeout: 180000 }, async t => {
+test("nine real single-format bundles retain reviewed mode/content and frozen corpus identity", { timeout: 180000 }, async t => {
     const records = retainedContextFixture().records.slice(0, 2), record = records[0];
     record.userPrompt.text = "FORMAT_ORIGIN_CANARY Ask format-person@example.invalid.\n<script>literal example</script>\npassword='FORMAT_SECRET'";
     record.userPrompt.status = "partial";
@@ -101,10 +73,9 @@ test("nine real single-format bundles retain reviewed mode/content and parse in 
     records[1].followUpPrompts = [];
     for (const item of records) for (const call of item.toolCalls) call.requestArgs = { entityUrls: ["/me/drive/root/children"] };
     record.notes = "FORMAT_HIDDEN_SIDE_FIELD";
-    const { context, root } = await privateFixture(t, records), exports = createExportController(context);
+    const { context } = await privateFixture(t, records), exports = createExportController(context);
     await seedRetainedReply(context, inventedSource(), "FORMAT_CONTEXT_REPLY_CANARY Contact reply-context@example.invalid.");
     const saved = [], hashes = new Map();
-    let productionPdf;
     for (const mode of ["original", "masked", "none"]) for (const format of ["json", "markdown", "pdf"]) {
         const artifact = await save(context, exports, mode, [format], { recordedContext: true, scenarioId: record.scenarioId });
         saved.push({ mode, format, artifact });
@@ -149,7 +120,6 @@ test("nine real single-format bundles retain reviewed mode/content and parse in 
         if (format === "pdf") {
             assert.ok(result.coverage.pages >= 1);
             assert.equal(result.coverage.representation, "pdf-text-layer");
-            if (mode === "original") productionPdf = file.bytes;
         }
     }
     const corpus = createSearchCorpus(context, { source: inventedSource, onInvalidate: () => {} });
@@ -166,10 +136,7 @@ test("nine real single-format bundles retain reviewed mode/content and parse in 
     }
     for (const [file, hash] of hashes) assert.equal(reportHash(await readFile(file)), hash, "Reading never rewrites frozen bytes");
     await corpusParserCancellation(t, context);
-    const production = await isolatedRuntime(root, productionPdf);
-    assert.match(production.text, /FORMAT_ORIGIN_CANARY/);
-    assert.match(production.text, /FORMAT_CONTEXT_REPLY_CANARY/);
-    t.diagnostic("9 single-format artifacts with accepted recordedContext; 3 real PDF renders; omit-dev PDF.js 6.3.289 text extraction succeeded with development test dependency absent.");
+    t.diagnostic("9 single-format artifacts with accepted recordedContext; 3 real PDF renders. Production-only installation is qualified in search-packaging.qualification.mjs.");
 });
 
 test("format preference distinguishes genuine absence from corruption and keeps HTML legacy reader behavior", async t => {

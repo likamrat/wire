@@ -11,6 +11,8 @@ import { dimensionalIcons } from "../web/dimensional-icons.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { styles } from "../web/styles.mjs";
 import { fixture } from "./helpers.mjs";
+import { coworkFixture } from "./native-read-model-fixtures.mjs";
+import { projectRetainedNativeRecords } from "../lib/retained-population.mjs";
 
 async function setup(t, locale = "en-US") {
     const browser = await chromium.launch();
@@ -51,6 +53,62 @@ async function update(page, counts, longNames = false) {
     await page.evaluate(analytics => window.view.update(analytics, { layer: "tool", filters: {} }), analytics);
     return analytics;
 }
+
+test("result chart titles and accessible names follow accepted units and clear on withdrawal", async t => {
+    const page = await setup(t), record = fixture("result-title");
+    const card = page.locator('[data-percentage-card="outcomes"]');
+    const titles = { tool: "Tool call results", "reported-api": "Returned result statuses",
+        "direct-request": "Graph request-site status", "recorded-http": "Visible Graph statuses",
+        http: "HTTP record results", "code-reference": "Code references" };
+    const envelopes = coworkFixture();
+    envelopes.find(row => row.record.id === "seq:8").outcomes.nestedApi = {
+        unit: "nested-api-result", availability: "recorded", declaredRequestCount: 2,
+        declaredRequestCountIsSuccessDenominator: false,
+        observed: [{ index: 0, indexKind: "response-array-position", statusCode: 200,
+            errorCode: null, paginationPresent: null, evidenceLevel: "intermediary-reported" }],
+    };
+    const native = projectRetainedNativeRecords(envelopes).records;
+    for (const [layer, title] of Object.entries(titles)) {
+        const analytics = buildActivityAnalytics([record], { layer });
+        await page.evaluate(analytics => window.view.update(analytics, { layer: analytics.layer, filters: {} }), analytics);
+        await expect(card).toHaveAccessibleName(title);
+        const model = await page.evaluate(() => window.view.referenceModel());
+        assert.equal(model.total, analytics.totals.count);
+        assert.deepEqual(Object.fromEntries(model.outcomes.rows.map(row => [row.id, row.count])),
+            Object.fromEntries(Object.entries(analytics.totals).filter(([key]) => ["success", "failure", "unknown", "partial", "other", "transport"].includes(key))));
+        if (analytics.totals.count) await expect(card.locator(".percentage-ring")).toHaveAttribute("aria-label", new RegExp("^" + title + "\\."));
+    }
+    for (const layer of ["tool", "reported-api"]) {
+        const analytics = buildActivityAnalytics([record, ...native], { layer });
+        assert.equal(analytics.measurementEligibility.outcomeRate, "separate-unit-populations-only");
+        await page.evaluate(analytics => window.view.update(analytics, { layer: analytics.layer, filters: {} }), analytics);
+        await expect(card).toHaveAccessibleName("Results by source");
+        await expect(card.locator(".percentage-content")).toHaveAttribute("data-unit-mode", "separate");
+        assert.equal(await card.locator(".percentage-ring").count(), 0);
+        assert.deepEqual(await card.locator("[data-count-unit]").evaluateAll(nodes => nodes.map(node => node.dataset.countUnit)),
+            analytics.unitPopulations.map(population => population.unit));
+    }
+    await page.evaluate(() => window.view.withdrawAccess());
+    await expect(card).toHaveAccessibleName("Results");
+});
+
+test("access withdrawal drops the chart model and all private exact content without inventing zero", async t => {
+    const page = await setup(t);
+    const analytics = await update(page, [3, 1, 0]);
+    await page.locator("details").first().evaluate(node => { node.open = true; });
+    await expect(page.locator(".percentage-table")).toHaveCount(1);
+    await page.evaluate(() => { window.view.withdrawAccess(); window.view.withdrawAccess(); });
+    assert.equal(await page.evaluate(() => window.view.referenceModel()), null);
+    assert.equal(await page.locator(".percentage-table,.percentage-ring,.percentage-legend").count(), 0);
+    assert.equal(await page.locator("[data-total],[data-revision],[data-count]").count(), 0);
+    assert.equal((await page.locator(".percentage-denominator").allTextContents()).join(""), "");
+    assert.equal(await page.evaluate(() => {
+        try { window.view.renderExact("outcomes", document.createElement("div")); return false; }
+        catch (error) { return error instanceof TypeError; }
+    }), true);
+    await page.evaluate(analytics => window.view.update(analytics, { layer: "tool", filters: {} }), analytics);
+    await expect(page.locator(".percentage-ring")).toHaveCount(1);
+});
 
 test("flat outcome paint retains exact tiny/full circles, inert centers, local fills and separate keyboard labels", async t => {
     const page = await setup(t);

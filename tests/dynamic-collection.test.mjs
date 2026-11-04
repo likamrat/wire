@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, mkdir, writeFile, appendFile, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, appendFile, readFile, readdir, open, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -18,6 +18,10 @@ import { interactionModelFact } from "../lib/interaction-model.mjs";
 import { evaluationRecordFingerprint } from "../lib/evaluation-fingerprint.mjs";
 import { buildSanitizedRecord } from "../lib/export.mjs";
 import { eventIdentity } from "../lib/deletion-identities.mjs";
+import { BACKFILL_DIRECTORY, validateBackfillCheckpoint } from "../lib/collector-backfill.mjs";
+import { TAIL_LIMITS } from "../lib/collector-io.mjs";
+import fs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 
 // Invented app metadata and events, isolated from the user's installation.
 test("source path rejection is explicit for nonstrings, relative paths and wrong basenames", () => {
@@ -79,6 +83,237 @@ async function logFor(app, id, events = []) {
 const call = (id = "synthetic-call") => event("tool.execution_start", {
     toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch",
     toolCallId: id, arguments: { entityUrls: ["/me/messages"] },
+});
+
+test("context retention uses linear serialization work and keeps late results after eviction", { timeout: 30000 }, async t => {
+    const app = await installation(t, { metadata174: true }), id = app.session(), count = 1200;
+    const events = [
+        event("user.message", { content: "Invented context-work request", messageId: "context-original" }),
+        call("context-target"),
+        ...Array.from({ length: count }, (_, index) => event("user.message", {
+            content: "Ordinary invented filler ".repeat(80), messageId: `context-message-${index}`,
+        }, `context-work-${index}`)),
+    ];
+    const file = await logFor(app, id, events), sourceBefore = await readFile(file);
+    const collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const configFile = path.join(app.context.dataDir, "collector", "config.json"), configBefore = await readFile(configFile);
+    const stringify = JSON.stringify;
+    let serializedEvents = 0;
+    const tracked = value => value?.type === "user.message" && value.id?.startsWith("context-work-");
+    const serialization = t.mock.method(JSON, "stringify", (value, ...args) => {
+        if (Array.isArray(value)) for (const item of value) serializedEvents += Number(tracked(item));
+        else serializedEvents += Number(tracked(value));
+        return stringify(value, ...args);
+    });
+    let checked;
+    try { checked = await collector.collectNow(); }
+    finally { serialization.mock.restore(); }
+    const first = await loadBoardState(app.context), target = first.evidence.find(row => row.toolCalls.some(call => call.toolCallId === "context-target"));
+    assert.equal(target.userPrompt.text, "Invented context-work request");
+    assert.equal(target.toolCalls[0].reportedOutcome, "unknown");
+    assert.equal(checked.check.changes.added, 1);
+    assert.equal(checked.historyCoverage.limited, 1);
+    assert.ok(checked.metrics.contextEvictions > 0);
+    assert.ok(serializedEvents <= count * 8,
+        `Direct event serialization visits must remain linear: ${serializedEvents} visits for ${count} input messages`);
+    t.diagnostic(JSON.stringify({ inputMessages: count, serializedEvents, contextEvictions: checked.metrics.contextEvictions }));
+    const evidenceFile = path.join(app.context.dataDir, "private-evidence", first.evidenceFile), firstBytes = await readFile(evidenceFile);
+    await appendFile(file, JSON.stringify(event("tool.execution_complete", { toolCallId: "context-target", success: true })) + "\n");
+    const completed = await collector.collectNow(), after = await loadBoardState(app.context);
+    assert.equal(completed.check.changes.added, 0);
+    assert.equal(completed.check.changes.updated, 1);
+    assert.equal(after.evidence.flatMap(row => row.toolCalls).length, 1);
+    assert.equal(after.evidence[0].userPrompt.text, "Invented context-work request");
+    assert.equal(after.evidence[0].toolCalls[0].reportedOutcome, "succeeded");
+    assert.deepEqual(await readFile(configFile), configBefore);
+    assert.deepEqual(await readFile(evidenceFile), firstBytes);
+    assert.deepEqual((await readFile(file)).subarray(0, sourceBefore.length), sourceBefore);
+    assert.equal(completed.config.enabled, false);
+    const unchanged = await collector.collectNow();
+    assert.equal(unchanged.metrics.lastBytesRead, 0);
+    assert.equal(unchanged.check.changes.added + unchanged.check.changes.updated, 0);
+});
+
+test("bounded oversized completion metadata updates the known call without retaining its body", { timeout: 30000 }, async t => {
+    const app = await installation(t, { metadata174: true }), id = app.session();
+    const body = JSON.stringify({ results: [{ statusCode: 200, body: { text: "PRIVATE_OVERSIZED_RESPONSE_" + "x".repeat(2 * 1024 ** 2) } }] });
+    const file = await logFor(app, id, [
+        event("user.message", { content: "Invented oversized completion request" }),
+        call("oversized-completion"),
+        event("tool.execution_complete", { toolCallId: "oversized-completion", success: true, result: { content: body } }),
+    ]);
+    const sourceBefore = await readFile(file);
+    const collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const configFile = path.join(app.context.dataDir, "collector", "config.json"), configBefore = await readFile(configFile);
+    const result = await collector.collectNow(), state = await loadBoardState(app.context);
+    assert.equal(state.evidence.length, 1);
+    assert.equal(state.evidence[0].toolCalls.length, 1);
+    const captured = state.evidence[0].toolCalls[0];
+    assert.equal(captured.reportedOutcome, "succeeded");
+    assert.equal(captured.toolSucceeded, true);
+    assert.ok(captured.completionEventId);
+    assert.deepEqual(captured.apiResults, [], "Metadata-only completion is not a claim about the unread API payload");
+    assert.equal(result.check.outcome, "partial");
+    assert.equal(result.metrics.oversizedLines, 1);
+    const index = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", "index.json"), "utf8"));
+    const checkpoint = await readFile(path.join(app.context.dataDir, "collector", index.fingerprint, `${id}.json`), "utf8");
+    assert.equal(checkpoint.includes("PRIVATE_OVERSIZED_RESPONSE_"), false);
+    assert.equal(JSON.stringify(state.evidence).includes("PRIVATE_OVERSIZED_RESPONSE_"), false);
+    assert.deepEqual(await readFile(file), sourceBefore);
+    assert.deepEqual(await readFile(configFile), configBefore);
+    const again = await collector.collectNow();
+    assert.equal(again.metrics.lastBytesRead, 0);
+    assert.equal(again.check.changes.added + again.check.changes.updated, 0);
+});
+
+test("recovered completions and richer full results are never overwritten by later completion deliveries", async t => {
+    const app = await installation(t, { metadata174: true }), id = app.session();
+    const start = call("recorded-completion"), completed = event("tool.execution_complete", {
+        toolCallId: "recorded-completion", success: true,
+        result: { content: "PRIVATE_LARGE_RESULT_" + "x".repeat(2 * 1024 ** 2) },
+    });
+    const file = await logFor(app, id, [event("user.message", { content: "Invented completion preservation request" }), start, completed]);
+    const collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const original = (await loadBoardState(app.context)).evidence[0].toolCalls[0];
+    assert.equal(original.reportedOutcome, "succeeded");
+    assert.deepEqual(original.apiResults, []);
+    for (const completionId of [completed.id, "different-completion"]) {
+        await appendFile(file, JSON.stringify({ ...completed, id: completionId,
+            data: { toolCallId: start.data.toolCallId, success: true, result: { structuredContent: { results: [{ statusCode: 403 }] } } } }) + "\n");
+        await collector.collectNow();
+        assert.deepEqual((await loadBoardState(app.context)).evidence[0].toolCalls[0], original);
+    }
+    const richStart = call("rich-completion"), richEnd = event("tool.execution_complete", {
+        toolCallId: "rich-completion", success: true, result: { structuredContent: { results: [{ statusCode: 403 }] } },
+    });
+    await appendFile(file, [event("user.message", { content: "Invented richer result" }), richStart, richEnd]
+        .map(value => JSON.stringify(value) + "\n").join(""));
+    await collector.collectNow();
+    const rich = (await loadBoardState(app.context)).evidence.flatMap(record => record.toolCalls).find(call => call.toolCallId === "rich-completion");
+    assert.deepEqual(rich.apiResults.map(result => result.statusCode), [403]);
+    await appendFile(file, [richStart, { ...completed, id: "oversized-later",
+        data: { ...completed.data, toolCallId: "rich-completion" } }].map(value => JSON.stringify(value) + "\n").join(""));
+    await collector.collectNow();
+    assert.deepEqual((await loadBoardState(app.context)).evidence.flatMap(record => record.toolCalls)
+        .find(call => call.toolCallId === "rich-completion"), rich);
+});
+
+test("extended pending metadata survives unchanged checks and restart without borrowing an old start", async t => {
+    const app = await installation(t, { metadata174: true }), id = app.session();
+    const file = await logFor(app, id, [event("user.message", { content: "Invented partial completion" }), call("pending-completion")]);
+    const completion = event("tool.execution_complete", { toolCallId: "pending-completion", success: true,
+        result: { content: "PRIVATE_PENDING_BODY_" + "x".repeat(1536 * 1024) } });
+    await appendFile(file, JSON.stringify(completion));
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    await collector.collectNow();
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json");
+    const before = JSON.parse(await readFile(indexFile)), cursor = before.sources[id].cursor;
+    assert.equal(before.schemaVersion, 2);
+    assert.ok(cursor.partialBytes > 1024 ** 2 && cursor.partialBytes < 4 * 1024 ** 2);
+    assert.equal((await collector.collectNow()).metrics.lastBytesRead, 0);
+    const deletion = createDeletionController(app.context);
+    const preview = await deletion.preview("pending-proof", { scope: "all" });
+    deletion.cancel("pending-proof", preview.operationId);
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await appendFile(file, "\n");
+    const completed = await collector.collectNow(), state = await loadBoardState(app.context);
+    assert.equal(completed.metrics.lastBytesRead, cursor.partialBytes + 1);
+    assert.equal(state.evidence[0].toolCalls[0].reportedOutcome, "unknown", "A prior-read start cannot authorize metadata recovery");
+    const after = JSON.parse(await readFile(indexFile));
+    assert.equal(after.sources[id].cursor.partialBytes, 0);
+    assert.equal(after.sources[id].cursor.oversizedLines, 1);
+    assert.equal(after.sources[id].cursor.offset, (await readFile(file)).length);
+    assert.equal(JSON.stringify(state.evidence).includes("PRIVATE_PENDING_BODY_"), false);
+    const checkpoint = await readFile(path.join(app.context.dataDir, "collector", after.fingerprint, `${id}.json`), "utf8");
+    assert.equal(checkpoint.includes("PRIVATE_PENDING_BODY_"), false);
+});
+
+test("backfill resumes its own context after restart and deletion never restores its collected calls", async t => {
+    const app = await installation(t, { metadata174: true }), id = app.session();
+    const prompt = event("user.message", { content: "Invented prefix request across chunks" });
+    const file = await logFor(app, id, [prompt, call("prefix-resume"),
+        ...Array.from({ length: 6 }, () => event("assistant.message", { content: "x".repeat(900000) })),
+        event("tool.execution_complete", { toolCallId: "prefix-resume", success: true,
+            result: { structuredContent: { results: [{ statusCode: 403 }] } } }),
+    ]);
+    const padding = await open(file, "a");
+    try {
+        await padding.writeFile(`{"id":"prefix-padding","type":"assistant.message","timestamp":"${new Date().toISOString()}","data":{"content":"`);
+        const chunk = Buffer.alloc(1024 ** 2, 120);
+        for (let offset = 0; offset < TAIL_LIMITS.initialFileBytes; offset += chunk.length) await padding.write(chunk);
+        await padding.writeFile('"}}\n');
+    } finally { await padding.close(); }
+    const sourceHash = createHash("sha256").update(await readFile(file)).digest("hex");
+    let collector = await createCollector(app.context, { timers: false });
+    app.cleanup.push(() => collector.close());
+    await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+    const first = await collector.collectNow();
+    assert.equal(first.check.changes.added, 1);
+    assert.equal(first.check.sourcesChecked, 1);
+    assert.equal((await loadBoardState(app.context)).evidence[0].toolCalls[0].reportedOutcome, "unknown");
+    const indexFile = path.join(app.context.dataDir, "collector", "index.json"), index = JSON.parse(await readFile(indexFile));
+    const mainFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${id}.json`);
+    assert.equal(JSON.parse(await readFile(mainFile)).events.some(event => event.id === prompt.id), false);
+    const prefixFile = path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, `${id}.json`);
+    assert.equal(JSON.parse(await readFile(prefixFile)).backfill.activeSource, id);
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    const second = await collector.collectNow(), state = await loadBoardState(app.context);
+    assert.equal(second.check.changes.added, 0);
+    assert.equal(second.check.changes.updated, 1);
+    assert.equal(state.evidence[0].userPrompt.text, prompt.data.content);
+    assert.deepEqual(state.evidence[0].toolCalls[0].apiResults.map(result => result.statusCode), [403]);
+    assert.equal(JSON.parse(await readFile(prefixFile)).backfill.activeSource, null);
+    assert.equal(JSON.parse(await readFile(mainFile)).events.some(event => event.id === prompt.id), false);
+    const deletion = createDeletionController(app.context, { validateBackfillCheckpoint });
+    const preview = await deletion.preview("prefix-delete", { scope: "all" });
+    await deletion.confirm("prefix-delete", { operationId: preview.operationId, confirmed: true });
+    await collector.close();
+    collector = await createCollector(app.context, { timers: false });
+    await collector.collectNow();
+    assert.deepEqual((await loadBoardState(app.context)).evidence, []);
+    assert.equal(JSON.parse(await readFile(prefixFile)).backfill.sources[0].phase, "suppressed");
+    assert.equal(createHash("sha256").update(await readFile(file)).digest("hex"), sourceHash);
+});
+
+test("backfill preserves the same credential-excluded prompt boundary as live-tail collection", async t => {
+    for (const backfill of [false, true]) {
+        const app = await installation(t, { metadata174: true }), id = app.session();
+        const file = await logFor(app, id, [
+            event("user.message", { content: "Invented earlier unrelated request" }),
+            event("user.message", { content: "Invented excluded current request", messageId: "ghp_" + "a".repeat(30) }),
+            call("after-excluded-prompt"),
+        ]);
+        if (backfill) {
+            const padding = await open(file, "a");
+            try {
+                await padding.writeFile(`{"id":"boundary-padding","type":"assistant.message","timestamp":"${new Date().toISOString()}","data":{"content":"`);
+                const chunk = Buffer.alloc(1024 ** 2, 120);
+                for (let offset = 0; offset < TAIL_LIMITS.initialFileBytes; offset += chunk.length) await padding.write(chunk);
+                await padding.writeFile('"}}\n');
+            } finally { await padding.close(); }
+        }
+        const collector = await createCollector(app.context, { timers: false });
+        app.cleanup.push(() => collector.close());
+        await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
+        const collected = await collector.collectNow(), state = await loadBoardState(app.context);
+        const record = state.evidence.find(value => value.toolCalls.some(call => call.toolCallId === "after-excluded-prompt"));
+        assert.ok(record);
+        if (backfill) assert.equal(collected.backfill.visitedSources, 1);
+        assert.equal(record.userPrompt.text, null, `${backfill ? "Backfill" : "Live tail"} cannot borrow the preceding request`);
+        assert.equal(record.userPrompt.capture.reason, "credential-excluded");
+        assert.doesNotMatch(JSON.stringify(state.evidence), /ghp_|Invented excluded current request/);
+    }
 });
 
 test("original model metadata survives collection, context eviction and restart without capturing replies", async t => {
@@ -553,7 +788,8 @@ test("approved schema156 collection continues after compatible schema166 upgrade
     assert.equal(facts.recordedOutcomes.filter(row => row.kind === "tool-call").length, 1);
     assert.equal(facts.recordedOutcomes.find(row => row.kind === "tool-call").outcome, "success");
     assert.equal(facts.metrics.find(metric => metric.definitionId === "tool-duration").value, 1200);
-    assert.equal(facts.metrics.find(metric => metric.dimension === "accuracy").reason, "unsupported-check");
+    assert.equal(facts.metrics.some(metric => metric.dimension === "accuracy"), false,
+        "A metadata schema upgrade must not restore retired accuracy placeholders");
     const unchanged = await collector.collectNow();
     assert.equal(unchanged.check.changes.added, 0);
     assert.equal(unchanged.check.changes.updated, 0);
@@ -636,22 +872,30 @@ test("manual check owns a completed receipt and applied revision for new calls a
 });
 
 test("manual callers coalesce behind an in-flight interval cycle and still reconcile new sources", { timeout: 20000 }, async t => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: Date.now() });
     const app = await installation(t);
-    for (let i = 0; i < 90; i++) await logFor(app, app.session());
+    const file = await logFor(app, app.session());
     const collector = await createCollector(app.context);
     app.cleanup.push(() => collector.close());
     await collector.configure({ ...app.config, approved: true, enabled: true, windowDays: 30, pollSeconds: 5 });
-    const deadline = Date.now() + 9000;
-    let observed;
-    while (Date.now() < deadline) {
-        observed = await collector.status();
-        if (observed.state === "collecting") break;
-        await new Promise(resolve => setTimeout(resolve, 2));
-    }
+    const entered = Promise.withResolvers(), release = Promise.withResolvers(), realOpen = fs.open;
+    let held = false;
+    const opening = t.mock.method(fs, "open", async (...args) => {
+        if (args[0] === file && !held) { held = true; entered.resolve(); await release.promise; }
+        return realOpen(...args);
+    });
+    syncBuiltinESMExports();
+    app.cleanup.unshift(() => { release.resolve(); opening.mock.restore(); syncBuiltinESMExports(); });
+    await appendFile(file, JSON.stringify(event("assistant.message", { content: "Invented interval IO barrier" })) + "\n");
+    t.mock.timers.tick(5000);
+    await entered.promise;
+    const observed = await collector.status();
     assert.equal(observed.state, "collecting", "Exercise a real already-running background cycle");
     const id = app.session();
     await logFor(app, id, [event("user.message", { content: "Synthetic source added during background cycle" }), call("new-during-cycle")]);
-    const [one, two, paused] = await Promise.all([collector.collectNow(), collector.collectNow(), collector.setEnabled(false, observed.configVersion)]);
+    const pending = [collector.collectNow(), collector.collectNow(), collector.setEnabled(false, observed.configVersion)];
+    release.resolve();
+    const [one, two, paused] = await Promise.all(pending);
     assert.equal(one.check.id, two.check.id, "Overlapping manual requests share the owned check");
     assert.equal(one.check.changes.added, 1);
     assert.ok(one.discovery.roster.some(row => row.sessionId === id));

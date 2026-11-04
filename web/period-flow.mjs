@@ -20,6 +20,10 @@ export function createPeriodFlow(time, copy = chatCopy) {
                 : filters.to ? `Through ${boundLabel(filters.to)}` : "All dates";
         const recorder = layer === "http";
         const sources = recorder ? `${sessions.toLocaleString()} recorder source identit${sessions === 1 ? "y" : "ies"}` : copy.count(sessions);
+        const countParts = [
+            `${requests.toLocaleString()} ${recorder ? "record group" : "interaction"}${requests === 1 ? "" : "s"}`,
+            recorder ? `${sessions.toLocaleString()} recorder sources` : copy.count(sessions),
+        ];
         const missing = rows.filter(row => !row.sourceSessionId).length;
         const relationship = copy.relationship(requests, rows.length, unit, recorder);
         const summary = `${stale ? "Previous results: " : session ? recorder ? "This recorder source: " : "This Copilot chat: " : ""}${session ? "" : `${sources} / `}${relationship}.${missing ? ` ${missing.toLocaleString()} ${missing === 1 ? "record has" : "records have"} no source identity.` : ""}`;
@@ -45,7 +49,7 @@ export function createPeriodFlow(time, copy = chatCopy) {
                 }
             }
         }
-        return { sessions, requests, summary, caption, warning, historyLink,
+        return { sessions, requests, summary, caption, countParts, countText: countParts.join("; "), warning, historyLink,
             next: requests ? recorder ? `${period === "all retained dates" ? "All retained dates" : period} · Current filters; recorder groups are not Copilot requests.`
                 : `${period === "all retained dates" ? "All retained dates" : period} · Current filters · Groups follow recorded messages.`
                 : session ? "No request groups match this source and period. Try another period or inspect its coverage."

@@ -12,6 +12,25 @@ const source = () => ({
 });
 const consent = () => controls.consent(contract.defaultConsent(), source());
 const answerConsent = () => ({ ...samples.enabledConsent(), categories: ["answer"] });
+test("disposed response-saving controls drop private state without claiming the dispatched update was cancelled", () => {
+    const edit = controls.consent(answerConsent(), source());
+    edit.edit({ enabled: false, categories: [] });
+    const packet = edit.begin(mutation(94), "c".repeat(64));
+    edit.dispose();
+    edit.dispose();
+    assert.equal(edit.snapshot().applied, null);
+    assert.equal(edit.snapshot().draft, null);
+    assert.equal(edit.snapshot().mutationRef, packet.input.mutationRef);
+    assert.equal(edit.snapshot().phase, "stale");
+    assert.equal(edit.accept(packet.token, answerConsent()), false);
+    assert.equal(edit.uncertain(packet.token, "PRIVATE_LATE_ERROR"), false);
+    edit.invalidate("PRIVATE_LATE_CONTEXT");
+    assert.doesNotMatch(JSON.stringify(edit.snapshot()), /PRIVATE_LATE|sourceConfigRef|categories/);
+    assert.throws(() => edit.edit({ enabled: true, categories: ["answer"] }));
+    assert.throws(() => edit.begin(mutation(95), "d".repeat(64)));
+    assert.throws(() => edit.check());
+});
+
 test("recovery presentation matches only the retained uncertain operation and full receipt", () => {
     const edit = consent();
     edit.edit({ enabled: true, categories: ["answer"] });

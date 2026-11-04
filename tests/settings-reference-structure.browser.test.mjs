@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { defaultConsent, validateRequest } from "../lib/assessment-contract.mjs";
-import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption, openSourceEditor, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, selectActivityOption, openSourceEditor, restoreLegacySearch, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { createSettingsNavigation } from "../web/settings-navigation.mjs";
 import { createLocalSearch } from "../web/local-search.mjs";
 import { enabledConsent } from "./assessment-contract-fixtures.mjs";
@@ -39,7 +39,7 @@ async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
         if (request.method === "GET" && request.url === "/") {
             response.setHeader("Content-Type", "text/html");
             response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-settings-reference'; style-src 'unsafe-inline'; font-src data:; connect-src 'self'; base-uri 'none'");
-            return response.end(renderHtmlShell("a".repeat(64), "settings-reference"));
+            return response.end(renderHtmlShell("a".repeat(64), "settings-reference", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         if (request.method === "GET" && request.url === "/assets/assessment-contract.mjs") {
             response.setHeader("Content-Type", "text/javascript");

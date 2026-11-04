@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, chooseTheme, selectActivityOption, navigateMain } from "./helpers.mjs";
+import { fixture, chooseTheme, selectActivityOption, navigateMain, revealAnalyzeRecords } from "./helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { contrast, distance, hue, pairwise, measureChartPaint } from "./color-measurements.mjs";
 import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
@@ -250,7 +250,7 @@ test("screen service roles stay distinct from green completion and red failures 
             for (const id of ["Mail", "Calendar", "Files", "Teams", "People", "Tasks", "Notes", "Directory", "Search"]) assert.ok(serviceIds.includes(id), id);
             await page.locator("#percentageCharts").scrollIntoViewIfNeeded();
             await capture(page, `clarity-${theme}-${width}-${scale}-widgets`);
-            await page.locator("#resultsLink").click();
+            await revealAnalyzeRecords(page);
             for (const name of ["people-worked", "people-failed", "files", "hosted"]) await rowSpacing(row(name));
             const normal = await readable();
             for (const name of ["people-worked", "files"]) { await row(name).hover(); await readable(); }
@@ -297,8 +297,8 @@ test("screen service roles stay distinct from green completion and red failures 
         await selectActivityOption(page, "layerFilter", "tool"); await ready(page);
     }
     await page.emulateMedia({ forcedColors: "active" });
-    await page.locator("#resultsLink").click();
-    await expect(row("people-worked")).toContainText("1 Worked");
+    await revealAnalyzeRecords(page);
+    await expect(row("people-worked")).toContainText("1 Tool completed");
     await expect(row("people-failed")).toContainText("1 Tool failed");
     await expect(row("hosted")).toContainText("Service not shown");
     assert.equal(await row("people-worked").locator('[data-outcome="success"] svg').getAttribute("data-lucide-icon"), "check");
@@ -511,7 +511,7 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
         } finally { for (const action of cleanup) await action(); }
     });
     await page.goto(runtime.url); await ready(page); await page.evaluate(() => document.fonts.ready);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await expect(card(page, "multiple").locator(".card-tool-name")).toHaveCount(2);
     await expect(card(page, "multiple").locator(".identity-overflow")).toHaveText(["More tools", "More services"]);
     await expect(card(page, "multiple")).toContainText("Service details incomplete");
@@ -546,7 +546,7 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
     await popup.close();
 
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await link.scrollIntoViewIfNeeded();
     const anchor = await link.boundingBox();
     await page.mouse.click(anchor.x + 20, anchor.y + 20);
@@ -582,7 +582,7 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
         await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
         await chooseTheme(page, theme);
         await navigateMain(page, "analyze"); await ready(page);
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         const multiple = card(page, "multiple"), values = await metadata(multiple);
         assert.equal(values.tools.length, 2);
         assert.equal(values.services.filter(value => value.id !== "Unknown").length, 2);
@@ -687,7 +687,7 @@ test("one interaction vocabulary connects compact cards, exact calls and report 
     await navigateMain(page, "analyze"); await ready(page);
     await selectActivityOption(page, "layerFilter", "code-reference"); await ready(page);
     await expect(card(page, "empty")).toContainText("Execution not observed");
-    await expect(card(page, "empty")).not.toContainText("Worked");
+    await expect(card(page, "empty")).not.toContainText("Tool completed");
     await expect(card(page, "empty").locator(".card-tool-name")).toHaveText("shell");
     await selectActivityOption(page, "layerFilter", "tool"); await ready(page);
 

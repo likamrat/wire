@@ -20,7 +20,7 @@ test("real runtime loads only the exact pure comparison module closure with unch
         { port: 0, collector: { timers: false } });
     const assets = [
         "/assets/assessment-contract.mjs", "/assets/period-comparison-math.mjs", "/assets/report-outcome-comparison.mjs",
-        "/assets/report-metric-comparison.mjs", "/assets/wire-report-metric-adapter.mjs",
+        "/assets/report-metric-comparison.mjs", "/assets/wire-report-metric-adapter.mjs", "/assets/report-result-contract.mjs",
     ];
     for (const asset of assets) {
         const response = await fetch(new URL(asset, runtime.url));
@@ -54,6 +54,11 @@ test("real runtime loads only the exact pure comparison module closure with unch
         return comparePeriodCohorts(periods.baseline, periods.later);
     }, response.periods);
     assert.deepEqual(comparison, response.comparison);
+    const resultComparison = await page.evaluate(async periods => {
+        const { compareReportResultFacts } = await import("/assets/report-result-contract.mjs");
+        return compareReportResultFacts(periods.baseline.resultFacts, periods.later.resultFacts);
+    }, response.periods);
+    assert.deepEqual(resultComparison, response.resultComparison);
     assert.equal(comparison.matchingCallTiming.median.delta.value, 3000);
     assert.deepEqual([...loaded].sort(), assets.sort());
     assert.deepEqual(denied, []); assert.deepEqual(errors, []);

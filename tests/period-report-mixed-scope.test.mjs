@@ -187,6 +187,7 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
     await restoreLegacySearch(page, periodQuery);
     await selectActivityOption(page, "scopeFilter", "all");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await page.locator("#closeAnalyzeFilters").click();
     await page.locator("#comparePeriods").click();
     for (const [label, date] of [["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
         ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"]]) await page.getByLabel(label, { exact: true }).fill(date);
@@ -196,8 +197,8 @@ test("F12 public Both collections UI keeps A4/B4 through four-format review save
     assert.equal(live.options.filters.scope, "all");
     assert.deepEqual([live.periods.baseline.rowIds.length, live.periods.later.rowIds.length], [4, 4]);
     assert.ok(live.comparison.metrics.every(item => (item.baseline ?? item.later).basis === "observed"));
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (4)");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (4)");
+    await expect(page.locator('[data-period-side="baseline"] tbody tr')).toHaveCount(4);
+    await expect(page.locator('[data-period-side="later"] tbody tr')).toHaveCount(4);
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await page.locator("#createPeriodReport").click();
     await page.getByRole("button", { name: "Continue to contents", exact: true }).click();

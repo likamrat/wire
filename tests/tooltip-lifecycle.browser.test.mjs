@@ -15,7 +15,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { createSelectControls } from "../web/select-control.mjs";
 import { selectStyles } from "../web/select-styles.mjs";
-import { navigateMain, revealStoredRefresh } from "./helpers.mjs";
+import { navigateMain, navigateSettings, revealSavedDataRead, openAnalyzeFilters, closeAnalyzeFilters, selectActivityOption } from "./helpers.mjs";
 import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
 
 const proofDir = process.env.WORKIQ_TOOLTIP_PROOFS;
@@ -82,7 +82,7 @@ async function controlledClock(page) {
     await page.clock.pauseAt(new Date(Date.now() + 1000));
 }
 
-async function visibleTooltip(page, label) {
+async function visibleTooltip(page, label = "One owned tooltip") {
     assert.equal(await page.locator('[role="tooltip"]:visible').count(), 1, label);
     assert.equal(await page.locator('[aria-describedby~="evidence-tooltip"]').count(), 1, label);
 }
@@ -309,16 +309,20 @@ test("scroll and reflow do not turn stale hover into a new visit or extend depar
     await page.clock.runFor(1000); await noTooltip(page);
 });
 
-test("navigation, truncated selects, disabled wrappers, info and copy controls share pointer departure", async t => {
+test("navigation, disabled wrappers, info and copy share departure while wrapped selects need no duplicate help", async t => {
     const page = await fixture(t);
     await controlledClock(page);
     await page.locator("#choice").evaluate(node => node.setAttribute("aria-describedby", "static-help"));
-    for (const selector of ["#navigate", "#choice-control", ".ux-disabled-help", ".ux-help", ".ux-copy"]) {
+    for (const selector of ["#navigate", ".ux-disabled-help", ".ux-help", ".ux-copy"]) {
         const control = page.locator(selector).first();
         await page.mouse.move(1100, 800);
         await control.hover(); await page.clock.runFor(180); await visibleTooltip(page, selector);
         await page.mouse.move(1100, 800); await page.clock.runFor(120); await noTooltip(page);
     }
+    await page.locator("#choice-control").hover();
+    await page.clock.runFor(180);
+    await noTooltip(page);
+    assert.ok(await page.locator("#choice-control .select-value").evaluate(node => node.scrollWidth <= node.clientWidth));
     assert.equal(await page.locator("#choice-control").getAttribute("aria-describedby"), "static-help");
     assert.equal(await page.locator("#choice").inputValue(), "one");
     assert.equal(await page.evaluate(() => window.activations), 0);
@@ -491,7 +495,7 @@ test("touch action is transient while deliberate info help and disabled explanat
 test("custom select help dismisses without closing its listbox, identity details or static disclosures", async t => {
     const page = await fixture(t), trigger = page.locator("#choice-control");
     await trigger.focus();
-    await page.getByRole("tooltip").waitFor({ state: "visible" });
+    await noTooltip(page);
     await page.keyboard.press("ArrowDown");
     await noTooltip(page);
     await page.getByRole("listbox").waitFor({ state: "visible" });
@@ -633,29 +637,27 @@ test("real shell action, result, chart, source and report help clears without al
         await page.clock.runFor(180); await visibleTooltip(page);
         await page.mouse.move(1198, 998); await page.clock.runFor(120); await noTooltip(page);
     }
-    for (const selector of ["#checkActivity", "#refreshBtn"]) {
-        if (selector === "#refreshBtn") await revealStoredRefresh(page);
-        await leave(selector);
-    }
+    await page.locator("#analyzeRefresh").hover(); await page.clock.runFor(180); await noTooltip(page);
     for (const selector of ["#chart .time-column .dimensional-count", ".percentage-label[href]"]) {
         await page.locator(selector).first().hover();
         await page.clock.runFor(180); await noTooltip(page);
     }
-    assert.equal(await page.locator("#checkActivity").getAttribute("aria-describedby"), "freshScope");
+    assert.equal(await page.locator("#analyzeRefresh").getAttribute("aria-describedby"), null);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
-    await page.locator("#outcomeFilter-control").click();
-    await page.keyboard.press("w"); await page.keyboard.press("Enter"); await ready(page);
+    await page.clock.resume();
+    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
     const resultChip = page.getByRole("button", { name: /^Remove outcome filter:/ });
     assert.equal(await resultChip.getAttribute("data-ux-tooltip"), null);
     await resultChip.hover(); await page.clock.runFor(180); await noTooltip(page);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
     await navigateMain(page, "settings");
-    await leave("#editSource");
+    await navigateSettings(page, "connection");
+    await page.locator("#editSource").hover(); await noTooltip(page);
     await navigateMain(page, "reports");
     await chooseReportScope(page, "all");
     await reportContents(page);
     await leave("#exportBtn");
-    await leave("#reportsView .ux-help:visible");
+    assert.equal(await page.locator("#reportsView .ux-help:visible").count(), 0, "Report choices explain their scope inline rather than through retired per-field help");
     assert.equal(await page.locator("#exportBtn").isDisabled(), false);
     assert.equal(await page.locator('input[name="reportScope"]:checked').inputValue(), "all");
     assert.deepEqual(writes, []);
@@ -682,7 +684,7 @@ test("percentage links drill down without duplicate help or a second keyboard ac
         if (proxy) assert.deepEqual(proxy, { tabIndex: -1, hidden: "true", sameRoute: true }, "Painted pointer proxies share the visible label's route, never a second keyboard stop");
     }
     await legend.tap(); await ready(page); await noTooltip(page);
-    assert.match(page.url(), /#activity.*result=success/);
+    assert.match(page.url(), /#analyze.*result=success/);
     await page.goBack(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     assert.deepEqual(writes, []);
@@ -690,13 +692,13 @@ test("percentage links drill down without duplicate help or a second keyboard ac
 
 test("real isolated check stays tooltip-free through stalled action, receipt, applying, polling and Reload view", { timeout: 30000 }, async t => {
     const { page, writes } = await pipeline(t);
-    const action = page.locator("#checkActivity");
+    const action = page.locator("#analyzeRefresh");
     let releaseCheck, releaseSnapshot;
     await page.route("**/api/collection/now", async route => {
         await new Promise(resolve => { releaseCheck = resolve; });
         await route.continue();
     });
-    await action.hover(); await page.getByRole("tooltip").waitFor({ state: "visible" });
+    await action.hover(); await noTooltip(page);
     await action.click();
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "checking");
     await noTooltip(page);
@@ -718,13 +720,14 @@ test("real isolated check stays tooltip-free through stalled action, receipt, ap
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     await page.waitForResponse(response => response.url().endsWith("/api/collection/status") && response.ok(), { timeout: 7000 });
     await noTooltip(page);
-    const reload = await revealStoredRefresh(page);
-    await reload.hover(); await page.getByRole("tooltip").waitFor({ state: "visible" });
+    const reload = await revealSavedDataRead(page);
+    await reload.hover(); await noTooltip(page);
     await reload.click(); await ready(page); await page.waitForTimeout(250);
     await noTooltip(page);
     assert.deepEqual(writes, ["/api/collection/now"]);
+    await navigateMain(page, "analyze");
     await page.mouse.move(1, 1); await action.hover();
-    await page.getByRole("tooltip").waitFor({ state: "visible" });
+    await noTooltip(page);
     await page.route("**/api/collection/now", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Synthetic check failure." }) }));
     await action.click();
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
@@ -737,8 +740,9 @@ test("real shell result dropdown, chart actions, legend info and Settings naviga
     await runtime.collector.collectNow();
     await page.reload(); await ready(page);
     await page.mouse.move(1, 1);
+    await openAnalyzeFilters(page);
     const result = page.locator("#outcomeFilter-control");
-    await result.click(); await page.keyboard.press("w"); await page.keyboard.press("Enter"); await ready(page);
+    await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
     await page.waitForTimeout(250); await noTooltip(page);
     assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
     assert.equal(await result.evaluate(node => node === document.activeElement), true);
@@ -746,23 +750,27 @@ test("real shell result dropdown, chart actions, legend info and Settings naviga
     await clear.hover(); await noTooltip(page);
     assert.equal(await clear.getAttribute("data-ux-tooltip"), null);
     await clear.click(); await ready(page); await page.waitForTimeout(250); await noTooltip(page);
-    assert.equal(await page.locator("#outcomeFilter").inputValue(), "all");
+    assert.deepEqual(await page.locator("#outcomeFilter").evaluate(node => [...node.selectedOptions].map(option => option.value)),
+        ["success", "failure", "unknown", "partial", "other", "transport"]);
     assert.equal(await result.evaluate(node => node === document.activeElement), true);
+    await closeAnalyzeFilters(page);
     const column = page.locator("#chart .time-column").first();
     await column.focus(); await noTooltip(page);
     await page.keyboard.press("Enter"); await ready(page);
     await page.waitForTimeout(250); await noTooltip(page);
-    assert.match(page.url(), /#activity/);
+    assert.match(page.url(), /#analyze/);
     await page.goBack(); await ready(page); await noTooltip(page);
     const legend = page.locator(".percentage-label[href]").first();
     await legend.focus(); await noTooltip(page);
     await page.keyboard.press("Escape"); await noTooltip(page);
-    await (await revealStoredRefresh(page)).click(); await ready(page); await noTooltip(page);
+    await (await revealSavedDataRead(page)).click(); await ready(page); await noTooltip(page);
+    await navigateMain(page, "analyze");
     await legend.click(); await ready(page); await noTooltip(page);
     await navigateMain(page, "settings");
+    await navigateSettings(page, "connection");
     await page.waitForTimeout(250); await noTooltip(page);
     const edit = page.locator("#editSource");
-    await edit.focus(); await page.getByRole("tooltip").waitFor({ state: "visible" });
+    await edit.focus(); await noTooltip(page);
     await edit.click(); await noTooltip(page);
     await page.locator("#cancelSource").click();
     await page.waitForTimeout(250); await noTooltip(page);

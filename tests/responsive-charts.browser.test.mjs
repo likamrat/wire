@@ -4,6 +4,7 @@ import { chromium } from "@playwright/test";
 import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
 import { styles } from "../web/styles.mjs";
+import { completeNativeScroll } from "./helpers.mjs";
 
 const settle = page => page.evaluate(async () => {
     await document.fonts.ready;
@@ -13,8 +14,11 @@ const group = (total, index) => ({
     id: String(index), label: `Recorded category ${index}`, total,
     success: total, failure: 0, unknown: 0, partial: 0, other: 0, transport: 0,
 });
-async function setup(t) {
-    const browser = await chromium.launch();
+async function setup(t, native = false) {
+    const browser = await chromium.launch(native ? {
+        channel: process.platform === "win32" ? "msedge" : undefined,
+        ignoreDefaultArgs: ["--hide-scrollbars"], args: ["--force-device-scale-factor=1.5"],
+    } : {});
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, reducedMotion: "reduce" });
     const errors = [], requests = [];
     page.on("pageerror", error => errors.push(error.message));
@@ -126,6 +130,80 @@ test("all evidence units and extreme counts reflow in flat comparisons and measu
             assert.match(await last.getAttribute("aria-label"), /9007199254740991/);
         }
     }
+});
+
+test("a focused label that outgrows its scrollport keeps a visible edge after resize", async t => {
+    const page = await setup(t);
+    await page.locator("#host").evaluate(node => { node.style.width = "480px"; });
+    await mount(page, [1, 2, Number.MAX_SAFE_INTEGER].map(group));
+    const last = page.locator(".time-column").last();
+    await last.focus();
+    await page.evaluate(() => {
+        document.querySelector("#host").style.width = "302px";
+        document.documentElement.style.fontSize = "200%";
+    });
+    await settle(page);
+    const measure = () => last.evaluate(control => {
+        const scroll = control.closest(".dimensional-scroll"), clip = scroll.getBoundingClientRect();
+        const label = control.querySelector(".dimensional-count").getBoundingClientRect();
+        return { focused: document.activeElement === control, left: label.left, right: label.right, width: label.width,
+            clipLeft: clip.left, clipRight: clip.right, clipWidth: clip.width, offset: scroll.scrollLeft };
+    });
+    const resized = await measure();
+    assert.ok(resized.focused && resized.width > resized.clipWidth);
+    assert.ok(resized.left < resized.clipRight && resized.right > resized.clipLeft,
+        "Resizing must not leave the entire focused oversized label outside its scrollport");
+    assert.ok(resized.left >= resized.clipLeft || resized.right <= resized.clipRight,
+        "The existing oversized-label resize policy reveals one edge, not an unreadable middle");
+    const scroll = page.locator(".dimensional-scroll");
+    await scroll.focus();
+    for (const [key, edge] of [["ArrowLeft", "left"], ["ArrowRight", "right"]]) {
+        for (let step = 0; step < 12; step++) {
+            const value = await measure();
+            if (edge === "left" ? value.left >= value.clipLeft : value.right <= value.clipRight) break;
+            await completeNativeScroll(page, scroll, () => page.keyboard.press(key));
+        }
+        const value = await measure();
+        assert.ok(edge === "left"
+            ? value.left >= value.clipLeft && value.left < value.clipRight
+            : value.right <= value.clipRight && value.right > value.clipLeft, `Native ${key} reaches the complete ${edge} edge`);
+    }
+});
+
+test("oversized label refresh is idempotent", async t => {
+    const page = await setup(t, true);
+    await page.evaluate(() => {
+        document.querySelector("#host").style.width = "302px";
+        document.documentElement.style.fontSize = "200%";
+    });
+    await mount(page, [1, 2, Number.MAX_SAFE_INTEGER].map(group));
+    await page.locator(".time-column").last().focus();
+    const refresh = () => page.locator(".dimensional-scroll").evaluate(scroll => {
+        window.charts.refreshView(scroll);
+        return scroll.scrollLeft;
+    });
+    const first = await refresh();
+    assert.equal(await refresh(), first, "Unchanged geometry must not switch the visible edge of an oversized label");
+});
+
+test("refresh does not reclaim a focused scroll region", async t => {
+    const page = await setup(t, true);
+    await page.evaluate(() => {
+        document.querySelector("#host").style.width = "302px";
+        document.documentElement.style.fontSize = "200%";
+    });
+    await mount(page, [1, 2, Number.MAX_SAFE_INTEGER].map(group));
+    await page.locator(".time-column").last().focus();
+    const scroll = page.locator(".dimensional-scroll");
+    await scroll.focus();
+    const first = await scroll.evaluate(node => node.scrollLeft);
+    await completeNativeScroll(page, scroll, () => page.keyboard.press("ArrowLeft"));
+    await page.waitForFunction(offset => document.querySelector(".dimensional-scroll").scrollLeft < offset, first);
+    await settle(page);
+    const moved = await scroll.evaluate(node => node.scrollLeft);
+    const refresh = () => scroll.evaluate(node => { window.charts.refreshView(node); return node.scrollLeft; });
+    assert.equal(await refresh(), moved, "The scroll region is not a focused column; refreshing must preserve native reading position");
+    assert.equal(await refresh(), moved);
 });
 
 test("monthly baselines, dense dates and font/container changes preserve exact paint and observer ownership", async t => {

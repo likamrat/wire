@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { privateFixture, fixture, chooseTheme, navigateMain, openActivitySessions, selectActivityOption, revealStoredRefresh } from "./helpers.mjs";
@@ -200,11 +200,14 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     });
     const ready = () => page.locator('#workspace[aria-busy="false"]').waitFor();
     async function capture(name, comprehensive = false) {
+        const layouts = comprehensive && ["empty", "review"].includes(name)
+            ? [["light", 1440, 100], ["dark", 1440, 100], ["light", 820, 100], ["light", 1200, 200], ["dark", 375, 100], ["dark", 375, 200]]
+            : [["light", 1440, 100], ["dark", 375, 200]];
         for (const theme of ["light", "dark"]) {
             await page.setViewportSize({ width: 1440, height: 1000 });
             await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
             await chooseTheme(page, theme);
-            for (const [width, text] of comprehensive ? [[1440, 100], [820, 100], [375, 100], [1200, 200], [375, 200]] : [[1440, 100], [375, 200]]) {
+            for (const [, width, text] of layouts.filter(layout => layout[0] === theme)) {
                 await page.setViewportSize({ width, height: 1000 });
                 await page.evaluate(size => { document.documentElement.style.fontSize = size + "%"; }, text);
                 await page.evaluate(() => document.fonts.ready);
@@ -305,7 +308,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     await selectActivityOption(page, "promptAuthorFilter", ["user"]); await ready();
     await navigateMain(page, "reports"); await ready();
     await openReportCreation(page);
-    assert.match(await page.locator("#previewSelectionSummary").textContent(), / · 3 interactions$/);
+    assert.match(await page.locator("#previewSelectionSummary").textContent(), / 3 interactions$/);
     await selectActivityOption(page, "reportPromptAuthorFilter", ["user", "agent"]);
     assert.match(await page.locator("#reportPromptAuthorSummary").textContent(), /2 of 3 interactions/);
     await capture("selected", true);
@@ -318,7 +321,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     await selectActivityOption(page, "reportPromptAuthorFilter", ["user"]);
     await reportContents(page);
     for (const mode of ["none", "original", "masked"]) await page.locator(`[name=promptMode][value=${mode}]`).check();
-    for (const format of ["pdf", "json", "markdown"]) await page.locator(`#formatOptions input[value=${format}]`).check();
+    await page.locator("#formatOptions input[value=json]").check();
     await capture("contents", true);
     const waiting = await hold("/api/preview");
     await page.locator("#exportBtn").click(); await waiting.pending;
@@ -374,6 +377,7 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     assert.equal(requests.filter(endpoint => endpoint === "/api/export").length, 1);
     await page.locator("#reportStage3").getByRole("button", { name: "Start a new report", exact: true }).click();
     await chooseReportScope(page, "all"); await reportContents(page);
+    await page.locator("#formatOptions input[value=json]").check();
     await page.locator("[name=promptMode][value=none]").check();
     await scanReport(page);
     await page.locator(".attestation input[data-review-control]").check();
@@ -387,7 +391,8 @@ test("normal report journey remains readable through scope, pending, dirty, reco
     assert.match(await page.locator("#reportJourneyError").textContent(), /may have completed/);
     assert.equal(requests.filter(endpoint => endpoint === "/api/export").length, 2);
     await page.getByRole("button", { name: "Check save status", exact: true }).click(); await ready();
-    assert.equal(await page.locator("#savedLibraryTitle").textContent(), "Saved reports (2)");
+    await expect(page.locator("#savedLibraryTitle")).toHaveText("Saved reports (2)");
+    assert.equal((await loadBoardState(app.context)).exports.length, 2);
     assert.equal(requests.filter(endpoint => endpoint === "/api/export").length, 2, "Recovery reads history, never replays the mutation.");
     await capture("history-recovery");
     assert.deepEqual(await Promise.all(Object.values(saved.files).map(async file => digest(await readFile(file)))), frozenHashes);

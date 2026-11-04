@@ -7,7 +7,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions, automaticScoreOffSummary } from "./helpers.mjs";
+import { exportCatalogFor, navigateMain, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_THEME_PROOF_DIR;
 const records = ["/me/messages", "/me/events", "/me/drive/root/children", "/teams/fixture/channels", "/me/people", "/me/todo/lists"].map((apiPath, index) => ({
@@ -31,7 +31,7 @@ async function fixture(run, hostMode = "") {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-theme-fixture'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'");
-            res.end(renderHtmlShell("a".repeat(64), "theme-fixture").replace('<html lang="en">', `<html lang="en" data-color-mode="${hostMode}">`));
+            res.end(renderHtmlShell("a".repeat(64), "theme-fixture", UNBOUND_FIXTURE_BOOTSTRAP).replace('<html lang="en">', `<html lang="en" data-color-mode="${hostMode}">`));
             return;
         }
         requests.push(req.url);

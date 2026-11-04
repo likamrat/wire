@@ -2,11 +2,11 @@
 export function createAssessmentControls(contract) {
     const clone = value => structuredClone(value);
     function control(applied, build, accept) {
-        let generation = 0, operation = null;
+        let generation = 0, operation = null, disposed = false;
         let state = { phase: "view", applied: clone(applied), draft: null, message: "", mutationRef: null };
         const used = new Set();
-        const locked = () => ["pending", "unknown", "checking", "stale"].includes(state.phase);
-        const current = token => token === generation && operation !== null && ["pending", "checking"].includes(state.phase);
+        const locked = () => disposed || ["pending", "unknown", "checking", "stale"].includes(state.phase);
+        const current = token => !disposed && token === generation && operation !== null && ["pending", "checking"].includes(state.phase);
         function transitionFailure(token, phase, message) {
             if (!current(token)) return false;
             if (typeof message !== "string" || !message.trim()) throw new TypeError("A visible failure reason is required.");
@@ -76,6 +76,7 @@ export function createAssessmentControls(contract) {
                 return transitionFailure(token, "error", "No committed update was found. Nothing was retried. Review your choice before starting a new update.");
             },
             invalidate(message) {
+                if (disposed) return;
                 if (typeof message !== "string" || !message.trim()) throw new TypeError("Context invalidation needs a visible reason.");
                 generation++;
                 state = {
@@ -84,6 +85,19 @@ export function createAssessmentControls(contract) {
                     message: message + (operation ? " An earlier update may still have completed; it will not be replayed." : ""),
                 };
                 operation = null;
+            },
+            dispose() {
+                if (disposed) return;
+                disposed = true;
+                generation++;
+                state = { phase: "stale", applied: null, draft: null,
+                    mutationRef: operation?.input.mutationRef ?? state.mutationRef,
+                    message: "This response-saving control was released." };
+                operation = null;
+                applied = null;
+                build = null;
+                accept = null;
+                used.clear();
             },
         };
     }

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as contract from "../lib/assessment-contract.mjs";
-import { makeSnapshot, id } from "./report-comparison-fixtures.mjs";
+import { makeSnapshot, id } from "./assessment-contract-fixtures.mjs";
 import { createWireReportAdapter, verifiedReportIdentityRelation } from "../lib/wire-report-snapshot-adapter.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 

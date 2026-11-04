@@ -92,8 +92,9 @@ test("Setup keeps every choice with one relevant scope explanation and condition
             assert.match(await page.locator("#reportRecordedContextHelp").innerText(), /No prompts/);
         } else {
             await page.locator("#reportRecordedContext").check();
-            assert.match(await page.locator("#reportRecordedContextHelp").innerText(), /author.*prompt.*Review|author.*prompt.*review/s);
-            assert.match(await page.locator("#reportRecordedContextHelp").innerText(), /not.*permission|does not authorize/);
+            assert.match(await page.locator("#reportRecordedContextHelp").innerText(), /does not expand the measured activity/);
+            assert.match(await page.locator("#reportRecordedContextHelp").innerText(), /Unavailable replies stay excluded/);
+            assert.match(await page.locator("#reportStage2 .report-privacy-note").innerText(), /isn't permission to share/);
             await page.locator("#reportRecordedContext").uncheck();
             assert.equal(await page.locator("#reportRecordedContextHelp").isVisible(), false);
         }
@@ -116,7 +117,7 @@ test("An empty library has one honest state and the existing create path instead
     assert.equal(await page.locator("#savedLibraryHelp").count(), 0);
     assert.equal(await page.locator("#savedLibraryManagement").isVisible(), false);
     assert.equal(await page.locator("#savedLibraryTitle").innerText(), "Saved reports");
-    assert.match(await page.locator("#bundleList").innerText(), /No local reports have been saved/);
+    assert.match(await page.locator("#bundleList").innerText(), /No saved reports/);
     await page.getByRole("link", { name: "Create a report", exact: true }).click();
     assert.equal(await page.locator("#reportStage1").isVisible(), true);
 });

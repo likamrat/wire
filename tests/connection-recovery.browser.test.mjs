@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { fixture, privateFixture, revealStoredRefresh } from "./helpers.mjs";
+import { fixture, privateFixture, revealStoredRefresh, revealAnalyzeRecords } from "./helpers.mjs";
 
 async function screenshot(page, name) {
     const proof = process.env.WIRE_RECOVERY_PROOF_DIR;
@@ -79,7 +79,7 @@ test("renewed polling capability revalidates the accepted snapshot even at the s
     await expect.poll(() => requests.filter(request => request.url().endsWith("/api/session")).length, { timeout: 8000 }).toBe(1);
     await expect.poll(() => requests.filter(request => request.url().endsWith("/api/snapshot")).length).toBeGreaterThan(1);
     await expectSavedMetrics(page);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await expect(page.locator("#activityView")).toBeVisible();
 });
 

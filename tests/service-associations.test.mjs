@@ -134,7 +134,7 @@ test("requested capability scope cannot change canonical service membership or f
     const facts = () => buildReportFacts([record], { revision: 0, pseudonymKey: "d".repeat(64) },
         { preparedAt: "2026-10-01T12:30:00.000Z" }).facts;
     const frozenBytes = JSON.stringify(facts());
-    assert.equal(serviceCategories.requestedSearchScope(record.toolCalls[0]).label, "Requested scope: Teams messages and email");
+    assert.equal(serviceCategories.requestedSearchScope(record.toolCalls[0]).label, "Requested sources: Teams messages and email");
     assert.equal(JSON.stringify(buildActivityAnalytics([record])), bytes);
     assert.equal(JSON.stringify(facts()), frozenBytes);
     assert.equal(analytics.serviceInvolvement.definition.version, 1);

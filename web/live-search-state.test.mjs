@@ -57,6 +57,20 @@ test("fences and reconnect erase literal results and reject prior-generation res
     assert.equal(Object.hasOwn(state.snapshot(), "related"), false);
 });
 
+test("known collection advances retire results for refresh without treating other fences as retryable reads", () => {
+    const state = createLiveSearchState(wire);
+    state.receive(frame("connected")); state.query(1, "navigation", []); state.receive(results(1));
+    state.receive(frame("fence", { epoch: 1, reason: "collected" }));
+    assert.equal(state.snapshot().state, "refreshing");
+    assert.equal(state.snapshot().matches.receipt, null);
+    state.receive(results(1));
+    assert.deepEqual(state.snapshot().matches.hits, []);
+    state.receive(frame("fence", { epoch: 2, reason: "changed" }));
+    assert.equal(state.snapshot().state, "stale");
+    state.receive(frame("fence", { epoch: 3, reason: "wire-access-revoked" }));
+    assert.equal(state.snapshot().state, "stale");
+});
+
 test("obsolete protocols, Related and forged current purpose/type/match frames fail closed", () => {
     for (const alter of [
         value => { delete value.schemaVersion; },

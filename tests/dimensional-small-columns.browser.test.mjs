@@ -7,6 +7,7 @@ import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { styles } from "../web/styles.mjs";
+import { completeNativeScroll } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_SMALL_COLUMN_PROOFS;
 const screenshotPoints = [9, 28, 9, 121, 50].map((total, index) => ({
@@ -75,24 +76,35 @@ test("native scrolling keeps dense enlarged time labels, keyboard selection and 
             const scroll = page.locator(".flat-time-scroll"), last = page.locator(".time-column").last();
             await page.waitForFunction(() => document.querySelector(".flat-time-scroll").dataset.overflow === "true");
             assert.ok(await scroll.evaluate(node => node.scrollWidth > node.clientWidth + 1));
-            await scroll.focus(); await page.keyboard.press("ArrowRight");
+            await scroll.focus();
+            await completeNativeScroll(page, scroll, () => page.keyboard.press("ArrowRight"));
             await page.waitForFunction(() => document.querySelector(".flat-time-scroll").scrollLeft > 0);
-            await last.focus();
+            await completeNativeScroll(page, scroll, () => last.focus());
             const value = await last.locator(".dimensional-count").boundingBox(), clip = await scroll.boundingBox();
             if (value.width <= clip.width) {
                 assert.ok(value.x >= clip.x - 1 && value.x + value.width <= clip.x + clip.width + 1, "Focus reveals a fitting count");
             } else {
                 // A 16-digit enlarged count is wider than this viewport; both ends remain reachable.
-                await scroll.focus(); await page.keyboard.press("ArrowLeft");
-                await page.waitForFunction(() => {
-                    const node = document.querySelector(".time-slot:last-child .dimensional-count");
-                    return node.getBoundingClientRect().left >= node.closest(".dimensional-scroll").getBoundingClientRect().left;
-                });
-                await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight");
-                await page.waitForFunction(() => {
-                    const node = document.querySelector(".time-slot:last-child .dimensional-count");
-                    return node.getBoundingClientRect().right <= node.closest(".dimensional-scroll").getBoundingClientRect().right;
-                });
+                await scroll.focus();
+                for (const [key, edge] of [["ArrowLeft", "left"], ["ArrowRight", "right"]]) {
+                    for (let step = 0; step < 12; step++) {
+                        const reached = await last.locator(".dimensional-count").evaluate((node, edge) => {
+                            const box = node.getBoundingClientRect(), clip = node.closest(".dimensional-scroll").getBoundingClientRect();
+                            return edge === "left" ? box.left >= clip.left : box.right <= clip.right;
+                        }, edge);
+                        if (reached) break;
+                        await completeNativeScroll(page, scroll, () => page.keyboard.press(key));
+                    }
+                    await page.waitForFunction(edge => {
+                        const node = document.querySelector(".time-slot:last-child .dimensional-count");
+                        return edge === "left"
+                            ? node.getBoundingClientRect().left >= node.closest(".dimensional-scroll").getBoundingClientRect().left
+                            : node.getBoundingClientRect().right <= node.closest(".dimensional-scroll").getBoundingClientRect().right;
+                    }, edge);
+                    const box = await last.locator(".dimensional-count").boundingBox(), boundary = await scroll.boundingBox();
+                    assert.ok(edge === "left" ? box.x < boundary.x + boundary.width : box.x + box.width > boundary.x,
+                        `The ${edge} edge is visible, not scrolled past the opposite boundary`);
+                }
                 await last.focus();
             }
             const rows = await measure(page);
@@ -160,7 +172,7 @@ test("zero, subpixel, unit, equal, mixed, dense and single timelines keep one pr
             await mount(page, points, width, theme);
             const rows = await measure(page);
             for (const row of rows) {
-                const extent = Math.min(200, 40 * (totals.length + 1));
+                const extent = 200;
                 const expected = row.total / maximum * extent;
                 if (row.total) assert.equal(row.extent, extent);
                 assert.ok(Math.abs(row.edgeHeight - expected) < .03);

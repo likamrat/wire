@@ -19,7 +19,8 @@ export function createLiveSearchState(contract) {
             }
             if (event.event === "connected") value = { ...value, panelId: event.panelId, epoch: event.epoch, ...empty(), state: "ready" };
             else if (event.event === "fence" && event.panelId === value.panelId && event.epoch > value.epoch) {
-                value = { ...value, epoch: event.epoch, ...empty(), status: null, state: event.reason === "indexing" ? "building" : "stale" };
+                value = { ...value, epoch: event.epoch, ...empty(), status: null, state: event.reason === "indexing" ? "building"
+                    : event.reason === "collected" && value.purpose === "navigation" ? "refreshing" : "stale" };
             }
             else if (event.event === "results" && event.panelId === value.panelId && event.epoch === value.epoch
                 && event.requestId === value.requestId) {

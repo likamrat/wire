@@ -1,8 +1,15 @@
 // Serialized into the page; keep dependencies inside this function.
 export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
+    if (typeof api !== "function" || typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function") {
+        throw new TypeError("An access-aware API with publicationToken() and isCurrent() is required.");
+    }
     const $ = id => document.getElementById(id);
     const key = "workiq-evidence.recorder-attempt";
     let attemptId, attempt, busy = false, reading = false, uncertain = false, loaded = false, timer;
+    let accessAvailable = true, accessEpoch = 0, confirmationBody, confirmationAction;
+    const publication = () => ({ epoch: accessEpoch, token: api.publicationToken() });
+    const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
+        && api.isCurrent(access.token) === true;
     function text(id, value) { if ($(id).textContent !== value) $(id).textContent = value; }
     function storage(value) {
         try {
@@ -10,13 +17,16 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
             if (value === null) sessionStorage.removeItem(key);
             else sessionStorage.setItem(key, value);
         } catch {
-            $("recorderStorageWarning").hidden = false;
-            $("recorderStorageWarning").textContent = "This panel cannot remember the attempt across reloads. The runtime keeps saved diagnostics; read the last result before starting another.";
+            if (current(publication())) {
+                $("recorderStorageWarning").hidden = false;
+                $("recorderStorageWarning").textContent = "This panel cannot remember the attempt across reloads. The runtime keeps saved diagnostics; read the last result before starting another.";
+            }
         }
         return null;
     }
     attemptId = storage() || undefined;
     function render(message) {
+        if (!current(publication())) return;
         const pending = busy || attempt?.phase === "pending" && !uncertain;
         $("recordBtn").disabled = pending || !loaded;
         text("recordBtn", reading && (attempt?.phase !== "pending" || uncertain) ? "Reading result..."
@@ -44,14 +54,19 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
     }
     function schedule() {
         clearTimeout(timer);
-        if (attempt?.phase === "pending" && !uncertain) timer = setTimeout(() => readResult(), 750);
+        const access = publication();
+        if (current(access) && attempt?.phase === "pending" && !uncertain) timer = setTimeout(() => {
+            if (current(access)) readResult();
+        }, 750);
     }
     async function readResult() {
-        if (busy) return;
+        const access = publication();
+        if (!current(access) || busy) return;
         busy = true; reading = true;
         render(attempt?.phase === "pending" && !uncertain ? undefined : "Reading the saved diagnostic result. No network test is being started.");
         try {
             const result = await api("/api/record/status", attemptId ? { attemptId } : {});
+            if (!current(access)) return;
             loaded = true;
             if (result.attempt) {
                 attempt = result.attempt;
@@ -65,13 +80,15 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
             busy = false; reading = false;
             render(uncertain ? "No saved result is available for this attempt yet. It may have reached the runtime. Check the saved result again; this does not repeat the request." : undefined);
         } catch (error) {
+            if (!current(access)) return;
             busy = false; reading = false; loaded = true; uncertain = true;
             render(`${error.message} Check the saved result when the runtime is available; do not repeat the request.`);
         }
         schedule();
     }
     async function start() {
-        if (busy || attempt?.phase === "pending") return;
+        const access = publication();
+        if (!current(access) || busy || uncertain || !loaded || attempt?.phase === "pending") return;
         busy = true; uncertain = false; loaded = true;
         attemptId = crypto.randomUUID();
         storage(attemptId);
@@ -79,10 +96,12 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
         render("Starting the public request and saving its diagnostic result locally...");
         try {
             const result = await api("/api/record", { confirmed: true, attemptId });
+            if (!current(access)) return;
             if (!result.attempt?.attemptId) throw new Error("The runtime did not return an attempt identity. The request may have been sent.");
             attempt = result.attempt; attemptId = attempt.attemptId; storage(attemptId);
             busy = false; render();
         } catch (error) {
+            if (!current(access)) return;
             busy = false;
             if (error.code === "request_rejected") {
                 attempt = null; attemptId = undefined; storage(null);
@@ -95,19 +114,42 @@ export function mountRecorderDiagnostics({ api, openDialog, el, button }) {
         schedule();
     }
     $("recordBtn").addEventListener("click", () => {
-        if ($("recordBtn").disabled) return;
+        const access = publication();
+        if (!current(access) || $("recordBtn").disabled) return;
         if (uncertain) { readResult(); return; }
         const body = openDialog("Test HTTP recorder?");
+        confirmationBody = body;
         body.append(el("p", "", "Send one public GET to graph.microsoft.com/v1.0/$metadata and save the result locally. No credentials or response body are logged. This does not check your Copilot collection or workplace data."));
-        body.append(button("Send public request", () => {
+        const action = button("Send public request", () => {
+            if (!current(access) || !action.isConnected || !body.contains(action) || !$("overlay").open) return;
             $("overlay").close();
             start();
-            $("recorderStatus").focus({ preventScroll: true });
-        }, "primary"));
+            if (current(access)) $("recorderStatus").focus({ preventScroll: true });
+        }, "primary");
+        confirmationAction = action; body.append(action);
     });
     $("recorderDiagnostics").addEventListener("toggle", () => {
-        if ($("recorderDiagnostics").open && !busy) readResult();
+        if (current(publication()) && $("recorderDiagnostics").open && !busy) readResult();
     });
     window.addEventListener("pagehide", () => clearTimeout(timer));
-    window.addEventListener("pageshow", () => { if (loaded && !busy) readResult(); });
+    window.addEventListener("pageshow", () => { if (current(publication()) && loaded && !busy) readResult(); });
+    return {
+        withdrawAccess() {
+            if (!accessAvailable) return;
+            accessAvailable = false; accessEpoch++;
+            clearTimeout(timer); timer = undefined;
+            uncertain = uncertain || Boolean(attemptId); attempt = undefined; busy = false; reading = false; loaded = false;
+            if (confirmationAction && confirmationBody?.contains(confirmationAction)) confirmationBody.replaceChildren();
+            confirmationBody = undefined; confirmationAction = undefined;
+            for (const id of ["recorderStatus", "recorderEvidence", "recorderStorageWarning"]) text(id, "");
+            $("recorderEvidence").hidden = true; $("recorderStorageWarning").hidden = true; $("recorderResultLink").hidden = true;
+            $("recordBtn").disabled = true; $("recordBtn").setAttribute("aria-busy", "false");
+            text("recordBtn", "Test HTTP recorder");
+            $("recorderDiagnostics").open = false;
+        },
+        resumeAccess() {
+            const access = publication();
+            if (access.epoch === accessEpoch && access.token != null && api.isCurrent(access.token) === true) accessAvailable = true;
+        },
+    };
 }

@@ -30,8 +30,12 @@ test("saved-object receipt READ dismisses immediately and preserves recovery wit
     await page.addScriptTag({ content: `window.createDeletion=${createSavedArtifactDeletion.toString()};window.createUX=${createEvidenceUX.toString()};` });
     await page.evaluate(({ receipt, icons }) => {
         sessionStorage.setItem("wire.saved-artifact-deletion", JSON.stringify(receipt));
+        const token = Object.freeze({});
+        const api = Object.assign((...args) => window.readReceipt(...args), {
+            publicationToken: () => token, isCurrent: value => value === token,
+        });
         const flow = window.createDeletion({
-            api: window.readReceipt, ux: window.createUX(icons), onDeleted: () => { throw Error("No deletion is expected."); },
+            api, ux: window.createUX(icons), onDeleted: () => { throw Error("No deletion is expected."); },
             onError: message => { throw Error(message); }, fallbackFocus: () => document.getElementById("saved"),
         });
         document.getElementById("open").onclick = event => flow.open(null, event.currentTarget);

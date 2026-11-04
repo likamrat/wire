@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, revealAnalyzeRecords } from "./helpers.mjs";
 
 const proofs = process.env.WIRE_ICON_ROLE_PROOFS;
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -96,7 +96,7 @@ test("screen service, Settings, reader and report-control icons use coherent opt
     await serviceGeometry(page);
     await page.locator("#percentageCharts").scrollIntoViewIfNeeded();
     await capture(page, "service-legends");
-    await page.getByRole("link", { name: "View records", exact: true }).click();
+    await revealAnalyzeRecords(page);
     assert.equal(await page.locator("#activityList .request-row svg").count(), 0, "Minimal cards do not repeat decorative status/service glyphs");
     await page.locator('[data-analyze-mode="calls"]').click();
     await opticalSize(page.locator("#activityList .service-cue .wire-icon"), 24);
@@ -143,7 +143,7 @@ test("screen service, Settings, reader and report-control icons use coherent opt
     await serviceGeometry(page);
     await page.locator("#percentageCharts").scrollIntoViewIfNeeded();
     await capture(page, "service-legends-narrow-enlarged");
-    await page.getByRole("link", { name: "View records", exact: true }).click();
+    await revealAnalyzeRecords(page);
     await page.locator('[data-analyze-mode="calls"]').click();
     await opticalSize(page.locator("#activityList .service-cue .wire-icon"), 24);
     await metadataAlignment(page);

@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, navigateMain, chooseTheme } from "./helpers.mjs";
+import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption } from "./helpers.mjs";
 
 test("ordinary Reports entry chooses activity, configures contents, then approves and saves in one reading workspace", { timeout: 60000 }, async t => {
     const records = [fixture("harbor-notes"), fixture("review-meetings")];
@@ -55,7 +55,7 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
     assert.equal(await page.getByRole("button", { name: "Continue to contents", exact: true }).isDisabled(), true);
     assert.equal(await page.locator("#promptOptions").isVisible(), false);
     await page.getByRole("radio", { name: /All collected activity/ }).check();
-    assert.match(await page.locator("#previewSelectionSummary").innerText(), /2 chats · 2 interactions/);
+    assert.match(await page.locator("#previewSelectionSummary").innerText(), /2 chats 2 interactions/);
     assert.match(await page.locator("#reportScopeChoiceHelp").innerText(), /dates.*filters.*search/i);
     await capture("02-activity");
     await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
@@ -65,13 +65,17 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
     await page.locator("#formatOptions input[value=json]").check();
     await capture("03-contents");
     if (proofs) {
-        await page.setViewportSize({ width: 375, height: 1000 }); await chooseTheme(page, "light");
+        await chooseTheme(page, "light"); await page.setViewportSize({ width: 375, height: 1000 });
         await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
         await capture("04-contents-narrow-enlarged");
-        await page.setViewportSize({ width: 1440, height: 1000 }); await chooseTheme(page, "dark");
         await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        await page.waitForFunction(() => !document.querySelector("#contextSidebar").matches(":modal"));
+        await chooseTheme(page, "dark");
     }
+    const preparedResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.getByRole("button", { name: "Prepare report", exact: true }).click();
+    const prepared = await (await preparedResponse).json();
     await page.locator("#reportsView[data-report-phase=ready]").waitFor();
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-step"), "3");
     await page.frameLocator(".report-frame").locator("h1").waitFor();
@@ -80,6 +84,31 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
         return frame.clientHeight > 1000 && frame.contentDocument.documentElement.scrollHeight <= frame.clientHeight + 1;
     });
     await capture("05-review");
+    await page.getByRole("tab", { name: /^Files \(/ }).click();
+    const files = page.locator("#reportFileInspection");
+    assert.equal(await files.getByRole("button", { name: /Download/ }).count(), 0);
+    for (const [name, value] of Object.entries(prepared.files)) {
+        await page.locator(`#preparedReportFile [data-file-name="${name}"]`).click();
+        assert.equal(await page.locator(`#preparedReportFile [data-file-name="${name}"]`).getAttribute("aria-current"), "true");
+        if (name.endsWith(".pdf")) {
+            await files.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
+            assert.equal(await files.getByRole("button", { name: "Source", exact: true }).isVisible(), false);
+        } else {
+            await files.locator(name.endsWith(".html") ? ".report-frame" : name.endsWith(".md") ? ".saved-markdown" : ".saved-json-tree").waitFor();
+            await files.getByRole("button", { name: "Source", exact: true }).click();
+            assert.equal(await files.locator(`pre[aria-label="${name}"]`).textContent(), value, "Source is the exact prepared text, not the rendered DOM");
+            await files.getByRole("button", { name: name.endsWith(".json") ? "Tree" : "Preview", exact: true }).click();
+        }
+        if (proofs) {
+            if (name.endsWith(".html")) await files.frameLocator("iframe").locator("h1").waitFor();
+            else if (!name.endsWith(".pdf")) await files.locator(name.endsWith(".md") ? ".saved-markdown" : ".saved-json-tree").waitFor();
+            await page.locator(".report-inspection-tabs").evaluate(node =>
+                scrollTo(0, scrollY + node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom));
+            await page.screenshot({ path: path.join(proofs, "prepared-" + name + ".png") });
+        }
+    }
+    assert.equal(writes.includes("/api/privacy-review") || writes.includes("/api/export"), false, "Rendering a file is not disclosure approval or Save");
+    await page.getByRole("tab", { name: "Report", exact: true }).click();
     await page.setViewportSize({ width: 375, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     await page.getByRole("button", { name: "Review & save", exact: true }).click();
@@ -101,9 +130,15 @@ test("ordinary Reports entry chooses activity, configures contents, then approve
     assert.equal(await page.locator("#reportReviewBody").isVisible(), true);
     assert.equal(await page.locator(".report-frame").evaluate(node => node === window.preparedFrameBeforeApproval), true, "Approval must not replace the reading document");
     await page.getByRole("tab", { name: /^Files \(/ }).click();
-    await page.locator("#reportFileInspection summary").filter({ hasText: "coverage-and-redaction-manifest.json" }).click();
+    await page.locator('#preparedReportFile [data-file-name="coverage-and-redaction-manifest.json"]').click();
+    await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
     assert.match(await page.locator("#reportFileInspection").innerText(), /"reviewerConfirmed": true/);
     assert.equal((await loadBoardState(context)).exports.length, 0);
+    if (proofs) {
+        await page.locator(".report-inspection-tabs").evaluate(node =>
+            scrollTo(0, scrollY + node.getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom));
+        await page.screenshot({ path: path.join(proofs, "prepared-manifest-source.png") });
+    }
     await page.getByRole("tab", { name: "Report", exact: true }).click();
     if (proofs) {
         await page.getByRole("button", { name: "Review & save", exact: true }).click();

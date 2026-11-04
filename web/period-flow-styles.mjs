@@ -55,26 +55,18 @@ export const periodFlowStyles = `
 .stored-refresh>button {max-width:100%;white-space:normal;text-align:start}
 #freshHelp .stored-refresh>p {margin:0}
 .scope-reset-actions {margin-block:8px}
-.period-feedback {margin:8px 0 24px;display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:12px 20px}
-.home-period-summary #periodResult {font-size:var(--type-data-value);line-height:var(--leading-data-value)}
-.home-period-summary #activityCount,.home-period-summary #activityUnit {font:inherit;color:inherit;letter-spacing:inherit}
-.home-period-summary #periodHint {font-size:var(--type-small);line-height:1.5}
 #homeView>.insight-header {padding:0 0 12px;justify-content:flex-start}
-.period-feedback>div:first-child {min-width:0;max-width:100%;flex:0 1 auto;overflow-wrap:anywhere}
 #periodResult {font-size:1rem;font-weight:600}
 #periodHint {font-size:1rem;color:var(--muted);margin-top:4px}
 .period-coverage {flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:0 16px;min-width:0;padding:4px 16px;border-left:3px solid var(--warning);background:var(--paper);border-radius:var(--radius-small)}
 .period-coverage p {font-size:1rem;margin:0;max-width:100%;overflow-wrap:anywhere}
 .period-coverage a {display:inline-flex;min-height:44px;max-width:100%;align-items:center;white-space:normal;overflow-wrap:anywhere}
-#periodActions {display:flex;align-items:center;gap:var(--pill-gap);min-width:0;max-width:100%;flex:0 1 auto}
-#periodActions:empty,#periodActions:has(>#pageAction[hidden]) {display:none}
-#periodActions a {min-height:44px}
 .fresh-activity {margin:0 0 16px;container:fresh-activity / inline-size}
 .fresh-controls {display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:start;gap:8px 20px}
 .fresh-controls>.ux-disabled-help {justify-self:start}
 .fresh-result {grid-column:1/-1;min-width:0}
-.fresh-result p {margin:0;font-size:1rem}
-#freshStatus {font-weight:600;overflow-wrap:anywhere}
+.fresh-result p {margin:0;font-size:var(--type-body)}
+#freshStatus {font-weight:var(--weight-regular);overflow-wrap:anywhere}
 #freshContextMessage {margin-top:4px;overflow-wrap:anywhere}
 .fresh-result-meta {display:flex;flex-wrap:wrap;align-items:center;gap:0 16px}
 .fresh-result-meta #freshChecked {font-size:.875rem}

@@ -65,7 +65,7 @@ async function fixture(t, problem, { clock = false, decodeResponse = response =>
         }
     });
     await page.goto(runtime.url); await ready(page); await page.evaluate(() => document.fonts.ready);
-    if (await page.locator("#activityUpdateToggle").getAttribute("aria-expanded") === "false") await page.locator("#activityUpdateToggle").click();
+    await navigateMain(page, "settings"); await navigateSettings(page, "connection");
     return { ...app, runtime, page, requests, responses, before,
         restart: async () => { runtime = await startServer(app.context, createExportController(app.context), options); return runtime; } };
 }
@@ -97,21 +97,21 @@ async function capture(page, name, observations = {}) {
     }, null, 2));
 }
 
-async function refreshTooltip(page) {
+async function refreshLabel(page) {
     const control = page.locator("#checkActivity");
     await expect(control).toBeEnabled();
     await page.keyboard.press("Tab");
     await control.focus();
-    const tooltip = page.getByRole("tooltip");
-    await expect(tooltip).toBeVisible();
-    const text = (await tooltip.textContent()).trim();
-    await page.keyboard.press("Escape");
-    await expect(tooltip).not.toBeVisible();
-    return text;
+    const label = await control.getAttribute("aria-label");
+    if (await control.evaluate(node => node.classList.contains("icon-only"))) {
+        await expect(page.getByRole("tooltip")).toHaveText(label);
+        await page.keyboard.press("Escape");
+    } else await expect(page.getByRole("tooltip")).not.toBeVisible();
+    return label;
 }
 
 for (const [problem, code] of [["paths", "source_paths_invalid"], ["missing", "source_metadata_unavailable"]]) {
-    test(`Settings ${code} help describes the actual stored read without replaying the rejected source check`, { timeout: 30000 }, async t => {
+    test(`Settings ${code} labels the stored read without redundant help or replaying the rejected source check`, { timeout: 30000 }, async t => {
         const app = await fixture(t, problem), { page } = app;
         await page.locator("#checkActivity").focus();
         await page.keyboard.press("Enter");
@@ -120,14 +120,14 @@ for (const [problem, code] of [["paths", "source_paths_invalid"], ["missing", "s
         assert.equal(rejection.body.code, code, "This is a real collector rejection, not an injected UI state");
         await navigateMain(page, "settings");
         await navigateSettings(page, "connection");
-        const tooltip = await refreshTooltip(page);
+        const label = await refreshLabel(page);
         const effect = {
             visible: await page.locator("#settingsRefreshContext").isVisible(),
             text: await page.locator("#settingsRefreshContext").textContent(),
         };
         const sourceChecks = app.requests.filter(value => value === "/api/collection/now").length;
         const snapshotReads = app.requests.filter(value => value === "/api/snapshot").length;
-        await capture(page, `settings-help-${code}`, { code, tooltip, effect, sourceChecks, snapshotReads });
+        await capture(page, `settings-help-${code}`, { code, label, effect, sourceChecks, snapshotReads });
         const storedResponse = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
         await page.locator("#checkActivity").focus();
         await page.keyboard.press("Enter");
@@ -138,16 +138,15 @@ for (const [problem, code] of [["paths", "source_paths_invalid"], ["missing", "s
         assert.equal(sourceChecks, 1);
         assert.equal(app.requests.filter(value => value === "/api/snapshot").length, snapshotReads + 1);
         assert.deepEqual(await loadBoardState(app.context), app.before);
-        t.diagnostic(JSON.stringify({ code, tooltip, effect, sourceChecks, storedReadsAdded: 1 }));
-        assert.equal(tooltip, "Read stored activity. No source check will be repeated.");
-        assert.equal(effect.visible, true);
-        assert.equal(effect.text, "Read stored activity only. No new history check will be sent.");
+        t.diagnostic(JSON.stringify({ code, label, effect, sourceChecks, storedReadsAdded: 1 }));
+        assert.equal(label, "Read stored activity");
+        assert.equal(effect.visible, false);
+        assert.equal(effect.text, "");
     });
 
-    test(`Settings exit preserves dynamic Refresh help after ${code} recovery and return to normal intent`, { timeout: 30000 }, async t => {
+    test(`Settings exit preserves explicit action labels after ${code} recovery and return to normal intent`, { timeout: 30000 }, async t => {
         const app = await fixture(t, problem), { page } = app;
-        const normalHelp = "Refresh approved local history. Paused collection stays paused.";
-        assert.equal(await refreshTooltip(page), normalHelp);
+        assert.equal(await refreshLabel(page), "Refresh");
         await page.locator("#checkActivity").focus();
         await page.keyboard.press("Enter");
         await page.waitForFunction(() => document.getElementById("freshActivity").dataset.phase === "error");
@@ -156,10 +155,12 @@ for (const [problem, code] of [["paths", "source_paths_invalid"], ["missing", "s
         await navigateMain(page, "settings");
         await navigateSettings(page, "connection");
         await navigateMain(page, "analyze");
-        const analyzeRecovery = await refreshTooltip(page);
+        await expect(page.locator("#checkActivity")).not.toBeVisible();
+        await page.locator("#freshAwayLink").click();
+        const settingsRecovery = await refreshLabel(page);
         await navigateMain(page, "collection-status");
         await expect(page.locator("#collectionStatusView")).toBeVisible();
-        const statusRecovery = await refreshTooltip(page);
+        const statusRecovery = await refreshLabel(page);
         const sourceChecks = app.requests.filter(value => value === "/api/collection/now").length;
         const snapshotReads = app.requests.filter(value => value === "/api/snapshot").length;
         const storedResponse = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
@@ -169,16 +170,17 @@ for (const [problem, code] of [["paths", "source_paths_invalid"], ["missing", "s
         await ready(page);
         await expect(page.locator("#freshContextMessage")).toContainText("Stored activity refreshed");
         await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "complete");
-        const statusNormal = await refreshTooltip(page);
-        await navigateMain(page, "analyze");
-        const analyzeNormal = await refreshTooltip(page);
+        assert.equal(app.requests.filter(value => value === "/api/snapshot").length, snapshotReads + 1);
+        const statusNormal = await refreshLabel(page);
+        await navigateMain(page, "settings"); await navigateSettings(page, "connection");
+        const settingsNormal = await refreshLabel(page);
         assert.equal(app.requests.filter(value => value === "/api/collection/now").length, sourceChecks);
         assert.equal(sourceChecks, 1);
-        assert.equal(app.requests.filter(value => value === "/api/snapshot").length, snapshotReads + 1);
         assert.deepEqual(await loadBoardState(app.context), app.before);
-        t.diagnostic(JSON.stringify({ code, analyzeRecovery, statusRecovery, statusNormal, analyzeNormal, sourceChecks, storedReadsAdded: 1 }));
-        for (const text of [analyzeRecovery, statusRecovery]) assert.equal(text, "Read stored activity. No source check will be repeated.");
-        for (const text of [statusNormal, analyzeNormal]) assert.equal(text, normalHelp);
+        t.diagnostic(JSON.stringify({ code, settingsRecovery, statusRecovery, statusNormal, settingsNormal, sourceChecks }));
+        for (const text of [settingsRecovery, statusRecovery]) assert.equal(text, "Read stored activity");
+        assert.equal(statusNormal, "Refresh");
+        assert.equal(settingsNormal, "Refresh");
     });
 }
 
@@ -189,11 +191,13 @@ test("a real rejected source path offers one source repair, not an uncertain che
     await pointer(page, "#checkActivity");
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
     const after = await page.locator("#checkActivity").boundingBox();
-    assert.equal(after.x, initial.x); assert.equal(after.y, initial.y);
+    assert.equal(after.y, initial.y);
+    assert.equal(after.x + after.width, initial.x + initial.width,
+        "Settings keeps its single action aligned when Refresh becomes read-only recovery");
     assert.equal(await page.evaluate(() => scrollY), 0);
     const result = await page.locator("#freshResult").boundingBox();
     assert.ok(result.y >= initial.y + initial.height, "Recovery stays below its contextual action");
-    assert.equal(await page.locator("#activityUpdateSlot #checkActivity").count(), 1);
+    assert.equal(await page.locator('[data-settings-section="connection"] #checkActivity').count(), 1);
     const live = page.locator("#freshResult [role=status]");
     assert.equal(await live.getAttribute("aria-live"), "polite");
     assert.equal(await live.getAttribute("aria-atomic"), "true");
@@ -235,6 +239,7 @@ test("polling consolidates only the same source failure and keeps unrelated or u
     const app = await fixture(t, "paths", { clock: true }), { page } = app;
     await pointer(page, "#checkActivity");
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "error");
+    await navigateMain(page, "analyze");
     let variation = {}, polls = 0, unavailable = false;
     await page.route("**/api/collection/status", async route => {
         polls++;
@@ -383,7 +388,6 @@ test("an unapproved stored-read failure recovers after a real runtime restart wi
     assert.match(await page.locator("#freshContextMessage").innerText(), /Previous view kept.*WIRE could not be reached/);
     assert.equal(await page.locator("#message").isVisible(), false);
     assert.equal(await page.locator("#activityCount").innerText(), previous);
-    assert.match(await page.locator("#periodResult").innerText(), /Previous results/);
     await capture(page, "stopped-runtime-stored-read", { requests: app.requests });
     const runtime = await app.restart();
     await page.locator("#refreshBtn").focus(); await page.keyboard.press("Enter"); await ready(page);

@@ -7,15 +7,22 @@ import { chromium } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
-import { privateFixture, fixture, navigateMain, navigateSettings, chooseTheme } from "./helpers.mjs";
-import { chooseReportScope, reportContents, openReportLibrary, openReportComparison, scanReport } from "./report-journey-helpers.mjs";
+import { privateFixture, fixture, navigateMain, navigateSettings, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { chooseReportScope, reportContents, openReportLibrary, openReportComparison, scanReport, findReportCopy } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
-async function setup(t, count = 1001, { prepared = false, title } = {}) {
+async function setup(t, count = 1001, { prepared = false, title, metadata = false, allFormats = false } = {}) {
     const records = prepared ? Array.from({ length: 8 }, (_, index) => {
         const record = fixture(`report-layout-${index}`);
         record.userPrompt.text = `Invented planning request ${index + 1}: summarize the release exercise and its next steps.`;
+        if (metadata) {
+            record.sourceSessionId = "metadata-chat-" + index % 2;
+            record.sourceSessionName = "Planning · decisions for the invented regional release with a long retained chat name";
+            record.userPrompt.authorship = { actor: index % 2 ? "agent" : "user", basis: index % 2 ? "source-agent" : "source-user" };
+            record.userPrompt.text += " Contact person@example.invalid.";
+            record.followUpPrompts[0].status = "partial";
+        }
         return record;
     }) : [fixture()];
     const { context } = await privateFixture(t, records), controller = createExportController(context);
@@ -31,7 +38,7 @@ async function setup(t, count = 1001, { prepared = false, title } = {}) {
                 ? title ?? "Readiness review - calendar changes, document lookups and unresolved follow-up across the planning exercise"
                 : `Planning exercise ${index + 1}`,
             promptMode: ["none", "masked", "original"][index % 3],
-            formats: index === count - 1 ? ["json"] : ["html", "pdf", "json", "markdown"], timeContext,
+            formats: index === count - 1 ? ["json"] : allFormats && index === 0 ? ["html", "pdf", "json", "markdown"] : ["html", "json"], timeContext,
         }, selection);
         await controller.review("synthetic-layout-seed", preview.previewId, true, timeContext);
         entries.push((await controller.confirm("synthetic-layout-seed", preview.previewId, true, timeContext)).bundle);
@@ -68,6 +75,139 @@ async function setup(t, count = 1001, { prepared = false, title } = {}) {
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     return { page, context, entries, requests };
 }
+
+test("report metadata groups preserve scope, authors, counts and saved identity without decorative joins", { timeout: 60000 }, async t => {
+    const title = "Planning · decisions for the invented regional release, review meetings and unresolved documentation";
+    const { page, context, entries, requests } = await setup(t, 2, { prepared: true, metadata: true, title });
+    page.setDefaultTimeout(8000);
+    const bytes = await Promise.all(entries.flatMap(entry => Object.values(entry.files)).map(async file => hash(await readFile(file))));
+    const cases = [], output = process.env.WIRE_REPORT_METADATA_PROOFS;
+    if (output) await mkdir(output, { recursive: true });
+    async function capture(name, selector) {
+        await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
+        await page.evaluate(() => document.fonts.ready);
+        const measured = await page.locator(selector).evaluate(root => {
+            const box = node => {
+                const { x, y, right, bottom, width, height } = node.getBoundingClientRect();
+                return { x, y, right, bottom, width, height };
+            };
+            const groups = [...root.querySelectorAll(".report-metadata,.report-content-context")].filter(node => node.checkVisibility()).map(node => ({
+                text: node.textContent, box: box(node), after: getComputedStyle(node, "::after").content,
+                facts: [...node.children].filter(child => child.checkVisibility()).map(child => ({
+                    text: child.textContent, box: box(child), weight: getComputedStyle(child).fontWeight,
+                })),
+            }));
+            return { overflow: document.documentElement.scrollWidth > innerWidth + 1, groups };
+        });
+        assert.equal(measured.overflow, false, name);
+        for (const group of measured.groups) {
+            assert.doesNotMatch(group.text, / · /, name);
+            for (const fact of group.facts) {
+                assert.ok(fact.box.x >= group.box.x - 1 && fact.box.right <= group.box.right + 1, name + " bounded fact");
+                assert.equal(fact.weight, "400", name + " regular metadata");
+            }
+        }
+        cases.push({ name, ...measured });
+        if (output) await page.screenshot({ path: path.join(output, name + ".png"), fullPage: !await page.locator(":modal").count() });
+    }
+    async function sizes(name, selector) {
+        for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [390, 200]]) {
+            await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await page.waitForFunction(() => !document.querySelector("#contextSidebar").matches(":modal"));
+            await chooseTheme(page, theme);
+            await page.setViewportSize({ width, height: 1000 });
+            await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
+            await capture(`${name}-${theme}-${width}-${scale}`, selector);
+        }
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    }
+    await chooseReportScope(page, "all");
+    assert.equal(await page.locator("#scopeCount-all").textContent(), "2 chats 8 interactions");
+    assert.deepEqual(await page.locator("#scopeCount-all>span").allTextContents(), ["2 chats", "8 interactions"]);
+    await selectActivityOption(page, "reportPromptAuthorFilter", ["user"]);
+    assert.equal(await page.locator("#reportActivitySummary").textContent(), "1 chat 4 interactions included");
+    await sizes("activity", "#reportCreatePanel");
+    await reportContents(page);
+    assert.equal(await page.locator(".report-content-authors").textContent(), "Authors: My prompts");
+    assert.equal(await page.locator(".report-content-scope").textContent(), "All collected activity");
+    assert.equal(await page.locator(".report-content-scope").evaluate(node => getComputedStyle(node, "::after").content), "none");
+    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 4 interactions");
+    await sizes("contents", "#reportStage2");
+    await scanReport(page);
+    await page.getByRole("tab", { name: /^Text/ }).click();
+    assert.ok(await page.locator(".prompt-review-summary>span").count() >= 2);
+    await sizes("text-review", "#reportReviewBody");
+    const copy = await findReportCopy(page, "Invented planning request 1");
+    await copy.getByText("Edit or omit this report copy", { exact: true }).click();
+    await copy.getByRole("checkbox", { name: /Omit this/ }).check();
+    await page.getByRole("button", { name: "Rebuild preview", exact: true }).click();
+    await page.locator("#reportsView[data-report-phase=ready]").waitFor();
+    await findReportCopy(page, "Invented planning request 1");
+    assert.match(await page.locator(".prompt-comparison>h4").textContent(), /\(omitted\)$/);
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isVisible(), false);
+    await capture("omitted-copy", "#reportReviewBody");
+    await openReportLibrary(page); await openReportComparison(page);
+    const combo = page.locator("#comparisonWorkspace").getByRole("combobox", { name: "Later report", exact: true });
+    await combo.click();
+    const item = page.locator(`.select-option[data-value="${entries[1].bundleId}"]`);
+    assert.equal(await item.locator(".select-option-label").textContent(), title);
+    const detail = await item.locator(".select-option-detail").textContent();
+    assert.match(detail, /^Prepared .* \/ 2 interactions$/);
+    assert.doesNotMatch(detail, / · /);
+    assert.ok(await item.getAttribute("aria-describedby"));
+    const native = await page.locator("#comparisonWorkspace select").last().locator(`option[value="${entries[1].bundleId}"]`).textContent();
+    assert.equal(native, title);
+    assert.equal(await item.getAttribute("data-value"), entries[1].bundleId);
+    await page.keyboard.press("Escape");
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [390, 200]]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
+        await combo.click();
+        await item.scrollIntoViewIfNeeded();
+        assert.equal(await item.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true);
+        if (output) await page.screenshot({ path: path.join(output, `comparison-options-${theme}-${width}-${scale}.png`) });
+        await page.keyboard.press("Escape");
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await openReportLibrary(page);
+    await page.locator(`.saved-library-row[data-bundle-id="${entries[1].bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.locator(".saved-json-tree").waitFor();
+    assert.equal(await page.locator("#pageTitle").textContent(), title);
+    assert.equal(await page.locator(".saved-reader-caption").count(), 0, "Verified reading does not repeat prepared metadata above the document");
+    await sizes("saved-reader", "#savedReportReader");
+    await page.goto(new URL(page.url()).origin + "/#activity?session=metadata-chat-0");
+    await page.locator('#workspace[aria-busy="false"]').waitFor();
+    await page.getByRole("button", { name: "Create report for this Copilot chat", exact: true }).click();
+    assert.equal(await page.locator(".report-entry-name").textContent(), "Planning · decisions for the invented regional release with a long retained chat name");
+    assert.match(await page.locator(".report-entry-context").textContent(), /name Saved activity across all retained dates and services\. New interactions are not added automatically\./);
+    await sizes("chat-origin", "#reportCreatePanel");
+    assert.deepEqual(await Promise.all(entries.flatMap(entry => Object.values(entry.files)).map(async file => hash(await readFile(file)))), bytes);
+    assert.equal((await loadBoardState(context)).exports.length, 2);
+    assert.equal(requests.some(endpoint => ["/api/export", "/api/report-comparison/save", "/api/privacy-review"].includes(endpoint)), false);
+    if (output) await writeFile(path.join(output, "metadata-geometry.json"), JSON.stringify(cases, null, 2));
+});
+
+test("unavailable saved comparison choices retain native and accessible reasons beside identity", async t => {
+    const { page, entries, requests } = await setup(t, 2);
+    await openReportComparison(page);
+    const choices = page.locator("#comparisonWorkspace select").first();
+    await choices.locator("option").nth(1).waitFor({ state: "attached" });
+    const option = choices.locator(`option[value="${entries[0].bundleId}"]`);
+    assert.equal(await option.isDisabled(), true);
+    assert.match(await option.textContent(), /structured facts unavailable/);
+    await page.locator("#comparisonWorkspace").getByRole("combobox", { name: "Earlier report", exact: true }).click();
+    const row = page.locator(`.select-option[data-value="${entries[0].bundleId}"]`);
+    assert.equal(await row.getAttribute("aria-disabled"), "true");
+    assert.match(await row.locator(".select-option-detail").textContent(), /Unavailable: structured facts unavailable\./);
+    assert.ok(await row.getAttribute("aria-describedby"));
+    await page.keyboard.press("Escape");
+    assert.equal(requests.some(endpoint => /\/(preview|review|save|export)$/.test(endpoint)), false);
+});
+
 async function shot(page, name) {
     if (!process.env.WIRE_LIBRARY_PROOFS) return;
     await mkdir(process.env.WIRE_LIBRARY_PROOFS, { recursive: true });
@@ -77,7 +217,7 @@ async function shot(page, name) {
 }
 
 test("six saved reports share a deliberate page frame with tasks, inspector and wide document review", { timeout: 90000 }, async t => {
-    const { page, context, entries, requests } = await setup(t, 6, { prepared: true });
+    const { page, context, entries, requests } = await setup(t, 6, { prepared: true, allFormats: true });
     page.setDefaultTimeout(8000);
     const files = entries.flatMap(entry => Object.values(entry.files));
     const originals = await Promise.all(files.map(async file => hash(await readFile(file))));
@@ -106,7 +246,8 @@ test("six saved reports share a deliberate page frame with tasks, inspector and 
                 }
                 return Math.max(...rights);
             };
-            const frame = document.querySelector(body), heading = document.querySelector(".page-heading");
+            const frame = document.querySelector(body), heading = document.querySelector("#savedReportReader:not([hidden]) .saved-reader-heading")
+                || document.querySelector("#workspace > .page-heading");
             const inspector = document.querySelector("#contextSidebar[open]:has(.saved-report-inspection)");
             const controls = [...document.querySelectorAll("#reportTaskNav a,#savedReportsPanel button,#savedReportsPanel summary,#savedReportSearch,#savedReportOrder-control")]
                 .filter(node => node.checkVisibility()).map(node => {
@@ -618,6 +759,7 @@ test("recorded format capsules never manufacture files or turn a missing saved c
 test("saved titles share the reading scroller while fixed actions and successor headings retain their owner", { timeout: 30000 }, async t => {
     const title = "Planning review with calendar changes, document lookups and unresolved follow-up across the handover. ".repeat(3).slice(0, 200);
     const { page, context, entries, requests } = await setup(t, 2, { prepared: true, title });
+    page.setDefaultTimeout(8000);
     const originals = await Promise.all(entries.flatMap(entry => Object.values(entry.files)).map(async file => hash(await readFile(file))));
     const settle = () => page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().every(animation => animation.playState !== "running"));
     const inspect = index => page.locator(`[data-bundle-id="${entries[index].bundleId}"] .saved-report-summary`);
@@ -626,7 +768,7 @@ test("saved titles share the reading scroller while fixed actions and successor 
         return page.locator("#contextSidebar").evaluate(panel => {
             const rect = selector => panel.querySelector(selector).getBoundingClientRect().toJSON();
             return { body: rect("#contextSidebarBody"), close: rect("#closeContextSidebar"), footer: rect("#contextSidebarFooter"),
-                open: rect("#contextSidebarFooter button"), height: innerHeight,
+                open: rect('#contextSidebarFooter [data-view-key^="inspector-open:"]'), height: innerHeight,
                 title: panel.querySelector(".saved-inspector-title").textContent,
                 label: document.getElementById(panel.getAttribute("aria-labelledby"))?.textContent,
                 focus: document.activeElement.id, headings: panel.querySelectorAll(".saved-inspector-title").length };
@@ -655,8 +797,8 @@ test("saved titles share the reading scroller while fixed actions and successor 
             const after = await geometry();
             assert.deepEqual(after.close, before.close);
             assert.deepEqual(after.footer, before.footer);
-            await page.locator(".saved-inspector-files").scrollIntoViewIfNeeded();
-            for (const control of ["#closeContextSidebar", "#contextSidebarFooter button"]) {
+            await page.locator("#contextSidebar").getByRole("button", { name: "Delete report", exact: true }).scrollIntoViewIfNeeded();
+            for (const control of ["#closeContextSidebar", '#contextSidebarFooter [data-view-key^="inspector-open:"]']) {
                 assert.ok(await page.locator(control).evaluate(node => {
                     const box = node.getBoundingClientRect();
                     return node.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
@@ -703,7 +845,7 @@ test("Reports opens directly on the library and switching to creation preserves 
     assert.equal(await page.locator("#pageTitle").innerText(), "Reports");
     assert.equal(await page.locator(".report-journey").isVisible(), false);
     assert.equal(await page.locator("#savedReportSearch").isVisible(), true);
-    assert.equal(await page.locator("#savedReportSearch").getAttribute("placeholder"), "Search saved reports");
+    assert.equal(await page.locator("#savedReportSearch").getAttribute("placeholder"), "Search reports");
     assert.equal(await page.locator("#savedReportsPanel").isVisible(), true);
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), false, "Finding a report does not require passing Setup");
     await page.locator("#savedReportSearch").focus();
@@ -764,7 +906,7 @@ test("Analyze chat create intent, request return and explicit creation deep link
     await page.goForward();
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
     assert.match(await page.locator("#previewSelectionSummary").textContent(), /1 interaction/);
-    await page.locator("#reportList").getByRole("link", { name: "View interaction", exact: true }).click();
+    await page.locator("#reportList .request-card-open").first().click();
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Back to activity", exact: true }).click();
     assert.match(page.url(), /#reports.*task=create/);
     assert.equal(await page.locator("#reportCreatePanel").isVisible(), true);
@@ -887,7 +1029,7 @@ test("small, empty and error library states retain accessible controls at narrow
     await updateBoardState(context, state => { state.exports = []; });
     await page.reload(); await page.locator('#workspace[aria-busy="false"]').waitFor();
     if (!await page.locator("#bundles").evaluate(node => node.open)) await page.locator("#savedLibraryTitle").click();
-    assert.match(await page.locator("#bundleList").innerText(), /No local reports have been saved/);
+    assert.match(await page.locator("#bundleList").innerText(), /No saved reports/);
     assert.equal(await page.locator("#deleteAllReports").isDisabled(), true);
     await shot(page, "empty-library");
 });

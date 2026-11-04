@@ -8,7 +8,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
-import { fixture, exportCatalogFor, automaticScoreOffSummary, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, automaticScoreOffSummary, chooseTheme, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_COLLECTION_PROOFS;
@@ -45,7 +45,7 @@ async function setup(t) {
     const server = createServer(async (req, res) => {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
-            return res.end(render("a".repeat(64), "collection-clarity-fixture"));
+            return res.end(render("a".repeat(64), "collection-clarity-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         if (req.url === "/favicon.ico") return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
@@ -101,8 +101,14 @@ async function measure(page) {
             return { width: r.width, height: r.height, x: r.x, right: r.right };
         };
         const lines = node => {
-            const range = document.createRange(); range.selectNodeContents(node);
-            return new Set([...range.getClientRects()].filter(r => r.width > 0).map(r => Math.round(r.y))).size;
+            const range = document.createRange(), walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT), positions = new Set();
+            let text;
+            while (text = walker.nextNode()) {
+                if (!text.textContent.trim() || text.parentElement.closest("svg")) continue;
+                range.selectNodeContents(text);
+                for (const rect of range.getClientRects()) if (rect.width > 0) positions.add(Math.round(rect.y));
+            }
+            return positions.size;
         };
         const controls = [...root.querySelectorAll("a,button,input,summary")].filter(node => node.checkVisibility());
         const text = [...root.querySelectorAll("h2,p,a,label,summary")].filter(node => node.checkVisibility());
@@ -151,7 +157,7 @@ test("collection page has measured compact controls, responsive states and local
             if (!captureOnly) {
                 assert.ok(current.controls.every(control => control.height >= 44), `${theme}/${name} 44px targets`);
                 assert.ok(current.readingSize >= 16, "Reading typography is not shrunk to fit");
-                assert.match(current.font, /^Arial,/);
+                assert.match(current.font, /^"Asta Sans",/);
                 assert.ok(current.colors.every(pair => contrast(pair.color, pair.background) >= 4.5), `${theme}/${name} text contrast`);
                 if (name === "desktop") {
                     assert.ok(current.search.width <= 540 && current.search.width >= 280, "Search has a useful, proportionate width");
@@ -170,7 +176,9 @@ test("collection page has measured compact controls, responsive states and local
     await expect(page.locator("#collectionIssueLabel")).toHaveText("88 chats with history gaps");
     await expect(page.locator("#collectionIssueCounts")).toContainText("19 unavailable");
     await expect(page.locator("#collectionIssueCounts")).toContainText("69 limited");
-    await expect(page.locator("#collectionStatusGuidance")).toContainText("No action is needed");
+    await expect(page.locator("#collectionStatusGuidance")).toContainText("activity or links between prompts and actions may be missing");
+    await expect(page.locator("#collectionIssueImpact")).toContainText("Analyze, Search and new reports");
+    await expect(page.locator("#collectionIssueImpact")).toContainText("does not rewrite saved reports");
     await page.locator(".history-reason>summary").first().click();
     await expect(page.locator(".history-issue")).toHaveCount(6);
     await page.getByRole("button", { name: "Next affected Copilot chats", exact: true }).click();
@@ -182,7 +190,8 @@ test("collection page has measured compact controls, responsive states and local
     await page.locator(".history-issue>summary").click();
     await expect(page.locator(".history-issue-detail")).toContainText("No evidence has been collected");
     await page.getByRole("link", { name: "Open chat activity", exact: true }).click();
-    await expect(page.locator("#pageTitle")).toHaveText("Zephyr rollout <img> review");
+    await expect(page.locator("#pageTitle")).toHaveText("Analyze");
+    await expect(page.locator("#chatFilter")).toHaveValue("clarity-chat-18");
     assert.match(page.url(), /session=clarity-chat-18/);
     await expect(page.locator("#contextBack")).toHaveText("Back to history gaps");
     await page.goBack();
@@ -203,11 +212,12 @@ test("collection page has measured compact controls, responsive states and local
     await page.locator(".history-reason>summary").nth(1).click();
     await page.locator(".history-reason").nth(1).locator(".history-issue>summary").first().click();
     await expect(page.locator(".history-reason").nth(1)).toContainText("64 MiB");
-    await expect(page.locator(".history-reason").nth(1)).toContainText("Another check does not remove");
-    await expect(page.locator(".history-reason").nth(1)).toContainText("limited working memory");
+    await expect(page.locator(".history-reason").nth(1)).toContainText("another Refresh does not remove");
+    await expect(page.locator(".history-reason").nth(1)).toContainText("earlier chat context");
     await page.locator("#collectionSetup>summary").click();
     await expect(page.locator("#collectionSetup")).toContainText("A verified location is not a successful read");
-    await expect(page.locator("#refreshBtn")).toBeVisible();
+    await expect(page.locator("#checkActivity")).toBeVisible();
+    await expect(page.locator("#refreshBtn")).toBeHidden();
     await page.locator("#recorderDiagnostics>summary").click();
     await expect(page.locator("#recorderPurpose")).toContainText("not collection");
     await expect(page.locator("#recorderEffect")).toContainText("cannot verify Work IQ");
@@ -235,7 +245,7 @@ test("collection guidance distinguishes active, paused, unavailable, unchecked a
         ["importing", { historyCoverage: { ...healthy, pending: 2 }, historyIssues: [] }, "Collection active", "Automatic checks will continue", "History is still importing"],
         ["empty-source", { historyCoverage: { ...healthy, eligible: 0, readable: 0 }, historyIssues: [] }, "Collection active", "No eligible local chats", "No eligible chats to check"],
         ["all-unavailable", { historyCoverage: { ...initial.historyCoverage, readable: 0, unavailable: 971, limited: 0, affected: 971, groups: { missing: 971 } },
-            historyIssues: sessions.map(row => ({ ...row, reasons: ["missing"], unavailable: true, hasPriorEvidence: false })) }, "Collection active", "no chat history is currently readable", "971 chats with history gaps"],
+            historyIssues: sessions.map(row => ({ ...row, reasons: ["missing"], unavailable: true, hasPriorEvidence: false })) }, "Chat history couldn't be read", "cannot be collected yet", "971 chats with history gaps"],
         ["no-new-evidence", { historyCoverage: healthy, historyIssues: [], lastNewDataAt: null }, "Collection active", "No action is needed", "No history gaps reported"],
         ["new-evidence", { historyCoverage: healthy, historyIssues: [], lastNewDataAt: checked }, "Collection active", "No action is needed", "No history gaps reported"],
     ];
@@ -299,8 +309,11 @@ test("loading and failed status reads stay explicit, retry is read-only and sear
     });
     const snapshot = await page.locator("#collectionIssueGroups").innerHTML();
     const updated = initial.historyIssues.map(row => ({ ...row, lastAttemptAt: "2026-10-09T16:01:00.000Z" }));
+    const polled = page.waitForResponse(response => response.url().endsWith("/api/collection/status")
+        && response.request().postDataJSON().details !== true);
     setStatus({ historyIssues: updated, lastCheckedAt: "2026-10-09T16:01:00.000Z" });
-    await page.waitForFunction(() => document.querySelector("#collectionChecked").title.includes("9:01"));
+    await polled;
+    await expect(page.locator("#collectionExactCheck")).toContainText("9:01");
     assert.equal(await page.evaluate(() => document.activeElement === window.claritySearchNode), true);
     await expect(page.locator("#issueSearch")).toHaveValue("unavailable");
     assert.equal(await page.locator("#collectionIssueGroups").innerHTML(), snapshot);

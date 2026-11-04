@@ -6,7 +6,7 @@ import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { buildAssessmentModel, assessmentOverview } from "../lib/assessment-read-model.mjs";
-import { fixture, exportCatalogFor, chooseTheme, openActivitySessions, navigateMain, automaticScoreOffSummary } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, openActivitySessions, navigateMain, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { extractScenarios } from "../lib/history.mjs";
 import { createTextAccess } from "../web/text-access.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
@@ -62,7 +62,7 @@ async function setup(t) {
     await context.route("**/*", async route => {
         const request = route.request(), url = new URL(request.url());
         if (url.origin !== "https://wire.invalid") { unexpected.push(url.href); return route.abort(); }
-        if (request.method() === "GET" && url.pathname === "/") return route.fulfill({ contentType: "text/html", body: renderHtmlShell("a".repeat(64), "artificial-prompt-proof") });
+        if (request.method() === "GET" && url.pathname === "/") return route.fulfill({ contentType: "text/html", body: renderHtmlShell("a".repeat(64), "artificial-prompt-proof", UNBOUND_FIXTURE_BOOTSTRAP) });
         if (request.method() === "GET" && url.pathname === "/assets/assessment-contract.mjs") return route.fulfill({ contentType: "text/javascript", body: moduleSource });
         if (request.method() === "GET" && url.pathname === "/favicon.svg") return route.fulfill({ status: 204 });
         const input = request.postDataJSON();

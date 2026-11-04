@@ -21,11 +21,23 @@ export function createCallInvestigation(compareEntries) {
         const scenario = only(records.filter(record => record.scenarioId === route.request));
         const row = only(activity?.[layer]?.filter(row => row.id === route.call && row.scenarioId === route.request));
         if (!scenario || !row) return unavailable;
+        if (scenario.recordKind === "native-conversation" && layer === "reported-api") {
+            const observation = only(scenario.nativeConversation.returnedResults.filter(result => result.observationKey === row.observationKey));
+            const source = only(observation?.observed.filter(result => result.index === row.resultIndex));
+            if (!source) return unavailable;
+            const parent = row.parentCallId === null ? null
+                : only(activity.tool?.filter(call => call.id === row.parentCallId && call.scenarioId === scenario.scenarioId));
+            if (row.parentCallId !== null && !parent) return unavailable;
+            return { status: "available", row, source, actionId: parent?.id ?? row.id,
+                nativeResult: { observationKey: row.observationKey, index: row.resultIndex } };
+        }
         const parent = layer === "reported-api"
             ? only(activity?.tool?.filter(call => call.id === row.parentCallId && call.scenarioId === scenario.scenarioId)) : row;
         if (!parent) return unavailable;
         const source = ["tool", "reported-api"].includes(layer)
-            ? scenario.toolCalls?.find(call => parent.toolCallId ? call.toolCallId === parent.toolCallId
+            ? scenario.recordKind === "native-conversation"
+                ? scenario.nativeConversation.calls.find(call => call.key === parent.id && call.nativeCallId === parent.toolCallId)
+                : scenario.toolCalls?.find(call => parent.toolCallId ? call.toolCallId === parent.toolCallId
                 : call.startEventId && parent.id === `event:${JSON.stringify([scenario.sourceSessionId, call.startEventId])}`)
             : layer === "http" ? scenario.httpRecords?.find(record => record.recordId === row.recordId)
                 : scenario.graphActivities?.find(record => record.activityId === row.activityId);
@@ -42,7 +54,8 @@ export function createCallInvestigation(compareEntries) {
             if (resolved.status !== "available") return target;
             if (resolved.row.outcome !== "failure") continue;
             const source = records.find(record => record.scenarioId === route.request);
-            candidates.push({ target, at: resolved.source.startedAt, index: source.toolCalls.indexOf(resolved.source) });
+            candidates.push({ target, at: resolved.source.startedAt, index: source.recordKind === "native-conversation"
+                ? source.nativeConversation.calls.indexOf(resolved.source) : source.toolCalls.indexOf(resolved.source) });
         }
         candidates.sort((a, b) => compareEntries(a, b) || a.index - b.index);
         return candidates[0]?.target ?? null;

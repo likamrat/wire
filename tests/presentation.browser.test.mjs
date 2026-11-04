@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, openActivitySessions } from "./helpers.mjs";
+import { exportCatalogFor, openActivitySessions, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { reportContents } from "./report-journey-helpers.mjs";
 
 test("synthetic report review is explicit, separate, and cannot execute markup", { timeout: 30000 }, async () => {
@@ -30,7 +30,7 @@ test("synthetic report review is explicit, separate, and cannot execute markup",
             res.setHeader("Content-Type", "text/javascript; charset=utf-8");
             res.end(contractModule); return;
         }
-        if (req.method === "GET" && req.url === "/") { res.setHeader("Content-Type", "text/html"); res.end(renderHtmlShell("a".repeat(64), "synthetic-nonce")); return; }
+        if (req.method === "GET" && req.url === "/") { res.setHeader("Content-Type", "text/html"); res.end(renderHtmlShell("a".repeat(64), "synthetic-nonce", UNBOUND_FIXTURE_BOOTSTRAP)); return; }
         if (req.method !== "POST") { res.statusCode = 404; return json({ error: "Unsupported synthetic route." }); }
         let text = ""; for await (const chunk of req) text += chunk;
         const input = JSON.parse(text);

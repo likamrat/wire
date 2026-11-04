@@ -7,7 +7,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, navigateMain, revealAnalyzeRecords } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proof = process.env.WIRE_COMPACT_AUTHOR_PROOFS;
@@ -85,7 +85,7 @@ async function capture(page, name) {
 
 test("compact cards name the prompt author without inferring from text or replacing the native full-card link", { timeout: 45000 }, async t => {
     const { page, browserContext } = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     for (const [id, actor] of cases) {
         const row = card(page, id), label = actor === "user" ? "My prompt" : actor === "agent" ? "Agent prompt" : "Author unverified";
         await expect(row.locator(".request-card-author")).toHaveText(label);
@@ -136,7 +136,7 @@ test("My, Agent and unverified origins agree across compact card, sidebar, repor
             await page.evaluate(scale => document.documentElement.style.fontSize = `${scale * 100}%`, scale);
             await chooseTheme(page, theme);
             await navigateMain(page, "analyze"); await ready(page);
-            await page.locator("#resultsLink").click();
+            await revealAnalyzeRecords(page);
             const cues = await page.locator(".request-card-author").evaluateAll(nodes => nodes.map(node => {
                 const css = getComputedStyle(node), prompt = node.closest(".request-card-prompt"), promptCSS = getComputedStyle(prompt);
                 const rects = [...node.getClientRects()].map(rect => ({ left: rect.left, right: rect.right }));

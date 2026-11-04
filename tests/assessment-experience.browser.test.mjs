@@ -19,6 +19,33 @@ import { contract, currentView, samples, quality } from "./assessment-ui-fixture
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 
 const sourceLabel = "synthetic-scenario";
+test("assessment invalidation distinguishes ordinary data from authority and cleanup changes", async t => {
+    const browser = await chromium.launch(), page = await browser.newPage();
+    t.after(() => browser.close());
+    await page.route("https://wire.invalid/", route => route.fulfill({ contentType: "text/html",
+        body: '<!doctype html><div id="message"></div>' }));
+    await page.goto("https://wire.invalid/");
+    await page.addScriptTag({ content: `
+        const owner = {};
+        const api = Object.assign(async () => { throw Error("No API read is required."); },
+            { publicationToken: () => owner, isCurrent: value => value === owner });
+        window.reasons = [];
+        window.ui = (${createAssessmentExperience.toString()})({api, onChanged() {},
+            onInvalidated: (_message, reason) => reasons.push(reason)});
+        window.basis = {sourceRevision: 1, membershipRevision: 1, consentRevision: 1, overrideRevision: 1, deletionEpoch: 0};
+        ui.receive({schemaVersion: 1, basis, catalog: []});
+        ui.receive({schemaVersion: 1, basis: {...basis, sourceRevision: 2, membershipRevision: 2}, catalog: []});
+        ui.observe({basis: {...basis, sourceRevision: 3, membershipRevision: 3}});
+        ui.observe({basis: {...basis, sourceRevision: 0, membershipRevision: 0}});
+        ui.observe({basis: {...basis, sourceRevision: 3, membershipRevision: 3}, pendingCleanup: true, kind: "activity-deletion"});
+        for (const key of ["consentRevision", "overrideRevision", "deletionEpoch"]) {
+            ui.receive({schemaVersion: 1, basis: {...basis, [key]: 5}, catalog: []});
+        }
+        ui.receive(null);
+    ` });
+    assert.deepEqual(await page.evaluate(() => reasons), ["data", "data", "evidence", "evidence", "evidence", "evidence", "evidence", "evidence"]);
+});
+
 const answerText = "ARTIFICIAL RESPONSE ONLY\n" + "Exact retained text \u65e5\u672c\u8a9e e\u0301 <not-html> & private. ".repeat(35);
 function withResponse() {
     const view = currentView();

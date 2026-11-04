@@ -29,11 +29,12 @@ function collect(events) {
     return { retained, records: extractScenarios(retained, { sessionId: "invented-source" }, events[0].timestamp, events.at(-1).timestamp).scenarios };
 }
 
-test("supported completion error code survives collection, normalization, store and local projection without error payload", async t => {
+test("supported completion error survives local retention without stack or report payload", async t => {
     const { retained, records } = collect(sourceEvents({ error: { code: "AccessDenied", message: "INVENTED_PRIVATE_ERROR", stack: "INVENTED_STACK" } }));
     assert.equal(records[0].toolCalls[0].failureEvidence?.code, "AccessDenied");
     assert.equal(records[0].toolCalls[0].failureEvidence?.reason, "error-code-recorded");
-    assert.doesNotMatch(JSON.stringify(retained), /INVENTED_PRIVATE_ERROR|INVENTED_STACK/);
+    assert.equal(records[0].toolCalls[0].failureEvidence.diagnostic.message, "INVENTED_PRIVATE_ERROR");
+    assert.doesNotMatch(JSON.stringify(retained), /INVENTED_STACK/);
     const { context } = await privateFixture(t, []);
     await replaceEvidence(context, () => ({ records }));
     const projected = mergeEvidenceWithState(await loadBoardState(context))[0].toolCalls[0];
@@ -44,7 +45,7 @@ test("supported completion error code survives collection, normalization, store 
     assert.doesNotMatch(JSON.stringify(buildSanitizedRecord(records[0], "a".repeat(64))), /INVENTED_PRIVATE_ERROR|INVENTED_STACK/);
 });
 
-test("exact Work IQ MCP sign-in failures retain a screened machine cause without retaining the message or implying HTTP", async t => {
+test("exact Work IQ MCP sign-in failures retain their wording and machine signal without implying HTTP", async t => {
     const message = 'MCP server \'workiq\': Re-authentication required for MCP server "workiq". Run /mcp auth workiq';
     const events = sourceEvents({ error: { code: "failure", message, stack: "PRIVATE_SIGN_IN_STACK" } });
     events[1].data.toolName = "workiq-fetch";
@@ -54,7 +55,8 @@ test("exact Work IQ MCP sign-in failures retain a screened machine cause without
     assert.equal(records[0].toolCalls[0].failureEvidence.messageStatus, "text-excluded");
     assert.deepEqual(records[0].toolCalls[0].apiResults, []);
     assert.equal(records[0].toolCalls[0].observedGraphHttp, false);
-    assert.doesNotMatch(JSON.stringify(retained), /Re-authentication|\/mcp auth|PRIVATE_SIGN_IN_STACK/);
+    assert.equal(records[0].toolCalls[0].failureEvidence.diagnostic.message, message);
+    assert.doesNotMatch(JSON.stringify(retained), /PRIVATE_SIGN_IN_STACK/);
     const { context } = await privateFixture(t, records);
     assert.equal(mergeEvidenceWithState(await loadBoardState(context))[0].toolCalls[0].failureEvidence.messageSignal, "workiq-sign-in-required");
     const direct = extractScenarios(events, { sessionId: "invented-source" }, events[0].timestamp, events.at(-1).timestamp).scenarios[0];
@@ -67,7 +69,7 @@ test("exact Work IQ MCP sign-in failures retain a screened machine cause without
     ]) {
         const projected = collect(sourceEvents({ error: { code: "failure", message: unsafeOrDifferent } }));
         assert.equal(projected.records[0].toolCalls[0].failureEvidence.messageSignal, null);
-        assert.doesNotMatch(JSON.stringify(projected.retained), /Re-authentication|\/mcp auth|Bearer/);
+        assert.doesNotMatch(JSON.stringify(projected.retained), /Bearer/);
     }
 });
 
@@ -86,7 +88,7 @@ test("direct source extraction and incremental collection agree on explicit stru
     const incremental = collect(events).records[0].toolCalls[0];
     assert.deepEqual(direct.failureEvidence, incremental.failureEvidence);
     assert.equal(direct.failureEvidence?.messageSignal, "access-denial");
-    assert.doesNotMatch(JSON.stringify(direct), /INVENTED_PRIVATE_PAYLOAD/);
+    assert.equal(direct.failureEvidence.diagnostic.message, "Access denied. INVENTED_PRIVATE_PAYLOAD");
 });
 
 test("absence reasons distinguish inspected source, excluded content and unqualified retained history", () => {
@@ -104,7 +106,7 @@ test("absence reasons distinguish inspected source, excluded content and unquali
     ]) {
         const { retained, records } = collect(sourceEvents(data));
         assert.equal(records[0].toolCalls[0].failureEvidence.reason, reason);
-        assert.doesNotMatch(JSON.stringify(retained), /INVENTED_ERROR|INVENTED_SECRET|INVENTED_UNSTRUCTURED|INVENTED_PATH|call_INVENTED|ghp_|github_pat_/);
+        assert.doesNotMatch(JSON.stringify(retained), /INVENTED_UNSTRUCTURED|INVENTED_PATH|call_INVENTED|ghp_|github_pat_/);
         assert.equal(records[0].toolCalls[0].parentInvocationEvidence, "source-field-absent");
         assert.equal(records[0].toolCalls[0].parallelGroupEvidence, "adapter-not-supported");
     }
@@ -119,6 +121,10 @@ test("all new-report privacy modes exclude private failure payloads across every
     // Even malformed legacy/local metadata must not bypass the report allowlist.
     records[0].toolCalls[0].failureEvidence.privatePayload = "INVENTED_PRIVATE_RETAINED_PAYLOAD";
     records[0].toolCalls[0].failureEvidence.code = "C:\\INVENTED_PRIVATE_PATH";
+    records[0].toolCalls[0].resultEvidence = { version: 1, source: "sdk-result", applicationError: true, statusCode: 403,
+        contentStatus: "body-excluded", resultCount: null,
+        diagnostic: { version: 1, source: "mcp-result-text", status: "recorded", message: "INVENTED_PRIVATE_RESULT_ERROR" },
+        description: { version: 1, status: "recorded", text: "INVENTED_PRIVATE_RESULT_DESCRIPTION" } };
     for (const promptMode of ["none", "masked", "original"]) {
         const bundle = await buildSanitizedBundle(JSON.parse(JSON.stringify(records)), "b".repeat(64), { promptMode, formats: ["json", "html", "markdown", "pdf"] });
         for (const [file, content] of Object.entries(bundle.files)) {
@@ -187,7 +193,7 @@ test("message signals are bounded, credential-screened mentions, not inferred ca
     }
 });
 
-test("structured MCP request timeout survives the real collector without implying HTTP or copying the error", async t => {
+test("structured MCP request timeout survives the real collector without implying HTTP or copying the stack", async t => {
     const events = sourceEvents({ error: { code: "failure", message: "Invented tool: MCP error -32001: Request timed out", stack: "PRIVATE_TIMEOUT_STACK" } });
     events[2].timestamp = "2026-10-01T12:03:01.024Z";
     const { retained, records } = collect(events);
@@ -197,7 +203,8 @@ test("structured MCP request timeout survives the real collector without implyin
     assert.equal(call.durationMs, 180024);
     assert.equal(call.observedGraphHttp, false);
     assert.deepEqual(call.apiResults, []);
-    assert.doesNotMatch(JSON.stringify(retained), /Invented tool|MCP error|PRIVATE_TIMEOUT_STACK/);
+    assert.equal(call.failureEvidence.diagnostic.message, events[2].data.error.message);
+    assert.doesNotMatch(JSON.stringify(retained), /PRIVATE_TIMEOUT_STACK/);
     const { context } = await privateFixture(t, records);
     assert.equal(mergeEvidenceWithState(await loadBoardState(context))[0].toolCalls[0].failureEvidence.messageSignal, "request-timeout");
     for (const message of ["No MCP error -32001: Request timed out", "Possibly MCP error -32001: Request timed out",

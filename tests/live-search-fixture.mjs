@@ -65,7 +65,7 @@ export async function searchFixture(t, { records = searchRecords(), formats = []
 }
 export async function streamPanel(runtime, { purpose = "navigation" } = {}) {
     const origin = new URL(runtime.url).origin;
-    const headers = { Origin: origin, "Content-Type": "application/json" };
+    const headers = { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
     const session = await (await fetch(origin + "/api/session", { method: "POST", headers, body: "{}" })).json();
     headers["X-Board-Capability"] = session.capability;
     const api = async (path, body = {}) => {

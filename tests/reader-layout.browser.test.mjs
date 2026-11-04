@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
-import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, revealAnalyzeRecords } from "./helpers.mjs";
 import { contract, retainedResponse, samples } from "./assessment-ui-fixtures.mjs";
 import { graphMatrixRecord } from "./report-evidence-matrix-fixtures.mjs";
 import { recordedResponseTiming } from "../lib/response-timing.mjs";
@@ -57,7 +57,7 @@ function readerRecord() {
     return record;
 }
 
-async function setup(t, records = [readerRecord()], { responseText, assessmentFixture, responseCompleteness = "bounded-fragment", motion = "reduce", sidebarMotion, saveFrozen = false, initialStorage = {} } = {}) {
+async function setup(t, records = [readerRecord()], { responseText, assessmentFixture, responseCompleteness = "bounded-fragment", motion = "reduce", sidebarMotion, saveFrozen = false, initialStorage = {}, touch = false } = {}) {
     const cleanups = [];
     const { context } = await privateFixture({ after: action => cleanups.push(action) }, records);
     const reports = createExportController(context);
@@ -77,7 +77,7 @@ async function setup(t, records = [readerRecord()], { responseText, assessmentFi
         readSource: async () => { providerCalls++; throw Error("No source reads in reader proof."); },
     } });
     const browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: motion });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: motion, hasTouch: touch });
     const errors = [], requests = [];
     page.setDefaultTimeout(6000);
     page.on("pageerror", error => errors.push(error.stack));
@@ -150,11 +150,169 @@ async function setup(t, records = [readerRecord()], { responseText, assessmentFi
     if (sidebarMotion) await page.addInitScript(value => localStorage.setItem("workiq-evidence.sidebar-motion", value), sidebarMotion);
     await page.goto(runtime.url);
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await page.locator(".request-card-open").first().click();
     await expect(page.locator("#contextSidebar[open]")).toBeVisible();
     return { page, records, context, runtime, assessmentView, frozen };
 }
+
+async function readerSettled(page) {
+    await page.waitForFunction(() => ["contextSidebar", "main", "sidebar"].every(id =>
+        !document.getElementById(id).getAnimations().some(animation => animation.playState === "running")));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function readerShot(page, name) {
+    if (!proofs) return;
+    await mkdir(proofs, { recursive: true });
+    await page.screenshot({ path: path.join(proofs, name + ".png") });
+}
+
+function longReaderRecord() {
+    const record = readerRecord();
+    record.userPrompt.text = Array.from({ length: 60 }, (_, i) =>
+        `Milestone ${i + 1}: Review the invented Northstar release evidence, keep unresolved decisions distinct, and preserve the original source references. `).join("");
+    record.toolCalls.push({
+        ...record.toolCalls[0], toolCallId: "invented-second-call", startEventId: "invented-second-start", tool: "workiq-get_schema",
+        toolSucceeded: false, reportedOutcome: "failed", errorMessage: "Schema not found: /teams/invented/channels/release/startMigration",
+        apiResults: [{ index: 0, statusCode: 404, errorCode: "NotFound", errorMessage: "The invented target was not found.", evidenceLevel: "intermediary-reported" }],
+    });
+    record.graphActivities = [{ ...graphMatrixRecord("reader-geometry-reference").graphActivities[0],
+        activityId: "invented-geometry-reference", sourceSessionId: record.sourceSessionId,
+        scenarioId: record.scenarioId, evidenceLevel: "code-reference", httpStatus: null, statusBasis: "none" }];
+    return record;
+}
+
+// Keep a character on the current line, not a scrollTop proxy that passes despite reflow.
+async function rememberReaderLine(page, offset = 2400) {
+    return page.locator('[data-reader-section="prompt"] pre').evaluate((node, offset) => {
+        const body = document.querySelector("#contextSidebarBody"), text = node.firstChild;
+        const range = document.createRange();
+        range.setStart(text, Math.min(offset, text.length - 1));
+        range.setEnd(text, range.startOffset + 1);
+        body.scrollTop += range.getBoundingClientRect().top - body.getBoundingClientRect().top - 64;
+        const paragraph = document.createRange();
+        paragraph.selectNodeContents(node);
+        const line = [...paragraph.getClientRects()].find(rect => rect.top >= body.getBoundingClientRect().top + 16);
+        const caret = document.caretPositionFromPoint(line.left + 2, line.top + line.height / 2);
+        range.setStart(caret.offsetNode, caret.offset); range.setEnd(caret.offsetNode, caret.offset + 1);
+        window.readerProofRange = range;
+        return range.getBoundingClientRect().top - body.getBoundingClientRect().top;
+    }, offset);
+}
+
+async function readerLineTop(page) {
+    return page.evaluate(() => window.readerProofRange.getBoundingClientRect().top - document.querySelector("#contextSidebarBody").getBoundingClientRect().top);
+}
+
+test("combined reader preserves a visible text line, identity, disclosure and chosen width across drag and maximize/restore", { timeout: 45000 }, async t => {
+    const record = longReaderRecord();
+    const { page } = await setup(t, [record], { motion: "no-preference" });
+    await readerSettled(page);
+    await expect(page.locator("#requestContent .reader-call-row[data-tool-call-id]")).toHaveCount(2);
+    await expect(page.locator("#requestContent .reader-call-row")).toHaveCount(3);
+    await expect(page.locator('[data-reader-section="activity"]')).toContainText("Execution not observed");
+    const panel = page.locator("#contextSidebar"), width = () => panel.evaluate(node => node.getBoundingClientRect().width);
+    const originalWidth = await width(), originalURL = page.url();
+    await page.locator('[data-reader-section="source"] .reader-section-toggle').click();
+    await page.evaluate(() => { window.originalReader = document.querySelector("#requestContent"); });
+    for (const theme of ["dark", "light"]) {
+        await chooseTheme(page, theme);
+        const line = await rememberReaderLine(page);
+        await page.locator("#readerResize").focus();
+        await page.keyboard.press("Home");
+        assert.ok(Math.abs(await width() - 416) < 1);
+        assert.ok(Math.abs(await readerLineTop(page) - line) <= 24, "Narrowing retains the visible characters, not old scroll pixels");
+        await page.keyboard.press("ArrowLeft");
+        assert.ok(Math.abs(await width() - 448) < 1);
+        const handle = await page.locator("#readerResize").boundingBox();
+        await page.mouse.move(handle.x + 5, handle.y + 250);
+        await page.mouse.down();
+        await page.mouse.move(handle.x - 139, handle.y + 250, { steps: 8 });
+        await page.mouse.up();
+        const chosen = await width();
+        assert.ok(Math.abs(chosen - 592) < 2, `Pointer drag width ${chosen}`);
+        const afterDrag = await readerLineTop(page);
+        assert.ok(Math.abs(afterDrag - line) <= 24, `Drag preserves a reflowed line (${afterDrag} vs ${line})`);
+        await readerShot(page, `combined-${theme}-docked`);
+        await page.locator("#expandInteraction").focus();
+        await page.keyboard.press("Enter");
+        await expect(panel).toHaveAttribute("data-mode", "expanded");
+        await expect(page.getByRole("button", { name: "Restore reader width", exact: true })).toBeFocused();
+        assert.ok(await width() > chosen + 300);
+        assert.ok(Math.abs(await readerLineTop(page) - afterDrag) <= 24);
+        const currentLine = await rememberReaderLine(page, 4000);
+        await readerShot(page, `combined-${theme}-expanded`);
+        await page.keyboard.press("Enter");
+        await expect(panel).toHaveAttribute("data-mode", "docked");
+        assert.ok(Math.abs(await width() - chosen) < 1, "Restore uses the chosen width");
+        assert.ok(Math.abs(await readerLineTop(page) - currentLine) <= 24, "Restore keeps current reading, not the pre-maximize location");
+        assert.equal(await page.evaluate(() => window.originalReader === document.querySelector("#requestContent")), true);
+        await expect(page.locator('[data-reader-section="source"]')).toHaveAttribute("data-open", "true");
+        assert.equal(page.url(), originalURL, "Geometry does not create history entries");
+        for (const [id, glyph] of [["narrowInteraction", "minus"], ["widenInteraction", "plus"], ["expandInteraction", "maximize-2"]]) {
+            const control = page.locator("#" + id);
+            assert.equal((await control.innerText()).trim(), "");
+            await expect(control.locator("svg")).toHaveAttribute("data-lucide-icon", glyph);
+            const box = await control.boundingBox();
+            assert.equal(box.width, 44); assert.equal(box.height, 44);
+        }
+        await page.locator('[data-reader-section="activity"]').evaluate(node => {
+            const body = document.querySelector("#contextSidebarBody");
+            body.scrollTop += node.getBoundingClientRect().top - body.getBoundingClientRect().top;
+        });
+        await readerShot(page, `combined-${theme}-activity`);
+    }
+    await page.locator("#expandInteraction").hover();
+    await expect(page.locator(".ux-tooltip:visible")).toHaveText("Maximize interaction");
+    await page.locator("#expandInteraction").click();
+    await expect(page.locator("#expandInteraction svg")).toHaveAttribute("data-lucide-icon", "minimize-2");
+    await page.locator("#closeContextSidebar").click();
+    await expect(panel).not.toBeVisible();
+    await expect(page.locator(".request-card-open").first()).toBeFocused();
+    assert.equal(await page.locator("#main").evaluate(node => node.inert), false);
+    await page.locator(".request-card-open").first().click();
+    await readerSettled(page);
+    assert.ok(Math.abs(await width() - originalWidth) < 1, "Fresh opening retains the existing default");
+    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0);
+});
+
+test("combined reader bounds, touch alternatives and responsive single-pane preserve the current reading", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, [longReaderRecord()], { touch: true });
+    await readerSettled(page);
+    const panel = page.locator("#contextSidebar");
+    await page.locator("#narrowInteraction").tap();
+    await expect(page.locator("#readerResize")).toHaveAttribute("aria-valuenow", "512");
+    await page.locator("#widenInteraction").tap();
+    await expect(page.locator("#readerResize")).toHaveAttribute("aria-valuenow", "544");
+    await page.locator("#readerResize").focus(); await page.keyboard.press("End");
+    const max = Number(await page.locator("#readerResize").getAttribute("aria-valuemax"));
+    assert.ok(max <= 736);
+    await expect(page.locator("#widenInteraction")).toHaveAttribute("aria-disabled", "true");
+    assert.ok(await page.locator("#main").evaluate(node => node.getBoundingClientRect().width >= 576));
+    const line = await rememberReaderLine(page);
+    await page.setViewportSize({ width: 1100, height: 1000 });
+    await expect(panel).toHaveAttribute("data-mode", "overlay");
+    assert.equal(await panel.evaluate(node => node.matches(":modal")), true);
+    for (const id of ["readerResize", "readerWidthControls", "expandInteraction"]) await expect(page.locator("#" + id)).toBeHidden();
+    assert.ok(Math.abs(await readerLineTop(page) - line) <= 24);
+    await page.setViewportSize({ width: 390, height: 900 }); await readerSettled(page);
+    assert.ok(Math.abs(await readerLineTop(page) - line) <= 24, `Narrow viewport preserves the same text line: ${await readerLineTop(page)} vs ${line}`);
+    assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+    await readerShot(page, "combined-narrow");
+    await page.setViewportSize({ width: 1440, height: 1000 }); await readerSettled(page);
+    await expect(panel).toHaveAttribute("data-mode", "docked");
+    await expect(page.locator("#readerResize")).toHaveAttribute("aria-valuenow", String(max));
+    const enlargedLine = await rememberReaderLine(page);
+    await page.evaluate(() => document.documentElement.style.fontSize = "200%");
+    await expect(panel).toHaveAttribute("data-mode", "overlay");
+    assert.ok(Math.abs(await readerLineTop(page) - enlargedLine) <= 46, `Enlarged text preserves the same reading: ${await readerLineTop(page)} vs ${enlargedLine}`);
+    assert.ok(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
+    await expect(page.locator("#closeContextSidebar")).toBeInViewport();
+    await readerShot(page, "combined-enlarged");
+    await page.keyboard.press("Escape");
+    await expect(panel).not.toBeVisible();
+});
 
 test("approved reader opens the prompt first with useful sections and one visibility owner", { timeout: 20000 }, async t => {
     const { page, records } = await setup(t);
@@ -411,7 +569,8 @@ test("capture revocation scrubs response text and fences an in-flight old-basis 
         assessmentView.observations = assessmentView.observations.filter(item => item.origin !== "optional-capture");
         for (const item of [assessmentView.interaction, ...assessmentView.observations, ...assessmentView.assessments, ...assessmentView.metrics]) item.basis = { ...assessmentView.basis };
         await page.evaluate(() => dispatchEvent(new Event("online")));
-        await expect(page.locator("#requestContent")).toContainText("Capture is off");
+        await expect(page.locator("#requestContent")).toContainText("Saving is off");
+        await expect(page.locator("#requestContent")).not.toContainText("Saving is off by default");
         release(); await Promise.all(deliveries);
         assert.equal(await page.locator("#requestContent").evaluate((node, text) => node.textContent.includes(text), text), false);
         await expect(page.getByRole("button", { name: "Copy response", exact: true })).toHaveCount(0);
@@ -691,19 +850,42 @@ for (const [reason, label, captureOff] of [
     await captureCorrection(page, reason, "activity", `[data-reason="${reason}"]`);
 });
 
-test("correction: Requested sources replaces only the redundant recognized-capability recital", { timeout: 20000 }, async t => {
+test("requested sources stay with recorded input, without detached result caveats on failed or unsupported calls", { timeout: 20000 }, async t => {
     const record = readerRecord();
     record.toolCalls[0].tool = "workiq-retrieve";
     record.toolCalls[0].requestArgs = { query: "Invented request", capabilities: [{ name: "Email" }, { name: "TeamsMessages" }] };
     record.toolCalls.push({ ...record.toolCalls[0], toolCallId: "invented-unsupported-capability",
+        startEventId: "invented-unsupported-start", durationMs: 252, completedAt: "2026-09-30T12:00:02.252Z",
+        toolSucceeded: false, reportedOutcome: "failed",
+        failureEvidence: { version: 1, reason: "error-code-recorded", code: "failure",
+            messageStatus: "text-excluded", messageSignal: "workiq-sign-in-required" },
         requestArgs: { query: "Invented fallback", capabilities: [{ name: "Email", unsupported: true }] } });
-    const { page } = await setup(t, [record]);
+    record.toolCalls.push({ ...record.toolCalls[0], toolCallId: "invented-partial-capability",
+        startEventId: "invented-partial-start", toolSucceeded: null, reportedOutcome: "unknown",
+        requestArgs: { query: "Invented partial scope", capabilities: [{ name: "Email" }, { name: "InventedUnrecognizedSource" }] } });
+    const { page, context } = await setup(t, [record]);
+    const before = await loadBoardState(context);
     const known = page.locator('[data-tool-call-id="invented-reader-call"]');
-    await expect(known).toContainText("Requested sources");
-    assert.ok(!(await known.innerText()).includes("This does not show which sources returned results"));
     const fallback = page.locator('[data-tool-call-id="invented-unsupported-capability"]');
+    const partial = page.locator('[data-tool-call-id="invented-partial-capability"]');
+    for (const call of [known, fallback, partial]) {
+        await call.locator(".reader-call-toggle").click();
+        await expect(call.locator(".reader-call-evidence")).toHaveCount(0);
+        await expect(call).not.toContainText("This does not show which sources returned results");
+        await expect(call).not.toContainText("No results");
+    }
+    await expect(known).toContainText("Requested sources");
+    await expect(known.getByText("Email", { exact: true })).toHaveCount(1);
+    await expect(known.getByText("Teams messages", { exact: true })).toHaveCount(1);
+    await expect(fallback).not.toContainText("Requested sources");
     await expect(fallback).toContainText('"unsupported": true');
-    await expect(fallback).toContainText("This does not show which sources returned results");
+    await expect(fallback).toContainText('"name": "Email"');
+    await expect(fallback.locator(".call-heading")).toContainText("Work IQ required sign-in at the time");
+    await expect(fallback.locator(".reader-call-duration")).toHaveText("Tool latency: 252 ms");
+    await expect(partial).toContainText('"name": "Email"');
+    await expect(partial).toContainText('"name": "InventedUnrecognizedSource"');
+    await expect(partial.locator(".call-heading")).toContainText("Call 3 has no recorded result");
+    assert.deepEqual(await loadBoardState(context), before);
 });
 
 for (const outcome of ["read-failure", "revoked-source"]) test(`correction: persisted restoration does not revive private owners after ${outcome}`, { timeout: 20000 }, async t => {
@@ -863,7 +1045,8 @@ test("EC92 released presentation keeps compact identities, explicit durations an
     await expect(prompt.locator(".reader-section-toggle")).toHaveText("Agent prompt");
     await expect(prompt.getByRole("heading")).toHaveCount(1);
     const fetch = reader.locator('[data-tool-call-id="invented-reader-call"]');
-    await expect(fetch.locator(".reader-call-identity")).toHaveText(/Call 1\s*·\s*Tool: workiq-fetch/);
+    await expect(fetch.locator(".reader-call-identity-line")).toHaveText("workiq-fetch");
+    await expect(fetch.locator(".reader-call-summary")).toContainText("Call 1");
     await expect(fetch.locator("dt").filter({ hasText: /^Result$/ })).toHaveCount(0);
     await expect(fetch.locator(".reader-call-duration")).toHaveText("Tool latency: 7 ms");
     await expect(fetch.locator(".reader-call-duration data")).toHaveAttribute("value", "7");
@@ -941,11 +1124,11 @@ test("EC92 concise failure presentation retains distinct retention exclusions", 
     }));
     const { page } = await setup(t, [record]);
     const calls = page.locator('[data-reader-section="activity"] [data-tool-call-id]');
-    await expect(calls.nth(0)).toContainText("exceeded the 8 KiB inspection limit");
-    await expect(calls.nth(1)).toContainText("matched credential screening");
-    await expect(calls.nth(2)).toContainText("unsupported format");
+    await expect(calls.nth(0)).toContainText("Error details were too long to save");
+    await expect(calls.nth(1)).toContainText("Error details omitted for privacy");
+    await expect(calls.nth(2)).toContainText("WIRE could not read the error details");
     for (const [index, call] of (await calls.all()).entries()) {
-        await expect(call.locator(".call-heading .result-cause")).toHaveText(index === 1 ? "Error detail excluded for privacy" : "Error detail not retained");
+        await expect(call.locator(".call-heading .result-cause")).toHaveText(["Error details were too long to save", "Error details omitted for privacy", "WIRE could not read the error details"][index]);
         await expect(call.locator(".reader-recorded-signal")).toHaveCount(0);
         await expect(call.getByRole("button", { name: /sign in|retry|authenticate/i })).toHaveCount(0);
         assert.doesNotMatch(await call.innerText(), /Recorded error signal:|HTTP 401|HTTP 403/);
@@ -1010,10 +1193,10 @@ test("reader story separates the recorded request, interaction response and opti
     await page.locator('.request-card-open[href*="request=reader-approved"]').click();
     await expect(page.locator(".request-card-open")).toHaveCount(2);
     const reader = page.locator("#requestContent"), call = reader.locator('[data-tool-call-id="invented-reader-call"]');
-    await expect(reader.getByText("No saved response. Capture is off.", { exact: true })).toHaveCount(1);
+    await expect(reader.getByText("No assistant reply was saved for this interaction.", { exact: true })).toHaveCount(1);
     await expect(call.locator(".reader-input-value code")).toHaveText(requestPath);
     await expect(call.locator(".reader-input-heading .service-cue")).toHaveText("People");
-    await expect(call.locator(".call-heading .result-cause")).toHaveText("Sign-in was required");
+    await expect(call.locator(".call-heading .result-cause")).toHaveText("Work IQ required sign-in at the time");
     const observations = [];
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
         await page.setViewportSize({ width: 1440, height: 1000 });
@@ -1119,7 +1302,7 @@ test("reader story keeps the complete visible sequence across response states, p
             await expect(response.getByText("Partial text", { exact: true })).toHaveCount(responseState === "partial" ? 1 : 0);
             await response.getByRole("button", { name: "Copy response", exact: true }).click();
             assert.equal(await page.evaluate(() => window.readerCopies.at(-1)), exact);
-        } else await expect(reader.locator(":scope > .reader-response-availability")).toContainText("No saved response. Capture is off.");
+        } else await expect(reader.locator(":scope > .reader-response-availability")).toContainText("No assistant reply was saved for this interaction.");
         const expected = ["prompt", "activity", responseState === "absent" ? "availability" : "response", "source"];
         assert.deepEqual(await reader.evaluate(root => [...root.children].filter(node => node.checkVisibility()
             && (node.dataset.readerSection || node.classList.contains("reader-response-availability")))
@@ -1129,7 +1312,9 @@ test("reader story keeps the complete visible sequence across response states, p
         await expect(reader.locator(".journey-item .reader-response-availability")).toHaveCount(0);
         await expect(reader.locator(".reader-linked-context .full-text-content")).toHaveCount(0);
         await expect(reader.locator('.request-context-timeline [data-context-kind="action"]')).toHaveCount(2);
-        await expect(call.locator(".recorded-result-label")).toHaveText({ success: "Worked", failure: "Tool failed", unknown: "No result recorded" }[outcome]);
+        await expect(call.locator(".recorded-result-label")).toHaveText({
+            success: "Call 1 completed", failure: "Call 1 failed", unknown: "Call 1 has no recorded result",
+        }[outcome]);
         for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
             await page.setViewportSize({ width: 1440, height: 1000 });
             await page.evaluate(() => document.documentElement.style.fontSize = "100%");
@@ -1182,7 +1367,7 @@ test("reader story remains scoped when opened through actual Search and report p
         await expect(page.locator(".reader-linked-context")).not.toHaveAttribute("open", "");
         await expect(page.locator(".reader-linked-context .full-text-content")).toHaveCount(0);
         await expect(page.locator(".request-context-timeline .reader-response-availability")).toHaveCount(0);
-        await expect(page.locator("#requestContent > .reader-response-availability")).toContainText("No saved response.");
+        await expect(page.locator("#requestContent > .reader-response-availability")).toContainText("No assistant reply was saved for this interaction.");
         await expect(page.locator(".reader-request-paths code")).toHaveText(record.toolCalls[0].requestArgs.entityUrls);
     };
     await hit.click(); await verify();

@@ -7,6 +7,7 @@ import { searchFixture, searchRecords, saveSearchComparison, streamPanel } from 
 import { chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { contrast, pairwise } from "./color-measurements.mjs";
 import { dimensionalIcons } from "../web/dimensional-icons.mjs";
+import { loadBoardState } from "../lib/store.mjs";
 
 test("every Search category has its own readable rendered color, Lucide identity and type label", { timeout: 60000 }, async t => {
     const cleanup = [], records = searchRecords(1);
@@ -21,6 +22,7 @@ test("every Search category has its own readable rendered color, Lucide identity
         records, formats: ["html", "json"], reportTitles: ["Planning notes", "Retrieval evidence"],
     });
     await saveSearchComparison(app, ["html"]);
+    const storedBefore = await loadBoardState(app.context);
     const reference = await streamPanel(app.runtime);
     let rankedHits;
     try {
@@ -78,6 +80,7 @@ test("every Search category has its own readable rendered color, Lucide identity
         for (const [type, icon] of Object.entries(icons)) {
             await selectActivityOption(page, "wireSearchType", type);
             await expect(rows.first()).toBeVisible();
+            for (const glyph of await rows.locator(".wire-search-type-icon .wire-icon").all()) await expect(glyph).toHaveAttribute("aria-hidden", "true");
             assert.ok((await rows.evaluateAll(nodes => nodes.map(node => node.dataset.searchType))).every(value => value === type));
             await input.focus(); await input.press("ArrowDown");
             await expect(rows.first()).toBeFocused();
@@ -192,7 +195,7 @@ test("every Search category has its own readable rendered color, Lucide identity
         await selectActivityOption(page, "wireSearchType", "action");
         await expect(rows).toHaveCount(1);
         const outcome = await rows.evaluate(node => {
-            return { category: getComputedStyle(node.querySelector(".wire-search-kind")).color,
+            return { category: getComputedStyle(node.querySelector(".wire-search-type-icon .wire-icon")).color,
                 failure: getComputedStyle(node.querySelector(".wire-search-outcome")).color,
                 danger: getComputedStyle(node).getPropertyValue("--danger").trim() };
         });
@@ -234,6 +237,8 @@ test("every Search category has its own readable rendered color, Lucide identity
     await page.locator("#wireSearchRetry").click();
     await expect(rows).toHaveCount(1);
     await expect(rows).toContainText("Theme");
+    const storedAfter = await loadBoardState(app.context);
+    for (const key of ["evidence", "exports", "cards", "personalEvaluation"]) assert.deepEqual(storedAfter[key], storedBefore[key]);
     if (proofs) await writeFile(path.join(proofs, "rendered-category-measurements.json"), JSON.stringify(observations, null, 2));
 });
 

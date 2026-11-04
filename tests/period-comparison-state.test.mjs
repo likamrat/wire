@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPeriodComparisonState } from "../web/period-comparison.mjs";
+import * as resultContract from "../lib/report-result-contract.mjs";
 import { createLocalSearch } from "../web/local-search.mjs";
 import { time } from "../lib/time.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
@@ -11,13 +12,46 @@ import { createActivityProjection } from "../lib/activity-projection.mjs";
 import { OUTCOMES } from "../lib/analytics.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { comparePeriodCohorts } from "../lib/period-comparison-math.mjs";
+import { nativeConsumerFixture } from "./native-consumer-fixture.mjs";
+import { fixture } from "./helpers.mjs";
+
+test("actual mixed-source snapshot accepts only its qualified dated-side unit transition", async t => {
+    const app = await nativeConsumerFixture(t, { records: [fixture("comparison-unit-transition")] });
+    const api = await app.start();
+    const options = { layer: "tool", groupBy: "workload", bucket: "day", filters: { scope: "history" },
+        timeContext: time.normalize({ timeZone: "UTC", locale: "en-US" }) };
+    const snapshot = (await api("/api/snapshot", options)).body;
+    const machine = createPeriodComparisonState({ time, search: createLocalSearch(), contract, resultContract,
+        projection: createActivityProjection(time, serviceCategories, OUTCOMES), categories: serviceCategories, comparePeriodCohorts });
+    const input = machine.prepare(snapshot, options, {
+        baseline: { from: "2026-09-28", to: "2026-10-01" }, later: { from: "2026-10-02", to: "2026-10-03" },
+    });
+    const response = await api("/api/period-comparison", input);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.equal(snapshot.analytics.unit, "source-qualified tool calls");
+    assert.equal(response.body.definitions.unit, "Work IQ tool calls");
+    assert.deepEqual(Object.values(response.body.periods).map(side => side.rowIds.length), [1, 0]);
+    assert.equal(machine.accept(machine.begin(input, snapshot), response.body), true);
+    for (const change of [
+        value => { value.periods.later.analytics.unit = "source-qualified tool calls"; },
+        value => { value.periods.later.analytics.measurementEligibility.nativeActivityDates = "verified"; },
+        value => {
+            value.definitions.unit = "invented unit";
+            for (const side of Object.values(value.periods)) side.analytics.unit = "invented unit";
+        },
+    ]) {
+        const value = structuredClone(response.body); change(value);
+        assert.throws(() => machine.accept(machine.begin(input, snapshot), value), /Comparison facts/);
+        assert.equal(machine.consumer(), null);
+    }
+});
 
 export function comparisonStateFixture() {
     const { state, input } = periodFixture();
     const response = buildPeriodComparison(state, input);
     const snapshot = { revision: state.revision, scenarios: state.evidence, sessions: [], analytics: response.periods.baseline.analytics,
         assessment: { basis: response.assessmentBasis, source: response.source, catalog: buildAssessmentModel(state).catalog } };
-    const machine = createPeriodComparisonState({ time, search: createLocalSearch(), contract,
+    const machine = createPeriodComparisonState({ time, search: createLocalSearch(), contract, resultContract,
         projection: createActivityProjection(time, serviceCategories, OUTCOMES), categories: serviceCategories, comparePeriodCohorts });
     return { state, input, response, snapshot, machine };
 }
@@ -32,6 +66,68 @@ test("private-query membership comes from the whole accepted roster, not the dat
     assert.equal(request.options.filters.from, undefined);
     assert.equal(request.options.filters.to, undefined);
     assert.doesNotMatch(JSON.stringify(request), new RegExp(periodQuery));
+});
+
+test("accepted scope names and private-narrowing presence belong to the same frozen pair", () => {
+    const { state, input, snapshot, machine, response: unfiltered } = comparisonStateFixture();
+    const endpoint = unfiltered.periods.baseline.analytics.rows[0].endpoint;
+    input.options.filters.projectIds = ["selected-project"];
+    input.options.filters.sourceSessionIds = ["period-chat-0"];
+    input.options.filters.endpoints = [endpoint.id];
+    snapshot.scenarios[0].projectId = "selected-project";
+    snapshot.scenarios[0].project = "Accepted project";
+    snapshot.sessions = [{ sessionId: "period-chat-0", name: "Accepted chat" }, { sessionId: "outside", name: "Unselected chat" }];
+    const response = buildPeriodComparison(state, input);
+    const token = machine.begin(input, snapshot, undefined, true);
+    assert.equal(machine.scope(), null);
+    snapshot.scenarios[0].project = "Newer project";
+    snapshot.sessions[0].name = "Newer chat";
+    assert.equal(machine.accept(token, response), true);
+    assert.deepEqual(machine.consumer(), response, "Presentation metadata must not change the canonical report input");
+    assert.deepEqual(machine.scope(), {
+        hasSearch: true, projects: [{ id: "selected-project", name: "Accepted project" }],
+        sessions: [{ id: "period-chat-0", name: "Accepted chat" }], endpoints: [{ id: endpoint.id, name: endpoint.label }],
+    });
+    machine.scope().projects[0].name = "Changed detached result";
+    assert.equal(machine.scope().projects[0].name, "Accepted project");
+    assert.doesNotMatch(JSON.stringify(machine.scope()), /Newer|Unselected|INVENTED_PERIOD_NEEDLE/);
+    const newer = machine.begin(input, snapshot);
+    assert.equal(machine.scope(), null);
+    assert.equal(machine.accept(token, response), false);
+    assert.equal(machine.scope(), null);
+    assert.equal(machine.accept(newer, response), true);
+    assert.equal(machine.scope().hasSearch, false);
+    machine.leave();
+    assert.equal(machine.scope(), null);
+});
+
+test("invalid scope metadata cannot leave a newly requested description beside an accepted pair", () => {
+    const { input, response, snapshot, machine } = comparisonStateFixture();
+    machine.accept(machine.begin(input, snapshot), response);
+    assert.throws(() => machine.begin(input, snapshot, undefined, "PRIVATE_QUERY_MUST_NOT_BECOME_SCOPE_TEXT"), /Comparison/);
+    assert.equal(machine.consumer(), null);
+    assert.equal(machine.scope(), null);
+});
+
+test("scope keeps an applied private phrase even when it matches the complete retained roster", () => {
+    const { state, input, snapshot, machine } = comparisonStateFixture();
+    const request = machine.prepare(snapshot, input.options, input.periods, "request");
+    assert.equal(request.scenarioIds.length, snapshot.scenarios.length);
+    machine.accept(machine.begin(request, snapshot, undefined, true), buildPeriodComparison(state, request));
+    assert.equal(machine.scope().hasSearch, true);
+    assert.doesNotMatch(JSON.stringify(machine.scope()), /request/);
+});
+
+test("scope rejects conflicting accepted endpoint labels instead of choosing one period", () => {
+    const { state, input, snapshot, machine, response: unfiltered } = comparisonStateFixture();
+    input.options.filters.endpoints = [unfiltered.periods.baseline.analytics.rows[0].endpoint.id];
+    const response = buildPeriodComparison(state, input);
+    response.periods.later.analytics.filterOptions.endpoints = response.periods.later.analytics.filterOptions.endpoints.map(entry =>
+        entry.id === input.options.filters.endpoints[0] ? { ...entry, label: "Different period label" } : entry);
+    const token = machine.begin(input, snapshot);
+    assert.throws(() => machine.accept(token, response), /Comparison/);
+    assert.equal(machine.consumer(), null);
+    assert.equal(machine.scope(), null);
 });
 
 test("same-count different memberships and late reads cannot replace the current comparison", () => {

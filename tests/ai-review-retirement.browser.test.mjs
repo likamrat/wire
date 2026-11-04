@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { retirementFixture, retirementClient } from "./ai-review-retirement-fixture.mjs";
-import { navigateMain, navigateSettings } from "./helpers.mjs";
+import { navigateMain, navigateSettings, chooseTheme } from "./helpers.mjs";
 import { scanReport } from "./report-journey-helpers.mjs";
 
 test("normal Analyze, reader, Settings and Search retain replies and reporting without any rating functionality", { timeout: 45000 }, async t => {
@@ -68,6 +68,24 @@ test("normal Analyze, reader, Settings and Search retain replies and reporting w
     await page.locator(`.request-card-open[href*="${encodeURIComponent(f.inputs[0].record.scenarioId)}"]`).first().click();
     const reader = page.locator("#contextSidebar");
     await expect(reader).toContainText(answer);
+    await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
+    const reply = await reader.locator('[data-reader-section="response"] pre').last().elementHandle();
+    const readingWidth = await reader.evaluate(node => node.getBoundingClientRect().width);
+    await page.locator("#widenInteraction").click();
+    await page.locator("#expandInteraction").click();
+    await expect(reader).toHaveAttribute("data-mode", "expanded");
+    await expect(reader).toContainText(answer);
+    assert.equal(await reply.evaluate(node => node.isConnected), true, "Maximize keeps the actual authorized reply owner");
+    if (process.env.WIRE_READER_PROOFS) {
+        await mkdir(process.env.WIRE_READER_PROOFS, { recursive: true });
+        for (const theme of ["light", "dark"]) {
+            await chooseTheme(page, theme);
+            await page.screenshot({ path: path.join(process.env.WIRE_READER_PROOFS, `combined-${theme}-retained-reply.png`) });
+        }
+    }
+    await page.locator("#expandInteraction").click();
+    assert.equal(await reader.evaluate(node => node.getBoundingClientRect().width), readingWidth + 32);
+    assert.equal(await reply.evaluate(node => node.isConnected), true);
     assert.doesNotMatch(await reader.innerText(), /Automatic scores|AI quality|Saved check details|Local checks do not|Completion-evidence checks|Saved AI review|Personal feedback|Your feedback/i);
     await expect(reader.locator('[data-reader-section="reviews"],[data-feedback-dimension],.assessment-feedback-dialog')).toHaveCount(0);
     if (process.env.WIRE_AI_REMOVAL_PROOFS) {

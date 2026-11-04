@@ -19,9 +19,19 @@ export const sidebarStyles = `
 .workspace-utilities .theme-control {flex:none}
 .header-inner .theme-control {margin-left:0}
 html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
-.app-sidebar {position:fixed;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:196px;padding:16px 12px;background:var(--paper);border-right:1px solid transparent;box-shadow:var(--navigation-sidebar-shadow);overflow-y:auto;overscroll-behavior:contain}
-.navigation-content {display:flex;flex-direction:column;gap:24px}
-.navigation-collapse {display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0 0 12px;padding:10px;border:1px solid transparent;border-radius:var(--radius-control);background:var(--paper);color:var(--ink);box-shadow:none}
+.app-sidebar {position:fixed;display:flex;flex-direction:column;z-index:2;top:var(--app-header-height,76px);bottom:0;left:0;width:max-content;min-width:248px;padding:16px 12px;background:var(--paper);border-right:1px solid transparent;box-shadow:var(--navigation-sidebar-shadow);overflow-y:auto;overscroll-behavior:contain}
+.navigation-content {display:flex;flex:1 0 auto;flex-direction:column;gap:24px}
+.navigation-content>* {flex-shrink:0}
+.navigation-workspace>.navigation-group-label {font-weight:var(--weight-regular)}
+.navigation-content>.analyze-tools {margin-top:0;padding-top:0;border-top:0}
+.app-sidebar #analyzeTools .analyze-tool-action {white-space:nowrap}
+.navigation-footer {position:relative;display:grid;grid-template-columns:minmax(44px,1fr) 44px;align-items:center;gap:8px;contain:inline-size;margin-top:auto;padding-top:12px;border-top:1px solid var(--surface-divider)}
+.navigation-footer>#wireAccountEntry {grid-column:1;grid-row:1;min-width:0;margin:0}
+.navigation-footer>.primary-navigation {grid-column:2;grid-row:1}
+.navigation-footer .wire-account-entry {width:100%;padding-top:0}
+.navigation-footer .primary-navigation a {width:44px;gap:0}
+.navigation-footer .navigation-label {width:0;opacity:0}
+.navigation-collapse {display:flex;flex:none;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0 0 12px;padding:10px;border:1px solid transparent;border-radius:var(--radius-control);background:var(--paper);color:var(--ink);box-shadow:none}
 .navigation-collapse:hover {--pill-hover-border:transparent;background:var(--hover);border-color:transparent}
 .navigation-collapse:active {background:var(--pill-pressed);border-color:transparent}
 .navigation-collapse:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
@@ -29,6 +39,9 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 :root[data-navigation=collapsed] .app-sidebar .primary-navigation a {gap:0;width:44px}
 :root[data-navigation=collapsed] .app-sidebar .navigation-label {width:0;opacity:0}
 :root[data-navigation=collapsed] .app-sidebar .navigation-group-label {width:0;height:0;padding-block:0;opacity:0}
+:root[data-navigation=collapsed] .app-sidebar .navigation-footer {grid-template-columns:44px}
+:root[data-navigation=collapsed] .app-sidebar .navigation-footer>.primary-navigation {grid-column:1;grid-row:2}
+:root[data-navigation=collapsed] .app-sidebar .navigation-footer:has(>#wireAccountEntry[hidden])>.primary-navigation {grid-row:1}
 .navigation-label,.navigation-group-label {overflow:hidden}
 .app-sidebar[data-navigation-moving] {overflow-x:hidden}
 :root .app-sidebar[data-navigation-moving] .primary-navigation a {width:auto}
@@ -51,6 +64,10 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 #workspace>:not(#homeView),#homeView>.chart-actions,#homeView>.supporting {max-width:1384px}
 .navigation-toggle {display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;padding:10px}
 .navigation-drawer {margin:0;inset:0 auto 0 0;width:min(304px,calc(100vw - 16px));max-width:none;height:100dvh;max-height:100dvh;border:0;border-right:1px solid transparent;border-radius:0;padding:20px 12px;background:var(--paper);color:var(--ink);box-shadow:var(--navigation-sidebar-shadow)}
+.navigation-drawer[open] {display:flex;flex-direction:column}
+.navigation-drawer>.drawer-heading,.navigation-drawer>#drawerBrand {flex-shrink:0}
+#drawerContent {display:flex;flex:1 0 auto;flex-direction:column;min-width:0}
+#drawerContent>.navigation-content {min-width:0}
 .navigation-drawer .drawer-heading {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--rule)}
 .navigation-drawer .drawer-heading h2 {flex:1 1 7rem;min-width:0}
 .navigation-drawer .drawer-heading>button {margin-inline-start:auto}
@@ -60,6 +77,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 .navigation-drawer::backdrop {background:var(--scrim)}
 @media(forced-colors:active) {
  .app-sidebar,.navigation-drawer {border-right-color:CanvasText;box-shadow:none}
+ .navigation-footer {border-top-color:CanvasText}
 }
 @media(prefers-reduced-motion:no-preference) {
  .navigation-drawer[open]::backdrop {animation:navigation-scrim 180ms ease-out}
@@ -92,7 +110,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 @container (min-width:560px) {.format-choices {grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media (min-width:700px) and (max-width:999px) {.report-options {grid-template-columns:minmax(0,1fr)}}
 @media (min-width:700px) and (max-width:999px) {
- .app-sidebar {width:max-content;min-width:176px;padding:16px 10px}
+ .app-sidebar {width:max-content;min-width:228px;padding:16px 10px}
  body>main {width:calc(100% - var(--app-sidebar-width,176px));margin-left:var(--app-sidebar-width,176px);padding:24px 20px 48px}
  .page-heading {align-items:start;flex-direction:column}
  .page-actions {justify-content:start}

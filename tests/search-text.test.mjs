@@ -108,11 +108,16 @@ async function setFixtureTitle(context, bundle, title) {
     const file = bundle.files["product-report.html"], manifestFile = bundle.files["coverage-and-redaction-manifest.json"];
     const html = (await fs.readFile(file, "utf8")).replace(/<title>[^<]*<\/title>/u, `<title>${title}</title>`);
     const manifest = JSON.parse(await fs.readFile(manifestFile, "utf8"));
+    delete manifest.title;
     manifest.files["product-report.html"] = { sha256: reportHash(html), bytes: Buffer.byteLength(html) };
     const bytes = JSON.stringify(manifest);
     await fs.writeFile(file, html);
     await fs.writeFile(manifestFile, bytes);
-    await updateBoardState(context, state => { state.exports.find(entry => entry.bundleId === bundle.bundleId).manifestHash = reportHash(bytes); });
+    await updateBoardState(context, state => {
+        const entry = state.exports.find(entry => entry.bundleId === bundle.bundleId);
+        delete entry.title;
+        entry.manifestHash = reportHash(bytes);
+    });
 }
 
 test("generated saved HTML title-only and real report body extraction match POWER with original source and target", async t => {

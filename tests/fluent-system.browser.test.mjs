@@ -7,7 +7,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
-import { fixture, exportCatalogFor, chooseTheme, openActivitySessions, privateFixture } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, openActivitySessions, privateFixture, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { startServer } from "../lib/server.mjs";
@@ -38,7 +38,7 @@ async function setup(t) {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-fluent-system'; style-src 'unsafe-inline'; font-src data:; connect-src 'self'; base-uri 'none'");
-            return res.end(renderHtmlShell("a".repeat(64), "fluent-system"));
+            return res.end(renderHtmlShell("a".repeat(64), "fluent-system", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         requests.push(req.url);
         res.setHeader("Content-Type", "application/json");

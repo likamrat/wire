@@ -15,7 +15,10 @@ import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { assessmentSource } from "../lib/assessment-read-model.mjs";
 import { reportContents, reportActivityActionGeometry } from "./report-journey-helpers.mjs";
 
-for (const lostSaveResponse of [false, true]) test(`normal paired report, all formats and frozen reopen${lostSaveResponse ? " after lost save response" : ""}`, { timeout: 120000 }, async t => {
+for (const lostSaveResponse of [false, true]) test(lostSaveResponse
+    ? "paired report recovers its lost Save reply without replay and reopens exact HTML/JSON"
+    : "normal paired report, all formats and frozen reopen", { timeout: 120000 }, async t => {
+    const formats = lostSaveResponse ? ["html", "json"] : ["html", "pdf", "json", "markdown"];
     const fixture = periodFixture();
     fixture.records[0].toolCalls.find(call => call.toolCallId === "period-calendar").requestArgs = { entityUrls: ["/me/calendarView"] };
     const assessed = qualityDisplayFixture({ records: fixture.records, judgments: ["pass", "fail", "pass", "unassessed", "error"], finalDuration: null }).state;
@@ -47,7 +50,8 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     });
     await page.route("**/*", route => {
         const request = route.request(), url = new URL(request.url());
-        const allowed = ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+        const allowed = ["/api/session", "/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/assessment/detail",
+            "/api/report-artifacts/list",
             "/api/evaluation/automatic/summary", "/api/period-comparison", "/api/preview", "/api/privacy-review", "/api/export", "/api/cancel-preview", "/api/report/open"];
         if (url.origin !== new URL(server.url).origin || request.method() !== "GET" && !allowed.includes(url.pathname)) {
             denied.push(url.pathname); return route.abort();
@@ -64,8 +68,8 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     ]) await page.getByLabel(label, { exact: true }).fill(value);
     await page.locator("#applyPeriodComparison").click();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (3)");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (4)");
+    await expect(page.locator('[data-period-side="baseline"]')).toContainText("3 calls across 2 interactions");
+    await expect(page.locator('[data-period-side="later"]')).toContainText("4 calls across 4 interactions");
     const live = comparisons.at(-1);
     assert.ok(live);
     assert.equal((await loadBoardState(context)).exports.length, 0);
@@ -84,7 +88,7 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     assert.ok((await page.getByRole("button", { name: "Change comparison in Analyze", exact: true }).boundingBox()).height >= 44);
     await expect(page.locator("#reportPopulationNote")).toHaveText("Copy text does not combine the measured activity in the two periods.");
     const footerMeasurements = [];
-    for (const theme of ["light", "dark"]) for (const [width, text] of [[1365, 100], [375, 200]]) {
+    if (!lostSaveResponse) for (const theme of ["light", "dark"]) for (const [width, text] of [[1365, 100], [375, 200]]) {
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(text => { document.documentElement.style.fontSize = text + "%"; }, text);
@@ -127,16 +131,14 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     await reportContents(page);
     await expect(page.locator("#contextSidebarBody #reportStage2")).toBeVisible();
     await expect(page.locator("#reportList input")).toHaveCount(0);
-    await page.locator("#reportList .request-link").first().click();
+    await page.locator("#reportList .request-card-open").first().click();
     await expect(page.locator("#requestReportToggle")).toBeHidden();
     await expect(page.locator("#requestReportTitle")).toContainText("fixed paired periods");
     await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
     await expect(page.locator("#contextSidebarBody #reportStage2")).toBeVisible();
     await expect(page.locator('[data-period-report-side="baseline"]')).toContainText("3 matching Work IQ tool calls");
     await expect(page.locator('[data-period-report-side="later"]')).toContainText("4 matching Work IQ tool calls");
-    await page.locator("#formatOptions input[value=json]").check();
-    await page.locator("#formatOptions input[value=markdown]").check();
-    await page.locator("#formatOptions input[value=pdf]").check();
+    for (const format of formats.filter(format => format !== "html")) await page.locator(`#formatOptions input[value=${format}]`).check();
     assert.deepEqual(errors, []);
     await expect(page.locator("#exportBtn")).toBeEnabled();
     const previewResponse = page.waitForResponse(response => response.url().endsWith("/api/preview"), { timeout: 60000 });
@@ -150,23 +152,24 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     assert.equal(preview.snapshot.evaluationFacts, undefined);
     const frame = page.frameLocator(".report-frame");
     await expect(frame.getByRole("heading", { name: preview.title, level: 1, exact: true })).toBeVisible();
-    await expect(frame.getByRole("heading", { name: "Activity", level: 2, exact: true })).toBeVisible();
-    await expect(frame.locator("#baseline")).not.toContainText("Work IQ sign-in was required");
-    await expect(frame.locator("#baseline")).not.toContainText("synthetic-quality-fixture");
+    await expect(frame.getByRole("heading", { name: "Recorded outcomes", level: 2, exact: true })).toBeVisible();
+    await expect(frame.locator("#period-a-results")).toBeAttached();
+    await expect(frame.locator("#period-a-results")).not.toContainText("Work IQ sign-in was required");
+    await expect(frame.locator("body")).not.toContainText("synthetic-quality-fixture");
     assert.ok(preview.records.every(record => !record.toolCalls.length));
-    const outputPage = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
-    await outputPage.route("**/*", route => { denied.push(route.request().url()); return route.abort(); });
-    await outputPage.setContent(preview.previewHtml);
-    if (process.env.WIRE_PERIOD_REPORT_PROOFS) {
+    if (process.env.WIRE_PERIOD_REPORT_PROOFS && !lostSaveResponse) {
+        const outputPage = await browser.newPage({ viewport: { width: 1100, height: 1000 } });
+        await outputPage.route("**/*", route => { denied.push(route.request().url()); return route.abort(); });
+        await outputPage.setContent(preview.previewHtml);
         await mkdir(process.env.WIRE_PERIOD_REPORT_PROOFS, { recursive: true });
         await outputPage.screenshot({ path: path.join(process.env.WIRE_PERIOD_REPORT_PROOFS, "frozen-output-light.png") });
         await outputPage.setViewportSize({ width: 375, height: 950 });
         await outputPage.locator("html").evaluate(node => { node.style.fontSize = "200%"; node.dataset.evidenceTheme = "dark"; });
         await outputPage.screenshot({ path: path.join(process.env.WIRE_PERIOD_REPORT_PROOFS, "frozen-output-dark-375-200.png") });
+        await outputPage.close();
     }
-    await outputPage.close();
 
-    for (const theme of ["light", "dark"]) {
+    if (!lostSaveResponse) for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await page.setViewportSize({ width: 375, height: 950 });
         const zoom = await page.addStyleTag({ content: "html{font-size:200%}" });
@@ -203,13 +206,42 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     if (lostSaveResponse) {
         await expect(page.getByRole("button", { name: "Check save status", exact: true })).toBeVisible();
+        const entered = Promise.withResolvers(), release = Promise.withResolvers();
+        let heldRequest;
+        t.after(() => release.resolve());
+        await page.route("**/api/snapshot", async route => {
+            heldRequest = route.request();
+            const response = await route.fetch();
+            entered.resolve();
+            await release.promise;
+            await route.fulfill({ response });
+        }, { times: 1 });
+        const staleRead = page.waitForResponse(response => response.request() === heldRequest);
         await page.getByRole("button", { name: "Check save status", exact: true }).click();
+        await entered.promise;
+        const newerRead = page.waitForResponse(response => response.url().endsWith("/api/snapshot")
+            && response.request() !== heldRequest);
+        await page.evaluate(() => window.dispatchEvent(new Event("online")));
+        await (await newerRead).finished();
+        await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+        release.resolve(); await (await staleRead).finished();
+        await expect(page.locator("#reportJourneyError")).toContainText("Saved history is unavailable");
+        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "blocked");
+        assert.equal(requests.filter(route => route === "/api/export").length, 1);
+        const acceptedActivity = await page.locator("#activityList .request-card-open").first().elementHandle();
+        assert.ok(acceptedActivity, "The accepted activity frame exists before receipt recovery.");
+        await page.getByRole("button", { name: "Check save status", exact: true }).click();
+        await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+        assert.equal(await page.locator("#activityList .request-card-open").first()
+            .evaluate((node, original) => node === original, acceptedActivity), true,
+        "Receipt recovery publishes the file inventory without replacing the accepted activity frame.");
     } else saved = await (await savedResponse).json();
     assert.equal(saved.error, undefined, saved.error);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     assert.equal(requests.filter(route => route === "/api/export").length, 1);
     const state = await loadBoardState(context), entry = state.exports[0];
     assert.equal(state.exports.length, 1);
+    assert.equal(entry.bundleId, preview.bundleId, "Recovery identifies the original prepared report, not a new Save.");
     assert.equal(entry.kind, "report"); assert.equal(entry.reportType, "period-comparison");
     const filesBefore = new Map(await Promise.all(Object.entries(entry.files).map(async ([name, file]) => [name, await readFile(file)])));
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
@@ -217,9 +249,9 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
     await expect(page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: entry.title, level: 1, exact: true })).toBeVisible();
     await assert.rejects(loadSavedReportSource(context, state, entry.bundleId), /two frozen cohorts/);
     const inventory = await createSavedArtifactDescriptor(context)(state, { artifactKind: "report", artifactId: entry.bundleId });
-    assert.equal(inventory.files.length, 5);
+    assert.equal(inventory.files.length, formats.length + 1);
     const extracted = {};
-    for (const format of ["html", "json", "markdown", "pdf"]) {
+    for (const format of formats) {
         const document = await readSavedReportFile(context, state, entry.bundleId, format);
         const text = (await extractReportFile(document)).content;
         extracted[format] = text;
@@ -228,23 +260,25 @@ for (const lostSaveResponse of [false, true]) test(`normal paired report, all fo
         assert.match(text, /33\.33/); assert.match(text, /25/);
         assert.match(text, /America\/New_York|New York/);
     }
-    const task = getDocument({ data: new Uint8Array(filesBefore.get("product-report.pdf")), useSystemFonts: false, disableFontFace: true, fontExtraProperties: true });
     const fonts = [];
-    try {
-        const document = await task.promise;
-        for (let index = 1; index <= document.numPages; index++) {
-            const page = await document.getPage(index), viewport = page.getViewport({ scale: 1 }), operators = await page.getOperatorList();
-            for (const id of new Set(operators.fnArray.flatMap((op, i) => op === OPS.setFont ? [operators.argsArray[i][0]] : []))) {
-                const font = page.commonObjs.get(id);
-                assert.equal(font.missingFile, false); assert.ok(font.data?.byteLength > 0 || font.isType3Font);
-                fonts.push({ name: font.name, bytes: font.data?.byteLength ?? 0, type3Glyphs: font.isType3Font });
+    if (!lostSaveResponse) {
+        const task = getDocument({ data: new Uint8Array(filesBefore.get("product-report.pdf")), useSystemFonts: false, disableFontFace: true, fontExtraProperties: true });
+        try {
+            const document = await task.promise;
+            for (let index = 1; index <= document.numPages; index++) {
+                const page = await document.getPage(index), viewport = page.getViewport({ scale: 1 }), operators = await page.getOperatorList();
+                for (const id of new Set(operators.fnArray.flatMap((op, i) => op === OPS.setFont ? [operators.argsArray[i][0]] : []))) {
+                    const font = page.commonObjs.get(id);
+                    assert.equal(font.missingFile, false); assert.ok(font.data?.byteLength > 0 || font.isType3Font);
+                    fonts.push({ name: font.name, bytes: font.data?.byteLength ?? 0, type3Glyphs: font.isType3Font });
+                }
+                for (const item of (await page.getTextContent()).items.filter(item => item.str?.trim())) {
+                    assert.ok(item.transform[4] >= -1 && item.transform[4] + item.width <= viewport.width + 2, `page ${index} horizontal clipping: ${item.str}`);
+                    assert.ok(item.transform[5] >= 0 && item.transform[5] <= viewport.height + 1, `page ${index} vertical clipping`);
+                }
             }
-            for (const item of (await page.getTextContent()).items.filter(item => item.str?.trim())) {
-                assert.ok(item.transform[4] >= -1 && item.transform[4] + item.width <= viewport.width + 2, `page ${index} horizontal clipping: ${item.str}`);
-                assert.ok(item.transform[5] >= 0 && item.transform[5] <= viewport.height + 1, `page ${index} vertical clipping`);
-            }
-        }
-    } finally { await task.destroy(); }
+        } finally { await task.destroy(); }
+    }
     for (const [name, file] of Object.entries(entry.files)) assert.deepEqual(await readFile(file), filesBefore.get(name), "reopen/corpus never rewrites saved bytes");
     assert.deepEqual(errors, []); assert.deepEqual(denied, []);
     if (process.env.WIRE_PERIOD_REPORT_PROOFS) {

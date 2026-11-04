@@ -191,7 +191,7 @@ test("one visible calendar range changes every widget, headline, row and current
     const comparison = await (await compared).json();
     assert.deepEqual(comparison.periods.baseline.analytics.rows.map(row => row.toolCallId), ["f-0"]);
     assert.deepEqual(comparison.periods.later.analytics.rows.map(row => row.toolCallId), ["d-0"]);
-    await page.getByRole("button", { name: "Stop comparing", exact: true }).click(); await ready(page);
+    await page.locator('.primary-navigation [data-nav="analyze"]').click(); await ready(page);
     await scope(["a-0", "a-1"], 1, 1);
     await choose("custom");
     await page.locator("#fromFilter").fill("2026-04-02"); await page.locator("#toFilter").fill("2026-04-02");

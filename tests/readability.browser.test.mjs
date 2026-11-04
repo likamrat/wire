@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture as sourceFixture, exportCatalogFor, chooseTheme } from "./helpers.mjs";
+import { fixture as sourceFixture, exportCatalogFor, chooseTheme, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
 
 const endpoints = ["/me/messages", "/me/events", "/me/drive", "/teams", "/me/people", "/planner/tasks", "/search/query", "/unknown"];
@@ -60,7 +60,7 @@ async function fixture(run, source = records, sourceCoverage = coverage) {
     const server = createServer(async (req, res) => {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "readability-fixture"));
+            res.end(renderHtmlShell("a".repeat(64), "readability-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
             return;
         }
         requests.push(req.url);
@@ -172,8 +172,8 @@ test("exact numeric columns reconcile all six activity layers, chart groups, gap
         const headers = await page.locator("#countTable thead th").allTextContents();
         assert.equal(headers[1], "Total");
         if (layer === "code-reference") assert.deepEqual(headers.slice(1), ["Total"], "Code references have no invented outcome columns");
-        else if (layer === "tool") assert.deepEqual(headers.slice(1), ["Total", "Worked", "Tool failed", "No result recorded", "Partly worked"]);
-        else assert.ok(headers.includes("HTTP 2xx") && !headers.includes("Worked"));
+        else if (layer === "tool") assert.deepEqual(headers.slice(1), ["Total", "Tool completed", "Tool failed", "No result recorded", "Partial completion"]);
+        else assert.ok(headers.includes("HTTP 2xx") && !headers.includes("Tool completed"));
         if (layer === "reported-api") {
             assert.ok(headers.includes("Error result") && headers.includes("No status / error"));
             assert.match(await page.locator("#countTable caption").innerText(), /or a reported error code/);

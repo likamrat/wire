@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { privateFixture, navigateMain, selectActivityOption, revealStoredRefresh, chooseTheme, restoreLegacySearch } from "./helpers.mjs";
+import { privateFixture, navigateMain, selectActivityOption, revealStoredRefresh, chooseTheme, restoreLegacySearch, revealAnalyzeRecords } from "./helpers.mjs";
 import { chooseReportScope, reportContents, cancelReportPreview } from "./report-journey-helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 
@@ -90,7 +90,7 @@ test("normal Analyze entry directly opens exact interactions and restores query,
     await page.locator("#homeInsights").scrollIntoViewIfNeeded();
     await capture(page, "analyze-desktop-interaction-insights", "#homeInsights");
     await page.locator("#analyzeReviewDetails > summary").click();
-    await page.locator("#resultsLink").focus(); await page.keyboard.press("Enter");
+    await revealAnalyzeRecords(page);
     await expect(page.locator("#activityTitle")).toBeFocused();
     assert.match(page.url(), /#analyze$/);
     await restoreLegacySearch(page, privateQuery);
@@ -213,20 +213,20 @@ test("legacy scopes, Calls paging, retained stale results and narrow keyboard en
     await page.setViewportSize({ width: 375, height: 900 });
     await page.evaluate(() => scrollTo(0, 0));
     await capture(page, "analyze-narrow-dark-overview");
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await capture(page, "analyze-narrow-dark-results", "#activityView");
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     await frames(page);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    for (const node of await page.locator("#navigationToggle,#resultsLink").all()) {
+    for (const node of await page.locator("#navigationToggle").all()) {
         assert.ok((await node.boundingBox()).height >= 44);
         await expect(node).toBeVisible();
     }
     await page.locator(".skip-link").focus(); await page.keyboard.press("Enter");
     await expect(page.locator("#pageTitle")).toBeFocused();
     await capture(page, "analyze-narrow-dark-200-overview");
-    await page.locator("#resultsLink").focus(); await page.keyboard.press("Enter");
-    await expect(page.locator("#activityTitle")).toBeFocused();
+    await revealAnalyzeRecords(page);
+    await expect(page.locator("#activityListSummary")).toBeFocused();
     await expect(page.locator("#analyzeModes")).toBeInViewport();
     await page.locator("#activityList .request-link").first().focus();
     const target = (await rowIds(page))[0];
@@ -248,20 +248,20 @@ test("list population summaries stay concise without changing paging, filtered b
     const app = await setup(t), { page } = app;
     page.screenshot = () => { throw new Error("No captures in the list entry and Back proof."); };
     const summary = page.locator("#activityListSummary");
-    await expect(summary).toHaveText("10 interactions with 12 matching Work IQ tool calls.");
+    await expect(summary).toHaveText("10 interactions with 12 matching Work IQ tool calls");
     await expect(page.locator("#activityPager")).toContainText("1-8 of 10 interactions");
     const first = await rowIds(page);
     await page.locator('#activityList [data-view-key="request:parity-request-1"] input').check();
     await page.locator("#activityPager").getByRole("button", { name: "Next", exact: true }).click(); await ready(page);
     assert.deepEqual(sorted([...first, ...await rowIds(page)]), Array.from({ length: 10 }, (_, i) => `parity-request-${i}`));
-    await expect(summary).toHaveText("10 interactions with 12 matching Work IQ tool calls.");
+    await expect(summary).toHaveText("10 interactions with 12 matching Work IQ tool calls");
     await restoreLegacySearch(page, privateQuery);
-    await expect(summary).toHaveText("9 interactions with 11 matching Work IQ tool calls.");
+    await expect(summary).toHaveText("9 interactions with 11 matching Work IQ tool calls");
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
-    await expect(summary).toHaveText("3 interactions with 4 matching Work IQ tool calls.");
+    await expect(summary).toHaveText("3 interactions with 4 matching Work IQ tool calls");
     assert.deepEqual(sorted(await rowIds(page)), ["parity-request-0", "parity-request-3", "parity-request-6"]);
     await selectActivityOption(page, "toolFilter", "workiq-ask"); await ready(page);
-    await expect(summary).toHaveText("1 interaction with 1 matching Work IQ tool call.");
+    await expect(summary).toHaveText("1 interaction with 1 matching Work IQ tool call");
     await expect(page.locator(".card-result-scope")).toHaveText("1 of 3 Work IQ tool calls in this view");
     await expect(page.locator("#activitySelectionCompact")).toContainText("1 in report");
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);

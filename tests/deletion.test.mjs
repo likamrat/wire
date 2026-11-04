@@ -168,7 +168,7 @@ test("HTTP deletion is panel-bound, stale-safe, explicit, and status never repla
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     t.after(() => runtime.close());
     const origin = runtime.url.slice(0, -1);
-    const connect = async () => (await (await fetch(origin + "/api/session", { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: "{}" })).json()).capability;
+    const connect = async () => (await (await fetch(origin + "/api/session", { method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" }, body: "{}" })).json()).capability;
     const one = await connect(), two = await connect();
     const request = async (capability, endpoint, input) => {
         const response = await fetch(origin + "/api/deletion/" + endpoint, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "X-Board-Capability": capability }, body: JSON.stringify(input) });

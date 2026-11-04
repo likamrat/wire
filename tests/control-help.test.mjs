@@ -40,11 +40,14 @@ test("Tool latency help uses the recorded tool boundary and retains distinct fin
 
 test("category filter help explains available choices without inventing service evidence", () => {
     const tool = help.categoryGuide(["Discovery", "Search", "Mail", "Multiple workloads", "Unknown"]);
+    assert.match(tool, /One group per call; Service involved also finds a service within a multi-service call/);
+    assert.match(help.charts.activityCategory, /Calls spanning several services are grouped as More than one service/);
+    assert.doesNotMatch(help.categoryGuide(["Mail"], "reported-api"), /One group per call/);
     assert.match(tool, /Discovery:.*not data execution/);
     assert.match(tool, /Search and retrieval: may span sources/);
     assert.match(tool, /Mail names recorded service targets, not hidden traffic/);
     assert.match(tool, /More than one service: one call, different services/);
-    assert.match(tool, /Service not shown: insufficient service evidence, not failure/);
+    assert.match(tool, /Service not shown: the record does not identify a service; this is not a failure result/);
     assert.doesNotMatch(help.categoryGuide(["Mail", "Calendar"]), /Discovery|Search and retrieval|Service not shown/);
     assert.doesNotMatch(help.categoryGuide(["Discovery", "Mail"], "reported-api"), /Discovery/);
     const restored = Function(`return (${createControlHelp.toString()})((${createServiceCategories.toString()})(), (${createAssessmentWording.toString()})());`)();
@@ -99,9 +102,11 @@ test("all six evidence layers disclose the unit and its critical limit", () => {
 });
 
 test("report and action guidance preserves source, privacy and selection boundaries", () => {
-    assert.match(help.reportScopes.current, /every page.*complete eligible evidence/);
-    assert.match(help.reportScopes.selected, /outside this view.*complete eligible evidence/);
-    assert.match(help.reportScopes.all, /regardless.*no new scan/);
+    assert.match(help.reportScopes.current, /Full interactions.*across all pages/);
+    assert.match(help.reportScopes.selected, /other pages.*outside Analyze filters.*included/);
+    assert.match(help.reportScopes.all, /Analyze dates, filters and search do not limit/);
+    assert.equal(Object.hasOwn(help.actions, "exportBtn"), false, "The visible Prepare report action does not need a tutorial tooltip.");
+    assert.doesNotMatch(help.facts["Snapshot revision"], /invalidates.*prepared report/);
     assert.match(help.reviewStates.ready_to_export, /not privacy-approved/);
     assert.match(help.actions.removeRequest, /selection only.*remain/);
     assert.match(help.actions.download, /not your current choices/);

@@ -31,6 +31,8 @@ test("complete reader actions stay beside their subject without changing default
         const unchangedPreview = access.render(source, { key: "list", contentFirst: true });
         const explicitPreview = access.render(source, { key: "list", inlinePreview: false });
         const completeWithInline = access.render(source, { key: "default", mode: "complete", initialOpen: true, inlinePreview: true });
+        const joinedText = "Owner13579bdf-2468-4ace-9bdf-0123456789ab";
+        const joinedPreview = access.render({ status: "full", text: joinedText }, { key: "joined" }).querySelector(".full-text-preview");
         ordinary.id = "ordinary";
         content.id = "story";
         document.querySelector("main").append(ordinary, content);
@@ -42,12 +44,16 @@ test("complete reader actions stay beside their subject without changing default
             defaultOrder: [...ordinary.children].map(node => node.className),
             contentOrder: [...content.children].map(node => node.className),
             contentControlsInHeader: content.querySelector(".full-text-reader-actions").parentElement.className,
+            joinedPreviewExact: joinedPreview.textContent === joinedText,
+            joinedIdentifier: joinedPreview.querySelector(".text-preview-identifier")?.textContent,
         };
     });
 
     assert.equal(shape.defaultSame, true);
     assert.equal(shape.previewSame, true);
     assert.equal(shape.inlineOptInOnly, true);
+    assert.equal(shape.joinedPreviewExact, true);
+    assert.equal(shape.joinedIdentifier, "13579bdf-2468-4ace-9bdf-0123456789ab");
     assert.equal(shape.defaultControlsInHeader, "full-text-header");
     assert.deepEqual(shape.defaultOrder, ["full-text-header", "full-text-unavailable", "full-text-body", "reader-details"]);
     assert.deepEqual(shape.contentOrder, ["full-text-header", "full-text-unavailable", "full-text-body"]);

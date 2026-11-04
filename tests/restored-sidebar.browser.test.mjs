@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { privateFixture, fixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, setLegacyTimeBucket } from "./helpers.mjs";
+import { privateFixture, fixture, chooseTheme, navigateMain, navigateSettings, selectActivityOption, setLegacyTimeBucket, revealAnalyzeRecords } from "./helpers.mjs";
 import { scopeRecords } from "./analysis-scope-fixture.mjs";
 import { reportContents } from "./report-journey-helpers.mjs";
 import { lucideIcon } from "../web/ux-icons.mjs";
@@ -57,7 +57,7 @@ async function setup(t, options = {}, records = scopeRecords(), browserOptions =
         try {
             assert.deepEqual(errors, []);
             assert.equal(providerCalls, 0);
-            assert.ok(requests.every(url => ["/api/session", "/api/snapshot", "/api/collection/status", "/api/assessment/detail",
+            assert.ok(requests.every(url => ["/api/session", "/api/snapshot", "/api/collection/status", "/api/assessment/detail", "/api/assessment/consent",
                 "/api/assessment/overview", "/api/evaluation/automatic/summary", "/api/report-artifacts/list",
                 "/api/search/events"].includes(url)), `Unexpected mutation or provider request: ${requests}`);
             const after = await loadBoardState(context);
@@ -77,7 +77,7 @@ test("production shell restores the three destinations in the left sidebar, not 
         ["reports", "Reports", "clipboard-list"],
         ["settings", "Settings", "settings"],
     ];
-    const navigation = await page.locator(".primary-navigation").elementHandle();
+    const navigation = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
     async function inspectNavigation() {
         for (const [route, name, asset] of destinations) {
             const link = page.locator(`.primary-navigation a[data-nav="${route}"]`);
@@ -106,6 +106,7 @@ test("production shell restores the three destinations in the left sidebar, not 
     await expect(collapse(page)).toHaveAttribute("aria-expanded", "true");
     assert.equal(await page.locator("#wireSearch").count(), 1);
     for (const theme of ["light", "dark"]) {
+        await navigateMain(page, "analyze"); await ready(page);
         await chooseTheme(page, theme);
         await workspaceSearch(page);
         await inspectNavigation();
@@ -139,6 +140,158 @@ test("production shell restores the three destinations in the left sidebar, not 
     await inspectNavigation();
     await page.keyboard.press("Escape");
     await expect(page.locator("#navigationToggle")).toBeFocused();
+});
+
+test("Settings retains access to the existing Analyze sidebar actions", async t => {
+    const { page } = await setup(t);
+    await navigateMain(page, "settings"); await ready(page);
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        for (const section of ["connection", "privacy", "display", "troubleshooting"]) {
+            await navigateSettings(page, section);
+            await expect(page.locator('#navigationFooter [data-nav="settings"]')).toHaveAttribute("aria-current", "page");
+            for (const id of ["comparePeriods", "pageAction"]) {
+                await expect(page.locator("#analyzeTools #" + id)).toBeVisible();
+                await expect(page.locator("#" + id)).toHaveCount(1);
+            }
+            await expect(page.locator("#analyzeToolbar")).toBeHidden();
+        }
+        await navigateSettings(page, "connection");
+        await capture(page, `settings-tools-${theme}`);
+    }
+    await page.reload(); await ready(page);
+    await expect(page.locator("#resultsLink")).toHaveCount(0);
+    await navigateMain(page, "collection-status"); await ready(page);
+    for (const id of ["comparePeriods", "pageAction"]) await expect(page.locator("#analyzeTools #" + id)).toBeVisible();
+});
+
+test("Workspace destinations and contextual tools precede the bottom Settings utility without an account", async t => {
+    const { page } = await setup(t);
+    const main = page.getByRole("navigation", { name: "Main navigation", exact: true });
+    const utility = page.getByRole("navigation", { name: "Utility navigation", exact: true });
+    const settings = utility.locator('[data-nav="settings"]');
+    await expect(main.locator("a")).toHaveText(["Analyze", "Reports"]);
+    await expect(page.locator(".navigation-workspace > h2")).toHaveText("Workspace");
+    await expect(utility.locator("a")).toHaveText(["Settings"]);
+    await expect(page.locator('#navigationContent [data-nav="settings"]')).toHaveCount(1);
+    await expect(page.locator("#wireAccountEntry")).toBeHidden();
+    const host = await page.locator("#wireAccountEntry").elementHandle();
+    await expect(page.locator("#activityUpdateToggle,#analyzeUpdateEntry")).toHaveCount(0);
+    const content = await page.locator("#navigationContent").elementHandle();
+    const placement = async () => {
+        const metrics = await page.evaluate(() => {
+            const rect = id => document.getElementById(id).getBoundingClientRect().toJSON();
+            const footer = document.getElementById("navigationFooter");
+            const parent = footer.closest("dialog") || footer.closest("aside");
+            return { tools: rect("analyzeTools"), footer: rect("navigationFooter"), settings: footer.querySelector("a").getBoundingClientRect().toJSON(),
+                parent: parent.getBoundingClientRect().toJSON(), padding: parseFloat(getComputedStyle(parent).paddingBottom),
+                content: rect("navigationContent"), overflow: document.documentElement.scrollWidth - innerWidth };
+        });
+        assert.ok(metrics.footer.y >= metrics.tools.bottom + 24, "One section gap keeps actions distinct from utilities");
+        assert.ok(Math.abs(metrics.footer.bottom - metrics.parent.bottom + metrics.padding) <= 1, "Settings anchors the bottom without an account");
+        assert.ok(metrics.settings.width >= 44 && metrics.settings.height >= 44);
+        assert.ok(metrics.overflow <= 1);
+        return metrics;
+    };
+    const measured = [];
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        for (const collapsed of [false, true]) {
+            if (await collapse(page).getAttribute("aria-expanded") === String(collapsed)) await collapse(page).click();
+            await settled(page);
+            measured.push({ theme, collapsed, ...await placement() });
+            await capture(page, `grouping-${theme}-${collapsed ? "collapsed" : "expanded"}`);
+        }
+    }
+    await collapse(page).click(); await settled(page);
+    await main.locator('[data-nav="reports"]').focus();
+    await page.keyboard.press("Tab"); await expect(page.locator("#comparePeriods")).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(page.locator("#pageAction")).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(settings).toBeFocused();
+    await page.keyboard.press("Enter"); await ready(page);
+    await expect(settings).toHaveAttribute("aria-current", "page");
+    await navigateSettings(page, "display");
+    const settingsUrl = page.url();
+    await collapse(page).click(); await settled(page);
+    assert.equal(page.url(), settingsUrl, "Collapsing does not change the selected Settings tab");
+    await page.goBack(); await ready(page);
+    await expect(settings).toHaveAttribute("aria-current", "page");
+    await page.goBack(); await ready(page);
+    await expect(main.locator('[data-nav="analyze"]')).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#activityUpdateToggle,#analyzeUpdateEntry")).toHaveCount(0);
+    assert.equal(await host.evaluate(node => node === document.querySelector("#navigationFooter #wireAccountEntry")), true);
+    assert.equal(await content.evaluate(node => node === document.getElementById("navigationContent")), true);
+    await settings.click(); await ready(page);
+    await expect(page.locator('[data-settings-section="connection"]')).toBeVisible();
+    await page.goto(settingsUrl); await ready(page);
+    await page.reload(); await ready(page);
+    await expect(settings).toHaveAttribute("aria-current", "page");
+    await expect(page.locator('[data-settings-section="display"]')).toBeVisible();
+    await navigateMain(page, "analyze"); await ready(page);
+    // Reload replaces the document; breakpoint moves must not replace the new hosts.
+    const reloadedHost = await page.locator("#wireAccountEntry").elementHandle();
+    const reloadedContent = await page.locator("#navigationContent").elementHandle();
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.locator("#navigationToggle").click();
+    await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
+    await placement();
+    assert.equal(await reloadedHost.evaluate(node => node === document.querySelector("#navigationDrawer #wireAccountEntry")), true);
+    assert.equal(await reloadedContent.evaluate(node => node === document.querySelector("#navigationDrawer #navigationContent")), true);
+    await settings.click(); await ready(page);
+    await expect(page.locator("#navigationDrawer")).toBeHidden();
+    await expect(page.locator("#connectionTitle")).toBeFocused();
+    await page.locator("#navigationToggle").click();
+    await expect(settings).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#navigationToggle")).toBeFocused();
+    await host.dispose(); await content.dispose();
+    if (proofs) await writeFile(path.join(proofs, "sidebar-grouping.json"), JSON.stringify(measured, null, 2));
+});
+
+test("sidebar groups remain scroll-reachable without overlap at narrow and 200% sizes", async t => {
+    const { page } = await setup(t);
+    const measurements = [];
+    for (const [width, height, scale] of [[1440, 900, 2], [768, 900, 2], [390, 800, 1], [390, 640, 2]]) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        for (const theme of ["light", "dark"]) {
+            await chooseTheme(page, theme);
+            if (width < 700) {
+                await page.locator("#navigationToggle").click();
+                await page.waitForFunction(() => !document.querySelector("#navigationDrawer").getAnimations().length);
+            }
+            const parent = page.locator(width < 700 ? "#navigationDrawer" : "#sidebar");
+            for (const selector of ['nav [data-nav="analyze"]', 'nav [data-nav="reports"]', "#comparePeriods", "#pageAction", 'nav [data-nav="settings"]']) {
+                const control = parent.locator(selector);
+                await control.focus();
+                const metrics = await control.evaluate(node => {
+                    const rect = node.getBoundingClientRect(), surface = node.closest("dialog,aside").getBoundingClientRect();
+                    return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, surface: surface.toJSON(),
+                        visibleHit: node.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)),
+                        labelFits: node.scrollWidth <= node.clientWidth + 1 };
+                });
+                assert.ok(metrics.top >= metrics.surface.top && metrics.bottom <= metrics.surface.bottom, `${selector}: keyboard scrolls the complete target into view`);
+                assert.ok(metrics.left >= metrics.surface.left && metrics.right <= metrics.surface.right,
+                    `${width}/${height}/${scale}/${theme}/${selector}: ${JSON.stringify(metrics)}`);
+                assert.equal(metrics.visibleHit, true, `${selector}: not covered by another group`);
+                assert.equal(metrics.labelFits, true, `${selector}: no horizontal clipping`);
+            }
+            const layout = await page.evaluate(() => {
+                const groups = [...document.querySelectorAll("#navigationContent > *")].filter(node => node.checkVisibility());
+                return { overlap: groups.some((node, index) => index && node.getBoundingClientRect().top < groups[index - 1].getBoundingClientRect().bottom),
+                    overflow: document.documentElement.scrollWidth - innerWidth };
+            });
+            assert.equal(layout.overlap, false);
+            assert.ok(layout.overflow <= 1);
+            measurements.push({ width, height, scale, theme, ...layout });
+            await capture(page, `grouping-${theme}-${width}-${scale}x-settings`);
+            if (width < 700) {
+                await page.keyboard.press("Escape");
+                await expect(page.locator("#navigationToggle")).toBeFocused();
+            }
+        }
+    }
+    if (proofs) await writeFile(path.join(proofs, "sidebar-reachability.json"), JSON.stringify(measurements, null, 2));
 });
 
 test("collapsed brand centers the painted W in the header cell, not just its transparent image box", async t => {
@@ -190,6 +343,78 @@ test("collapsed brand centers the painted W in the header cell, not just its tra
         // Exclude the divider; a one-raster-pixel allowance covers paint antialiasing.
         assert.ok(Math.abs(paint.center.x - cellCenter.x) <= 1, "W paint is horizontally centered");
         assert.ok(Math.abs(paint.center.y - cellCenter.y) <= 1, "W paint is vertically centered");
+    }
+});
+
+for (const [theme, width, textScale, motion] of [
+    ["light", 1440, 1, "no-preference"], ["dark", 1440, 1, "reduce"],
+    ["light", 768, 2, "reduce"], ["dark", 768, 2, "no-preference"],
+]) test(`Analyze tool labels stay on one line throughout collapse, expansion and reversal (${theme}/${width}/${textScale}x)`, async t => {
+    const { page } = await setup(t);
+    await page.setViewportSize({ width, height: 1000 });
+    await chooseTheme(page, theme);
+    await page.emulateMedia({ reducedMotion: motion });
+    await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, textScale);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const trace = await page.evaluate(async () => {
+        const rail = document.getElementById("sidebar"), toggle = document.getElementById("navigationCollapse");
+        const frame = () => new Promise(resolve => requestAnimationFrame(resolve)), samples = [];
+        let phase = "initial", running = true;
+        function sample() {
+            const rows = [...document.querySelectorAll("#analyzeTools .analyze-tool-action")].filter(node => node.checkVisibility()).map(node => {
+                const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT), lines = new Set();
+                while (walker.nextNode()) {
+                    if (!walker.currentNode.textContent.trim()) continue;
+                    const range = document.createRange(); range.selectNodeContents(walker.currentNode);
+                    for (const rect of range.getClientRects()) if (rect.width > 0 && rect.height > 0) lines.add(Math.round(rect.y));
+                }
+                return { id: node.id, lines: lines.size, height: node.getBoundingClientRect().height };
+            });
+            samples.push({ phase, width: rail.getBoundingClientRect().width, rows });
+            if (running) requestAnimationFrame(sample);
+        }
+        async function settle() {
+            for (let i = 0; i < 120; i++) {
+                await frame();
+                if (i > 1 && !rail.hasAttribute("data-navigation-moving")) return;
+            }
+            throw new Error("Sidebar motion did not settle");
+        }
+        sample();
+        for (const next of ["collapse", "expand"]) { phase = next; toggle.click(); await settle(); }
+        phase = "reverse-collapse"; toggle.click();
+        for (let i = 0; i < 4; i++) await frame();
+        phase = "reverse-expand"; toggle.click(); await settle();
+        running = false; await frame();
+        return samples;
+    });
+    const label = `${theme}-${width}-${textScale}x-${motion}`;
+    if (proofs) {
+        await writeFile(path.join(proofs, `tool-label-motion-${label}.json`), JSON.stringify(trace, null, 2));
+        await collapse(page).click(); await settled(page);
+        await collapse(page).click();
+        await page.evaluate(async () => {
+            for (const selector of ["#sidebar", "#shellBrand"]) for (const animation of document.querySelector(selector).getAnimations({ subtree: true })) {
+                animation.pause(); animation.currentTime = 40;
+            }
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        });
+        await page.screenshot({ path: path.join(proofs, `tool-label-expand-40ms-${label}.png`) });
+        await page.evaluate(() => {
+            for (const selector of ["#sidebar", "#shellBrand"]) for (const animation of document.querySelector(selector).getAnimations({ subtree: true })) animation.play();
+        });
+        await settled(page);
+    }
+    for (const phase of ["collapse", "expand", "reverse-collapse", "reverse-expand"]) {
+        const samples = trace.filter(frame => frame.phase === phase);
+        assert.ok(new Set(samples.map(frame => Math.round(frame.width))).size > 1, `${phase}: actual intermediate widths`);
+        const wrapped = samples.find(frame => frame.rows.some(row => row.lines > 1));
+        assert.equal(wrapped, undefined, `${label}/${phase}: tool labels must not reflow during the glide: ${JSON.stringify(wrapped)}`);
+        for (const row of samples.flatMap(sample => sample.rows)) {
+            const endpoints = [trace[0], trace.filter(sample => sample.phase === "collapse").at(-1), trace.at(-1)];
+            const height = Math.max(...endpoints.flatMap(sample => sample.rows.filter(item => item.id === row.id).map(item => item.height)));
+            assert.ok(row.height <= height, `${label}/${phase}/${row.id}: no transient height growth`);
+        }
     }
 });
 
@@ -291,7 +516,7 @@ test("both built-in sidebars paint actual frames under the unchanged native brow
     const traces = [];
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         const trace = await page.evaluate(async () => {
             const rail = document.querySelector("#sidebar"), panel = document.querySelector("#contextSidebar");
             const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -457,7 +682,7 @@ test("trusted sidebar reversals return the scrolled selected record to its origi
     });
     assert.ok(await page.evaluate(() => document.documentElement.clientWidth < innerWidth),
         "Native desktop scrollbar geometry is present, unlike the default headless overlay");
-    await page.getByRole("link", { name: "View records", exact: true }).click();
+    await revealAnalyzeRecords(page);
     const selected = page.locator("#activityList .request-row").nth(1);
     async function inspectSelection(select = false) {
         await selected.locator(".request-card-open").click();
@@ -763,7 +988,7 @@ test("brand focus, touch, reduced motion and breakpoint interruption retain sett
 test("narrow overlay restores focus, traps keyboard and preserves the desktop choice under either host policy", async t => {
     const { page } = await setup(t);
     await collapse(page).click(); await settled(page);
-    const navigation = await page.locator(".primary-navigation").elementHandle();
+    const navigation = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
     await page.locator('nav [data-nav="analyze"]').focus();
     await page.setViewportSize({ width: 375, height: 900 });
     const trigger = page.locator("#navigationToggle"), drawer = page.locator("#navigationDrawer");

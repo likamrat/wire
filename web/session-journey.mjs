@@ -11,9 +11,9 @@ export function createSessionJourney() {
     }
     function returnRoute(value, includeSourceReturn = false) {
         if (!value || !["analyze", "reports", "settings", "collection-status"].includes(value.view)) return null;
-        const keys = ["view", "layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService",
+        const keys = ["view", "layer", "chart", "bucket", "range", "from", "to", "source", "tool", "services", "includeMissingService",
             "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "page", "expanded",
-            "origin", "issues", "section", "setting", "task", "mode", "callSort", "compare", "aFrom", "aTo", "bFrom", "bTo", "search", "inspect", "order"];
+            "origin", "issues", "section", "setting", "task", "mode", "callSort", "compare", "aFrom", "aTo", "bFrom", "bTo", "search", "inspect", "order", "nativeGroup"];
         const saved = Object.fromEntries(Object.entries(value)
             .filter(([key, entry]) => keys.includes(key) && ["string", "number", "boolean"].includes(typeof entry)));
         if (value.localSearch) saved.localSearch = Object.fromEntries(["settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch"]
@@ -32,7 +32,7 @@ export function createSessionJourney() {
     function open(route, sessionId, result) {
         if (result) return canonical({ ...route, view: "analyze", session: sessionId, request: undefined, page: undefined, result, origin: undefined });
         const next = { view: "analyze", session: sessionId };
-        for (const key of ["layer", "range", "from", "to", "service", "scope", "authors"]) if (route[key]) next[key] = route[key];
+        for (const key of ["layer", "range", "from", "to", "source", "service", "scope", "authors"]) if (route[key]) next[key] = route[key];
         return next;
     }
     function reportIds(catalog, sessionId) {
@@ -49,7 +49,9 @@ export function createSessionJourney() {
         if (typeof value.request !== "string" || !value.request) return null;
         const origin = { ...returnRoute({ ...value, view: "analyze" }, true), view: "request", request: value.request,
             returnToResults: underlying(value) };
-        for (const key of ["call", "callRevision"]) if (typeof value[key] === "string") origin[key] = value[key];
+        for (const key of ["call", "callRevision", "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal"]) {
+            if (typeof value[key] === "string") origin[key] = value[key];
+        }
         return origin;
     }
     return { canonical, open, reportIds, returnRoute, underlying, savedRoute, savedOrigin };

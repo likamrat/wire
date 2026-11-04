@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, fixture, chooseTheme, navigateMain, navigateSettings, openActivitySessions, selectActivityOption, revealStoredRefresh, openSourceEditor } from "./helpers.mjs";
+import { exportCatalogFor, fixture, chooseTheme, navigateMain, navigateSettings, openActivitySessions, selectActivityOption, revealStoredRefresh, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { chooseReportScope, reportContents } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
@@ -49,7 +49,7 @@ async function setup(t) {
     const server = createServer(async (request, response) => {
         if (request.method === "GET") {
             response.setHeader("Content-Type", "text/html");
-            response.end(renderHtmlShell("a".repeat(64), "hover-fixture"));
+            response.end(renderHtmlShell("a".repeat(64), "hover-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
             return;
         }
         requests.push(request.url);
@@ -199,7 +199,6 @@ test("component family hover matrix uses mounted routes and their effective pain
         await inspect(".view-switch button[aria-pressed=true]", "selected chart tab");
         await inspect(".view-switch button[aria-pressed=false]", "unselected chart tab");
         await inspect("[data-select-id=dateFilter]", "period select trigger");
-        await inspect("[data-select-id=dateFilter]", "unified date trigger");
         await inspect("#outcomeFilter-control", "result filter");
         for (const tone of ["success", "failure", "unknown"]) {
             await selectActivityOption(page, "outcomeFilter", tone); await ready();

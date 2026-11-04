@@ -47,6 +47,18 @@ test("Discovery reads consistently across whole charts, filters and action detai
     });
     for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
         await page.setViewportSize({ width, height: 1000 });
+        await page.goto(runtime.url + "#analyze"); await ready(page);
+        await chooseTheme(page, theme);
+        await page.goto(runtime.url + "#request?request=discovery-categories&range=capture"); await ready(page);
+        const targets = await page.locator('[data-reader-section="activity"] .reader-call-toggle').evaluateAll(nodes =>
+            nodes.map(node => ({ id: node.closest("[data-tool-call-id]").dataset.toolCallId, height: node.getBoundingClientRect().height })));
+        assert.deepEqual(targets.map(target => target.id).sort(), record.toolCalls.map(call => call.toolCallId).sort());
+        assert.equal(targets.length, 8, "All recorded discovery and execution calls have a real disclosure target");
+        assert.ok(targets.every(target => target.height >= 44), `${theme}/${width}: native reader disclosure targets`);
+    }
+    t.diagnostic("Current discovery disclosure target guard passed for eight distinct calls in all four theme/width states.");
+    for (const theme of ["light", "dark"]) for (const width of [1280, 375]) {
+        await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
         await page.goto(runtime.url + "#home?range=capture&chart=workload"); await ready(page);
         await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent === "8 Work IQ tool calls");
@@ -76,8 +88,6 @@ test("Discovery reads consistently across whole charts, filters and action detai
         assert.match(await page.locator('[data-tool-call-id="invented-call-2"]').textContent(), /Agent discovery[\s\S]*No result recorded/);
         assert.match(await page.locator('[data-tool-call-id="invented-call-3"]').textContent(), /Copilot assistance[\s\S]*Not in this record/);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        const sizes = await page.locator(".journey-item > details > summary").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
-        assert.ok(sizes.every(height => height >= 44));
         await screenshot(page, `${theme}-${width}-whole-detail`);
         if (width === 375) {
             await page.evaluate(() => { document.documentElement.style.fontSize = "32px"; });
@@ -95,7 +105,7 @@ test("Discovery reads consistently across whole charts, filters and action detai
     await screenshot(page, "discovery-filtered-three");
     await selectActivityOption(page, "outcomeFilter", ["partial"]); await ready(page);
     await page.waitForFunction(() => document.querySelector("#meaningMatched").textContent.startsWith("0 "));
-    assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /No activity in this applied view/);
+    assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /No matching activity/);
     await screenshot(page, "discovery-zero");
     await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);
     await selectActivityOption(page, "serviceFilter", "Unknown"); await ready(page);
@@ -104,7 +114,6 @@ test("Discovery reads consistently across whole charts, filters and action detai
     await selectActivityOption(page, "layerFilter", "reported-api"); await ready(page);
     assert.doesNotMatch(page.url(), /service=Discovery/);
     assert.equal(await page.locator('.filter-field:has(#serviceFilter) .help-heading label').textContent(), "Category");
-    assert.equal(await page.locator("#chartTitle").textContent(), "Service categories");
     assert.equal(await page.locator("#chartTitle").textContent(), "Service categories");
     assert.match(await page.locator("#meaningMatched").textContent(), /^1 tool-returned API result$/);
     assert.equal(await page.locator('#serviceFilter option[value="Discovery"]').count(), 0);
@@ -118,7 +127,7 @@ test("Discovery reads consistently across whole charts, filters and action detai
     assert.match(await singleAction.innerText(), /Data service\s+Not applicable/);
     assert.equal(await page.locator("#requestView dt").filter({ hasText: /^Purpose$/ }).count(), 1);
     assert.doesNotMatch(await page.locator("#requestView").innerText(), /Service not identified|API metadata: None recorded|API path\s+Not recorded/);
-    assert.match(await page.locator(".full-request-results").textContent(), /1 Work IQ tool call[\s\S]*1 Worked/);
+    assert.match(await page.locator(".full-request-results").textContent(), /1 Work IQ tool call[\s\S]*1 Tool completed/);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await screenshot(page, `${theme}-single-discovery`);

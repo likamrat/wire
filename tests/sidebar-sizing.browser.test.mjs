@@ -50,14 +50,14 @@ async function showNavigation(page) {
         return document.querySelector(".primary-navigation")?.closest(narrow ? "#navigationDrawer" : "#sidebar")
             && document.querySelector("#navigationToggle").hidden === !narrow;
     });
-    if (!await page.locator(".primary-navigation").isVisible()) await page.locator("#navigationToggle").click();
+    if (!await page.locator("#navigationContent").isVisible()) await page.locator("#navigationToggle").click();
 }
 
 async function measure(page) {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    return page.locator(".primary-navigation").evaluate(nav => {
+    return page.locator("#navigationContent").evaluate(nav => {
         const box = rect => Object.fromEntries(["x", "y", "width", "height"].map(key => [key, rect[key]]));
-        return [...nav.querySelectorAll("a")].map(node => {
+        return [...nav.querySelectorAll(".primary-navigation a")].map(node => {
             const style = getComputedStyle(node), rect = node.getBoundingClientRect();
             const range = document.createRange();
             range.selectNodeContents(node.querySelector(".navigation-label"));
@@ -168,7 +168,7 @@ test("all five navigation rows keep geometry across themes, sizes, pointer and c
             readable(await measure(page), label, scale);
             matrix.push({ theme, width, scale, route, rows: current });
         }
-        if (proofs) await page.locator(".primary-navigation").screenshot({ path: path.join(proofs, `navigation-${theme}-${width}-${scale}x.png`) });
+        if (proofs) await page.locator("#navigationContent").screenshot({ path: path.join(proofs, `navigation-${theme}-${width}-${scale}x.png`) });
     }
     // A narrow embedded document in a wide host must follow its own viewport, not the host width.
     const host = await page.context().browser().newPage({ viewport: { width: 2560, height: 1000 }, reducedMotion: "reduce" });
@@ -191,7 +191,7 @@ test("all five navigation rows keep geometry across themes, sizes, pointer and c
 
 test("native row edges, Tab/Enter, deep links, Back/Forward and polling preserve navigation identity and size", { timeout: 60000 }, async t => {
     const { page, runtime } = await setup(t);
-    const nav = await page.locator(".primary-navigation").elementHandle();
+    const nav = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await link(page, "home").click(); await ready(page);
@@ -228,7 +228,7 @@ test("native row edges, Tab/Enter, deep links, Back/Forward and polling preserve
     await page.goto(runtime.url + "#collection-status"); await ready(page);
     assert.equal(await link(page, "collection-status").getAttribute("aria-current"), "page", "Fresh deep link");
     await page.setViewportSize({ width: 375, height: 1000 });
-    assert.equal(await page.locator(".primary-navigation").isVisible(), false);
+    assert.equal(await page.locator("#navigationContent").isVisible(), false);
     await page.locator("#navigationToggle").click();
     assert.equal(await nav.evaluate(node => node === document.querySelector("#navigationDrawer .primary-navigation")), true, "Same nodes in drawer");
     await page.keyboard.press("Escape");

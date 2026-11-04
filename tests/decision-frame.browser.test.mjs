@@ -11,7 +11,9 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 function frameMarkup() {
-    const shell = renderHtmlShell("a".repeat(64), "frame-proof");
+    const shell = renderHtmlShell("a".repeat(64), "frame-proof", {
+        schemaVersion: 1, mode: "unbound", runtimeId: "00000000-0000-4000-8000-000000000010",
+    });
     const start = shell.indexOf('<dialog id="deleteDialog"');
     return shell.slice(start, shell.indexOf("</dialog>", start) + 9);
 }
@@ -69,7 +71,6 @@ for (const theme of ["light", "dark"]) test(`activity decision lifecycle keeps $
     const operationId = "00000000-0000-4000-8000-000000000003";
     const counts = { records: 3, requestGroups: 2, toolCalls: 3, graphRecords: 0, diagnostics: 0, other: 0,
         localCopies: 2, savedReports: 4, savedComparisons: 1 };
-    const preserved = JSON.stringify({ counts, activity: ["synthetic-a", "synthetic-b", "synthetic-c"], saved: ["unchanged"] });
     const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 375, height: 1000 }, reducedMotion: "reduce" });
     const calls = [], errors = [];
     let release;
@@ -100,8 +101,12 @@ for (const theme of ["light", "dark"]) test(`activity decision lifecycle keeps $
         document.documentElement.dataset.evidenceTheme = theme;
         document.documentElement.style.fontSize = "200%";
         window.refreshes = 0;
+        const token = Object.freeze({});
+        const api = async (endpoint, input) => { const value = await window.syntheticDeletion(endpoint, input); if (value.failure) throw Error(value.failure); return value; };
+        api.publicationToken = () => token;
+        api.isCurrent = value => value === token;
         window.mountFlow({
-            api: async (endpoint, input) => { const value = await window.syntheticDeletion(endpoint, input); if (value.failure) throw Error(value.failure); return value; },
+            api,
             flow: window.createFlow(), timeContext: () => ({ timeZone: "UTC", locale: "en-US" }),
             ux: window.createUx(icons), onCommitted: async () => { window.refreshes++; return true; },
         });
@@ -168,7 +173,6 @@ for (const theme of ["light", "dark"]) test(`activity decision lifecycle keeps $
     await page.keyboard.press("Escape");
     assert.equal(await dialog.isVisible(), false);
     assert.equal(await page.evaluate(() => window.refreshes), 1);
-    assert.equal(JSON.stringify({ counts, activity: ["synthetic-a", "synthetic-b", "synthetic-c"], saved: ["unchanged"] }), preserved);
 });
 
 test("shared native frame stays neutral without an explicit destructive kind and permits unavailable recovery scope", async t => {

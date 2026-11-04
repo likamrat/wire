@@ -15,7 +15,7 @@ import { comparisonBodyHtml, renderComparisonHtml, renderComparisonMarkdown, rep
 import { exclusiveBoard, loadBoardState } from "../lib/store.mjs";
 import { startServer } from "../lib/server.mjs";
 import { retirementFixture } from "./ai-review-retirement-fixture.mjs";
-import { makeRatio } from "./report-comparison-fixtures.mjs";
+import { makeRatio } from "./assessment-contract-fixtures.mjs";
 
 function historicalFacts(state, projection) {
     const facts = structuredClone(buildReportFacts(state.evidence, state, { preparedAt: "2026-10-10T12:00:00.000Z" }).facts);

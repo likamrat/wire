@@ -23,7 +23,7 @@ async function ownedPanel(runtime, owner, query, types) {
 
 test("actual PDF typing coalesces newest text and cancel closes its owned extraction", { timeout: 60000 }, async t => {
     const parsers = [], guard = forbidSearchAi(t, { pdf: true, onPdf: child => parsers.push(child) });
-    const { runtime } = await searchFixture(t, { formats: ["pdf"] });
+    const { runtime } = await searchFixture(t, { formats: ["pdf"], reportTitles: ["Saved report"] });
     guard.connect(runtime);
     const a = await streamPanel(runtime), b = await streamPanel(runtime);
     t.after(async () => { await a.close(); await b.close(); });
@@ -37,6 +37,7 @@ test("actual PDF typing coalesces newest text and cancel closes its owned extrac
     }
     const result = await a.wait(event => event.event === "results" && event.requestId === 5);
     assert.equal(result.matches.receipt.mode, "text");
+    assert.equal(result.matches.total, 1);
     assert.equal(result.matches.hits[0].target.format, "pdf");
     assert.equal(a.events.some(event => event.event === "results" && [2, 3, 4].includes(event.requestId)), false);
     const receipt = result.matches.receipt;
@@ -150,9 +151,10 @@ test("one owned Open slot, Close waiting and backpressure prevent late or trunca
 test("frozen comparison Open remains exact-owner and cannot deliver bytes after Close", { timeout: 15000 }, async t => {
     const guard = forbidSearchAi(t), app = await searchFixture(t, { formats: ["json", "json"] });
     guard.connect(app.runtime);
-    await saveSearchComparison(app, ["json"]);
-    const a = await ownedPanel(app.runtime, "comparison-a", "Saved comparison", ["comparison"]);
-    await ownedPanel(app.runtime, "comparison-b", "Saved comparison", ["comparison"]);
+    const comparison = await saveSearchComparison(app, ["json"]);
+    const a = await ownedPanel(app.runtime, "comparison-a", comparison.title, ["comparison"]);
+    await ownedPanel(app.runtime, "comparison-b", comparison.title, ["comparison"]);
+    assert.equal(a.found.matches.total, 1);
     const input = { id: a.found.matches.hits[0].id, receipt: a.found.matches.receipt, openId: 1 };
     await assert.rejects(app.runtime.search.open("comparison-b", input), /stale-search-target/);
     const entered = Promise.withResolvers(), release = Promise.withResolvers();
@@ -189,7 +191,7 @@ test("actual permission revocation fences both owners before acknowledgment whil
     await a.wait(event => event.event === "fence" && event.epoch > activity.epoch);
     await b.wait(event => event.event === "fence" && event.epoch > reply.epoch);
     assert.equal((await b.api("/api/search/open", { id: reply.matches.hits[0].id, receipt: reply.matches.receipt, openId: 1 })).code, 409);
-    await a.api("/api/search/query", { query: "Saved report", requestId: 2, types: ["report"] });
+    await a.api("/api/search/query", { query: app.bundles[0].title, requestId: 2, types: ["report"] });
     const saved = await a.wait(event => event.event === "results" && event.requestId === 2);
     assert.equal(saved.status.corpus.state, "partial");
     assert.equal(saved.matches.total, 1);

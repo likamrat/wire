@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
-import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, revealStoredRefresh, exportCatalogFor, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, revealStoredRefresh, exportCatalogFor, restoreLegacySearch, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 import { contrast, measureChartPaint } from "./color-measurements.mjs";
 import { chooseReportScope } from "./report-journey-helpers.mjs";
@@ -43,7 +43,7 @@ async function setup(t, source = records()) {
     const server = createServer(async (req, res) => {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "breakdown-fixture")); return;
+            res.end(renderHtmlShell("a".repeat(64), "breakdown-fixture", UNBOUND_FIXTURE_BOOTSTRAP)); return;
         }
         let body = ""; for await (const chunk of req) body += chunk;
         const input = JSON.parse(body || "{}");
@@ -367,7 +367,7 @@ test("zero, tiny, empty and incompatible snapshots never fabricate a share or re
     await restoreLegacySearch(page, "NO_BREAKDOWN_MATCH"); await ready(page);
     await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", "0");
     assert.equal(await page.locator(".percentage-slice,.percentage-bar").count(), 0);
-    await expect(card(page, "tools")).toContainText("Percentages are not applicable");
+    await expect(card(page, "tools")).toContainText("No matching activity.");
     await expect(card(page, "tools").locator("tfoot")).toContainText("Not applicable");
     await capture(page, "empty-light");
 });
@@ -385,7 +385,7 @@ test("returned entries keep their own unit and accepted target refinement while 
     await expect(page.locator("#takeaway")).toContainText("1 of 1 Work IQ tool calls");
     await selectActivityOption(page, "layerFilter", "code-reference"); await ready(page);
     await expect(page.locator(".percentage-section")).toHaveAttribute("data-total", "0");
-    await expect(card(page, "outcomes")).toContainText("Percentages are not applicable");
+    await expect(card(page, "outcomes")).toContainText("No matching activity.");
     assert.equal(await page.locator(".percentage-slice,.percentage-bar").count(), 0);
 });
 

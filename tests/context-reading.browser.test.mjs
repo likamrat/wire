@@ -168,9 +168,10 @@ test("normal isolated source opens retained correction, retry and reply immediat
         .map(node => node.querySelector(".full-text-reader-actions").parentElement === node.querySelector(".full-text-header")
             && Boolean(node.querySelector(".full-text-reader-actions").compareDocumentPosition(node.querySelector(".full-text-body")) & Node.DOCUMENT_POSITION_FOLLOWING))),
     [true, true, true], "Prompt, correction and reply each keep their controls beside the subject, before its text");
-    await expect(page.locator("#reader-copy-notice")).toHaveCount(1);
+    await expect(page.locator("#reader-copy-notice")).toHaveCount(0);
     for (const copy of await timeline.getByRole("button", { name: /^Copy (prompt|response)$/ }).all()) {
-        await expect(copy).toHaveAttribute("aria-describedby", "reader-copy-notice");
+        const description = await copy.getAttribute("aria-describedby");
+        await expect(page.locator(`[id="${description}"]`)).toHaveText("Copies original text, unmasked.");
     }
     assert.doesNotMatch(await timeline.innerText(), /UNRELATED_RECORD|Separate synthetic topic|More unrelated synthetic/);
     assert.deepEqual(await timeline.locator(".full-text-content").allTextContents(),
@@ -196,7 +197,7 @@ test("normal isolated source opens retained correction, retry and reply immediat
     await expect(page.locator(".interaction-findings").first()).toContainText("Your feedback");
     await expect(page.locator(".interaction-findings").first()).toContainText("Work IQ sign-in was required");
     await expect(page.locator(".request-context-summaries .full-request-results").first()).toContainText("1 Tool failed");
-    await expect(page.locator(".request-context-summaries .full-request-results").nth(1)).toContainText("1 Worked");
+    await expect(page.locator(".request-context-summaries .full-request-results").nth(1)).toContainText("1 Tool completed");
     await expect(page.locator(".request-context-summaries .assessment-timing")).toHaveCount(0);
     await expect(page.locator(".request-context-timeline .response-timing")).toHaveCount(2);
     await expect(page.locator(".request-context-summaries .timing-summary")).toHaveCount(0);

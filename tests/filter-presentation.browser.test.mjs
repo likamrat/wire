@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "@playwright/test";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { chooseTheme, selectActivityOption, openAnalyzeFilters } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 import { createSelectControls } from "../web/select-control.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
@@ -40,6 +40,7 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
     await page.goto(app.runtime.url); await ready(page);
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
         await page.setViewportSize({ width, height: 1000 }); await chooseTheme(page, theme);
+        await openAnalyzeFilters(page);
         await page.evaluate(async scale => {
             document.documentElement.style.fontSize = `${scale * 100}%`;
             await document.fonts.ready;
@@ -47,7 +48,7 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
             scrollTo(0, 0);
         }, scale);
         const name = `${theme}-${width}-${scale}`, paper = theme === "light" ? "rgb(255, 255, 255)" : "rgb(32, 44, 59)";
-        const controlPaper = theme === "light" ? paper : "rgb(25, 35, 48)";
+        const controlPaper = paper;
         if (await page.locator("#filters .ux-help").count()) violations.push(`${name}: routine field info targets remain`);
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `context-${name}.png`), fullPage: true });
         if (!await page.locator("#moreFilters").evaluate(node => node.open)) await page.locator("#moreFiltersToggle").click();
@@ -130,7 +131,7 @@ test("all filter menus use clean paper surfaces and self-explanatory controls wi
         const activePaint = await page.locator("#filters .select-trigger[data-filter-active=true]").evaluateAll(nodes =>
             nodes.map(node => getComputedStyle(node, "::before").backgroundColor));
         assert.equal(activePaint.length, 2);
-        assert.ok(activePaint.every(color => color === controlPaper));
+        assert.ok(activePaint.every(color => color === controlPaper), `${name}: expected ${controlPaper}, got ${JSON.stringify(activePaint)}`);
         if (proofDir) {
             await page.evaluate(() => scrollTo(0, 0));
             await page.screenshot({ path: path.join(proofDir, `active-${name}.png`), fullPage: true });

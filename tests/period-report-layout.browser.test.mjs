@@ -40,6 +40,8 @@ for (const [name, callCount] of [["normal", null], ["long", 48], ["multi-page", 
     assert.deepEqual(preview.snapshot.periodComparison.comparison, value.comparison);
     assert.deepEqual(JSON.parse(preview.files["product-report.json"]), preview.snapshot);
     assert.equal(preview.files["product-report.md"], renderPeriodReportMarkdown(preview.snapshot));
+    assert.ok(preview.files["product-report.md"].indexOf("## Timing") <
+        preview.files["product-report.md"].indexOf("## Exact matching evidence"), "Read the timing comparison before the full record roster");
     assert.equal(manifest.periodComparisonHash, hash(JSON.stringify(preview.snapshot.periodComparison)));
     assert.ok(!preview.previewHtml.includes("--context-paper"), "Screen theme roles stay outside output");
     if (proof) {
@@ -67,6 +69,9 @@ for (const [name, callCount] of [["normal", null], ["long", 48], ["multi-page", 
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         const grid = await page.locator(".period-evidence-grid").first().evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length);
         assert.equal(grid, width === 390 ? 1 : 2);
+        if (width === 390) assert.equal(await page.locator(".comparison-whole-values").first()
+            .evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length), 1,
+        "Narrow whole-interaction values use a full line per period");
         views.push({ width, grid, rendered });
         if (proof) {
             for (const [name, selector] of [["overview", "#numbers"], ["evidence", "#evidence"], ["coverage", "#definitions"]]) {

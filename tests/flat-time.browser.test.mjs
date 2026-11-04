@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, restoreLegacySearch, setLegacyTimeBucket } from "./helpers.mjs";
+import { fixture, chooseTheme, selectActivityOption, automaticScoreOffSummary, restoreLegacySearch, setLegacyTimeBucket, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { scopeRecords, privateQuery } from "./analysis-scope-fixture.mjs";
 import { rgb, contrast, measureChartPaint } from "./color-measurements.mjs";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
@@ -44,7 +44,7 @@ async function setup(t, source = records(), zone = "America/Los_Angeles") {
     const server = createServer(async (req, res) => {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "flat-time-fixture")); return;
+            res.end(renderHtmlShell("a".repeat(64), "flat-time-fixture", UNBOUND_FIXTURE_BOOTSTRAP)); return;
         }
         let body = ""; for await (const chunk of req) body += chunk;
         const input = JSON.parse(body || "{}");
@@ -106,7 +106,7 @@ test("a populated sparse Analyze timeline keeps a steady plot in the complete ti
     await page.goto(app.runtime.url); await ready(page);
     await expect(page.locator("#activityCount")).toHaveText("15");
     await expect(page.locator(".time-column")).toHaveCount(1);
-    await expect(page.locator(".time-column")).toHaveAttribute("aria-label", /15 Work IQ tool calls.*11 worked.*4 tool failed/);
+    await expect(page.locator(".time-column")).toHaveAttribute("aria-label", /15 Work IQ tool calls.*11 tool completed.*4 tool failed/);
     const measure = () => page.locator(".chart-panel").evaluate(panel => {
         const box = node => {
             const rect = node.getBoundingClientRect();
@@ -247,7 +247,7 @@ test("source bins, shares, DST and partial bounds drill into the same Analyze ID
         for (const part of column.parts) assert.ok(Math.abs(part.height - part.count / column.maximum * column.plotHeight) < .01);
     }
     assert.equal(await page.locator(".time-zero svg,.time-zero rect").count(), 0);
-    await expect(page.locator(".time-column").nth(1)).toHaveAttribute("aria-label", /2 worked \(50%\).*1 tool failed \(25%\).*1 no result recorded \(25%\)/i);
+    await expect(page.locator(".time-column").nth(1)).toHaveAttribute("aria-label", /2 tool completed \(50%\).*1 tool failed \(25%\).*1 no result recorded \(25%\)/i);
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     const origin = page.url(), ids = analytics().timeSeries.points[1].drilldownIds;
     await page.locator(".time-column").nth(1).focus(); await page.keyboard.press("Enter"); await ready(page);

@@ -11,7 +11,7 @@ test("synthetic: installed assessment reads, guarded mutation receipts and contr
     t.after(() => runtime.close());
     let origin = runtime.url.slice(0, -1);
     const post = (route, body, capability) => fetch(origin + route, {
-        method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...(capability ? { "X-Board-Capability": capability } : {}) },
+        method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1", ...(capability ? { "X-Board-Capability": capability } : {}) },
         body: JSON.stringify(body),
     });
     const a = (await (await post("/api/session", {})).json()).capability;
@@ -71,7 +71,7 @@ test("synthetic: read-only status survives a failed post-seal revocation and a r
     t.after(() => runtime.close());
     let origin = runtime.url.slice(0, -1);
     const post = (route, body, capability) => fetch(origin + route, {
-        method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...(capability ? { "X-Board-Capability": capability } : {}) },
+        method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1", ...(capability ? { "X-Board-Capability": capability } : {}) },
         body: JSON.stringify(body), signal: AbortSignal.timeout(5000),
     });
     const owner = (await (await post("/api/session", {})).json()).capability;

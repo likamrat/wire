@@ -11,7 +11,7 @@ import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
 import { dimensionalIcons } from "../web/dimensional-icons.mjs";
 import { styles } from "../web/styles.mjs";
-import { chooseTheme } from "./helpers.mjs";
+import { chooseTheme, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WORKIQ_ICON_PROOF_DIR;
@@ -69,7 +69,7 @@ async function fixture(run) {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-icons'; style-src 'unsafe-inline'; font-src data:; connect-src 'self'; base-uri 'none'");
             return res.end(req.url === "/"
-                ? renderHtmlShell("a".repeat(64), "icons")
+                ? renderHtmlShell("a".repeat(64), "icons", UNBOUND_FIXTURE_BOOTSTRAP)
                 : `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles}</style></head><body><main><h1>Synthetic icon fixture</h1><button id="comparison">Open synthetic comparison</button></main><dialog aria-label="Synthetic comparison"></dialog><script nonce="icons">const icons=${JSON.stringify(uxIcons)};const createEvidenceUX=${createEvidenceUX.toString()};(${primitives.toString()})();</script></body></html>`);
         }
         res.setHeader("Content-Type", "application/json");

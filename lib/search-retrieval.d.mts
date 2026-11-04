@@ -1,4 +1,4 @@
-import type { CorpusEntry, CorpusReceipt, CorpusStatus, CorpusType } from "./search-corpus.mjs";
+import type { CorpusEntry, CorpusReceipt, CorpusStatus, CorpusType, NativeRetainedReader } from "./search-corpus.mjs";
 
 export type SearchMode = "text" | "unavailable";
 export interface SearchStatus {
@@ -53,4 +53,5 @@ export interface SearchRetrieval {
 export function createSearchRetrieval(session: object, options: {
     source: (state: object) => { available: boolean; sourceConfigRef: string | null; sourceConfigRevision: number };
     onInvalidate: (receipt: CorpusReceipt) => undefined;
+    nativeReader?: NativeRetainedReader;
 }): SearchRetrieval;

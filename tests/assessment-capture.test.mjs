@@ -91,6 +91,11 @@ test("synthetic: collector, consent, historical annotations, frozen reports and 
         sourceConfigRef: source.sourceConfigRef, sourceConfigRevision: source.sourceConfigRevision, confirmed: true,
     }, { source: state => collector.assessmentSource(state) });
     assert.equal(consent.data.consent.state, "enabled");
+    await collector.collectNow();
+    assert.equal((await loadBoardState(context)).personalEvaluation.captures.length, 0,
+        "Enabling saving does not rewind the consumed source cursor.");
+    assert.match(await readFile(file, "utf8"), /OFF_NOT_CAPTURED_SYNTHETIC/,
+        "Not saved in WIRE does not mean missing from original history.");
     await appendFile(file, JSON.stringify(event("assistant.message", { content: "ON_CAPTURED_SYNTHETIC_ANSWER" })) + "\n");
     const collected = await collector.collectNow();
     state = await loadBoardState(context);
@@ -178,7 +183,7 @@ test("synthetic: collector, consent, historical annotations, frozen reports and 
     collector = runtime.collector;
     const origin = runtime.url.slice(0, -1);
     const post = (route, body, capability) => fetch(origin + route, {
-        method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...(capability ? { "X-Board-Capability": capability } : {}) },
+        method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1", ...(capability ? { "X-Board-Capability": capability } : {}) },
         body: JSON.stringify(body), signal: AbortSignal.timeout(5000),
     });
     const capability = (await (await post("/api/session", {})).json()).capability;

@@ -46,14 +46,14 @@ test("every current interface excludes retired reviews, including menus, dialogs
     });
     async function save(owner) {
         const state = await loadBoardState(f.context);
-        const preview = await reports.preview(owner, undefined, { promptMode: "none", formats: ["html", "pdf", "json", "markdown"] },
+        const preview = await reports.preview(owner, undefined, { promptMode: "none", formats: ["html", "json"] },
             { kind: "all", revision: state.revision });
         await reports.review(owner, preview.previewId, true);
         return (await reports.confirm(owner, preview.previewId, true)).bundle;
     }
     const earlier = await save("fixture-owner");
     const later = await save("fixture-owner");
-    const prepared = await reports.previewComparison("fixture-owner", earlier.bundleId, later.bundleId, { formats: ["html", "pdf", "json", "markdown"] });
+    const prepared = await reports.previewComparison("fixture-owner", earlier.bundleId, later.bundleId, { formats: ["html", "json"] });
     await reports.reviewComparison("fixture-owner", prepared.previewId, true);
     const comparison = (await reports.confirmComparison("fixture-owner", prepared.previewId, true)).bundle;
     const frozenFiles = [earlier, later, comparison].flatMap(bundle => Object.values(bundle.files));
@@ -74,7 +74,11 @@ test("every current interface excludes retired reviews, including menus, dialogs
             await page.screenshot({ path: path.join(proofDir, "surface-" + name + ".png") });
         }
     }
-    async function expand(root) {
+    async function expand(root, frozen = false) {
+        if (frozen) {
+            await root.locator("details").evaluateAll(nodes => nodes.forEach(node => { node.open = true; }));
+            return;
+        }
         for (const details of await root.locator("details").all()) {
             if (await details.isVisible() && !await details.evaluate(node => node.open)) await details.locator(":scope > summary").click();
         }
@@ -83,20 +87,25 @@ test("every current interface excludes retired reviews, including menus, dialogs
 
     await page.goto(runtime.url); await ready();
     for (const label of ["Over time", "By category", "By path or operation"]) {
+        await page.locator("#openAnalyzeFilters").click();
         await page.getByRole("button", { name: label, exact: true }).click();
+        await page.locator("#closeAnalyzeFilters").click();
         await capture("dashboard-" + label.toLowerCase().replaceAll(" ", "-"));
     }
     await expect(page.locator("#analyzeReviewDetails,#homeInsights,#homeFindings")).toHaveCount(0);
     await capture("dashboard-no-reviews", page.locator("main"), true);
-    await page.locator("#meaning > summary").click();
+    await page.locator("#openChartReference").click();
     await capture("chart-data-and-definitions", page.locator("#meaning"));
-    await page.locator("#moreFilters > summary").click();
-    const filterIds = await page.locator('[data-select-id]').evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => node.dataset.selectId));
+    await page.locator("#closeChartReference").click();
+    await page.locator("#openAnalyzeFilters").click();
+    const filterIds = await page.locator('#analyzeFilterDialog [data-select-id]').evaluateAll(nodes => nodes.filter(node => node.checkVisibility()).map(node => node.dataset.selectId));
+    assert.ok(filterIds.length > 0);
     for (const id of filterIds) {
         await page.locator(`[data-select-id="${id}"]`).click();
         await capture("filter-" + id, page.locator(".select-popup"));
         await page.keyboard.press("Escape");
     }
+    await page.locator("#closeAnalyzeFilters").click();
     await expect(page.locator("[data-analyze-mode],#callSort")).toHaveCount(0);
     await capture("activity");
     await page.locator(".request-card-open").first().click();
@@ -104,7 +113,6 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await expect(page.locator("#contextSidebar .reader-call-duration").first()).toBeVisible();
     await expect(page.locator("#contextSidebar .reader-call-duration").first()).toContainText("Tool latency:");
     await expect(page.locator("#contextSidebar .reader-local-timing")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Expand all sections", exact: true })).toHaveCount(0);
     await capture("interaction-reader", page.locator("#contextSidebar"), true);
     await expect(page.locator('[data-reader-section="reviews"],[data-feedback-dimension],.assessment-feedback-dialog')).toHaveCount(0);
     await page.locator("#closeContextSidebar").click();
@@ -158,13 +166,13 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await capture("report-library", page.locator("#savedReportsPanel"));
     await page.getByRole("button", { name: "Open saved report", exact: true }).first().click();
     let body = page.frameLocator("iframe:visible").first().locator("body");
-    await expect(body).toContainText("Activity report");
-    await expand(body); await capture("saved-current-report", body);
+    await expect(body.getByRole("heading", { name: earlier.title, level: 1, exact: true })).toBeVisible();
+    await expand(body, true); await capture("saved-current-report", body);
     await navigateMain(page, "reports");
     await page.getByRole("button", { name: "Open saved comparison", exact: true }).click();
     body = page.frameLocator("iframe:visible").first().locator("body");
-    await expect(body).toContainText("Report comparison");
-    await expand(body); await capture("saved-current-comparison", body);
+    await expect(body.getByRole("heading", { name: comparison.title, level: 1, exact: true })).toBeVisible();
+    await expand(body, true); await capture("saved-current-comparison", body);
     await navigateMain(page, "reports"); await page.locator("#reportCreateLink").click();
     await capture("report-activity", page.locator("#reportsView"));
     await page.locator('[data-select-id="reportPromptAuthorFilter"]').click();
@@ -172,24 +180,29 @@ test("every current interface excludes retired reviews, including menus, dialogs
     await page.locator('[name=reportScope][value=all]').check();
     await page.getByRole("button", { name: "Continue to contents", exact: true }).click();
     await expand(page.locator("#reportStage2")); await capture("report-contents", page.locator("#reportStage2"));
-    await scanReport(page);
+    const preview = await scanReport(page);
     body = page.frameLocator("iframe:visible").first().locator("body");
-    await expect(body).toContainText("Activity report");
-    await expand(body); await capture("new-report-preview", body, true);
+    await expect(body.getByRole("heading", { name: preview.title, level: 1, exact: true })).toBeVisible();
+    await expand(body, true); await capture("new-report-preview", body, true);
     for (const label of [/^Text \(/, /^Files \(/]) {
         await page.getByRole("tab", { name: label }).click();
         await capture(label.source.startsWith("^Text") ? "report-text-review" : "report-files", page.locator("#reportReviewBody"));
     }
+    await page.getByRole("tab", { name: "Report", exact: true }).click();
     await page.getByRole("button", { name: "Back to contents", exact: true }).click();
 
     await navigateMain(page, "analyze");
-    const reset = page.getByRole("button", { name: "Reset Analyze", exact: true });
-    if (await reset.isVisible()) await reset.click();
+    await page.locator("#openAnalyzeFilters").click();
+    const reset = page.getByRole("button", { name: "Reset filters", exact: true });
+    await expect(reset).toBeEnabled();
+    await reset.click();
+    await page.locator("#closeAnalyzeFilters").click();
     await ready(); await page.locator("#comparePeriods").click();
     const day = new Date().toISOString().slice(0, 10);
     for (const id of ["comparisonAFrom", "comparisonATo", "comparisonBFrom", "comparisonBTo"]) await page.locator("#" + id).fill(day);
     await page.locator("#applyPeriodComparison").click();
-    await expect(page.locator("#periodComparison")).toContainText("Compare recorded timing");
+    await expect(page.locator("#periodComparisonResultsTitle")).toBeVisible();
+    await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await expand(page.locator("#periodComparison"));
     await capture("period-comparison", page.locator("#periodComparison"), true);
     assert.equal(await page.getByRole("button", { name: "Measure definitions", exact: true }).count(), 0);

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
@@ -54,6 +54,45 @@ async function begin(page) {
     await page.getByRole("button", { name: "Send public request", exact: true }).click();
 }
 
+test("shared shell confirmation exits through Close, Escape and native Back without dispatch", { timeout: 20000 }, async t => {
+    const { page, context, sent } = await setup(t);
+    page.setDefaultTimeout(5000);
+    await page.goto(new URL("#analyze", page.url()).href);
+    await page.locator("#workspace[aria-busy=false]").waitFor();
+    await page.evaluate(() => { location.hash = "#collection-status"; });
+    await page.locator("#collectionStatusView").waitFor();
+    if (!await page.locator("#recorderDiagnostics").evaluate(node => node.open)) await page.locator("#recorderDiagnostics > summary").click();
+    await page.waitForFunction(() => !document.getElementById("recordBtn").disabled);
+    const before = await loadBoardState(context), writes = [];
+    page.on("request", request => {
+        if (new URL(request.url()).pathname === "/api/record") writes.push(request.url());
+    });
+    for (const action of ["Close", "Escape", "Back"]) {
+        await page.locator("#recordBtn").click();
+        assert.equal(await page.locator("#overlay:modal").count(), 1);
+        if (action === "Close") await page.locator("#closeDialog").click();
+        else if (action === "Escape") {
+            await page.mouse.move(0, 0);
+            await page.locator("#closeDialog").focus();
+            await expect(page.locator("#evidence-tooltip")).toBeVisible();
+            assert.match(await page.locator("#closeDialog").getAttribute("aria-describedby"), /\bevidence-tooltip\b/);
+            await page.keyboard.press("Escape");
+            await expect(page.locator("#evidence-tooltip")).toBeHidden();
+            assert.equal(await page.locator("#overlay:modal").count(), 1, "Keyboard help owns the first Escape, not the dialog.");
+            await page.keyboard.press("Escape");
+        }
+        else await page.goBack();
+        await page.waitForFunction(() => !document.querySelector(":modal")).catch(error => {
+            throw new Error(`${action} did not dismiss the confirmation at ${page.url()}`, { cause: error });
+        });
+        if (action !== "Back") await page.waitForFunction(() => document.activeElement.id === "recordBtn");
+    }
+    assert.equal(await page.locator("#homeView").isVisible(), true);
+    assert.deepEqual(writes, []);
+    assert.deepEqual(sent, []);
+    assert.deepEqual(await loadBoardState(context), before);
+});
+
 test("metadata action shows pending feedback beside its button, not only above the page", { timeout: 20000 }, async t => {
     const { page, sent } = await setup(t);
     let release;
@@ -79,7 +118,7 @@ test("metadata action shows pending feedback beside its button, not only above t
 test("real click route recorder path persists exact outcomes without workplace counts, duplicates or navigation replay", { timeout: 40000 }, async t => {
     const { page, context, sent, respond, runtime } = await setup(t);
     const before = await loadBoardState(context);
-    assert.match(await page.locator("#pageIntro").innerText(), /approved local history collection/);
+    assert.match(await page.locator("#recorderPurpose").innerText(), /Test the HTTP recorder, not collection/);
     assert.match(await page.locator("#recorderPurpose").innerText(), /not needed/);
     assert.equal(sent.length, 0, "Opening diagnostics is read-only");
     const ids = [];
@@ -92,7 +131,7 @@ test("real click route recorder path persists exact outcomes without workplace c
         await navigateMain(page, "home");
         respond(reply);
         await page.waitForFunction(() => !document.querySelector("#recordBtn").disabled);
-        assert.match(page.url(), /#home/, "Completion must not navigate back or steal reading context");
+        assert.match(page.url(), /#analyze/, "Completion must not navigate back or steal reading context");
         await navigateMain(page, "collection-status");
         assert.match(await page.locator("#recorderStatus").innerText(), expected);
         assert.equal(sent.length, count);
@@ -196,7 +235,7 @@ test("offline activation stays uncertain, can read after reconnect, and never re
     await page.context().setOffline(true);
     await begin(page);
     await page.waitForFunction(() => document.querySelector("#recordBtn").textContent === "Check saved result");
-    assert.match(await page.locator("#recorderStatus").innerText(), /unavailable or timed out/);
+    assert.match(await page.locator("#recorderStatus").innerText(), /local runtime could not be reached or timed out/);
     await page.context().setOffline(false);
     await page.locator("#recordBtn").click();
     await page.waitForFunction(() => document.querySelector("#recorderStatus").textContent.includes("No saved result"));

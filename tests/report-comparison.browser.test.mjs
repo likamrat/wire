@@ -16,7 +16,7 @@ const ratio = (metric, pass) => ({
     basis: "user-assessment", aggregation: "pass-rate", boundary: "eligible-interactions", state: "available",
     coverage: { count: 100, eligible: 110 }, numerator: pass, denominator: 100,
 });
-function model(known = true) {
+function model(known = true, identityRelation = "same-namespace") {
     const report = (id, success, accuracy, trust) => ({
         schemaVersion: 1, bundleId: `export-${id}`, snapshotHash: id.repeat(64), disclosureReviewed: true, patternVersion: 1,
         metrics: { accuracy: ratio("accuracy", accuracy), "answer-trust": ratio("answer-trust", trust) },
@@ -27,7 +27,7 @@ function model(known = true) {
         }],
         scope: { selectionKind: "selected", timeZone: "UTC", collectionDefinition: "synthetic-fixture", callTimesAvailable: false, historyComplete: false },
     });
-    return compareFrozenReportFacts(report("a", 76, 25, 50), report("b", 88, 90, 75), { identityRelation: "same-namespace" });
+    return compareFrozenReportFacts(report("a", 76, 25, 50), report("b", 88, 90, 75), { identityRelation });
 }
 
 test("comparison uses the loaded font and remains readable across root-text sizes and themes", { timeout: 120000 }, async () => {
@@ -100,6 +100,9 @@ test("comparison uses the loaded font and remains readable across root-text size
         assert.equal(await inspect.evaluate(node => getComputedStyle(node).outlineStyle), "solid", "Comparison action retains keyboard focus");
         await inspect.click();
         assert.deepEqual(await page.evaluate(() => [window.inspected, window.inspectCount]), ["mail", 1]);
+        await page.evaluate(value => window.component.render(document.querySelector("#comparison"), value), model(true, "unknown"));
+        assert.match(await page.locator("#comparison").innerText(), /Overlap is unverified; the difference may include previously counted calls/);
+        assert.doesNotMatch(await page.locator("#comparison").innerText(), /The reports can be read side by side|Tool execution is separate from answer accuracy/);
         await page.evaluate(value => window.component.render(document.querySelector("#comparison"), value), model(false));
         assert.deepEqual(await page.locator(".comparison-score-value").allTextContents(), ["Not scored", "Not scored"]);
         await page.evaluate(() => window.component.clear(document.querySelector("#comparison")));

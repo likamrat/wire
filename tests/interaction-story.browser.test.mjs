@@ -56,10 +56,10 @@ test("a completed call without a saved reply is not three zero-score review card
     await page.waitForFunction(() => !document.querySelector("#requestContent .assessment-loading"));
     const reader = page.locator("#requestContent");
     while (await reader.locator("details:not([open]) > summary:visible").count()) await reader.locator("details:not([open]) > summary:visible").first().click();
-    await expect(reader.locator(".call-heading")).toContainText("1 Worked");
-    await expect(reader.locator(".interaction-response")).toContainText("No saved response.");
-    await expect(reader.locator(".interaction-response .reader-empty")).toHaveText("No saved response. Capture is off.");
-    await expect(reader.locator(".interaction-response .reader-response-note")).toHaveCount(0);
+    await expect(reader.locator(".call-heading .recorded-result-label")).toHaveText("Call 1 completed");
+    await expect(reader.locator(".interaction-response")).toContainText("Copilot reply");
+    await expect(reader.locator(".interaction-response .reader-empty")).toHaveText("No assistant reply was saved for this interaction.");
+    await expect(reader.locator(".interaction-response .reader-response-note")).toContainText("future replies");
     await expect(reader.locator(".recorded-arguments .ux-code-label")).toHaveText("Tool input (recorded)");
     await expect(reader.locator(".response-timing data")).toHaveAttribute("value", "114089");
     await expect(reader.locator(".assessment-check")).toHaveCount(0);

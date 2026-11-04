@@ -3,6 +3,18 @@ import assert from "node:assert/strict";
 import { createReportJourney } from "../web/report-journey.mjs";
 
 const preview = { previewId: "synthetic-preview", privacy: { allSelectedFieldsScanned: true } };
+
+test("an original native view can prepare with separate unknown All counts but cannot pretend to be GitHub interactions", () => {
+    const journey = createReportJourney();
+    journey.update({ requestCount: 0, nativeView: true, nativeConversationCount: null, scope: "all", scopeReady: true });
+    assert.equal(journey.go(2), true);
+    assert.equal(journey.snapshot().requestCount, 0);
+    assert.equal(journey.snapshot().nativeConversationCount, null);
+    journey.update({ nativeConversationCount: 0 });
+    assert.notEqual(journey.reason(3), "");
+    journey.update({ nativeConversationCount: 2 });
+    assert.ok(journey.beginScan() !== false);
+});
 function chosen(journey, count = 2) {
     journey.update({ requestCount: count, scopeReady: true, formats: ["html", "pdf", "json", "markdown"] });
 }

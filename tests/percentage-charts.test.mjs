@@ -12,6 +12,28 @@ const charts = createPercentageCharts({ categories: createServiceCategories(), d
 const entry = (id, count) => ({ id, label: id, count });
 const sum = rows => rows.reduce((value, row) => value + row.count, 0);
 
+test("bounded widget shares and links stay qualified to their original source population", () => {
+    const base = charts.model(buildActivityAnalytics([fixture("shared-widgets")]));
+    const native = { aggregates: { complete: true, layer: "tool", conversations: 2, selectedRows: 3,
+        outcomes: { success: 2, failure: 1, unknown: 0, partial: 0, other: 0, transport: 0 } },
+    toolGroups: { complete: true, groups: [{ id: "native-tool", label: "Recorded tool", count: 3 }], other: null },
+    sourceGroups: [{ sourceId: "microsoft-365-cowork", conversations: 2, count: 3 }] };
+    const model = charts.withNative(base, native);
+    assert.equal(model.separateUnits, true);
+    assert.deepEqual(model.unitPopulations.map(row => row.totals.count), [1, 3]);
+    assert.equal(model.tools.rows.find(row => row.sourceLabel === "Microsoft 365").fraction, 1);
+    assert.equal(model.tools.rows.find(row => row.sourceLabel === "GitHub Copilot").sourceId, "github-copilot");
+    const noCalls = charts.withNative(charts.model(buildActivityAnalytics([])), { ...native,
+        aggregates: { ...native.aggregates, selectedRows: 0, outcomes: { ...native.aggregates.outcomes, success: 0, failure: 0 } },
+        toolGroups: { complete: true, groups: [], other: null } });
+    assert.equal(noCalls.hasNativeConversations, true);
+    const http = charts.model(buildActivityAnalytics([], { layer: "http" }));
+    assert.equal(charts.withNative(http, { ...native, aggregates: {
+        complete: true, layer: "http", conversations: 0, selectedRows: 0,
+        outcomes: { success: 0, failure: 0, unknown: 0, partial: 0, other: 0, transport: 0 } },
+    toolGroups: { complete: true, groups: [], other: null } }).unit, http.unit);
+});
+
 test("percentages retain exact integer denominators, zero, one, tiny and near-complete shares", () => {
     for (const [value, total, text] of [[0, 0, "Not applicable"], [0, 1, "0%"], [1, 1, "100%"],
         [1, 3, "33.3%"], [2, 3, "66.7%"], [1, 1001, "<0.1%"], [10000, 10001, ">99.9%"],
@@ -86,16 +108,21 @@ test("flat ring is circular and contained", () => {
 });
 
 test("flat exclusive rings have exact contiguous angles, including full-circle and tiny slices", () => {
-    for (const values of [[1], [1, 1], [1, 3], [3, 1], [1, 999999], [999999, 1], Array(24).fill(1)]) {
+    for (const values of [[1], [1, 1], [1, 3], [3, 1], [193, 25, 1], [1, 999999], [999999, 1], Array(24).fill(1)]) {
         const data = charts.partition(values.map((value, i) => entry(`segment-${i}`, value)), sum(values.map(count => ({ count }))), { maxSlices: Math.max(2, values.length) });
+        const before = structuredClone(data);
         let cursor = 0;
         for (const slice of charts.visualSlices(data)) {
             assert.equal(slice.visualStart, cursor);
             assert.equal(slice.visualFraction, slice.count / data.total);
+            assert.equal(slice.fraction, slice.visualFraction);
+            assert.ok(slice.visualEnd > slice.visualStart);
             assert.equal(slice.visualEnd, slice.end);
+            if (data.total === 219 && slice.count === 1) assert.equal(slice.percentage, "0.5%");
             assert.doesNotMatch(charts.arc(slice.start, slice.end), /NaN|Infinity/);
             cursor = slice.end;
         }
+        assert.deepEqual(data, before);
         assert.equal(cursor, 1);
     }
     assert.notEqual(charts.arc(.999999, 1), charts.arc(.999, 1));

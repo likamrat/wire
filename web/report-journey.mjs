@@ -1,7 +1,8 @@
 // Prepared copies alone permit parent measurement; saved readers keep their opaque sandbox.
-export function createPreparedReportFrame(html, frozenFrame, { onError, doc = document } = {}) {
+export function createPreparedReportFrame(html, frozenFrame, { onError, doc = document, isCurrent = () => true } = {}) {
     if (typeof frozenFrame !== "function" || typeof onError !== "function") throw new TypeError("Prepared reports require sanitization and an error handler.");
     const frame = frozenFrame(html, doc), view = doc.defaultView;
+    html = null;
     frame.title = "Prepared report";
     frame.setAttribute("sandbox", "allow-same-origin");
     frame.style.height = "1px";
@@ -14,9 +15,9 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, doc = do
     const removal = new view.MutationObserver(changes => {
         if (!frame.isConnected && changes.some(change => [...change.removedNodes].some(node => node === frame || node.contains?.(frame)))) dispose();
     });
-    function current() { return active && frame.isConnected && source === frame.contentDocument; }
+    function current() { return active && isCurrent() && frame.isConnected && source === frame.contentDocument; }
     function schedule() {
-        if (!active || scheduled) return;
+        if (!active || !isCurrent() || scheduled) return;
         scheduled = view.requestAnimationFrame(measure);
     }
     function refresh() { selfResizes = 0; schedule(); }
@@ -57,7 +58,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, doc = do
         view.scrollTo({ top });
     }
     function loaded() {
-        if (!active || !frame.isConnected) return;
+        if (!active || !isCurrent() || !frame.isConnected) return;
         source = frame.contentDocument;
         if (!source?.body) {
             dispose();
@@ -80,8 +81,10 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, doc = do
         source?.removeEventListener("click", navigate);
         source?.removeEventListener("toggle", refresh, true);
         source?.fonts.removeEventListener("loadingdone", refresh);
+        (source || frame.contentDocument)?.documentElement?.replaceChildren();
         source = undefined;
         frame.srcdoc = "";
+        frame.title = "";
         frame.remove();
     }
     frame.addEventListener("load", loaded);
@@ -89,16 +92,33 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, doc = do
     textSize.observe(doc.documentElement, { attributes: true, attributeFilter: ["style", "class"] });
     textSize.observe(doc.head, { childList: true, subtree: true, characterData: true });
     removal.observe(doc.body, { childList: true, subtree: true });
-    return { frame, dispose };
+    return { frame, dispose, withdrawAccess: dispose };
 }
 
 // Serialized into the page. Presentation state only; the export controller owns every privacy gate.
-export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, showSourceIssues, downloadFile, openSavedReport, icon, utility, onStateChange, presentStep, requestStep } = {}) {
+export function createReportJourney({ root, cancelReview, clearSelection, readCurrent, readSavedReports, showSourceIssues, downloadFile, openSavedReport, icon, utility, onStateChange, presentStep, requestStep, api, createSaveIdentity } = {}) {
+    const accessIntegrated = Boolean(root) || api !== undefined || createSaveIdentity !== undefined;
+    if (accessIntegrated && (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function" || typeof createSaveIdentity !== "function")) {
+        throw new TypeError("Mounted report journeys require publication authority and a save-identity factory.");
+    }
+    if (root && typeof readSavedReports !== "function") throw new TypeError("Report recovery requires a fresh saved-history reader.");
+    const saveVerifier = accessIntegrated ? createSaveIdentity({ kind: "report", api }) : null;
+    if (accessIntegrated && (!saveVerifier || ["prepareSaveIdentity", "matchesSaveIdentity", "saveIdentity", "invalidatePrepared", "dispatched",
+        "uncertain", "settled", "withdrawAccess", "resumeAccess"].some(method => typeof saveVerifier[method] !== "function"))) {
+        throw new TypeError("Report save-identity factory returned an invalid verifier interface.");
+    }
+    const publicationAvailable = () => {
+        if (!accessIntegrated) return !root;
+        const token = api.publicationToken();
+        return token != null && api.isCurrent(token);
+    };
     const labels = ["Activity", "Contents", "Review & save"];
     const questions = ["Activity to include", "Choose contents", "Review and save your report"];
     const number = new Intl.NumberFormat();
     let step = 1, reached = 1, phase = "draft", preview, bundle, failure = "";
     let saveUnconfirmed = false, contentsPresented = false;
+    let accessWithdrawn = false, accessGeneration = 0, savedVersion = 0, checkingSave = false, recoveryRows = null;
+    const hasAccess = () => !accessWithdrawn && publicationAvailable();
     let model = { requestCount: 0, scope: "selected", scopeReady: false, scopeIssue: "", promptMode: "masked", formats: ["html"], timeLabel: "", entry: null };
     let nodes;
     const positions = new Map();
@@ -112,7 +132,8 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
                 .map(node => ({ node, left: node.scrollLeft, top: node.scrollTop })) });
     }
     const snapshot = () => ({ step, reached, phase, saveUnconfirmed, hasPreview: Boolean(preview), completed: Boolean(bundle), ...structuredClone(model) });
-    const ready = () => model.scopeReady && model.requestCount > 0;
+    const ready = () => model.scopeReady && (model.requestCount > 0
+        || model.nativeView === true && (model.nativeConversationCount === null || model.nativeConversationCount > 0));
     const isWriting = () => phase === "writing";
     function reason(target) {
         if (isWriting()) return "Wait for the current local save to finish.";
@@ -129,6 +150,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         if (node && node.textContent !== value) node.textContent = value;
     }
     function paint(focus = false, reading = null) {
+        if (!hasAccess()) return;
         onStateChange?.();
         if (!nodes) { presentStep?.({ step, focus }); return; }
         root.dataset.reportStep = String(step);
@@ -147,20 +169,23 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
             else control.removeAttribute("aria-current");
         });
         text(nodes.progress, phase === "saved" ? "Report saved" : phase === "unavailable" ? "Saved report unavailable" : `Step ${step} of 3`);
-        text(nodes.scopeName, ({ selected: "Selected interactions", current: "Current Analyze view", all: "All collected activity", period: "Paired periods" })[model.scope]
-            + (model.authorFiltered ? ` · ${model.authorLabel}` : ""));
+        text(nodes.scopeName, ({ selected: "Selected interactions", current: "Current Analyze view", all: "All collected activity", period: "Paired periods" })[model.scope]);
+        text(nodes.scopeAuthors, model.authorFiltered ? `Authors: ${model.authorLabel}` : "");
+        nodes.scopeAuthors.hidden = !model.authorFiltered;
         const chats = Number.isSafeInteger(model.sourceSessionCount) && model.sourceSessionCount >= 0
             ? `${number.format(model.sourceSessionCount)} ${model.sourceSessionCount === 1 ? "chat" : "chats"}` : "Chat count unavailable";
-        text(nodes.activityCount, model.scope === "period"
+        text(nodes.activityChats, model.scope === "period" || model.nativeView ? "" : chats);
+        nodes.activityChats.hidden = model.scope === "period" || model.nativeView === true;
+        text(nodes.activityInteractions, model.scope === "period"
             ? `${number.format(model.requestCount)} supporting ${model.requestCount === 1 ? "interaction" : "interactions"}`
-            : `${chats} · ${number.format(model.requestCount)} ${model.requestCount === 1 ? "interaction" : "interactions"} included`);
+            : model.nativeView ? `${number.format(model.requestCount)} GitHub ${model.requestCount === 1 ? "interaction" : "interactions"}; ${model.nativeConversationCount === null
+                ? "Microsoft count checked at preparation" : `${number.format(model.nativeConversationCount)} Microsoft ${model.nativeConversationCount === 1 ? "conversation" : "conversations"}`}`
+                : `${number.format(model.requestCount)} ${model.requestCount === 1 ? "interaction" : "interactions"} included`);
         nodes.activityCount.hidden = !model.scopeReady;
         const activityVisible = step === 1 || Boolean(presentStep && step === 2);
         nodes.start.hidden = !activityVisible;
-        text(nodes.context, model.entry
-            ? `${model.entry.sessionName || "Copilot chat name not recorded"} · Saved activity across all retained dates and services. New interactions are not added automatically.`
-            : "");
-        nodes.context.hidden = !nodes.context.textContent || !activityVisible;
+        text(nodes.contextName, model.entry?.sessionName || "Copilot chat name not recorded");
+        nodes.context.hidden = !model.entry || !activityVisible;
         text(nodes.gap, ready() ? "" : model.scopeIssue || (model.entry ? "No readable interactions in this chat. Check source issues or choose another scope." : "Choose an interaction or another scope to continue."));
         nodes.gap.hidden = ready();
         nodes.issues.hidden = ready() || !model.entry || !showSourceIssues;
@@ -215,8 +240,10 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         }
     }
     function go(target) {
+        if (!hasAccess()) return false;
         if (!Number.isInteger(target) || target < 1 || target > 3 || reason(target)) return false;
-        if (requestStep && !requestStep(() => go(target))) return false;
+        const navigationAccess = accessGeneration;
+        if (requestStep && !requestStep(() => navigationAccess === accessGeneration && go(target))) return false;
         const returning = target < step;
         rememberStep();
         if (["saved", "unavailable"].includes(phase) && target < 3) {
@@ -240,7 +267,9 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         return true;
     }
     function invalidate(message) {
+        if (!hasAccess()) return;
         if (isWriting() || saveUnconfirmed || phase === "saved" || phase === "unavailable") return;
+        saveVerifier?.invalidatePrepared();
         const hadPreview = Boolean(preview) || phase === "scanning";
         suspendedControls.clear();
         preview = undefined;
@@ -261,6 +290,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
     }
     function invalidateSavedReport(bundleId) {
         if (bundle?.bundleId !== bundleId) return false;
+        savedVersion++;
         bundle = preview = undefined;
         phase = "unavailable";
         reached = 1;
@@ -276,20 +306,92 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
     }
     function clear() {
         if (isWriting() || saveUnconfirmed) return false;
+        saveVerifier?.invalidatePrepared();
         positions.clear();
         suspendedControls.clear();
+        savedVersion++;
         preview = bundle = undefined;
         saveUnconfirmed = false;
         step = reached = 1;
         phase = "draft";
         failure = "";
-        model = { ...model, requestCount: 0, scope: "selected", scopeReady: false, entry: null };
+        model = { ...model, requestCount: 0, nativeView: false, nativeConversationCount: null, scope: "selected", scopeReady: false, entry: null };
         delete model.title;
         nodes?.reviewHost.replaceChildren();
         nodes?.saveHost.replaceChildren();
         nodes?.reviewActions.replaceChildren();
         nodes?.saveActions.replaceChildren();
         paint(true);
+        return true;
+    }
+    function withdrawAccess() {
+        if (accessWithdrawn) return;
+        saveUnconfirmed ||= isWriting() || Boolean(saveVerifier?.saveIdentity()?.dispatched);
+        accessWithdrawn = true; accessGeneration++; savedVersion++; checkingSave = false;
+        saveVerifier?.withdrawAccess();
+        recoveryRows = null;
+        positions.clear(); suspendedControls.clear();
+        preview = bundle = undefined; failure = ""; contentsPresented = false;
+        phase = saveUnconfirmed ? "blocked" : "draft"; step = reached = 1;
+        model = { requestCount: 0, scope: "selected", scopeReady: false, scopeIssue: "",
+            promptMode: model.promptMode, formats: [...model.formats], timeLabel: "", entry: null };
+        if (!nodes) return;
+        for (const host of [nodes.reviewHost, nodes.saveHost, nodes.reviewActions, nodes.saveActions]) {
+            for (const frame of host.querySelectorAll("iframe")) { frame.srcdoc = ""; frame.removeAttribute("src"); frame.title = ""; }
+            for (const text of host.querySelectorAll("pre")) text.textContent = "";
+            for (const field of host.querySelectorAll("input,textarea")) {
+                field.value = ""; field.removeAttribute("value");
+                if (field.localName === "textarea") field.textContent = "";
+                if ("checked" in field) field.checked = false;
+            }
+            host.replaceChildren();
+        }
+        for (const node of [nodes.scopeName, nodes.scopeAuthors, nodes.contextName, nodes.activityChats,
+            nodes.activityInteractions, nodes.gap, nodes.error, nodes.prepareIssue]) node.textContent = "";
+        for (const hint of nodes.stepHints) hint.textContent = "";
+        nodes.feedback = nodes.reviewControl = undefined;
+        for (const id of ["reportTitle", "manualTerms", "reportRequestSearch"]) {
+            const field = root.ownerDocument.getElementById(id);
+            if (field) { field.value = ""; field.removeAttribute("placeholder"); }
+        }
+        for (const id of ["reportList", "previewSelectionSummary", "reportMatchingContext", "scopeExclusions", "reportPromptAuthorSummary", "reportPopulationNote", "reportPageSelectionSummary",
+            "reportTimeContext", "scopeSummary", "scopeExplanation", "scopeCount-all", "scopeCount-current", "scopeCount-selected"]) {
+            root.ownerDocument.getElementById(id)?.replaceChildren();
+        }
+        root.querySelectorAll("[data-review-control]").forEach(control => { control.disabled = true; if ("checked" in control) control.checked = false; });
+    }
+    async function recoverSave() {
+        if (accessWithdrawn || checkingSave || !saveUnconfirmed || !saveVerifier || !readSavedReports) return false;
+        const generation = accessGeneration, token = api.publicationToken();
+        const current = () => !accessWithdrawn && generation === accessGeneration && api.isCurrent(token);
+        if (!current()) return false;
+        checkingSave = true;
+        try {
+            let entries = await readSavedReports();
+            if (!current()) return false;
+            if (!Array.isArray(entries)) throw new Error("Saved history is unavailable. The outcome remains unconfirmed; no save was repeated.");
+            recoveryRows = entries; entries = null;
+            for (let index = 0; index < recoveryRows.length; index++) {
+                const matches = await saveVerifier.matchesSaveIdentity(recoveryRows[index]);
+                if (!current()) return false;
+                if (matches) { owner.saved(recoveryRows[index]); return true; }
+            }
+            throw new Error("No registered receipt is available for this report. The outcome remains unconfirmed; no save was repeated.");
+        } catch (error) {
+            if (current()) { failure = error.message; paint(); }
+            return false;
+        } finally { if (current()) { checkingSave = false; recoveryRows = null; } }
+    }
+    function resumeAccess() {
+        if (saveVerifier && !saveVerifier.resumeAccess()) return false;
+        if (!accessWithdrawn) return true;
+        accessWithdrawn = false; accessGeneration++;
+        if (saveUnconfirmed && nodes) {
+            nodes.saveHost.append(nodes.el("p", "", "The original report save is unconfirmed. Check its status; do not save again."),
+                nodes.button("Check save status", recoverSave));
+            step = reached = 3;
+        }
+        paint();
         return true;
     }
     if (root) {
@@ -303,14 +405,17 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         function button(label, action, cls = "quiet") {
             const node = el("button", cls, label);
             node.type = "button";
-            node.addEventListener("click", action);
+            node.addEventListener("click", event => { if (hasAccess() && node.isConnected) action(event); });
             return node;
         }
         const shell = el("div", "report-journey"), nav = el("nav", "report-progress"), list = el("ol");
         shell.id = "reportCreatePanel";
         nav.setAttribute("aria-label", "Report creation steps");
         const progress = el("p", "report-progress-label visually-hidden"), summary = el("div", "report-content-context"), context = el("p", "report-entry-context");
-        const scopeName = el("span", "report-content-scope");
+        const scopeName = el("span", "report-content-scope"), scopeAuthors = el("span", "report-content-authors");
+        const contextName = el("span", "report-entry-name");
+        context.append(contextName, doc.createTextNode(" "), el("span", "",
+            "Saved activity across all retained dates and services. New interactions are not added automatically."));
         progress.setAttribute("role", "status");
         const steps = [], stepHints = [], panels = [], headings = [], backButtons = [];
         labels.forEach((label, index) => {
@@ -337,7 +442,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         nav.append(list);
         const existingStart = root.querySelector(".report-start");
         const scan = byId("exportBtn"), scanWrapper = scan.closest(".ux-disabled-help") || scan;
-        summary.append(scopeName, byId("previewSelectionSummary"));
+        summary.append(scopeName, doc.createTextNode(" "), scopeAuthors, doc.createTextNode(" "), byId("previewSelectionSummary"));
         shell.append(progress, nav, context);
         const error = el("p", "notice error report-journey-error");
         error.id = "reportJourneyError";
@@ -345,9 +450,11 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         error.tabIndex = -1;
         shell.append(error);
         const retry = button("Read current activity", async () => {
+            const generation = accessGeneration, token = api?.publicationToken?.();
+            const current = () => generation === accessGeneration && hasAccess() && (!saveVerifier || api.isCurrent(token));
             retry.disabled = true;
-            try { if (await readCurrent()) go(2); }
-            finally { retry.disabled = false; }
+            try { if (await readCurrent() && current()) go(2); }
+            finally { if (current()) retry.disabled = false; }
         });
         retry.dataset.storedRefreshRetry = "";
         shell.append(retry);
@@ -377,7 +484,9 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         panels[0].append(scopeLayout);
         const firstFooter = el("div", "report-stage-actions report-activity-actions"), firstActions = el("div", "report-next-actions");
         firstFooter.id = "reportActivityActions";
-        const activitySummary = el("div", "report-activity-summary"), activityCount = el("p");
+        const activitySummary = el("div", "report-activity-summary"), activityCount = el("p", "report-metadata");
+        const activityChats = el("span"), activityInteractions = el("span");
+        activityCount.append(activityChats, doc.createTextNode(" "), activityInteractions);
         activityCount.id = "reportActivitySummary"; activityCount.setAttribute("role", "status");
         const outsidePage = el("p", "context-help-note");
         outsidePage.id = "reportPageSelectionSummary"; outsidePage.setAttribute("role", "status");
@@ -413,25 +522,38 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         panels[2].append(reviewFooter);
         root.insertBefore(shell, byId("savedReportsPanel"));
         shell.append(...panels);
-        nodes = { panels, steps, stepHints, headings, backButtons, progress, scopeName, context, gap, next, issues, scan, error, retry, reviewHost, saveHost, reviewActions, saveActions, contentFooter, prepareIssue, activityCount, el, button, start: existingStart };
+        nodes = { panels, steps, stepHints, headings, backButtons, progress, scopeName, scopeAuthors, context, contextName, gap, next, issues, scan, error, retry, reviewHost, saveHost, reviewActions, saveActions, contentFooter, prepareIssue, activityCount, activityChats, activityInteractions, el, button, start: existingStart };
         paint();
     }
-    return {
+    const owner = {
         snapshot, reason, go, invalidate, clear,
+        withdrawAccess, resumeAccess, recoverSave,
+        prepareSaveIdentity(value) {
+            if (!saveVerifier || !hasAccess()) return Promise.reject(new Error("Report save verification is unavailable."));
+            if (phase !== "reviewed" || value?.previewId !== preview?.previewId || value?.bundleId !== preview?.bundleId) {
+                return Promise.reject(new Error("Only the current disclosure-approved report can prepare a save identity."));
+            }
+            return saveVerifier.prepareSaveIdentity(value);
+        },
+        matchesSaveIdentity: value => saveVerifier ? saveVerifier.matchesSaveIdentity(value) : Promise.resolve(false),
+        saveIdentity: () => saveVerifier?.saveIdentity() ?? null,
         setContentsPresented(presented) {
+            if (!hasAccess()) return;
             if (contentsPresented === presented) return;
             contentsPresented = presented;
             if (nodes) nodes.next.hidden = presented;
         },
         get reviewHost() { return nodes?.reviewHost; },
         get saveHost() { return nodes?.saveHost; },
-        isReviewOpen: () => !saveUnconfirmed && (Boolean(preview) || phase === "scanning") && (!root || !root.hidden),
+        isReviewOpen: () => hasAccess() && !saveUnconfirmed && (Boolean(preview) || phase === "scanning") && (!root || !root.hidden),
         update(patch) {
+            if (!hasAccess()) return;
             model = { ...model, ...structuredClone(patch) };
             paint();
         },
         beginScan() {
-            if (isWriting() || saveUnconfirmed || phase === "scanning" || !ready() || !model.formats.length) return null;
+            if (!hasAccess() || isWriting() || saveUnconfirmed || phase === "scanning" || !ready() || !model.formats.length) return null;
+            saveVerifier?.invalidatePrepared();
             rememberStep();
             preview = bundle = undefined;
             delete model.title;
@@ -446,7 +568,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
             return nodes?.reviewHost;
         },
         previewReady(value, { confirm, feedback } = {}) {
-            if (phase !== "scanning" || !value?.previewId || value.privacy?.allSelectedFieldsScanned !== true) return false;
+            if (!hasAccess() || phase !== "scanning" || !value?.previewId || value.privacy?.allSelectedFieldsScanned !== true) return false;
             preview = value;
             model.title = value.title;
             phase = "ready";
@@ -467,20 +589,28 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
             return true;
         },
         reviewed() {
-            if (phase !== "ready" || !preview) return false;
+            if (!hasAccess() || phase !== "ready" || !preview) return false;
             phase = "reviewed";
             paint();
             nodes?.saveActions.querySelector("button")?.focus();
             return true;
         },
         writing(value) {
+            if (!hasAccess()) return false;
+            if (value && phase !== "reviewed") return false;
+            if (value && saveVerifier && !saveVerifier.dispatched()) return false;
             if (value && phase === "reviewed") phase = "writing";
             else if (!value && phase === "writing") phase = "blocked";
             paint();
+            return true;
         },
         failed(message, { saveRejected = false } = {}) {
+            if (!hasAccess()) return;
             // Draft invalidation can revoke disclosure, but cannot determine a dispatched write's outcome.
+            const notStarted = saveRejected && isWriting() && !saveUnconfirmed && !saveVerifier?.saveIdentity()?.unknown;
             saveUnconfirmed ||= isWriting() && !saveRejected;
+            if (notStarted) saveVerifier?.settled();
+            else if (saveUnconfirmed) saveVerifier?.uncertain();
             phase = "blocked";
             failure = message;
             preview = undefined;
@@ -494,14 +624,20 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
         },
         invalidateSavedReport,
         syncPresence(entries) {
+            if (!hasAccess()) return;
             if (bundle && !entries.some(entry => entry.bundleId === bundle.bundleId)) invalidateSavedReport(bundle.bundleId);
         },
         saved(value, { available = true } = {}) {
+            if (!hasAccess()) return false;
             if (!value?.bundleId || !value.files || !Object.keys(value.files).length) throw new Error("Saved report file links are unavailable.");
             bundle = structuredClone(value);
             model.title = value.title;
             saveUnconfirmed = false;
-            const savedBundle = bundle;
+            saveVerifier?.settled();
+            const savedGeneration = ++savedVersion;
+            const savedPublication = api?.publicationToken?.();
+            const currentSaved = () => !accessWithdrawn && savedGeneration === savedVersion && Boolean(bundle)
+                && (!saveVerifier || api.isCurrent(savedPublication));
             preview = undefined;
             phase = "saved";
             step = reached = 3;
@@ -513,7 +649,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
                 message.setAttribute("role", "status");
                 saveHost.replaceChildren(message);
                 const actions = el("div", "report-saved-actions");
-                if (openSavedReport) actions.append(button("Open saved report", event => openSavedReport(value, event.currentTarget), "primary"));
+                if (openSavedReport) actions.append(button("Open saved report", event => { if (currentSaved() && event.currentTarget.isConnected) openSavedReport(bundle, event.currentTarget); }, "primary"));
                 actions.append(button("Start a new report", () => clearSelection?.()));
                 saveHost.append(actions);
                 const downloads = el("div", "report-downloads saved-report-downloads");
@@ -527,19 +663,21 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
                     const option = el("option", "", label); option.value = name; select.append(option);
                 }
                 const control = button("Download", async () => {
-                    if (bundle !== savedBundle || control.disabled) return;
+                    if (!currentSaved() || !control.isConnected || control.disabled) return;
                     const name = select.value;
                     control.disabled = select.disabled = true;
-                    try { await downloadFile(value, name, () => bundle === savedBundle); }
-                    catch (error) { if (bundle === savedBundle) { failure = `Download failed: ${error.message}`; paint(); } }
-                    finally { if (bundle === savedBundle) control.disabled = select.disabled = false; }
+                    try { await downloadFile(bundle, name, currentSaved); }
+                    catch (error) { if (currentSaved()) { failure = `Download failed: ${error.message}`; paint(); } }
+                    finally { if (currentSaved()) control.disabled = select.disabled = false; }
                 });
                 field.append(select); downloads.append(field, control);
                 saveHost.append(downloads);
                 nodes.saveActions.replaceChildren();
                 for (const control of root.querySelectorAll("[data-review-control]")) control.disabled = true;
             }
+            value = null;
             paint(true);
         },
     };
+    return owner;
 }

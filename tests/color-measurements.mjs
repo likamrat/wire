@@ -5,6 +5,42 @@ export function rgb(value) {
     throw new TypeError(`Unsupported measured color: ${value}`);
 }
 
+// Browser-side paint measurement includes alpha edges and the action's inset face.
+export function measureControlSurface(node) {
+    const rgba = value => {
+        if (value.startsWith("color(srgb")) {
+            const [color, alpha] = value.slice(11, -1).split("/");
+            return [...color.trim().split(/\s+/).map(channel => Number(channel) * 255), Number(alpha ?? 1)];
+        }
+        if (!/^rgba?\(/.test(value)) throw new Error(`Unsupported control color: ${value}`);
+        const values = value.match(/[\d.]+/g).map(Number);
+        return [...values.slice(0, 3), values[3] ?? 1];
+    };
+    const blend = (front, back) => front.slice(0, 3).map((value, index) => value * front[3] + back[index] * (1 - front[3]));
+    const color = value => `rgb(${value.slice(0, 3).join(",")})`;
+    function background(element) {
+        return element ? blend(rgba(getComputedStyle(element).backgroundColor), background(element.parentElement)) : [255, 255, 255];
+    }
+    const css = getComputedStyle(node), before = getComputedStyle(node, "::before"), box = node.getBoundingClientRect();
+    const backdrop = background(node.parentElement), own = blend(rgba(css.backgroundColor), backdrop);
+    const inset = before.content !== "none" && parseFloat(before.width) >= box.width * .8
+        && parseFloat(before.height) >= parseFloat(css.lineHeight);
+    const paint = inset ? before : css;
+    let opacity = 1;
+    for (let parent = node; parent; parent = parent.parentElement) opacity *= Number(getComputedStyle(parent).opacity);
+    const face = inset ? blend(rgba(before.backgroundColor), own) : own;
+    const edge = parseFloat(paint.borderTopWidth) > 0 && paint.borderTopStyle !== "none" ? rgba(paint.borderTopColor) : [...face, 1];
+    const border = blend(edge, face);
+    const ink = blend(rgba(css.color), face);
+    const focus = css.outlineStyle === "none" && inset ? before : css;
+    const visible = value => color(blend([...value, opacity], backdrop));
+    return { backdrop: color(backdrop), face: visible(face), border: visible(border), ink: visible(ink),
+        borderWidth: parseFloat(paint.borderTopWidth),
+        focus: focus.outlineStyle !== "none" ? color(blend(rgba(focus.outlineColor), backdrop)) : null,
+        focusWidth: parseFloat(focus.outlineWidth), fontSize: parseFloat(css.fontSize),
+        box: box.toJSON(), disabled: node.matches(":disabled,[aria-disabled=true]") };
+}
+
 export async function shadowPaint(page, selector, side, distances = [2, 6, 12, 24, 40]) {
     const bounds = await page.locator(selector).boundingBox();
     const baseline = await page.screenshot();

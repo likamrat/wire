@@ -203,7 +203,7 @@ test("mixed outcomes keep exact errors, distinct scopes and chronological bounde
     assert.match(await page.locator(".matched-action .action-error").textContent(), /Original_<not-markup>_\u65e5\u672c\u8a9e/);
     await page.locator(".matched-action .text-link").click(); await ready(page);
     assert.match(await page.locator(".request-matching").textContent(), /1 of 8 Work IQ tool calls/);
-    assert.match(await page.locator(".full-request-results").textContent(), /8 Work IQ tool calls.*7 Worked.*1 Tool failed.*1 tool-returned API result/s);
+    assert.match(await page.locator(".full-request-results").textContent(), /8 Work IQ tool calls.*7 Tool completed.*1 Tool failed.*1 tool-returned API result/s);
     assert.equal(await page.locator(".journey-item").count(), 6);
     assert.equal(await page.locator(".journey-item").nth(2).locator(".action-error").textContent(), "Reported HTTP 403: Original_<not-markup>_\u65e5\u672c\u8a9e");
     assert.match(await page.locator(".journey-item").nth(2).locator(".action-context").textContent(), /1 matching/);

@@ -78,4 +78,37 @@ test("report choice metadata projects only a known saved request-group count", (
         const unknown = describeSavedArtifact({ ...entry, selectionScope: { requestGroups } }, { exports: [] });
         assert.equal(Object.hasOwn(unknown, "requestGroupCount"), false);
     }
+    for (const nativeConversations of [0, 2]) {
+        const known = describeSavedArtifact({ ...entry, selectionScope: { requestGroups: 3, nativeConversations } }, { exports: [] });
+        assert.equal(known.nativeConversationCount, nativeConversations);
+        assert.equal(known.requestGroupCount, 3);
+    }
+    for (const nativeConversations of [undefined, null, -1, 0.5, "2"]) {
+        const unknown = describeSavedArtifact({ ...entry, selectionScope: { nativeConversations } }, { exports: [] });
+        assert.equal(Object.hasOwn(unknown, "nativeConversationCount"), false);
+    }
+});
+
+test("native report deletion is refused before reading its file inventory and advertised unavailable", async t => {
+    const { context } = await privateFixture(t);
+    const native = { bundleId: `export-${randomUUID()}`, kind: "report", nativeEvidenceHash: "a".repeat(64), formats: ["html"] };
+    Object.defineProperty(native, "files", { get() { assert.fail("Native deletion must not walk any files"); } });
+    await assert.rejects(createSavedArtifactDescriptor(context)({ exports: [native] },
+        { artifactKind: "report", artifactId: native.bundleId }), { status: 503, code: "NATIVE_REPORT_DELETION_UNAVAILABLE" });
+    assert.equal(describeSavedArtifact({ ...native }, { exports: [] }).canDelete, false);
+});
+
+test("a hidden native comparison dependency cannot trigger file walks or reveal its identity through a GitHub descriptor", async t => {
+    const { context } = await privateFixture(t);
+    const github = { bundleId: `export-${randomUUID()}`, kind: "report" };
+    const dependent = { bundleId: `export-${randomUUID()}`, kind: "comparison", nativeEvidenceHash: "b".repeat(64),
+        sourceReports: [{ bundleId: github.bundleId }] };
+    assert.equal(describeSavedArtifact(github, { exports: [github, dependent] }).canDelete, false);
+    for (const item of [github, dependent]) Object.defineProperty(item, "files", { get() { assert.fail("No dependency files may be walked"); } });
+    await assert.rejects(createSavedArtifactDescriptor(context)({ exports: [github, dependent] },
+        { artifactKind: "report", artifactId: github.bundleId }), error => {
+            assert.equal(error.code, "NATIVE_REPORT_DELETION_UNAVAILABLE");
+            assert.ok(!error.message.includes(dependent.bundleId));
+            return true;
+        });
 });

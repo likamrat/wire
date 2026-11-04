@@ -101,7 +101,7 @@ async function setup(t, { nativeScrollbars = false } = {}) {
 test("response timing belongs to each prompt and the reader, not a detached aggregate or review", { timeout: 45000 }, async t => {
     const { page, requests } = await setup(t);
     await expect(rowFor(page).locator(".response-timing")).toContainText("Final response");
-    await expect(rowFor(page).locator(".response-timing data")).toHaveText("11:18 min");
+    await expect(rowFor(page).locator(".response-timing data")).toHaveText("677,960 ms (677.96 s)");
     await expect(rowFor(page).locator(".response-timing data")).toHaveAttribute("value", "677960");
     await expect(rowFor(page, "BETA").locator(".response-timing")).toContainText("Not recorded");
     await expect(page.locator("#recordedTiming")).toHaveCount(0);
@@ -113,7 +113,7 @@ test("response timing belongs to each prompt and the reader, not a detached aggr
     await expect(page.locator("#homeInsights .assessment-empty-review")).toBeVisible();
     await expect(page.locator("#homeInsights .assessment-timing")).toHaveCount(0);
     await rowFor(page).locator(".request-link").click();
-    await expect(page.locator(".request-original .response-timing data")).toHaveText("11:18 min");
+    await expect(page.locator(".request-original .response-timing data")).toHaveText("677,960 ms (677.96 s)");
     await expect(page.locator(".request-context-summaries > h2")).toHaveText("Reviews");
     await capturePage(page, "normal-interaction");
     await expect(page.locator(".interaction-insights .assessment-timing")).toHaveCount(0);
@@ -129,7 +129,7 @@ test("filtered prompt timing keeps its whole original interval and exact call na
     const { page, source, context } = await setup(t);
     await selectActivityOption(page, "serviceAssociationFilter", "Calendar"); await ready(page);
     await restoreLegacySearch(page, "SYNTHETIC_TIMING_ALPHA"); await ready(page);
-    await expect(rowFor(page).locator(".response-timing data")).toHaveText("11:18 min");
+    await expect(rowFor(page).locator(".response-timing data")).toHaveText("677,960 ms (677.96 s)");
     await page.locator('[data-analyze-mode="calls"]').click(); await ready(page);
     await selectActivityOption(page, "callSort", "fastest"); await ready(page);
     await expect(page.locator("#activityList .matched-action")).toHaveCount(1);

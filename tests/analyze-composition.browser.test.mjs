@@ -411,10 +411,10 @@ test("Analyze composes exact sparse outcomes with time and keeps filter and reco
     await expect(page.locator("#activityCount")).toHaveText("15");
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparison")).toBeVisible();
-    await page.locator("#periodComparison").getByRole("button", { name: "Stop comparing", exact: true }).click();
+    await page.locator('.primary-navigation [data-nav="analyze"]').click();
     await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#comparePeriods")).toBeFocused();
-    await page.locator("#resultsLink").focus();
+    await page.locator('nav [data-nav="analyze"]').focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#activityTitle")).toBeFocused();
     await page.locator("#activityList .request-link").first().click();
@@ -453,7 +453,8 @@ test("Analyze dense and empty populations keep their own counts and readable bou
     const outcomes = await page.locator(".analyze-outcome-summary").boundingBox();
     const paths = await page.locator(".analyze-chart-main").boundingBox();
     const breakdowns = await page.locator("#percentageCharts").boundingBox();
-    assert.ok(Math.abs(outcomes.height - paths.height) < 2, "The paired widgets share row edges even when path content grows");
+    assert.ok(Math.abs(outcomes.y - paths.y) < 2, "The paired widgets retain their shared top edge");
+    assert.ok(outcomes.height < paths.height, "The outcome widget stays content-sized when path content grows");
     assert.ok(breakdowns.y >= paths.y + paths.height, "Tools and Services remain below the chart row in every mode");
     assert.ok(breakdowns.y - (paths.y + paths.height) < 24, "The following row uses normal spacing, not reserved chart filler");
     for (const theme of ["light", "dark"]) {

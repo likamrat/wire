@@ -11,7 +11,7 @@ import { uxIcons } from "../web/ux-icons.mjs";
 import { styles } from "../web/styles.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture as sourceFixture, exportCatalogFor, chooseTheme, openActivitySessions } from "./helpers.mjs";
+import { fixture as sourceFixture, exportCatalogFor, chooseTheme, openActivitySessions, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_METADATA_PROOFS;
 const labels = [
@@ -67,7 +67,7 @@ async function fixture(run, contextOptions = {}) {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-metadata-fixture'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'");
-            return res.end(req.url === "/component" ? componentShell() : renderHtmlShell("a".repeat(64), "metadata-fixture"));
+            return res.end(req.url === "/component" ? componentShell() : renderHtmlShell("a".repeat(64), "metadata-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         requests.push(req.url);
         res.setHeader("Content-Type", "application/json");

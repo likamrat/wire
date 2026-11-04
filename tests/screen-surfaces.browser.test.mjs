@@ -238,7 +238,7 @@ test("production screens use a cool light canvas, charcoal depth, IQOS Asta Sans
         }))), counts);
         const controls = [];
         for (const selector of ["#checkActivity", "#dateFilter-control", "#outcomeFilter-control",
-            "#resultsLink", "#activityList a.request-card-open", ".percentage-label[href]"]) {
+            "#activityList a.request-card-open", ".percentage-label[href]"]) {
             const control = page.locator(selector).first();
             await control.hover();
             await inspect(`hover-${selector}`, theme);

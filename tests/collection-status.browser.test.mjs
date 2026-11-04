@@ -76,7 +76,7 @@ test("history issues are scoped, bounded and stable during polling in both theme
     cursors.unshift({ sessionId: "new-first", error: "missing", errorCode: "ENOENT", lastAttemptAt: "2026-10-05T01:01:00Z" });
     await page.waitForFunction(() => document.querySelector("#collectionIssueLabel").textContent.includes("17 chats"));
     assert.equal(await first.evaluate(node => node === document.activeElement), true, "New issues append without moving an existing focused source");
-    assert.match(await page.locator("#collectionIssueCounts").innerText(), /16 unavailable.*1 limited/);
+    assert.match(await page.locator("#collectionIssueCounts").innerText(), /16 unavailable\s+1 limited/);
     await page.getByRole("button", { name: "Next affected Copilot chats", exact: true }).click();
     assert.match(await page.locator("#collectionIssueGroups").innerText(), /7-12 of 16 affected Copilot chats/);
     await page.getByRole("button", { name: "Next affected Copilot chats", exact: true }).click();
@@ -85,7 +85,7 @@ test("history issues are scoped, bounded and stable during polling in both theme
     await page.locator(".history-reason>summary").last().click();
     await page.locator(".history-reason").last().locator(".history-issue>summary").click();
     assert.match(await page.locator(".history-reason").last().innerText(), /No evidence has been collected/);
-    assert.match(await page.locator(".history-reason").last().innerText(), /limited working memory/);
+    assert.match(await page.locator(".history-reason").last().innerText(), /earlier chat context/);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         for (const width of [375, 820, 1200]) {

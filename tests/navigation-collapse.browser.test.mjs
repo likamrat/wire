@@ -205,7 +205,7 @@ test("scope, search, selected requests, Settings and report drafts survive toggl
 
 test("mobile drawer keeps desktop choice, modal containment and focus across pointer and touch round-trips", { timeout: 60000 }, async t => {
     const { page } = await setup(t, { hasTouch: true });
-    const navigation = await page.locator(".primary-navigation").elementHandle();
+    const navigation = await page.getByRole("navigation", { name: "Main navigation", exact: true }).elementHandle();
     for (const collapsed of [false, true]) {
         await setCollapsed(page, collapsed);
         await nav(page, "activity").focus();

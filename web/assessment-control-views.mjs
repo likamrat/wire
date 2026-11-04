@@ -1,6 +1,8 @@
 // Emits explicit packets; transport and lifecycle stay with the main client.
 export function mountConsentSetup(root, { control, sourceLabel, currentSource = null, onSubmit, onCheck, onCancel, onRender }) {
     const doc = root.ownerDocument;
+    const events = new AbortController();
+    let disposed = false, cleared = false;
     function el(tag, text, cls) {
         const node = doc.createElement(tag);
         if (text !== undefined) node.textContent = text;
@@ -15,7 +17,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     const form = el("form"), option = el("div", undefined, "settings-choice-row"), input = el("input");
     const copy = el("div", undefined, "settings-row-copy"), heading = el("h3");
     const label = el("label", "Save Copilot replies locally");
-    const summary = el("p", "Keep recorded Copilot replies on this device. Turning this off deletes saved replies, not activity or reports.", "settings-reply-help");
+    const summary = el("p", "Turning this off deletes saved replies, not activity or reports.", "settings-reply-help");
     input.id = `${root.id || "optionalEvidence"}-choice`;
     summary.id = `${input.id}-help`;
     label.htmlFor = input.id;
@@ -51,7 +53,9 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
     const currentEnabled = consent => consent?.state === "enabled" && (!currentSource || currentSource.available === true
         && consent.sourceConfigRef === currentSource.sourceConfigRef && consent.sourceConfigRevision === currentSource.sourceConfigRevision);
     function render() {
+        if (disposed) return;
         const finishPresentation = onRender?.();
+        if (disposed) return;
         const snapshot = control.snapshot();
         const state = snapshot.applied?.state;
         const active = currentEnabled(snapshot.applied), inactiveGrant = state === "enabled" && !active;
@@ -94,13 +98,13 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
         if (input.checked === currentEnabled(control.snapshot().applied)) control.cancel();
         else control.edit({ enabled: input.checked, categories: input.checked ? ["answer"] : [] });
         render();
-    });
+    }, { signal: events.signal });
     revokePrior.addEventListener("click", () => {
         localError = "";
         control.edit({ enabled: false, categories: [] });
         render();
-        confirm.focus();
-    });
+        if (!disposed) confirm.focus();
+    }, { signal: events.signal });
     form.addEventListener("submit", event => {
         event.preventDefault();
         localError = "";
@@ -109,23 +113,41 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
             const random = [...crypto.getRandomValues(new Uint8Array(48))].map(value => value.toString(16).padStart(2, "0")).join("");
             packet = control.begin("mutation-" + random.slice(0, 32), random.slice(32));
         }
-        catch (error) { localError = error.message; render(); status.focus(); return; }
+        catch (error) { localError = error.message; render(); if (!disposed) status.focus(); return; }
         render();
-        onSubmit(packet);
-    });
+        if (!disposed) onSubmit(packet);
+    }, { signal: events.signal });
     check.addEventListener("click", () => {
         const packet = control.check();
         render();
-        onCheck(packet);
-    });
+        if (!disposed) onCheck(packet);
+    }, { signal: events.signal });
     cancel.addEventListener("click", () => {
         if (!locked(control.snapshot())) control.cancel();
         localError = "";
         render();
-        onCancel();
-    });
+        if (!disposed) onCancel();
+    }, { signal: events.signal });
     render();
-    return { render, focus: () => input.focus(), recoveryPresentation() {
+    return { render, focus: () => { if (!disposed) input.focus(); }, dispose() {
+        if (cleared) return;
+        disposed = true;
+        events.abort();
+        control = currentSource = sourceLabel = onSubmit = onCheck = onCancel = onRender = null;
+        localError = "";
+        for (const node of section.querySelectorAll("input,button")) node.disabled = true;
+        input.checked = input.defaultChecked = false;
+        input.value = input.defaultValue = "";
+        const text = doc.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+        while (text.nextNode()) text.currentNode.data = "";
+        const busy = form.getAttributeNode("aria-busy");
+        if (busy) { busy.value = ""; form.removeAttributeNode(busy); }
+        form.replaceChildren();
+        section.replaceChildren();
+        section.remove();
+        cleared = true;
+    }, recoveryPresentation() {
+        if (disposed) return { check, status, slot: recoverySlot, offered: false, presented: false, delegate() {} };
         const offered = ["unknown", "checking"].includes(control.snapshot().phase);
         const visible = node => node.checkVisibility({ visibilityProperty: true, opacityProperty: true });
         return { check, status, slot: recoverySlot, offered,
@@ -133,6 +155,7 @@ export function mountConsentSetup(root, { control, sourceLabel, currentSource = 
                 && Boolean(status.textContent.trim()) && visible(root) && !root.closest("[inert]")
                 && (visible(check) && visible(status) || recoverySlot.childElementCount > 0 && visible(recoverySlot)),
             delegate(value) {
+                if (disposed) return;
                 check.hidden = value || !offered;
                 status.hidden = value || !status.textContent;
                 recoverySlot.hidden = !value;

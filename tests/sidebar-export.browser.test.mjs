@@ -47,7 +47,7 @@ test("sidebar and mobile drawer enter Reports without a global export action and
         const plot = await page.locator("#chart").boundingBox();
         assert.ok(plot.width >= (width === 375 ? 300 : width === 820 ? 550 : 870), `${width}px viewport: chart width ${plot.width}px`);
         if (width === 375) {
-            assert.equal(await page.locator(".primary-navigation").isVisible(), false);
+            assert.equal(await page.locator("#navigationContent").isVisible(), false);
             await page.locator("#navigationToggle").click();
             assert.equal(await page.locator("#navigationToggle").getAttribute("aria-expanded"), "true");
             assert.equal(await page.locator(".primary-navigation [aria-current=page]").getAttribute("data-nav"), "home");

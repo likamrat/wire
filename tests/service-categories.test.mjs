@@ -51,27 +51,31 @@ test("requested retrieval scope uses only supported capability names and never i
     const labels = ["Teams messages", "email", "people", "meetings", "OneDrive and SharePoint", "Dataverse", "connected sources"];
     for (const [index, name] of names.entries()) {
         const scope = serviceCategories.requestedSearchScope(call([{ name }]));
-        assert.equal(scope.label, `Requested scope: ${labels[index]}`);
-        assert.equal(scope.description, "This does not show which sources returned results.");
+        assert.equal(scope.label, `Requested sources: ${labels[index]}`);
+        assert.equal(scope.description, "", "A concrete requested-source label needs no generic result caveat");
     }
     const input = call([{ name: "TeamsMessages", urls: [{ url: "PRIVATE-URL" }] }, { name: "Email" }, { name: "TeamsMessages" }]);
     const before = structuredClone(input);
     const scope = serviceCategories.requestedSearchScope(input);
-    assert.equal(scope.label, "Requested scope: Teams messages and email");
+    assert.equal(scope.label, "Requested sources: Teams messages and email");
     assert.deepEqual(input, before);
     assert.doesNotMatch(JSON.stringify(scope), /PRIVATE-URL/);
     for (const capabilities of [undefined, null, []]) assert.equal(serviceCategories.requestedSearchScope(call(capabilities)), null);
     assert.equal(serviceCategories.requestedSearchScope({ ...input, tool: "workiq-ask" }), null);
     for (const capabilities of ["PRIVATE", {}, [null], ["Email"], [{ name: "PRIVATE" }], [{ name: "email" }], [[]]]) {
         const unsupported = serviceCategories.requestedSearchScope(call(capabilities));
-        assert.equal(unsupported.label, "Requested scope not identified");
-        assert.match(unsupported.description, /does not match supported capability names/);
+        assert.equal(unsupported.label, "Requested sources not identified");
+        assert.equal(unsupported.description, "The recorded source choices are not recognized.");
         assert.doesNotMatch(JSON.stringify(unsupported), /PRIVATE/);
     }
     const partial = serviceCategories.requestedSearchScope(call([{ name: "Email" }, { name: "PRIVATE" }]));
-    assert.equal(partial.label, "Requested scope: email");
-    assert.match(partial.description, /Some requested scope entries could not be identified/);
-    assert.match(partial.description, /does not show which sources returned results/);
+    assert.equal(partial.label, "Requested sources: email");
+    assert.equal(partial.description, "Some requested sources could not be identified.");
+    assert.doesNotMatch(partial.description, /results|returned/);
+    for (const toolSucceeded of [true, false, null]) {
+        assert.deepEqual(serviceCategories.requestedSearchScope({ ...input, toolSucceeded }), scope,
+            "A requested source choice must not acquire a result claim from the call's outcome");
+    }
     const browser = Function(`return (${createServiceCategories.toString()})()`)();
     assert.deepEqual(browser.requestedSearchScope(input), scope);
 });

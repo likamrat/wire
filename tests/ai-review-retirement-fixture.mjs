@@ -71,7 +71,7 @@ export async function retirementFixture(t) {
 
 export async function retirementClient(runtime) {
     const origin = new URL(runtime.url).origin;
-    const headers = { Origin: origin, "Content-Type": "application/json" };
+    const headers = { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
     const response = await fetch(origin + "/api/session", { method: "POST", headers, body: "{}" });
     if (!response.ok) throw new Error("Synthetic panel connection failed.");
     headers["X-Board-Capability"] = (await response.json()).capability;

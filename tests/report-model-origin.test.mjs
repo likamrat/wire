@@ -10,7 +10,7 @@ import { renderComparisonHtml, renderComparisonMarkdown } from "../lib/report-pr
 import { nativeQualityHtml, nativeQualityMarkdown } from "../lib/native-report-output.mjs";
 import { createReportComparison } from "../web/report-comparison.mjs";
 import { fixture } from "./helpers.mjs";
-import { makeRatio } from "./report-comparison-fixtures.mjs";
+import { makeRatio } from "./assessment-contract-fixtures.mjs";
 
 function modelFacts(model, rubricVersion) {
     const record = fixture("model-origin"), state = { revision: 1, pseudonymKey: "a".repeat(64), evidence: [record] };

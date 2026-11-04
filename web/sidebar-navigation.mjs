@@ -73,10 +73,17 @@ export function mountSidebarNavigation(ux, preference) {
             })),
         };
     }
+    function captureFooter() {
+        const footer = $("navigationFooter");
+        const capture = node => node?.checkVisibility() ? { node, bounds: node.getBoundingClientRect() } : null;
+        return { ...capture(footer), account: capture($("wireAccountTrigger")),
+            utility: capture(footer.querySelector("[data-nav]")), gap: parseFloat(getComputedStyle(footer).columnGap) };
+    }
     function captureGeometry() {
         return {
             width: rail.getBoundingClientRect().width,
             brand: captureBrand(),
+            footer: captureFooter(),
             labels: [...content.querySelectorAll(".navigation-label,.navigation-group-label")].map(node => {
                 const style = getComputedStyle(node), bounds = node.getBoundingClientRect();
                 return { node, width: bounds.width, height: bounds.height, opacity: style.opacity,
@@ -92,6 +99,10 @@ export function mountSidebarNavigation(ux, preference) {
         rail.removeAttribute("data-navigation-moving");
         measure();
     }
+    content.addEventListener("click", event => {
+        if (rail.hasAttribute("data-navigation-moving") && event.target instanceof Element
+            && event.target.closest("#wireAccountTrigger")) finishMotion();
+    }, { capture: true });
     function glide(from) {
         const to = captureGeometry();
         if (Math.abs(from.width - to.width) < 1) return;
@@ -102,6 +113,26 @@ export function mountSidebarNavigation(ux, preference) {
         };
         rail.dataset.navigationMoving = "";
         const width = animate(rail, [{ width: from.width + "px", minWidth: "0px" }, { width: to.width + "px", minWidth: "0px" }]);
+        const originFooter = from.footer, targetFooter = to.footer;
+        const placed = (item, footer) => ({ position: "absolute", left: item.bounds.x - footer.bounds.x + "px",
+            bottom: footer.bounds.bottom - item.bounds.bottom + "px", width: item.bounds.width + "px",
+            height: item.bounds.height + "px", maxWidth: "none", overflow: "hidden" });
+        let split = null;
+        if (originFooter.account && targetFooter.account && originFooter.account.node === targetFooter.account.node) {
+            const start = originFooter.utility.bounds.x - originFooter.account.bounds.x;
+            const end = targetFooter.utility.bounds.x - targetFooter.account.bounds.x;
+            const clearance = Math.min(originFooter.account.bounds.width, targetFooter.account.bounds.width) + targetFooter.gap;
+            split = Math.max(0, Math.min(1, (clearance - start) / (end - start)));
+            const first = placed(originFooter.account, originFooter), last = placed(targetFooter.account, targetFooter);
+            // Keep the account above Settings until the rail has room for two full targets.
+            animate(targetFooter.account.node, [{ ...first, offset: 0 },
+                { ...(collapsed ? last : first), offset: split }, { ...last, offset: 1 }]);
+        }
+        const firstFooter = { height: originFooter.bounds.height + "px" }, lastFooter = { height: targetFooter.bounds.height + "px" };
+        animate(targetFooter.node, split === null ? [firstFooter, lastFooter] : [
+            { ...firstFooter, offset: 0 }, { ...(collapsed ? lastFooter : firstFooter), offset: split }, { ...lastFooter, offset: 1 },
+        ]);
+        animate(targetFooter.utility.node, [placed(originFooter.utility, originFooter), placed(targetFooter.utility, targetFooter)]);
         const originBrand = from.brand, targetBrand = to.brand;
         animate(targetBrand.link, [
             { width: originBrand.bounds.width + "px", marginLeft: originBrand.inset + "px",
@@ -158,7 +189,8 @@ export function mountSidebarNavigation(ux, preference) {
     for (const node of content.querySelectorAll("[data-nav]")) {
         const name = node.textContent.trim();
         node.setAttribute("aria-label", name);
-        ux.tooltip(node, () => !media.matches && collapsed ? name : "", { placement: "right", tone: "contrast" });
+        const utility = Boolean(node.closest(".navigation-footer"));
+        ux.tooltip(node, () => utility || !media.matches && collapsed ? name : "", { placement: "right", tone: "contrast" });
     }
     preference.subscribe(state => {
         ux.hideTooltip();
@@ -234,6 +266,7 @@ export function mountSidebarNavigation(ux, preference) {
     drawer.addEventListener("cancel", event => { event.preventDefault(); close(); });
     window.addEventListener("keydown", event => {
         if (!drawer.open || event.key !== "Escape") return;
+        if (event.defaultPrevented || drawer.querySelector("#wireAccountMenu:popover-open")) return;
         ux.hideTooltip();
         event.preventDefault();
         event.stopPropagation();

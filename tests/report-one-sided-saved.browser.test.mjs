@@ -14,7 +14,7 @@ import { loadSavedReportSource } from "../lib/report-artifacts.mjs";
 import { renderHtmlReport } from "../lib/product-report.mjs";
 import { compareFrozenReportFacts } from "../lib/frozen-report-comparison.mjs";
 import { renderComparisonHtml, renderComparisonMarkdown, reportPresentation } from "../lib/report-presentation.mjs";
-import { makeRatio } from "./report-comparison-fixtures.mjs";
+import { makeRatio } from "./assessment-contract-fixtures.mjs";
 import { startServer } from "../lib/server.mjs";
 
 const timeContext = { timeZone: "UTC", locale: "en-US" };
@@ -172,14 +172,14 @@ test("historical one-sided facts stay readable in both directions while new comp
         for (const name of ["comparison-report.html", "comparison-report.md", "comparison-report.json"]) {
             const text = await readFile(saved.files[name], "utf8");
             assert.doesNotMatch(text, /Your feedback|Personal feedback|user-personal|model-assessed/);
-            assert.match(text, /Recorded tool results/);
+            assert.match(text, /Recorded tool completion/);
         }
         const pdf = getDocument({ data: new Uint8Array(await readFile(saved.files["comparison-report.pdf"])), useSystemFonts: true });
         try {
             const doc = await pdf.promise, text = [];
             for (let n = 1; n <= doc.numPages; n++) text.push((await (await doc.getPage(n)).getTextContent()).items.map(part => part.str ?? "").join(""));
             assert.doesNotMatch(text.join(""), /Your feedback|Personal feedback/);
-            assert.match(text.join(""), /Recorded tool results/);
+            assert.match(text.join(""), /Recorded tool completion/);
         } finally { await pdf.destroy(); }
         const openedNew = await controller.openComparison("new-copy", saved.bundleId);
         assert.equal(openedNew.comparison.metricProjectionVersion, 4);
@@ -191,7 +191,7 @@ test("historical one-sided facts stay readable in both directions while new comp
         await item(direction.legacy.bundleId).locator(".saved-report-summary").click();
         const beforeOpen = await loadBoardState(context);
         const opening = page.waitForResponse(result => result.url().endsWith("/api/artifact-file"));
-        await item(direction.legacy.bundleId).getByRole("button", { name: "Open saved comparison", exact: true }).click();
+        await page.locator("#contextSidebar").getByRole("button", { name: "Open saved comparison", exact: true }).click();
         const openResponse = await opening;
         assert.equal(openResponse.status(), 200, await openResponse.text());
         const document = await openResponse.json();
@@ -242,7 +242,7 @@ test("historical one-sided facts stay readable in both directions while new comp
     await showReports(directions[0].legacy.bundleId);
     await item(directions[0].legacy.bundleId).locator(".saved-report-summary").click();
     const reopened = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
-    await item(directions[0].legacy.bundleId).getByRole("button", { name: "Open saved comparison", exact: true }).click();
+    await page.locator("#contextSidebar").getByRole("button", { name: "Open saved comparison", exact: true }).click();
     assert.equal((await reopened).status(), 200);
     const frozen = page.frameLocator("#savedReportReader iframe");
     await frozen.locator(".comparison-unavailable > summary").click();

@@ -9,8 +9,42 @@ import { fixture, privateFixture } from "./helpers.mjs";
 import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { readSavedArtifactFile, readSavedComparison, loadSavedReportSource } from "../lib/report-artifacts.mjs";
+import { matrixRecords } from "./report-evidence-matrix-fixtures.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
+
+test("actual saved-report traffic-mix matrix refuses a false improvement narrative", async t => {
+    function pattern(name, total, success, endpoint) {
+        return matrixRecords(name, Array.from({ length: total }, (_, index) => index < success ? "success" : "failure")).map(record => ({
+            ...record, toolCalls: record.toolCalls.map(call => ({ ...call, requestedApiPath: endpoint, requestArgs: { entityUrls: [endpoint] } })),
+        }));
+    }
+    const baseline = [...pattern("before-easy", 10, 9, "/me/messages"), ...pattern("before-hard", 10, 5, "/me/calendarView")];
+    const later = [...pattern("after-easy", 90, 81, "/me/messages"), ...pattern("after-hard", 10, 5, "/me/calendarView")];
+    const { context } = await privateFixture(t, [...baseline, ...later]);
+    const controller = createExportController(context), bundles = [];
+    for (const records of [baseline, later]) {
+        const state = await loadBoardState(context);
+        const preview = await controller.preview("matrix", undefined, { promptMode: "none", formats: ["json"] },
+            { kind: "selected", revision: state.revision, scenarioIds: records.map(record => record.scenarioId) });
+        await controller.review("matrix", preview.previewId, true);
+        bundles.push((await controller.confirm("matrix", preview.previewId, true)).bundle);
+    }
+    const pair = await controller.inspectComparison("matrix", bundles[0].bundleId, bundles[1].bundleId);
+    assert.equal(pair.comparison.toolComparison.raw.baseline.successRate.percent, 70);
+    assert.equal(pair.comparison.toolComparison.raw.later.successRate.percent, 86);
+    assert.ok(pair.comparison.toolComparison.patterns.length > 0);
+    assert.ok(pair.comparison.toolComparison.patterns.every(item => item.change.success === 0));
+    assert.equal(pair.comparison.toolComparison.matched.fixedBaselineMix.change.success, 0);
+    assert.match(pair.comparison.narrative.heading, /pattern rates did not/);
+    assert.equal(pair.comparison.narrative.tone, "neutral");
+    const comparison = await controller.previewComparison("matrix", bundles[0].bundleId, bundles[1].bundleId, { formats: ["html", "json", "markdown"] });
+    for (const name of ["comparison-report.html", "comparison-report.md"]) {
+        assert.match(comparison.files[name], /pattern rates did not/);
+        assert.doesNotMatch(comparison.files[name], /team improved|fix caused|quality improved/);
+    }
+});
+
 async function setup(t) {
     const earlier = fixture("earlier"), later = fixture("later");
     later.toolCalls[0].toolSucceeded = false;
@@ -70,10 +104,25 @@ test("comparison titles bind every new format and verified canonical-title carri
         const text = (await (await pdf.getPage(1)).getTextContent()).items.map(item => item.str || "").join(" ");
         assert.ok(text.includes(title));
     } finally { await document.destroy(); }
-    await controller.reviewComparison("named-comparison", preview.previewId, true);
+    const reviewed = await controller.reviewComparison("named-comparison", preview.previewId, true);
     const saved = (await controller.confirmComparison("named-comparison", preview.previewId, true)).bundle;
+    for (const [name, value] of Object.entries(reviewed.files)) {
+        const expected = typeof value === "string" ? Buffer.from(value) : Buffer.from(value.data, "base64");
+        assert.deepEqual(await readFile(saved.files[name]), expected);
+    }
+    const bytes = await readFile(saved.files["comparison-report.pdf"]);
+    assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
+    const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
+    try {
+        const doc = await task.promise, text = [];
+        for (let n = 1; n <= doc.numPages; n++) text.push((await (await doc.getPage(n)).getTextContent()).items.map(item => item.str ?? "").join(""));
+        assert.match(text.join("\n"), /WIRE/);
+        assert.match(text.join("\n"), /Recorded tool completion/);
+        assert.doesNotMatch(text.join("\n"), /Answer correctness|Not checked automatically|AI results/);
+    } finally { await task.destroy(); }
     assert.equal(saved.title, title);
     const state = await loadBoardState(context);
+    assert.equal(state.exports.length, 3);
     for (const format of ["html", "pdf", "json", "markdown", "manifest"]) {
         assert.equal((await readSavedArtifactFile(context, state, saved.bundleId, "comparison", format)).canonicalTitle, title);
     }
@@ -219,26 +268,4 @@ test("unrelated collected activity does not invalidate an unchanged selected rep
     }));
     const result = await controller.confirm("selected", preview.previewId, true);
     assert.equal(result.bundle.kind, "report");
-});
-
-test("all comparison formats share reviewed frozen facts and the real PDF remains searchable", { timeout: 60000 }, async t => {
-    const { context, controller, earlier, later } = await setup(t);
-    const preview = await controller.previewComparison("all-formats", earlier.bundleId, later.bundleId, { formats: ["html", "pdf", "json", "markdown"] });
-    const reviewed = await controller.reviewComparison("all-formats", preview.previewId, true);
-    const saved = (await controller.confirmComparison("all-formats", preview.previewId, true)).bundle;
-    for (const [name, value] of Object.entries(reviewed.files)) {
-        const expected = typeof value === "string" ? Buffer.from(value) : Buffer.from(value.data, "base64");
-        assert.deepEqual(await readFile(saved.files[name]), expected);
-    }
-    const bytes = await readFile(saved.files["comparison-report.pdf"]);
-    assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
-    const task = getDocument({ data: new Uint8Array(bytes), useSystemFonts: true });
-    try {
-        const doc = await task.promise, text = [];
-        for (let n = 1; n <= doc.numPages; n++) text.push((await (await doc.getPage(n)).getTextContent()).items.map(item => item.str ?? "").join(""));
-        assert.match(text.join("\n"), /WIRE/);
-        assert.match(text.join("\n"), /Recorded tool results/);
-        assert.doesNotMatch(text.join("\n"), /Answer correctness|Not checked automatically|AI results/);
-    } finally { await task.destroy(); }
-    assert.equal((await loadBoardState(context)).exports.length, 3);
 });

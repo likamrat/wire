@@ -34,7 +34,7 @@ test("recorded response latency stays distinct through actual detail, overview a
     assert.equal(await page.locator("#homeInsights .assessment-timing").count(), 0);
     await page.goto(runtime.url + "#request?request=timed-response-0");
     await page.locator(".request-original .response-timing data").waitFor();
-    assert.equal(await page.locator(".request-original .response-timing data").innerText(), "0 s");
+    assert.equal(await page.locator(".request-original .response-timing data").innerText(), "0 ms");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme); await page.setViewportSize({ width: 375, height: 1000 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);

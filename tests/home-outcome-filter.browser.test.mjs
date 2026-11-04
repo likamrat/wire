@@ -15,7 +15,7 @@ import { fixture, privateFixture, selectActivityOption, navigateMain, chooseThem
 
 const outcomes = ["success", "failure", "unknown", "partial", "other", "transport"];
 const proofs = process.env.WORKIQ_OUTCOME_PROOFS;
-const resultDefinitions = createRecordedResults();
+const resultDefinitions = createRecordedResults({ screen: true });
 
 function records() {
     return ["succeeded", "failed", undefined, "partial"].map((outcome, index) => {
@@ -245,7 +245,7 @@ test("multiple results stay a draft until Apply; cancel, Escape and outside leav
         assert.equal(await page.getByRole("button", { name: "Apply", exact: true }).isDisabled(), true);
         assert.equal(await page.locator(".select-validation").innerText(), "Select at least one result.");
         await page.getByRole("option", { name: "Tool failed (1)", exact: true }).click();
-        await page.getByRole("option", { name: "Partly worked (1)", exact: true }).click();
+        await page.getByRole("option", { name: "Partial completion (1)", exact: true }).click();
         assert.equal(await trigger.getAttribute("aria-expanded"), "true");
         assert.deepEqual(await selectedResults(page), outcomes, "Draft never changes native form values");
         assert.equal(await page.locator("#activityCount").innerText(), "4");
@@ -550,7 +550,7 @@ test("one styled Outcome dropdown shares the single applied-filter removal entry
     assert.equal(await page.locator("#clearResultFilter").isVisible(), false);
     await page.locator("#outcomeFilter-control").click();
     assert.equal(await page.getByRole("option").count(), 6);
-    assert.equal(await page.getByRole("option", { name: "Worked (1)", exact: true }).getAttribute("aria-selected"), "true");
+    assert.equal(await page.getByRole("option", { name: "Tool completed (1)", exact: true }).getAttribute("aria-selected"), "true");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "4");
@@ -571,8 +571,8 @@ test("the shared dropdown precedes every Home chart and keeps pre-outcome counts
     assert.equal(await page.locator("#resultSummary").evaluate(node =>
         [document.querySelector(".insight-header"), document.querySelector(".chart-panel"), document.querySelector("#percentageCharts")]
             .every(chart => Boolean(node.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING))), true);
-    assert.match(await page.locator("#resultFilterScope").innerText(), /All charts: Worked only/);
-    assert.match(await page.locator(".percentage-scope").innerText(), /Worked only/);
+    assert.match(await page.locator("#resultFilterScope").innerText(), /All charts: Tool completed only/);
+    assert.match(await page.locator(".percentage-scope").innerText(), /Tool completed only/);
     await selectActivityOption(page, "outcomeFilter", "all"); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "4");
     assert.deepEqual(await selectedResults(page), outcomes);
@@ -693,7 +693,7 @@ test("HTTP, returned-result and Graph layers retain their units; code references
             assert.equal(number(await page.locator("#activityCount").innerText()), baseline.totals[key]);
             assert.deepEqual(snapshot.analytics.resultFacet, baseline.resultFacet);
             assert.ok((await page.locator("#resultSummary").innerText()).includes(resultDefinitions.labels(layer)[key]));
-            assert.doesNotMatch(await page.locator("#resultSummary").innerText(), /Worked|Tool failed/);
+            assert.doesNotMatch(await page.locator("#resultSummary").innerText(), /Tool completed|Tool failed/);
             await reconcileView(page, snapshot);
         }
     }
@@ -704,7 +704,7 @@ test("HTTP, returned-result and Graph layers retain their units; code references
     await page.getByRole("button", { name: /^Remove outcome filter:/ }).click(); await ready(page);
     assert.equal(await page.locator("#activityCount").innerText(), "1");
     assert.equal(await page.locator("#activityUnit").innerText(), "Graph code reference");
-    assert.doesNotMatch(await page.locator("#resultSummary").innerText(), /Worked|Tool failed/);
+    assert.doesNotMatch(await page.locator("#resultSummary").innerText(), /Tool completed|Tool failed/);
 });
 
 test("pending, failed, late and malformed reads keep the complete last accepted chart and facet", async t => {
@@ -945,7 +945,7 @@ test("Recorded result scope and definitions stay available without routine field
     assert.match(await page.locator("#meaningBody").innerText(), /partial, not complete/);
     await selectActivityOption(page, "outcomeFilter", "success"); await ready(page);
     await navigateMain(page, "activity"); await ready(page);
-    assert.match(await page.locator("#resultFilterScope").textContent(), /Worked.*before result filtering/);
+    assert.match(await page.locator("#resultFilterScope").textContent(), /Tool completed.*before result filtering/);
     await page.locator("#outcomeFilter-control").click();
     assert.equal(await page.getByRole("tooltip").isVisible(), false);
     await page.keyboard.press("Escape");
@@ -1024,7 +1024,7 @@ test("shared dropdown and trailing clear keep keyboard/touch targets and full la
         });
         assert.deepEqual(geometry, { inAppliedScope: true, belowField: true, selectedFits: true });
         await choice.press("ArrowDown");
-        assert.equal(await page.getByRole("option", { name: "Worked (1)", exact: true }).getAttribute("aria-selected"), "true");
+        assert.equal(await page.getByRole("option", { name: "Tool completed (1)", exact: true }).getAttribute("aria-selected"), "true");
         assert.equal(await page.getByRole("option").count(), 6);
         if (proofs) await page.screenshot({ path: path.join(proofs, `menu-${theme}-${width}-${scale}.png`) });
         assert.deepEqual(await page.getByRole("option").allInnerTexts(), await page.locator("#outcomeFilter option").allTextContents());

@@ -1,9 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { createReportScope } from "../web/report-scope.mjs";
 import { buildExportCatalog, summarizeExportSelection } from "../lib/export-selection.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { fixture } from "./helpers.mjs";
+import { nativeReportFrame } from "./native-report-fixtures.mjs";
+
+test("native conversations keep separate report counts and cannot be silently removed by GitHub author filtering",
+    { skip: !process.env.WIRE_BOUNDED_BACKEND_ROOT }, async () => {
+    const { buildNativeExportRequests } = await import(pathToFileURL(
+        path.join(process.env.WIRE_BOUNDED_BACKEND_ROOT, "lib", "export-selection.mjs")).href);
+    const github = buildExportCatalog([fixture()]);
+    const native = buildNativeExportRequests(nativeReportFrame().records);
+    const scope = createReportScope(promptAuthorship);
+    const catalog = { ...github, requests: [...github.requests, ...native] };
+    const all = scope.resolve(catalog, "all", [], []);
+    assert.equal(all.available, true);
+    assert.equal(all.requests.length, 3);
+    assert.equal(all.counts.workIqActions, 1);
+    assert.equal(all.nativeCounts.calls, 3);
+    assert.match(scope.summary(all), /Microsoft/);
+    assert.match(scope.summary(all), /1 Work IQ tool call/);
+    const narrowed = scope.resolve(catalog, "all", [], [], ["user"]);
+    assert.equal(narrowed.available, false);
+    assert.equal(narrowed.requests.filter(request => request.recordKind === "native-conversation").length, 2);
+    assert.match(scope.summary(narrowed), /all prompt authors/);
+});
 
 test("browser scope counts equal canonical backend selection and never change selected IDs", () => {
     const a = fixture("a"), b = fixture("b");
@@ -30,11 +54,11 @@ test("one report is distinct from zero, singular, plural and alias-expanded requ
     assert.equal(scope.inclusion(none), "No requests selected");
     assert.match(scope.summary(none), /^No requests selected/);
     const single = scope.resolve(catalog, "selected", [], ["first"]);
-    assert.equal(scope.inclusion(single), "One report · 1 request group included");
+    assert.equal(scope.inclusion(single), "One report with 1 request group included");
     assert.match(scope.summary(single), /1 Work IQ tool call, 1 tool-returned API result,/);
     const expanded = scope.resolve(catalog, "selected", [], ["overlap"]);
     assert.equal(expanded.requests.length, 2);
-    assert.equal(scope.inclusion(expanded), "One report · 2 request groups included");
+    assert.equal(scope.inclusion(expanded), "One report with 2 request groups included");
     assert.match(scope.summary(expanded), /2 Work IQ tool calls, 2 tool-returned API results,/);
     assert.equal(scope.inclusion(scope.resolve(undefined, "selected", [], [])), "Report selection unavailable");
     assert.deepEqual(expanded.selection(1), { kind: "selected", revision: 1, scenarioIds: ["overlap"] });

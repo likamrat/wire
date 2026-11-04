@@ -13,7 +13,7 @@ import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { buildAssessmentModel, buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { readSavedReportFile } from "../lib/report-artifacts.mjs";
 import { extractReportFile } from "../lib/search-corpus-report-content.mjs";
-import { makeRatio } from "./report-comparison-fixtures.mjs";
+import { makeRatio } from "./assessment-contract-fixtures.mjs";
 import { metricSlotKey } from "../lib/assessment-contract.mjs";
 
 async function setup(t) {
@@ -48,12 +48,12 @@ test("Tool latency period output qualifies aggregates and only labels exact tool
             assert.match(html, /1,000 ms/);
             assert.match(markdown, /1000 ms/);
             assert.match(html, /Tool latency: call start to recorded completion/);
-            assert.match(markdown, /\| Record \/ interaction \| Tool \/ services \| Outcome \| Tool latency \|/);
+            assert.match(markdown, /\| Record \/ interaction \| Tool \| Services \| Outcome \| Tool latency \|/);
         } else {
             assert.deepEqual(periodReportDisplay(frozen).timing, []);
             assert.match(html, /Recorded duration for this evidence layer/);
             assert.doesNotMatch(html, /<th scope="col">Tool latency<\/th>/);
-            assert.match(markdown, /\| Record \/ interaction \| Tool \/ services \| Outcome \| Recorded duration \|/);
+            assert.match(markdown, /\| Record \/ interaction \| Tool \| Services \| Outcome \| Recorded duration \|/);
         }
         assert.equal(JSON.stringify(frozen), before);
     }

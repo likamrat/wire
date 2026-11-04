@@ -83,7 +83,7 @@ export const liveSearchPanel = `
   <p id="wireSearchStatus" role="status" aria-live="polite"></p>
   <button id="wireSearchRetry" type="button" class="quiet" hidden>Reconnect search</button>
   <section id="wireSearchMatches" class="wire-search-set" aria-labelledby="wireSearchMatchesTitle" hidden>
-    <h3 id="wireSearchMatchesTitle"><span id="wireSearchCount">Matches</span><span id="wireSearchCoverage"></span></h3>
+    <h3 id="wireSearchMatchesTitle"><span id="wireSearchCount">Matches</span> <span id="wireSearchCoverage"></span></h3>
     <ol id="wireSearchResults" class="wire-search-results" aria-label="Search results"></ol>
     <div id="wireSearchPaging" class="wire-search-paging"></div>
   </section>
@@ -109,7 +109,9 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-filters,.wire-search-paging {display:flex;align-items:center;flex-wrap:wrap;gap:12px}
 .wire-search-filters {gap:8px;padding:4px 6px 8px}
 .wire-search-panel > p:not(.visually-hidden):not(:empty) {margin:8px}
-#wireSearchCoverage:not(:empty)::before {content:" · ";white-space:pre}
+#wireSearchMatchesTitle {display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-xs) var(--space-md)}
+#wireSearchMatchesTitle>span {min-width:0;overflow-wrap:anywhere}
+#wireSearchCount {color:var(--ink)}
 .wire-search-set {margin:0;min-width:0}
 .wire-search-set>h3:not(.visually-hidden),.wire-search-set>p:not(.visually-hidden) {margin:8px 6px 4px 34px;font:inherit;color:var(--muted)}
 .wire-search-results {padding:0;margin:0;list-style:none}
@@ -159,13 +161,14 @@ export function createFrozenReportFrame(html, doc = document) {
     const frame = doc.createElement("iframe");
     frame.className = "report-frame"; frame.title = "Frozen saved report";
     frame.setAttribute("sandbox", ""); frame.setAttribute("referrerpolicy", "no-referrer");
-    const template = doc.createElement("template");
-    template.innerHTML = html;
-    template.content.querySelectorAll("base,iframe,frame,object,embed,script").forEach(node => node.remove());
-    template.content.querySelectorAll("meta[http-equiv]").forEach(node => {
+    // Keep body styling in a document without a browsing context.
+    const parsed = doc.implementation.createHTMLDocument("");
+    parsed.documentElement.innerHTML = html;
+    parsed.querySelectorAll("base,iframe,frame,object,embed,script").forEach(node => node.remove());
+    parsed.querySelectorAll("meta[http-equiv]").forEach(node => {
         if (node.getAttribute("http-equiv").trim().toLowerCase() !== "content-security-policy") node.remove();
     });
-    template.content.querySelectorAll("[href],[xlink\\:href]").forEach(node => {
+    parsed.querySelectorAll("[href],[xlink\\:href]").forEach(node => {
         for (const attribute of ["href", "xlink:href"]) {
             const value = node.getAttribute(attribute);
             if (value !== null && !/^#[a-zA-Z0-9_-]+$/.test(value)) node.removeAttribute(attribute);
@@ -183,11 +186,14 @@ export function createFrozenReportFrame(html, doc = document) {
         }
     }
     const isolation = '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;; font-src data:; base-uri &#39;none&#39;; form-action &#39;none&#39;">';
-    frame.srcdoc = "<!doctype html>" + root.outerHTML.replace("</html>", () => isolation + template.innerHTML + "</html>");
+    frame.srcdoc = "<!doctype html>" + root.outerHTML.replace("</html>", () => isolation + parsed.head.outerHTML + parsed.body.outerHTML + "</html>");
     return frame;
 }
 
-export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, presentHit, serviceIcon }) {
+export function mountLiveSearch({ api, createState, navigate, presentDocument, getAnalysis, onAnalysis, onInvalidateOpen, contract, ux, searchFields, results, presentHit, serviceIcon, nativeSearch }) {
+    if (typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function" || typeof api.accessState !== "function") {
+        throw new TypeError("Search requires the shared access publication fence.");
+    }
     const $ = id => document.getElementById(id);
     const input = $("wireSearch"), panel = $("wireSearchPanel"), list = $("wireSearchResults");
     const home = $("wireSearchHome");
@@ -195,20 +201,82 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
     const lists = { matches: list };
     const pagers = { matches: $("wireSearchPaging") };
     const returns = new Map();
+    const preparations = new Set();
     let stream, timer, heartbeat, sequence = 0, openId = 0, restore, analysisKey = null, documentReturn = null;
     let pages = { matches: 0 }, drawnKeys = { matches: null };
     let connected = false, connecting = false, disposed = false, queryActive = false;
     let hidden = document.hidden, resumeVisibleQuery = false, returnRecovery = false, failure = null;
     let suspendedPresentation = null, windowAway = false, ownerReleased = false, releaseFence = null;
-    const inactive = () => disposed || document.hidden || windowAway;
+    let accessWithdrawn = false, accessVersion = 0, streamAuthority = null;
+    const inactive = () => accessWithdrawn || disposed || document.hidden || windowAway;
+    function currentToken(token, version) {
+        if (version !== accessVersion || token === null || token === undefined) return false;
+        if (typeof token.then === "function" || version !== accessVersion) return false;
+        return api.isCurrent(token) === true && version === accessVersion;
+    }
+    function isPublished(authority) {
+        if (accessWithdrawn || !authority || authority.version !== accessVersion) return false;
+        const { token, version } = authority, current = currentToken(token, version);
+        if (accessWithdrawn || version !== accessVersion || authority.token !== token) return false;
+        if (current) return true;
+        withdrawAccess();
+        return false;
+    }
+    function publication() {
+        if (accessWithdrawn) return null;
+        const version = accessVersion, authority = { token: api.publicationToken(), version };
+        return isPublished(authority) ? authority : null;
+    }
+    function clearPreparations() {
+        for (const prepared of preparations) prepared.value = prepared.receipt = prepared.authority = null;
+        preparations.clear();
+    }
+    function withdrawAccess() {
+        const notify = !accessWithdrawn;
+        accessWithdrawn = true;
+        accessVersion++;
+        nativeSearch?.withdraw();
+        if (notify) { sequence++; openId++; }
+        connected = connecting = queryActive = resumeVisibleQuery = returnRecovery = ownerReleased = false;
+        restore = suspendedPresentation = releaseFence = streamAuthority = analysisKey = documentReturn = failure = null;
+        clearTimeout(timer); clearTimeout(heartbeat);
+        const retired = stream; stream = null;
+        retired?.abort();
+        returns.clear(); clearPreparations(); state.disconnect(); eraseLists();
+        pages = { matches: 0 };
+        input.disabled = scope.disabled = category.disabled = true;
+        field.sync("");
+        hide();
+        panel.scrollTop = list.scrollTop = 0;
+        delete panel.dataset.searchState;
+        for (const id of ["wireSearchStatus", "wireSearchCount", "wireSearchCoverage"]) replaceSearchText($(id), "");
+        $("wireSearchStatus").classList.remove("visually-hidden");
+        $("wireSearchCoverage").hidden = $("wireSearchRetry").hidden = true;
+        if (notify) onInvalidateOpen({ accessWithdrawn: true });
+    }
     const knownOwnerRelease = reason => ["idle", "session-released", "runtime-stopped"].includes(reason);
     const purpose = () => scope.value === "analysis" ? "analysis" : "navigation";
     const types = () => scope.value === "analysis" ? ["interaction", "context", "reply", "action"] : category.value ? [category.value] : [];
     const ownedReceipt = () => state.snapshot().matches?.receipt;
     const releasedCurrentOwner = () => Boolean(releaseFence && releaseFence.stream === stream
         && releaseFence.panelId === state.snapshot().panelId && releaseFence.epoch === state.snapshot().epoch);
+    function eraseSearchContent(root) {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) text.data = "";
+        for (const node of root.querySelectorAll("*")) {
+            for (const name of ["aria-label", "title", "data-search-id", "data-search-bundle"]) {
+                const attribute = node.getAttributeNode(name);
+                if (attribute) { attribute.value = ""; node.removeAttributeNode(attribute); }
+            }
+        }
+        root.replaceChildren();
+    }
+    function replaceSearchText(root, text) {
+        eraseSearchContent(root);
+        if (text) root.append(document.createTextNode(text));
+    }
     function eraseLists() {
-        list.replaceChildren(); pagers.matches.replaceChildren(); drawnKeys.matches = null;
+        eraseSearchContent(list); eraseSearchContent(pagers.matches); drawnKeys.matches = null;
         $("wireSearchMatches").hidden = true;
     }
     function el(tag, text, cls) {
@@ -218,7 +286,8 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         return node;
     }
     function button(text, action) {
-        const node = el("button", text, "quiet"); node.type = "button"; node.addEventListener("click", action);
+        const authority = publication(), node = el("button", text, "quiet");
+        node.type = "button"; node.addEventListener("click", () => { if (isPublished(authority)) action(); });
         const role = text.startsWith("Previous ") ? "previous" : text.startsWith("Next ") ? "next" : text === "Back to search" ? "back" : null;
         if (role) ux?.utility(node, role, text);
         return node;
@@ -235,6 +304,10 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
     function coverageMessage(corpus, requestedTypes) {
         const issues = corpus?.issues?.filter(issue => !Array.isArray(issue.types)
             || issue.types.some(type => requestedTypes.includes(type))) ?? [];
+        if (issues.length && issues.every(issue => issue.types?.length === 1 && issue.types[0] === "reply"
+            && ["not-authorized", "revoked", "not-retained", "source-unavailable"].includes(issue.code))) {
+            return "Saved GitHub replies are unavailable for Search.";
+        }
         const reports = issues.length && issues.every(issue => issue.types?.length === 1 && issue.types[0] === "report");
         if (reports && issues.every(issue => issue.code === "missing")) {
             return issues.length === 1 ? "A saved report file is missing." : "Some saved report files are missing.";
@@ -244,6 +317,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         return "Some saved content could not be searched.";
     }
     function show() {
+        if (!publication()) return;
         field.sync();
         panel.hidden = !input.value.trim();
         input.setAttribute("aria-expanded", String(!panel.hidden));
@@ -262,12 +336,18 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
             ? "Find matching activity within your current filters. Results update the charts and report scope."
             : "Search your saved activity and reports. This does not collect new data.";
     }
+    function syncNativeSearch() {
+        nativeSearch?.changed({ query: input.value, scope: scope.value, types: types() });
+    }
     function eraseDocument() {
+        clearPreparations();
         if (documentReturn) returns.delete(documentReturn);
         documentReturn = null;
         onInvalidateOpen();
     }
     function fail(message = "Search disconnected. Results were cleared; reconnect to read current items.", { released = false } = {}) {
+        const authority = publication();
+        if (!authority) return;
         const recover = released && returnRecovery && !inactive() && queryActive;
         if (!released) { queryActive = resumeVisibleQuery = false; suspendedPresentation = null; }
         ownerReleased = released && queryActive;
@@ -279,60 +359,70 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         stream?.abort(); stream = null;
         clearTimeout(heartbeat);
         state.disconnect(); eraseLists(); eraseDocument();
-        $("wireSearchStatus").textContent = message;
+        if (!isPublished(authority)) return;
+        replaceSearchText($("wireSearchStatus"), message);
         $("wireSearchStatus").classList.remove("visually-hidden");
-        $("wireSearchCoverage").textContent = "";
+        replaceSearchText($("wireSearchCoverage"), "");
         $("wireSearchRetry").hidden = false;
         onAnalysis({ state: "unavailable", query: scope.value === "analysis" ? input.value : null });
-        if (recover) connect();
+        if (recover && isPublished(authority)) connect();
     }
     function restoreResultFocus() {
+        const restoration = restore, authority = restoration?.authority;
+        if (!isPublished(authority)) return;
         const current = state.snapshot(), context = getAnalysis();
-        if (!restore || panel.hidden || !current.matches.receipt || context?.pending || current.matches.receipt.revision !== context?.revision
+        if (restore !== restoration || !isPublished(authority) || panel.hidden || !current.matches.receipt || context?.pending || context?.returnPending || current.matches.receipt.revision !== context?.revision
             || scope.value === "analysis" && analysisKey !== context?.key) return;
-        lists.matches.scrollTop = restore.scroll.matches;
-        panel.scrollTop = restore.panelScroll;
-        const focused = [...lists[restore.set].querySelectorAll("button")].find(node => node.dataset.searchId === restore.focus);
-        if (!restore.retainFocus) (focused || input).focus({ preventScroll: true });
+        lists.matches.scrollTop = restoration.scroll.matches;
+        panel.scrollTop = restoration.panelScroll;
+        const focused = [...lists[restoration.set].querySelectorAll("button")].find(node => node.dataset.searchId === restoration.focus);
+        if (!isPublished(authority)) return;
+        if (!restoration.retainFocus) (focused || input).focus({ preventScroll: true });
         restore = null;
     }
     function paint() {
-        if (inactive()) return;
+        const authority = publication();
+        if (inactive() || !authority) return;
         const current = state.snapshot(), status = current.status;
         panel.dataset.searchState = current.state;
         const partial = Boolean(current.matches.receipt && !contract.completeCoverage(status?.corpus, current.matches.receipt.queryTypes));
         const labels = { queued: "Searching...",
+            refreshing: "Updating search...",
             building: "Preparing search...",
             searching: "Searching...", stale: "Saved content changed. Search again.",
             changing: "Saved content changed. Search again.",
             unavailable: "Search is unavailable. Try again.",
             disconnected: failure || "Search disconnected. Reconnect to read current items.", closed: "Local search closed.", superseded: "A newer query replaced this read.",
-            incomplete: "Search is incomplete. Some saved content could not be searched.",
-            "no-match": "No matches. Try different words." };
-        $("wireSearchStatus").textContent = !input.value.trim() ? ""
+            incomplete: coverageMessage(status?.corpus, current.matches.receipt?.queryTypes ?? types()) === "Saved GitHub replies are unavailable for Search."
+                ? "Saved GitHub replies are unavailable for Search."
+                : "Search is incomplete. Some saved content could not be searched.",
+            "no-match": nativeSearch?.active() ? "No GitHub, saved or navigation matches. Microsoft results are separate." : "No matches. Try different words." };
+        replaceSearchText($("wireSearchStatus"), !input.value.trim() ? ""
             : current.matches.receipt ? current.matches.total
                 ? `${current.matches.total} ${partial ? "available " : ""}match${current.matches.total === 1 ? "" : "es"}`
                 : partial ? labels.incomplete : labels["no-match"]
-                : labels[current.state] || "Ready for a local search.";
+                : labels[current.state] || "Ready for a local search.");
         $("wireSearchStatus").classList.toggle("visually-hidden", Boolean(current.matches.total));
-        $("wireSearchCoverage").textContent = partial && current.matches.total
-            ? coverageMessage(status?.corpus, current.matches.receipt.queryTypes) : "";
+        replaceSearchText($("wireSearchCoverage"), partial && current.matches.total
+            ? coverageMessage(status?.corpus, current.matches.receipt.queryTypes) : "");
         $("wireSearchCoverage").hidden = !$("wireSearchCoverage").textContent;
         $("wireSearchRetry").hidden = !input.value.trim() || !["disconnected", "stale", "unavailable", "closed", "changing"].includes(current.state);
         $("wireSearchRetry").textContent = connected ? "Retry search" : "Reconnect search";
         $("wireSearchMatches").hidden = !current.matches.total;
-        $("wireSearchCount").textContent = `${current.matches.total} match${current.matches.total === 1 ? "" : "es"}`;
-        paintSet("matches", current.matches);
+        replaceSearchText($("wireSearchCount"), `${current.matches.total} ${nativeSearch?.active() ? "GitHub / saved / navigation " : ""}match${current.matches.total === 1 ? "" : "es"}`);
+        paintSet("matches", current.matches, authority);
+        if (!isPublished(authority)) return;
         restoreResultFocus();
     }
-    function paintSet(key, value) {
+    function paintSet(key, value, authority) {
+        if (!isPublished(authority)) return;
         const hits = value?.hits ?? [], size = 20, pageCount = Math.ceil(hits.length / size);
         if (value?.receipt) pages[key] = Math.min(pages[key], Math.max(0, pageCount - 1));
         const draw = JSON.stringify([value?.receipt ?? null, pages[key]]);
         if (draw === drawnKeys[key]) return;
         drawnKeys[key] = draw;
         const list = lists[key], paging = pagers[key];
-        list.replaceChildren();
+        eraseSearchContent(list);
         const contexts = new Map(), byType = new Map();
         const reportFormat = hit => hit.type === "report" && ["html", "json", "markdown", "pdf"].includes(hit.coverage?.format)
             ? hit.coverage.format === "markdown" ? "Markdown" : hit.coverage.format.toUpperCase() : null;
@@ -349,7 +439,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         for (const hit of groupedHits.slice(pages[key] * size, (pages[key] + 1) * size)) {
             const context = contexts.get(JSON.stringify([hit.type, hit.title]));
             const shown = presentHit(hit, { showSource: context.sources.size > 1 });
-            const row = el("li"), target = button("", () => open(hit, key));
+            const hitId = hit.id, row = el("li"), target = button("", () => open(hitId, key));
             row.dataset.searchCategory = hit.type;
             if (previousType !== hit.type) {
                 const group = ({ interaction: "Interactions", context: "Conversation context", reply: "Replies", action: "Recorded actions",
@@ -410,18 +500,28 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 format, outcome?.label, limitation].filter(Boolean).join("; "));
             if (limitation) body.append(el("span", limitation, "wire-search-limitation"));
             target.append(body);
+            if (!isPublished(authority)) return;
             row.append(target); list.append(row);
         }
-        paging.replaceChildren();
+        if (!isPublished(authority)) return;
+        eraseSearchContent(paging);
         if (pageCount > 1) {
             const noun = "results";
-            const previous = button("Previous " + noun, () => { restore = null; pages[key]--; paint(); list.querySelector("button")?.focus(); });
-            const next = button("Next " + noun, () => { restore = null; pages[key]++; paint(); list.querySelector("button")?.focus(); });
+            const previous = button("Previous " + noun, () => {
+                restore = null; pages[key]--; paint();
+                if (isPublished(authority)) list.querySelector("button")?.focus();
+            });
+            const next = button("Next " + noun, () => {
+                restore = null; pages[key]++; paint();
+                if (isPublished(authority)) list.querySelector("button")?.focus();
+            });
             previous.disabled = !pages[key]; next.disabled = pages[key] >= pageCount - 1;
+            if (!isPublished(authority)) return;
             paging.append(previous, el("span", `Page ${pages[key] + 1} of ${pageCount}; ${hits.length} total`), next);
         }
     }
-    function receive(event) {
+    function receive(event, authority) {
+        if (!isPublished(authority)) return;
         const before = state.snapshot();
         if (inactive() && ["results", "opened"].includes(event.event)) return;
         if (event.event === "connected") {
@@ -432,7 +532,9 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         } else state.receive(event);
         if (event.panelId !== state.snapshot().panelId) return;
         clearTimeout(heartbeat);
-        if (!inactive()) heartbeat = setTimeout(() => fail("Search disconnected. Results were cleared. Reconnect to continue."), 5000);
+        if (!inactive()) heartbeat = setTimeout(() => {
+            if (isPublished(authority)) fail("Search disconnected. Results were cleared. Reconnect to continue.");
+        }, 5000);
         if (event.event === "heartbeat") return;
         if (event.event === "fence" && event.epoch > before.epoch) {
             releaseFence = knownOwnerRelease(event.reason) ? { stream, panelId: event.panelId, epoch: event.epoch, reason: event.reason } : null;
@@ -443,13 +545,22 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
                 queryActive = resumeVisibleQuery = returnRecovery = ownerReleased = false; suspendedPresentation = null;
             }
             eraseDocument();
+            if (!isPublished(authority)) return;
             onAnalysis({ state: "stale", query: scope.value === "analysis" ? input.value : null, revoked: true });
+            if (event.reason === "collected" && purpose() === "navigation") {
+                nativeSearch?.withdraw();
+                if (isPublished(authority) && queryActive && !inactive() && !panel.hidden) {
+                    schedule();
+                    return;
+                }
+            }
         }
         if (event.event === "status" && event.epoch === state.snapshot().epoch
             && (event.requestId === state.snapshot().requestId || event.requestId === undefined && event.state === "unavailable")
             && ["unavailable", "closed"].includes(event.state)) {
             fail(event.state === "closed" ? "Local search closed." : "Search is unavailable. Try again."); return;
         }
+        if (!isPublished(authority)) return;
         if (event.event === "results" && state.snapshot().matches === event.matches && scope.value === "analysis"
             && contract.analysisReceipt(event.matches.receipt)) {
             onAnalysis({ state: "ready", query: input.value, hits: event.matches.hits, receipt: event.matches.receipt,
@@ -457,33 +568,46 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         }
         if (event.event === "results" && state.snapshot().matches === event.matches) returnRecovery = false;
         if (event.event === "opened" && event.openId === openId && contract.sameReceipt(event.receipt, ownedReceipt())) {
-            void showOpened(event.document, event.receipt, event.openId).catch(() => fail("The current item could not be displayed. Return to search and read it again."));
+            const prepared = { value: event.document, receipt: event.receipt, id: event.openId, authority };
+            preparations.add(prepared);
+            void showOpened(prepared).catch(() => {
+                if (isPublished(authority) && prepared.id === openId) fail("The current item could not be displayed. Return to search and read it again.");
+            });
         }
         paint();
     }
     function connect() {
-        if (connected || connecting || inactive()) return;
+        const authority = publication();
+        if (!authority || connected || connecting || inactive()) return;
         connecting = true;
         queryActive = Boolean(input.value.trim());
         ownerReleased = false; releaseFence = null;
         failure = null;
         state.query(++sequence, purpose(), types());
         paint();
+        if (!isPublished(authority)) return;
         stream = new AbortController();
+        streamAuthority = authority;
         const owned = stream;
         clearTimeout(heartbeat);
-        heartbeat = setTimeout(() => fail("The local search connection did not become ready. No results were retained."), 10000);
+        heartbeat = setTimeout(() => {
+            if (isPublished(authority) && stream === owned) fail("The local search connection did not become ready. No results were retained.");
+        }, 10000);
         api.searchEvents(event => {
-            if (stream === owned && !owned.signal.aborted) receive(event);
+            if (isPublished(authority) && stream === owned && !owned.signal.aborted) receive(event, authority);
         }, { signal: owned.signal, schemaVersion: contract.schemaVersion }).catch(error => {
-            if (!owned.signal.aborted && stream === owned) {
+            if (isPublished(authority) && !owned.signal.aborted && stream === owned) {
                 const released = error.reason === "search-stream-ended" && releasedCurrentOwner();
                 fail(released && releaseFence.reason === "idle" ? "Search paused after inactivity." : failureMessage(error), { released });
             }
         });
     }
     function schedule(resetPage = true) {
+        const authority = publication();
+        if (!authority) return;
+        syncNativeSearch();
         if (documentReturn) eraseDocument();
+        if (!isPublished(authority)) return;
         clearTimeout(timer);
         queryActive = Boolean(input.value.trim());
         if (!queryActive) resumeVisibleQuery = false;
@@ -491,24 +615,30 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         const requestId = ++sequence;
         state.query(requestId, purpose(), types());
         if (resetPage && !restore) pages = { matches: 0 };
-        analysisKey = getAnalysis()?.key ?? null;
+        const analysis = getAnalysis();
+        if (!isPublished(authority)) return;
+        analysisKey = analysis?.key ?? null;
         onAnalysis({ state: "pending", query: scope.value === "analysis" ? input.value : null, scopeKey: analysisKey });
+        if (!isPublished(authority)) return;
         paint();
+        if (!isPublished(authority)) return;
         if (inactive() && input.value.trim()) return;
         if (!connected) { connect(); return; }
+        const owned = stream;
         timer = setTimeout(async () => {
+            if (!isPublished(authority) || stream !== owned || owned.signal.aborted || requestId !== sequence) return;
             try {
-                await api("/api/search/query", { schemaVersion: contract.schemaVersion, purpose: purpose(), query: input.value, requestId, types: types() }, { signal: stream.signal });
+                await api("/api/search/query", { schemaVersion: contract.schemaVersion, purpose: purpose(), query: input.value, requestId, types: types() }, { signal: owned.signal });
             } catch (error) {
-                if (requestId === sequence && error.reason !== "search_cancelled") {
+                if (isPublished(authority) && stream === owned && requestId === sequence && error.reason !== "search_cancelled") {
                     fail(failureMessage(error), { released: error.reason === "search-disconnected" && releasedCurrentOwner() });
                 }
             }
         }, 120);
     }
-    function remember() {
+    function remember(authority) {
         const key = crypto.randomUUID();
-        returns.set(key, { query: input.value, scope: scope.value, category: category.value, pages: { ...pages },
+        returns.set(key, { authority, query: input.value, scope: scope.value, category: category.value, pages: { ...pages },
             panelScroll: panel.scrollTop,
             scroll: { matches: lists.matches.scrollTop },
             set: document.activeElement?.dataset.searchSet || "matches", focus: document.activeElement?.dataset.searchId });
@@ -516,41 +646,65 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         history.replaceState({ ...history.state, wireSearchReturn: key }, "");
         return key;
     }
-    async function open(hit, set) {
+    function open(hitId, set) {
+        const authority = publication();
+        if (!authority) return;
         const receipt = state.snapshot()[set]?.receipt, id = ++openId;
         if (!receipt || !connected) return;
-        remember();
-        $("wireSearchStatus").textContent = "Opening the exact current item...";
-        try { await api("/api/search/open", { id: hit.id, receipt, openId: id }, { signal: stream.signal }); }
-        catch (error) {
-            if (id !== openId) return;
+        remember(authority);
+        replaceSearchText($("wireSearchStatus"), "Opening the exact current item...");
+        void api("/api/search/open", { id: hitId, receipt, openId: id }, { signal: stream.signal }).catch(error => {
+            if (!isPublished(authority) || id !== openId) return;
             state.query(++sequence, purpose(), types()); eraseLists(); paint();
-            $("wireSearchStatus").textContent = failureMessage(error);
+            replaceSearchText($("wireSearchStatus"), failureMessage(error));
             $("wireSearchRetry").textContent = connected ? "Retry search" : "Reconnect search";
             $("wireSearchRetry").hidden = false;
-        }
+        });
     }
-    async function showOpened(value, receipt, id) {
+    async function showOpened(prepared) {
         const returnKey = history.state?.wireSearchReturn;
-        const isCurrent = () => !inactive() && connected && id === openId && contract.sameReceipt(receipt, ownedReceipt());
-        hide();
-        if (value.kind === "route") await navigate(value);
-        else if (isCurrent()) {
-            documentReturn = returnKey;
-            if (!await presentDocument(value, { isCurrent, returnKey })) return;
+        const isCurrent = () => isPublished(prepared.authority) && !inactive() && connected && prepared.id === openId
+            && contract.sameReceipt(prepared.receipt, ownedReceipt());
+        let retainedDocument = false;
+        try {
+            if (!isCurrent()) return;
+            hide();
+            if (prepared.value.kind === "route") await navigate(prepared.value, { isCurrent });
+            else {
+                documentReturn = returnKey;
+                if (!await presentDocument(prepared.value, { isCurrent, returnKey })) return;
+                retainedDocument = isCurrent();
+            }
+            if (!isCurrent()) return;
+            const { wireSearchReturn, ...next } = history.state || {};
+            history.replaceState(next, "");
+        } finally {
+            prepared.value = null;
+            if (!retainedDocument) {
+                prepared.receipt = prepared.authority = null;
+                preparations.delete(prepared);
+            }
         }
-        if (!isCurrent()) return;
-        const { wireSearchReturn, ...next } = history.state || {};
-        history.replaceState(next, "");
     }
-    input.addEventListener("focus", () => { show(); paint(); });
+    input.addEventListener("focus", () => {
+        show();
+        if (state.snapshot().state === "refreshing" && queryActive && purpose() === "navigation") schedule();
+        else paint();
+    });
     input.addEventListener("click", () => { if (panel.hidden) { show(); paint(); } });
     const field = searchFields.mount(input, {
         clearLabel: "Clear search",
-        onInput: () => { restore = null; panel.scrollTop = 0; show(); schedule(); },
-        onClear: () => { restore = null; show(); schedule(); },
+        onInput: () => {
+            const authority = publication();
+            if (authority) { restore = null; panel.scrollTop = 0; show(); if (isPublished(authority)) schedule(); }
+        },
+        onClear: () => {
+            const authority = publication();
+            if (authority) { restore = null; show(); if (isPublished(authority)) schedule(); }
+        },
     });
     scope.addEventListener("change", () => {
+        if (!publication()) return;
         restore = null;
         syncScope();
         schedule();
@@ -558,11 +712,16 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
     category.addEventListener("change", () => { restore = null; schedule(); });
     $("wireSearchRetry").addEventListener("click", () => { connected ? schedule() : connect(); });
     input.addEventListener("keydown", event => {
-        if (event.isComposing) return;
-        if (event.key === "ArrowDown") { event.preventDefault(); show(); lists.matches.querySelector("button")?.focus(); }
+        const authority = publication();
+        if (event.isComposing || !authority) return;
+        if (event.key === "ArrowDown") {
+            event.preventDefault(); show();
+            if (isPublished(authority)) lists.matches.querySelector("button")?.focus();
+        }
         if (event.key === "Escape") { event.preventDefault(); hide(); }
     });
     for (const list of Object.values(lists)) list.addEventListener("keydown", event => {
+        if (!publication()) return;
         const nodes = Object.values(lists).flatMap(list => [...list.querySelectorAll("button")]), index = nodes.indexOf(document.activeElement);
         if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
             event.preventDefault();
@@ -571,17 +730,21 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         }
     });
     function restoreSearch(key) {
+        if (!publication()) return false;
         documentReturn = null;
         const saved = !disposed && returns.get(key);
-        if (!saved) { hide(); return false; }
+        const authority = saved?.authority;
+        if (!saved || !isPublished(authority)) { hide(); return false; }
         input.value = saved.query; scope.value = saved.scope; category.value = saved.category;
         syncScope();
-        pages = { ...saved.pages }; restore = saved; show(); schedule(false);
+        pages = { ...saved.pages }; restore = saved; show();
+        if (!isPublished(authority)) return false;
+        schedule(false);
         return true;
     }
     window.addEventListener("popstate", () => restoreSearch(history.state?.wireSearchReturn));
     home.addEventListener("keydown", event => {
-        if (event.key === "Escape" && !event.isComposing) {
+        if (event.key === "Escape" && !event.isComposing && publication()) {
             event.preventDefault(); input.focus({ preventScroll: true }); hide();
         }
     });
@@ -592,9 +755,11 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         document.addEventListener(type, event => { if (event.isTrusted) restore = null; }, { capture: true, passive: true });
     }
     function suspend() {
+        const authority = publication();
+        if (!authority) return;
         resumeVisibleQuery ||= queryActive && (connected || connecting || ownerReleased);
         if (!panel.hidden && resumeVisibleQuery) suspendedPresentation = {
-            panelScroll: panel.scrollTop, scroll: { matches: list.scrollTop }, set: "matches",
+            authority: streamAuthority, panelScroll: panel.scrollTop, scroll: { matches: list.scrollTop }, set: "matches",
             focus: document.activeElement?.dataset.searchId, retainFocus: !document.activeElement?.dataset.searchId,
         };
         returnRecovery = false;
@@ -603,18 +768,23 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         // The visible return must submit a fresh sequence against current sources.
         if (resumeVisibleQuery) state.query(++sequence, purpose(), types());
         eraseLists(); eraseDocument(); hide();
+        if (!isPublished(authority)) return;
         onAnalysis({ state: resumeVisibleQuery ? "pending" : "unavailable",
             query: scope.value === "analysis" ? input.value : null, scopeKey: analysisKey });
     }
     function resume() {
-        if (inactive()) return;
+        const authority = publication();
+        if (!authority || inactive()) return;
         if (resumeVisibleQuery) {
             resumeVisibleQuery = false;
             if (suspendedPresentation) {
                 restore = suspendedPresentation; suspendedPresentation = null; show();
             }
+            if (!isPublished(authority)) return;
             returnRecovery = connected || connecting;
-            heartbeat = setTimeout(() => fail("Search disconnected. Results were cleared. Reconnect to continue."), connecting ? 10000 : 5000);
+            heartbeat = setTimeout(() => {
+                if (isPublished(authority)) fail("Search disconnected. Results were cleared. Reconnect to continue.");
+            }, connecting ? 10000 : 5000);
             if (connected) schedule(false);
             else if (!connecting) connect();
         } else if (connected) paint();
@@ -638,32 +808,72 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         if (hidden) suspend();
         else resume();
     });
+    const canPrepareAnalysis = query => Boolean(publication()) && (!input.value || scope.value === "analysis" && input.value === query);
     paint();
     return {
+        hide,
         invalidate: fail,
+        withdrawAccess,
+        resumeAccess() {
+            const version = accessVersion, token = api.publicationToken(), current = currentToken(token, version);
+            if (version !== accessVersion) return false;
+            if (!current) { withdrawAccess(); return false; }
+            accessWithdrawn = false;
+            input.disabled = scope.disabled = false;
+            syncScope(); field.sync();
+            return true;
+        },
         restore: restoreSearch,
-        canRestore: key => !disposed && returns.has(key),
-        returnKey: () => !disposed && returns.has(history.state?.wireSearchReturn) ? history.state.wireSearchReturn : null,
+        canRestore: key => !disposed && isPublished(returns.get(key)?.authority),
+        returnKey: () => !disposed && isPublished(returns.get(history.state?.wireSearchReturn)?.authority) ? history.state.wireSearchReturn : null,
         sessionChanged() {
-            returns.clear();
-            if (!connecting) {
-                const renew = queryActive && (connected || resumeVisibleQuery || returnRecovery || ownerReleased);
-                fail("The local connection changed. Reading current Search items.", { released: true });
-                if (renew) {
-                    if (inactive()) resumeVisibleQuery = true;
-                    else connect();
-                }
-                return;
+            const version = accessVersion, mode = api.accessState().mode;
+            if (version !== accessVersion) return;
+            if (mode !== "unbound" || accessWithdrawn) { withdrawAccess(); return; }
+            const token = api.publicationToken(), current = currentToken(token, version);
+            if (version !== accessVersion) return;
+            if (!current) { withdrawAccess(); return; }
+            const renew = queryActive && (connected || connecting || resumeVisibleQuery || returnRecovery || ownerReleased);
+            accessVersion++; sequence++; openId++;
+            returns.clear(); returnRecovery = false; streamAuthority = null;
+            const authority = { token, version: accessVersion };
+            if (restore) restore.authority = authority;
+            if (suspendedPresentation) suspendedPresentation.authority = authority;
+            fail("The local connection changed. Reading current Search items.", { released: true });
+            if (!isPublished(authority)) return;
+            if (renew) {
+                if (inactive()) resumeVisibleQuery = true;
+                else connect();
             }
-            state.disconnect(); eraseLists(); eraseDocument();
-            onAnalysis({ state: "stale", query: scope.value === "analysis" ? input.value : null, revoked: true });
         },
         analysisScope() {
+            const authority = publication();
+            if (!authority) return;
             if (scope.value !== "analysis") { scope.value = "analysis"; scope.dispatchEvent(new Event("change")); }
-            show(); input.focus();
+            show();
+            if (isPublished(authority)) input.focus();
+        },
+        analysisPreparation() {
+            return publication() && scope.value === "analysis" && input.value.trim() ? input.value : null;
+        },
+        canPrepareAnalysis,
+        prepareAnalysis(query) {
+            const authority = publication();
+            if (!authority) throw new Error("Search access is unavailable. Start a new search after access returns.");
+            if (typeof query !== "string" || !query.trim()) throw new TypeError("Private Search preparation requires a nonempty query.");
+            if (!canPrepareAnalysis(query) || !isPublished(authority)) throw new Error("Search changed while the private view was opening.");
+            input.value = query; scope.value = "analysis";
+            syncScope();
+            field.sync();
+            resumeVisibleQuery = inactive();
+            schedule();
         },
         changed() {
+            const authority = publication();
+            if (!authority) return;
+            syncNativeSearch();
             const context = getAnalysis();
+            if (!isPublished(authority)) return;
             if (queryActive && (connected || connecting || resumeVisibleQuery) && scope.value === "analysis" && input.value && context?.active && !context.pending
                 && (analysisKey !== context.key || context.needsRebind && state.snapshot().matches.receipt)) {
                 schedule(!restore);

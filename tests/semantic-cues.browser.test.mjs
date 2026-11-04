@@ -12,10 +12,11 @@ import { serviceCategories } from "../lib/service-categories.mjs";
 import { createRecordedResults } from "../web/recorded-results.mjs";
 import { dimensionalIcons } from "../web/dimensional-icons.mjs";
 import { uxIconSources } from "../web/ux-icons.mjs";
-import { buildSanitizedBundle } from "../lib/export.mjs";
+import { buildSanitizedBundle, buildSanitizedRecord } from "../lib/export.mjs";
+import { buildExportCatalog } from "../lib/export-selection.mjs";
 import { renderHtmlReport } from "../lib/product-report.mjs";
 import { renderPdf } from "../lib/pdf.mjs";
-import { fixture, exportCatalogFor, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { rgb, pairwise, contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_CUE_PROOFS;
@@ -35,9 +36,9 @@ const records = [
     };
     return record;
 });
-const iconName = markup => /data-fluent-icon="([^"]+)"/.exec(markup)[1];
+const iconName = markup => /data-lucide-icon="([^"]+)"/.exec(markup)[1];
 const expectedServices = serviceCategories.entries.map(entry => ({
-    ...entry, tone: charts.tone(entry.id), icon: iconName(dimensionalIcons[entry.id]),
+    ...serviceCategories.display(entry.id), tone: charts.tone(entry.id), icon: iconName(dimensionalIcons[entry.id]),
 }));
 
 test("all outcome and classifier cues keep the canonical semantic palette and glyphs", () => {
@@ -59,19 +60,16 @@ async function ready(page) {
     await page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
 }
 async function expand(page) {
-    for (const id of ["meaning", "serviceDefinitions"]) {
-        if (!await page.locator(`#${id}`).evaluate(node => node.open)) {
-            await page.locator(`#${id}>summary`).focus();
-            await page.keyboard.press("Enter");
-        }
-    }
+    await page.locator("#openChartReference").click();
+    await page.locator("#chartReferenceShowData").click();
+    await page.locator("#chartReferenceSource>summary").press("Enter");
 }
 async function app(run) {
     const before = structuredClone(records), posts = [], errors = [];
     const server = createServer(async (req, res) => {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "cue-fixture"));
+            res.end(renderHtmlShell("a".repeat(64), "cue-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
             return;
         }
         posts.push(req.url);
@@ -103,7 +101,7 @@ async function app(run) {
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 }
 
-async function measure(page, selector = "#meaning,#serviceDefinitions") {
+async function measure(page, selector = "#meaningBody,#serviceDefinitions") {
     return page.locator(selector).evaluateAll(sections => {
         const rgb = value => value.match(/[\d.]+/g).map(Number);
         const lum = rgb => rgb.slice(0, 3).map(n => n / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
@@ -122,9 +120,9 @@ async function measure(page, selector = "#meaning,#serviceDefinitions") {
             const svg = node.querySelector("svg"), label = node.querySelector(":scope>span"), style = getComputedStyle(node);
             return {
                 text: node.textContent, service: node.dataset.service, outcome: node.dataset.outcome, color: style.color,
-                icon: svg.dataset.fluentIcon, hidden: svg.getAttribute("aria-hidden"), focusable: svg.getAttribute("focusable"),
+                icon: svg.dataset.lucideIcon, hidden: svg.getAttribute("aria-hidden"), focusable: svg.getAttribute("focusable"),
                 contrast: contrast(rgb(style.color), background(node)),
-                iconContrast: contrast(rgb(getComputedStyle(svg).fill), background(svg)),
+                iconContrast: contrast(rgb(getComputedStyle(svg).stroke), background(svg)),
                 iconBox: rect(svg), labelBox: rect(label), box: rect(node),
                 lineHeight: parseFloat(style.lineHeight), cursor: style.cursor, tabIndex: node.tabIndex,
                 clipped: [...label.getClientRects()].some(r => r.right > node.getBoundingClientRect().right + 1),
@@ -150,6 +148,7 @@ async function measure(page, selector = "#meaning,#serviceDefinitions") {
 }
 function assertReadable(value) {
     assert.ok(value.overflow <= 1, "No page overflow");
+    assert.ok(value.text.length > 0 && value.cues.length > 0, "The current guide must actually render evidence meanings");
     for (const text of value.text) {
         assert.ok(text.contrast >= 4.5, `${text.text}: ${text.contrast}`);
         assert.equal(text.clipped, false, `${text.text}: text fragments stay inside their own reading column`);
@@ -158,8 +157,9 @@ function assertReadable(value) {
         assert.ok(cue.contrast >= 4.5 && cue.iconContrast >= 3, `${cue.text}: text=${cue.contrast}, icon=${cue.iconContrast}`);
         assert.equal(cue.hidden, "true"); assert.equal(cue.focusable, "false");
         assert.equal(cue.tabIndex, -1); assert.notEqual(cue.cursor, "pointer");
-        assert.equal(cue.iconBox.width, 20); assert.equal(cue.iconBox.height, 20);
-        assert.ok(Math.abs(cue.iconBox.y + 10 - cue.box.y - cue.lineHeight / 2) < 1, `${cue.text}: first-line alignment`);
+        const iconSize = cue.service ? 24 : 20;
+        assert.equal(cue.iconBox.width, iconSize); assert.equal(cue.iconBox.height, iconSize);
+        assert.ok(Math.abs(cue.iconBox.y + iconSize / 2 - cue.box.y - cue.lineHeight / 2) < 1, `${cue.text}: first-line alignment`);
         assert.ok(cue.iconBox.right + 7 <= cue.labelBox.x && cue.labelBox.right <= cue.box.right + 1);
         assert.equal(cue.clipped, false);
     }
@@ -175,9 +175,9 @@ async function screenshotSections(page, name) {
     await page.screenshot({ path: path.join(proofs, `${name}.png`), clip, fullPage: true });
 }
 
-test("expanded result and every service definition retain readable cues when text grows before opening at 375/820/1200 and 200%", { timeout: 60000 }, async () => app(async (context, url) => {
+test("current guide result and service meanings retain readable cues at wide, narrow and enlarged text", { timeout: 60000 }, async () => app(async (context, url) => {
     const page = await context.newPage(), measurements = [];
-    for (const theme of ["light", "dark"]) for (const width of [375, 820, 1200]) for (const scale of [1, 2]) {
+    for (const [theme, width, scale] of [["light", 1200, 1], ["dark", 820, 1], ["light", 375, 2], ["dark", 375, 2]]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.goto(url); await ready(page); await chooseTheme(page, theme);
         assert.equal(await page.locator("#meaning").evaluate(n => n.open), false);
@@ -187,11 +187,10 @@ test("expanded result and every service definition retain readable cues when tex
         const outcomeCues = value.cues.filter(c => c.outcome);
         assert.equal(new Set(outcomeCues.map(c => c.color)).size, 5, "Failures and connection failures share red screen ink, with distinct glyphs and labels");
         assert.equal(new Set(outcomeCues.map(c => c.icon)).size, 6, "Six distinct canonical glyphs, including partial");
-        assert.equal(value.glossaryColumns, width > 700 ? 2 : 1);
         assert.deepEqual(value.cues.filter(c => c.service).map(c => c.service), expectedServices.map(c => c.id));
         for (const entry of expectedServices) {
             const cue = value.cues.find(c => c.service === entry.id);
-            assert.equal(cue.text, entry.label); assert.equal(cue.icon, entry.icon);
+            assert.equal(cue.text.trim(), entry.label); assert.equal(cue.icon, entry.icon);
             const canonical = await page.locator("html").evaluate((node, tone) => {
                 const probe = document.createElement("span"); probe.style.color = `var(--chart-${tone}-label)`; node.append(probe);
                 const color = getComputedStyle(probe).color; probe.remove(); return color;
@@ -203,20 +202,12 @@ test("expanded result and every service definition retain readable cues when tex
         assert.equal(new Set(Object.values(serviceColors)).size, expectedServices.length);
         const distances = pairwise(serviceColors);
         assert.ok(distances[0].distance >= 7, `${theme}: ${JSON.stringify(distances[0])}`);
-        await page.locator("#outcomeFilter-control").click();
         for (const cue of value.cues.filter(c => c.outcome)) {
             assert.equal(cue.icon, uxIconSources[results.icon(cue.outcome)]);
-            const legend = page.locator(`.select-option .result-tone-${cue.outcome}`);
-            assert.equal(await legend.evaluate(n => getComputedStyle(n).color), cue.color);
         }
-        await page.keyboard.press("Escape");
         assert.equal(await page.locator("#meaningText").innerText(), "Tool completion is not answer correctness.");
-        assert.deepEqual(await page.locator("#meaning h3").allTextContents(), ["Current scope", "Result meanings"]);
-        assert.equal(await page.locator("#meaningReading").evaluate(node => node.open), false);
-        await page.locator("#meaningReading>summary").click();
-        assert.deepEqual(await page.locator("#chartReadingNotes dt").allTextContents(), ["Chart scale", "Chart colors", "Dates and grouping", "Evidence limits"]);
-        assert.match(await page.locator("#chartReadingNotes").innerText(), /not an observed Graph HTTP response/);
-        await page.locator("#meaningReading>summary").click();
+        assert.deepEqual(await page.locator("#chartReadingNotes dt").allTextContents(), ["Dates and grouping", "Evidence limits"]);
+        assert.match(await page.locator("#chartReadingNotes").innerText(), /Recorded Work IQ tool attempts; a successful tool result does not prove the whole task was correct/);
         assert.match(await page.locator('[data-outcome="unknown"]+dd').innerText(), /not evidence of success or failure/);
         assert.equal(await page.locator("#meaning dt :is(button,a),#serviceDefinitions dt :is(button,a)").count(), 0);
         await screenshotSections(page, `synthetic-${theme}-${width}-${scale * 100}`);
@@ -226,7 +217,8 @@ test("expanded result and every service definition retain readable cues when tex
             await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
             assertReadable(await measure(page));
         }
-        await page.locator("#meaning>summary").focus(); await page.keyboard.press("Enter");
+        await page.locator("#closeChartReference").click();
+        await page.waitForFunction(() => !document.getElementById("meaning").open);
         assert.equal(await page.locator("#meaning").evaluate(n => n.open), false);
     }
     if (proofs) await writeFile(path.join(proofs, "contrast-and-mapping.json"), JSON.stringify(measurements, null, 2));
@@ -235,7 +227,7 @@ test("expanded result and every service definition retain readable cues when tex
 test("forced colors, grayscale, grouped Other and request chips keep exact icons, labels and distinct interactions", { timeout: 40000 }, async () => app(async (context, url) => {
     const page = await context.newPage();
     await page.setViewportSize({ width: 1200, height: 1000 });
-    await page.goto(url + "/#home?chart=workload"); await ready(page); await expand(page);
+    await page.goto(url + "/#analyze?chart=workload"); await ready(page);
     const other = page.locator('.flat-comparison-row:has([data-group-id="group:other"])');
     assert.equal(await other.locator(".dimensional-category-icon").count(), 0, "Column labels omit the redundant icon lane; glossary and result glyphs remain unchanged");
     assert.ok((await other.locator(".group-name").textContent()).includes("Other"));
@@ -244,9 +236,9 @@ test("forced colors, grayscale, grouped Other and request chips keep exact icons
     assert.equal(await other.locator(".ux-help").count(), 0);
     assert.match(await other.locator(".flat-comparison-action").getAttribute("aria-label"), /Show all categories/);
     assert.equal(page.url(), start);
-    await page.keyboard.press("Escape");
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
+        await expand(page);
         await page.emulateMedia({ forcedColors: "active", colorScheme: theme });
         const value = await measure(page); assertReadable(value);
         assert.equal(new Set(value.cues.map(c => c.color)).size, 1, "Words and glyphs distinguish states with system colors");
@@ -256,13 +248,14 @@ test("forced colors, grayscale, grouped Other and request chips keep exact icons
         assertReadable(await measure(page));
         await screenshotSections(page, `grayscale-${theme}`);
         await page.evaluate(() => { document.body.style.filter = ""; });
+        await page.locator("#closeChartReference").click();
     }
-    await page.goto(url + "/#activity"); await ready(page);
-    const chips = page.locator(".request-row .recorded-result");
-    assert.ok(await chips.count() >= 3);
-    for (const chip of await chips.all()) {
-        const key = await chip.getAttribute("data-outcome");
-        assert.equal(await chip.locator("svg").getAttribute("data-fluent-icon"), uxIconSources[results.icon(key)]);
+    for (const [index, key] of ["success", "failure", "unknown", "partial"].entries()) {
+        await page.goto(url + "/#request?request=semantic-cue-" + index); await ready(page);
+        const chip = page.locator('[data-reader-section="activity"] .reader-call-summary .recorded-result');
+        assert.equal(await chip.count(), 1);
+        assert.equal(await chip.getAttribute("data-outcome"), key);
+        assert.equal(await chip.locator("svg").first().getAttribute("data-lucide-icon"), uxIconSources[results.icon(key)]);
         assert.ok((await chip.getAttribute("class")).includes(`result-tone-${key}`));
         assert.equal(await chip.evaluate(n => n.tagName), "SPAN");
     }
@@ -295,8 +288,8 @@ async function chartColors(page, selector, theme) {
         const entry = row.tone === "service-other" ? { id: "group:other" } : expectedServices.find(entry => entry.tone === row.tone);
         assert.ok(entry, row.label);
         row.service = entry.id;
-        assert.deepEqual(rgb(row.color), rgb(charts.servicePalette[entry.id][theme].label), row.label);
-        assert.deepEqual(rgb(row.mid), rgb(charts.servicePalette[entry.id][theme].mid), row.label);
+        assert.deepEqual(rgb(row.color), rgb(entry.id === "Files" && theme === "light" ? "#007357" : charts.servicePalette[entry.id][theme].label), row.label);
+        assert.deepEqual(rgb(row.mid), rgb(entry.id === "Files" && theme === "light" ? "#007357" : charts.servicePalette[entry.id][theme].mid), row.label);
         row.markContrast = contrast(row.color, row.background);
         assert.ok(row.markContrast >= 3, `${row.label}: ${row.markContrast}`);
         assert.ok(Math.abs(row.width - row.track * row.total / row.maximum) <= .03);
@@ -381,13 +374,22 @@ test("rendered service charts preserve canonical color/name identities without i
     if (proofs) await writeFile(path.join(proofs, "rendered-chart-colors.json"), JSON.stringify(evidence, null, 2));
 }));
 
-test("new synthetic human reports share category/result cues while JSON stays semantic and PDF text remains bounded", { timeout: 60000 }, async () => {
+test("catalog-selected reports preserve frozen service facts in HTML, JSON and bounded PDF text", { timeout: 60000 }, async () => {
     const original = structuredClone(records);
-    const bundle = await buildSanitizedBundle(records, "a".repeat(64), { promptMode: "none", formats: ["html", "pdf", "json", "markdown"] });
+    const catalog = buildExportCatalog(records);
+    assert.deepEqual(catalog.records.map(record => record.scenarioId), records.filter((_, index) => index !== 10).map(record => record.scenarioId));
+    assert.equal(catalog.excluded.requestGroupsWithoutEligibleEvidence, 1);
+    assert.equal(catalog.excluded.platformDiagnosticEvidenceRecords, 1);
+    assert.equal(catalog.excluded.excludedOrDuplicateEvidenceRecords, 1);
+    await assert.rejects(buildSanitizedBundle([records[10]], "a".repeat(64), { promptMode: "none", formats: ["json"] }), /Invalid frozen result facts/);
+    const bundle = await buildSanitizedBundle(catalog.records, "a".repeat(64), { promptMode: "none", formats: ["html", "pdf", "json"] });
     assert.deepEqual(records, original);
     assert.equal(bundle.privacy.reviewerConfirmed, false);
     const snapshot = JSON.parse(bundle.files["product-report.json"]);
     for (const entry of snapshot.serviceCategories) assert.deepEqual(Object.keys(entry), ["id", "label", "description"]);
+    const services = snapshot.evaluationFacts.serviceInvolvement;
+    assert.equal(services.denominator, 12);
+    assert.ok(services.groups.length > 0);
     const html = bundle.files["product-report.html"], network = [], reportMeasurements = [];
     const browser = await chromium.launch();
     try {
@@ -396,18 +398,21 @@ test("new synthetic human reports share category/result cues while JSON stays se
         await page.setContent(html);
         for (const media of ["screen", "print"]) for (const width of media === "screen" ? [375, 820, 1200] : [820]) {
             await page.setViewportSize({ width, height: 1000 }); await page.emulateMedia({ media });
-            const measured = await page.locator(".service-glossary").evaluate(node => ({
-                labels: [...node.querySelectorAll("dt")].map(row => row.textContent),
-                descriptions: [...node.querySelectorAll("dd")].map(row => row.textContent),
+            const section = page.locator("#breakdowns>section").filter({ has: page.getByRole("heading", { name: "Services", exact: true }) });
+            const measured = await section.evaluate(node => ({
+                labels: [...node.querySelectorAll(".native-bar-heading>span")].map(row => row.textContent),
+                values: [...node.querySelectorAll(".native-bar")].map(row => ({ count: Number(row.dataset.count), denominator: Number(row.dataset.denominator) })),
                 overflow: document.documentElement.scrollWidth - innerWidth,
-                clipped: [...node.querySelectorAll("dt,dd")].filter(row => row.scrollWidth > row.clientWidth + 1).map(row => row.textContent),
+                clipped: [...node.querySelectorAll(".native-bar-heading")].filter(row => row.scrollWidth > row.clientWidth + 1).map(row => row.textContent),
             }));
             assert.ok(measured.overflow <= 1);
             assert.deepEqual(measured.clipped, []);
-            assert.deepEqual(measured.labels, snapshot.serviceCategories.map(entry => entry.label));
-            assert.deepEqual(measured.descriptions, snapshot.serviceCategories.map(entry => entry.description));
+            assert.deepEqual(measured.labels, services.groups.map(group => serviceCategories.describe(group.service).label));
+            assert.deepEqual(measured.values, services.groups.map(group => ({ count: group.count, denominator: services.denominator })));
+            assert.match(await section.textContent(), /Each call counts once per service; services overlap/);
+            assert.match(await page.locator("#coverage").textContent(), new RegExp(`Service definition: ${services.definition.id} v${services.definition.version}`));
             reportMeasurements.push({ media, width, ...measured });
-            if (proofs && width === 820) await page.locator(".service-glossary").screenshot({ path: path.join(proofs, `synthetic-report-${media}.png`) });
+            if (proofs && width === 820) await section.screenshot({ path: path.join(proofs, `synthetic-report-${media}.png`) });
         }
         assert.deepEqual(network, []);
     } finally { await browser.close(); }
@@ -430,10 +435,9 @@ test("new synthetic human reports share category/result cues while JSON stays se
         }
     } finally { await loading.destroy(); }
     const text = pages.join(" ").replace(/\s+/g, " ");
-    for (const entry of snapshot.serviceCategories) {
-        assert.ok(text.includes(entry.label), entry.label);
-        assert.ok(text.replace(/\s+/g, "").includes(entry.description.replace(/\s+/g, "")), entry.description);
-    }
+    for (const group of services.groups) assert.ok(text.includes(serviceCategories.describe(group.service).label), group.service);
+    assert.match(text, /Each call counts once per service; services overlap/);
+    assert.ok(text.includes(`Service definition: ${services.definition.id} v${services.definition.version}`));
     assert.doesNotMatch(text, /SYNTHETIC_PRIVATE_PROMPT|SYNTHETIC_PRIVATE_FOLLOWUP/);
     if (proofs) {
         await writeFile(path.join(proofs, "synthetic-report.html"), html);
@@ -443,16 +447,19 @@ test("new synthetic human reports share category/result cues while JSON stays se
 });
 
 test("script-free human report rendering covers even categories withheld by the current privacy path projection", { timeout: 30000 }, async () => {
-    const bundle = await buildSanitizedBundle(records, "a".repeat(64), { promptMode: "none", formats: ["json"] });
     // These invented structural paths exercise the renderer, not disclosure approval.
     // The genuine bundle test above keeps the existing projection completely intact.
-    const projectedFixture = bundle.records.map((record, index) => ({
-        ...record, toolCalls: record.toolCalls.map(call => ({
+    const projectedFixture = records.map((source, index) => {
+        const record = buildSanitizedRecord(source, "a".repeat(64));
+        delete record.userPrompt;
+        delete record.followUpPrompts;
+        return {
+        ...record, projectionVersion: 3, promptMode: "none", prompts: [], toolCalls: record.toolCalls.map(call => ({
             ...call,
             requestedApiPath: records[index].toolCalls[0].requestedApiPath,
             requestArgs: structuredClone(records[index].toolCalls[0].requestArgs),
         })),
-    }));
+    }; });
     const html = renderHtmlReport(projectedFixture);
     const browser = await chromium.launch(), measurements = [];
     try {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { restoreOneSidedMetricDisplay } from "../lib/report-comparison-compatibility.mjs";
 import { adaptReportMetric } from "../lib/report-facts.mjs";
 import { normalizeMetricFact } from "../lib/report-metric-comparison.mjs";
-import { makeSnapshot, makeRatio, id } from "./report-comparison-fixtures.mjs";
+import { makeSnapshot, makeRatio, id } from "./assessment-contract-fixtures.mjs";
 
 const hash = "f".repeat(64);
 function sourceMetric(personal) {

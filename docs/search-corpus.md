@@ -1,95 +1,155 @@
 # Authorized search corpus
 
-`lib/search-corpus.mjs` provides a process-private, derived corpus for subsequent on-device retrieval. `lib/search-corpus.d.mts` is the consumer contract. It does not install a model, rank queries, expose an HTTP endpoint, render search UI, modify analysis membership, collect original history, or persist an index.
+`lib/search-corpus.mjs` supplies process-private admitted text to
+[literal retrieval](live-search.md); `lib/search-corpus.d.mts` defines its
+consumer interface. The corpus does not install models, collect original
+history, grant permission, render UI or persist an index.
 
-The [deterministic text retrieval facade](live-search.md) consumes this contract through `index` and `deliver`. It uses no AI, inference tokenizer or model resources.
+## Admitted sources
 
-The [live-search owner](live-search.md) connects that unchanged facade to the
-loopback runtime, ordered generation stream, single field and verified opening
-journey. It does not bypass these readers or add a persistent corpus cache.
+| Type | Authoritative input and reader | Destination and limit |
+| --- | --- | --- |
+| Interaction/context | Complete accepted `mergeEvidenceWithState` roster and `createRequestContext.select`, not a date/page slice | Exact interaction/message context; no task clustering or reconstructed chat |
+| Retained reply | Assessment read model plus the existing authorized retained-response action | Original interaction; source/consent/membership/integrity checked before and after read |
+| Recorded action | Canonical activity analytics and exact call investigation across supported layers | Exact request/layer/call; returned entries also bind snapshot revision |
+| Tool/service | Names actually present in qualified retained actions | Existing all-scope filter destination, not automatic analytical membership |
+| Saved report | Registered saved-file reader, disclosure manifest and exact bytes/hash | Exact bundle/format/manifest/file identity, without source regeneration |
+| Saved comparison | Verified frozen manifest and compatibility reader | Exact independent saved comparison, not its source reports' current contents |
+| View/setting | Fixed current navigation/settings registry | Reveal/navigate only; never click a control or open approval |
 
-## Source contract
+Retired review/feedback operations are absent from navigation, while their
+wording in an independently authorized historical saved document can remain
+searchable. No source-path or live permission DOM values become setting text.
 
-| Type | Allowed input and reader | Identity and destination |
-|---|---|---|
-| Interaction / conversation context | Full accepted `mergeEvidenceWithState` roster, equivalent to `snapshot.scenarios`, not a date/page slice. Only retained prompt/follow-up text, checked availability, author basis, recorded links and gaps from `createRequestContext.select`. | Accepted context message key (scenario plus recorded event where available). Direct `#request?request=...`. No invented task grouping or whole-chat reconstruction. |
-| Retained reply | `buildAssessmentModel` discovers authorized observations. Only `executeAssessmentAction(get_interaction_evidence)` reads payloads; its source/consent/membership/integrity and before/after basis guards remain authoritative. | Observation identity is hashed; raw observation refs, capture files and consent/source handles are not exposed. Direct interaction reader, bounded completeness and unverified finality preserved. |
-| Recorded action | The same `buildActivityAnalytics` canonical projection used by `buildRequestActivity`, and `createCallInvestigation.resolve`, across all supported layers. Tool, normalized method/path/query-key names, recorded status/outcome, retained failure code/reason/signal and qualified service associations. No argument values, response bodies or reconstructed rationale. | Layer plus canonical call identity. Exact request/layer/call route; returned API entries also require the accepted `callRevision`, because offsets can be reused. |
-| Tool / service | Names actually present in qualified retained actions, never inferred from prompt text. | Existing Analyze tool/service filter routes, explicitly `scope=all`. Discovery is not an analytical population until the user opens the named destination. |
-| Saved report | `readSavedReportFile`: registered ownership, disclosure manifest and exact file bytes/hash. HTML retains conservative inert visible-body extraction and its plain document title; JSON reads a verified projected snapshot; Markdown is inert source text; PDF reads its saved text layer locally. No source regeneration or resource/link fetching. | Registered bundle ID; independently bound format, manifest hash, file hash and artifact revision. HTML keeps `open-saved-report`; other formats use the closed `open-saved-report-file` target. |
-| Saved comparison | `readSavedComparison`: frozen manifest integrity and the accepted frozen compatibility reader. Allowlisted displayed metric/outcome/pattern/narrative fields only, not `sourceFacts` or internal membership/hash metadata. | Registered comparison ID and its own manifest/content revision. Typed `open-saved-comparison` target. Deleting a source report does not delete the separately saved comparison. |
-| View / Setting | Fixed current navigation metadata; the registered entries from `createSettingsNavigation`, categories and `resolve`. Retired sidebar-motion settings and review/feedback operations are not current destinations; historical saved text is not erased. No DOM values or live permission/path fields. | Existing route allowlist; Settings uses `#settings?section=...&setting=...`, operational entries use `#collection-status?setting=...`. Visualization targets include existing focus-only container IDs; Failed calls opens failure-filtered Activity. Timing leads to per-call values inside each interaction, not a separate ranking view. Never click a control or open approval. |
+IDs use the typed canonical identity hash; revisions bind content, source,
+coverage and target. IDs can survive content changes, revisions cannot.
+Only admitted title, content and readable source label are matched. Operational
+IDs, hashes, private paths, target descriptors and raw source fields are not
+searchable text.
 
-IDs are `wire-search-v1:<type>:<SHA-256 of canonical identity>`. `contentHash` hashes the permitted content. `source.revision` binds the actual input provenance; `revision` binds the entire item including coverage and target. IDs survive content changes; revisions do not. A follow-up lacking a recorded event uses the existing context reader's fallback key, not a claim of recovered message identity.
+Titles for interactions/context/replies are original slices up to 120 graphemes.
+Empty/unavailable text stays qualified. An observed automatic continuation can
+have an Automatic continuation title and empty body without becoming a
+missing-prompt error or retaining host instructions.
 
-Only title, content/excerpt, readable source label and explicitly permitted display coverage are search text. IDs, target descriptors, hashes and lifecycle metadata are routing/validation data, not searchable text. Corpus `excerpt` equals complete permitted content: this unit adds no arbitrary truncation or result/page limit. Text retrieval selects an original excerpt/range from the matched title, content or readable source label, never from routing/private fields.
+The derived-text screen removes recognized credentials, private URLs, local
+paths and opaque identifiers. It is not complete DLP or permission to include
+another field. Validated canonical report titles use their verified
+manifest-declared provenance, not a title-shaped string as a bypass.
 
-All extracted content is plain text. Consumers must use text rendering, never `innerHTML`, including when a frozen report contains escaped markup.
+Recorded actions may include their already-retained screened diagnostics.
+A tool call and its exact returned entry keep their own scopes/revision;
+Search does not read the original error envelope or response body to enrich them.
 
-Interaction/context/reply display titles use a bounded, at-most-120-grapheme
-original slice of already-admitted text. No summary, ellipsis or role label is
-added to searchable content; empty/unavailable text retains its generic fallback,
-except a supported automatic continuation is titled **Automatic continuation**.
-Its content stays empty. `coverage.activityState` and `availabilityNote` preserve
-the shared explanation **No new message was sent** without a `text-unavailable`
-source issue. Text completeness remains separate from activity availability:
-this does not claim a saved prompt body, index host instructions, or manufacture
-an original. Known gaps and source conflicts carry their actual qualifications;
-unexplained older absence stays unknown.
-Full content and coverage are unchanged, and the title remains part of the entry
-revision. Saved report titles come from their verified document, not this preview.
+## Saved-file extraction
 
-The fixed **Compare periods** destination is `#analyze?compare=periods`. It only navigates to the accepted comparison view; it does not create a report, refresh sources or start a tool action.
+Choose HTML -> JSON -> Markdown -> PDF only when the earlier format was
+genuinely not saved. A declared missing/corrupt file, inconsistent inventory,
+unsupported schema/encoding or failed extraction is an error, not permission
+to try a lower format.
 
-The existing privacy scanner removes detected credentials, private URLs, local paths and opaque identifiers from derived text. Operational metadata never enters the projection. This is a bounded pattern screen, not perfect DLP; it does not manufacture approval for other fields.
+- HTML extracts inert visible body text and the verified document title,
+  excluding scripts, styles, hidden content and attributes.
+- JSON validates the complete frozen snapshot/manifest identity and extracts
+  allowlisted projected facts and copies, not arbitrary fields.
+- Markdown remains inert source text, including literal code/prompt lines;
+  no links or resources are followed.
+- PDF reads the verified saved text layer locally. Images have no OCR;
+  encrypted, unsupported, textless and failed parses remain unavailable.
 
-## Consumer and lifecycle contract
+Optional recorded context requires the matching closed schema, identical
+snapshot/manifest copies and context hash as well as ordinary hashes/privacy
+checks. Result-text copies and historical facts retain their original
+representation, coverage, membership and interpretation. Absence does not
+invent current facts. No extraction rewrites saved bytes.
 
-Construct `createSearchCorpus(session, { source, onInvalidate })` only for the existing private store. `source(state)` is required, synchronous and read-only: supply the current collector's `assessmentSource(state)`. Do not fall back to persisted authorization when the current collector/source is unavailable. An unavailable source excludes replies; an absent or malformed source callback result fails the read.
+The selected file's size limit remains 32 MiB. PDF.js runs in a short-lived
+owned Node child using `--disallow-code-generation-from-strings` and a minimal
+system/temp environment. Preloads, debugger/NODE_OPTIONS/provider/data-dir
+variables and inherited stdout/stderr are excluded. Only verified bytes cross
+local IPC.
 
-The corpus starts **uninitialized with zero entries**. There is no disk index to trust on restart. Every rebuild, index read and hit delivery reads and validates the current retained inputs again; it never reads original Copilot history. Artifact files are checked again before publication inside the existing board serialization queue. Reply payload reads stay outside that queue so their existing reader can acquire its own guards. A final state/source stamp check inside the queue linearizes publication against owned deletion/revocation writes.
+The byte/text-only parser disables external resources, font loading, Wasm,
+XFA, GPU/image/rendering and other active paths. It checks the code-generation
+restriction before loading PDF.js. Any decoder diagnostic rejects extraction
+rather than presenting repaired success; diagnostic text is not retained.
+Cancellation terminates the owned parser and waits for closure. This is a
+constrained parsing path, not an OS sandbox or secure-erasure guarantee.
 
-Corpus reads use the additive internal `readOnly` option on `loadBoardState` and `exclusiveBoard`. Missing state and migration-required state fail before store-owned directory creation, initialization or migration; a read-only save callback rejects. The same internal option is threaded through both before/after state reads in `executeAssessmentAction` and its non-mutating receipt read. Assessment mutations reject the flag, and no public request JSON field or evidence response/basis contract changed. Defaults remain unchanged for existing callers. This guarantees no **store-owned** writes on this read path, not a sandbox around arbitrary caller callback code.
+## Index, delivery and invalidation
 
-1. `rebuild()` constructs current entries and returns content-free status.
-2. `index(build, publish)` passes a frozen corpus and `{ signal }` to trusted **local-only** computation. `build` may be asynchronous. After it finishes, all sources are re-read, current permission/integrity is checked again, and only the same generation may reach synchronous `publish(result, { generation })`. Keep only ID/revision references in queued hits. Invalidation, closing or a superseding operation aborts parser work and the supplied signal.
-3. `deliver({ generation, hits: [{ id, revision }] }, disclose)` re-reads current sources, checks every identity/revision and only then calls synchronous `disclose(hits)`. Never render, navigate or resolve saved-artifact targets from an old builder result without this gate.
-4. `invalidate()` cancels outstanding work, drops cached content and calls the required synchronous `onInvalidate`. `close()` does the same permanently.
+Construct `createSearchCorpus(session,{source,onInvalidate})` for the existing
+store. `source(state)` is required, synchronous and read-only, supplying the
+current collector source. Persisted authorization cannot replace an unavailable
+current source. Missing/malformed callback results fail; unavailable reply
+authority does not block independently authorized saved artifacts.
 
-**Runtime integration obligation:** before acknowledging current-source/consent/deletion/evidence/artifact changes, call `invalidate()`. `onInvalidate` must synchronously clear the retrieval index, queued hits and already-displayed excerpts/targets in every consuming panel. It must not reenter the corpus. On current-state polling/transport failure, invalidate rather than leave old results available. Dispose local build references on cancellation. The corpus gates late publication; JavaScript cannot retroactively erase content already disclosed or guarantee memory zeroization.
+The corpus starts uninitialized with no disk index. Every rebuild/index read/
+delivery revalidates retained inputs. Artifact checks run inside the existing
+board serialization boundary; reply payload reads remain outside it so their
+own guards can operate. A final state/source stamp check linearizes publication
+against owned changes.
 
-Methods supersede earlier asynchronous operations. `ready`/`partial` is current availability, not completeness of original history. `stale`, `superseded`, `unavailable` and `closed` are not no-match results. Safe issue codes identify missing, corrupt/unsupported, inaccessible, cleanup-pending, unavailable-source and unauthorized/revoked inputs without logging content, private paths, query text or credentials. Missing reply payloads do not block independently authorized artifacts. A changed generation invalidates queued results, not the independent approval of an unchanged saved artifact.
+| Method | Contract |
+| --- | --- |
+| `rebuild()` | Construct current entries and return content-free status. |
+| `index(build,publish)` | Run local-only computation under cancellation; reread sources and allow synchronous publication only for the same current generation. |
+| `deliver(ticket,disclose)` | Recheck every ID/revision and authority before synchronous disclosure. |
+| `invalidate()` | Abort owned work, drop derived content and synchronously notify consumers. |
+| `close()` | Permanently invalidate and drain owned operations. |
 
-Each source issue also identifies its affected corpus `types`; unknown/global
-failures remain unclassified and fail closed. This permits a consumer with an
-explicit, receipt-bound type scope to distinguish an unrelated report failure
-from missing analytical activity. It does not remove issues, alter the global
-`partial` state, expand permissions or treat Related suggestions as analytical
-membership. Per-item saved-text completeness labels remain separate from whether
-all currently authorized retained items were successfully read.
+Store reads use the internal read-only path: absent or migration-required state
+fails before initialization/directories/writes, and save callbacks reject.
+That is a guarantee about owned store operations, not arbitrary supplied code.
 
-Saved-artifact targets form a closed data union, not executable actions or invented URLs. After `deliver`, live-search may dispatch only the corresponding read-only report/comparison open function. `open-saved-report-file` additionally carries `format: "json" | "markdown" | "pdf"`; its `documentHash` is the exact file hash, not the extracted text hash. An explicit later open calls `readSavedReportFile` with that format under the current read-only store gate and compares bundle, manifest and file identity. JSON/Markdown bytes are inert source text; PDF bytes belong only in a controlled local viewer or an explicit download. No corpus method opens, downloads or launches a file. The legacy `/api/report-file` download path is not the verified-format dispatcher; wiring transport for these targets requires its own scoped integration. Do not put capabilities/queries/paths in a URL. Settings/view focus must reveal/focus only and preserve independent approval flows.
+Source/consent/deletion/evidence/artifact changes must invalidate before their
+acknowledgement. Consumers synchronously clear index references, queued/displayed
+excerpts and targets, and invalidate on failed status/transport. Old builder
+results are not render/Open authority. JavaScript cannot erase content already
+disclosed to another process or the user.
 
-## Availability, resource accounting and focused proof
+Ready/partial describes retained availability, not complete source history.
+Stale, superseded, unavailable and closed are not no-match. Type-qualified issues
+can distinguish an unrelated saved-file gap from incomplete analytical activity,
+but cannot discard a relevant coverage gap to manufacture complete membership.
+Per-file text completeness is separate from whether every admitted item was read.
 
-Report preference is **HTML -> JSON -> Markdown -> PDF**, moving on only when an earlier format was genuinely not saved. The chosen format must agree with the registered/manifest inventory. A declared missing file, hash/length mismatch, inconsistent inventory, invalid encoding/schema, unavailable parser or failed extraction is an explicit error, never a reason to try a lower format. The existing `readSavedReportDocument` HTML response and supported legacy cases stay compatible. Comparisons continue to use their verified frozen manifest.
+## Exact Open
 
-JSON uses `inspectSavedReportSnapshot` to check its actual full snapshot hash, identity, mode and inventory. Extraction allowlists saved summaries, technical facts and projected prompt text/coverage, not arbitrary properties, original source data or a fresh rendering. Markdown is explicitly **source text**, preserving literal indented prompt/code lines; it is never executed as HTML, and no links are followed. Each format retains the artifact's own original/masked/no-text mode independently of current reply consent.
+Targets are a closed data union, never executable actions or caller paths.
+After delivery, the live owner may dispatch only the corresponding read-only
+report/comparison/request/view destination. Saved non-HTML targets carry their
+exact format and original file digest, not a text-extraction digest.
 
-Optional JSON `recordedContext` uses the accepted `validateReportContext(context, records, promptMode)` closed v1 schema. Snapshot and manifest objects must both be present and identical; `recordedContextHash` must match SHA-256 of `JSON.stringify(context)`, in addition to the normal snapshot/file/registered-manifest hashes. None requires absence. Context entries follow each anchor's ordered keys and are emitted once across anchors, with projected text/null, labels, partial/unavailable status, unverified reply finality and explanatory gaps, never references or preview originals. Mandatory and masked-mode text checks reuse the existing `textFindings` rule. Typed context-entry/included/partial/unavailable/omitted coverage does not change analytical membership. Missing, mismatched, unsupported or privacy-invalid context fails closed rather than being silently ignored.
+Open rechecks original owner, source, target revision and exact saved bytes.
+Do not put capabilities, query text or private paths in URLs. A source change
+can retire Search authority without revoking an independently approved library
+copy; a removed saved artifact cannot be opened through either path.
 
-Optional native `evaluationFacts.reviewStatuses` and `serviceInvolvement` pass the existing `freezeEvaluationFacts` / `validateReportFacts` closed shape, membership and endpoint checks before extraction. Their snapshot/manifest facts copies and existing facts hash must agree. Only recorded execution counts, known cause or reason-availability codes, saved assessment status/availability/attempt enums, closed service names and validated counts/coverage become text. Interaction/member references and operational permission flags do not. Each service uses the declared frozen tool-call denominator; service groups and missing-detail coverage can overlap, while not-applicable coverage remains disjoint. The saved involvement-v1 definition stays separate from exclusive activity-category v3 meaning: no summed shares, inferred comparison, current-source reconstruction or analytical membership change. Legacy absence adds no new display section and does not rewrite saved bytes or hashes.
+## Native source-fact text
 
-PDF.js 6.3.289 is a runtime dependency, not a development-only capability. Its v6 `getDocument` API no longer exposes the old `isEvalSupported` flag. The corpus therefore starts a short-lived, owned Node parser child with `--disallow-code-generation-from-strings` and verifies that enforcement before loading PDF.js. It uses `process.execPath`, the fixed owned entry module and a minimal system/temp environment, never a shell. Preloads, debugging flags, `NODE_OPTIONS`, provider credentials and data-directory variables are not inherited. Only verified bytes cross its local IPC boundary; stdout/stderr are not inherited. The v6 byte-only/text-only configuration disables worker asset fetch, system fonts/font-face loading, Wasm, XFA, hardware/GPU, offscreen/image decoding, range/stream fetching and debug hooks. Deny-all binary-data/rendering factories and network entry points reject attempted external resources. No viewer, scripting, annotations, attachments or rendering API is used.
+Optional incubation source facts use existing context hits, not new authored
+messages, services or outcomes. Only qualified recorded literal task/step/action
+names, clarification wording/options and supported provider-progress text enter.
+Raw IDs, timestamps, coordinates, hashes, structured payloads and excluded
+reasoning/control bodies do not become text.
 
-Text is consumed in streaming chunks, bounded by the same existing 32 MiB managed-file ceiling rather than truncated. Page/text-page counts identify text-layer coverage: images have no OCR, glyph layout may be normalized, and documents without extractable text, encrypted/unsupported documents and parser failures are explicitly unavailable. Loading tasks are destroyed and pages cleaned on completion/error. Aborting a corpus operation terminates its owned parser process; the caller waits for process closure before receiving a result. This is a constrained parser path, not a general OS sandbox.
+Facts retain original and decoded source pointers, source-qualified keys and
+their own availability. Their exact `native-source-fact-...` destination focuses
+the retained fact in its conversation; no call ID or author is invented.
+Missing text/unsupported facts remain incomplete context coverage. Navigation
+can remain possible without a complete analysis receipt.
 
-`stopAtErrors` alone does not suppress every PDF.js cross-reference repair. Decoder diagnostics are therefore reduced to a boolean inside the isolated helper, never logged or retained as text; any diagnostic-bearing extraction is rejected rather than published as a repaired success.
+Native reply authority uses the actual retained account lease, not GitHub's
+separate reply-saving flag. Index, delivery and Open recheck current lease/root/
+revision. Boundaries for paged native Search, exact ordinal Open and analytical
+membership are in [retained views](incubation/native-retained-views.md).
+This does not activate the source or qualify real acquisition.
 
-The cache retains one projected generation and no query metadata. Status reports item count and UTF-8 bytes of titles plus content (not process RSS, embedding size or a storage quota). Reads process the full accepted roster; index computation requires a second fresh scan before publication. Final artifact checks re-read/hash the chosen file without reparsing its PDF. This favors an auditable permission boundary over incremental-index performance. Future incremental persistence requires its own approved lifecycle seam.
+## Validation
 
-`node --test tests/search-corpus.test.mjs tests/search-corpus-readonly.test.mjs` uses only owned ephemeral stores, invented retained envelopes and real permission/report-save/deletion readers. It exercises all corpus types, masked/original/no-text artifacts, frozen comparison content, canonical routes and call revisions, missing/revoked/corrupt replies, partial/unknown authorship, inert HTML, private-field exclusion, queued construction/index/delivery fences, independent artifact removal, and restart without an old index. The read-only tests remove state after a real payload read and verify neither state nor exports is recreated; they also prove save rejection, unchanged default initialization/migration and unchanged public request validation. No real collector, provider, model, scoring, capture or user-data operation is run.
-
-`node --test tests/search-corpus-report-formats.test.mjs` is the bounded format-extension proof: nine real single-format bundles with accepted recorded context (JSON/Markdown/PDF across original/masked/none), three PDF renders, exact frozen-byte hashes, context shape/hash/privacy checks, no-fallback corruption/ownership/deletion and cancellation checks. An isolated `npm ci --omit=dev --ignore-scripts` setup runs the copied parser against an invented saved PDF, with PDF.js present and the development Playwright test package absent. It cannot satisfy its PDF.js import from this checkout's development modules.
-
-`tests/search-corpus-native.test.mjs` exercises newly generated registered JSON-only native display facts, legacy-absent JSON, shape/membership/hash/privacy tampering and one contextual native PDF through the unchanged strict reader. It uses only owned synthetic stores and keeps protected native formatters/styles unchanged; this technical compatibility proof is not visual/theme acceptance.
+The current corpus and format suites exercise invented stores, real readers,
+ownership/privacy/deletion fences, full populations, saved formats and parser
+closure. Packaging qualification is a separate
+[production-only lane](development.md#check-a-change). Tests and screenshots
+must not be described as real provider or private-data acceptance.

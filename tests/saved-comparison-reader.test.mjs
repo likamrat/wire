@@ -33,7 +33,7 @@ test("artifact-file rejects missing private state without initialization or publ
     });
     const origin = new URL(runtime.url).origin;
     const session = await fetch(origin + "/api/session", { method: "POST",
-        headers: { Origin: origin, "Content-Type": "application/json" }, body: "{}" });
+        headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" }, body: "{}" });
     assert.equal(session.status, 200, "The owned fixture server is already running before state becomes unavailable");
     const { capability } = await session.json();
     await rename(context.dataDir, unavailable);
@@ -53,24 +53,24 @@ test("artifact-file rejects missing private state without initialization or publ
     assert.equal(Object.hasOwn(result, "artifact"), false);
 });
 
-async function setup(t) {
+async function setup(t, { firstSourceFormats = ["html", "json"], comparisonFormats = ["html", "json"] } = {}) {
     const { context } = await privateFixture(t, [fixture("earlier"), fixture("later")]);
     const controller = createExportController(context), sources = [];
     for (const id of ["earlier", "later"]) {
         const state = await loadBoardState(context);
-        const preview = await controller.preview("fixture", undefined, { promptMode: "none", formats },
+        const preview = await controller.preview("fixture", undefined, { promptMode: "none", formats: sources.length ? ["html", "json"] : firstSourceFormats },
             { kind: "selected", revision: state.revision, scenarioIds: [id] });
         await controller.review("fixture", preview.previewId, true);
         sources.push((await controller.confirm("fixture", preview.previewId, true)).bundle);
     }
-    const preview = await controller.previewComparison("fixture", sources[0].bundleId, sources[1].bundleId, { formats });
+    const preview = await controller.previewComparison("fixture", sources[0].bundleId, sources[1].bundleId, { formats: comparisonFormats });
     await controller.reviewComparison("fixture", preview.previewId, true);
     const comparison = (await controller.confirmComparison("fixture", preview.previewId, true)).bundle;
     return { context, controller, sources, comparison };
 }
 
 test("verified artifact files retain exact bytes and identity for every ordinary/comparison format and manifest", { timeout: 30000 }, async t => {
-    const { context, controller, sources, comparison } = await setup(t);
+    const { context, controller, sources, comparison } = await setup(t, { firstSourceFormats: formats, comparisonFormats: formats });
     const state = await loadBoardState(context), before = JSON.stringify(state);
     for (const artifact of [sources[0], comparison]) for (const format of [...formats, "manifest"]) {
         const document = await readSavedArtifactFile(context, state, artifact.bundleId, artifact.kind, format);
@@ -93,7 +93,7 @@ test("verified artifact files retain exact bytes and identity for every ordinary
     t.after(() => runtime.close());
     const origin = new URL(runtime.url).origin;
     const post = (route, body, capability) => fetch(origin + route, { method: "POST",
-        headers: { Origin: origin, "Content-Type": "application/json", ...(capability ? { "X-Board-Capability": capability } : {}) },
+        headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1", ...(capability ? { "X-Board-Capability": capability } : {}) },
         body: JSON.stringify(body) });
     const input = { bundleId: comparison.bundleId, kind: "comparison", format: "html" };
     assert.equal((await post("/api/artifact-file", input)).status, 403);
@@ -115,7 +115,7 @@ test("verified artifact files retain exact bytes and identity for every ordinary
 });
 
 test("comparison file reads reject tampering, wrong inventory, missing files and unregistered disclosure without fallback", { timeout: 30000 }, async t => {
-    const { context, comparison } = await setup(t);
+    const { context, comparison } = await setup(t, { comparisonFormats: ["html", "json", "markdown"] });
     const state = await loadBoardState(context), name = "comparison-report.html";
     const original = await readFile(comparison.files[name]);
     await writeFile(comparison.files[name], Buffer.concat([original, Buffer.from("\nnot reviewed")]));

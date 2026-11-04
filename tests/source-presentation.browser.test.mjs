@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, exportCatalogFor, navigateMain, navigateSettings, chooseTheme, openSourceEditor } from "./helpers.mjs";
+import { fixture, exportCatalogFor, navigateMain, navigateSettings, chooseTheme, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofs = process.env.WORKIQ_SOURCE_PRESENTATION_PROOFS;
@@ -25,7 +25,7 @@ async function setup(t) {
     const server = createServer(async (req, res) => {
         if (req.url === "/" && req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
-            return res.end(renderHtmlShell("a".repeat(64), "source-presentation-proof"));
+            return res.end(renderHtmlShell("a".repeat(64), "source-presentation-proof", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         if (req.url === "/favicon.ico") return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;

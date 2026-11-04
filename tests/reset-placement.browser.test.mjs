@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, exportCatalogFor, automaticScoreOffSummary, chooseTheme, navigateMain, openActivitySessions, selectActivityOption } from "./helpers.mjs";
+import { fixture, exportCatalogFor, automaticScoreOffSummary, chooseTheme, navigateMain, openActivitySessions, selectActivityOption, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { reportContents } from "./report-journey-helpers.mjs";
 
 const proofs = process.env.WIRE_RESET_PLACEMENT_PROOFS;
@@ -40,7 +40,7 @@ async function setup(t) {
     const server = createServer(async (req, res) => {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "invented-reset-placement-nonce"));
+            res.end(renderHtmlShell("a".repeat(64), "invented-reset-placement-nonce", UNBOUND_FIXTURE_BOOTSTRAP));
             return;
         }
         let body = ""; for await (const chunk of req) body += chunk;

@@ -111,7 +111,7 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
         views.push(view);
         return view;
     }
-    function detail({ key, toggle, body, visibility, initialOpen = false, render }) {
+    function detail({ key, toggle, body, visibility, initialOpen = false, render, onOpenChange }) {
         let live = true;
         const owned = {
             isCurrent: () => live && current() && visibility.isCurrent(),
@@ -124,6 +124,7 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
             body.replaceChildren();
             body.hidden = !owned.isOpen();
             toggle.setAttribute("aria-expanded", String(presentation.isOpen(key, initialOpen)));
+            onOpenChange?.(!body.hidden);
             if (!body.hidden) body.append(render(owned));
         }
         const unsubscribe = visibility.subscribe(paint);
@@ -142,6 +143,7 @@ export function createReaderSections({ root, presentation, ux, isCurrent, reques
             toggle.setAttribute("aria-expanded", "false");
             toggle.disabled = true;
             render = null;
+            onOpenChange = null;
         });
         paint();
     }

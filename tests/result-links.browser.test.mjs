@@ -184,7 +184,7 @@ test("12 Worked and 2 Tool failed navigate canonical actions in exactly the orig
         for (const [key, value] of new URLSearchParams(slice.split("?")[1])) assert.equal(params.get(key), value);
         assert.equal(await page.locator("#activitySearch").inputValue(), sessionName);
         assert.match(await page.locator("#sessionAnalysis").innerText(), /2 request groups with 14 Work IQ tool calls/);
-        assert.match(await page.locator("#sessionAnalysis .session-scope").innerText(), new RegExp(`showing ${outcome === "success" ? "Worked" : "Tool failed"} only`));
+        assert.match(await page.locator("#sessionAnalysis .session-scope").innerText(), new RegExp(`showing ${outcome === "success" ? "Tool completed" : "Tool failed"} only`));
         assert.deepEqual(await page.locator(".session-selected:visible").allInnerTexts(), ["0 in report"]);
         assert.equal(await page.locator(".request-row").count(), 0, "Result drilldown is actions, not mixed request cards");
         const actual = await allMatching(page);
@@ -239,7 +239,7 @@ test("a private request match narrows Worked without expanding to the session's 
         assert.equal(new URLSearchParams(deep.url().split("?")[1]).get("result"), "success");
         assert.equal(await deep.locator("#activitySearch").inputValue(), "", "Copied URLs cannot contain private search");
         assert.equal((await allMatching(deep)).length, 12, "Fresh deep link retains every explicit URL filter");
-        assert.match(await deep.locator("#viewingContext").innerText(), /Worked/);
+        assert.match(await deep.locator("#viewingContext").innerText(), /Tool completed/);
     } finally { await fresh.close(); }
 });
 

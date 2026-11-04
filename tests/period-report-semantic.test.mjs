@@ -7,6 +7,7 @@ import { buildPeriodComparison, validatePeriodComparisonInput } from "../lib/per
 import { acceptPeriodReport, freezePeriodReport, validatePeriodReport } from "../lib/period-report.mjs";
 import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { createPeriodComparisonState } from "../web/period-comparison.mjs";
+import * as resultContract from "../lib/report-result-contract.mjs";
 import { createLocalSearch } from "../web/local-search.mjs";
 import { createActivityProjection } from "../lib/activity-projection.mjs";
 import { comparePeriodCohorts } from "../lib/period-comparison-math.mjs";
@@ -23,20 +24,21 @@ function setup(state, input) {
     const legacy = buildPeriodComparison(state, input), model = buildAssessmentModel(state);
     const membership = { scenarioIds: [], actionIds: [legacy.periods.baseline.rowIds[0], legacy.periods.later.rowIds[0]],
         parentScenarioIds: [legacy.periods.baseline.scenarioIds[0], legacy.periods.later.scenarioIds[0]] };
-    const receipt = { schemaVersion: 2, panelId: randomUUID(), epoch: 0, requestId: 1, generation: 1, indexId: "1".repeat(64),
-        modelId: "2".repeat(64), mode: "hybrid", revision: state.revision, purpose: "strict-match-population",
+    const receipt = { schemaVersion: 3, panelId: randomUUID(), epoch: 0, requestId: 1, generation: 1, indexId: "1".repeat(64),
+        mode: "text", revision: state.revision, purpose: "strict-match-population",
         queryPurpose: "analysis", queryTypes: [...searchWireContract.allTypes], matchPolicyId: searchWireContract.matchPolicyId };
+    assert.equal(searchWireContract.analysisReceipt(receipt), true);
     const search = { status: "ready", coverage: "whole-retained-corpus", receipt, ...membership };
     const snapshot = { revision: state.revision, scenarios: state.evidence, sessions: [], analytics: legacy.periods.baseline.analytics,
         assessment: { basis: model.basis, source: model.source, catalog: model.catalog } };
-    const machine = createPeriodComparisonState({ time, search: createLocalSearch(), contract,
+    const machine = createPeriodComparisonState({ time, search: createLocalSearch(), contract, resultContract,
         projection: createActivityProjection(time, serviceCategories, OUTCOMES), categories: serviceCategories, comparePeriodCohorts, searchContract: searchWireContract });
     const request = machine.prepare(snapshot, { ...input.options, filters: { ...input.options.filters, from: "2026-03-07", to: "2026-03-07" } },
         input.periods, "", [], search);
     return { membership, receipt, search, snapshot, machine, request };
 }
 
-test("typed complete semantic hits stay exact across replacement dates, live consumer and frozen report", () => {
+test("typed complete literal Search hits stay exact across replacement dates, live consumer and frozen report", () => {
     const { state, input } = periodFixture(), { membership, search, snapshot, machine, request } = setup(state, input);
     assert.equal(request.scenarioIds, undefined);
     assert.equal(request.options.filters.from, undefined);
@@ -59,7 +61,7 @@ test("typed complete semantic hits stay exact across replacement dates, live con
     assert.throws(() => machine.accept(token, { ...value, selection: { ...value.selection, semanticMembership: { ...membership, actionIds: [] } } }));
 });
 
-test("empty valid semantic result stays empty, while scenario hits retain complete matching interactions", () => {
+test("empty valid literal Search result stays empty, while scenario hits retain complete matching interactions", () => {
     const { state, input } = periodFixture(), { request } = setup(state, input);
     const empty = buildPeriodComparison(state, request, { semanticMembership: { scenarioIds: [], actionIds: [], parentScenarioIds: [] } });
     assert.equal(empty.periods.baseline.rowIds.length, 0); assert.equal(empty.periods.later.rowIds.length, 0);
@@ -68,7 +70,7 @@ test("empty valid semantic result stays empty, while scenario hits retain comple
     assert.equal(hit.periods.baseline.assessment.metrics[0].coverage.eligible, 3);
 });
 
-test("semantic returned-entry selection freezes broader parent identities and does not widen measured result rows", () => {
+test("literal Search returned-entry selection freezes broader parent identities and does not widen measured result rows", () => {
     const { state, input } = periodFixture();
     input.options.layer = "reported-api";
     input.options.filters.outcomes = ["failure"];

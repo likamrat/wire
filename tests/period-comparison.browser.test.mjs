@@ -8,7 +8,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { currentStatePayload } from "../lib/server.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
 import { assessmentOverview, assessmentDependencies, buildAssessmentModel, invalidateAssessmentCache } from "../lib/assessment-read-model.mjs";
-import { automaticScoreOffSummary, chooseTheme, selectActivityOption, restoreLegacySearch } from "./helpers.mjs";
+import { automaticScoreOffSummary, chooseTheme, selectActivityOption, restoreLegacySearch, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { periodFixture, periodQuery } from "./period-comparison-fixture.mjs";
 
 const proof = process.env.WIRE_PERIOD_PROOFS;
@@ -36,7 +36,7 @@ async function setup(t, { polling = false, permissionFeedback = false } = {}) {
     const server = createServer(async (req, res) => {
         try {
             if (req.method === "GET" && req.url === "/") {
-                res.setHeader("Content-Type", "text/html"); res.end(renderHtmlShell("a".repeat(64), "period-proof")); return;
+                res.setHeader("Content-Type", "text/html"); res.end(renderHtmlShell("a".repeat(64), "period-proof", UNBOUND_FIXTURE_BOOTSTRAP)); return;
             }
             if (req.method === "GET" && req.url === "/assets/assessment-contract.mjs") {
                 res.setHeader("Content-Type", "text/javascript"); res.end(contract); return;
@@ -111,8 +111,8 @@ test("Tool latency period labels identify matching aggregates and exact tool rec
     await openComparison(app);
     const root = page.locator("#periodComparison");
     const region = root.locator(".compare-latency");
-    await expect(region.locator("h4")).toHaveText(["Median", "95th percentile"]);
-    const before = await region.innerText();
+    await expect(region.locator("tbody th")).toHaveText(["Typical call (median)", "95% finished within", "Calls with timing"]);
+    const before = (await region.innerText()).replace(/\s+/g, " ");
     const metrics = structuredClone(app.replies.at(-1).comparison.matchingCallTiming);
     assert.equal(metrics.median.baseline.value, 0);
     assert.equal(metrics.p95.baseline.value, 1000);
@@ -122,13 +122,13 @@ test("Tool latency period labels identify matching aggregates and exact tool rec
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        assert.equal(await region.innerText(), before);
-        await expect(region.locator("svg")).toHaveCount(2);
+        assert.equal((await region.innerText()).replace(/\s+/g, " "), before);
+        await expect(region.locator("svg")).toHaveCount(0);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));
         const first = root.locator('[data-period-side="baseline"]');
         await page.locator("#comparisonRecordsA").click();
         await expect(first).toBeVisible();
-        await expect(first.locator("table")).toContainText("Tool latency");
+        await expect(first.locator("thead")).toContainText("Latency");
         if (proof) {
             await mkdir(proof, { recursive: true });
             await region.screenshot({ path: path.join(proof, `tool-latency-period-${theme}-${width}-${scale}.png`) });
@@ -303,7 +303,7 @@ test("normal Analyze compares both periods, keeps precise scope and supports Bac
     await expect(root).toBeVisible(); await expect(page.locator("#createPeriodReport")).toBeVisible();
     await expect(page.locator("#comparisonSearch")).toHaveValue(periodQuery);
     await expect(a.locator(".assessment-saved-details")).toHaveAttribute("open", "");
-    await page.getByRole("button", { name: "Stop comparing" }).click();
+    await page.locator('.primary-navigation [data-nav="analyze"]').click();
     await expect(page.locator("#activityView")).toBeVisible(); await expect(page.locator("#homeView")).toBeVisible();
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
     await expect(page.locator("#pageAction")).toBeVisible();
@@ -322,9 +322,9 @@ test("private search and Author refinements, empty periods, stale errors and lat
     await openComparison(app);
     const root = page.locator("#periodComparison");
     await selectActivityOption(page, "promptAuthorFilter", "user");
-    await expect(root.locator('[data-period-side="later"]')).toContainText("Exact matching records (2)");
+    await expect(root.locator('[data-period-side="later"] tbody tr')).toHaveCount(2);
     await restoreLegacySearch(page, "no invented match");
-    await expect(root).toContainText("No matching retained activity in either period");
+    await expect(root).toContainText("No activity was found in either period");
     await expect(root.locator("table")).toHaveCount(0);
     await expect(page.locator("#createPeriodReport")).toBeHidden();
     app.fail(true);
@@ -332,6 +332,7 @@ test("private search and Author refinements, empty periods, stale errors and lat
     await expect(page.locator("#periodComparisonStatus")).toContainText("stored revision changed");
     await expect(root.locator("[data-period-side]")).toHaveCount(0);
     app.fail(false);
+    await page.locator("#closeAnalyzeFilters").click();
     await root.getByRole("button", { name: "Retry comparison read" }).click();
     await expect(page.locator("#createPeriodReport")).toBeVisible();
     let release;
@@ -339,11 +340,11 @@ test("private search and Author refinements, empty periods, stale errors and lat
     await restoreLegacySearch(page, "no match again");
     await expect.poll(() => Boolean(release)).toBe(true);
     await restoreLegacySearch(page, periodQuery);
-    await expect(root.locator('[data-period-side="later"]')).toContainText("Exact matching records (2)");
+    await expect(root.locator('[data-period-side="later"] tbody tr')).toHaveCount(2);
     release(); app.delay(null);
-    await expect(root.locator('[data-period-side="later"]')).toContainText("Exact matching records (2)");
+    await expect(root.locator('[data-period-side="later"] tbody tr')).toHaveCount(2);
     await expect(page.locator("#pageAction")).not.toBeVisible();
-    await page.getByRole("button", { name: "Stop comparing" }).click();
+    await page.locator('nav [data-nav="analyze"]:visible').click();
     await expect(page.locator("#activityTitle")).toHaveText("Activity");
     await expect(page.locator("#activitySearch")).toHaveValue(periodQuery);
     await expect(page.locator('[data-analyze-mode],#callSortControls')).toHaveCount(0);
@@ -364,7 +365,7 @@ test("an in-flight comparison is invalidated during an unchanged stored reread a
     releaseComparison(); app.delay(null);
     releaseSnapshot(); app.delaySnapshot(null);
     await expect(page.locator("#createPeriodReport")).toBeVisible();
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (2)");
+    await expect(page.locator('[data-period-side="baseline"] tbody tr')).toHaveCount(2);
 });
 
 test("a permission-basis observation clears displayed findings while the accepted snapshot remains deferred", { timeout: 30000 }, async t => {
@@ -384,10 +385,10 @@ test("comparison Outcome choices use both cohorts and a late facet read does not
     const app = await setup(t), { page } = app;
     await openComparison(app);
     await selectActivityOption(page, "outcomeFilter", "unknown");
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("No matching retained activity");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (1)");
+    await expect(page.locator('[data-period-side="baseline"]')).toContainText("No matching activity was found");
+    await expect(page.locator('[data-period-side="later"] tbody tr')).toHaveCount(1);
     await selectActivityOption(page, "outcomeFilter", "all");
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (3)");
+    await expect(page.locator('[data-period-side="baseline"] tbody tr')).toHaveCount(3);
     let release;
     app.delay(() => new Promise(resolve => { release = resolve; }));
     await restoreLegacySearch(page, "request 0");
@@ -424,6 +425,6 @@ test("inconsistent derived response shows an error and clears comparison tables 
     app.alterComparison(null);
     await page.getByRole("button", { name: "Retry comparison read", exact: true }).click();
     await expect(page.locator("#createPeriodReport")).toBeVisible();
-    await expect(page.locator('[data-period-side="baseline"]')).toContainText("Exact matching records (3)");
-    await expect(page.locator('[data-period-side="later"]')).toContainText("Exact matching records (4)");
+    await expect(page.locator('[data-period-side="baseline"] tbody tr')).toHaveCount(3);
+    await expect(page.locator('[data-period-side="later"] tbody tr')).toHaveCount(4);
 });

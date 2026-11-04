@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { chooseTheme, exportCatalogFor, fixture, selectActivityOption, navigateSettings, automaticScoreOffSummary, openSourceEditor } from "./helpers.mjs";
+import { chooseTheme, exportCatalogFor, fixture, selectActivityOption, navigateSettings, automaticScoreOffSummary, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
 const proofDir = process.env.WORKIQ_SETTINGS_HELP_PROOFS;
@@ -40,7 +40,7 @@ async function setup(t, approved = true) {
     const server = createServer(async (req, res) => {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
-            return res.end(renderHtmlShell("a".repeat(64), "settings-help"));
+            return res.end(renderHtmlShell("a".repeat(64), "settings-help", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
@@ -178,7 +178,7 @@ async function tooltip(page, id, text, mode = "hover") {
     await bubble.waitFor({ state: "visible" });
     assert.equal(await bubble.innerText(), text, `${id}/${mode}`);
     assert.equal(await page.locator("#evidence-tooltip").count(), 1);
-    assert.equal(await trigger.getAttribute("aria-describedby"), id === "collectNow" && !await control(page, id).isDisabled() ? "freshScope evidence-tooltip" : "evidence-tooltip");
+    assert.equal(await trigger.getAttribute("aria-describedby"), "evidence-tooltip");
     assert.equal(await control(page, id).getAttribute("title"), null);
     assert.equal(await trigger.locator("button button, .ux-help").count(), 0, "No nested action or extra info-button tabstop");
     if (await control(page, id).isDisabled()) {
@@ -191,7 +191,7 @@ async function tooltip(page, id, text, mode = "hover") {
 async function dismiss(page, trigger) {
     await page.keyboard.press("Escape");
     assert.equal(await page.getByRole("tooltip").isVisible(), false);
-    assert.equal(await trigger.getAttribute("aria-describedby"), await trigger.getAttribute("id") === "checkActivity" ? "freshScope" : null);
+    assert.equal(await trigger.getAttribute("aria-describedby"), null);
 }
 async function saved(page) {
     await page.waitForFunction(() => !document.querySelector("#collectionCadence").disabled);

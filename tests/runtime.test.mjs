@@ -4,6 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { get } from "node:http";
+import { registerHooks } from "node:module";
+import { randomUUID } from "node:crypto";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { createBoardTransport } from "../lib/client-transport.mjs";
@@ -28,14 +30,16 @@ async function close(runtime) {
 async function post(origin, route, body, capability, headers = {}) {
     return nativeFetch(origin + route, {
         method: "POST",
-        headers: { Origin: origin, "Content-Type": "application/json", ...(capability ? { "X-Board-Capability": capability } : {}), ...headers },
+        headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1",
+            ...(capability ? { "X-Board-Capability": capability } : {}), ...headers },
         body: JSON.stringify(body),
     });
 }
-async function session(origin) {
+async function session(origin, connection = false) {
     const result = await post(origin, "/api/session", {});
     assert.equal(result.status, 200);
-    return (await result.json()).capability;
+    const value = await result.json();
+    return connection ? value : value.capability;
 }
 function browserFetch(origin, calls) {
     globalThis.fetch = (route, options) => {
@@ -43,6 +47,108 @@ function browserFetch(origin, calls) {
         return nativeFetch(origin + route, { ...options, headers: { ...options.headers, Origin: origin } });
     };
 }
+
+test("unsupported session handshakes require an update before consuming any of the 128 panel authorities", async t => {
+    const { origin } = await fixture(t);
+    const obsolete = () => nativeFetch(origin + "/api/session", {
+        method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: "{}",
+    });
+    for (let index = 0; index < 130; index++) {
+        const response = await obsolete();
+        assert.equal(response.status, 409);
+        const body = await response.json();
+        assert.equal(body.code, "WIRE_CLIENT_UPDATE_REQUIRED");
+        assert.match(body.error, /Reload|reload/);
+        assert.equal(body.capability, undefined);
+    }
+    for (const protocol of ["0", "2", "1, 1", "copilot-only"]) {
+        const response = await post(origin, "/api/session", {}, undefined, { "X-Wire-Session-Protocol": protocol });
+        assert.equal(response.status, 409);
+        assert.equal((await response.json()).code, "WIRE_CLIENT_UPDATE_REQUIRED");
+    }
+    assert.equal((await post(origin, "/api/session", { mode: "unbound" })).status, 400);
+    assert.equal((await post(origin, "/api/snapshot", {})).status, 403,
+        "Compatibility metadata alone never authenticates a panel.");
+    const owners = [];
+    for (let index = 0; index < 128; index++) owners.push(await session(origin));
+    assert.equal(new Set(owners).size, 128);
+    assert.equal((await post(origin, "/api/session", {})).status, 429);
+    assert.equal((await nativeFetch(origin + "/")).status, 429, "The current server-rendered entry shares the unchanged cap.");
+    assert.equal((await obsolete()).status, 409, "Compatibility is checked even when legitimate panels occupy every slot.");
+    assert.equal((await nativeFetch(origin + "/health")).status, 200);
+    assert.equal((await post(origin, "/api/session/release", {}, owners[0])).status, 200);
+    assert.equal((await nativeFetch(origin + "/")).status, 200);
+    assert.equal((await post(origin, "/api/snapshot", {}, owners[0])).status, 403);
+    assert.equal((await post(origin, "/api/snapshot", {}, owners[1])).status, 200);
+});
+
+test("current canvas reuses one compatible authority for 130 opens and reads, then releases only itself", async t => {
+    const { runtime, origin } = await fixture(t), requests = [];
+    runtime.server.on("request", request => requests.push({
+        path: request.url, protocol: request.headers["x-wire-session-protocol"],
+    }));
+    const client = createRuntimeClient(origin), other = await session(origin);
+    requests.length = 0;
+    for (let index = 0; index < 130; index++) {
+        assert.equal((await client.open("reused-canvas")).url, runtime.url);
+        await client.action("reused-canvas", "get_summary", {});
+    }
+    assert.deepEqual(requests.filter(request => request.path === "/api/session"),
+        [{ path: "/api/session", protocol: "1" }]);
+    await client.close("reused-canvas");
+    assert.equal(requests.filter(request => request.path === "/api/session/release").length, 1);
+    assert.equal((await post(origin, "/api/snapshot", {}, other)).status, 200);
+});
+
+test("canvas compatibility refusal remains explicit and does not replay an attempted open", async t => {
+    const calls = [];
+    t.mock.method(globalThis, "fetch", async (url, options) => {
+        calls.push(new URL(url).pathname);
+        if (url.endsWith("/health")) return Response.json({ service: "workiq-evidence", protocol: 1 });
+        assert.equal(options.headers["X-Wire-Session-Protocol"], "1");
+        return Response.json({ code: "WIRE_CLIENT_UPDATE_REQUIRED",
+            error: "Update and reload the WIRE canvas extension. No panel was opened." }, { status: 409 });
+    });
+    await assert.rejects(createRuntimeClient("http://127.0.0.1:1").open("outdated-canvas"),
+        error => error.code === "WIRE_CLIENT_UPDATE_REQUIRED" && /update and reload/i.test(error.message));
+    assert.deepEqual(calls, ["/health", "/api/session"]);
+});
+
+test("registered canvas uses the current adapter and surfaces update-required without hiding it as server downtime", async t => {
+    const { runtime, origin } = await fixture(t), key = `wireCanvasFixture_${randomUUID()}`;
+    const sdk = `export class CanvasError extends Error {
+        constructor(code, message) { super(message); this.code = code; }
+    }
+    export const createCanvas = value => value;
+    export const joinSession = async value => { globalThis[${JSON.stringify(key)}] = value; return {}; };`;
+    const client = `import { createRuntimeClient as create } from ${JSON.stringify(new URL("../lib/runtime-client.mjs", import.meta.url).href)};
+        export const createRuntimeClient = () => create(${JSON.stringify(origin)});`;
+    const entry = new URL("../extension.mjs", import.meta.url);
+    const hooks = registerHooks({
+        resolve(specifier, context, next) {
+            if (context.parentURL?.startsWith(entry.href)) {
+                const source = specifier === "@github/copilot-sdk/extension" ? sdk
+                    : specifier === "./lib/runtime-client.mjs" ? client : null;
+                if (source) return { url: "data:text/javascript," + encodeURIComponent(source), shortCircuit: true };
+            }
+            return next(specifier, context);
+        },
+    });
+    t.after(() => { hooks.deregister(); delete globalThis[key]; });
+    await import(entry.href + "?fixture=" + randomUUID());
+    const canvas = globalThis[key].canvases[0];
+    const opened = await canvas.open({ instanceId: "registered-fixture" });
+    assert.equal(opened.url, runtime.url);
+    const summary = canvas.actions.find(action => action.name === "get_summary");
+    await summary.handler({ instanceId: "registered-fixture", actionName: "get_summary", input: {} });
+    await canvas.onClose({ instanceId: "registered-fixture" });
+    t.mock.method(globalThis, "fetch", (url, options) => url === origin + "/api/session"
+        ? Promise.resolve(Response.json({ code: "WIRE_CLIENT_UPDATE_REQUIRED",
+            error: "Update and reload the WIRE canvas extension. No panel was opened." }, { status: 409 }))
+        : nativeFetch(url, options));
+    await assert.rejects(canvas.open({ instanceId: "incompatible-fixture" }),
+        error => error.code === "runtime_update_required" && /update and reload/i.test(error.message));
+});
 
 test("one snapshot revision, session isolation, host/origin protections, and close without server death", async t => {
     const { runtime, origin } = await fixture(t);
@@ -95,10 +201,10 @@ test("the approved favicon is local, host-protected and does not consume panel c
 
 test("old browser capability recovers after actual server restart; mutation is never replayed", async t => {
     const { runtime, context, origin } = await fixture(t);
-    const capability = await session(origin);
+    const { capability, accessBootstrap } = await session(origin, true);
     let changes = 0;
     const calls = [];
-    const api = createBoardTransport(capability, () => changes++);
+    const api = createBoardTransport(capability, () => changes++, accessBootstrap);
     const port = runtime.server.address().port;
     await close(runtime);
     const replacement = await startServer(context, createExportController(context), { port });
@@ -110,7 +216,7 @@ test("old browser capability recovers after actual server restart; mutation is n
         assert.equal(changes, 1);
         assert.deepEqual(calls, ["/api/snapshot", "/api/session", "/api/snapshot"]);
         calls.length = 0;
-        const staleMutation = createBoardTransport(capability);
+        const staleMutation = createBoardTransport(capability, undefined, accessBootstrap);
         await assert.rejects(staleMutation("/api/move", { scenarioId: "synthetic-only", toState: "reviewing" }), /not replayed/);
         assert.deepEqual(calls, ["/api/move", "/api/session"]);
     } finally { globalThis.fetch = nativeFetch; await close(replacement); }
@@ -118,12 +224,12 @@ test("old browser capability recovers after actual server restart; mutation is n
 
 test("concurrent expired reads share one handshake; releasing adapter does not stop runtime", async t => {
     const { runtime, origin } = await fixture(t);
-    const capability = await session(origin);
+    const { capability, accessBootstrap } = await session(origin, true);
     await post(origin, "/api/session/release", {}, capability);
     const calls = [];
     browserFetch(origin, calls);
     try {
-        const api = createBoardTransport(capability);
+        const api = createBoardTransport(capability, undefined, accessBootstrap);
         const [a, b] = await Promise.all([api("/api/state"), api("/api/state")]);
         assert.equal(a.revision, b.revision);
         assert.equal(calls.filter(route => route === "/api/session").length, 1);
@@ -140,7 +246,7 @@ test("concurrent expired reads share one handshake; releasing adapter does not s
 test("network loss is classified consistently at the first read, renewal and renewed read", async t => {
     const { origin } = await fixture(t);
     for (const failure of ["first", "renewal", "renewed-read"]) {
-        const capability = await session(origin);
+        const { capability, accessBootstrap } = await session(origin, true);
         if (failure !== "first") await post(origin, "/api/session/release", {}, capability);
         const calls = [];
         globalThis.fetch = (route, options) => {
@@ -150,7 +256,7 @@ test("network loss is classified consistently at the first read, renewal and ren
             return nativeFetch(origin + route, { ...options, headers: { ...options.headers, Origin: origin } });
         };
         try {
-            await assert.rejects(createBoardTransport(capability)("/api/state"), error =>
+            await assert.rejects(createBoardTransport(capability, undefined, accessBootstrap)("/api/state"), error =>
                 error.reason === "runtime_unavailable" && /No action was replayed/.test(error.message));
             assert.equal(calls.length, failure === "first" ? 1 : failure === "renewal" ? 2 : 3);
         } finally { globalThis.fetch = nativeFetch; }

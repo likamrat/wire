@@ -1,7 +1,24 @@
 // Shared route adapter, serialized with the shell. Matching stays in activity analytics.
 export function createFilterState(results, authorship) {
+    const sources = [
+        { id: "github-copilot", label: "GitHub Copilot" },
+        { id: "microsoft-365-chat", label: "Microsoft 365 Copilot Chat" },
+        { id: "microsoft-365-cowork", label: "Cowork" },
+    ];
+    function sourceLabel(id) {
+        if (id === "microsoft-365") return "Microsoft 365";
+        const source = sources.find(source => source.id === id);
+        if (!source) throw new RangeError("Accepted source is unavailable.");
+        return source.label;
+    }
+    function sourceIdentity(rows) {
+        if (!Array.isArray(rows) || !rows.length) return null;
+        const source = sources.find(source => source.id === rows[0]?.sourceId);
+        return source && rows.every(row => row?.sourceId === source.id) ? { ...source } : null;
+    }
     function canonical(route) {
         const next = { ...route };
+        if (next.source === "all") next.source = undefined;
         if (typeof next.services === "string") next.services = [...new Set(next.services.split(",").filter(Boolean))].sort().join(",") || undefined;
         if (typeof next.withinServices === "string") next.withinServices = [...new Set(next.withinServices.split(",").filter(Boolean))].sort().join(",") || undefined;
         if (!next.services) next.includeMissingService = undefined;
@@ -10,6 +27,8 @@ export function createFilterState(results, authorship) {
     }
     function query(route) {
         const filters = { scope: route.scope || "history", includeMetadata: route.layer === "http" };
+        if (route.source) filters.sources = route.source === "microsoft-365"
+            ? ["microsoft-365-chat", "microsoft-365-cowork"] : [route.source];
         if (route.project) filters.projectIds = [route.project === "unscoped" ? null : route.project];
         if (route.tool) filters.tools = [route.tool];
         if (route.service) filters.workloads = [route.service];
@@ -27,7 +46,7 @@ export function createFilterState(results, authorship) {
     }
     function scope(route, next) {
         const retained = Object.fromEntries(["layer", "range", "from", "to", "bucket", "tool", "service", "services", "includeMissingService",
-            "withinServices", "scope", "authors", "result", "project", "endpoint"].filter(key => route[key] !== undefined).map(key => [key, route[key]]));
+            "withinServices", "scope", "authors", "result", "project", "endpoint", "source", "nativeGroup"].filter(key => route[key] !== undefined).map(key => [key, route[key]]));
         return { ...retained, ...next };
     }
     function bucket(route) {
@@ -36,7 +55,7 @@ export function createFilterState(results, authorship) {
         const span = Date.parse(route.to) - Date.parse(route.from);
         return span < 31 * 86400000 ? "day" : span >= 366 * 86400000 ? "month" : "week";
     }
-    return { canonical, query, scope, bucket };
+    return { canonical, query, scope, bucket, sources, sourceLabel, sourceIdentity };
 }
 
 // Refine only an accepted canonical snapshot. Private search never becomes a server filter.
@@ -47,7 +66,10 @@ export function createAnalysisSlice(localSearch, projection) {
         const records = new Map(snapshot.scenarios.map(scenario => [scenario.scenarioId, scenario]));
         return [...records.values()].filter(scenario => {
             const source = sources.get(scenario.sourceSessionId);
-            return localSearch.phrase(search, [scenario.userPrompt?.text, scenario.title, source?.project, source?.name,
+            return localSearch.phrase(search, [scenario.userPrompt?.text,
+                ...(scenario.recordKind === "native-conversation" ? scenario.nativeConversation.messages
+                    .filter(message => message.availability === "recorded").map(message => message.value.text) : []),
+                scenario.title, source?.project, source?.name,
                 scenario.project, scenario.sourceSessionName, scenario.sourceSessionId]);
         }).map(scenario => scenario.scenarioId).sort();
     }
@@ -56,7 +78,8 @@ export function createAnalysisSlice(localSearch, projection) {
             throw new TypeError("Service chart refinements require named services.");
         }
         const base = snapshot.analytics, records = new Map(snapshot.scenarios.map(scenario => [scenario.scenarioId, scenario]));
-        if (membership && (membership.revision !== snapshot.revision || membership.scopeKey !== JSON.stringify([options, withinServices])
+        if (membership && (membership.revision !== snapshot.revision || membership.nativeRevision !== snapshot.nativeRead?.revision
+            || membership.scopeKey !== JSON.stringify([options, withinServices])
             || !Array.isArray(membership.scenarioIds) || !Array.isArray(membership.actionIds) || !Array.isArray(membership.parentScenarioIds))) {
             throw new TypeError("Search membership is not bound to this accepted analytical scope.");
         }
@@ -68,9 +91,28 @@ export function createAnalysisSlice(localSearch, projection) {
         const searchRows = rows => hasQuery ? rows.filter(row => withinLegacy(row)
             && (!membership || matches.has(row.scenarioId) || actionIds.has(row.id))) : rows;
         const refineRows = rows => searchRows(rows).filter(row => withinServices.every(service => row.serviceAssociation?.services.includes(service)));
-        const rows = refineRows(base.rows), scenarioIds = [...new Set(rows.map(row => row.scenarioId).filter(id => records.has(id)))];
+        const rows = refineRows(base.rows);
+        const population = base.population?.scenarioIds;
+        if (population !== undefined && (!Array.isArray(population) || new Set(population).size !== population.length
+            || population.some(id => !records.has(id)))) throw new TypeError("Accepted conversation population is unavailable.");
+        const contextIds = base.population?.contextOnlyScenarioIds ?? [];
+        if (!Array.isArray(contextIds) || new Set(contextIds).size !== contextIds.length
+            || contextIds.some(id => !population?.includes(id) || records.get(id).recordKind !== "native-conversation")
+            || contextIds.length && base.population.contextDateBasis !== "ordinary-message-created") {
+            throw new TypeError("Accepted message-date context is unavailable.");
+        }
+        const context = new Set(contextIds);
+        const matched = new Set(rows.map(row => row.scenarioId).filter(id => records.has(id)));
+        const scenarioIds = population ? population.filter(id => matched.has(id)
+            || !withinServices.length && (!legacy || legacy.has(id)) && (!membership || matches.has(id))
+                && records.get(id).recordKind === "native-conversation"
+                && (context.has(id) || !records.get(id).nativeConversation.calls.length))
+            : [...matched];
         let analytics = base;
         if (hasQuery || withinServices.length) {
+            if (population && typeof projection.narrowPopulation !== "function") {
+                throw new TypeError("Conversation refinement requires the shared accepted-population projection.");
+            }
             const facetRows = refineRows(base.resultFacet.rows);
             let parentCalls;
             if (base.layer === "reported-api") {
@@ -88,6 +130,7 @@ export function createAnalysisSlice(localSearch, projection) {
             analytics = {
                 ...base,
                 ...projection.project(rows, { ...options, timeContext: base.timeContext, dateRange: base.dateRange }, snapshot.scenarios),
+                ...(population ? { population: projection.narrowPopulation(base.population, scenarioIds, rows, snapshot.scenarios) } : {}),
                 resultFacet: { ...base.resultFacet, rows: facetRows, totals: projection.summarize(facetRows) },
                 apiCoverage: base.layer === "reported-api"
                     ? projection.apiCoverage(parentCalls, rows) : base.apiCoverage,
@@ -109,55 +152,115 @@ export function createAnalysisSlice(localSearch, projection) {
     return slice;
 }
 
-export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState, createAnalysisSlice, createActivityProjection, createRequestContext, createCallInvestigation) {
+export function mountEvidence(capability, createBoardTransport, theme, createReportDraft, createEvidenceUX, uxIcons, mountThemeControl, createTimeContext, createServiceCategories, createDimensionalCharts, dimensionalIcons, mountSidebarNavigation, createReportScope, createSelectControls, createInlineMetadata, createControlHelp, createRecordedResults, createLiveState, createDisclosureState, createCollectionStatus, createSessionJourney, createReportJourney, mountCollectionSettings, createTextAccess, createPeriodFlow, createChatCopy, mountDisplayTimeSettings, createLocalSearch, createSettingsNavigation, createFreshActivity, createPercentageCharts, createRequestTiming, mountRecorderDiagnostics, createDeletionFlow, mountDeletion, assessmentFactories, createPromptAuthorship, createFilterState, createAnalysisSlice, createActivityProjection, createRequestContext, createCallInvestigation, accessBootstrap) {
     const $ = (id) => document.getElementById(id);
+    const api = createBoardTransport(capability, sessionChanged, accessBootstrap);
+    let analytics;
+    const historyOwner = crypto.randomUUID();
+    let accessToken = null, clearingAccess = false;
+    for (const type of ["click", "auxclick", "input", "change", "submit", "keydown"]) {
+        document.addEventListener(type, event => {
+            if (api.publicationToken() && !clearingAccess) return;
+            if (!event.target.closest?.("#workspace,#contextSidebar,#overlay,.select-popup")) return;
+            event.preventDefault(); event.stopImmediatePropagation();
+        }, { capture: true });
+    }
     const time = createTimeContext();
     const authorship = createPromptAuthorship();
     const requestTiming = createRequestTiming(time, authorship);
     const localSearch = createLocalSearch(), settingsNavigation = createSettingsNavigation(localSearch);
+    const [incomingView, incomingQuery = ""] = location.hash.split("?");
+    const incomingParameters = new URLSearchParams(incomingQuery);
+    const incomingNavigationKey = incomingParameters.get("privateView") ?? history.state?.wirePrivateNavigation;
+    if (incomingParameters.has("privateView")) {
+        incomingParameters.delete("privateView");
+        history.replaceState({ ...history.state, wirePrivateNavigation: incomingNavigationKey }, "",
+            incomingView + (incomingParameters.size ? "?" + incomingParameters : ""));
+    }
+    let incomingNavigation = null, incomingNavigationError = null, incomingNavigationClaimed = false;
+    function claimIncomingNavigation() {
+        if (incomingNavigationClaimed || incomingNavigationKey === undefined || !api.publicationToken()) return;
+        incomingNavigationClaimed = true;
+        try {
+            incomingNavigation = window.opener?.__wireTakePrivateNavigation?.(incomingNavigationKey, window, location.hash) ?? null;
+        } catch (error) {
+            if (error.name !== "SecurityError") throw error;
+        }
+        window.opener = null;
+        if (!incomingNavigation || typeof incomingNavigation.search !== "string"
+            || incomingNavigation.analysisQuery !== null && typeof incomingNavigation.analysisQuery !== "string"
+            || !Number.isSafeInteger(incomingNavigation.revision)) {
+            incomingNavigation = null;
+            incomingNavigationError = "The private selection could not be restored. Return to the original tab and open the result again.";
+        } else {
+            history.replaceState({ ...history.state, evidenceView: { ...history.state?.evidenceView,
+                url: location.hash, search: incomingNavigation.search } }, "");
+        }
+    }
+    if (api.publicationToken()) claimIncomingNavigation();
     let compactSettings, settingsSearchSignature, issueRows, deletionUI, recollectionUI, assessmentUI, liveSearchUI;
     let recollectionNoticeVisible = true, recollectionNoticeKey = "";
-    let semanticMembership, semanticQuery = null, semanticComplete = false, semanticBound = false, semanticStatus = "stale";
+    let semanticMembership, semanticQuery = incomingNavigationKey === undefined ? null : incomingNavigation?.analysisQuery ?? "",
+        semanticComplete = false, semanticBound = false, semanticStatus = "stale";
     let searchOpenedRequest = null, searchTargetInvalid = false;
     const chatCopy = createChatCopy();
     const periodFlow = createPeriodFlow(time, chatCopy);
     let viewerTime = time.detect();
     let displayTimeSettings;
     const draft = createReportDraft({ contextSelector: createRequestContext() });
+    const nativePublication = assessmentFactories.createNativeReportPublicationState();
+    let syncNativeSaveAvailability = null, nativePreviewExpiryTimer;
+    function nativePublicationContext(includeDraft = true) {
+        const access = api.accessState();
+        return { kind: "report", mode: access.mode, collectionMode: access.collectionMode,
+            runtimeId: access.runtimeId, publication: api.publicationToken(), owner: api.controlToken(), revision: state?.revision,
+            ...(includeDraft && state ? { draftToken: draft.token(), scope: JSON.stringify([
+                reportScope, reportSelection().selection(state.revision), reportNativeIntent(), draft.options(),
+            ]) } : {}) };
+    }
     const renderedContextBundles = new Set();
     const ux = createEvidenceUX(uxIcons);
     const searchFields = assessmentFactories.createSearchFields(ux);
     const metadata = createInlineMetadata(ux);
     // Keep operation wording on screen separate from saved report definitions.
     const recordedCategories = createServiceCategories();
-    const categories = { ...recordedCategories, operation(tool) {
+    const categories = { ...recordedCategories, entries: recordedCategories.entries.map(entry => recordedCategories.display(entry.id)),
+        describe: recordedCategories.display, operation(tool) {
         const operation = recordedCategories.operation(tool);
         return tool === "workiq-ask" ? { ...operation, label: "Asked Copilot",
             description: "Recorded attempt to ask Copilot or an agent, not confirmation of delivery." } : operation;
     }, serviceEvidence(row, layer = "tool") {
-        const evidence = recordedCategories.serviceEvidence(row, layer);
-        return evidence?.reason === "hosted-routing" ? { ...evidence,
-            description: "The recorded tool output does not identify a downstream service or API path. This is an evidence gap, not a service failure or a check of your current connection." }
-            : layer === "tool" && evidence?.reason === "missing-target" ? { ...evidence,
-                description: "No downstream service target is available in the recorded tool output. This is an evidence gap, not a service failure or a check of your current connection." } : evidence;
+        return recordedCategories.displayEvidence(recordedCategories.serviceEvidence(row, layer), { screen: true });
+    }, displayEvidence(evidence) {
+        return recordedCategories.displayEvidence(evidence, { screen: true });
+    }, availabilitySummary(rows, layer) {
+        return recordedCategories.availabilitySummary(rows, layer, { screen: true });
+    }, explainRows(rows, layer) {
+        return recordedCategories.availabilitySummary(rows, layer, { screen: true })?.description ?? "";
+    }, evidenceGroups(rows, layer) {
+        return recordedCategories.evidenceGroups(rows, layer).map(group => ({ ...group,
+            evidence: recordedCategories.displayEvidence(group.evidence, { screen: true }),
+            purpose: group.tool === "workiq-ask" ? "Asked Copilot" : group.purpose }));
     } };
     const help = createControlHelp(categories);
     const dimensional = createDimensionalCharts();
     const reportScopes = createReportScope(authorship);
-    const results = createRecordedResults();
+    const results = createRecordedResults({ scope: () => analytics, screen: true });
     const filterState = createFilterState(results, authorship);
-    const analysisSlice = createAnalysisSlice(localSearch, createActivityProjection(time, categories, Object.keys(results.labels("tool"))));
+    // Display wording must not change the facts checked against the server's projection.
+    const activityProjection = createActivityProjection(time, recordedCategories, Object.keys(results.labels("tool")));
+    const analysisSlice = createAnalysisSlice(localSearch, activityProjection);
     const timingPresentation = assessmentFactories.timing;
     const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, icons: dimensionalIcons,
-        createLink: (kind, row) => kind === "outcomes" && applied.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
-            : kind === "services" ? link("", "activity", { withinServices: [...new Set([...(route.withinServices?.split(",") || []), row.id])].sort().join(","), page: undefined })
+        createLink: (kind, row) => Object.hasOwn(row, "nativeFilter") ? row.nativeFilter ? link("", "activity", { ...row.nativeFilter, page: undefined }) : null
+            : kind === "outcomes" && applied.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
+            : kind === "services" ? link("", "activity", { withinServices: [...new Set([...(route.withinServices?.split(",") || []), row.id])].sort().join(","), page: undefined,
+                ...(row.sourceId ? { source: row.sourceId } : {}) })
                 : kind === "service-purpose" ? link("", "activity", { endpoint: "operation:workiq-retrieve", page: undefined })
                     : kind === "service-preparation" ? link("", "activity", { service: "Discovery", page: undefined })
                         : kind === "service-operation" ? link("", "activity", { tool: "workiq-ask", endpoint: row.endpointId, page: undefined })
-                : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined }) : null });
-    $("analyzePopulation").append($("filters"), $("appliedFilters"), $("serviceFocus"), $("freshActivity"), $("collectionNotice"));
-    $("periodActions").prepend($("resultsLink"));
-    $("resultsLink").textContent = "View records";
+                : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined,
+                    ...(row.sourceId ? { source: row.sourceId } : {}) }) : null });
     const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData"), includeModels: true });
     const live = createLiveState();
     const sourceCheckKey = "workiq-evidence.source-check.v1";
@@ -170,12 +273,202 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         sourcePending = true;
         sourceStorageWarning = "This tab cannot read its source-check recovery state. Source refresh stays read-only.";
     }
-    const fresh = createFreshActivity({ sourceUnknown: sourcePending, sourceWarning: sourceStorageWarning });
-    let collectionReadGeneration = 0;
     const historyStatus = createCollectionStatus();
+    const sourceCollection = assessmentFactories.createSourceCollectionState({
+        bootstrap: accessBootstrap, collectionStatus: historyStatus,
+        createNativeConfigurationState: assessmentFactories.createNativeConfigurationState,
+    });
+    function acceptSourceCollection(status) {
+        if (!sourceCollection.controlsActive) return status;
+        sourceCollection.receive(status?.sourceAware, api.accessState());
+        const github = status.sourceAware.github.status;
+        if (["nativeControl", "nativePersistence", "nativeConfigurationOffer"].some(key => Object.hasOwn(status, key))
+            || ["configVersion", "revision", "deletionVersion", "artifactRevision"].some(key => status[key] !== github[key])) {
+            sourceCollection.withdraw();
+            throw new Error("GitHub collection changed while source status was read. Read current Settings; no action was started.");
+        }
+        return status;
+    }
+    function nativeCollectionStatus(status) {
+        return sourceCollection.active ? { nativePersistence: status?.sourceAware?.microsoft.status } : status;
+    }
+    function observeNativeReaderStatus(status) {
+        if (!sourceCollection.active) return;
+        const native = historyStatus.persistence(nativeCollectionStatus(status));
+        if (!native?.configured) { boundedNative.retireReaderAuthority(status.revision); return; }
+        boundedNative.observeReaderAuthority({ revision: status.revision, deletionVersion: status.deletionVersion,
+            current: { generation: native.generation, configurationRevision: native.configuration?.configurationRevision ?? null,
+                privacyRevision: native.configuration?.privacyRevision ?? null } });
+    }
+    function savedMicrosoftSummary(view) {
+        const committed = view?.readback?.committed;
+        return committed?.committedAt ? `Last saved ${timestamp(committed.committedAt)}.`
+            : view?.readback ? "Saved time unavailable."
+            : "";
+    }
+    async function readCollectionStatus(input = {}) {
+        const publication = api.publicationToken();
+        const status = await api("/api/collection/status", input);
+        if (!api.isCurrent(publication)) throw new Error("This collection read was retired when WIRE access changed.");
+        if (!sourceCollection.controlsActive) return status;
+        const composite = await api("/api/collection/sources/status", {});
+        if (!api.isCurrent(publication)) throw new Error("This source status read was retired when WIRE access changed.");
+        return acceptSourceCollection({ ...status, sourceAware: composite });
+    }
+    let nativeCollectIntent = null;
+    const receiptStatus = { ...historyStatus, nativeReadbackMatches(receipt, snapshot, status) {
+        return sourceCollection.active ? nativeIntentCurrent()
+            && boundedContract.matchesReadback(nativeCollectIntent?.readbackQualification, snapshot?.nativeRead, receipt)
+            : historyStatus.nativeReadbackMatches(receipt, snapshot, status);
+    } };
+    let fresh = createFreshActivity({ sourceUnknown: sourcePending, sourceWarning: sourceStorageWarning, nativeStatus: receiptStatus });
+    const refreshSources = assessmentFactories.createRefreshSources();
+    let refreshGesture = null;
+    let githubRecoveryPending = false;
+    const refreshWorking = () => Boolean(refreshGesture?.running || refreshGesture?.recovering);
+    function refreshGestureCurrent(gesture) {
+        return gesture === refreshGesture && !gesture.withdrawn && api.isCurrent(gesture.publication)
+            && api.isControlCurrent(gesture.owner) === true && api.accessState().runtimeId === gesture.runtimeId;
+    }
+    function refreshPresentation() {
+        const model = fresh.snapshot(), gesture = refreshGesture;
+        if (!gesture || gesture.withdrawn) return githubRecoveryPending ? { ...model,
+            phase: ["checking", "applying", "waiting"].includes(model.phase) ? model.phase : "unconfirmed",
+            sourceUnknown: true, recovery: "stored", message: "Earlier GitHub check unconfirmed.",
+            context: "Read saved activity; neither source check will be repeated." } : model;
+        const summary = refreshSources.describe(gesture.branches);
+        return { ...model, phase: gesture.running ? "checking" : gesture.recovering ? "applying"
+            : summary.recovery ? "unconfirmed" : summary.waiting ? "waiting" : "complete",
+            message: summary.message, context: summary.context, coverage: summary.coverage,
+            recovery: summary.recovery || model.sourceBlocked ? "stored" : null,
+            sourceUnknown: Object.values(gesture.branches).some(branch => branch.state !== "superseded" && branch.result?.sourceUnknown),
+            readFailed: Object.values(gesture.branches).some(branch => branch.state !== "superseded" && branch.result?.readFailed),
+            combined: { completedAt: gesture.completedAt, problem: summary.problem } };
+    }
+    function settleRefreshBranch(branch) {
+        if (branch.withdrawn || !branch.flow || ["skipped", "queued", "retired"].includes(branch.state)) return;
+        const next = structuredClone(branch.flow.snapshot());
+        branch.flow.releaseSnapshot(branch.result);
+        branch.result = next;
+    }
+    function withdrawRefreshGesture() {
+        const gesture = refreshGesture, github = gesture?.branches.github, microsoft = gesture?.branches.microsoft;
+        const githubResult = github?.flow?.snapshot();
+        githubRecoveryPending ||= Boolean(github?.dispatched && github.state !== "retired"
+            && !githubResult?.check && !githubResult?.sourceFailure && !github.result?.check && !github.result?.sourceFailure);
+        const original = gesture ? microsoft?.dispatched ? microsoft.intent : null : nativeCollectIntent;
+        const recovery = original && !original.confirmed ? { operationId: original.operationId, owner: original.owner } : null;
+        if (gesture) {
+            gesture.withdrawn = true;
+            for (const [source, branch] of Object.entries(gesture.branches)) {
+                branch.flow?.withdrawAccess(branch.result, branch.intent?.readbackQualification, gesture.plan?.[source]);
+                if (branch.intent) for (const key of Object.keys(branch.intent)) delete branch.intent[key];
+                for (const key of Object.keys(branch)) delete branch[key];
+                branch.withdrawn = true;
+                delete gesture.branches[source];
+            }
+            if (gesture.plan) for (const key of Object.keys(gesture.plan)) delete gesture.plan[key];
+            for (const key of Object.keys(gesture)) delete gesture[key];
+            gesture.withdrawn = true;
+        }
+        fresh.withdrawAccess(nativeCollectIntent?.readbackQualification);
+        if (nativeCollectIntent) for (const key of Object.keys(nativeCollectIntent)) delete nativeCollectIntent[key];
+        nativeCollectIntent = recovery;
+        refreshGesture = null;
+    }
+    function retireRefreshBranch(branch) {
+        const flow = branch.flow;
+        flow?.withdrawAccess(branch.result, branch.intent?.readbackQualification, branch.gesture.plan?.[branch.source]);
+        if (nativeCollectIntent === branch.intent) nativeCollectIntent = null;
+        if (branch.intent) for (const key of Object.keys(branch.intent)) delete branch.intent[key];
+        branch.intent = branch.result = branch.flow = null;
+        branch.state = "retired";
+        if (fresh === flow) fresh = createFreshActivity({ nativeStatus: receiptStatus, sourceWarning: sourceStorageWarning });
+    }
+    function syncRefreshBranches(snapshot) {
+        const gesture = refreshGesture;
+        if (!gesture || gesture.withdrawn) return;
+        const prior = refreshSources.describe(gesture.branches);
+        if (!refreshWorking() && !prior.recovery && !prior.waiting
+            && Number.isSafeInteger(gesture.completedRevision) && snapshot.revision > gesture.completedRevision) {
+            withdrawRefreshGesture();
+            fresh = createFreshActivity({ nativeStatus: receiptStatus, sourceWarning: sourceStorageWarning });
+            return;
+        }
+        for (const source of refreshSources.names) {
+            const branch = gesture.branches[source], model = branch.flow?.snapshot();
+            if (!model || branch.state === "retired") continue;
+            if (!gesture.running && Number.isSafeInteger(branch.feedbackRevision) && snapshot.revision > branch.feedbackRevision) {
+                retireRefreshBranch(branch);
+                continue;
+            }
+            if (branch.state === "superseded") continue;
+            const native = snapshot.collection?.sourceAware?.microsoft.status, receipt = model.nativeReceipt;
+            const changed = source === "github" ? model.check && snapshot.collection?.configVersion !== model.check.configVersion
+                : receipt?.status === "committed" && (native?.accountRef !== receipt.partition
+                    || native?.configuration?.configurationRevision !== receipt.configurationRevision
+                    || native?.configuration?.privacyRevision !== receipt.privacyRevision);
+            if (changed) {
+                branch.state = "superseded";
+                branch.feedbackRevision ??= snapshot.revision;
+                settleRefreshBranch(branch);
+                if (fresh === branch.flow) {
+                    fresh = createFreshActivity({ nativeStatus: receiptStatus, sourceWarning: sourceStorageWarning });
+                    nativeCollectIntent = null;
+                }
+                continue;
+            }
+            const awaitingView = ["applying", "waiting"].includes(model.phase);
+            if (awaitingView) {
+                if (source === "github") branch.flow.applied(snapshot.revision, snapshot.collection?.configVersion, snapshot.analytics.rows);
+                else if (nativeIntentCurrent(branch.intent) && branch.flow.nativeApplied(snapshot, nativeCollectionStatus(collection))) {
+                    branch.intent.confirmed = true;
+                }
+            }
+            if (awaitingView || ["applying", "waiting"].includes(branch.result?.phase)
+                || branch.result?.sourceUnknown && !model.sourceUnknown && model.phase === "complete") settleRefreshBranch(branch);
+            const result = branch.result;
+            if (branch.feedbackRevision === undefined && result && !result.sourceUnknown && !result.sourceBlocked
+                && !result.readFailed && !result.sourceFailure && ["complete", "partial"].includes(result.phase)
+                && (result.check || result.nativeReceipt?.status === "committed")) branch.feedbackRevision = snapshot.revision;
+        }
+        if (!refreshWorking()) {
+            gesture.completedRevision = snapshot.revision;
+            clearSourceCheckMarker();
+        }
+    }
+    let collectionReadGeneration = 0;
+    function nativeIntentCurrent(intent = nativeCollectIntent) {
+        return Boolean(intent?.owner) && typeof intent.owner.then !== "function" && api.isControlCurrent(intent.owner) === true;
+    }
+    function nativeReceiptQuery() {
+        return nativeIntentCurrent() ? { operationId: nativeCollectIntent.operationId } : {};
+    }
+    async function qualifyNativeReadback(intent) {
+        if (!sourceCollection.active || !nativeIntentCurrent(intent)) return;
+        fresh.releaseSnapshot(intent.readbackQualification);
+        intent.readbackQualification = null;
+        const value = await api("/api/retained/microsoft/readback", { schemaVersion: 1, operationId: intent.operationId });
+        if (intent !== nativeCollectIntent || !nativeIntentCurrent(intent)) throw new Error("The original Microsoft operation owner changed.");
+        intent.readbackQualification = boundedContract.decodeReadback(value, intent.operationId);
+    }
+    function receiveNativeReceipt(status, intent = nativeCollectIntent) {
+        if (!intent || !nativeIntentCurrent(intent)) return false;
+        const value = historyStatus.persistence(status);
+        if (!value || value.receiptQuery !== intent.operationId) {
+            fresh.nativeReceived(fresh.snapshot().token, null);
+            return false;
+        }
+        const receipt = value.receipt;
+        if (receipt && (receipt.operationId !== intent.operationId || receipt.partition !== value.accountRef)) {
+            throw new Error("The Microsoft receipt does not match this panel's operation and account.");
+        }
+        return fresh.nativeReceived(fresh.snapshot().token, receipt);
+    }
     const sessionJourney = createSessionJourney();
-    let reportEntry = null, reportJourney, reportComparisonUI, savedArtifactUI, artifactRefreshRequired = false, contextReturnKey, savedReportView, preparedReportReader;
+    let reportEntry = null, reportJourney, reportComparisonUI, savedArtifactUI, artifactRefreshRequired = false, contextReturnKey, savedReportView, preparedReportReader, preparedFileInspection;
     let periodReport = null, periodReportInvalid = false;
+    let reportPickerEvents = null;
     const sessionReportButton = button("Create report for this Copilot chat", createSessionReport, "primary");
     sessionReportButton.id = "createSessionReport";
     sessionReportButton.hidden = true;
@@ -185,11 +478,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const presentation = createDisclosureState(), readingPositions = new Map();
     const sidebarPositions = new Map();
     let sidebarIdentity = null, sidebarOrigin = null, sidebarAnimation = null, sidebarAnimationFinish = null, sidebarExit = null, requestRenderKey = null, requestInvalidated = false, contextOwner = null;
-    let sidebarColumnAnimation = null, sidebarColumnAnchor = null;
+    let sidebarColumnAnimation = null, sidebarColumnAnchor = null, sidebarColumnFrame = null;
     let sidebarReadingFocus = null, cancelSidebarReading = null;
+    let readerWidth = null, readerExpanded = false, readerResize = null, sidebarTextAnchor = null, readerLayoutSize = null;
     let readerSections = null, timingHeadingObserver = null, cardEntry = null;
     const readerTextReleases = [];
     function clearReaderSections() {
+        sidebarTextAnchor = null;
+        endReaderResize();
         timingHeadingObserver?.disconnect();
         timingHeadingObserver = null;
         for (const release of readerTextReleases.splice(0)) release();
@@ -229,10 +525,58 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     let periodReturnReading = null;
     const textAccess = createTextAccess(ux, presentation, authorship, metadata);
+    const nativeActivity = assessmentFactories.createNativeActivityPresentation({
+        api, ux, presentation, createReaderSections: assessmentFactories.readerSections, sourceLabel: filterState.sourceLabel,
+        excerpt: textAccess.excerpt, timing: timingPresentation, results, pagedList,
+        capturedAt: value => time.formatMoment(value, applied?.timeContext || viewerTime),
+    });
+    const boundedContract = assessmentFactories.createBoundedNativeState();
+    let nativeAnalysisState = null, nativeAnalysisRender = 0;
+    const boundedNative = assessmentFactories.mountBoundedNative({
+        api, ux, results, createState: assessmentFactories.createBoundedNativeState, sourceLabel: filterState.sourceLabel,
+        active: () => sourceCollection.active, presentHit: assessmentFactories.liveSearch.presentHit,
+        matchPolicyId: assessmentFactories.liveSearch.contract.matchPolicyId,
+        savedSummary: savedMicrosoftSummary,
+        dimensional, formatDate: value => date(value),
+        createReaderSections: assessmentFactories.readerSections, presentation, renderText: value => renderDocument(value),
+        onPage: () => { if (state && !isLoading && !clearingAccess) queueMicrotask(() => { if (state && !isLoading && !clearingAccess) render(); }); },
+        conversationHref: target => routeUrl(routeFor("request", { request: target.conversationId, nativeSource: target.sourceId,
+            nativeRevision: String(target.revision), nativeSourceRevision: target.sourceRevision })),
+        onFilter: values => navigate(routeFor("analyze", { ...values, request: undefined, page: undefined })),
+        onInventories: dimension => {
+            pendingInventoryUpdates.add(dimension);
+            refreshInventoryControls();
+        },
+        onGroup: groupId => navigate(routeFor("analyze", { nativeGroup: groupId ?? undefined, request: undefined, page: undefined })),
+        onAnalysis: value => {
+            if (value === null && nativeAnalysisState === null) return;
+            nativeAnalysisState = value;
+            const version = ++nativeAnalysisRender, publication = api.publicationToken();
+            queueMicrotask(() => {
+                if (version === nativeAnalysisRender && api.isCurrent(publication) && state && !isLoading && !clearingAccess) render();
+            });
+        },
+        openConversation: target => {
+            const native = {
+                request: target.conversationId, nativeSource: target.sourceId, nativeRevision: String(target.revision),
+                nativeSourceRevision: target.sourceRevision,
+                nativeOrdinal: target.ordinal === undefined ? undefined : String(target.ordinal),
+            };
+            liveSearchUI?.hide?.();
+            navigate(routeFor("request", native));
+        },
+    });
     const requestContext = createRequestContext();
     const callInvestigation = createCallInvestigation(requestContext.compare);
     let detailOwner = "page";
-    let collection, collectionSettings, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
+    let collection, collectionSettings, sourceSettings, recorderUI, accountUI, accountProfile, microsoftProfile, collectionBusy = false, collectionReadError = "", collectionReadReason = "", connectionNeedsSnapshot = false, pollTimer, pageInactive = false;
+    const privateObjectUrls = new Set();
+    function privateObjectUrl(bytes) {
+        const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+        privateObjectUrls.add(url);
+        setTimeout(() => { URL.revokeObjectURL(url); privateObjectUrls.delete(url); }, 1000);
+        return url;
+    }
     const sidebar = mountSidebarNavigation(ux);
     let reportScope = "selected";
     let reportAuthors = authorship.selection();
@@ -240,26 +584,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     document.querySelectorAll(".primary-navigation [data-nav]").forEach(node => {
         node.prepend(ux.icon(`navigation-${node.dataset.nav}`));
     });
-    for (const [id, icon] of Object.entries({ navigationToggle: "menu", closeNavigation: "close", refreshBtn: "refresh", checkActivity: "refresh", resetView: "reset", closeDialog: "close" })) {
+    for (const [id, icon] of Object.entries({ navigationToggle: "menu", closeNavigation: "close", refreshBtn: "refresh", checkActivity: "refresh", closeDialog: "close" })) {
         ux.utility($(id), icon, $(id).getAttribute("aria-label") || $(id).textContent);
     }
-    for (const [id, text] of Object.entries(help.actions)) if ($(id)) ux.tooltip($(id), $(id).classList.contains("icon-only") ? $(id).getAttribute("aria-label") : text);
-    ux.tooltip($("resetView"), "Reset Analyze filters and browsing state. Keep report selections, evidence and preferences.");
-    function refreshUsesStoredRecovery(model = fresh.snapshot()) {
+    $("resetView").prepend(ux.icon("reset"));
+    $("analyzeRefresh").prepend(ux.icon("refresh"));
+    ux.tooltip($("analyzeRefresh"), () => $("analyzeRefreshLabel").checkVisibility()
+        ? "" : $("analyzeRefresh").getAttribute("aria-label"));
+    for (const [id, text] of Object.entries(help.actions)) if ($(id) && id !== "resetView") ux.tooltip($(id), $(id).classList.contains("icon-only") ? $(id).getAttribute("aria-label") : text);
+    function refreshUsesStoredRecovery(model = refreshPresentation()) {
         return Boolean(model.sourceUnknown || model.sourceBlocked || model.phase === "error" || collectionReadError || isStale);
     }
-    ux.tooltip($("checkActivity"), () => refreshUsesStoredRecovery()
-        ? "Read stored activity. No source check will be repeated."
-        : collection?.config?.approved ? "Refresh approved local history. Paused collection stays paused." : "Refresh stored activity. No source is approved.");
-    ux.tooltip($("refreshBtn"), "Read stored activity. No source check will be repeated.");
-    ux.tooltip($("freshStoredRead"), "Read stored activity and current status without checking source history.");
-    ux.tooltip($("freshRecollect"), () => recollectionUI?.snapshot().phase === "blocked"
-        ? "Review the unavailable recovery receipt. No source history will be read."
-        : recollectionUI?.snapshot().needsReceipt ? "Read the saved recollection result without repeating the operation."
-            : "Preview selected approved history before explicitly confirming a reread.");
-    ux.tooltip($("activityUpdateToggle"), "Open activity updates for approved local history and stored evidence.");
+    ux.tooltip($("checkActivity"), "");
+    ux.tooltip($("refreshBtn"), "");
+    ux.tooltip($("freshStoredRead"), "");
     for (const [id, label] of Object.entries({ clearDates: "Clear dates", clearActivitySearch: "Clear legacy search" })) ux.utility($(id), "close", label);
-    ux.utility($("openAnalysisSearch"), "search", "Search this Analyze scope", "Search this view");
     for (const node of document.querySelectorAll("[data-chart]")) ux.tooltip(node, () =>
         node.dataset.chart === "workload" && applied?.layer === "tool" ? help.charts.activityCategory : help.charts[node.dataset.chart]);
     const units = {
@@ -285,7 +624,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const nextReviewLabel = { captured: "Start review", reviewing: "Mark ready" };
     const scopeLabels = { history: "Current activity", legacy: "Preserved earlier snapshot", all: "Both collections" };
     const selected = new Set();
-    let state, analytics, slice, applied, appliedRoute, generation = 0, navigationGeneration = 0, activePreview = null;
+    let state, slice, applied, appliedRoute, generation = 0, navigationGeneration = 0, activePreview = null, clearPreviewPayload = null, pendingSaveResult = null, pendingSaveOwner = null;
+    let acceptingSnapshot = null;
     let selectControls;
     let isStale = false, isLoading = false, exportWriting = false, returnFocus = null, route = readRoute();
     let historyPosition = Number.isSafeInteger(history.state?.evidenceView?.position) ? history.state.evidenceView.position : 0;
@@ -295,10 +635,33 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const homeCount = el("span"), homeUnit = el("span");
     homeCount.id = "activityCount";
     homeUnit.id = "activityUnit";
+    const analyzeScope = assessmentFactories.createAnalyzeScope(results, authorship, serviceLabel, filterState.sourceLabel);
+    const analyzeReferenceEntry = assessmentFactories.mountAnalyzeReferenceEntry({
+        host: $("analyzeReferenceEntry"), trigger: $("openChartReference"), openReference: openChartReference,
+    });
+    const analyzeControls = assessmentFactories.mountAnalyzeControls(ux, {
+        api, motionTiming: sidebar.timing,
+        closeSelect: () => selectControls?.close(), closeNavigation: () => sidebar.close(false),
+    });
+    $("meaningScopeTitle").parentElement.append($("periodHint"));
+    const chartReferenceKeys = new Map();
+    let chartReferenceRevision = null, chartReferenceVersion = 0, chartReferenceOrigin = null, pendingChartReferenceReading = null;
+    let chartReferenceAccepted = null, chartReferenceInput = null, chartReferenceSourceCoverage = "";
+    const chartReferenceCountTable = $("countTable");
+    const chartReferenceUI = assessmentFactories.chartReference.mount({
+        host: $("analyzeReference"), root: $("meaning"), trigger: $("openChartReference"),
+        ux, results, help, categories, dimensional, motionTiming: sidebar.timing,
+        readContext: readChartReferenceContext, renderExact: renderChartReferenceExact,
+        renderQualification: analyzeControls.scopeCaption,
+        openComparisonRecords: openChartReferencePeriodRecords,
+        publicationToken: () => api.publicationToken(), isCurrent: token => api.isCurrent(token),
+        onUnavailable: message => announce(message, "stale"),
+    });
     let readingIntent = 0;
     for (const type of ["pointerdown", "wheel", "touchmove", "keydown"]) {
         document.addEventListener(type, event => {
             if (!event.isTrusted) return;
+            retainSidebarColumnAnchor();
             readingIntent++;
             if (contextBody.contains(event.target)) cancelSidebarReading?.();
         }, { capture: true, passive: true });
@@ -318,9 +681,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const origin = underlyingRoute();
         return origin.view === "reports" && origin.task === "create";
     }
-    function requestIdentity(value = route) { return JSON.stringify([value.request, value.call, value.callRevision]); }
+    function requestIdentity(value = route) { return JSON.stringify([value.request, value.call, value.callRevision,
+        value.nativeSource, value.nativeRevision, value.nativeSourceRevision, value.nativeOrdinal]); }
     function sidebarAnchor() {
         return (route.inspect ? savedInspector?.anchor || keyed("bundle:" + route.inspect) : null)
+            ?? (fromReportCreation() ? keyed("report:" + route.request)?.closest(".activity-card") : null)
             ?? keyed("request:" + route.request)?.closest(".activity-card")
             ?? document.querySelector(`[data-action-id="${CSS.escape(route.call || "")}"].activity-card`)
             ?? (sidebarOrigin?.anchor?.isConnected ? sidebarOrigin.anchor : null);
@@ -340,32 +705,138 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const current = sidebarColumnAnchor;
         if (!current || current.navigation !== navigationGeneration || current.intent !== readingIntent
             || !current.anchor?.isConnected || !current.anchor.checkVisibility()) return;
-        window.scrollBy(0, current.anchor.getBoundingClientRect().top - current.top);
+        const target = Math.max(0, scrollY + current.anchor.getBoundingClientRect().top - current.top);
+        // Short origins need scroll capacity before native scrolling can compensate their reflow.
+        if (target > document.documentElement.scrollHeight - innerHeight) {
+            document.body.style.setProperty("--context-anchor-height", `${Math.ceil(innerHeight + target)}px`);
+        }
+        window.scrollBy(0, target - scrollY);
         rememberSidebarAnchor();
+    }
+    function readerBounds() {
+        const unit = parseFloat(getComputedStyle(document.documentElement).fontSize);
+        const available = document.documentElement.clientWidth - $("main").getBoundingClientRect().left;
+        return { unit, available, min: 26 * unit, max: Math.min(46 * unit, available - 36 * unit), split: available >= 62 * unit };
+    }
+    function currentReaderLayoutSize() {
+        return `${contextBody.clientWidth}:${getComputedStyle(document.documentElement).fontSize}`;
+    }
+    function captureReaderAnchor() {
+        if (!contextOwner?.interaction || !contextSidebar.open || !contextBody.checkVisibility()) return null;
+        if (contextBody.scrollTop < 1) return { start: true };
+        const viewport = contextBody.getBoundingClientRect(), walker = document.createTreeWalker(contextBody, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const node = walker.currentNode, parent = node.parentElement;
+            if (!node.data.trim() || !parent.checkVisibility() || parent.closest('[inert],.reader-section-heading,button')) continue;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const rect = [...range.getClientRects()].find(rect => rect.width && rect.top >= viewport.top + 16 && rect.bottom < viewport.bottom);
+            if (!rect) continue;
+            const x = Math.max(viewport.left + 20, rect.left + 2), y = rect.top + rect.height / 2;
+            const caret = document.caretPositionFromPoint?.(x, y);
+            const legacy = caret ? null : document.caretRangeFromPoint?.(x, y);
+            const text = caret?.offsetNode ?? legacy?.startContainer, offset = caret?.offset ?? legacy?.startOffset;
+            if (text?.nodeType !== Node.TEXT_NODE || !contextBody.contains(text) || offset >= text.length) continue;
+            range.setStart(text, offset); range.setEnd(text, offset + 1);
+            return { node: text, offset, top: range.getBoundingClientRect().top - viewport.top };
+        }
+        return null;
+    }
+    function restoreReaderAnchor(anchor) {
+        if (!anchor || !contextOwner?.interaction) return;
+        if (anchor.start) { contextBody.scrollTop = 0; return; }
+        if (!contextBody.contains(anchor.node) || anchor.offset >= anchor.node.length || !anchor.node.parentElement.checkVisibility()) return;
+        const range = document.createRange();
+        range.setStart(anchor.node, anchor.offset); range.setEnd(anchor.node, anchor.offset + 1);
+        contextBody.scrollTop += range.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - anchor.top;
+    }
+    function syncReaderControls(bounds) {
+        const interaction = Boolean(contextOwner?.interaction);
+        const adjustable = interaction && bounds.split && !readerExpanded;
+        $("readerWidthControls").hidden = !adjustable;
+        $("readerResize").hidden = !adjustable;
+        $("expandInteraction").hidden = !interaction || !bounds.split;
+        const label = readerExpanded ? "Restore reader width" : "Maximize interaction";
+        const expand = $("expandInteraction");
+        if (expand.getAttribute("aria-label") !== label) {
+            expand.setAttribute("aria-label", label);
+            expand.replaceChildren(ux.icon(readerExpanded ? "reader-restore" : "reader-maximize"));
+            ux.tooltip(expand, label);
+        }
+        if (adjustable) {
+            const width = contextSidebar.getBoundingClientRect().width, handle = $("readerResize");
+            handle.setAttribute("aria-valuemin", String(Math.round(bounds.min)));
+            handle.setAttribute("aria-valuemax", String(Math.round(bounds.max)));
+            handle.setAttribute("aria-valuenow", String(Math.round(width)));
+            handle.setAttribute("aria-valuetext", `${Math.round(width)} pixels wide`);
+            $("narrowInteraction").setAttribute("aria-disabled", String(width <= bounds.min + 1));
+            $("widenInteraction").setAttribute("aria-disabled", String(width >= bounds.max - 1));
+        } else endReaderResize();
     }
     function fitContextSidebar() {
         if (!sidebarIdentity) return;
-        const rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        const available = innerWidth - $("main").getBoundingClientRect().left;
-        const modal = available < 62 * rootSize;
-        if (contextSidebar.open && contextSidebar.matches(":modal") !== modal) {
+        const bounds = readerBounds();
+        const modal = contextOwner?.interaction ? !bounds.split : innerWidth - $("main").getBoundingClientRect().left < 62 * bounds.unit;
+        const expanded = Boolean(contextOwner?.interaction && readerExpanded && !modal);
+        const mode = modal ? "overlay" : expanded ? "expanded" : "docked";
+        if (contextSidebar.open && contextSidebar.dataset.mode !== mode) {
             finishSidebarMotion();
             if (!sidebarIdentity) return;
         }
         const focus = contextSidebar.contains(document.activeElement) ? document.activeElement : null;
-        const top = contextBody.scrollTop, pageY = scrollY;
+        const top = contextBody.scrollTop, pageY = scrollY, reading = sidebarTextAnchor;
         keepAnchor(() => {
-            document.body.toggleAttribute("data-context-docked", !modal);
-            contextSidebar.dataset.mode = modal ? "overlay" : "docked";
+            document.body.toggleAttribute("data-context-docked", !modal && !expanded);
+            document.body.toggleAttribute("data-reader-expanded", expanded);
+            if (modal || expanded) document.body.style.removeProperty("--context-anchor-height");
+            $("main").inert = expanded;
+            contextSidebar.dataset.mode = mode;
+            contextSidebar.toggleAttribute("data-interaction-reader", Boolean(contextOwner?.interaction));
+            if (contextOwner?.interaction && !modal) {
+                const width = Math.min(bounds.max, Math.max(bounds.min, readerWidth ?? Math.min(innerWidth * .42, 34 * bounds.unit)));
+                document.body.style.setProperty("--context-sidebar-width", `${expanded ? bounds.available : width}px`);
+            } else document.body.style.removeProperty("--context-sidebar-width");
             if (contextSidebar.open && contextSidebar.matches(":modal") !== modal) contextSidebar.close();
             if (!contextSidebar.open) modal ? contextSidebar.showModal() : contextSidebar.show();
         });
         contextBody.scrollTop = top;
-        focus?.focus({ preventScroll: true });
+        // Content publication and navigation restoration own scrolling when size is unchanged.
+        if (readerLayoutSize !== currentReaderLayoutSize()) restoreReaderAnchor(reading);
+        syncReaderControls(bounds);
+        if (focus?.checkVisibility()) focus.focus({ preventScroll: true });
+        else if (focus) $("closeContextSidebar").focus({ preventScroll: true });
         if (modal) window.scrollTo(scrollX, pageY);
+        sidebarTextAnchor = captureReaderAnchor();
+        readerLayoutSize = currentReaderLayoutSize();
+    }
+    function changeReaderGeometry(change) {
+        if (!sidebarIdentity || !contextOwner?.interaction || clearingAccess) return;
+        finishSidebarMotion();
+        cancelSidebarReading?.();
+        const anchor = sidebarAnchor(), top = anchor?.getBoundingClientRect().top;
+        sidebarTextAnchor = readerResize?.anchor ?? captureReaderAnchor();
+        ux.hideTooltip();
+        change();
+        fitContextSidebar();
+        sidebarColumnAnchor = { anchor, top, navigation: navigationGeneration, intent: readingIntent };
+        retainSidebarColumnAnchor();
+    }
+    function resizeReader(width) {
+        const bounds = readerBounds();
+        if (!bounds.split || readerExpanded) return;
+        changeReaderGeometry(() => { readerWidth = Math.max(bounds.min, Math.min(bounds.max, width)); });
+    }
+    function endReaderResize() {
+        const drag = readerResize;
+        readerResize = null;
+        contextSidebar?.removeAttribute("data-resizing");
+        const handle = $("readerResize");
+        if (drag && handle?.hasPointerCapture(drag.pointerId)) handle.releasePointerCapture(drag.pointerId);
     }
     function finishSidebarMotion() {
         const animation = sidebarAnimation, finish = sidebarAnimationFinish;
+        cancelAnimationFrame(sidebarColumnFrame);
+        sidebarColumnFrame = null;
         sidebarAnimation = null; sidebarAnimationFinish = null;
         // Release the exiting column before canceling its fill, never through the docked width.
         if (!sidebarIdentity && sidebarColumnAnimation) document.body.removeAttribute("data-context-docked");
@@ -383,6 +854,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const occupied = sidebarColumnAnimation ? document.documentElement.clientWidth - main.getBoundingClientRect().right : entering ? 0 : width;
         const anchor = preserveAnchor ? sidebarAnchor() : null, top = anchor?.getBoundingClientRect().top;
         const navigation = navigationGeneration, intent = readingIntent;
+        cancelAnimationFrame(sidebarColumnFrame);
+        sidebarColumnFrame = null;
         sidebarAnimation?.cancel();
         sidebarAnimation = null; sidebarAnimationFinish = null;
         sidebarColumnAnchor = null;
@@ -404,6 +877,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             retainSidebarColumnAnchor();
         }
         sidebarAnimation = animation; sidebarAnimationFinish = finish;
+        if (docked) {
+            const track = () => {
+                if (sidebarAnimation !== animation) return;
+                retainSidebarColumnAnchor();
+                sidebarColumnFrame = requestAnimationFrame(track);
+            };
+            track();
+        }
         animation.onfinish = () => { if (sidebarAnimation === animation) finishSidebarMotion(); };
     }
     function clearSidebarExit() {
@@ -420,7 +901,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function saveSidebarPosition() {
         if (!sidebarIdentity || contextOwner?.identity === "report-setup" || cancelSidebarReading) return;
         for (const node of contextBody.querySelectorAll("details[data-disclosure-key]")) presentation.setOpen(node.dataset.disclosureKey, node.open);
-        sidebarPositions.set(sidebarIdentity, { top: contextBody.scrollTop, revision: state?.revision, basis: JSON.stringify(state?.assessment?.basis),
+        sidebarPositions.set(sidebarIdentity, { top: contextBody.scrollTop, revision: state?.revision, nativeRevision: state?.nativeRead?.revision, basis: JSON.stringify(state?.assessment?.basis),
             identifyInteraction: $("contextSidebarTitle").hasAttribute("data-interaction-identity"),
             focus: sidebarReadingFocus,
             keys: [...contextBody.querySelectorAll("[data-disclosure-key],.full-text[data-view-key]")].map(node => node.dataset.disclosureKey || node.dataset.viewKey) });
@@ -432,20 +913,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             tag: target.tagName, label: target.getAttribute("aria-label") };
         if (contextOwner?.identity === "report-setup") reportSetupReturn = { ...reportSetupReturn, focus: target };
     });
-    function showContextSidebar({ identity, title, body, bodyTitle, footer, anchor, requestClose, closeLabel = "Close interaction" }) {
+    function showContextSidebar({ identity, title, body, bodyTitle, footer, anchor, requestClose, interaction = false, closeLabel = "Close interaction" }) {
+        if (clearingAccess || !api.publicationToken()) return;
         if (body !== $("requestView")) clearReaderSections();
         const entering = !sidebarIdentity;
         if (entering) {
             sidebarOrigin = { anchor, top: anchor?.getBoundingClientRect().top };
         }
         if (sidebarIdentity !== identity) {
+            endReaderResize();
+            readerWidth = null; readerExpanded = false; sidebarTextAnchor = null;
             cancelSidebarReading?.();
             sidebarReadingFocus = null;
             if (contextOwner?.footer) $("contextSidebarParking").append(contextOwner.footer);
             $("contextSidebarFooter").replaceChildren();
         }
         sidebarIdentity = identity;
-        contextOwner = { identity, requestClose, footer };
+        contextOwner = { identity, requestClose, footer, interaction };
         contextSidebar.hidden = false;
         if (body.parentElement !== contextBody) {
             for (const previous of [...contextBody.children]) {
@@ -474,6 +958,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         } finally { main.style.removeProperty("width"); }
     }
     function interactionTitle() {
+        if (sourceCollection.active && route.nativeSource) return "Microsoft conversation";
         if (route.call === undefined) return "Interaction";
         return ({ tool: "Call in context", "reported-api": "API result in context", http: "HTTP record in context",
             "direct-request": "Request site in context", "recorded-http": "Request site in context",
@@ -484,7 +969,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (contextOwner?.identity === "report-setup") rememberReportSetup(true);
         showContextSidebar({ identity: requestIdentity(), title: interactionTitle(),
             body: $("requestView"), anchor: sidebarAnchor() || document.activeElement?.closest("[data-view-key]"),
-            requestClose: closeContextSidebar });
+            requestClose: closeContextSidebar, interaction: true });
         updateActiveCard();
     }
     function rememberReportSetup(peek = false) {
@@ -556,8 +1041,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (fromReportCreation()) footer.append(button(reportSetupReturn?.peek ? "Back to report setup" : "Back to activity", returnFromReportInspection));
     }
     function updateActiveCard() {
+        const key = (fromReportCreation() ? "report:" : "request:") + route.request;
         for (const node of document.querySelectorAll(".request-card-open")) {
-            const active = sidebarIdentity !== null && node.closest(".request-row")?.dataset.viewKey === "request:" + route.request;
+            const active = sidebarIdentity !== null && node.closest(".request-row")?.dataset.viewKey === key;
             node.setAttribute("aria-expanded", String(active));
             node.closest(".request-row").toggleAttribute("data-detail-active", active);
         }
@@ -569,14 +1055,56 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function timingInset(target) { return 16 + (timingHeading(target)?.getBoundingClientRect().height || 0); }
     function identifyInteraction() {
         const scenario = state.scenarios.find(item => item.scenarioId === route.request);
-        $("contextSidebarTitle").textContent = textAccess.excerpt(scenario?.userPrompt, 80);
+        $("contextSidebarTitle").textContent = scenario ? excerpt(scenario) : "Interaction unavailable";
         $("contextSidebarTitle").setAttribute("data-interaction-identity", "");
     }
+    function restoreSidebarPosition(saved, valid) {
+        cancelSidebarReading?.();
+        const identity = sidebarIdentity, navigation = navigationGeneration, intent = readingIntent;
+        let frame;
+        const stop = () => {
+            cancelAnimationFrame(frame);
+            observer.disconnect();
+            if (cancelSidebarReading === stop) cancelSidebarReading = null;
+        };
+        const restore = () => {
+            if (identity !== sidebarIdentity || navigation !== navigationGeneration || intent !== readingIntent || requestInvalidated || !valid()) { stop(); return; }
+            if (contextBody.querySelector('[aria-busy="true"]')) return;
+            const owner = saved.focus?.key ? keyed(saved.focus.key) : null;
+            const remembered = saved.focus?.id ? $(saved.focus.id) : null;
+            const target = remembered && contextSidebar.contains(remembered) ? remembered
+                : owner && contextBody.contains(owner) ? [...owner.querySelectorAll(saved.focus.tag)].find(node => node.getAttribute("aria-label") === saved.focus.label) : null;
+            if (saved.focus?.text !== undefined && target?.textContent !== saved.focus.text) { stop(); return; }
+            if (target?.checkVisibility()) target.focus({ preventScroll: true });
+            contextBody.scrollTop = saved.top;
+            stop();
+        };
+        const observer = new MutationObserver(() => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(restore);
+        });
+        cancelSidebarReading = stop;
+        observer.observe(contextBody, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-busy"] });
+        restore();
+    }
     function focusSidebar() {
+        if (clearingAccess || !api.publicationToken()) return;
         cancelSidebarReading?.();
         const saved = sidebarPositions.get(sidebarIdentity);
-        const valid = () => saved && saved.revision === state?.revision && saved.basis === JSON.stringify(state?.assessment?.basis);
+        const valid = () => saved && saved.revision === state?.revision && saved.nativeRevision === state?.nativeRead?.revision
+            && saved.basis === JSON.stringify(state?.assessment?.basis);
         const entry = cardEntry;
+        if (entry?.pending && entry.focus === "prompt" && entry.target.request === route.request
+            && entry.navigation === navigationGeneration && entry.intent === readingIntent && entry.revision === state.revision) {
+            entry.pending = false;
+            const prompt = $("selectedContext")?.querySelector(".full-text-content");
+            if (prompt) {
+                readerSections?.reveal(prompt);
+                contextBody.scrollTop = 0;
+                prompt.focus({ preventScroll: true });
+                return;
+            }
+        }
         if (!valid() && entry?.pending && route.call === undefined && entry.target.request === route.request
             && entry.navigation === navigationGeneration && entry.intent === readingIntent) {
             entry.pending = false;
@@ -602,32 +1130,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (valid()) {
             cardEntry = null;
             if (saved.identifyInteraction) identifyInteraction();
-            const identity = sidebarIdentity, navigation = navigationGeneration, intent = readingIntent;
-            let frame;
-            const stop = () => {
-                cancelAnimationFrame(frame);
-                observer.disconnect();
-                if (cancelSidebarReading === stop) cancelSidebarReading = null;
-            };
-            const restore = () => {
-                if (identity !== sidebarIdentity || navigation !== navigationGeneration || intent !== readingIntent || requestInvalidated || !valid()) { stop(); return; }
-                if (contextBody.querySelector('[aria-busy="true"]')) return;
-                const owner = saved.focus?.key ? keyed(saved.focus.key) : null;
-                const remembered = saved.focus?.id ? $(saved.focus.id) : null;
-                const target = remembered && contextSidebar.contains(remembered) ? remembered
-                    : owner && contextBody.contains(owner) ? [...owner.querySelectorAll(saved.focus.tag)].find(node => node.getAttribute("aria-label") === saved.focus.label) : null;
-                if (target?.checkVisibility()) target.focus({ preventScroll: true });
-                contextBody.scrollTop = saved.top;
-                stop();
-            };
-            const observer = new MutationObserver(() => {
-                cancelAnimationFrame(frame);
-                frame = requestAnimationFrame(restore);
-            });
-            cancelSidebarReading = stop;
-            observer.observe(contextBody, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-busy"] });
             $("contextSidebarTitle").focus({ preventScroll: true });
-            restore();
+            restoreSidebarPosition(saved, valid);
             return;
         }
         const anchor = $("selectedCall") || $("unavailableCall") || $("selectedContext")?.closest("[data-reader-section]") || $("selectedContext");
@@ -640,20 +1144,33 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function hideContextSidebar({ restoreFocus = true, preserveAnchor = true, onClosed } = {}) {
         if (!sidebarIdentity) { restoreSidebarHistoryMode(); onClosed?.(); return; }
         saveSidebarPosition();
+        endReaderResize();
+        sidebarTextAnchor = null;
         cancelSidebarReading?.();
         const anchor = sidebarAnchor(), top = anchor?.getBoundingClientRect().top;
         const navigation = navigationGeneration, intent = readingIntent, closingOwner = contextOwner;
+        // Let the origin's container layouts settle beneath the exiting reading surface.
+        document.body.removeAttribute("data-reader-expanded");
+        $("main").inert = false;
         sidebarIdentity = null; requestRenderKey = null; sidebarReadingFocus = null;
         updateActiveCard();
         moveSidebar(false, () => {
             contextSidebar.close();
             document.body.removeAttribute("data-context-docked");
+            document.body.removeAttribute("data-reader-expanded");
+            document.body.style.removeProperty("--context-sidebar-width");
+            document.body.style.removeProperty("--context-anchor-height");
+            $("main").inert = false;
             if (contextOwner === closingOwner) {
                 if (closingOwner?.footer) $("contextSidebarParking").append(closingOwner.footer);
                 contextOwner = null;
             }
             if (preserveAnchor && navigation === navigationGeneration && intent === readingIntent && anchor?.isConnected && anchor.checkVisibility()) window.scrollBy(0, anchor.getBoundingClientRect().top - top);
-            if (restoreFocus && navigation === navigationGeneration && intent === readingIntent) ux.restoreFocus(anchor?.querySelector(".request-card-open,.request-link") || $("activityTitle"));
+            if (restoreFocus && navigation === navigationGeneration && intent === readingIntent) {
+                const origin = anchor?.querySelector(".request-card-open,.request-link");
+                if (origin?.isConnected && origin.checkVisibility()) ux.restoreFocus(origin);
+                else if ($("activityView").checkVisibility()) revealResults();
+            }
             restoreSidebarHistoryMode();
             onClosed?.();
         }, preserveAnchor);
@@ -665,10 +1182,49 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else navigate(origin, true, { restorePosition: true });
     }
     const sidebarHistoryKey = crypto.randomUUID();
+    for (const [id, icon, label, direction] of [
+        ["narrowInteraction", "zoom-out", "Narrow interaction", -1],
+        ["widenInteraction", "zoom-in", "Widen interaction", 1],
+    ]) {
+        const control = $(id);
+        control.append(ux.icon(icon)); ux.tooltip(control, label);
+        control.addEventListener("click", () => resizeReader(contextSidebar.getBoundingClientRect().width + direction * 2 * readerBounds().unit));
+    }
+    $("expandInteraction").addEventListener("click", () => {
+        if (!readerBounds().split) return;
+        changeReaderGeometry(() => { readerExpanded = !readerExpanded; });
+    });
+    const resizeHandle = $("readerResize");
+    ux.tooltip(resizeHandle, "Drag to resize. Left widens, Right narrows; Home and End reach the limits.");
+    resizeHandle.addEventListener("keydown", event => {
+        const bounds = readerBounds(), width = contextSidebar.getBoundingClientRect().width;
+        const next = { ArrowLeft: width + 2 * bounds.unit, ArrowRight: width - 2 * bounds.unit, Home: bounds.min, End: bounds.max }[event.key];
+        if (next === undefined) return;
+        event.preventDefault(); resizeReader(next);
+    });
+    resizeHandle.addEventListener("pointerdown", event => {
+        if (event.button !== 0 || !event.isPrimary || !contextOwner?.interaction || !readerBounds().split || readerExpanded) return;
+        event.preventDefault();
+        changeReaderGeometry(() => {});
+        resizeHandle.focus({ preventScroll: true });
+        readerResize = { pointerId: event.pointerId, x: event.clientX, width: contextSidebar.getBoundingClientRect().width, anchor: sidebarTextAnchor };
+        contextSidebar.setAttribute("data-resizing", "");
+        resizeHandle.setPointerCapture(event.pointerId);
+    });
+    resizeHandle.addEventListener("pointermove", event => {
+        if (readerResize?.pointerId !== event.pointerId) return;
+        resizeReader(readerResize.width + readerResize.x - event.clientX);
+    });
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) resizeHandle.addEventListener(type, endReaderResize);
+    contextBody.addEventListener("scroll", () => {
+        // Native reflow can deliver scroll before ResizeObserver; keep the pre-reflow text anchor.
+        if (readerLayoutSize === currentReaderLayoutSize()) sidebarTextAnchor = captureReaderAnchor();
+    }, { passive: true });
     $("closeContextSidebar").append(ux.icon("close"));
     ux.tooltip($("closeContextSidebar"), "Close interaction");
     $("closeContextSidebar").addEventListener("click", () => contextOwner?.requestClose());
     contextSidebar.addEventListener("cancel", event => { event.preventDefault(); contextOwner?.requestClose(); });
+    ux.dismissOnOutside(contextSidebar, () => contextOwner?.requestClose());
     contextSidebar.addEventListener("keydown", event => {
         if (event.key !== "Escape" || event.defaultPrevented || contextSidebar.matches(":modal")) return;
         if (document.querySelector(".ux-tooltip:not([hidden]),.select-popup:not([hidden])")) return;
@@ -717,9 +1273,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else window.scrollBy(0, delta);
     }
     function captureReading() {
+        if (clearingAccess || !api.publicationToken()) return null;
         for (const node of document.querySelectorAll("details[data-disclosure-key]")) presentation.setOpen(node.dataset.disclosureKey, node.open);
         const active = document.activeElement, owner = active?.closest("[data-view-key]");
-        const focus = contextSidebar.contains(active) ? null : active?.id ? { id: active.id } : owner ? {
+        const readerPosition = contextOwner?.interaction && contextBody.contains(active)
+            ? { identity: sidebarIdentity, top: contextBody.scrollTop } : null;
+        const focus = contextSidebar.contains(active) && !readerPosition ? null : active?.id ? {
+            id: active.id, ...(readerPosition ? { text: active.textContent } : {}),
+        } : owner ? {
             key: owner.dataset.viewKey, label: active.getAttribute("aria-label"), tag: active.tagName,
             text: active.textContent, type: active.getAttribute("type"), self: active === owner,
         } : null;
@@ -739,14 +1300,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             key: reader.closest("[data-view-key]")?.dataset.viewKey, text: reader.textContent,
             anchor: selection.anchorOffset, focus: selection.focusOffset,
         } : null;
-        return { x: scrollX, y: scrollY, focus, scrollers, anchor: anchor?.dataset.viewKey, top: anchor?.getBoundingClientRect().top, textSelection };
+        return { publication: api.publicationToken(), x: scrollX, y: scrollY, focus, scrollers, anchor: anchor?.dataset.viewKey, top: anchor?.getBoundingClientRect().top, textSelection,
+            chartReference: chartReferenceUI.capture(), reader: readerPosition };
+    }
+    function forgetReading(saved) {
+        if (!saved) return;
+        if (saved.chartReference) for (const key of Object.keys(saved.chartReference)) delete saved.chartReference[key];
+        for (const key of Object.keys(saved)) delete saved[key];
     }
     function restoreReading(saved) {
-        if (!saved) return;
+        if (!saved || clearingAccess || !api.isCurrent(saved.publication)) return;
+        if (saved.chartReference && route.view === "analyze" && semanticQuery !== null && !semanticBound) {
+            pendingChartReferenceReading = { position: saved, navigation: navigationGeneration, intent: readingIntent };
+            return;
+        }
         const root = saved.focus?.key ? keyed(saved.focus.key) : null;
         const focus = saved.focus?.id ? $(saved.focus.id) : root && saved.focus.self ? root : root ? [...root.querySelectorAll("button,a,input,summary,textarea,pre")].find(node =>
             node.tagName === saved.focus.tag && (saved.focus.tag === "SUMMARY" || (saved.focus.label ? node.getAttribute("aria-label") === saved.focus.label : node.textContent === saved.focus.text && node.getAttribute("type") === saved.focus.type))) : null;
-        if (focus?.checkVisibility()) ux.restoreFocus(focus);
+        const readerCurrent = !saved.reader || saved.reader.identity === sidebarIdentity && contextOwner?.interaction
+            && contextBody.contains(focus) && focus.textContent === saved.focus.text;
+        if (readerCurrent && focus?.checkVisibility()) ux.restoreFocus(focus);
+        if (saved.reader && readerCurrent) contextBody.scrollTop = saved.reader.top;
         for (const entry of saved.scrollers) {
             const owner = entry.key ? keyed(entry.key) : null;
             const node = entry.id ? $(entry.id) : owner ? [owner, ...owner.querySelectorAll("*")].find(node =>
@@ -766,6 +1340,28 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 window.getSelection()?.setBaseAndExtent(reader.firstChild, anchor, reader.firstChild, focus);
             }
         }
+        if (saved.reader && readerCurrent) {
+            const revision = state?.revision;
+            restoreSidebarPosition({ top: saved.reader.top, focus: saved.focus }, () =>
+                api.isCurrent(saved.publication) && state?.revision === revision
+                && contextOwner?.interaction && sidebarIdentity === saved.reader.identity);
+        }
+        if (saved.chartReference && route.view === "analyze") {
+            if (chartReferenceUI.value().view === "closed") chartReferenceUI.restore(saved.chartReference);
+            else chartReferenceUI.refresh();
+        }
+    }
+    function finishChartReferenceReading() {
+        const pending = pendingChartReferenceReading;
+        if (!pending) return;
+        if (pending.navigation !== navigationGeneration || pending.intent !== readingIntent || route.view !== "analyze") {
+            pendingChartReferenceReading = null;
+            return;
+        }
+        if (isLoading || isStale || semanticQuery !== null && !semanticBound) return;
+        pendingChartReferenceReading = null;
+        if (pending.position) restoreReading(pending.position);
+        else revealResults();
     }
     function bindDetails(node, key, renderBody, initial = false) {
         viewKey(node, "disclosure:" + key);
@@ -773,7 +1369,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         node.open = presentation.isOpen(key, initial);
         let renderedOpen = node.open;
         const update = () => {
-            if (!node.isConnected || renderedOpen === node.open) return;
+            if (clearingAccess || !api.publicationToken() || !node.isConnected || renderedOpen === node.open) return;
             renderedOpen = node.open;
             presentation.setOpen(key, node.open);
             renderBody?.(node.open);
@@ -787,8 +1383,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderBody?.(node.open);
         return node;
     }
-    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false, onPage }) {
+    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false, pageLabel = "Saved library page", onPage, isCurrent, beforeReplace }) {
+        const publication = api.publicationToken();
         const paint = (position = null) => {
+            if (!api.isCurrent(publication) || isCurrent && !isCurrent()) return;
             const page = presentation.page(key, items.length, size), start = page * size;
             const pager = viewKey(el("div", "pager list-pager"), "pager:" + key);
             const label = viewKey(el("span", "", items.length ? `${count(start + 1)}-${count(Math.min(start + size, items.length))} of ${count(items.length)} ${noun}` : `0 ${noun}`), "position:" + key);
@@ -799,6 +1397,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (items.length > size) {
                 for (const [name, offset] of [["Previous", -1], ["Next", 1]]) {
                     const control = button(name, () => {
+                        if (isCurrent && !pager.isConnected) return;
+                        if (isCurrent && !isCurrent()) { announce("That earlier table view is no longer current.", "stale"); return; }
                         onPage?.();
                         captureReading();
                         const position = capturePager(pager, offset);
@@ -816,12 +1416,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     const form = el("form", "library-page-jump"), fieldLabel = el("label", "", "Page"), input = el("input");
                     input.type = "number"; input.min = "1"; input.max = String(pages); input.step = "1";
                     input.required = true; input.value = String(page + 1);
-                    input.setAttribute("aria-label", "Saved library page");
+                    input.setAttribute("aria-label", pageLabel);
                     fieldLabel.append(input, el("span", "", `of ${count(pages)}`));
                     const go = el("button", "quiet", "Go"); go.type = "submit"; go.setAttribute("aria-label", "Go to page");
                     form.append(fieldLabel, go);
                     form.addEventListener("submit", event => {
                         event.preventDefault();
+                        if (!api.isCurrent(publication) || !form.isConnected || isCurrent && !isCurrent()) return;
                         if (!form.reportValidity()) return;
                         onPage?.();
                         const position = capturePager(pager, 0);
@@ -834,6 +1435,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             const list = el(listTag, listClass);
             for (const item of items.slice(start, start + size)) list.append(renderItem(item));
+            beforeReplace?.(host);
+            if (!api.isCurrent(publication) || isCurrent && !isCurrent()) { beforeReplace?.(list); return; }
             host.replaceChildren(pager, wrapList(list));
             if (position) restorePager(position);
         };
@@ -848,13 +1451,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function button(text, action, cls = "") {
         const node = el("button", cls, text);
+        const publication = accessToken;
         node.type = "button";
-        node.addEventListener("click", action);
+        node.addEventListener("click", event => {
+            if (clearingAccess || !api.publicationToken() || publication && !api.isCurrent(publication)) return;
+            action?.(event);
+        });
         const utilityRole = { Previous: "previous", Next: "next", Close: "close", Back: "back" }[text];
         if (utilityRole) ux.utility(node, utilityRole, text);
         return node;
     }
     function option(value, label) { const node = el("option", "", label); node.value = value; return node; }
+    function replacePrivateChoices(control, ...choices) {
+        const walker = document.createTreeWalker(control, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) text.data = "";
+        for (const child of control.querySelectorAll("*")) for (const attribute of [...child.attributes]) {
+            attribute.value = "";
+            child.removeAttributeNode(attribute);
+        }
+        control.replaceChildren(...choices);
+    }
     function count(value) { return Number.isFinite(value) ? value.toLocaleString() : "Not recorded"; }
     function localQuery(id) { return route.localSearch?.[id] || ""; }
     const scopedSearches = {};
@@ -866,8 +1482,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const part of localSearch.parts(text, query)) node.append(part.match ? el("mark", "", part.text) : document.createTextNode(part.text));
         return node;
     }
+    function nativeSettingUnavailable(id) {
+        if (sourceCollection.copilotOnly && id?.startsWith("microsoft-")) return true;
+        const configuredInterface = collectionSettings?.hasNativeConfiguration?.() === true;
+        if (id === "global-collection") return !sourceCollection.active
+            && !(sourceCollection.copilotOnly && collection?.sourceAware?.global.paused);
+        if (["microsoft-collection-state", "microsoft-collect-now"].includes(id)) return !sourceCollection.active;
+        if (id === "microsoft-collection") return !sourceCollection.active && !configuredInterface;
+        return Boolean(historyStatus.native(collection)) && (["source", "source-paths", "cadence"].includes(id)
+            || ["history-window", "save-preferences"].includes(id) && !configuredInterface
+            || id === "collect-now" && !historyStatus.persistence(collection));
+    }
     function settingsTarget(entry) {
         const approved = collection?.config?.approved;
+        if (nativeSettingUnavailable(entry.id)) return "connectionTitle";
+        if (sourceCollection.active && entry.id === "microsoft-collection") return "sourceMicrosoftSurfaces";
+        if (entry.id === "collection-state" && historyStatus.native(collection)) {
+            return collectionSettings?.nativeConfigurationIntent?.() === "enable" ? "saveCollection" : "pauseCollection";
+        }
+        if (entry.id === "microsoft-connection" && !$("wireMicrosoftConnection")?.checkVisibility()) return "connectionTitle";
         if (entry.id === "collect-now") return [$("storedViewRetry"), $("refreshBtn"), $("collectionRetry"), $("checkActivity")]
             .find(control => control?.checkVisibility())?.id || entry.target;
         if (entry.id === "source") return !$("sourceEditor").hidden ? "sourceDatabase" : approved ? "editSource" : "reviewSource";
@@ -880,9 +1513,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return entry.target;
     }
     function renderSettingsSearch() {
-        const query = localQuery("settingsSearch"), entries = settingsNavigation.find(query);
+        const query = localQuery("settingsSearch"), entries = settingsNavigation.find(query).filter(entry => !nativeSettingUnavailable(entry.id));
         const contexts = entries.map(entry => {
             const id = settingsTarget(entry), control = $(id);
+            if (collectionSettings?.hasNativeConfiguration?.()
+                && ["microsoft-collection", "history-window", "save-preferences"].includes(entry.id)) {
+                return collectionSettings.explain(id);
+            }
+            if (entry.id === "collect-now" && historyStatus.persistence(collection)) return collectionSettings?.explain("collectNow") || "Read current Microsoft collection status.";
+            if (entry.id === "collection-state" && historyStatus.native(collection)) return collectionSettings?.explain(id) || "Pause or resume registered Microsoft reads. Saved activity stays available.";
+            if (entry.id === "microsoft-connection") return $("wireMicrosoftConnection") && !$("microsoftConnectionHost").hidden
+                ? `${$("wireMicrosoftStatus").textContent}. ${entry.context}` : "Microsoft 365 connection is not available in this runtime. GitHub Copilot app and retained activity are unchanged.";
             if (!collection?.config?.approved && entry.id === "collect-now") return "Refresh reads stored activity only. Approve a source separately to check history; opening this result does neither.";
             if (!collection?.config?.approved && ["source-paths", "collection-state"].includes(entry.id)) return "Requires an approved source. Open Connection to review permission; nothing is started.";
             if (entry.id === "source") return collectionSettings?.explain(id) || "Read the current connection before reviewing a source.";
@@ -919,19 +1560,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         setText($("settingsCategorySummary"), "Category: " + settingsNavigation.categories.find(category => category.id === section).title);
         $("settingsStatusLink").hidden = section === "troubleshooting";
-        setText($("settingsRouteNotice"), route.settingsWarning || "");
-        $("settingsRouteNotice").hidden = !route.settingsWarning;
+        const routeNotice = nativeSettingUnavailable(route.setting) ? sourceCollection.copilotOnly
+            ? "This setting is not available in this release." : "This setting is not available for the registered Microsoft reads."
+            : route.settingsWarning || (route.setting === "microsoft-connection"
+            && (!$("wireMicrosoftConnection") || $("microsoftConnectionHost").hidden)
+            ? "Microsoft 365 connection is not available in this runtime." : "");
+        setText($("settingsRouteNotice"), routeNotice);
+        $("settingsRouteNotice").hidden = !routeNotice;
         renderSettingsSearch();
     }
     let refreshHelpVisibility = null;
     function renderSettingsRefresh(connection, model) {
         const host = $("freshActivity"), help = $("freshHelp");
-        const analyze = route.view === "analyze", labelled = connection || analyze;
-        const storedOnly = refreshUsesStoredRecovery(model);
+        const labelled = connection;
+        const storedOnly = !refreshWorking() && refreshUsesStoredRecovery(model);
+        const nativePersistence = historyStatus.persistence(collection);
+        const sources = sourceCollection.active ? sourceCollection.view(api.accessState()) : null;
+        const canAcquire = sources ? sources.current && refreshSources.names.some(source => sources.actions[source].includes("collect-now"))
+            : nativePersistence ? nativePersistence.actions.includes("collect-now") : Boolean(collection?.config?.approved);
         for (const [id, originalText] of [["checkActivity", "Refresh"], ["refreshBtn", "Read stored activity"]]) {
             const control = $(id);
-            const text = labelled && id === "checkActivity" ? storedOnly || !collection?.config?.approved
-                ? "Read stored activity" : analyze ? "Check local history" : originalText : originalText;
+            const text = id === "checkActivity" ? storedOnly || !canAcquire
+                ? "Read stored activity" : nativePersistence ? "Collect now" : originalText
+                : originalText;
             let label = control.querySelector(":scope > .settings-action-label");
             if (labelled && !label) {
                 label = el("span", "settings-action-label", text);
@@ -939,8 +1590,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             if (label) { setText(label, text); label.hidden = !labelled; }
             control.setAttribute("aria-label", text);
+            ux.tooltip(control, labelled ? "" : text);
             control.classList.toggle("icon-only", !labelled);
             control.classList.toggle("quiet", !labelled);
+            control.classList.toggle("primary", labelled && id === "checkActivity" && !storedOnly
+                && canAcquire);
         }
         function checkedScope(check) {
             const checked = Number.isSafeInteger(check.sourcesChecked) && check.sourcesChecked >= 0;
@@ -950,71 +1604,47 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (eligible) return `${check.eligibleSources.toLocaleString()} eligible ${check.eligibleSources === 1 ? "chat" : "chats"}; checked count is unavailable.`;
             return "Checked chat counts are unavailable.";
         }
-        let context = $("settingsRefreshContext"), details = $("settingsRefreshDetails");
+        let context = $("settingsRefreshContext");
         if (connection && !context) {
             context = el("p", "settings-refresh-context");
             context.id = "settingsRefreshContext";
             $("freshResult").before(context);
-            details = el("div", "settings-refresh-details");
-            details.id = "settingsRefreshDetails";
-            host.append(details);
+        }
+        const storedControl = $("freshStoredRead").closest(".ux-disabled-help") || $("freshStoredRead");
+        if (storedControl.parentElement !== $("collectionSetup")) $("collectionSetup").append(storedControl);
+        const check = model.check, partial = model.phase === "partial";
+        $("freshCoverageAnnouncement").classList.toggle("visually-hidden", !connection);
+        const c = model.combined || nativePersistence ? null : partial && check ? check.coverage : collection?.historyCoverage;
+        const pending = partial && check ? check.pendingSources : c?.pending;
+        const gaps = c ? [
+            c.unavailable > 0 ? `${chatCopy.count(c.unavailable)} unavailable` : "",
+            c.limited > 0 ? `${chatCopy.count(c.limited)} incomplete` : "",
+            pending > 0 ? "more history remains to read" : "",
+        ].filter(Boolean) : [];
+        const coverage = model.combined || nativePersistence ? model.coverage : gaps.length ? `GitHub history: ${gaps.join("; ")}.`
+            : partial ? model.coverage : "";
+        setText($("freshCoverageAnnouncement"), coverage);
+        $("freshCoverageAnnouncement").hidden = !coverage;
+        if (coverage) $("freshResult").hidden = false;
+        if (check && ["complete", "partial"].includes(model.phase)) {
+            const countDetail = Number.isSafeInteger(check.sourcesChecked) && Number.isSafeInteger(check.eligibleSources) ? "" : checkedScope(check);
+            setText($("freshCheckDetails"), [model.details, countDetail, model.coverage].filter(Boolean).join(" "));
+            $("freshCheckDetails").hidden = false;
         }
         if (connection) {
             if (refreshHelpVisibility === null) refreshHelpVisibility = help.hidden;
             help.hidden = true;
             const approved = collection?.config?.approved;
-            const explanation = storedOnly
-                ? "Read stored activity only. No new history check will be sent."
-                : model.phase === "idle"
-                    ? approved ? "Check approved Copilot history for new activity." + (collection.config.enabled ? "" : " Collection stays paused.")
-                        : "Read stored activity only. Approve a source above to check history."
-                    : "";
+            const explanation = !storedOnly && !["checking", "applying", "waiting"].includes(model.phase)
+                && approved && !collection.config.enabled ? "Collection stays paused." : "";
             setText(context, explanation);
             context.hidden = !explanation;
-            if (model.phase === "partial" && model.check) {
-                setText($("freshStatus"), `History check incomplete. ${checkedScope(model.check)}`);
-                setText($("freshIssues"), "Review current history issues");
-            }
         } else {
             if (refreshHelpVisibility !== null) {
                 help.hidden = refreshHelpVisibility;
                 refreshHelpVisibility = null;
             }
             if (context) context.hidden = true;
-        }
-        const check = model.check, partial = model.phase === "partial";
-        if (details) details.hidden = !connection || !check || !["complete", "partial"].includes(model.phase);
-        if (details && !details.hidden) {
-            const signature = JSON.stringify([check, partial]);
-            if (details.dataset.checkKey === signature) return;
-            details.dataset.checkKey = signature;
-            const facts = [];
-            if (partial) {
-                const { added, updated } = check.changes;
-                facts.push(el("p", "", added || updated
-                    ? `${added.toLocaleString()} new and ${updated.toLocaleString()} updated activity records.`
-                    : "No new or updated activity was recorded."));
-                const limits = el("ul", "settings-refresh-limits");
-                for (const [count, label] of [
-                    [check.coverage?.unavailable, "with unavailable history"],
-                    [check.coverage?.limited, "with reading limits"],
-                    [check.pendingSources, "still being read"],
-                    [check.partialSources, "waiting for a saved entry"],
-                    [check.skippedSources, "outside the discovery limit"],
-                ]) if (count > 0) limits.append(el("li", "", `${chatCopy.count(count)} ${label}.`));
-                if (limits.children.length) facts.push(limits);
-                const reasons = el("ul", "settings-refresh-reasons");
-                for (const [code, count] of Object.entries(check.coverage?.groups ?? {})) {
-                    if (count > 0) reasons.append(el("li", "", `${chatCopy.count(count)}: ${historyStatus.checkSummaries[code] ?? "Reason unavailable."}`));
-                }
-                if (reasons.children.length) facts.push(reasons);
-                else facts.push(el("p", "", "No reason breakdown is available for this check."));
-                facts.push(el("p", "", "These details describe this check; current history may differ. Limits can overlap."));
-            } else {
-                facts.push(el("p", "", checkedScope(check)
-                    + (check.changes.added || check.changes.updated ? "" : " No new records does not establish complete history.")));
-            }
-            details.replaceChildren(...facts);
         }
     }
     function revealSetting() {
@@ -1078,11 +1708,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return list;
     }
-    function serviceIdentity(rows, layer, { compact = false, separated = false } = {}) {
-        if (!Array.isArray(rows)) return el("span", "identity-gap", "Service evidence unavailable");
+    function serviceIdentity(rows, layer, { compact = false, labelled = false, fieldValue = false, includeGap = true } = {}) {
+        const available = Array.isArray(rows);
         const services = new Set(), activity = new Map();
         let missing = false;
-        for (const row of rows) {
+        for (const row of available ? rows : []) {
             const association = row.serviceAssociation?.layer === layer ? row.serviceAssociation : null;
             const entry = categoryPresentation(row, layer), operation = layer === "tool" ? categories.operation(row.tool) : null;
             if (association) {
@@ -1104,31 +1734,46 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const items = known.slice(0, compact ? 2 : undefined).map(entry => serviceCue("span", entry.id));
         if (compact && known.length > 2) items.push(el("span", "identity-overflow", "More services"));
         for (const entry of activity.values()) items.push(serviceCue("span", entry.id, entry));
-        if (missing) items.push(el("span", "identity-gap", known.length ? "Service details incomplete" : "Service not shown"));
-        if (!separated) return identityList(items);
-        const list = el("ul", "service-label-list");
-        for (const item of items) {
-            const entry = el("li", item.classList.contains("identity-gap") ? "service-label-gap" : "");
-            entry.append(item);
-            list.append(entry);
+        const availability = categories.availabilitySummary(available ? rows : undefined, layer);
+        const gapLabel = !available || fieldValue ? availability?.label : availability?.notice;
+        const gap = includeGap && (!available || missing) && gapLabel
+            ? el("span", "recorded-category-field service-availability") : null;
+        if (gap) {
+            gap.append(el("span", "identity-gap", gapLabel));
         }
-        return list;
+        if (!labelled) {
+            const identity = el("span", "service-identity");
+            if (items.length) identity.append(identityList(items));
+            if (gap) identity.append(document.createTextNode(" "), gap);
+            return identity;
+        }
+        const group = el("div", "recorded-category");
+        if (items.length) {
+            const entries = [...known, ...activity.values()];
+            const operations = layer === "tool" ? entries.filter(entry => ["Discovery", "Unknown", "Search", "Platform metadata"].includes(entry.id)).length : 0;
+            const label = operations ? operations < entries.length ? "Services and operations" : operations === 1 ? "Operation" : "Operations"
+                : entries.length === 1 && entries[0].id !== "Multiple workloads" ? "Service" : "Services";
+            const field = el("div", "recorded-category-field"), list = compact ? identityList(items) : el("ul", "service-label-list");
+            if (!compact) for (const item of items) {
+                const entry = el("li");
+                entry.append(item);
+                list.append(entry);
+            }
+            field.append(el("span", "recorded-category-label", label + ":"), document.createTextNode(" "), list);
+            group.append(field);
+        }
+        if (gap) group.append(document.createTextNode(" "), gap);
+        return group;
     }
-    function recordedCategory(rows, layer) {
-        const value = serviceIdentity(rows?.length ? rows : undefined, layer, { separated: true });
-        const multiple = value.querySelectorAll(".service-cue").length > 1;
-        const label = layer === "tool" ? multiple ? "Categories" : "Category" : multiple ? "Services" : "Service";
-        const field = el("div", "recorded-category");
-        field.append(el("span", "recorded-category-label", label + ":"), value);
-        return field;
+    function recordedCategory(rows, layer, options = {}) {
+        return serviceIdentity(rows?.length ? rows : undefined, layer, { ...options, labelled: true });
     }
     function actionHeading(title, service, row, layer = "tool", { inlineHelp = true } = {}) {
         const heading = el("div", "action-heading");
         heading.append(el("h3", "", title));
         if (!inlineHelp) {
             const identity = el("span", "action-service-heading");
-            identity.append(row ? serviceIdentity([{ ...row, tool: title }], layer)
-                : el("span", "identity-gap", "Service evidence unavailable"));
+            identity.append(serviceIdentity(row ? [{ ...row, tool: title }] : undefined, layer));
             heading.append(identity);
             return heading;
         }
@@ -1140,7 +1785,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const scope = layer === "tool" ? categories.requestedSearchScope(sourceCallFor(row)) : null;
             const help = [
                 evidence?.description ?? (service === "Discovery" ? operation.description : entry.description),
-                scope ? `${scope.label}. ${scope.description}` : null,
+                scope ? [scope.label + ".", scope.description].filter(Boolean).join(" ") : null,
             ].filter(Boolean).join(" ");
             cue.lastElementChild.textContent = label;
             if (evidence && !entry.icon) cue.querySelector("svg")?.remove();
@@ -1161,10 +1806,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         field.append(label, control);
     }
     for (const [id, label] of [
-        ["dateFilter", "Dates"], ["toolFilter", "Tool"], ["serviceAssociationFilter", "Service involved"],
+        ["dateFilter", "Dates"], ["sourceFilter", "Source"], ["toolFilter", "Tool"], ["serviceAssociationFilter", "Service involved"],
         ["serviceFilter", "Activity category"], ["projectFilter", "Copilot project"],
         ["chatFilter", "Copilot chat"], ["layerFilter", "Evidence layer"], ["scopeFilter", "Collection"],
     ]) filterField(id, label);
+    function sourceOptions() {
+        replacePrivateChoices($("sourceFilter"), option("all", "All sources"), option("microsoft-365", "Microsoft 365"),
+            ...filterState.sources.map(source => option(source.id, source.label)));
+    }
+    sourceOptions();
     $("filters").querySelector(".filter-scroll").addEventListener("focusin", event => {
         if (event.target instanceof HTMLElement && event.target.matches("button")) {
             event.target.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -1236,6 +1886,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return text.length > length ? text.slice(0, length).trimEnd() + "..." : text;
     }
     function excerpt(scenario) {
+        if (nativeActivity.isNative(scenario)) return nativeActivity.recognition(scenario).text;
         return textAccess.excerpt(scenario.userPrompt);
     }
     function facts(pairs, { inlineHelp = true, missing = {}, technical = false, omitMissing = false, copyIdentifiers = true } = {}) {
@@ -1266,10 +1917,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function empty(title, text) {
         const node = el("div", "empty-state");
-        node.append(el("h3", "", title), el("p", "", text));
+        node.append(el("h3", "", title));
+        if (text) node.append(el("p", "", text));
         return node;
     }
     function announce(text, kind = "", retry = false) {
+        if (clearingAccess || !api.publicationToken()) return;
         const node = $("message");
         delete node.dataset.connectionFailure;
         node.replaceChildren(el("p", "", text));
@@ -1286,8 +1939,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function clearMessage() { $("message").hidden = true; }
+    function retirePendingSaveMessage() {
+        if (!exportWriting && !collectionSettings?.isBusy() && $("message").classList.contains("pending-save")) clearMessage();
+    }
 
-    const api = createBoardTransport(capability, () => {
+    function sessionChanged() {
+        if (api.accessState().mode !== "unbound") return;
+        for (const key of privateNavigations.keys()) forgetPrivateNavigation(key);
         liveSearchUI?.sessionChanged();
         connectionNeedsSnapshot = true;
         assessmentUI?.invalidate("The local connection changed. Read current insights; no update was replayed.");
@@ -1297,15 +1955,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         isStale = true;
         invalidateDialog("The local connection changed. Close and prepare a new report preview.");
         updateSelection();
-    });
+    }
     let searchReturnMarker = null;
-    const analysisSearchKey = () => state ? JSON.stringify([state.revision, applied, route.withinServices?.split(",") || []]) : null;
+    const analysisSearchKey = () => state ? JSON.stringify([state.revision, state.nativeRead?.sourceRevision ?? state.nativeRead?.revision, applied, route.withinServices?.split(",") || []]) : null;
     function unavailableSearchMembership() {
-        return { revision: state.revision, scopeKey: JSON.stringify([applied, route.withinServices?.split(",") || []]),
+        return { revision: state.revision, nativeRevision: state.nativeRead?.revision, scopeKey: JSON.stringify([applied, route.withinServices?.split(",") || []]),
             receipt: null, scenarioIds: [], actionIds: [], parentScenarioIds: [] };
     }
     liveSearchUI = assessmentFactories.liveSearch.mount({
         api, ux, searchFields, results, createState: assessmentFactories.liveSearch.createState,
+        nativeSearch: {
+            active: () => sourceCollection.active,
+            changed: value => boundedNative.searchChanged({ ...value,
+                sources: sourceCollection.active ? applied?.filters.sources?.length
+                    ? applied.filters.sources.filter(source => boundedContract.sourceIds.includes(source)) : boundedContract.sourceIds : [],
+                revision: state?.revision ?? null, pending: isLoading || !state, base: state?.nativeRead, analytics: applied }),
+            withdraw: () => boundedNative.searchChanged({ query: "", scope: "navigation", types: [], sources: [], revision: null }),
+        },
         serviceIcon(target) {
             if (target?.kind !== "route" || typeof target.href !== "string" || !target.href.startsWith("#analyze?")) throw new TypeError("Search service target is invalid.");
             const services = new URLSearchParams(target.href.split("?")[1]).getAll("services");
@@ -1321,24 +1987,39 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return true;
         },
         getAnalysis: () => ({ key: analysisSearchKey(), revision: state?.revision, pending: isLoading,
+            returnPending: Boolean(sidebarExit),
             active: underlyingRoute().view === "analyze", needsRebind: semanticStatus === "pending" && !semanticBound }),
-        async navigate(target) {
+        async navigate(target, { isCurrent } = {}) {
+            if (!isCurrent?.()) return false;
             const next = readRoute(target.href, null);
             searchOpenedRequest = next.view === "request" ? next.request : null;
             searchReturnMarker = liveSearchUI.returnKey();
             searchTargetInvalid = false;
             await navigate(next.view === "analyze" ? next
-                : { ...route, ...next, request: next.request, call: next.call, callRevision: next.callRevision }, false, { fromSearch: true });
+                : { ...route, ...next, request: next.request, call: next.call, callRevision: next.callRevision }, false, { fromSearch: true, isCurrent });
+            if (!isCurrent()) return false;
             if (target.focus) {
-                const node = $(target.focus);
+                const nativeTarget = target.focus.startsWith("native-source-fact-") || target.focus.startsWith("native-message-");
+                const node = nativeTarget ? readerSections?.revealTarget?.(target.focus) : $(target.focus);
+                if (!isCurrent()) return false;
+                if (nativeTarget && !node) {
+                    announce("This exact recorded text is no longer available. Search again to open the current record.", "stale");
+                    return false;
+                }
                 if (node) {
+                    if (nativeTarget) { cancelSidebarReading?.(); cancelSidebarReading = null; }
                     node.tabIndex = -1; node.focus({ preventScroll: true });
                     if (contextBody.contains(node)) contextBody.scrollTop += node.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - 16;
                     else node.scrollIntoView({ block: "start" });
                 }
             }
         },
-        onInvalidateOpen() {
+        onInvalidateOpen({ accessWithdrawn = false } = {}) {
+            if (accessWithdrawn) {
+                searchOpenedRequest = null; searchReturnMarker = null; searchTargetInvalid = true;
+                savedEntries.clear(); clearSavedReader();
+                return;
+            }
             for (const entry of savedEntries.values()) if (entry.searchReturn) delete entry.value;
             if (savedReportView && route.savedAuthority === "search") invalidateSavedReader("This Search destination is no longer current. Return to Search and open its verified current item.");
             if (!searchOpenedRequest || (route.view === "request" ? route.request : sidebarExit?.request) !== searchOpenedRequest) return;
@@ -1350,10 +2031,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         onAnalysis(update) {
             if (!state) return;
             if (update.query === null || !update.query.trim()) {
+                if (incomingNavigation?.analysisQuery) {
+                    semanticQuery = incomingNavigation.analysisQuery;
+                    semanticComplete = semanticBound = false;
+                    semanticMembership = unavailableSearchMembership();
+                    return;
+                }
                 if (semanticQuery === null) return;
                 semanticQuery = null; semanticMembership = undefined; semanticComplete = false; semanticBound = false;
+                if (history.state?.wirePrivateNavigation) {
+                    const { wirePrivateNavigation, ...navigationState } = history.state;
+                    history.replaceState(navigationState, "");
+                }
                 $("wireAnalysisSearchNotice").hidden = true;
-                render(); return;
+                render(); finishChartReferenceReading(); return;
             }
             semanticQuery = update.query;
             semanticComplete = false;
@@ -1370,11 +2061,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             } else {
                 semanticMembership = unavailableSearchMembership();
             }
-            $("wireAnalysisSearchNotice").hidden = false;
+            $("wireAnalysisSearchNotice").hidden = update.state === "ready" && current && semanticComplete;
             $("wireAnalysisSearchNotice").textContent = update.state === "ready" && current
-                ? `Search / Current Analyze scope: ${semanticQuery}. ${semanticComplete ? "Current search matches across all pages." : "Partial searchable coverage; analytical measures and current-view report preparation are unavailable."} Navigation hits do not change membership.`
-                : `Search / Current Analyze scope: ${semanticQuery}. ${update.state === "pending" ? "Waiting for verified membership; analytical counts are not displayed yet." : "Membership cleared because local search is not current."} Current-view report preparation is unavailable.`;
+                ? semanticComplete ? "" : "Some saved text could not be searched. Counts and Current reports are unavailable."
+                : update.state === "pending" ? "Searching saved activity..." : "Search is unavailable. Try again before preparing a Current report.";
             render();
+            finishChartReferenceReading();
         },
     });
     deletionUI = mountDeletion({ api, flow: createDeletionFlow(), timeContext: () => viewerTime, ux,
@@ -1393,9 +2085,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             recollectionNoticeKey = key;
             renderFreshActivity();
         },
-        pageSources: (host, sources, renderItem, reset) => {
+        pageSources: (host, sources, renderItem, reset, isCurrent) => {
             if (reset) presentation.setPage("recollection-chats", 0);
-            pagedList(host, sources, { key: "recollection-chats", size: pageSize, noun: "chats", renderItem });
+            pagedList(host, sources, { key: "recollection-chats", size: pageSize, noun: "chats", renderItem, isCurrent });
         },
         onCommitted: async () => {
             clearDeletedDraft("changed by explicit recollection");
@@ -1405,12 +2097,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let ignoringStaleContextStatus = false;
     assessmentUI = assessmentFactories.createExperience({
         ...assessmentFactories, api, ux, textAccess,
-        onInvalidated: message => {
+        onInvalidated: (message, reason) => {
+            if (clearingAccess || !api.publicationToken()) return;
+            if (reason === "data" && sourceCollection.active && route.nativeSource
+                && readerSections?.retains?.(nativeReaderScope())) return;
             if (sidebarExit) { clearSidebarExit(); finishSidebarMotion(); }
+            const sameReader = reason === "data" && acceptingSnapshot && contextOwner?.interaction && route.nativeSource === undefined
+                && state?.collection?.configVersion === acceptingSnapshot.collection?.configVersion
+                && state?.deletionVersion === acceptingSnapshot.deletionVersion
+                && JSON.stringify(requestContext.select(state.scenarios, route.request))
+                    === JSON.stringify(requestContext.select(acceptingSnapshot.scenarios, route.request));
+            // Only presentation choices survive; text owners and pending callbacks still retire below.
+            const retainedKeys = new Set(sameReader
+                ? [...contextBody.querySelectorAll("[data-disclosure-key],.full-text[data-view-key]")].map(node => node.dataset.disclosureKey || node.dataset.viewKey) : []);
             cancelSidebarReading?.();
             sidebarReadingFocus = null;
-            for (const node of contextBody.querySelectorAll("[data-disclosure-key],.full-text[data-view-key]")) presentation.forget(node.dataset.disclosureKey || node.dataset.viewKey);
-            for (const entry of sidebarPositions.values()) for (const key of entry.keys) presentation.forget(key);
+            for (const node of contextBody.querySelectorAll("[data-disclosure-key],.full-text[data-view-key]")) {
+                const key = node.dataset.disclosureKey || node.dataset.viewKey;
+                if (!retainedKeys.has(key)) presentation.forget(key);
+            }
+            for (const entry of sidebarPositions.values()) for (const key of entry.keys) if (!retainedKeys.has(key)) presentation.forget(key);
             sidebarPositions.clear();
             requestRenderKey = null;
             if (route.view === "request") {
@@ -1431,8 +2137,53 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             invalidateDialog("Recorded evidence or permission changed. Prepare a new report preview.");
         },
     });
+    function cloneReportBrand() {
+        const originals = $("shellBrand").querySelectorAll(".brand-logo");
+        if (originals.length !== 2) throw new Error("WIRE's report wordmark assets are unavailable.");
+        const mark = el("span", "saved-report-mark");
+        mark.setAttribute("role", "img"); mark.setAttribute("aria-label", "WIRE");
+        for (const original of originals) {
+            const copy = original.cloneNode(true), ids = new Map(), prefix = "report-mark-" + crypto.randomUUID() + "-";
+            for (const node of copy.querySelectorAll("[id]")) {
+                ids.set(node.id, prefix + ids.size); node.id = ids.get(node.id);
+            }
+            for (const node of [copy, ...copy.querySelectorAll("*")]) for (const attribute of [...node.attributes]) {
+                let value = attribute.value;
+                for (const [before, after] of ids) value = value.replaceAll(`url(#${before})`, `url(#${after})`);
+                if (value !== attribute.value) node.setAttribute(attribute.name, value);
+            }
+            mark.append(copy);
+        }
+        return mark;
+    }
+    function mountFileInspection(host, files, options) {
+        return assessmentFactories.preparedFileInspection(host, files, {
+            ...options, icon: ux.icon, brand: cloneReportBrand,
+            createPreview: (target, value, settings) => {
+                const mounted = assessmentFactories.savedFilePreview(target, value, {
+                    ...settings, frozenFrame: assessmentFactories.liveSearch.frozenFrame,
+                });
+                void mounted.ready.then(() => { if (settings.isCurrent()) selectControls?.sync(); });
+                return mounted;
+            },
+        });
+    }
+    function clearPreparedReaders() {
+        preparedReportReader?.dispose(); preparedReportReader = null;
+        preparedFileInspection?.dispose(); preparedFileInspection = null;
+    }
     function scrubContextPreview() {
         for (const bundle of renderedContextBundles) {
+            for (const copy of bundle.nativeReview ?? []) {
+                copy.original = copy.text = null;
+                copy.segments = [];
+            }
+            for (const copy of bundle.resultReview ?? []) {
+                copy.original = copy.text = null;
+                copy.segments = [];
+            }
+            for (const copy of bundle.snapshot?.resultText?.copies ?? []) copy.text = null;
+            if (bundle.snapshot?.nativeEvidence) delete bundle.snapshot.nativeEvidence;
             for (const copy of bundle.contextReview ?? []) if (copy.kind === "response") {
                 copy.original = copy.text = null;
                 copy.segments = [];
@@ -1444,8 +2195,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderedContextBundles.clear();
         const body = $("reportReviewBody");
         if (body?.dataset.recordedContext !== "true") return;
-        preparedReportReader?.dispose();
-        preparedReportReader = null;
+        clearPreparedReaders();
         for (const frame of body.querySelectorAll(".report-frame")) frame.srcdoc = "";
         body.replaceChildren();
         delete body.dataset.recordedContext;
@@ -1459,17 +2209,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     const periodComparisonUI = assessmentFactories.periodComparison.mount({
         root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, search: localSearch, categories, results,
-        projection: createActivityProjection(time, categories, resultKeys),
+        projection: createActivityProjection(time, recordedCategories, resultKeys),
         createState: assessmentFactories.periodComparison.createState, assessmentFactories, bindDetails,
-        getContext: () => ({ snapshot: state, options: query(), route, search, isLoading, isStale, readingIntent,
-            semanticSearch: semanticQuery === null ? undefined : {
+        getContext: () => {
+            const options = query(), includesGithub = !options.filters.sources?.length || options.filters.sources.includes("github-copilot");
+            return { snapshot: state, options, nativeView: acceptedNativeView(), route, search, isLoading, isStale, readingIntent, navigationGeneration,
+            semanticSearch: semanticQuery === null || !includesGithub ? undefined : {
                 status: semanticStatus,
                 receipt: semanticBound ? semanticMembership?.receipt : undefined,
                 scenarioIds: semanticMembership?.scenarioIds ?? [], actionIds: semanticMembership?.actionIds ?? [],
                 parentScenarioIds: semanticMembership?.parentScenarioIds ?? [], coverage: "whole-retained-corpus",
                 ...(search.trim() ? { withinScenarioIds: analysisSlice.legacyScenarioIds(state, search) } : {}),
-            } }),
-        navigate: changes => navigate(routeFor("analyze", changes), false, { keepFocus: true }),
+            } };
+        },
+        navigate: changes => navigate(Object.hasOwn(changes, "compare") && changes.compare === undefined
+            ? comparisonExitRoute() : routeFor("analyze", changes), false, { keepFocus: true }),
+        onPairChange: pair => {
+            const description = analyzeScope.describePair(pair);
+            analyzeControls.pairedCaption(description === null ? null : {
+                ...description, key: pair.key, revision: pair.revision,
+                replacesCollectionCaption: pair.comparison.options.filters.scope !== "history",
+            });
+            refreshChartReference();
+        },
         onSearch: value => { $("activitySearch").value = value; $("activitySearch").dispatchEvent(new Event("input")); },
         openSearch: () => liveSearchUI.analysisScope(),
         syncFilters: () => selectControls?.sync(),
@@ -1478,7 +2240,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (reportJourney?.snapshot().saveUnconfirmed) { announce(reportJourney.reason(1), "stale"); return; }
             if (exportWriting || isLoading || isStale) return;
             const ids = [...new Set(Object.values(value.periods).flatMap(side => side.scenarioIds))];
-            if (!ids.length) { announce("Neither period has matching retained records. Choose periods with activity before creating a report.", "error"); return; }
+            if (!ids.length && !value.nativePeriods?.rows.length && !value.nativePeriods?.refinement?.contextConversationRefs.length) { announce("Neither period has matching retained records. Choose periods with activity before creating a report.", "error"); return; }
             clearReportSelection();
             periodReport = { value, semanticSelection, returnTo: { ...route, search }, timeContext: structuredClone(viewerTime) };
             periodReportInvalid = false;
@@ -1505,25 +2267,38 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("detail").replaceChildren();
     }
     function invalidatePreview(message) {
+        if (clearingAccess || !api.publicationToken()) return;
+        const publication = api.publicationToken();
         if (message !== "" || !$("reportReviewBody")?.dataset.recordedContext || !draft.contextCurrent(draft.contextToken())) {
             draft.clearContext({ writing: exportWriting });
             scrubContextPreview();
         }
         if (exportWriting) return;
-        preparedReportReader?.dispose();
-        preparedReportReader = null;
+        nativePublication.invalidate(); clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
+        clearPreparedReaders();
         draft.invalidate();
         if (message !== "") $("reportReviewBody")?.querySelector(".rebuild-preview")?.remove();
         reportJourney?.invalidate(message);
         const preview = activePreview;
         activePreview = null;
-        if (preview?.previewId) api("/api/cancel-preview", { previewId: preview.previewId }).catch(() => announce("The previous preview could not be cancelled on the runtime. Do not reuse it; prepare a new preview before reviewing.", "error"));
+        if (preview?.previewId) api("/api/cancel-preview", { previewId: preview.previewId }).catch(() => {
+            if (api.isCurrent(publication)) announce("The previous preview could not be cancelled on the runtime. Do not reuse it; prepare a new preview before reviewing.", "error");
+        });
     }
     function readRoute(hash = location.hash, navigationState = history.state) {
+        const current = api.publicationToken();
+        if (!current || api.accessState().mode !== "unbound" && (navigationState?.wireAccess?.owner !== historyOwner
+            || navigationState.wireAccess.epoch !== current.epoch || navigationState.wireAccess.runtimeId !== current.runtimeId)) {
+            if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.search?.trim()) {
+                incomingNavigationError = "The earlier private selection is no longer authorized. Search again or explicitly open this view without that selection.";
+            }
+            navigationState = null;
+        }
         const [rawView, rawQuery = ""] = hash.slice(1).split("?");
         const view = rawView === "report" ? "reports" : rawView || "analyze";
         const params = new URLSearchParams(rawQuery);
-        const keys = ["layer", "chart", "bucket", "range", "from", "to", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision", "compare", "aFrom", "aTo", "bFrom", "bTo", "bundle", "inspect", "order"];
+        const keys = ["layer", "chart", "bucket", "range", "from", "to", "source", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision", "compare", "aFrom", "aTo", "bFrom", "bTo", "bundle", "inspect", "order",
+            "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal", "nativeGroup"];
         const values = { view: ["analyze", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
         if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
@@ -1542,6 +2317,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function canonicalRoute(next) {
         next = sessionJourney.savedRoute(filterState.canonical(sessionJourney.canonical(next)));
+        if (next.view !== "request") {
+            const { nativeSource, nativeRevision, nativeSourceRevision, nativeOrdinal, ...rest } = next;
+            next = rest;
+        }
         if (next.view !== "request" && Object.hasOwn(next, "call")) next = { ...next, call: undefined };
         if ((next.view !== "request" || next.layer !== "reported-api" || next.call === undefined) && Object.hasOwn(next, "callRevision")) {
             next = { ...next, callRevision: undefined };
@@ -1572,6 +2351,79 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const [key, value] of Object.entries(next)) if (!["view", "search", "returnToSessions", "returnToResults", "localSearch", "settingsWarning", "sidebarEntry", "savedEntry", "savedAuthority"].includes(key) && value !== null && value !== undefined && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key))) params.set(key, value);
         return "#" + next.view + (params.size ? "?" + params.toString() : "");
     }
+    function linkUrl(next) {
+        const url = routeUrl(next), [view, query = ""] = url.split("?");
+        if (view !== "#analyze" || !search.trim() && semanticQuery === null) return url;
+        // A copied URL cannot silently drop private narrowing.
+        const parameters = new URLSearchParams(query);
+        parameters.set("privateView", "required");
+        return view + "?" + parameters;
+    }
+    // Preparation only: recipients admit their own snapshot and fresh Search receipt.
+    const privateNavigationLifetimeMs = 30000;
+    const privateNavigations = new Map();
+    function forgetPrivateNavigation(key) {
+        const entry = privateNavigations.get(key);
+        clearTimeout(entry?.timer);
+        if (entry) { entry.value = null; entry.recipient = null; entry.target = ""; }
+        privateNavigations.delete(key);
+    }
+    window.__wireTakePrivateNavigation = (key, recipient, target) => {
+        const entry = privateNavigations.get(key);
+        if (!entry || !api.isCurrent(entry.publication) || entry.recipient !== recipient || entry.target !== target) return null;
+        if (!(performance.now() < entry.expiresAt) || isLoading || isStale || entry.value.revision !== state?.revision
+            || entry.value.sourceVersion !== state.collection?.configVersion || entry.value.nativeRevision !== state.nativeRead?.revision
+            || entry.value.deletionVersion !== state.deletionVersion) { forgetPrivateNavigation(key); return null; }
+        const value = structuredClone(entry.value);
+        forgetPrivateNavigation(key);
+        return value;
+    };
+    window.addEventListener("pagehide", () => {
+        for (const key of privateNavigations.keys()) forgetPrivateNavigation(key);
+    });
+    function privateNavigationNotice(message, kind) {
+        if (!chartReferenceUI.notify(message)) announce(message, kind);
+    }
+    function openPrivateNavigation(event) {
+        if (!api.publicationToken()) return;
+        const modified = event.type === "auxclick" ? event.button === 1
+            : event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey);
+        if (!modified || event.altKey || event.defaultPrevented || !search.trim() && semanticQuery === null) return;
+        const anchor = event.target.closest?.("a[href]");
+        if (!anchor || anchor.hasAttribute("download")) return;
+        const target = new URL(anchor.getAttribute("href"), location.href);
+        if (target.origin !== location.origin || target.pathname !== location.pathname || target.search !== location.search
+            || !["analyze", "home", "overview", "activity", "calls"].includes(target.hash.slice(1).split("?")[0])) return;
+        const [view, query = ""] = target.hash.split("?");
+        const parameters = new URLSearchParams(query);
+        if (parameters.get("privateView") !== "required") return;
+        event.preventDefault();
+        if (isLoading || isStale || !state || semanticQuery !== null && !semanticBound) {
+            privateNavigationNotice("Wait for the current private selection before opening another tab.", "stale");
+            return;
+        }
+        const analysisQuery = liveSearchUI.analysisPreparation();
+        if (semanticQuery !== null && analysisQuery !== semanticQuery) {
+            privateNavigationNotice("The private Search changed. Wait for its current results before opening another tab.", "stale");
+            return;
+        }
+        const value = { search, analysisQuery: semanticQuery === null ? null : analysisQuery,
+            revision: state.revision, nativeRevision: state.nativeRead?.revision, sourceVersion: state.collection?.configVersion, deletionVersion: state.deletionVersion,
+            timeContext: structuredClone(applied.timeContext) };
+        parameters.delete("privateView");
+        target.hash = view + (parameters.size ? "?" + parameters : "");
+        const key = crypto.randomUUID(), destination = new URL(target);
+        parameters.set("privateView", key);
+        destination.hash = view + "?" + parameters;
+        const recipient = window.open(destination.href, "_blank", event.shiftKey ? "popup" : undefined);
+        if (!recipient) {
+            privateNavigationNotice("The new tab was blocked. Allow it or open this result in the current tab.", "error");
+            return;
+        }
+        privateNavigations.set(key, { publication: api.publicationToken(), recipient, target: target.hash, value, expiresAt: performance.now() + privateNavigationLifetimeMs,
+            timer: setTimeout(() => forgetPrivateNavigation(key), privateNavigationLifetimeMs) });
+    }
+    for (const event of ["click", "auxclick"]) document.addEventListener(event, openPrivateNavigation);
     function routeFor(view, changes = {}) {
         if (view === "request" && route.view === "request" && changes.request === undefined) {
             view = underlyingRoute().view;
@@ -1582,6 +2434,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             bundle: undefined, inspect: undefined, savedEntry: undefined, savedAuthority: undefined,
             returnToResults: view === "request" ? route.returnToResults : undefined,
             request: ["request", "reports"].includes(view) ? route.request : undefined,
+            ...Object.fromEntries(["nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal"]
+                .map(key => [key, view === "request" && (!changes.request || changes.request === route.request) ? route[key] : undefined])),
             call: view === "request" && (!changes.request || changes.request === route.request) ? route.call : undefined,
             callRevision: view === "request" && (!changes.request || changes.request === route.request) ? route.callRevision : undefined,
             origin: view === "request" ? (route.view === "reports" ? "reports" : route.origin || "analyze") : undefined,
@@ -1594,6 +2448,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ...changes,
         };
     }
+    function comparisonExitRoute(origin = underlyingRoute()) {
+        return routeFor("analyze", { ...origin, view: "analyze", compare: undefined, request: undefined, task: undefined });
+    }
+    function isComparisonAnalyzeLink(node, origin = underlyingRoute()) {
+        return node.matches('.primary-navigation [data-nav="analyze"]') && origin.compare === "periods";
+    }
     function readingKey(value) {
         const [view, query = ""] = routeUrl(value).split("?");
         const params = new URLSearchParams(query);
@@ -1605,10 +2465,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return navigate(routeFor(view, changes), replace);
     }
     function rememberRoute(next, replace = false) {
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess) return;
         const url = routeUrl(next);
         historyPosition = replace ? historyPosition : historyPosition + 1;
         // Private-text search belongs to this browser history entry, never a copied URL.
-        const navigationState = { ...history.state, evidenceView: { url, search: next.search || "", position: historyPosition,
+        const navigationState = { ...history.state, wireAccess: { owner: historyOwner, epoch: publication.epoch, runtimeId: publication.runtimeId },
+            evidenceView: { url, search: next.search || "", position: historyPosition,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
             returnToSessions: sessionJourney.returnRoute(next.returnToSessions),
@@ -1619,13 +2482,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else history.pushState(navigationState, "", url);
     }
     function navigate(next, replace = false, options = {}) {
+        if (clearingAccess || !api.publicationToken()) return false;
         next = canonicalRoute(next);
+        if (routeUrl(next) !== location.hash && !next.search) incomingNavigationError = null;
         if (options.isCurrent && !options.isCurrent()) {
             announce("This Search destination is no longer current. Search again before opening it.", "stale");
             return false;
         }
         if (exportWriting || collectionSettings?.isBusy()) {
-            announce("Wait for the current local save to finish before leaving this view.");
+            announce("Wait for the current local save to finish before leaving this view.", "pending-save");
             return false;
         }
         if (next.view === "request" && !options.fromSearch) {
@@ -1642,8 +2507,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function link(label, view, changes = {}, cls = "") {
         const node = el("a", cls, label);
-        node.href = routeUrl(routeFor(view, changes));
+        const publication = api.publicationToken();
+        node.href = linkUrl(routeFor(view, changes));
         node.addEventListener("click", (event) => {
+            if (!api.isCurrent(publication)) { event.preventDefault(); return; }
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             go(view, changes);
@@ -1652,8 +2519,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function routeLink(label, next, cls = "text-link", options = {}) {
         const node = el("a", cls, label);
-        node.href = routeUrl(next);
+        const publication = api.publicationToken();
+        node.href = linkUrl(next);
         node.addEventListener("click", event => {
+            if (!api.isCurrent(publication)) { event.preventDefault(); return; }
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             if (next.session) presentation.setOpen("session:" + next.session, true);
@@ -1661,7 +2530,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (options.searchReturn) {
                 const navigation = navigationGeneration, intent = readingIntent;
                 Promise.resolve(pending).then(loaded => {
-                    if (loaded && navigation === navigationGeneration && intent === readingIntent && !liveSearchUI.restore(options.searchReturn)) {
+                    if (loaded && api.isCurrent(publication) && navigation === navigationGeneration && intent === readingIntent && !liveSearchUI.restore(options.searchReturn)) {
                         announce("The earlier search is no longer available. Search again to see current results.", "stale");
                     }
                 });
@@ -1720,15 +2589,72 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function sourceCallFor(row) {
         const scenario = state.scenarios.find(item => item.scenarioId === row?.scenarioId);
+        if (nativeActivity.isNative(scenario)) return scenario.nativeConversation.calls.find(call => call.key === (row.parentCallId || row.id));
         return scenario?.toolCalls?.find(tool => tool.toolCallId ? tool.toolCallId === row.toolCallId
             : (row.parentCallId || row.id) === `event:${JSON.stringify([scenario.sourceSessionId, tool.startEventId])}`);
     }
-    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows, inline = false } = {}) {
+    function callOutcomeLabel(outcome) {
+        return ({ success: "completed", failure: "failed", unknown: "has no recorded result",
+            partial: "partly completed", other: "has another result", transport: "could not connect" })[outcome];
+    }
+    function callReasonList(items, { inline = false } = {}) {
+        const list = el(inline ? "span" : "ul", "call-reason-list");
+        if (inline) list.setAttribute("role", "list");
+        for (const item of items) {
+            const reason = el(inline ? "span" : "li", "call-reason-item");
+            if (inline) reason.setAttribute("role", "listitem");
+            if (item.label) reason.append(el("span", "call-reason-label", item.label + ": "));
+            reason.append(el("span", "call-reason-text", failureReasonText(item.text)));
+            list.append(reason);
+        }
+        return list;
+    }
+    // Screen copy only; shared labels and failure-group identities stay unchanged.
+    const failureReasonCopy = {
+        "Work IQ could not find the requested MCP server": "Work IQ could not find the requested address",
+        "Sign-in was required": "Work IQ required sign-in at the time",
+        "Request timed out (MCP -32001)": "The tool did not respond in time",
+        "Error text excluded for privacy": "Error details omitted for privacy",
+        "Error text exceeded the saving limit": "Error details were too long to save",
+        "Error format was not supported": "WIRE could not read the error details",
+        "Error text was not saved": "WIRE did not save the error details",
+        "The source did not supply a failure reason": "The tool did not provide an error reason",
+    };
+    function failureReasonText(reason) {
+        return Object.hasOwn(failureReasonCopy, reason) ? failureReasonCopy[reason] : reason;
+    }
+    function failureGuidance(call) {
+        const evidence = call?.failureEvidence;
+        if (evidence?.version === 1 && evidence.messageStatus === "text-excluded") {
+            if (evidence.messageSignal === "response-processing-error" && evidence.messageSource === "workiq-error-json"
+                && evidence.code === "InternalServerError") {
+                return "The recorded error does not say why processing failed.";
+            }
+            if (evidence.messageSignal === "mcp-server-path-not-found" && evidence.messageSource === "workiq-error-json") {
+                return "If you still need this, ask Copilot to find an available Work IQ service before trying again.";
+            }
+            if (evidence.messageSignal === "workiq-sign-in-required") {
+                return "If a new attempt also asks you to sign in, sign in to Work IQ in Copilot and try again.";
+            }
+            if (evidence.messageSignal === "access-denial") {
+                return "If this happens again, check your access to the requested information in the original app.";
+            }
+            if (evidence.messageSignal === "request-timeout") {
+                return "Check the original chat before trying again; a timeout alone does not show whether the work finished.";
+            }
+        }
+        if (evidence?.version !== 1 || !["not-supplied", "unsupported-format", "size-excluded", "sensitive-excluded", "text-excluded"].includes(evidence.messageStatus)) {
+            return "The saved record does not explain why this call failed. The original Copilot chat may have more context.";
+        }
+        return "For more detail, check the original Copilot chat, if it is still available.";
+    }
+    function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows, inline = false, includeReturned = true } = {}) {
         const node = el(inline ? "span" : "div", "recorded-results");
         node.dataset.resultLayer = layer;
         node.setAttribute("role", "group");
         node.setAttribute("aria-label", scope);
-        const entries = rows ? results.explainedEntries(layer, rows, sourceCallFor, { concise: singleRecord }) : results.entries(layer, summary);
+        const entries = rows ? results.explainedEntries(layer, rows, sourceCallFor,
+            { concise: singleRecord, contextual: singleRecord && Boolean(recordLabel), includeReturned }) : results.entries(layer, summary);
         if (!entries) {
             const unavailable = el("span", "result-unavailable");
             unavailable.append(metadata.item(`${label || results.unit(layer, 2)}: result counts unavailable`, explanation ? { help: explanation } : {}));
@@ -1741,7 +2667,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const values = heading && !compact ? el(inline ? "span" : "div", "result-values") : node;
         if (compact) {
             node.classList.add("result-inline");
-            const described = rows && !singleRecord ? entries.map(entry => `${count(entry.count)} ${entry.label}${entry.reason ? ": " + entry.reason : ""}`).join("; ") : "";
+            const described = rows && !singleRecord ? entries.map(entry => `${count(entry.count)} ${entry.label}${entry.reason ? ": " + failureReasonText(entry.reason) : ""}`).join("; ") : "";
             node.setAttribute("aria-label", `${heading || scope}: ${results.countLabel(layer, summary.count, total)}${described ? ". " + described : ""}`);
         } else if (heading) {
             node.classList.add("result-with-heading");
@@ -1751,24 +2677,36 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         } else node.append(unit);
         for (const entry of entries) {
             const actionable = sessionId && results.canInspect(layer, entry.key);
-            const classes = `recorded-result ${entry.key} result-tone-${entry.key}`;
+            const classes = `recorded-result ${entry.key} result-tone-${singleRecord && recordLabel ? entry.key : entry.tone ?? entry.key}`;
             const item = actionable ? routeLink("", sessionRoute(sessionId, entry.key), classes + " result-link") : el("span", classes);
             item.dataset.outcome = entry.key;
             item.dataset.count = entry.count;
-            item.append(ux.icon(`${entry.icon}-compact`), el("span", "recorded-result-label",
+            item.append(ux.icon(`${singleRecord && recordLabel ? results.icon(entry.key) : entry.icon}-compact`), el("span", "recorded-result-label",
                 `${singleRecord && entry.count === 1 ? "" : count(entry.count) + " "}${singleRecord && summary.count === 1 && recordLabel ? recordLabel : entry.label}`));
             if (entry.reason) {
                 item.classList.add("result-explained");
-                const words = el("span", "result-explanation");
                 const recital = item.lastElementChild;
-                words.append(el("span", "result-cause", entry.reason));
-                if (singleRecord && entry.reasonOnly) recital.remove();
-                else words.append(document.createTextNode(" \u00b7 "), recital);
-                item.append(words);
+                if (singleRecord && recordLabel) {
+                    item.classList.add("result-story");
+                    if (["failure", "partial", "transport"].includes(entry.tone ?? entry.key)) item.classList.add("result-story-problem");
+                    const status = el("span", "result-status result-tone-" + entry.key);
+                    status.append(...item.childNodes);
+                    const reasons = callReasonList(results.callReasonItems(sourceCallFor(rows[0]), rows[0].outcome, { includeReturned }), { inline: true });
+                    reasons.classList.add("result-cause");
+                    item.append(status, reasons);
+                    const coverage = includeReturned && results.returnedCoverage(sourceCallFor(rows[0]));
+                    if (coverage) item.append(el("span", "returned-coverage", coverage.text));
+                } else {
+                    const words = el("span", "result-explanation");
+                    words.append(el("span", "result-cause", failureReasonText(entry.reason)));
+                    if (singleRecord && entry.reasonOnly) recital.remove();
+                    else words.append(document.createTextNode(" \u00b7 "), recital);
+                    item.append(words);
+                }
             }
             if (actionable) {
                 viewKey(item, `session-result:${scope}:${sessionId}:${layer}:${entry.key}`);
-                const label = layer === "tool" ? `View ${count(entry.count)} Work IQ tool call${entry.count === 1 ? "" : "s"} ${entry.key === "success" ? "that worked" : "needing attention"}` : `View ${count(entry.count)} ${results.unit(layer, entry.count)}: ${entry.label}`;
+                const label = layer === "tool" ? `View ${count(entry.count)} Work IQ tool call${entry.count === 1 ? "" : "s"} ${entry.key === "success" ? "with recorded completion" : "needing attention"}` : `View ${count(entry.count)} ${results.unit(layer, entry.count)}: ${entry.label}`;
                 item.setAttribute("aria-label", `${label} in ${layer === "http" ? "recorder source" : "GitHub Copilot chat"} ${sessionSource(sessionId)?.name}. Current date, service and request scope.`);
                 ux.tooltip(item, `${label} in this ${layer === "http" ? "recorder source" : "Copilot chat"} and scope. ${help.resultHelp(entry.key, layer)} Nothing is retried or executed.`);
             }
@@ -1829,18 +2767,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     if (index) service.append(document.createTextNode(", "));
                     service.append(serviceCue("span", name));
                 }
-                for (const gap of association?.gaps ?? []) {
+                for (const rawGap of association?.gaps ?? []) {
+                    const gap = categories.displayEvidence(rawGap);
                     service.append(metadata.item(gap.label, { help: gap.description }));
-                    if (includePurpose) service.append(el("p", "context-help-note", gap.description));
                 }
-                if (!service.childNodes.length) service.textContent = "Service association unavailable in this snapshot.";
+                if (includePurpose && association?.gaps.length) service.append(el("p", "context-help-note",
+                    categories.attributionReading(row, "reported-api").text));
+                if (!service.childNodes.length) service.textContent = "Service evidence could not be read in this snapshot.";
             } else {
                 const scope = categories.requestedSearchScope(call);
                 const identity = serviceIdentity(row ? [{ ...row, tool: call?.tool || row.tool }] : undefined, "tool");
                 service.append(identity);
-                if (scope) service.append(ux.helpButton(categoryPresentation(row).label, `${scope.label}. ${scope.description}`));
+                if (scope) service.append(ux.helpButton(categoryPresentation(row).label, [scope.label + ".", scope.description].filter(Boolean).join(" ")));
             }
-            list.append(el("dt", "", returned ? "Service" : "Activity category"), service);
+            list.append(el("dt", "", returned ? "Result service" : "Services and operations"), service);
         }
         if (operation && includePurpose) {
             list.append(el("dt", "", "Purpose"), el("dd", "", operation.description));
@@ -1881,15 +2821,37 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         field.classList.add("response-timing");
         field.hidden = timing.status === "unavailable";
         if (timing.status === "measured") {
-            const duration = el("data", "", timingPresentation.duration(timing.durationMs));
-            duration.value = String(timing.durationMs);
-            value.append(duration);
+            value.append(durationValue(timing.durationMs));
         } else if (timing.status === "error") {
             const error = el("span", "action-error", "Timing could not be read");
             error.setAttribute("role", "alert");
             value.append(error);
         } else value.textContent = "Not recorded";
         return field;
+    }
+    function field(label, value) {
+        const node = cardFact(label, value ?? "Not recorded");
+        node.firstElementChild.textContent = label;
+        return node;
+    }
+    function fields(pairs) {
+        const node = el("dl", "reader-fields");
+        for (const [label, value] of pairs) if (value !== undefined && value !== null && value !== "") node.append(field(label, value));
+        return node;
+    }
+    function resultDetailBlock(rows, { errorContext = false } = {}) {
+        if (!rows.length) return null;
+        const node = el("div", "reader-error-details");
+        for (const [label, value] of rows) {
+            if (["Recorded error", "Error detail", "Source description"].includes(label)) {
+                if (!errorContext || label === "Source description") node.append(el("p", "context-help-note", label));
+                node.append(el("p", "reader-error-message", value));
+            } else node.append(fields([[label, value]]));
+        }
+        return node;
+    }
+    function failureDiagnostic(diagnostic, options) {
+        return resultDetailBlock(results.diagnosticDetails(diagnostic, options), { errorContext: true });
     }
     function returnedDetails(call, row, apiRows, selectedId) {
         if (!apiRows?.length) return null;
@@ -1899,12 +2861,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const retained = results.returnedResult(call, entry);
             const code = retained?.errorCode;
             const status = entry.status != null ? `Tool-reported HTTP ${entry.status}` : code ? "Tool-reported error" : null;
-            const recordLabel = (["partial", "unknown"].includes(entry.outcome)
+            const recordLabel = (Number.isSafeInteger(retained?.index) && retained.index >= 0 ? `Returned entry ${retained.index + 1}: ` : "")
+                + (["partial", "unknown"].includes(entry.outcome)
                 ? results.labels("reported-api")[entry.outcome] + (status ? ": " + status : "")
                 : status || results.labels("reported-api")[entry.outcome]) + (code ? ": " + code : "");
+            const diagnostic = failureDiagnostic(retained?.errorDiagnostic, {
+                codeShown: code === retained?.errorDiagnostic?.code,
+                statusShown: entry.status === retained?.errorDiagnostic?.statusCode,
+            });
             item.append(resultLine("reported-api", results.summarize([entry]), {
-                heading: "Returned API result", compactSingle: true, singleRecord: true, recordLabel }),
-                actionFields(call, entry, { includeTool: false, returned: true }));
+                heading: "Returned API result", compactSingle: true, singleRecord: true, recordLabel }));
+            if (diagnostic) item.append(diagnostic);
+            item.append(actionFields(call, entry, { includeTool: false, returned: true, includeService: !results.inheritsCallService(call, entry, row) }));
             const duration = el("p", "reader-api-duration");
             duration.append("API result duration: ", durationValue(callInvestigation.duration(retained, "reported-api")));
             item.append(duration);
@@ -1920,15 +2888,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         };
         const list = el("div", "returned-api-entries");
         const otherRows = selectedId ? apiRows.filter(entry => entry.id !== selectedId) : apiRows;
+        const hasErrors = otherRows.some(entry => ["failure", "transport"].includes(entry.outcome)
+            || results.diagnosticDetails(results.returnedResult(call, entry)?.errorDiagnostic).length);
         pagedList(list, otherRows, {
-            key: "returned:" + row.id, noun: "returned results",
+            key: "returned:" + row.id, noun: call.resultEvidence?.contentStatus === "partial"
+                ? "retained entries" : "returned results",
+            size: hasErrors ? Math.max(6, otherRows.length) : 6,
             renderItem: renderEntry,
         });
+        const coverage = results.returnedCoverage(call);
+        if (coverage) list.prepend(el("p", "returned-coverage", coverage.text));
         if (selectedId) {
             const section = el("section", "selected-api-result");
             section.append(renderEntry(apiRows.find(entry => entry.id === selectedId)),
                 el("p", "context-help-note", "This returned entry belongs to the recorded tool call above. Its status is not a separate observed HTTP execution."));
             if (otherRows.length) section.append(list);
+            else if (coverage) section.append(el("p", "returned-coverage", coverage.text));
             return section;
         }
         return list;
@@ -1955,7 +2930,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (promptAuthors) {
             const byId = new Map(records.map(record => [record.scenarioId, record]));
             if (data.rows.some(row => !promptAuthors.includes(row.promptAuthor)
-                || row.promptAuthor !== authorship.read(byId.get(row.scenarioId)?.userPrompt).actor)) {
+                || byId.get(row.scenarioId)?.recordKind !== "native-conversation"
+                    && row.promptAuthor !== authorship.read(byId.get(row.scenarioId)?.userPrompt).actor)) {
                 throw new Error("The prompt author filter does not match the retained interaction authors.");
             }
         }
@@ -1986,18 +2962,82 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         percentages.validate(data);
         return data;
     }
-    async function load({ background = false, afterExport = false, refinement = false, expectedSource } = {}) {
+    function validateBoundedSnapshot(snapshot, config) {
+        const native = snapshot.nativeRead;
+        if (!native || native.revision !== snapshot.revision || JSON.stringify(snapshot.analytics?.native) !== JSON.stringify(native)) {
+            throw new Error("The Microsoft aggregate and page do not match this snapshot.");
+        }
+        if (snapshot.scenarios?.some(record => nativeActivity.isNative(record))
+            || snapshot.analytics?.rows?.some(row => boundedContract.sourceIds.includes(row.sourceId))) {
+            throw new Error("The bounded Microsoft population cannot be replaced by legacy native arrays.");
+        }
+        if (native.status === "unavailable") {
+            const fields = native.reason === "microsoft-account-not-configured"
+                ? ["status", "reason", "revision", "generation", "authorizationRevision"] : ["status", "reason", "revision"];
+            if (Object.keys(native).length !== fields.length || fields.some(key => !Object.hasOwn(native, key))
+                || !["microsoft-account-not-configured", "native-retention-not-configured", "native-retained-source-not-committed"].includes(native.reason)) {
+                throw new Error("The unavailable Microsoft view is invalid; no zero population was inferred.");
+            }
+            const metadata = nativeCollectionStatus(snapshot.collection);
+            if (native.reason === "microsoft-account-not-configured") {
+                const unavailable = historyStatus.nativeUnavailable(metadata);
+                if (!unavailable || !historyStatus.nativeUnavailableCurrent(metadata, api.accessState().state)
+                    || native.generation !== unavailable.generation || native.authorizationRevision !== unavailable.authorizationRevision) {
+                    throw new Error("Microsoft setup metadata changed during the bounded snapshot.");
+                }
+            } else {
+                const saved = historyStatus.persistence(metadata);
+                if (!saved || (native.reason === "native-retention-not-configured") !== !saved.configured) {
+                    throw new Error("Microsoft availability does not match its current configuration.");
+                }
+            }
+            return;
+        }
+        const { status, ...value } = native;
+        if (status !== "bounded") throw new Error("The source-aware Microsoft view must use the bounded public protocol.");
+        boundedContract.decode(value, { schemaVersion: 1, revision: snapshot.revision, sources: boundedContract.sourceIds,
+            analytics: config, page: { limit: config.limit ?? 10, after: null } });
+        const current = value.readback.current;
+        const saved = historyStatus.persistence(nativeCollectionStatus(snapshot.collection));
+        if (!saved || current.generation !== api.accessState().state?.generation
+            || current.configurationRevision !== (saved.configuration?.configurationRevision ?? null)
+            || current.privacyRevision !== (saved.configuration?.privacyRevision ?? null)) {
+            throw new Error("The bounded Microsoft view does not match current collection settings.");
+        }
+    }
+    function syncSavedReportPresence(currentRead) {
+        const entries = state.exports || [];
+        savedArtifactUI?.observeEligibility();
+        reportComparisonUI?.syncPresence(entries);
+        reportJourney?.syncPresence(entries);
+        if (!currentRead()) return false;
+        if (savedReportView && !entries.some(entry => savedIdentity(entry) === savedReportView.identity)) {
+            invalidateSavedReader("This saved item changed or is no longer available. Return to the library and refresh saved reports.");
+        }
+        return true;
+    }
+    async function load({ background = false, afterExport = false, refinement = false, expectedSource, refreshOwner } = {}) {
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess) return false;
         if (exportWriting && !afterExport) {
             announce("The confirmed local save is still running. This view will refresh when it finishes; the write is not replayed.");
             return false;
         }
         const request = ++generation;
+        const currentRead = () => api.isCurrent(publication) && request === generation && !pageInactive;
         const recollectionReceipt = recollectionUI?.snapshot().result?.operationId;
         if (!background || fresh.snapshot().phase === "waiting") fresh.retryApply();
         syncTime();
         const config = query();
+        const previousStale = isStale;
         isLoading = true;
         isStale = Boolean(analytics);
+        savedInspector?.refreshEligibility?.();
+        if (sourceCollection.active && (JSON.stringify(config) !== JSON.stringify(applied) || boundedNative.presentation().error)) {
+            boundedNative.invalidate("Updating the complete Microsoft source selection...");
+            liveSearchUI?.changed();
+        }
+        refreshChartReference();
         $("deleteAllReports").disabled = true;
         syncResultFilter();
         syncAuthorFilter();
@@ -2005,7 +3045,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!background) {
             if (!analytics) setText($("periodResult"), "Updating this period...");
             $("periodResult").setAttribute("aria-busy", "true");
-            $("pageAction").setAttribute("aria-disabled", "true");
+            for (const id of ["pageAction", "reportContextAction"]) $(id).setAttribute("aria-disabled", "true");
         }
         ux.pending($("loadingStatus"), true);
         ux.pending($("periodResult"), true);
@@ -2018,14 +3058,71 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (analytics && !background && !refinement) announce("Updating this view...");
         const refreshRead = background && !afterExport ? fresh.snapshot() : null;
         try {
+            if (incomingNavigationError) throw new Error(incomingNavigationError);
             const next = await api("/api/snapshot", config);
-            if (request !== generation || pageInactive) return false;
+            if (!api.isCurrent(publication) || request !== generation || pageInactive) return false;
+            if (refreshOwner && (!refreshGestureCurrent(refreshOwner) || refreshViewHeld())) {
+                isStale = previousStale;
+                if (refreshGestureCurrent(refreshOwner)) deferRefreshView(refreshOwner);
+                return false;
+            }
+            acceptSourceCollection(next.collection);
+            if (sourceCollection.active) validateBoundedSnapshot(next, config);
+            if (sourceCollection.active && route.nativeGroup !== undefined) {
+                if (!/^[a-f0-9]{64}$/.test(route.nativeGroup) || next.nativeRead?.status !== "bounded") {
+                    throw new Error("The original Microsoft group is unavailable. Clear the group or read its current source view.");
+                }
+                const groupRequest = { schemaVersion: 1, revision: next.revision, viewId: next.nativeRead.viewId,
+                    groupId: route.nativeGroup, page: { limit: config.limit ?? 10, after: null } };
+                const context = { sources: [...boundedContract.sourceIds], analytics: config, original: next.nativeRead };
+                const grouped = await api("/api/retained/microsoft/drilldown", groupRequest);
+                if (!currentRead()) return false;
+                boundedContract.decode(grouped, groupRequest, context);
+                next.nativeGroupBinding = { request: groupRequest, context };
+                next.nativeRead = { status: "bounded", ...grouped };
+                next.analytics.native = next.nativeRead;
+            }
+            const currentNative = nativeCollectionStatus(next.collection), previousNative = nativeCollectionStatus(collection);
+            const nativeStatus = historyStatus.persistence(currentNative);
+            const nativeUnavailable = historyStatus.nativeUnavailable(currentNative);
+            if (!sourceCollection.active && (nativeUnavailable || next.nativeRead?.status === "unavailable")) {
+                if (!historyStatus.nativeUnavailableCurrent(currentNative, api.accessState().state, previousNative)
+                    || !historyStatus.nativeUnavailableMatches(next, currentNative)) {
+                    throw new Error("Microsoft account setup status changed. Read current Settings and stored activity; no collection was repeated.");
+                }
+            }
+            if (nativeStatus && !sourceCollection.active) {
+                if (nativeStatus.generation !== api.accessState().state?.generation
+                    || !historyStatus.nativeReadbackCurrent(next, currentNative)) {
+                    throw new Error("Saved Microsoft activity does not match current access and collection settings. Read current status and stored activity; collection will not be repeated.");
+                }
+                const currentNativeStatus = historyStatus.persistence(previousNative);
+                if (currentNativeStatus?.accountRef === nativeStatus.accountRef
+                    && currentNativeStatus.generation === nativeStatus.generation
+                    && currentNativeStatus.revision > nativeStatus.revision) {
+                    throw new Error("The Microsoft snapshot is older than the current collection status. Retry the stored read; collection will not be repeated.");
+                }
+            }
             const result = next.analytics;
-            if (timeChanged()) return load({ background, afterExport, refinement, expectedSource });
+            if (timeChanged()) return load({ background, afterExport, refinement, expectedSource, refreshOwner });
             if (!Array.isArray(next.scenarios)) throw new Error("Recorded requests are unavailable.");
             if (result?.revision !== undefined && result.revision !== next.revision) throw new Error("Activity changed during the read. Try again.");
             if (result?.timeContext && JSON.stringify(result.timeContext) !== JSON.stringify(config.timeContext)) throw new Error("The runtime used a different timezone. Retry the stored-data read before continuing.");
             const validated = validateAnalytics(result, next.scenarios);
+            if (incomingNavigation && (incomingNavigation.revision !== next.revision
+                || incomingNavigation.nativeRevision !== next.nativeRead?.revision
+                || incomingNavigation.sourceVersion !== next.collection?.configVersion
+                || incomingNavigation.deletionVersion !== next.deletionVersion
+                || JSON.stringify(incomingNavigation.timeContext) !== JSON.stringify(config.timeContext))) {
+                incomingNavigation = null; semanticQuery = "";
+                incomingNavigationError = "The selected records changed. Return to the original tab and open the current result again.";
+                throw new Error(incomingNavigationError);
+            }
+            if (incomingNavigation?.analysisQuery && !liveSearchUI.canPrepareAnalysis(incomingNavigation.analysisQuery)) {
+                incomingNavigation = null; semanticQuery = "";
+                incomingNavigationError = "Search changed while the private view was opening. Your newer Search was kept.";
+                throw new Error(incomingNavigationError);
+            }
             if (route.withinServices) analysisSlice(next, config, search, route.withinServices.split(","));
             const checking = fresh.snapshot();
             if (expectedSource !== undefined && next.collection?.configVersion !== expectedSource) throw new Error("The approved source changed during the stored read. Retry current status and stored activity; no source check was repeated.");
@@ -2034,31 +3131,71 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (state && next.revision < state.revision) throw new Error("An older snapshot was rejected. The current view is kept.");
             if (next.sessionAnalysis && (next.sessionAnalysis.revision !== next.revision || !results.valid(next.sessionAnalysis.totals))) throw new Error("Source analysis does not match this snapshot. Retry the stored-data read before continuing.");
             const reading = captureReading();
-            if (state && (next.deletionVersion ?? 0) !== (state.deletionVersion ?? 0)) clearDeletedDraft();
-            assessmentUI.receive(next.assessment);
-            if (state && JSON.stringify((state.exports || []).map(item => [item.bundleId, item.manifestHash])) !== JSON.stringify((next.exports || []).map(item => [item.bundleId, item.manifestHash]))) savedArtifactUI?.invalidate();
-            state = next;
-            requestInvalidated = false;
-            reportComparisonUI?.syncPresence(next.exports || []);
-            reportJourney?.syncPresence(next.exports || []);
-            if (savedReportView && !(next.exports || []).some(entry => savedIdentity(entry) === savedReportView.identity)) {
-                invalidateSavedReader("This saved item changed or is no longer available. Return to the library and refresh saved reports.");
+            if (!currentRead()) return false;
+            if (state && (state.revision !== next.revision || state.nativeRead?.revision !== next.nativeRead?.revision || state.deletionVersion !== next.deletionVersion
+                || state.collection?.configVersion !== next.collection?.configVersion)) {
+                for (const key of privateNavigations.keys()) forgetPrivateNavigation(key);
             }
+            if (state && (next.deletionVersion ?? 0) !== (state.deletionVersion ?? 0)) clearDeletedDraft();
+            if (!currentRead()) return false;
+            if (sourceCollection.active) {
+                if (next.nativeRead?.status === "bounded") boundedNative.observeReaderAuthority(next.nativeRead);
+                observeNativeReaderStatus(next.collection);
+            }
+            acceptingSnapshot = next;
+            try { assessmentUI.receive(next.assessment); }
+            finally { acceptingSnapshot = null; }
+            if (state && JSON.stringify((state.exports || []).map(item => [item.bundleId, item.manifestHash])) !== JSON.stringify((next.exports || []).map(item => [item.bundleId, item.manifestHash]))) savedArtifactUI?.invalidate();
+            if (!currentRead()) return false;
+            if (refreshOwner && (!refreshGestureCurrent(refreshOwner) || refreshViewHeld())) {
+                isStale = previousStale;
+                if (refreshGestureCurrent(refreshOwner)) deferRefreshView(refreshOwner);
+                return false;
+            }
+            state = next;
+            nativePublication.snapshot(next.nativeReportPublication, nativePublicationContext(false));
+            syncNativeSaveAvailability?.();
+            requestInvalidated = false;
+            if (!syncSavedReportPresence(currentRead)) return false;
             analytics = validated;
             applied = config;
             appliedRoute = { ...route };
             connectionNeedsSnapshot = false;
             isStale = false;
             isLoading = false;
+            const incomingAnalysisQuery = incomingNavigation?.analysisQuery;
+            if (incomingNavigation) {
+                if (incomingAnalysisQuery === null) {
+                    semanticQuery = null;
+                    const { wirePrivateNavigation, ...navigationState } = history.state;
+                    history.replaceState(navigationState, "");
+                } else semanticMembership = unavailableSearchMembership();
+            }
             syncResultFilter();
             syncAuthorFilter();
+            if (!currentRead()) return false;
             $("loading").hidden = true;
+            $("accessShell").hidden = true;
             $("workspace").hidden = false;
             clearMessage();
-            if (next.collection) renderCollection(next.collection);
-            else collectionUnavailable("Collection status unavailable from this connection. Reconnect to the maintained runtime.");
+            if (next.collection) renderCollection(next.collection, publication);
+            else collectionUnavailable("Collection status unavailable from this connection. Reconnect to the maintained runtime.", "", publication);
             render();
-            fresh.applied(state.revision, next.collection?.configVersion, analytics.rows);
+            if (!currentRead()) return false;
+            if (incomingAnalysisQuery) liveSearchUI.prepareAnalysis(incomingAnalysisQuery);
+            incomingNavigation = null;
+            if (nativeCollectIntent) {
+                if (nativeIntentCurrent() && nativeCollectIntent.confirmed
+                    && fresh.snapshot().nativeReceipt
+                    && !receiptStatus.nativeReadbackMatches(fresh.snapshot().nativeReceipt, next, nativeCollectionStatus(collection))) {
+                    fresh.retireNativeResult();
+                    nativeCollectIntent = null;
+                } else if (nativeIntentCurrent() && fresh.nativeApplied(next, nativeCollectionStatus(collection))) {
+                    nativeCollectIntent.confirmed = true;
+                    clearSourceCheckMarker();
+                }
+            } else fresh.applied(state.revision, next.collection?.configVersion, analytics.rows);
+            syncRefreshBranches(next);
             recollectionUI?.viewApplied(recollectionReceipt);
             renderFreshActivity();
             restoreReading(reading);
@@ -2068,12 +3205,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (next.collection) { clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 5000); }
             return true;
         } catch (error) {
-            if (request !== generation || pageInactive) return false;
+            if (!api.isCurrent(publication) || request !== generation || pageInactive) return false;
             liveSearchUI?.invalidate("The stored view could not be verified. Search results were cleared.");
             assessmentUI.clearPrivateText();
             isStale = Boolean(analytics);
             isLoading = false;
-            if (error.reason === "runtime_unavailable") collectionUnavailable(error.message, error.reason);
+            if (sourceCollection.active) boundedNative.invalidate("The current Microsoft selection could not be verified. Read current activity.");
+            refreshChartReference();
+            if (sourceCollection.active || error.reason === "runtime_unavailable") collectionUnavailable(error.message, error.reason, publication);
             if (fresh.snapshot().phase === "applying") fresh.fail(fresh.snapshot().token, error.message, { reason: error.reason });
             refreshReadFailure = analytics && refreshRead?.phase === "applying"
                 ? { generation: request, token: refreshRead.token, checkId: refreshRead.check?.id } : null;
@@ -2085,8 +3224,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     ? (analytics ? "Local runtime unavailable. Showing the last recorded snapshot. " : "Your activity could not load. ")
                         + "Start WIRE if it is stopped, then retry."
                     : (analytics ? "This view could not update. The last recorded snapshot is shown. " : "Your activity could not load. ") + error.message,
-                analytics ? "stale" : "error", true);
+                analytics ? "stale" : "error", !incomingNavigationError);
                 if (offline) $("message").dataset.connectionFailure = "true";
+                if (error.reason === "wire_access_global_collection_stale" && $("storedViewRetry")) {
+                    setText($("storedViewRetry"), "Read current settings");
+                }
+            }
+            if (incomingNavigationError || incomingNavigation) {
+                $("message").append(button("Open this view without the private selection", () => {
+                    incomingNavigation = null; incomingNavigationError = null;
+                    semanticQuery = null; semanticMembership = undefined; semanticComplete = semanticBound = false;
+                    const { wirePrivateNavigation, ...navigationState } = history.state;
+                    history.replaceState(navigationState, "");
+                    navigate({ ...route, search: "" }, true);
+                }, "quiet"));
             }
             renderCollectionNotice();
             if (analytics) {
@@ -2099,12 +3250,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             return false;
         } finally {
-            if (request === generation) {
+            if (api.isCurrent(publication) && request === generation) {
                 isLoading = false;
+                savedInspector?.refreshEligibility?.();
                 $("refreshBtn").disabled = false;
                 $("workspace").setAttribute("aria-busy", "false");
                 $("periodResult").removeAttribute("aria-busy");
-                $("pageAction").removeAttribute("aria-disabled");
+                for (const id of ["pageAction", "reportContextAction"]) $(id).removeAttribute("aria-disabled");
                 $("applyDates").removeAttribute("aria-disabled");
                 ux.pending($("loadingStatus"), false);
                 ux.pending($("periodResult"), false);
@@ -2114,14 +3266,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         }
     }
-    function applyRoute(next, { keepFocus = false, restorePosition = false, reset = false, paging = null, reportSetup = false, cardTarget = null } = {}) {
+    function applyRoute(next, { keepFocus = false, restorePosition = false, reset = false, paging = null, reportSetup = false, cardTarget = null, revealReferenceRecords = false } = {}) {
+        const publication = api.publicationToken();
+        if (clearingAccess || !publication) { route = readRoute(); return false; }
+        if (next.view !== "analyze") analyzeControls.close(false);
         if (exportWriting || collectionSettings?.isBusy()) {
             rememberRoute(route, true);
-            announce("Wait for the current local save to finish before leaving this view.");
+            announce("Wait for the current local save to finish before leaving this view.", "pending-save");
             return false;
         }
+        // A new navigation can precede ResizeObserver delivery for the current motion frame.
+        retainSidebarColumnAnchor();
         const navigation = ++navigationGeneration;
+        pendingChartReferenceReading = null;
         const intent = readingIntent;
+        const recordsFocus = revealReferenceRecords && route.view === "request" ? document.activeElement : null;
         cardEntry = cardTarget && next.view === "request" && next.call === undefined && next.request === cardTarget.target.request
             ? { ...cardTarget, navigation, intent, pending: true } : null;
         if (sidebarExit) {
@@ -2143,7 +3302,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (savedReportView && (next.bundle !== route.bundle || next.savedEntry !== route.savedEntry || next.view !== "reports")) clearSavedReader();
         if (savedInspector && (!next.inspect || next.view !== "reports" || next.bundle)) closeSavedInspector(false, true);
-        let searchReturn = null, returnReading = null, sidebarClosed = true, navigationFinished = false;
+        let searchReturn = null, returnReading = null, comparisonReturn = null, sidebarClosed = true, navigationFinished = false, recordsRevealed = false;
+        function finishRecordsReveal() {
+            if (!revealReferenceRecords || recordsRevealed || !sidebarClosed || !navigationFinished
+                || !api.isCurrent(publication) || navigation !== navigationGeneration || intent !== readingIntent || route.view !== "analyze"
+                || recordsFocus && document.activeElement !== recordsFocus && document.activeElement !== document.body) return;
+            recordsRevealed = true;
+            if (semanticQuery !== null && !semanticBound) pendingChartReferenceReading = { navigation, intent, position: null };
+            else revealResults();
+        }
         function finishSearchReturn() {
             if (!searchReturn || !sidebarClosed || !navigationFinished || navigation !== navigationGeneration || intent !== readingIntent) return;
             const marker = searchReturn;
@@ -2152,22 +3319,37 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             restoreReading(returnReading);
             liveSearchUI.restore(marker);
         }
+        function finishComparisonReturn() {
+            if (!comparisonReturn || !sidebarClosed || !navigationFinished
+                || navigation !== navigationGeneration || intent !== readingIntent) return;
+            periodReturnReading = { position: comparisonReturn, navigation, intent };
+            comparisonReturn = null;
+            restorePeriodComparisonReading();
+        }
         if (contextOwner?.identity === "report-setup" && next.view !== "request"
             && (next.view !== "reports" || next.task !== "create")) closeReportSetup({ restoreFocus: false });
         if (analytics && !isLoading && !isStale && next.view === "request"
             && (route.view === "request" || readingKey(route) === readingKey(sessionJourney.underlying(next)))
             && JSON.stringify(applied) === JSON.stringify(query(next))) {
             if (route.view === "request" && requestIdentity(route) === requestIdentity(next)) {
+                if (cardEntry?.focus === "prompt") {
+                    requestRenderKey = null;
+                    renderRequest();
+                    focusSidebar();
+                    return true;
+                }
                 cardEntry = null;
                 $("contextSidebarTitle").focus({ preventScroll: true }); return true;
             }
             if (route.view !== "request") readingPositions.set(readingKey(route), captureReading());
             else saveSidebarPosition();
+            chartReferenceUI.leave();
             ux.hideTooltip(); selectControls?.close(); sidebar.close(false);
             assessmentUI.leave();
             route = next;
             rememberRoute(route, true);
             appliedRoute = { ...route };
+            refreshChartReference();
             showInteractionSidebar();
             renderRequest();
             focusSidebar();
@@ -2176,8 +3358,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.view === "request" && next.view !== "request") {
             const sameOrigin = readingKey(underlyingRoute()) === readingKey(next);
             const unchanged = sameOrigin && !isLoading && !isStale && JSON.stringify(applied) === JSON.stringify(query(next));
-            searchReturn = sameOrigin && route.request === searchOpenedRequest && liveSearchUI.canRestore(searchReturnMarker) ? searchReturnMarker : null;
+            searchReturn = sameOrigin && !revealReferenceRecords && route.request === searchOpenedRequest && liveSearchUI.canRestore(searchReturnMarker) ? searchReturnMarker : null;
             returnReading = searchReturn ? readingPositions.get(readingKey(underlyingRoute())) : null;
+            // Same-scope comparison links return to their roster, not a hidden Activity card.
+            comparisonReturn = unchanged && restorePosition && !searchReturn && next.view === "analyze" && next.compare === "periods"
+                ? readingPositions.get(readingKey(next)) : null;
             const cleanup = () => {
                 assessmentUI.leave();
                 clearReaderSections();
@@ -2196,11 +3381,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     sidebarExit = { request: route.request, cleanup };
                     ux.hideTooltip(); selectControls?.close();
                 }
-                hideContextSidebar({ restoreFocus: unchanged && !searchReturn, preserveAnchor: !searchReturn,
+                hideContextSidebar({ restoreFocus: unchanged && !searchReturn && !comparisonReturn && !revealReferenceRecords, preserveAnchor: !searchReturn,
                     onClosed: () => {
                         clearSidebarExit();
                         sidebarClosed = true;
                         finishSearchReturn();
+                        finishComparisonReturn();
+                        finishRecordsReveal();
                     } });
                 if (!retainPaint) { cleanup(); finishSidebarMotion(); }
                 if (reportSetupReturn) reportSetupReturn.peek = false;
@@ -2208,10 +3395,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (unchanged) {
                 route = canonicalRoute(next);
                 appliedRoute = { ...route };
+                refreshChartReference();
+                if (revealReferenceRecords) { renderNavigation(); updateSelection(); }
                 if (reportSetup) reportJourney.go(2);
                 if (route.view === "reports" && route.task === "create") syncReportSetupPresentation();
                 navigationFinished = true;
                 finishSearchReturn();
+                finishComparisonReturn();
+                finishRecordsReveal();
                 return true;
             }
         }
@@ -2219,6 +3410,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.view === "request" && next.view === "request") saveSidebarPosition();
         savedArtifactUI?.leave();
         if (appliedRoute) readingPositions.set(readingKey(appliedRoute), captureReading());
+        chartReferenceUI.leave();
         ux.hideTooltip();
         selectControls?.close();
         sidebar.close(false);
@@ -2227,12 +3419,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (["range", "from", "to"].some(key => route[key] !== next[key])) dateDraft = null;
         route = canonicalRoute(next);
         rememberRoute(route, true);
+        if (!state) showConnectionSettings(api.accessState());
         search = route.search || "";
         activityPage = Math.max(0, Number.parseInt(route.page || "0", 10) || 0);
         syncControls();
         $("resetView").hidden = route.view !== "analyze";
         $("resetView").disabled = !viewChanged();
-        const queryChanged = before !== JSON.stringify(query());
+        const queryChanged = before !== JSON.stringify(query()) || route.nativeGroup !== previousRoute.nativeGroup;
         // Navigation is not report consent. Reconcile the exact report basis after a verified read.
         if (reportJourney?.snapshot().phase === "scanning" || $("reportReviewBody")?.querySelector('[data-review-control][data-pending=true]')) invalidatePreview();
         const refinement = !reset && !restorePosition && Boolean(analytics)
@@ -2241,11 +3434,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && (queryChanged || route.range !== previousRoute.range || route.chart !== previousRoute.chart || route.withinServices !== previousRoute.withinServices);
         const controlsOnly = refinement && !queryChanged && route.chart === previousRoute.chart && route.withinServices === previousRoute.withinServices;
         if (refinement && clearingFilter) {
-            const controls = { tool: "toolFilter", services: "serviceAssociationFilter", includeMissingService: "serviceAssociationFilter", withinServices: "serviceAssociationFilter", service: "serviceFilter",
+            const controls = { source: "sourceFilter", tool: "toolFilter", services: "serviceAssociationFilter", includeMissingService: "serviceAssociationFilter", withinServices: "serviceAssociationFilter", service: "serviceFilter",
                 project: "projectFilter", session: "chatFilter", layer: "layerFilter", scope: "scopeFilter", result: "outcomeFilter", authors: "promptAuthorFilter", from: "dateFilter", to: "dateFilter" };
             const changed = Object.keys(controls).find(key => route[key] !== previousRoute[key]);
             const trigger = changed ? $(controls[changed] + "-control") : null;
-            let target = trigger?.checkVisibility() ? trigger : trigger?.closest("#moreFilters") ? $("moreFiltersToggle") : $("dateFilter-control");
+            let target = trigger?.checkVisibility() ? trigger : trigger?.closest("#moreFilters") && $("moreFiltersToggle").checkVisibility()
+                ? $("moreFiltersToggle") : $("openAnalyzeFilters");
             if (changed === "result" && trigger?.disabled) {
                 target = $("resultFilterLabel");
                 target.tabIndex = -1;
@@ -2265,7 +3459,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         periodReturnReading = restorePosition && route.view === "analyze" && route.compare === "periods" && position
             ? { position, navigation, intent } : null;
         const finishNavigation = (loaded = true) => {
-            if (!loaded || navigation !== navigationGeneration || refinement || intent !== readingIntent) return;
+            if (!loaded || navigation !== navigationGeneration || intent !== readingIntent) return;
+            if (revealReferenceRecords && route.view === "analyze") {
+                navigationFinished = true;
+                finishRecordsReveal();
+                return;
+            }
+            if (refinement) return;
             if (route.view === "reports" && route.task === "compare" && !route.bundle && !route.inspect) reportComparisonUI.open(undefined, { retain: true, focus: false });
             if (route.bundle) { $("pageTitle").focus({ preventScroll: true }); window.scrollTo(0, 0); return; }
             if (route.inspect) {
@@ -2315,7 +3515,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function syncControls() {
         restoring = true;
         const values = {
-            layerFilter: route.layer || "tool", dateFilter: route.range || "capture",
+            layerFilter: route.layer || "tool", dateFilter: route.range || "capture", sourceFilter: route.source || "all",
             toolFilter: route.tool || "all", serviceAssociationFilter: route.services || "all", chatFilter: route.session || "all",
             serviceFilter: route.service || "all",
             projectFilter: route.project || "all", scopeFilter: route.scope || "history",
@@ -2323,7 +3523,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         };
         for (const [id, value] of Object.entries(values)) {
             const control = $(id);
-            if (control.tagName === "SELECT" && ![...control.options].some((item) => item.value === value)) control.append(option(value, value));
+            if (control.tagName === "SELECT" && ![...control.options].some((item) => item.value === value)) {
+                control.append(option(value, id === "sourceFilter" ? "Source unavailable" : value));
+            }
             control.value = value;
         }
         $("dateFields").hidden = $("dateFilter").value !== "custom";
@@ -2368,8 +3570,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return Object.entries(route).some(([key, value]) => !["localSearch", "settingsWarning", "bucket"].includes(key) && value !== undefined && value !== null && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key)) && String(value) !== defaults[key]);
     }
     async function resetView() {
+        const keepFocus = route.compare === "periods" && $("analyzeFilterDialog").open;
+        if (keepFocus) analyzeControls.close();
         const next = { view: "analyze", ...(route.bucket ? { bucket: route.bucket } : {}) };
-        await navigate(next, false, { reset: true });
+        await navigate(next, false, { reset: true, keepFocus });
     }
     let refreshReadFailure = null;
     let deferredReviewIdentity = null;
@@ -2396,31 +3600,51 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : " Waiting until the current review or edits finish.");
     }
     function renderStoredRefresh() {
+        if (clearingAccess || !api.publicationToken()) return;
         const report = reportJourney?.snapshot();
         const reviewing = report?.hasPreview || report?.phase === "scanning";
-        const editing = collectionSettings?.hasDraft() || collectionSettings?.isBusy();
-        const blocked = isLoading || collectionBusy || exportWriting || reviewing || editing || ["checking", "applying"].includes(fresh.snapshot().phase);
+        const editing = collectionSettings?.hasDraft() || sourceSettings?.hasDraft();
+        const settingsBusy = collectionSettings?.isBusy() || sourceSettings?.isBusy();
+        const blocked = isLoading || collectionBusy || refreshWorking() || exportWriting || reviewing || editing || settingsBusy
+            || ["checking", "applying"].includes(fresh.snapshot().phase);
         for (const control of [$("refreshBtn"), $("freshStoredRead"), $("collectionRetry"), ...document.querySelectorAll("[data-stored-refresh-retry]")]) control.disabled = blocked;
-        $("checkActivity").disabled = blocked || fresh.busy() || collectionSettings?.canRefresh() === false;
+        $("checkActivity").disabled = blocked || fresh.busy()
+            || !sourceCollection.active && collectionSettings?.canRefresh() === false;
+        $("analyzeRefresh").disabled = $("checkActivity").disabled;
         const reason = editing ? "Save or cancel your Settings edits before refreshing."
             : reviewing ? "Finish this report, or change its choices in Setup, before refreshing."
+            : refreshWorking() || settingsBusy ? "Wait for the current activity update to finish."
             : collectionSettings?.canRefresh() === false ? collectionSettings.explain("collectNow")
             : "Wait for the current activity update to finish.";
         ux.explainDisabled($("checkActivity"), reason, { compact: true });
+        ux.explainDisabled($("analyzeRefresh"), reason, { compact: true });
         ux.explainDisabled($("freshStoredRead"), reason, { compact: true });
-        const model = fresh.snapshot(), localRecovery = model.recovery === "stored" || model.phase === "error" && !model.sourceFailure;
+        const model = refreshPresentation(), localRecovery = model.recovery === "stored" || model.phase === "error" && !model.sourceFailure;
         const globalRecovery = !$("message").hidden && $("message").querySelector("[data-stored-refresh-retry]");
+        const sharedRecovery = Boolean(globalRecovery && !globalRecovery.disabled);
+        collectionSettings?.setSharedRecovery(sharedRecovery);
+        sourceSettings?.setSharedRecovery(sharedRecovery);
         const collectionRecovery = collectionReadError && $("collectionRetry").parentElement.checkVisibility();
         const needsRecovery = localRecovery || collectionReadError || isStale && !isLoading;
         $("storedRefresh").hidden = Boolean(globalRecovery) || !needsRecovery || !localRecovery && Boolean(collectionRecovery);
         $("collectionRetry").hidden = !collectionReadError || Boolean(globalRecovery) || !$("storedRefresh").hidden;
-        $("checkActivity").hidden = Boolean(globalRecovery) || !$("storedRefresh").hidden
+        $("checkActivity").hidden = Boolean(historyStatus.native(collection)) && !historyStatus.persistence(collection)
+            || Boolean(globalRecovery) || !$("storedRefresh").hidden
             || !$("collectionRetry").hidden && $("collectionRetry").parentElement.checkVisibility();
         $("checkActivity").closest(".ux-disabled-help").hidden = $("checkActivity").hidden;
-        $("freshStoredRead").hidden = route.view !== "analyze" || !collection?.config?.approved
+        $("freshStoredRead").hidden = route.view !== "collection-status"
+            || !collection?.config?.approved && !historyStatus.persistence(collection)
             || Boolean(globalRecovery) || $("checkActivity").hidden || Boolean(model.recovery)
             || model.phase === "error" || Boolean(collectionReadError) || isStale && !isLoading;
         $("freshStoredRead").closest(".ux-disabled-help").hidden = $("freshStoredRead").hidden;
+        if (refreshWorking()) {
+            $("storedRefresh").hidden = true;
+            $("collectionRetry").hidden = true;
+            $("checkActivity").hidden = false;
+            $("checkActivity").closest(".ux-disabled-help").hidden = false;
+            $("freshStoredRead").hidden = true;
+            $("freshStoredRead").closest(".ux-disabled-help").hidden = true;
+        }
         ux.pending($("freshStoredRead"), !model.check && model.phase === "applying");
         setText($("storedRefreshHelp"), reviewing
             ? "Finish this report, or change its choices in Setup, before refreshing."
@@ -2435,7 +3659,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const report = reportJourney?.snapshot();
         if (collectionSettings?.hasDraft() || collectionSettings?.isBusy()) return "Save or cancel your Settings edits before reading history again.";
         if (report?.hasPreview || report?.phase === "scanning" || $("overlay").open) return "Finish this report, or change its choices in Setup, before updating activity.";
-        if (exportWriting || isLoading || collectionBusy || fresh.busy()) return "Wait for the current activity update or local save to finish.";
+        if (exportWriting || isLoading || collectionBusy || refreshWorking() || fresh.busy()) return "Wait for the current activity update or local save to finish.";
         if (action === "receipt" || action === "view") return "";
         if (!collection?.config?.approved) return "Approve a local source in Settings before reading its history again.";
         if (isStale || collectionReadError || collectionSettings?.canRefresh() === false) return "Read the current stored activity and source status before previewing history again.";
@@ -2445,12 +3669,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const current = recollectionUI?.snapshot();
         const reason = recollectionGuard(current?.needsReceipt ? "receipt" : "open");
         const recoveryLabel = current?.phase === "blocked" ? "Review recollection recovery" : "Check recollection result";
-        const control = $("freshRecollect");
-        control.hidden = route.view !== "analyze";
-        control.disabled = Boolean(reason) || current?.phase === "pending";
-        setText(control.querySelector("span"), current?.needsReceipt ? recoveryLabel : "Read history again...");
-        ux.explainDisabled(control, reason || "Wait for the current history operation to finish.", { compact: true });
-        control.closest(".ux-disabled-help").hidden = control.hidden;
         $("recollectActivity").disabled = Boolean(reason) || current?.phase === "pending";
         setText($("recollectActivity"), current?.needsReceipt ? recoveryLabel : "Choose chats");
         ux.explainDisabled($("recollectActivity"), reason || "Wait for the current history operation to finish.", { compact: true });
@@ -2458,35 +3676,35 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const message = ["complete", "not-started"].includes(current?.phase) && !recollectionNoticeVisible ? "" : current?.message || "";
         setText(notice, message + (current?.phase === "complete" && !current.viewNeedsRead
             ? " Current filters are kept; reread records may be outside them." : ""));
-        notice.hidden = route.view !== "analyze" || !message;
+        notice.hidden = route.view !== "settings" || settingsNavigation.resolve(route).section !== "privacy" || !message;
     }
-    function renderActivityUpdateEntry() {
-        const model = fresh.snapshot();
-        const entry = fresh.entry({ approved: collection?.config?.approved, enabled: collection?.config?.enabled,
-            checked: collection?.lastCheckedAt ? freshness(collection.lastCheckedAt) : "",
+    function activityUpdatePresentation() {
+        const saved = historyStatus.persistence(collection);
+        const entry = fresh.entry({ approved: collection?.config?.approved, enabled: saved ? !saved.configuration?.settings.paused : collection?.config?.enabled,
+            nativePersistence: Boolean(saved),
             readError: Boolean(collectionReadError), stale: isStale && !isLoading, collectionState: collection?.state });
         const reread = recollectionUI?.snapshot();
-        const expanded = presentation.isOpen("activity-update", entry.attention || reread?.needsReceipt);
-        $("freshActivity").dataset.expanded = String(route.view !== "analyze" || expanded);
         const label = !entry.attention && reread?.phase === "pending" ? "Reading selected history..."
             : !entry.attention && reread?.phase === "blocked" ? "Recollection recovery unavailable"
             : !entry.attention && reread?.needsReceipt ? "History reread unconfirmed"
             : !entry.attention && reread?.phase === "not-started" && recollectionNoticeVisible ? "No history reread committed"
             : !entry.attention && reread?.phase === "complete" && recollectionNoticeVisible ? "History reread completed" : entry.label;
-        setText($("activityUpdateLabel"), label);
-        $("activityUpdateToggle").setAttribute("aria-expanded", String(expanded));
-        $("activityUpdateToggle").setAttribute("aria-label", `Activity updates: ${label}`);
-        ux.pending($("activityUpdateToggle"), entry.pending || reread?.phase === "pending");
-        return expanded;
+        return { entry, reread, label };
     }
     async function refreshStoredData(event) {
+        if (refreshGesture && !refreshGesture.withdrawn) return recoverRefreshGesture(event);
+        return refreshStoredSourceData(event);
+    }
+    async function refreshStoredSourceData(event, statusOnly = false) {
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess) return false;
         renderStoredRefresh();
-        if ($("refreshBtn").disabled || ["checking", "applying"].includes(fresh.snapshot().phase)) return;
+        if (!statusOnly && $("refreshBtn").disabled || ["checking", "applying"].includes(fresh.snapshot().phase)) return;
         if (!recollectionUI?.snapshot().viewNeedsRead) recollectionNoticeVisible = false;
         const initiator = document.activeElement === event?.currentTarget ? event.currentTarget : null;
         const intent = readingIntent, navigation = navigationGeneration, context = route;
         fresh.retryApply();
-        if (fresh.snapshot().phase !== "applying") fresh.begin({ checkSource: false });
+        if (fresh.snapshot().phase !== "applying" && !nativeCollectIntent) fresh.begin({ checkSource: false });
         collectionReadGeneration++;
         const readGeneration = collectionReadGeneration;
         clearTimeout(pollTimer);
@@ -2494,13 +3712,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderFreshActivity();
         let statusError, expectedSource;
         try {
-            const status = await api("/api/collection/status", {});
-            if (readGeneration !== collectionReadGeneration) return false;
+            const intent = nativeCollectIntent, input = nativeReceiptQuery();
+            if (intent && !input.operationId) fresh.nativeRecoveryFailed("The original panel owner is no longer available.");
+            if (sourceCollection.active && input.operationId) {
+                const receiptStatus = await api("/api/collection/microsoft/status", input);
+                if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration) return false;
+                if (intent === nativeCollectIntent && nativeIntentCurrent(intent)) {
+                    if (receiveNativeReceipt(receiptStatus, intent)) await qualifyNativeReadback(intent);
+                }
+            }
+            const status = await readCollectionStatus(sourceCollection.active ? {} : input);
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration) return false;
             expectedSource = status.configVersion;
             fresh.retryApply({ configVersion: status.configVersion });
-            renderCollection(status);
-        } catch (error) { statusError = error; }
-        if (readGeneration !== collectionReadGeneration) return false;
+            if (!sourceCollection.active && intent && input.operationId && intent === nativeCollectIntent && nativeIntentCurrent(intent)) receiveNativeReceipt(status, intent);
+            renderCollection(status, publication);
+        } catch (error) {
+            statusError = error;
+            if (api.isCurrent(publication) && nativeCollectIntent) fresh.nativeRecoveryFailed(error.message, error.reason);
+        }
+        if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration) return false;
+        if (statusOnly) return { statusError, expectedSource };
         if ($("overlay").open || reportJourney?.isReviewOpen() || collectionSettings?.hasDraft()) {
             fresh.defer();
             $("workspace").setAttribute("aria-busy", "false");
@@ -2511,26 +3743,175 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const pending = load({ background: true, expectedSource }), request = generation;
         const loaded = await pending;
-        if (statusError && (!loaded || !state?.collection)) collectionUnavailable(statusError.message, statusError.reason);
+        if (!api.isCurrent(publication)) return false;
+        if (statusError && (!loaded || !state?.collection)) collectionUnavailable(statusError.message, statusError.reason, publication);
         // An unrelated lastCheck cannot confirm or unlock a source request whose response was lost.
         renderFreshActivity();
         if (loaded && request === generation && navigation === navigationGeneration && context === route
             && intent === readingIntent && initiator
             && (document.activeElement === document.body || document.activeElement === initiator)) {
             const fallback = $("checkActivity").checkVisibility() ? $("checkActivity")
-                : $("activityUpdateToggle").checkVisibility() ? $("activityUpdateToggle")
-                    : $("freshAwayLink").checkVisibility() ? $("freshAwayLink") : $("pageTitle");
+                : $("freshAwayLink").checkVisibility() ? $("freshAwayLink") : $("pageTitle");
             ux.restoreFocus(initiator.isConnected && initiator.checkVisibility() && !initiator.disabled ? initiator : fallback);
         }
         return loaded;
     }
-    function renderNavigation() {
+    function openChartReference() {
+        if (route.view !== "analyze" || semanticQuery !== null && !semanticBound) return;
+        analyzeControls.close(false);
+        selectControls?.close(); sidebar.close(false); ux.hideTooltip();
+        chartReferenceOrigin = readingPositions.get(readingKey(route)) ?? null;
+        chartReferenceUI.open();
+    }
+    function readChartReferenceContext() {
+        if (underlyingRoute().compare === "periods") {
+            const pair = periodComparisonUI.acceptedPair();
+            const description = analyzeScope.describePair(pair);
+            const target = pair ? periodComparisonUI.recordsTarget(pair) : null;
+            return Object.freeze({
+                key: pair?.key || "period:unavailable", revision: pair?.revision,
+                layer: pair?.comparison.definitions.layer || applied?.layer || "tool",
+                mode: "comparison", available: Boolean(pair), canOpenData: Boolean(target),
+                qualification: description?.text ?? "", qualificationParts: description?.parts.slice() ?? [],
+                notice: pair ? "" : "Comparison records are not available for the current view.",
+                unavailableReason: pair ? "There is no current period-record roster to open." : "Apply both periods before opening their records.",
+            });
+        }
+        const available = Boolean(chartReferenceAccepted && (semanticQuery === null || semanticBound));
+        if (!available) return Object.freeze({
+            key: "analysis:unavailable", layer: applied?.layer || "tool", mode: "analyze",
+            available: false, canOpenData: false,
+            qualification: "", qualificationParts: [],
+            notice: semanticQuery !== null && !semanticBound ? "Search has not supplied a current selection." : "Chart numbers are unavailable.",
+            unavailableReason: "Open a current Analyze view before reading exact numbers.",
+        });
+        const current = chartReferenceInput.state === state && chartReferenceInput.applied === applied && chartReferenceInput.slice === slice
+            && (!boundedIncludesMicrosoft() || acceptedNativeView()?.status === "bounded" && !search.trim() && !route.withinServices);
+        return Object.freeze({
+            ...chartReferenceAccepted, mode: "analyze", available: true, canOpenData: current && !isLoading && !isStale,
+            notice: isLoading || !current ? "The view is updating. Earlier accepted numbers are shown."
+                : isStale ? "These numbers are from an earlier accepted view." : "",
+            unavailableReason: "Wait for a current view before opening matching records.",
+        });
+    }
+    function publishChartReference() {
+        const scope = acceptedAnalyzeScope(), model = percentages.referenceModel();
+        if (!scope || !state || !Number.isSafeInteger(state.revision) || state.revision < 0 || !applied || !slice || !model) {
+            chartReferenceAccepted = null; chartReferenceInput = null; return;
+        }
+        if (chartReferenceRevision !== state.revision) { chartReferenceKeys.clear(); chartReferenceRevision = state.revision; }
+        const signature = JSON.stringify([state.revision, state.collection?.configVersion, state.deletionVersion,
+            applied, appliedRoute.withinServices || "", appliedRoute.search?.trim() || "",
+            acceptedNativeView()?.selectionRef, acceptedNativeView()?.textSelection?.membershipRef,
+            semanticQuery === null ? null : { policy: semanticMembership?.receipt?.matchPolicyId, types: semanticMembership?.receipt?.queryTypes },
+            slice.rowIds, slice.scenarioIds, model]);
+        if (!chartReferenceKeys.has(signature)) chartReferenceKeys.set(signature, `analysis:${state.revision}:${++chartReferenceVersion}`);
+        chartReferenceAccepted = Object.freeze({
+            key: chartReferenceKeys.get(signature), revision: state.revision, layer: applied.layer,
+            ...assessmentFactories.chartReference.facts(analytics, model.github ?? model),
+            nativeView: boundedIncludesMicrosoft() && !search.trim() && !route.withinServices ? acceptedNativeView() : null,
+            nativeOnly: Boolean(sharedNativeView() && !analytics.totals.count && !slice.scenarios.length
+                || sourceCollection.active && applied.filters.sources?.length
+                && applied.filters.sources.every(source => boundedContract.sourceIds.includes(source))),
+            qualification: scope.restrictionText, qualificationParts: scope.restrictions.slice(),
+            coverage: [...new Set([acceptedAnalyzePeriod()?.warning, chartReferenceSourceCoverage].filter(Boolean))].join(" "),
+        });
+        chartReferenceInput = { state, applied, slice };
+    }
+    function renderChartReferenceExact(topic, host, identity, presentationState) {
+        const context = readChartReferenceContext();
+        if (context.mode !== "analyze" || !context.canOpenData || identity.key !== context.key || identity.revision !== context.revision) {
+            return { status: "unavailable", reason: "The chart view changed. Open its current exact data." };
+        }
+        const isCurrent = () => {
+            const current = readChartReferenceContext();
+            return presentationState.isCurrent() && current.mode === "analyze" && current.canOpenData
+                && current.key === identity.key && current.revision === identity.revision;
+        };
+        const guarded = link => {
+            const guard = event => {
+                if (isCurrent()) {
+                    if (event.type !== "click" || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+                    event.preventDefault(); event.stopImmediatePropagation();
+                    const next = { ...readRoute(link.getAttribute("href"), null), search: appliedRoute.search, localSearch: appliedRoute.localSearch };
+                    if (readingKey(next) === readingKey(appliedRoute)) { chartReferenceUI.leave(); revealResults(); }
+                    else navigate(next, false, { revealReferenceRecords: true });
+                    return;
+                }
+                event.preventDefault(); event.stopImmediatePropagation();
+                announce("That earlier chart link is no longer current.", "stale");
+                chartReferenceUI.refresh();
+            };
+            for (const event of ["click", "auxclick"]) link.addEventListener(event, guard, { capture: true });
+            return link;
+        };
+        if (context.nativeOnly) {
+            host.replaceChildren();
+            boundedNative.renderExact(host, topic, isCurrent, entry => !presentationState.rowQuery?.trim()
+                || localSearch.phrase(presentationState.rowQuery, [entry.label]));
+            return { status: "ready" };
+        }
+        if (["outcomes", "services", "models", "tools"].includes(topic)) {
+            percentages.renderExact(topic, host);
+            for (const link of host.querySelectorAll("a")) guarded(link);
+        } else {
+            const chartType = { time: "time", categories: "workload", paths: "endpoint" }[topic];
+            if (!chartType) throw new TypeError("Choose a supported exact chart table.");
+            host.replaceChildren(chartReferenceCountTable);
+            if (chartType === "time" && !analytics.timeSeries) {
+                return { status: "unavailable", reason: "Dated chart values are unavailable for this accepted view." };
+            }
+            renderCountTable(chartReferenceCountTable, chartType, (group, label) => {
+                const changes = chartType === "time" ? { range: "custom", from: group.from, to: group.to }
+                    : chartType === "endpoint" ? { endpoint: group.id } : { service: group.label };
+                    const next = canonicalRoute({ ...appliedRoute, view: "analyze", request: undefined, call: undefined, callRevision: undefined,
+                        ...changes, ...(context.nativeView ? { source: "github-copilot" } : {}), page: undefined });
+                return guarded(viewKey(routeLink(label, next, "chart-data-action text-link"), "chart-reference:" + topic + ":" + (group.id || group.date)));
+            }, { referenceKey: identity.key, isCurrent, rowQuery: presentationState.rowQuery, resetPage: presentationState.resetPage });
+        }
+        if (context.nativeView) boundedNative.renderExact(host, topic, isCurrent, entry => !presentationState.rowQuery?.trim()
+            || localSearch.phrase(presentationState.rowQuery, [entry.label]));
+        return { status: "ready" };
+    }
+    function openChartReferencePeriodRecords(identity) {
+        const publication = api.publicationToken();
+        if (!publication) return;
+        const target = periodComparisonUI.recordsTarget(identity);
+        if (!target) {
+            announce("The comparison changed. Apply the current periods before opening their records.", "stale");
+            chartReferenceUI.refresh();
+            return;
+        }
+        const navigation = navigationGeneration, intent = readingIntent, origin = chartReferenceOrigin;
+        chartReferenceUI.leave();
+        requestAnimationFrame(() => {
+            if (!api.isCurrent(publication) || navigation !== navigationGeneration || intent !== readingIntent) return;
+            const current = periodComparisonUI.recordsTarget(identity);
+            if (!current) { announce("The comparison records are no longer current.", "stale"); return; }
+            const savedFocus = origin?.focus?.id ? $(origin.focus.id) : origin?.focus?.key ? keyed(origin.focus.key) : null;
+            if (savedFocus && (current.region.contains(savedFocus) || savedFocus === current.tab)) restoreReading(origin);
+            else {
+                current.tab.focus({ preventScroll: true });
+                current.tab.scrollIntoView({ block: "center", inline: "nearest" });
+            }
+        });
+    }
+    function refreshChartReference() {
+        if (clearingAccess || !api.publicationToken()) return;
+        analyzeReferenceEntry.show(route.view === "analyze" && (semanticQuery === null || semanticBound));
+        if (route.view !== "analyze") chartReferenceUI.leave();
+        else chartReferenceUI.refresh();
+    }
+    function renderNavigation(navigationOrigin = underlyingRoute()) {
+        analyzeReferenceEntry.show(route.view === "analyze" && (semanticQuery === null || semanticBound));
+        analyzeControls.context({ analyze: route.view === "analyze", compare: route.view === "analyze" && route.compare === "periods",
+            ordinary: route.view === "analyze" && route.compare !== "periods" && (semanticQuery === null || semanticBound) });
         const finishRecoveryPresentation = assessmentUI?.prepareRecoveryPresentation();
-        $("wireAnalysisSearchNotice").hidden = semanticQuery === null || route.view !== "analyze";
+        $("wireAnalysisSearchNotice").hidden = semanticQuery === null || route.view !== "analyze" || !$("wireAnalysisSearchNotice").textContent;
         const active = route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
-            node.href = routeUrl(routeFor(view, { request: undefined, task: undefined }));
+            node.href = routeUrl(isComparisonAnalyzeLink(node, navigationOrigin) ? comparisonExitRoute(navigationOrigin) : routeFor(view, { request: undefined, task: undefined }));
             if (view === active && node.closest("nav")) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
         });
@@ -2538,9 +3919,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
             for (const id of ids) $(id).hidden = route.view !== view || view === "analyze" && semanticQuery !== null && !semanticBound;
         }
-        $("resultsLink").hidden = route.view !== "analyze" || semanticQuery !== null && !semanticBound;
         $("filters").hidden = configurationOrStatus || route.view === "request" || route.view === "reports";
-        $("filterHeading").hidden = $("filters").hidden;
+        $("filterHeading").hidden = false;
         $("appliedFilters").hidden = $("filters").hidden;
         $("filterChips").hidden = configurationOrStatus || route.view === "reports" || route.view === "request";
         $("coverage").hidden = configurationOrStatus || route.view === "request";
@@ -2584,18 +3964,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ["Project", source.projectId ? source.project || source.projectId : null], ["Project ID", source.projectId],
             ], { inlineHelp: false }), "source-header-details", "source:" + source.sessionId));
         }
-        const actions = { analyze: ["Create report", "reports"], request: ["Review selection", "reports"], reports: ["Back to Analyze", "analyze"], settings: ["Back to Analyze", "analyze"], "collection-status": ["Back to Analyze", "analyze"] };
-        const [label, target] = actions[route.view];
-        $("pageAction").textContent = label;
-        $("pageAction").href = routeUrl(routeFor(target, target === "reports" ? { task: "create" } : {}));
-        const actionHost = route.view === "analyze" ? $("analyzeResultActions") : route.view === "reports" ? $("pageHeadingActions") : route.view === "request" ? $("activitySelectionContext") : $("pagePrimaryActions");
-        if ($("pageAction").parentElement !== actionHost) {
-            if (route.view === "reports") actionHost.prepend($("pageAction"));
-            else actionHost.append($("pageAction"));
+        $("pageAction").textContent = "Create report";
+        $("pageAction").href = routeUrl(routeFor("reports", { task: "create" }));
+        const contextualAction = $("reportContextAction"), reviewingSelection = route.view === "request";
+        contextualAction.textContent = reviewingSelection ? "Review selection" : "Back to Analyze";
+        contextualAction.href = routeUrl(routeFor(reviewingSelection ? "reports" : "analyze", reviewingSelection ? { task: "create" } : {}));
+        const actionHost = reviewingSelection ? $("activitySelectionContext") : $("pageHeadingActions");
+        if (contextualAction.parentElement !== actionHost) {
+            if (reviewingSelection) actionHost.append(contextualAction);
+            else actionHost.prepend(contextualAction);
         }
-        $("pageAction").hidden = configurationOrStatus || route.view === "request" && !reportSelection().requests.length;
-        $("pageAction").classList.toggle("button-link", route.view !== "request");
-        $("pageAction").classList.toggle("text-link", route.view === "request");
+        const reportMembership = reportSelection();
+        contextualAction.hidden = !["request", "reports"].includes(route.view)
+            || !reportMembership.requests.length && !reportMembership.nativeConversationCount;
+        contextualAction.classList.toggle("button-link", !reviewingSelection);
+        contextualAction.classList.toggle("text-link", reviewingSelection);
         sessionReportButton.hidden = route.view !== "analyze" || !route.session || applied.layer === "http";
         $("resetView").hidden = configurationOrStatus || route.view === "reports" || route.view === "request";
         $("resetView").disabled = !viewChanged();
@@ -2624,7 +4007,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("contextReturn").replaceChildren(...(back ? [back] : []));
             contextReturnKey = returnKey;
         }
-        if ($("contextReturn").parentElement !== $("pagePrimaryActions")) $("pagePrimaryActions").prepend($("contextReturn"));
+        const returnHost = route.view === "analyze" ? $("analyzeReturnActions") : $("pagePrimaryActions");
+        if ($("contextReturn").parentElement !== returnHost) returnHost.prepend($("contextReturn"));
         $("contextReturn").hidden = !returnRoute;
         const reports = route.view === "reports";
         const inactiveClear = reports ? $("activityClearSelection") : $("reportClearSelection");
@@ -2656,6 +4040,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("savedReportsPanel").hidden = creating || comparing || reading;
         $("comparisonWorkspace").hidden = !comparing;
         $("savedReportReader").hidden = !reading;
+        const filePanel = creating && !$("reportStage3")?.hidden ? $("reportFileInspection")
+            : comparing ? $("comparisonInspectionPanel1") : null;
+        $("reportsView").classList.toggle("report-file-stage", route.view === "reports" && Boolean(filePanel && !filePanel.hidden));
         if ($("reportTaskNav").parentElement !== $("pagePrimaryActions")) $("pagePrimaryActions").append($("reportTaskNav"));
         $("reportTaskNav").hidden = route.view !== "reports" || reading;
         if (route.view === "reports") $("coverage").hidden = true;
@@ -2700,7 +4087,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 term.append(document.createTextNode(`${count(group.count)} ${results.unit(applied.layer, group.count)}: `));
                 if (group.purpose) term.append(document.createTextNode(group.purpose + " "), el("span", "muted", `(${group.tool})`));
                 else term.append(document.createTextNode(group.tool));
-                item.append(term, el("dd", "", `${group.evidence.label}. ${group.evidence.description}`));
+                const representative = rows.find(row => (row.tool || "Tool not identified") === group.tool
+                    && categories.serviceEvidence(row, applied.layer)?.reason === group.evidence.reason);
+                item.append(term, el("dd", "", categories.attributionReading(representative, applied.layer)?.text
+                    ?? `${group.evidence.label}. ${group.evidence.description}`));
                 groups.append(item);
             }
             evidenceHost.append(heading, description, groups);
@@ -2718,6 +4108,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             { label: `${count(rows.length)} ${results.unit(applied.layer, rows.length)}` },
             { label: resultNames(resultSelection(route.result)) },
             { label: authorship.selectionLabel(applied.filters.promptAuthors) },
+            ...(applied.filters.sources?.length ? [{ label: applied.filters.sources.map(filterState.sourceLabel).join(", ") }] : []),
             ...(route.tool ? [{ label: route.tool }] : []),
             ...(route.services ? [{ label: $("serviceFocusScope").textContent }] : []),
             { label: route.service ? serviceLabel(route.service) : allCategories() },
@@ -2763,14 +4154,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             chip.append(ux.icon("close"));
             host.append(chip);
         }
-        const labels = { tool: "Tool", services: "Service", service: "Category", result: "Outcome", authors: "Author", project: "Copilot project",
+        if (sourceCollection.active && route.nativeGroup) {
+            const group = state.nativeRead?.grouping?.groups.find(group => group.id === route.nativeGroup);
+            const chip = button(`Microsoft group: ${group?.label ?? "Unavailable"}`, () => go("analyze", {
+                nativeGroup: undefined, request: undefined, page: undefined,
+            }), "filter-chip");
+            chip.setAttribute("aria-label", "Remove Microsoft group restriction");
+            chip.append(ux.icon("close")); host.append(chip);
+        }
+        const labels = { source: "Source", tool: "Tool", services: "Service", service: "Category", result: "Outcome", authors: "Author", project: "Copilot project",
             endpoint: "API path", session: "Copilot chat", layer: "Activity", scope: "Collection" };
         const selectedLabel = id => $(id).selectedOptions[0]?.textContent;
         for (const [key, label] of Object.entries(labels)) {
             const selectedValue = key === "authors" && applied ? authorship.filterValue(applied.filters.promptAuthors) : route[key];
             if (!selectedValue || key === "scope" && selectedValue === "history" || key === "layer" && selectedValue === "tool") continue;
             const value = key === "authors" ? authorship.selectionLabel(selectedValue) : key === "result" ? resultNames(resultSelection(selectedValue))
-                : key === "scope" ? scopeLabels[selectedValue] : key === "project" ? selectedLabel("projectFilter")
+                : key === "source" ? selectedLabel("sourceFilter") : key === "scope" ? scopeLabels[selectedValue] : key === "project" ? selectedLabel("projectFilter")
                     : key === "session" ? selectedLabel("chatFilter") : key === "layer" ? selectedLabel("layerFilter")
                         : key === "endpoint" ? "Selected path"
                             : key === "tool" ? selectedValue : key === "services" ? selectedValue.split(",").map(serviceLabel).join(", ") : serviceLabel(selectedValue);
@@ -2806,42 +4205,108 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function renderPeriodFeedback() {
-        $("periodFeedback").hidden = route.view !== "analyze";
-        if ($("periodFeedback").hidden) return;
+        if (route.view !== "analyze") return;
         const unbound = semanticQuery !== null && !semanticBound;
         $("periodResult").hidden = unbound;
         $("periodHint").hidden = unbound;
-        $("periodActions").hidden = unbound;
-        if (unbound) { $("periodCoverage").hidden = true; return; }
+        if (unbound) { $("periodCoverage").hidden = true; return renderAnalyzeScope(); }
         const rows = selectionRows();
-        const model = periodFlow({ rows, filters: applied.filters, coverage: state.collection?.config?.approved ? state.collection.checkedWindow : state.coverage, timeContext: applied.timeContext, session: Boolean(route.session), stale: isStale, layer: applied.layer, unit: results.unit(applied.layer, rows.length) });
-        $("periodFeedback").classList.add("home-period-summary");
+        const model = acceptedAnalyzePeriod();
         setText(homeCount, count(rows.length));
         setText(homeUnit, results.unit(applied.layer, rows.length));
         $("periodResult").replaceChildren(...(isStale ? ["Previous results: "] : []), homeCount, " ", homeUnit, ` (${model.caption})`);
         $("periodResult").dataset.revision = String(state.revision);
-        setText($("periodHint"), isStale ? "The update failed. The last applied period is still shown; retry before using these results."
+        const hint = isStale ? "The update failed. The last applied period is still shown; retry before using these results."
             : !state.scenarios.length && !collection?.config ? "No activity has been collected."
-                : model.requests ? `${count(model.requests)} ${applied.layer === "http" ? "record group" : "interaction"}${model.requests === 1 ? "" : "s"} · ${applied.layer === "http" ? `${count(model.sessions)} recorder sources` : chatCopy.count(model.sessions)}`
-                    : model.next);
+                : model.requests ? model.countText : model.next;
+        analyzeControls.scopeCaption($("periodHint"), { text: hint,
+            parts: !isStale && model.requests ? model.countParts : [hint] });
         $("periodHint").hidden = !rows.length && !isStale;
         setText($("periodCoverageText"), model.warning);
         $("periodCoverage").hidden = !model.warning;
         $("periodHistoryLink").hidden = !model.historyLink;
+        return renderAnalyzeScope(model);
+    }
+    function acceptedAnalyzePeriod() {
+        if (!state || !applied || !analytics || !appliedRoute) return null;
+        const rows = selectionRows();
+        return periodFlow({ rows, filters: applied.filters,
+            coverage: state.collection?.config?.approved ? state.collection.checkedWindow : state.coverage,
+            timeContext: applied.timeContext, session: Boolean(appliedRoute.session), stale: isStale,
+            layer: applied.layer, unit: results.unit(applied.layer, rows.length) });
+    }
+    function acceptedAnalyzeScope(period = acceptedAnalyzePeriod()) {
+        if (!period || semanticQuery !== null && !semanticBound) return null;
+        const projects = applied.filters.projectIds || [], sources = applied.filters.sourceSessionIds || [];
+        const names = [...new Set([
+            ...projects.map(id => state.scenarios.find(row => row.projectId === id)),
+            ...sources.map(id => state.scenarios.find(row => row.sourceSessionId === id)),
+        ])].filter(Boolean);
+        const snapshot = {
+            scenarios: names.map(({ projectId, project, sourceSessionId, sourceSessionName }) => ({ projectId, project, sourceSessionId, sourceSessionName })),
+            sessions: sources.map(id => state.sessions?.find(row => row.sessionId === id)).filter(Boolean).map(({ sessionId, name }) => ({ sessionId, name })),
+        };
+        return analyzeScope.describe({ applied, acceptedRoute: { withinServices: appliedRoute.withinServices,
+            nativeGroupLabel: appliedRoute.nativeGroup ? state.nativeRead?.grouping?.groups.find(group => group.id === appliedRoute.nativeGroup)?.label
+                ?? "Selected group unavailable" : undefined }, snapshot, analytics,
+            period: period.caption, hasSearch: Boolean(appliedRoute.search?.trim()) || semanticQuery !== null && semanticBound });
+    }
+    function renderAnalyzeScope(period = acceptedAnalyzePeriod()) {
+        const description = acceptedAnalyzeScope(period);
+        if (!description) { analyzeControls.caption(null); return; }
+        const update = activityUpdatePresentation();
+        const updateState = fresh.snapshot();
+        const notice = historyStatus.entry(collection, { hasEvidence: Boolean(state.scenarios.length),
+            unavailable: Boolean(collectionReadError), reason: collectionReadReason });
+        const updateError = updateState.readFailed || updateState.sourceFailure || collectionReadError
+            || isStale && !isLoading || collection?.state === "error";
+        const updateExplained = route.view === "analyze" && (update.entry.pending && $("analyzeRefresh").checkVisibility()
+            || !$("freshAwayNotice").hidden);
+        const errors = [
+            isStale && !isLoading ? "Previous results. The view could not update." : "",
+            notice?.severity === "error" ? notice.text : "",
+            updateState.readFailed || updateState.sourceFailure ? updateState.message : "",
+        ].filter(Boolean);
+        const status = [
+            nativeActivityDatesUnavailable() && (applied.filters.from || applied.filters.to)
+                ? analytics.population?.coverage?.messageCreationDatesAvailable && analytics.population.contextOnlyScenarioIds?.length
+                    ? "Microsoft context uses message dates; call dates are unavailable."
+                    : "Microsoft call dates are unavailable; undated calls are excluded." : "",
+            !updateExplained && (update.entry.attention || update.reread?.needsReceipt) && (!updateError || update.entry.pending) ? update.label : "",
+            !updateExplained && updateState.sourceUnknown ? "A local history check is unconfirmed. It will not be repeated." : "",
+            !updateExplained && updateState.sourceBlocked ? "Source checks are read-only in this tab." : "",
+            period.warning,
+        ].filter(Boolean);
+        analyzeControls.caption({ ...description, status: [...new Set(status)].join(" "), error: [...new Set(errors)].join(" "), revision: state.revision,
+            empty: analytics.totals.count === 0 && !slice?.scenarios.length && !sharedNativeView()?.aggregates.conversations && !isLoading && !isStale });
+        publishAcceptedListScope(description);
+        return description;
+    }
+    function publishAcceptedListScope(description) {
+        const host = $("activityListScope");
+        if (!host) return;
+        // Defaults are already described by the global Dates and collection controls.
+        const parts = description?.parts.filter((part, index) => index === 0
+            ? Boolean(applied.filters.from || applied.filters.to) : index !== 1 || applied.filters.scope !== "history") ?? [];
+        analyzeControls.scopeCaption(host, description ? { ...description, parts, text: parts.join("; ") } : null);
+        host.hidden = !parts.length;
+        if (description) host.dataset.revision = String(state.revision);
+        else delete host.dataset.revision;
     }
     function renderControls() {
         resultLabels = results.labels(applied.layer);
+        sourceOptions();
         const projects = new Map(state.scenarios.map((scenario) => [scenario.projectId || "unscoped", scenario.projectId ? scenario.project || scenario.projectId : "Project not recorded"]));
-        $("projectFilter").replaceChildren(option("all", "All projects"), ...[...projects].map(([id, name]) => option(id, name)));
+        replacePrivateChoices($("projectFilter"), option("all", "All projects"), ...[...projects].map(([id, name]) => option(id, name)));
         const workloads = analytics.filterOptions?.workloads || analytics.filterOptions?.services || [];
-        $("serviceFilter").replaceChildren(option("all", "All categories"), ...workloads.map((item) => option(typeof item === "string" ? item : item.id, serviceLabel(typeof item === "string" ? item : item.label))));
-        $("toolFilter").replaceChildren(option("all", "All tools"), ...(analytics.filterOptions?.tools || []).map(tool => option(tool, tool)));
+        replacePrivateChoices($("serviceFilter"), option("all", "All categories"), ...workloads.map((item) => option(typeof item === "string" ? item : item.id, serviceLabel(typeof item === "string" ? item : item.label))));
+        replacePrivateChoices($("toolFilter"), option("all", "All tools"), ...(analytics.filterOptions?.tools || []).map(tool => option(tool, tool)));
         const services = (analytics.filterOptions?.services || []).filter(value => !["Discovery", "Multiple workloads", "Unknown"].includes(value));
-        $("serviceAssociationFilter").replaceChildren(option("all", "All services"), ...services.map(value => option(value, serviceLabel(value))));
+        replacePrivateChoices($("serviceAssociationFilter"), option("all", "All services"), ...services.map(value => option(value, serviceLabel(value))));
         const chats = new Map((state.sessions || []).map(source => [source.sessionId, source.name || chatCopy.unnamed]));
         for (const scenario of state.scenarios) if (scenario.sourceSessionId && !chats.has(scenario.sourceSessionId)) chats.set(scenario.sourceSessionId, scenario.sourceSessionName || chatCopy.unnamed);
         setText($("chatFilter").closest(".filter-field").querySelector("label"), applied.layer === "http" ? "Recorder source" : "Copilot chat");
-        $("chatFilter").replaceChildren(option("all", applied.layer === "http" ? "All recorder sources" : "All Copilot chats"), ...[...chats].map(([id, name]) => {
+        replacePrivateChoices($("chatFilter"), option("all", applied.layer === "http" ? "All recorder sources" : "All Copilot chats"), ...[...chats].map(([id, name]) => {
             const reference = sourceReference({ sessionId: id, name });
             return option(id, reference ? `${name} (${reference})` : name);
         }));
@@ -2850,40 +4315,232 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const selectedResults = resultSelection(applied.filters.outcomes);
         const choices = applied.layer === "code-reference" ? [...new Set(["unknown", ...selectedResults])] : resultKeys;
         const totals = analytics.resultFacet.totals;
-        const countsAvailable = semanticQuery === null || semanticBound;
-        const resultOptions = choices.map(key => [key, applied.layer === "code-reference" && key !== "unknown" ? `Previous: ${results.labels("tool")[key]}` : resultLabels[key], countsAvailable ? totals[key] : null]);
-        $("outcomeFilter").dataset.allLabel = countsAvailable ? `All results (${count(totals.count)})` : "All results (counts unavailable)";
+        const githubCountsAvailable = semanticQuery === null || semanticBound && semanticComplete;
+        const nativeOnly = sourceCollection.active && applied.filters.sources?.length
+            && applied.filters.sources.every(source => boundedContract.sourceIds.includes(source));
+        const nativeView = acceptedNativeView();
+        const nativeFacet = boundedIncludesMicrosoft() && nativeView?.status === "bounded" && !search.trim()
+            && !route.withinServices ? nativeView.resultFacet : null;
+        const countsAvailable = nativeOnly ? Boolean(nativeFacet) : githubCountsAvailable || Boolean(nativeFacet);
+        const optionCount = key => {
+            if (!countsAvailable) return null;
+            if (!boundedIncludesMicrosoft()) return githubCountsAvailable ? count(totals[key]) : null;
+            const microsoft = nativeFacet ? count(key === "count" ? nativeFacet.count : nativeFacet.outcomes[key]) : "unavailable";
+            return nativeOnly ? microsoft : `GitHub ${githubCountsAvailable ? count(totals[key]) : "unavailable"}; Microsoft ${microsoft}`;
+        };
+        const resultOptions = choices.map(key => [key, applied.layer === "code-reference" && key !== "unknown" ? `Previous: ${results.labels("tool")[key]}` : resultLabels[key], optionCount(key)]);
+        $("outcomeFilter").dataset.allLabel = countsAvailable ? `All results (${optionCount("count")})` : "All results (counts unavailable)";
         const signature = JSON.stringify([applied.layer, resultOptions]);
         if ($("outcomeFilter").dataset.optionsSignature !== signature) {
-            $("outcomeFilter").replaceChildren(...resultOptions.map(([key, label, total]) => {
-                const node = option(key, `${label} (${total === null ? "count unavailable" : count(total)})`);
+            replacePrivateChoices($("outcomeFilter"), ...resultOptions.map(([key, label, total]) => {
+                const node = option(key, `${label} (${total === null ? "count unavailable" : total})`);
                 node.dataset.optionLabel = label;
-                node.dataset.count = total === null ? "count unavailable" : count(total);
+                node.dataset.count = total === null ? "count unavailable" : total;
                 return node;
             }));
             $("outcomeFilter").dataset.optionsSignature = signature;
         }
         $("outcomeFilter").disabled = applied.layer === "code-reference";
         $("resultSummary").dataset.revision = String(state.revision);
+        applyNativeInventoryOptions();
         syncControls();
     }
+    const nativeFilterDimensions = { toolFilter: "tools", outcomeFilter: "outcomes", sourceFilter: "sources",
+        chatFilter: "conversations", serviceAssociationFilter: "services", serviceFilter: "workloads", promptAuthorFilter: "promptAuthors" };
+    function nativeInventoryPaging(select) {
+        if (!sourceCollection.active || !state?.nativeRead || !nativeFilterDimensions[select.id]) return null;
+        const dimension = nativeFilterDimensions[select.id], { value, error, loading, bound } = boundedNative.inventory(dimension);
+        if (!bound) return { label: "Microsoft options unavailable." };
+        if (loading) return { label: "Reading Microsoft choices..." };
+        if (error) return { label: "Microsoft choices unavailable. " + error,
+            first: () => boundedNative.pageInventory(dimension, false) };
+        if (!value) return { label: "Reading Microsoft choices...",
+            load: async () => {
+                await boundedNative.pageInventory(dimension, false);
+                const current = boundedNative.inventory(dimension);
+                return Boolean(current.value || current.error);
+            } };
+        if (value.qualification === "unqualified") return { label: "Microsoft values are unavailable for this filter." };
+        if (!value.page.nextCursor && value.page.items.length === value.aggregates.options && !value.aggregates.unavailableRows) return null;
+        return { label: `${value.page.items.length} of ${count(value.aggregates.options)} Microsoft options.`
+                + (value.aggregates.unavailableRows ? ` Values unavailable for ${count(value.aggregates.unavailableRows)} records.` : ""),
+            ...(value.page.nextCursor ? { next: () => boundedNative.pageInventory(dimension, true) } : {}),
+            first: () => boundedNative.pageInventory(dimension, false) };
+    }
+    const pendingInventoryUpdates = new Set();
+    function refreshInventoryControls() {
+        if (!pendingInventoryUpdates.size || !state || !applied || isLoading || clearingAccess || !api.publicationToken()
+            || document.querySelector(".select-popup:not([hidden])")) return;
+        const pending = [...pendingInventoryUpdates]; pendingInventoryUpdates.clear();
+        for (const dimension of pending) applyNativeInventoryOptions(dimension);
+        syncControls();
+    }
+    function applyNativeInventoryOptions(onlyDimension) {
+        if (!sourceCollection.active) return;
+        const nativeOnly = applied.filters.sources?.length && applied.filters.sources.every(source => boundedContract.sourceIds.includes(source));
+        for (const [id, dimension] of Object.entries(nativeFilterDimensions)) {
+            if (onlyDimension && dimension !== onlyDimension) continue;
+            const control = $(id), inventory = boundedNative.inventory(dimension), value = inventory.value;
+            for (const item of [...control.options]) if (item.dataset.nativeInventory === "true") item.remove();
+            if (id === "promptAuthorFilter") {
+                control.disabled = Boolean(nativeOnly);
+                continue;
+            }
+            if (id === "sourceFilter") {
+                for (const item of control.options) if (boundedContract.sourceIds.includes(item.value)) {
+                    delete item.dataset.detail;
+                }
+                continue;
+            }
+            const enabled = value?.qualification === "available";
+            if (nativeOnly && id !== "outcomeFilter") {
+                const all = control.options[0]?.cloneNode(true);
+                replacePrivateChoices(control, ...(all ? [all] : []));
+            }
+            control.disabled = id === "outcomeFilter" && applied.layer === "code-reference"
+                || Boolean(nativeOnly && !enabled && ["services", "workloads"].includes(dimension));
+            if (id === "outcomeFilter") {
+                for (const item of control.options) {
+                    const row = enabled && value.page.items.find(row => row.value === item.value);
+                    const facet = sharedNativeView()?.resultFacet;
+                    const nativeCount = row ? count(row.count) : enabled && value.page.nextCursor === null ? "0"
+                        : facet ? count(facet.outcomes[item.value]) : "unavailable";
+                    if (boundedIncludesMicrosoft()) {
+                        item.dataset.count = nativeOnly ? nativeCount : `GitHub ${semanticQuery === null || semanticBound && semanticComplete
+                            ? count(analytics.resultFacet.totals[item.value]) : "unavailable"}; Microsoft ${nativeCount}`;
+                        item.label = `${resultLabels[item.value]} (${item.dataset.count})`;
+                    }
+                }
+                continue;
+            }
+            if (enabled) for (const row of value.page.items) {
+                let item = [...control.options].find(option => option.value === row.value);
+                if (!item) {
+                    item = option(row.value, dimension === "conversations" ? `${row.label} (${row.value.slice(0, 8)})` : row.label);
+                    item.dataset.nativeInventory = "true"; control.append(item);
+                }
+                item.dataset.detail = `${count(row.count)} Microsoft ${applied.layer === "tool" ? "tool calls" : "returned results"}`;
+            }
+            const requested = { toolFilter: route.tool, chatFilter: route.session,
+                serviceFilter: route.service, serviceAssociationFilter: route.services }[id];
+            if (requested && ![...control.options].some(item => item.value === requested)) {
+                const item = option(requested, requested);
+                item.dataset.detail = "Current selection is not on this Microsoft option page.";
+                item.dataset.nativeInventory = "true"; control.append(item);
+            }
+        }
+    }
     function visibleResultKeys() { return applied.layer === "code-reference" ? [] : resultKeys.filter((key) => ["success", "failure", "unknown"].includes(key) || analytics.resultFacet.totals[key] > 0 || applied.filters.outcomes?.includes(key)); }
-    function groupSummary(group) { return visibleResultKeys().map((key) => `${count(group[key])} ${resultLabels[key].toLowerCase()} (${percentageMath.percent(group[key], group.total)})`).join(", ") + ". Shares of this column"; }
+    function groupSummary(group) {
+        const separate = group.successRate?.unavailable === "different-source-unit-definitions";
+        return visibleResultKeys().map(key => `${count(group[key])} ${resultLabels[key].toLowerCase()}${separate ? ""
+            : ` (${percentageMath.percent(group[key], group.total)})`}`).join(", ") + (separate ? ". Different source units." : "");
+    }
+    function chartGroupUnit(group) {
+        return group.native ? applied.layer === "tool" ? "native tool calls" : "returned-result observations"
+            : results.unit(applied.layer, group.total);
+    }
     function inspectColumnSection(node, group, key) {
-        ux.tooltip(node, `${resultLabels[key]}: ${count(group[key])} of ${count(group.total)} ${results.unit(applied.layer, group.total)} (${percentageMath.percent(group[key], group.total)}).`,
-            { placement: "right", immediatePointer: true });
+        ux.tooltip(node, `${resultLabels[key]}: ${count(group[key])} of ${count(group.total)} ${chartGroupUnit(group)}${group.successRate?.unavailable
+            ? ". Different source units" : ` (${percentageMath.percent(group[key], group.total)})`}.`,
+            { placement: "right", immediatePointer: true, avoid: () =>
+                (node.closest(".analyze-chart-grid") || node.closest(".flat-time-view,.flat-comparison"))
+                    ?.querySelectorAll(".time-column,.dimensional-count,.dimensional-time-labels,.flat-time-axis,.flat-comparison-action,.flat-comparison-count,.group-name,.percentage-legend-row") || [] });
+    }
+    function nativeActivityDatesUnavailable() {
+        return ["tool", "reported-api"].includes(applied.layer) && analytics.measurementEligibility?.nativeActivityDates === "unqualified"
+            && (!applied.filters.sources?.length || applied.filters.sources.some(source => source.startsWith("microsoft-365-")));
+    }
+    function nativeContextDateBasis(scenarioId) {
+        return analytics.population?.contextOnlyScenarioIds?.includes(scenarioId) ? analytics.population.contextDateBasis : null;
+    }
+    function boundedIncludesMicrosoft() {
+        return sourceCollection.active && (!applied?.filters.sources?.length
+            || applied.filters.sources.some(source => boundedContract.sourceIds.includes(source)));
+    }
+    function acceptedNativeView() {
+        return nativeAnalysisState ? nativeAnalysisState.value ? { status: "bounded", ...nativeAnalysisState.value } : null : state?.nativeRead;
+    }
+    function sharedNativeView() {
+        return boundedIncludesMicrosoft() && !isStale && !search.trim() && !route.withinServices
+            && acceptedNativeView()?.status === "bounded" ? acceptedNativeView() : null;
+    }
+    function nativeViewRestriction() {
+        const reason = acceptedNativeView()?.reason;
+        return isStale ? "Microsoft activity changed. Refresh to continue."
+            : search.trim() || route.withinServices ? "Microsoft activity is unavailable for this filter."
+                : nativeAnalysisState && !nativeAnalysisState.value ? nativeAnalysisState.error || "Searching Microsoft activity..."
+                    : acceptedNativeView()?.status !== "bounded" ? ({
+                        "microsoft-account-not-configured": "Connect Microsoft 365 in Settings.",
+                        "native-retention-not-configured": "Enable Microsoft collection in Settings.",
+                        "native-retained-source-not-committed": "No saved Microsoft activity is available.",
+                    }[reason] || reason || "Microsoft activity could not be read.") : "";
+    }
+    function seedBoundedNative() {
+        const nativeView = acceptedNativeView();
+        const restriction = nativeViewRestriction();
+        boundedNative.seed(nativeView, applied, restriction, nativeAnalysisState?.value ? nativeAnalysisState.binding : state.nativeGroupBinding,
+            { chartType: route.chart || "time" });
+        return { nativeView, restriction };
+    }
+    function renderBoundedAnalyze() {
+        const nativeOnly = applied.filters.sources?.length && applied.filters.sources.every(source => boundedContract.sourceIds.includes(source));
+        const includesNative = boundedIncludesMicrosoft();
+        const { nativeView, restriction } = seedBoundedNative();
+        const githubReady = semanticQuery === null || semanticBound && semanticComplete;
+        $("homeView").querySelector(".analyze-dashboard").hidden = (nativeOnly || !githubReady) && !sharedNativeView();
+        $("activityListContext").hidden = $("activityList").hidden = false;
+        const native = !restriction && nativeView?.status === "bounded" ? nativeView.aggregates : null;
+        const descriptions = [
+            ...(!nativeOnly ? [githubReady ? `GitHub Copilot: ${count(analytics.totals.count)} ${results.unit(applied.layer, analytics.totals.count)}`
+                : "GitHub Copilot: Search membership unavailable"] : []),
+            ...(includesNative ? [native ? `Microsoft: ${count(native.selectedRows)} ${native.layer === "tool" ? "native tool calls"
+                : native.layer === "reported-api" ? "returned-result observations" : "selected records"}`
+                : "Microsoft: current totals unavailable"] : []),
+        ];
+        setText($("periodResult"), descriptions.join(" / "));
+        if (nativeAnalysisState) {
+            setText($("wireAnalysisSearchNotice"), native
+                ? "Reports include whole matching conversations."
+                    + (!nativeOnly && !semanticComplete ? " Current reports need both sources' search results." : "")
+                : nativeAnalysisState.error ? "Microsoft search failed. Try again." : "Searching Microsoft activity...");
+            $("wireAnalysisSearchNotice").hidden = false;
+        }
+        $("periodResult").hidden = false;
+        if (native) setText($("periodHint"), savedMicrosoftSummary(nativeView));
+        $("periodHint").hidden = !native && Boolean(nativeOnly);
+        if (includesNative) $("analyzeEmptyScope").hidden = true;
+        $("comparePeriods").disabled = includesNative && !state.nativeRead?.allViewId;
+        const optionNotice = $("boundedFilterNotice") || el("p", "settings-help");
+        if (!optionNotice.id) { optionNotice.id = "boundedFilterNotice"; $("periodResult").after(optionNotice); }
+        const setupCovered = !nativeOnly && !isStale && !nativeAnalysisState && !search.trim() && !route.withinServices
+            && nativeView?.status === "unavailable" && nativeView.reason === "microsoft-account-not-configured"
+            && !$("collectionNotice").hidden && $("collectionNotice").dataset.severity === "normal"
+            && !$("collectionNoticeAction").hidden;
+        optionNotice.hidden = !includesNative || Boolean(native) || setupCovered;
+        setText(optionNotice, includesNative && !native && !setupCovered ? restriction : "");
     }
     function renderHome() {
         const layer = applied.layer;
         $("homeView").dataset.revision = String(state.revision);
         const chartType = route.chart || "time";
-        $("homeView").dataset.empty = String(analytics.totals.count === 0 && !slice.scenarios.length
+        const native = sharedNativeView();
+        const selectedCount = analytics.totals.count + (native?.aggregates.selectedRows ?? 0);
+        $("homeView").dataset.empty = String(selectedCount === 0 && !slice.scenarios.length && !native?.aggregates.conversations
             && !isLoading && !isStale && (semanticQuery === null || semanticBound && semanticComplete));
-        $("periodLabel").textContent = applied.filters.from || applied.filters.to || analytics.coverage.firstAt
-            ? `${date(applied.filters.from || analytics.coverage.firstAt)} - ${date(applied.filters.to || analytics.coverage.lastAt)}`
+        const recordedDates = [analytics.coverage.firstAt, analytics.coverage.lastAt,
+            ...(native?.timeSeries.points.filter(point => point.count).map(point => point.date) ?? [])].filter(Boolean).sort();
+        $("periodLabel").textContent = applied.filters.from || applied.filters.to || recordedDates.length
+            ? `${date(applied.filters.from || recordedDates[0])} - ${date(applied.filters.to || recordedDates.at(-1))}`
             : "No dated activity in this view";
-        $("meaningMatched").textContent = `${count(analytics.totals.count)} ${results.unit(layer, analytics.totals.count)}`;
-        $("meaningSources").textContent = layer === "http" ? `${count(analytics.coverage.sessionCount)} recorder sources` : chatCopy.count(analytics.coverage.sessionCount);
+        $("meaningMatched").textContent = native
+            ? [...(analytics.totals.count ? [`GitHub: ${count(analytics.totals.count)} ${results.unit(layer, analytics.totals.count)}`] : []),
+                `Microsoft: ${count(native.aggregates.selectedRows)} ${layer === "tool" ? "native tool calls" : "returned-result observations"}`].join(" / ")
+            : `${count(analytics.totals.count)} ${results.unit(layer, analytics.totals.count)}`;
+        $("meaningSources").textContent = native
+            ? [...(analytics.coverage.sessionCount ? [chatCopy.count(analytics.coverage.sessionCount)] : []),
+                `${count(native.aggregates.conversations)} Microsoft conversations`].join(" / ")
+            : layer === "http" ? `${count(analytics.coverage.sessionCount)} recorder sources` : chatCopy.count(analytics.coverage.sessionCount);
         $("takeaway").textContent = "";
         if (layer === "reported-api" && analytics.apiCoverage) $("takeaway").textContent = `${count(analytics.apiCoverage.callsWithNumericStatus)} of ${count(analytics.apiCoverage.eligibleToolCalls)} Work IQ tool calls retained an API status; ${count(analytics.apiCoverage.callsWithoutNumericStatus)} did not. Parent-call coverage is before API-result outcome/path filters; private search applies.`;
         if (layer === "direct-request") $("takeaway").textContent = "Request sites found in recorded commands. A request is not proof of a returned response.";
@@ -2912,30 +4569,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const notes = $("chartReadingNotes");
         const reading = el("dl");
         for (const [label, text] of [
-            ["Chart scale", chartType === "time"
-                ? "Time columns and their recorded-result sections use a linear count scale from zero; small values are not enlarged. Count links and the exact-data table remain usable when a section is too small to see. Percentage charts also preserve actual shares."
-                : "Bars use a linear count scale from zero. Counts, shares and result sections are not enlarged. Full labels and exact-data links remain usable even for tiny values."],
-            ["Chart colors", chartType === "workload" ? `Color identifies the ${layer === "tool" ? "activity category" : "service"}, not its result.` : "Colors match the recorded results."],
             ["Dates and grouping", chartType === "time"
-                ? `${help.fields.timeGrouping} Weeks start Monday; daylight-saving changes follow the display time zone in Settings. Zero means no matching records, not proof that no activity occurred. Scroll horizontally for more dates when needed, or use the exact data below.`
+                ? "Undated records are excluded. Weeks start Monday, in the display time zone."
                 : chartType === "workload" && layer === "tool" ? help.charts.activityCategory : help.charts[chartType]],
-            ["Evidence limits", `${explanations[layer]}${layer === "tool" ? " Tool completion is not an observed Graph HTTP response." : ""}`],
+            ["Evidence limits", explanations[layer]],
         ]) reading.append(el("dt", "", label), el("dd", "", text));
         notes.replaceChildren(reading);
         const previousChart = $("chart").querySelector(".dimensional-scroll");
         if (previousChart) dimensional.disposeView(previousChart);
         $("chart").replaceChildren();
         $("chartFooter").replaceChildren();
-        if (!analytics.totals.count) {
-            $("chart").append(!state.scenarios.length && !collection?.config
-                ? empty("No collected activity yet", "Nothing is collected without your source approval.")
-                : empty("No activity in this slice", layer === "recorded-http" ? "No HTTP status is visible for these requests. Try Direct Graph requests to inspect what was requested." : layer === "direct-request" ? "No qualifying recorded Graph request sites were found in these inspected records. Code references and recorder diagnostics are separate evidence." : layer === "http" ? "No recorder diagnostics match. These are separate from workplace activity." : "Try another date, service, or activity source, or use Reset Analyze beside the filters."));
+        const nativeDatesUnavailable = nativeActivityDatesUnavailable();
+        if (!selectedCount) {
+            $("chart").append(native?.aggregates.conversations ? empty("No recorded tool calls")
+                : nativeDatesUnavailable && (applied.filters.from || applied.filters.to)
+                ? empty("No dated calls", analytics.population?.contextOnlyScenarioIds?.length
+                    ? "Message-date context is available in Activity. Microsoft call dates are unavailable."
+                    : "Microsoft call dates are unavailable. Use All dates to read retained conversations.")
+                : layer === "tool" && slice.scenarios.some(nativeActivity.isNative)
+                    ? empty("No recorded tool calls")
+                : !state.scenarios.length && !native && !collection?.config
+                ? empty("No collected activity yet", "Connect a source in Settings.")
+                : empty("No matching activity", layer === "recorded-http" ? "No HTTP statuses were recorded. Try Graph API call sites." : layer === "direct-request" ? "No Graph request sites were recorded." : layer === "http" ? "No recorder captures match." : "Change a filter or reset Analyze."));
         } else if (chartType === "time") renderTime();
         else renderComparison();
         const selectedResults = resultSelection(applied.filters.outcomes);
-        if (!analytics.totals.count && selectedResults.length) {
+        if (!selectedCount && selectedResults.length) {
             $("chart").replaceChildren(empty(layer === "code-reference" ? "No references match the previous result filter" : "No matching results in this view",
-                "Remove the Outcome chip to show all results. Other filters stay applied."));
+                "Clear the Outcome filter."));
         }
         const definitions = categories.used((analytics.workloadGroups || []).map((group) => group.label)), glossary = el("dl", "service-glossary");
         for (const entry of definitions) {
@@ -2945,37 +4606,42 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         $("serviceDefinitions").replaceChildren(el("h3", "", layer === "tool" ? "Activity categories" : "Service categories"), glossary);
         $("serviceDefinitions").hidden = !definitions.length;
-        const chartRows = chartType === "time" ? analytics.timeSeries?.points?.length || 0 : analytics.groups.length;
+        const chartRows = (chartType === "time" ? analytics.timeSeries?.points?.length || 0 : analytics.groups.length)
+            + (chartType === "time" ? native?.timeSeries.points.length ?? 0 : native?.grouping.groups.length ?? 0);
         $("chartDataTitle").textContent = `${$("chartTitle").textContent} (${count(chartRows)} ${chartRows === 1 ? "row" : "rows"})`;
-        bindDetails($("meaning"), "meaning", open => {
-            if (open) renderCountTable();
-            else $("countTable").replaceChildren();
-        });
-        percentages.update(analytics, { ...applied, search: Boolean(search), withinServices: route.withinServices?.split(",") || [] }, slice.scenarios);
+        percentages.update(analytics, { ...applied, search: Boolean(search), withinServices: route.withinServices?.split(",") || [] }, slice.scenarios, native);
+        publishChartReference();
     }
     function renderTime() {
         const series = analytics.timeSeries;
-        if (!series?.points?.length) {
-            $("chart").append(empty("No dated activity is available", "The captured records do not include usable dates for this slice. Service and API-path views remain available."));
-            if (series?.undatedCount) $("chartFooter").append(el("span", "", `${count(series.undatedCount)} undated records are not plotted.`));
+        const native = sharedNativeView(), nativePoints = native?.timeSeries.points ?? [];
+        if (!series?.points?.length && !nativePoints.length) {
+            $("chart").append(empty("Dates unavailable"));
+            const missing = (series?.undatedCount ?? 0) + (native?.timeSeries.undatedRows ?? 0);
+            if (missing) $("chartFooter").append(el("span", "", `${count(missing)} undated ${missing === 1 ? "record" : "records"}.`));
             return;
         }
-        const points = series.points;
+        const points = [...(series?.points ?? []).map(point => ({ ...point, chartSource: "GitHub Copilot" })),
+            ...nativePoints.map(point => ({ ...point, ...point.outcomes, total: point.count, chartSource: "Microsoft 365", native: true }))]
+            .sort((a, b) => a.date.localeCompare(b.date) || a.chartSource.localeCompare(b.chartSource));
+        const mixed = Boolean(series?.points?.length && nativePoints.length);
         const chart = dimensional.timeView({
-            points, label: point => date(point.date),
+            points, label: point => date(point.date) + (mixed ? " / " + point.chartSource : ""),
             unit: total => results.columnUnit(applied.layer, total),
-            summary: point => `${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${results.unit(applied.layer, point.total)}. ${groupSummary(point)}.`,
-            createAction: point => link("", "activity", { range: "custom", from: point.from, to: point.to, page: undefined }),
+            summary: point => `${point.chartSource}: ${date(point.date, true)}${point.endDate && point.endDate !== point.date ? " - " + date(point.endDate, true) : ""}: ${count(point.total)} ${chartGroupUnit(point)}. ${groupSummary(point)}.`,
+            createAction: point => link("", "activity", { range: "custom", from: point.from, to: point.to, page: undefined,
+                ...(native ? { source: point.native ? native.sourceGroups.length === 1 ? native.sourceGroups[0].sourceId : "microsoft-365" : "github-copilot" } : {}) }),
             inspect: inspectColumnSection,
         });
         chart.removeAttribute("aria-label");
         chart.setAttribute("aria-labelledby", "chartTitle");
         chart.setAttribute("aria-describedby", "chartReadingNotes");
         viewKey(chart, "chart:time");
-        chart.querySelectorAll(".time-slot").forEach((slot, index) => viewKey(slot.firstElementChild, "chart:time:" + points[index].date));
+        chart.querySelectorAll(".time-slot").forEach((slot, index) => viewKey(slot.firstElementChild, "chart:time:" + points[index].chartSource + ":" + points[index].date));
         $("chart").append(chart);
         dimensional.refreshView(chart);
-        if (series.undatedCount) $("chartFooter").append(el("span", "", `${count(series.undatedCount)} undated records are not plotted.`));
+        const missing = (series?.undatedCount ?? 0) + (native?.timeSeries.undatedRows ?? 0);
+        if (missing) $("chartFooter").append(el("span", "", `${count(missing)} undated ${missing === 1 ? "record" : "records"}.`));
     }
     function drillTime(point) {
         go("activity", { range: "custom", from: point.from, to: point.to, page: undefined });
@@ -2985,16 +4651,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         go("activity", route.chart === "endpoint" ? { endpoint: group.id, page: undefined } : { service: group.label, page: undefined });
     }
     function renderComparison() {
-        const groups = route.expanded === "true" ? analytics.groups : [...(analytics.visibleGroups || analytics.groups), ...(analytics.otherGroup ? [analytics.otherGroup] : [])];
+        const native = sharedNativeView();
+        const groups = [...(route.expanded === "true" ? analytics.groups : [...(analytics.visibleGroups || analytics.groups), ...(analytics.otherGroup ? [analytics.otherGroup] : [])]),
+            ...(native?.grouping.groups.map(group => ({ ...group, ...group.outcomes, total: group.count, native: true })) ?? []),
+            ...(native?.grouping.other ? [{ id: "native-other", label: "Other Microsoft groups", total: native.grouping.other.count,
+                ...native.grouping.other.outcomes, native: true, unavailable: true }] : [])];
         const serviceMode = route.chart !== "endpoint";
-        const label = group => serviceMode ? categories.describe(group.label, group.groupCount).label : group.label.replace(/ \(no endpoint reported\)$/, "");
+        const label = group => group.native ? (group.label === "Unknown" ? "Service not identified" : group.label === "Path not qualified" ? "Path unavailable" : group.label)
+            + (analytics.totals.count ? " / Microsoft 365" : "") : serviceMode ? categories.describe(group.label, group.groupCount).label : group.label.replace(/ \(no endpoint reported\)$/, "");
         const guidance = el("span");
         const chart = dimensional.comparisonView({
             groups, serviceMode, label, icons: dimensionalIcons,
             unit: total => results.columnUnit(applied.layer, total),
-            summary: group => `${label(group)}: ${count(group.total)} ${results.unit(applied.layer, group.total)}; ${groupSummary(group)}.${group.id === "group:other" ? " Show all categories." : ""}`,
-            createAction: group => group.id === "group:other" ? link("", "home", { expanded: "true" })
-                : link("", "activity", serviceMode ? { service: group.label, page: undefined } : { endpoint: group.id, page: undefined }),
+            summary: group => `${label(group)}: ${count(group.total)} ${chartGroupUnit(group)}; ${groupSummary(group)}.${group.id === "group:other" ? " Show all categories." : ""}`,
+            createAction: group => group.native ? group.unavailable ? el("span") : link("", "activity", { nativeGroup: group.id, source: native.sourceGroups.length === 1 ? native.sourceGroups[0].sourceId : "microsoft-365", page: undefined })
+                : group.id === "group:other" ? link("", "home", { expanded: "true" })
+                : link("", "activity", { ...(serviceMode ? { service: group.label } : { endpoint: group.id }), page: undefined,
+                    ...(native ? { source: "github-copilot" } : {}) }),
             inspect: serviceMode ? undefined : inspectColumnSection,
             onOverflow: overflowing => { guidance.textContent = overflowing ? "Scroll for more categories." : ""; },
         });
@@ -3008,9 +4681,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("chartFooter").append(guidance);
         if (analytics.otherGroup && route.expanded !== "true") $("chartFooter").append(ux.tooltip(button("Show all", () => go("home", { expanded: "true" }), "quiet"), help.actions.showAll));
     }
-    function renderCountTable() {
-        const time = !route.chart || route.chart === "time";
-        const groups = time ? analytics.timeSeries?.points || [] : analytics.groups;
+    function renderCountTable(host = $("countTable"), chartType = route.chart || "time", createReferenceAction = null, options = {}) {
+        const time = chartType === "time";
+        const groups = time ? analytics.timeSeries?.points || [] : createReferenceAction
+            ? chartType === "endpoint" ? activityProjection.groupRows(analytics.rows, "endpoint") : analytics.workloadGroups
+            : analytics.groups;
         const table = el("table"), thead = el("thead"), heading = el("tr");
         const layer = applied.layer;
         const labels = layer === "tool"
@@ -3021,11 +4696,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             key === "success" || key === "failure" || key === "unknown" && layer !== "recorded-http" || analytics.totals[key] > 0);
         const calendarMeaning = applied.bucket === "week" ? " Dates are Mondays." : applied.bucket === "month" ? " Dates are the first of each month." : "";
         const caption = el("caption", "", `${units[layer][0].toUpperCase() + units[layer].slice(1)}${time
-            ? ` by ${applied.bucket}.${calendarMeaning} Counts use the current filters.`
-            : ". All categories matching the current filters, including those grouped as Other in the chart."}`);
+            ? ` by ${applied.bucket}.${calendarMeaning}` : "."}`);
         if (groups.length > 24) caption.append(" Totals include every page.");
         if (layer === "reported-api") caption.append(" Error results include HTTP 4xx/5xx or a reported error code.");
-        const dateLabel = time ? applied.bucket === "week" ? "Week starting" : applied.bucket === "month" ? "Month starting" : "Date" : route.chart === "endpoint" ? applied.layer === "tool" ? "Path / operation" : "API path" : categoryNoun();
+        const dateLabel = time ? applied.bucket === "week" ? "Week starting" : applied.bucket === "month" ? "Month starting" : "Date" : chartType === "endpoint" ? applied.layer === "tool" ? "Path / operation" : "API path" : categoryNoun();
         table.setAttribute("aria-label", "Exact data for the visible chart");
         table.className = "exact-data-table";
         const columns = el("colgroup");
@@ -3038,24 +4712,35 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         totalLabel.scope = "row";
         totalRow.append(totalLabel, ...["total", ...keys].map(key => el("td", "numeric", count(groups.reduce((sum, group) => sum + group[key], 0)))));
         footer.append(totalRow);
-        pagedList($("countTable"), groups, { key: "chart:" + sliceKey(), size: 24, noun: "chart rows", listTag: "tbody", renderItem: group => {
+        if (createReferenceAction && !options.referenceKey) throw new TypeError("Exact chart rows require their accepted reference identity.");
+        const tableKey = createReferenceAction ? "chart-reference:" + chartType + ":" + options.referenceKey : "chart:" + sliceKey();
+        const rowQuery = createReferenceAction && chartType === "endpoint" ? (options.rowQuery || "").trim().toLocaleLowerCase() : "";
+        const visibleGroups = rowQuery ? groups.filter(group => group.label.toLocaleLowerCase().includes(rowQuery)) : groups;
+        if (options.resetPage) presentation.setPage(tableKey, 0);
+        pagedList(host, visibleGroups, { key: tableKey, size: 24, noun: "chart rows", isCurrent: options.isCurrent, listTag: "tbody", renderItem: group => {
             const row = el("tr");
             const label = el("td");
             if (time && group.total) {
-                const action = button(date(group.date, true), () => drillTime(group), "chart-data-action quiet");
+                const action = createReferenceAction ? createReferenceAction(group, date(group.date, true))
+                    : button(date(group.date, true), () => drillTime(group), "chart-data-action quiet");
                 action.setAttribute("aria-label", `${date(group.date, true)}: ${count(group.total)} ${results.unit(applied.layer, group.total)}. View requests.`);
                 label.append(action);
             } else if (!time && group.total) {
-                const name = route.chart === "endpoint" ? group.label : serviceLabel(group.label);
-                const action = button(name, () => drillGroup(group), "chart-data-action quiet");
+                const name = chartType === "endpoint" ? group.label : serviceLabel(group.label);
+                const action = createReferenceAction ? createReferenceAction(group, name) : button(name, () => drillGroup(group), "chart-data-action quiet");
                 action.setAttribute("aria-label", `${name}: ${count(group.total)} ${results.unit(applied.layer, group.total)}. View requests.`);
                 label.append(action);
-            } else label.append(el("span", "chart-data-label", time ? date(group.date, true) : route.chart === "endpoint" ? group.label : serviceLabel(group.label)));
+            } else label.append(el("span", "chart-data-label", time ? date(group.date, true) : chartType === "endpoint" ? group.label : serviceLabel(group.label)));
             row.append(label, el("td", "numeric", count(group.total)), ...keys.map(key => el("td", "numeric", count(group[key]))));
             return row;
         }, wrapList: tbody => {
             table.replaceChildren(caption, columns, thead, tbody, footer);
             const content = document.createDocumentFragment();
+            if (rowQuery) {
+                const found = el("p", "table-note", `${count(visibleGroups.length)} of ${count(groups.length)} rows found. Totals include all rows.`);
+                found.setAttribute("role", "status");
+                content.append(found);
+            }
             content.append(groups.length ? table : el("p", "", "No chart rows in this slice."));
             if (time && analytics.timeSeries?.undatedCount) {
                 const missing = analytics.timeSeries.undatedCount;
@@ -3079,10 +4764,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return slice?.scenarios.slice() || [];
     }
     function revealResults() {
-        $("activityTitle").focus({ preventScroll: true });
-        $("activityView").scrollIntoView({ block: "start" });
+        if (!api.publicationToken() || clearingAccess) return;
+        if (!$("activityView").checkVisibility()) return;
+        $("activityListSummary").focus({ preventScroll: true });
+        $("activityListContext").scrollIntoView({ block: "start" });
     }
     function revealSessionResult() {
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess) return;
         if (route.view === "request" && route.call !== undefined) {
             const target = $("selectedCall") || $("unavailableCall");
             if (!target) return false;
@@ -3097,7 +4786,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const schedule = () => {
                 cancelAnimationFrame(frame);
                 frame = requestAnimationFrame(() => {
-                    if (navigation !== navigationGeneration || intent !== readingIntent
+                    if (!api.isCurrent(publication) || navigation !== navigationGeneration || intent !== readingIntent
                         || !target.isConnected || document.activeElement !== target) { stop(); return; }
                     contextBody.scrollTop += target.getBoundingClientRect().top - contextBody.getBoundingClientRect().top - timingInset(target);
                     if (!body.querySelector('[aria-busy="true"]')) stop();
@@ -3105,6 +4794,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             };
             // Retained findings/replies can move this anchor after the initial render.
             const observer = new MutationObserver(schedule);
+            readerTextReleases.push(stop);
             observer.observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-busy"] });
             for (const type of ["pointerdown", "wheel", "touchmove", "keydown"]) {
                 document.addEventListener(type, event => { if (event.isTrusted) stop(); }, { capture: true, passive: true, signal: events.signal });
@@ -3138,7 +4828,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }));
         host.append(el("p", "session-scope", `${sessionScopeText()}. ${route.result ? `Totals above include all results in this scope; showing ${resultNames(resultSelection(route.result))} only below.` : "All recorded results in this scope below."}`));
         if (summary?.count) host.append(el("p", "context-help-note", applied.layer === "tool"
-            ? "Worked and Tool failed count tool calls, not completed requests."
+            ? "Tool completed and Tool failed count recorded tool completions, not application results or completed tasks."
             : explanations[applied.layer]));
         const reasons = source.reasons?.map(reason => historyStatus.reasons[reason]?.label).filter(Boolean) || [];
         const coverage = source.missing ? "No retained records identify this source."
@@ -3148,7 +4838,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : reasons.length ? "Partial history: " + reasons.join("; ") + "."
             : !source.coverageKnown ? "History coverage has not been verified for this Copilot chat."
             : "Collected history only; unrecorded calls and hosted internal Graph traffic are not observable.";
-        host.append(el("p", "session-coverage", coverage));
+        const coverageNotice = el("p", "session-coverage", coverage);
+        host.append(coverageNotice);
         if (!summary?.count) {
             host.append(el("p", "", summary ? "No recorded evidence matches this source and scope. This is not a success or failure result." : "Result counts are unavailable; no replacement totals were inferred."));
             const layers = results.layers.filter(layer => state.requestActivity?.[layer]?.some(row => row.sourceSessionId === source.sessionId));
@@ -3162,53 +4853,95 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (source.unavailable || source.pending || reasons.length || !summary?.count) {
             host.append(link("Review collection status", "collection-status", { setting: "issues" }, "text-link"));
         }
+        if (source.missing || source.unavailable || source.eligible === false || source.pending || reasons.length || !source.coverageKnown) return coverageNotice;
     }
     function renderActivity() {
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess) return;
         captureReading();
         const scenarios = currentViewScenarios();
         scenarios.sort((a, b) => String(b.userPrompt?.sourceTimestamp || b.capturedAt || "").localeCompare(String(a.userPrompt?.sourceTimestamp || a.capturedAt || "")));
         const host = $("activityList");
+        releaseCardPreviews(host);
+        nativeActivity.clearCards();
+        boundedNative.clearCards();
         const orphaned = selectionRows().filter(row => !slice.scenarioIds.includes(row.scenarioId));
         const items = [...presentation.ordered("interactions:" + sliceKey(), scenarios, item => item.scenarioId)
             .map(scenario => ({ scenario })), ...orphaned.map(record => ({ record }))];
+        const native = sharedNativeView(), nativePage = boundedNative.presentation();
+        const roster = assessmentFactories.activityPage({ index: activityPage, github: items.length,
+            native: native?.aggregates.conversations ?? 0, githubSize: pageSize, nativeSize: native?.page.limit ?? 10,
+            ...(native && (nativePage.value || nativePage.loading) ? { nativeWindow: { index: nativePage.pageIndex, offset: nativePage.pageOffset,
+                count: nativePage.pageCount, hasNext: nativePage.hasNext } } : {}) });
         const noun = orphaned.length ? "activity entries" : applied.layer === "http" ? "record groups" : "interactions";
         $("activityTitle").textContent = "Activity";
         $("activityView").dataset.revision = String(state.revision);
         const unlinked = orphaned.length;
         const groups = `${count(scenarios.length)} ${applied.layer === "http" ? "record group" : "interaction"}${scenarios.length === 1 ? "" : "s"}`;
-        $("activityListSummary").textContent = `${groups} with ${count(selectionRows().length)} matching ${results.unit(applied.layer, selectionRows().length)}.`
-            + (unlinked ? ` ${count(unlinked)} records have no retained interaction and are listed separately below.` : "");
-        $("activityListSummary").hidden = selectionRows().length === 0;
+        const nativeUnavailable = boundedIncludesMicrosoft() && !native;
+        $("activityListSummary").textContent = native ? [
+            ...(items.length ? [`${count(items.length)} GitHub ${items.length === 1 ? "interaction" : "interactions"}`] : []),
+            `${count(native.aggregates.conversations)} Microsoft ${native.aggregates.conversations === 1 ? "conversation" : "conversations"}`,
+        ].join(" / ") : nativeUnavailable && !items.length ? "Microsoft activity is unavailable"
+            : `${nativeUnavailable ? "GitHub: " : ""}${groups} with ${count(selectionRows().length)} matching ${results.unit(applied.layer, selectionRows().length)}`
+            + (unlinked ? `. ${count(unlinked)} records have no retained interaction and are listed separately below.` : "");
+        $("activityListSummary").hidden = false;
         host.replaceChildren();
-        activityPage = Math.min(activityPage, Math.max(0, Math.ceil(items.length / pageSize) - 1));
-        if (!items.length) {
-            host.append(empty(!state.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
+        activityPage = roster.index;
+        if (!roster.total && !nativeUnavailable) {
+            host.append(empty(native ? "No matching activity" : !state.scenarios.length ? "No collected activity yet" : `No matching ${noun}`,
                 state.scenarios.length
                     ? search ? "Try another phrase or clear Search." : "Change filters or reset Analyze."
                     : search ? "Try a different phrase or clear the private search. Other filters and report selections stay."
                         : "Change a filter or use Reset Analyze. Source approval and collection settings stay unchanged."));
         }
-        for (const item of items.slice(activityPage * pageSize, (activityPage + 1) * pageSize)) {
-            host.append(item.scenario ? requestCard(item.scenario) : matchingAction(item.record));
+        for (const item of items.slice(roster.githubOffset, roster.githubOffset + roster.githubLimit)) {
+            const card = item.scenario ? requestCard(item.scenario) : matchingAction(item.record);
+            if (!api.isCurrent(publication)) return;
+            if (card) host.append(card);
+        }
+        if (nativeUnavailable) {
+            if (!items.length) host.append(empty("Microsoft activity is unavailable", nativeViewRestriction()));
+            else if (!["microsoft-account-not-configured", "native-retention-not-configured", "native-retained-source-not-committed"]
+                .includes(acceptedNativeView()?.reason)) host.append(el("p", "notice", nativeViewRestriction()));
+        }
+        if (native && roster.nativePage !== null) {
+            if (nativePage.value && nativePage.pageIndex === roster.nativePage && !nativePage.error) {
+                for (const item of nativePage.value.page.items) host.append(boundedNative.card({ item, view: nativePage.value }));
+            } else if (nativePage.error) {
+                host.append(empty("Microsoft activity is unavailable", nativePage.error));
+                host.append(button("Read current activity", async () => {
+                    activityPage = 0;
+                    await navigate(routeFor("analyze", { page: undefined }), true);
+                    await refreshStoredData();
+                }, "quiet"));
+            }
+            else {
+                host.append(el("p", "reader-state", "Reading this activity page..."));
+                if (!nativePage.loading) void boundedNative.pageAt(roster.nativePage);
+            }
         }
         const pager = viewKey($("activityPager"), "pager:activity");
-        pager.hidden = !items.length;
+        pager.hidden = !roster.total;
         pager.setAttribute("role", "navigation");
         pager.setAttribute("aria-label", "Analyze result pages");
-        pager.replaceChildren(el("span", "", `${activityPage * pageSize + 1}-${Math.min((activityPage + 1) * pageSize, items.length)} of ${items.length} ${noun}`));
+        const pageReady = roster.nativePage === null || !native || nativePage.value && nativePage.pageIndex === roster.nativePage && !nativePage.error;
+        pager.replaceChildren(el("span", "", pageReady ? `${roster.first}-${roster.last} of ${roster.total} ${native ? "activity entries" : nativeUnavailable ? "GitHub " + noun : noun}`
+            : nativeUnavailable || nativePage.error ? "Microsoft page unavailable" : `Reading page / ${roster.total} activity entries`));
+        if (nativeUnavailable) pager.append(el("span", "muted", "Microsoft total unavailable"));
         const position = pager.firstElementChild;
         position.id = "activityPagePosition";
         position.dataset.pagePosition = "";
         position.tabIndex = -1;
-        if (items.length > pageSize) {
+        if (roster.pages > 1) {
             const turnPage = offset => navigate(routeFor("analyze", { page: Math.max(0, activityPage + offset) }), false,
                 { paging: capturePager(pager, offset) });
             const prev = button("Previous", () => turnPage(-1));
-            prev.disabled = activityPage === 0;
+            prev.disabled = activityPage === 0 || !pageReady;
             prev.dataset.pageDirection = "-1";
             prev.setAttribute("aria-describedby", position.id);
             const next = button("Next", () => turnPage(1));
-            next.disabled = (activityPage + 1) * pageSize >= items.length;
+            next.disabled = activityPage + 1 >= roster.pages || !pageReady;
             next.dataset.pageDirection = "1";
             next.setAttribute("aria-describedby", position.id);
             pager.append(prev, next);
@@ -3242,7 +4975,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function durationValue(milliseconds) {
         if (milliseconds === null) return el("span", "call-duration", "Not recorded");
-        const value = el("data", "call-duration", timingPresentation.duration(milliseconds));
+        const value = el("data", "call-duration");
+        const [primary, secondary] = timingPresentation.duration(milliseconds).split(" (");
+        value.append(el("span", "duration-primary", primary));
+        if (secondary) value.append(" ", el("span", "duration-equivalent", "(" + secondary));
         value.value = String(milliseconds);
         return value;
     }
@@ -3302,12 +5038,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             // Full canonical context omits tool names; recover only the exact owning call's identity.
             const identities = rows?.map(row => Object.hasOwn(row, "tool") || !["tool", "reported-api"].includes(layer)
                 ? row : { ...row, tool: sourceCallFor(row)?.tool });
-            const tools = el("span", "identity-group"), services = el("span", "identity-group");
+            const tools = el("span", "identity-group"), services = recordedCategory(identities, layer, { compact: true });
             tools.append(el("span", "identity-key", "Tools: "), cardTools(identities, false, { compact: true }));
             services.setAttribute("role", "group");
             services.setAttribute("aria-label", "Services and recorded activity");
-            services.append(el("span", "identity-key", layer === "tool" ? "Categories: " : "Services: "),
-                serviceIdentity(identities, layer, { compact: true }));
             identity.append(tools, services);
             summary.append(identity);
         }
@@ -3339,36 +5073,70 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (options.includeModel !== false) list.append(originalModelFact(scenario, options));
     }
-    function activityCardProblem(rows, { hasText = true, total } = {}) {
-        const presentation = results.activitySummary(applied.layer, rows, sourceCallFor);
-        const problem = el("p", "request-card-problem");
+    function activityCardProblem(rows, { total, layer = applied.layer, callLabels = new Map() } = {}) {
+        const presentation = results.activitySummary(layer, rows, sourceCallFor, { contextual: true });
+        const problem = el("div", "request-card-problem"), copy = el("div", "request-card-result-copy");
         const summary = presentation?.summary;
         const scope = total === undefined || total === summary?.count ? "Recorded" : "Matching";
-        let words;
-        if (!presentation) words = "Result counts unavailable.";
-        else if (!summary.count) words = `No recorded ${results.unit(applied.layer, 0)} in this view.`;
-        else if (applied.layer !== "tool") words = results.heading(applied.layer) + ": "
-            + results.entries(applied.layer, summary).map(entry => `${count(entry.count)} ${entry.label}`).join("; ") + ".";
-        else if (summary.failure) {
-            const tools = [...new Set(rows.filter(row => row.outcome === "failure").map(row => row.tool).filter(Boolean))];
-            const subject = !hasText && tools.length === 1 ? tools[0] : summary.failure === 1 ? "Tool call" : "Tool calls";
-            words = subject + " failed. " + presentation.reasons.map(entry => entry.reason).join("; ") + ".";
-            const uncertain = results.entries("tool", summary).filter(entry => !["success", "failure"].includes(entry.key));
-            if (uncertain.length) words += " " + uncertain.map(entry => entry.label).join("; ") + ".";
-        } else if (summary.success === summary.count) words = scope + " tool " + (summary.count === 1 ? "call worked." : "calls worked.");
-        else words = scope + " tool calls: " + results.entries("tool", summary)
-            .map(entry => `${count(entry.count)} ${entry.label.toLowerCase()}`).join("; ") + ".";
+        function appendEntries(host, entries, { showCounts = false, lowercase = false } = {}) {
+            entries.forEach((entry, index) => {
+                if (index) host.append(document.createTextNode("; "));
+                const part = el("span", ["failure", "transport"].includes(entry.key) ? "request-card-failure-text" : "",
+                    (showCounts ? count(entry.count) + " " : "") + (lowercase ? entry.label.toLowerCase() : entry.label));
+                part.dataset.resultOutcome = entry.key;
+                host.append(part);
+            });
+        }
+        function appendReasons() {
+            const reasons = el("ul", "request-card-reasons");
+            for (const entry of presentation.reasons) {
+                const item = el("li", "request-card-reason result-tone-" + entry.tone);
+                item.dataset.resultOutcome = entry.outcome;
+                if (entry.rowId) item.dataset.callId = entry.rowId;
+                const label = callLabels.get(entry.rowId);
+                const status = el("span", "result-status result-tone-" + entry.outcome);
+                status.append(ux.icon(results.icon(entry.outcome) + "-compact"),
+                    el("span", "", label ? label + " " + callOutcomeLabel(entry.outcome) : results.labels("tool")[entry.outcome]));
+                const explanations = callReasonList(entry.items);
+                explanations.classList.add("request-card-reason-text");
+                item.append(status, explanations);
+                if (entry.coverage) item.append(el("p", "returned-coverage", entry.coverage.text));
+                reasons.append(item);
+            }
+            copy.append(reasons);
+        }
+        if (!presentation) copy.textContent = "Result counts unavailable.";
+        else if (!summary.count) copy.textContent = `No recorded ${results.unit(layer, 0)} in this view.`;
+        else if (layer !== "tool") {
+            copy.append(document.createTextNode(results.heading(layer) + ": "));
+            appendEntries(copy, results.entries(layer, summary), { showCounts: true });
+            copy.append(document.createTextNode("."));
+        } else if (presentation.reasons.length) {
+            appendReasons();
+        } else if (summary.success === summary.count) copy.textContent = scope + " tool " + (summary.count === 1 ? "call completed." : "calls completed.");
+        else {
+            copy.append(document.createTextNode(scope + " tool calls: "));
+            appendEntries(copy, results.entries("tool", summary), { showCounts: true, lowercase: true });
+            copy.append(document.createTextNode("."));
+        }
         if (presentation?.outcome) {
             problem.classList.add("result-tone-" + presentation.outcome);
             problem.dataset.outcome = presentation.outcome;
-            problem.dataset.count = String(presentation.entries.filter(entry => entry.key === presentation.outcome)
+            problem.dataset.count = String(presentation.entries.filter(entry => (entry.tone ?? entry.key) === presentation.outcome)
                 .reduce((total, entry) => total + entry.count, 0));
-            problem.append(ux.icon(results.icon(presentation.outcome) + "-compact"));
+            if (!presentation.reasons.length) problem.append(ux.icon(results.icon(presentation.outcome) + "-compact"));
         }
-        problem.append(el("span", "", words));
+        problem.append(copy);
         return { presentation, problem };
     }
-    function requestCard(scenario) {
+    function requestCard(scenario, { reportPicker = false } = {}) {
+        const layer = reportPicker ? "tool" : applied.layer;
+        const rows = reportPicker ? fullRowsFor(scenario.scenarioId, layer) ?? [] : rowsFor(scenario.scenarioId);
+        if (nativeActivity.isNative(scenario)) return nativeActivity.card({
+            record: scenario, href: routeUrl(routeFor("request", { request: scenario.scenarioId })), rows, layer,
+            contextDateBasis: nativeContextDateBasis(scenario.scenarioId),
+            onOpen: id => navigate(routeFor("request", { request: id })),
+        });
         const row = viewKey(el("article", "request-row activity-card"), "request:" + scenario.scenarioId);
         const target = routeFor("request", { request: scenario.scenarioId });
         const action = el("a", "request-card-open");
@@ -3376,49 +5144,68 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         action.setAttribute("aria-controls", "contextSidebar");
         action.setAttribute("aria-expanded", String(sidebarIdentity !== null && route.request === scenario.scenarioId));
         const description = textAccess.describePrompt(scenario.userPrompt);
-        const rows = rowsFor(scenario.scenarioId);
-        const ordered = applied.layer === "tool" ? rows.map(row => ({ row, source: sourceCallFor(row) }))
+        const ordered = layer === "tool" ? rows.map(row => ({ row, source: sourceCallFor(row) }))
             .sort((a, b) => !a.source || !b.source ? a.source ? 1 : b.source ? -1 : 0
                 : requestContext.compare({ at: a.source.startedAt }, { at: b.source.startedAt })
                     || scenario.toolCalls.indexOf(a.source) - scenario.toolCalls.indexOf(b.source))
             .map(entry => entry.row) : rows;
-        const prompt = el("p", "request-card-prompt", description.hasText ? textAccess.excerpt(scenario.userPrompt)
-            : (/\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice);
+        const actions = [...(scenario.toolCalls ?? []), ...(scenario.graphActivities ?? []), ...(scenario.httpRecords ?? [])]
+            .map(source => ({ source, at: source.startedAt })).sort(requestContext.compare);
+        const callLabels = new Map(ordered.map(row => {
+            const source = sourceCallFor(row);
+            const index = actions.findIndex(entry => entry.source === source || source && entry.source.toolCallId === source.toolCallId
+                && entry.source.startEventId === source.startEventId);
+            return [row.id, index < 0 ? row.tool || "Tool call" : results.callLabel(index + 1)];
+        }));
+        const more = el("span", "request-card-read-more", "Read more");
+        more.hidden = true;
         const actor = authorship.read(scenario.userPrompt).actor;
-        const author = el("p", "request-card-origin request-card-author", actor === "unknown" && description.label !== "Automatic continuation"
-            ? "Author unverified" : description.label);
+        const authorLabel = actor === "unknown" && !description.automatic ? "Author unverified" : description.label;
+        const moment = requestTiming.entry(scenario, applied.timeContext);
+        const recognition = description.hasText ? textAccess.excerpt(scenario.userPrompt, 96) : null;
+        const nameLink = omitted => action.setAttribute("aria-label",
+            `${omitted ? "Read full prompt" : "View interaction"}: ${recognition} (${authorLabel}; ${moment.value})`);
+        if (description.hasText) nameLink(false);
+        const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, omitted => {
+            more.hidden = !omitted;
+            nameLink(omitted);
+        }) : el("p", "request-card-prompt",
+            (description.automatic || /\bprompt\b/i.test(description.notice) ? "" : "Prompt: ") + description.notice);
+        const sourceIdentity = filterState.sourceIdentity(rows);
+        const sourceLabel = state.nativeRead ? sourceIdentity?.label ?? "Source unavailable" : null;
+        if (sourceIdentity) row.dataset.sourceId = sourceIdentity.id;
+        const author = el("p", "request-card-origin request-card-author", sourceLabel ? sourceLabel + " \u00b7 " + authorLabel : authorLabel);
         author.dataset.promptActor = actor;
-        const categories = recordedCategory(rows, applied.layer);
+        const categories = recordedCategory(rows, layer);
         categories.classList.add("request-card-categories");
-        const full = results.summarize(fullRowsFor(scenario.scenarioId));
-        const { presentation, problem } = activityCardProblem(ordered, { ...description, total: full?.count ?? null });
+        const full = results.summarize(fullRowsFor(scenario.scenarioId, layer));
+        const { presentation, problem } = activityCardProblem(ordered, { ...description, total: full?.count ?? null, layer, callLabels });
         const summary = presentation?.summary;
         const facts = el("div", "request-card-summary");
-        const moment = requestTiming.entry(scenario, applied.timeContext);
         facts.append(el("span", "request-card-time", (moment.label === "Message recorded" ? "" : moment.label + ": ") + moment.value));
         if (summary) {
-            const values = results.entries(applied.layer, summary);
-            const counts = full?.count === summary.count ? `${count(summary.count)} recorded ${results.columnUnit(applied.layer, summary.count)}`
-                : results.countLabel(applied.layer, summary.count, full?.count ?? null);
-            const breakdown = applied.layer === "tool" && summary.failure && values.length > 1
-                ? " / " + values.map(entry => `${count(entry.count)} ${entry.key === "failure" ? "failed" : entry.label.toLowerCase()}`).join(" / ") : "";
+            const values = results.entries(layer, summary);
+            const counts = full?.count === summary.count ? `${count(summary.count)} recorded ${results.columnUnit(layer, summary.count)}`
+                : results.countLabel(layer, summary.count, full?.count ?? null);
+            const breakdown = layer === "tool" && values.length > 1
+                ? " / " + values.map(entry => `${count(entry.count)} ${["success", "failure"].includes(entry.key)
+                    ? callOutcomeLabel(entry.key) : entry.label.toLowerCase()}`).join(" / ") : "";
             facts.append(el("span", "request-card-count", counts + breakdown));
         }
-        action.append(author, prompt);
+        action.append(author, prompt, more);
         if (description.hasText && description.notice) action.append(el("p", "request-card-availability", description.notice));
         action.append(categories, problem);
-        if (presentation?.moreReasons) {
-            const more = el("span", "request-card-more-problems");
-            more.append(el("span", "", `${count(presentation.moreReasons)} more failure ${presentation.moreReasons === 1 ? "reason" : "reasons"} in the reader`),
-                ux.icon("forward"));
-            action.append(more);
-        }
         action.append(facts);
         action.addEventListener("click", event => {
             if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             if (!window.getSelection()?.isCollapsed && action.contains(window.getSelection()?.anchorNode)) { event.preventDefault(); return; }
             event.preventDefault();
             const target = routeFor("request", { request: scenario.scenarioId });
+            if (description.hasText && prompt.scrollHeight > prompt.clientHeight + 1) {
+                textAccess.setOpen("request:" + scenario.scenarioId, true);
+                navigate(target, false, { cardTarget: { target, revision: state.revision, focus: "prompt" } });
+                return;
+            }
             const failure = underlyingRoute().view === "analyze" && !isLoading && !isStale
                 ? callInvestigation.firstFailure(state.requestActivity, state.scenarios, rowsFor(scenario.scenarioId),
                     { ...target, layer: applied.layer }, state.revision) : null;
@@ -3426,6 +5213,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
         row.append(action);
         return row;
+    }
+    function releaseCardPreviews(host) {
+        for (const preview of host.querySelectorAll("[data-card-preview]")) {
+            const link = preview.closest("a"), name = link?.getAttributeNode("aria-label");
+            if (name) { name.value = ""; link.removeAttributeNode(name); }
+            textAccess.release(preview);
+        }
     }
     function renderSelectionCount(node, total, maximum) {
         let number = node.querySelector(".selection-number");
@@ -3445,27 +5239,104 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const aliases = reportPicker ? state.exportCatalog.requests.find(request => request.scenarioId === scenario.scenarioId).aliases : [scenario.scenarioId];
         checkbox.checked = aliases.some(id => selected.has(id));
         checkbox.setAttribute("aria-label", "Select request for report: " + shorten(excerpt(scenario), 70));
-        ux.tooltip(checkbox, help.actions.selectRequest);
-        checkbox.addEventListener("change", () => setReportRequestSelected(scenario.scenarioId, checkbox.checked));
+        ux.tooltip(checkbox, () => checkbox.disabled ? reportSelectionBlock() || "No reportable activity." : "");
+        checkbox.addEventListener("change", () => setReportRequestSelected(scenario.scenarioId, checkbox.checked),
+            reportPicker ? { signal: reportPickerEvents.signal } : undefined);
         return checkbox;
     }
+    function nativeReaderScope() { return JSON.stringify([requestIdentity(), route.origin, fromReportCreation()]); }
+    function nativeReaderSelectionBlock() {
+        return route.nativeSource && (Number(route.nativeRevision) !== state?.revision
+            || route.nativeSourceRevision !== state?.nativeRead?.sourceRevision
+            || boundedNative.readerRevision() > Number(route.nativeRevision))
+            ? "Reopen this conversation from current activity to change report selection." : "";
+    }
+    function reportReaderActions(scenarioId) {
+        const actions = el("section", "request-actions");
+        actions.setAttribute("aria-label", "Report selection");
+        const reportTitle = el("span", "muted");
+        reportTitle.id = "requestReportTitle";
+        const pick = button("Add to report", () => {
+            if (!pick.isConnected || route.view !== "request" || route.request !== scenarioId) return;
+            const readingBlock = nativeReaderSelectionBlock();
+            if (readingBlock) { announce(readingBlock, "stale"); return; }
+            if (underlyingRoute().view === "reports" && reportScope !== "selected") {
+                announce("Return to report Activity to change this report's scope.", "stale"); return;
+            }
+            if (!setReportRequestSelected(scenarioId, !reportRequestSelection(scenarioId).selected)) return;
+            updateRequestReportActions();
+        });
+        pick.id = "requestReportToggle";
+        const continueReport = button("Continue to report", () => {
+            if (!continueReport.isConnected || route.view !== "request" || route.request !== scenarioId) return;
+            if (fromReportCreation()) returnFromReportInspection();
+            else {
+                const readingBlock = nativeReaderSelectionBlock();
+                if (readingBlock) { announce(readingBlock, "stale"); return; }
+                continueSelectedReport(scenarioId);
+            }
+        }, "primary");
+        continueReport.id = "requestReportContinue";
+        actions.append(reportTitle, pick, continueReport);
+        ux.explainDisabled(pick, () => nativeReaderSelectionBlock() || reportSelectionBlock() || (underlyingRoute().view === "reports" && reportScope !== "selected"
+            ? "Return to report Activity to change this scope." : "This interaction has no reportable activity."), { compact: true });
+        ux.explainDisabled(continueReport, () => !fromReportCreation() && nativeReaderSelectionBlock() || reportSelectionBlock() || (underlyingRoute().view === "reports" && reportScope !== "selected"
+            ? "Return to report Activity to change this scope." : "Add this interaction before continuing."), { compact: true });
+        return actions;
+    }
     function renderRequest() {
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess) return;
         if (route.view !== "request") return;
         if (pageInactive) return;
         if (requestInvalidated) return;
         if (searchTargetInvalid && route.request === searchOpenedRequest) return;
-        const renderKey = JSON.stringify([requestIdentity(), state.revision, state.assessment?.basis, applied, route.withinServices]);
+        if (sourceCollection.active && route.nativeSource && readerSections?.retains?.(nativeReaderScope())) {
+            updateRequestReportActions(); return;
+        }
+        const renderKey = JSON.stringify([requestIdentity(), state.revision, state.nativeRead?.revision, state.assessment?.basis, applied, route.withinServices,
+            nativeContextDateBasis(route.request)]);
         if (requestRenderKey === renderKey) { updateRequestReportActions(); return; }
         requestRenderKey = renderKey;
         captureReading();
         clearReaderSections();
-        const context = requestContext.select(state.scenarios, route.request);
         const target = callInvestigation.resolve(state.requestActivity, state.scenarios, route, state.revision);
         const body = $("requestContent");
         renderReportInspectionReturn();
         body.replaceChildren();
         detailOwner = "request:" + route.request;
         viewKey(body, detailOwner);
+        if (sourceCollection.active && route.nativeSource !== undefined) {
+            const ordinal = route.nativeOrdinal === undefined ? undefined : Number(route.nativeOrdinal);
+            const revision = Number(route.nativeRevision);
+            const exposed = nativeReportItem(route.request);
+            const nativeTarget = { conversationId: route.request, sourceId: route.nativeSource,
+                revision, sourceRevision: route.nativeSourceRevision, ordinal };
+            const currentRoot = state.nativeRead?.status === "bounded" && revision === state.revision
+                && state.nativeRead.sourceRevision === route.nativeSourceRevision;
+            if (currentRoot) boundedNative.acceptReaderTarget(nativeTarget, state.nativeRead);
+            const originalRoot = boundedNative.hasReaderTarget(nativeTarget);
+            if (!boundedContract.sourceIds.includes(route.nativeSource) || !/^[a-f0-9]{64}$/.test(route.request ?? "")
+                || exposed && exposed.sourceId !== route.nativeSource
+                || applied.filters.sources?.length && !applied.filters.sources.includes(route.nativeSource)
+                    && !selectedNative().items.some(item => item.id === route.request && item.sourceId === route.nativeSource)
+                || !Number.isSafeInteger(revision) || revision < 0
+                || ordinal !== undefined && (!Number.isSafeInteger(ordinal) || ordinal < 0)
+                || !/^[a-f0-9]{64}$/.test(route.nativeSourceRevision ?? "")
+                || !currentRoot && !originalRoot) {
+                body.append(empty("This exact Microsoft record is unavailable", "The source or saved revision changed. Reopen it from a current page or Search result."));
+                return;
+            }
+            if (ordinal !== undefined) sidebarPositions.delete(requestIdentity());
+            readerSections = boundedNative.mountReader({ root: body, conversationId: route.request, sourceId: route.nativeSource,
+                revision, sourceRevision: route.nativeSourceRevision, ordinal, scope: nativeReaderScope(),
+                isCurrent: () => route.view === "request" && requestRenderKey === renderKey && !requestInvalidated });
+            $("contextSidebarFooter").replaceChildren(el("p", "context-help-note",
+                "Reports include the complete saved conversation."),
+                reportReaderActions(route.request));
+            updateRequestReportActions();
+            return;
+        }
         if (target.status === "unavailable") {
             const notice = empty("This exact record is unavailable", target.reason === "snapshot-changed"
                 ? "This API-result link has no matching snapshot revision. Returned-entry identities are not stable across stored revisions. No other entry was substituted. Return to Activity and reopen the result from the current snapshot."
@@ -3475,14 +5346,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             body.append(notice);
             return;
         }
+        const native = state.scenarios.find(record => record.scenarioId === route.request && nativeActivity.isNative(record));
+        if (native) {
+            readerSections = nativeActivity.mountReader({ root: body, record: native, target,
+                contextDateBasis: nativeContextDateBasis(native.scenarioId),
+                isCurrent: () => route.view === "request" && requestRenderKey === renderKey && !requestInvalidated });
+            if (!api.isCurrent(publication) || !readerSections) return;
+            const blocked = state.exportCatalog?.blockedRequests?.find(item => item.scenarioId === native.scenarioId);
+            if (!blocked && state.exportCatalog?.requests.some(request => request.scenarioId === native.scenarioId)) {
+                $("contextSidebarFooter").append(reportReaderActions(native.scenarioId));
+                updateRequestReportActions();
+            } else {
+                const notice = el("p", "context-help-note", reportUnavailability(blocked) || "Report availability has not been verified for this conversation.");
+                const action = button("Add to report", () => {}, "quiet");
+                action.disabled = true;
+                $("contextSidebarFooter").append(notice, action);
+            }
+            return;
+        }
+        const context = requestContext.select(state.scenarios, route.request);
         if (!context.groups.length) {
             body.append(empty("This interaction is not available", "It may no longer be in the current local collection. Return to Analyze to choose another interaction."));
             return;
         }
-        const contextNote = el("p", "request-context-note", target.status === "available"
-            ? `Nearby messages are context, not additional matches.${applied.layer === "tool" ? " Tool completion is not answer correctness." : ""}`
+        const contextLimit = target.status === "available"
+            ? "Nearby messages are context, not additional matches."
             : context.groups.length > 1 || context.messages.some(message => message.kind === "follow-up") ? "Linked messages may be separate work; this is not the whole chat."
-                : "Saved messages only; unsaved parts of the conversation may be missing.");
+                : null;
+        const contextNote = contextLimit ? el("p", "request-context-note", contextLimit) : null;
         const currentReader = () => route.view === "request" && requestRenderKey === renderKey && !requestInvalidated;
         const sections = assessmentFactories.readerSections({
             root: body, presentation, ux, isCurrent: currentReader,
@@ -3518,20 +5409,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         };
         bindDetails(linkedContext, sectionKey("linked-context"), updateLinked);
         sourceSection.visibility.subscribe(updateLinked);
-        const copyNoticeId = "reader-copy-notice";
         const entries = [], seen = new Set(), rendered = [], responseHosts = [], sourceHomes = new Map(), entryLabels = new Map();
         let commonToolTiming = false;
         const timeContext = applied.timeContext, selectedScenario = context.groups.find(group => group.relation === "selected").scenario;
-        function field(label, value) {
-            const node = cardFact(label, value ?? "Not recorded");
-            node.firstElementChild.textContent = label;
-            return node;
-        }
-        function fields(pairs) {
-            const node = el("dl", "reader-fields");
-            for (const [label, value] of pairs) if (value !== undefined && value !== null && value !== "") node.append(field(label, value));
-            return node;
-        }
         function moment(value) {
             if (value === null || value === undefined || value === "") return el("span", "muted", "Not recorded");
             try { time.instant(value); }
@@ -3541,7 +5421,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             const node = el("time");
             node.dateTime = value;
-            node.title = value;
+            node.tabIndex = 0;
+            ux.tooltip(node, value);
             const formatter = new Intl.DateTimeFormat(timeContext.locale, {
                 timeZone: timeContext.timeZone, year: "numeric", month: "short", day: "numeric",
                 hour: "numeric", minute: "2-digit", second: "2-digit",
@@ -3591,12 +5472,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             summary.append(result);
             if (duration !== undefined) {
                 const elapsed = el("span", "reader-call-duration"), value = durationValue(duration);
-                if (duration !== null && duration < 1000) value.textContent = String(duration) + " ms";
                 elapsed.append(el("span", "reader-duration-label", durationLabel + ": "), value);
                 secondary.append(elapsed);
             }
             heading.append(identity, summary, secondary);
             return heading;
+        }
+        function callToggleName(toggle) {
+            const copy = toggle.cloneNode(true);
+            copy.querySelectorAll("[hidden]").forEach(node => node.remove());
+            toggle.setAttribute("aria-label", "Inspect recorded evidence: " + copy.textContent);
         }
         function callDetails(item, heading, key, visibility, actionId, render) {
             const identity = heading.querySelector(".reader-call-identity");
@@ -3614,10 +5499,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             item.append(detail);
             sections.detail({ key: JSON.stringify(["call-detail", requestIdentity(), key]), toggle, body: detail, visibility,
                 initialOpen: target.status === "available" && target.actionId === actionId && applied.layer !== "reported-api",
-                render });
+                render, onOpenChange: open => {
+                    if (item.dataset.resultDetails === "true") toggle.querySelectorAll(".result-cause").forEach(node => { node.hidden = open; });
+                    callToggleName(toggle);
+                } });
         }
         function identityValues(rows, layer) {
-            const identities = serviceIdentity(rows?.length ? rows : undefined, layer), values = el("ul", "reader-values");
+            const identities = serviceIdentity(rows?.length ? rows : undefined, layer, { fieldValue: true }), values = el("ul", "reader-values");
             for (const identity of identities.children.length ? [...identities.children] : [identities]) {
                 const item = el("li"); item.append(identity); values.append(item);
             }
@@ -3693,7 +5581,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (args.timeZone !== undefined) remaining.push(["Time zone", args.timeZone]);
             input.append(values);
             if (remaining.length) input.append(fields(remaining));
-            return { node: input, targets: Boolean(args.entityUrls), requestedSources: Boolean(args.capabilities) };
+            return { node: input, targets: Boolean(args.entityUrls) };
         }
         const responseTime = responseTimingFact(selectedScenario);
         responseTime.firstElementChild.textContent = "Prompt to final response";
@@ -3713,12 +5601,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const label = el(identity ? "span" : "p", "context-entry-label"), separator = labelText.indexOf(":");
             if (separator >= 0) label.append(el("strong", "", labelText.slice(0, separator + 1)), document.createTextNode(labelText.slice(separator + 1)));
             else label.textContent = labelText;
-            if (identity) (identity.querySelector(".reader-call-identity-line") || identity).prepend(label, el("span", "reader-identity-separator", " \u00b7 "));
+            const callResult = entry.recordKind === "tool" ? item.querySelector(".reader-call-summary .recorded-result-label") : null;
+            if (callResult) callResult.prepend(label, document.createTextNode(" "));
+            else if (identity) (identity.querySelector(".reader-call-identity-line") || identity).prepend(label, document.createTextNode(" "));
             else item.prepend(label);
             if (entry.hideLabel || entry.kind === "follow-up" || entry.kind === "prompt" && entry.relation !== "selected") label.remove();
             if (entry.kind === "action") label.classList.add("reader-entry-label");
+            if (entry.recordKind === "tool") {
+                for (const results of item.querySelectorAll(":scope > .returned-api-entries, :scope > .selected-api-result")) {
+                    results.setAttribute("role", "group");
+                    results.setAttribute("aria-label", "Returned results for " + labelText);
+                }
+            }
             const toggle = identity?.querySelector(".reader-call-toggle");
-            if (toggle) toggle.setAttribute("aria-label", "Inspect recorded evidence: " + toggle.textContent);
+            if (toggle) callToggleName(toggle);
             if (entry.actionId) item.id = "reader-record-" + encodeURIComponent(entry.actionId);
             if (entry.kind === "prompt" && entry.relation === "selected") {
                 item.id = "selectedContext";
@@ -3761,7 +5657,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : "Matching context unavailable. The retained interaction follows."));
         const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
         requestText.append(readerText(scenario.userPrompt, {
-            key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true, copyNoticeId,
+            key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true,
             originKind, visibility: isSelected ? promptSection.visibility : linkedVisibility,
             actionsHost: isSelected ? promptSection.actions : undefined,
             contextTitle: isSelected ? undefined : group.relation === "preceding" ? "Earlier message" : "Following message",
@@ -3773,10 +5669,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         modelFact.append(model);
         const readerFacts = el("div", "reader-facts");
         const sourceFacts = el("dl", "reader-fields reader-source");
+        if (state.nativeRead) {
+            const identity = filterState.sourceIdentity(rows);
+            sourceFacts.append(cardFact("Source", identity?.label ?? "Source unavailable"));
+            if (identity) sourceFacts.dataset.sourceId = identity.id;
+        }
         appendCardSource(sourceFacts, scenario, { compact: true, includeModel: false, includeTime: false, includeProject: false });
         for (const term of sourceFacts.querySelectorAll("dt")) term.textContent = term.textContent.replace(/:$/, "");
         if (isSelected) readerFacts.append(sourceFacts);
         readerFacts.append(modelFact);
+        readerFacts.append(fields([["Project", sourceProject.projectId ? sourceProject.project || sourceProject.projectId
+            : sourceProject.sessionId || sourceProject.sourceSessionId ? "No project associated" : "Not recorded"]]));
         (isSelected ? sourceSection.body : requestText).append(readerFacts);
         if (isSelected) {
             const timing = el("div", "reader-prompt-timing");
@@ -3802,7 +5705,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 return item;
             } });
         responseHosts.push({ scenarioId: scenario.scenarioId, relation: group.relation, host: responseHost });
-        assessmentUI.detail(responseHost, scenario.scenarioId, { eager: true, contentFirst: true, copyNoticeId,
+        assessmentUI.detail(responseHost, scenario.scenarioId, { eager: true, contentFirst: true,
             recordedTimingHome: isSelected && !responseTime.hidden ? responseTime : null,
             placeResponse: (node, observation, position) => {
             if (!journey.isConnected || !currentReader()) return;
@@ -3832,54 +5735,32 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         provenance.dataset.contextGroup = scenario.scenarioId;
         if (context.groups.length > 1) provenance.append(el("h3", "reader-source-heading", relationLabel(group.relation)));
         const association = scenario.promptAssociation === "Nearest preceding recorded user.message; association is inferred, not a proven causal link. Follow-ups remain separate prompt-group scenarios."
-            ? "Message links follow the order of saved records; they don't prove what triggered a call. Follow-up messages stay separate." : scenario.promptAssociation;
+            ? "Calls follow this saved prompt; the link is inferred, not proven." : scenario.promptAssociation;
         const coverage = scenario.coverageNote === "Recorded Work IQ invocation, not observed Graph HTTP. Result entity/body content excluded. Missing completions and truncated logs are disclosed in the source roster."
             && !scenario.toolCalls?.some(tool => tool.observedGraphHttp)
-            ? "Work IQ call records exclude Graph network traffic and returned item contents. Collection coverage lists missing call endings and cut-off logs." : scenario.coverageNote;
-        provenance.append(fields([
-            ["Source event", original?.sourceEventId != null ? identifier(original.sourceEventId) : "Not recorded"],
-            ["Chat ID", isSelected ? scenario.sourceSessionId != null ? identifier(scenario.sourceSessionId) : "Not recorded" : null],
-            ["Project", sourceProject.projectId ? sourceProject.project || sourceProject.projectId
-                : sourceProject.sessionId || sourceProject.sourceSessionId ? "No project associated" : "Not recorded"],
-        ]));
+            ? "These records show Work IQ calls, not Graph traffic or returned content." : scenario.coverageNote;
+        const identifiers = [
+            ["Source event", original?.sourceEventId ?? "Not recorded"],
+            ["Chat ID", scenario.sourceSessionId ?? "Not recorded"],
+        ];
         const limits = el("div", "reader-record-limits");
         if (association) limits.append(el("p", "", association));
         if (coverage) limits.append(el("p", "", coverage));
         provenance.append(limits);
         support.append(provenance);
-        sourceHomes.set(scenario.scenarioId, { provenance, limits });
+        sourceHomes.set(scenario.scenarioId, { provenance, identifiers,
+            operationHome: isSelected ? intro : requestText, operationEntries: [] });
         sourceSection.body.append(support);
         for (const message of context.messages.filter(message => message.scenarioId === scenario.scenarioId && message.kind === "follow-up")) {
             const followup = el("section", "request-context-prompt");
             followup.append(readerText(message.source, { key: message.key, mode: "complete", initialOpen: false, contentFirst: true,
-                copyNoticeId, originKind, visibility: linkedVisibility, contextTitle: "Following message", copyLabel: "Copy following message" }));
-            if (message.source.association) provenance.append(el("p", "context-help-note", message.source.association));
+                originKind, visibility: linkedVisibility, contextTitle: "Following message", copyLabel: "Copy following message" }));
+            if (message.source.association) followup.append(el("p", "context-help-note",
+                message.source.association === "Nearest following user message only; follow-up relationship inferred, not confirmed."
+                    ? "This is the next saved message, not a confirmed follow-up." : message.source.association));
             entries.push({ ...message, relation: group.relation, render: () => followup });
         }
-        const actions = el("section", "request-actions");
-        actions.setAttribute("aria-label", "Report selection");
-        const reportTitle = el("span", "muted");
-        reportTitle.id = "requestReportTitle";
-        const pick = button("Add to report", () => {
-            if (!pick.isConnected || route.view !== "request" || route.request !== scenario.scenarioId) return;
-            if (underlyingRoute().view === "reports" && reportScope !== "selected") {
-                announce("Return to report Activity to change this report's scope.", "stale"); return;
-            }
-            if (!setReportRequestSelected(scenario.scenarioId, !reportRequestSelection(scenario.scenarioId).selected)) return;
-            updateRequestReportActions();
-        });
-        pick.id = "requestReportToggle";
-        const continueReport = button("Continue to report", () => {
-            if (!continueReport.isConnected || route.view !== "request" || route.request !== scenario.scenarioId) return;
-            if (fromReportCreation()) returnFromReportInspection();
-            else continueSelectedReport(scenario.scenarioId);
-        }, "primary");
-        continueReport.id = "requestReportContinue";
-        actions.append(reportTitle, pick, continueReport);
-        ux.explainDisabled(pick, () => reportSelectionBlock() || (underlyingRoute().view === "reports" && reportScope !== "selected"
-            ? "Return to report Activity to change this scope." : "This interaction has no reportable activity."), { compact: true });
-        ux.explainDisabled(continueReport, () => reportSelectionBlock() || (underlyingRoute().view === "reports" && reportScope !== "selected"
-            ? "Return to report Activity to change this scope." : "Add this interaction before continuing."), { compact: true });
+        const actions = reportReaderActions(scenario.scenarioId);
         const entryStart = entries.length;
         const canonical = fullRowsFor(scenario.scenarioId, "tool") ?? (applied.layer === "tool" ? rows : undefined);
         for (const [toolIndex, tool] of (scenario.toolCalls || []).entries()) {
@@ -3887,23 +5768,37 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (row && (seen.has(row.id) || row.id === target.actionId && !isSelected)) continue;
             if (row) seen.add(row.id);
             const key = JSON.stringify([scenario.scenarioId, "tool", row?.id || tool.toolCallId || tool.startEventId || ["unidentified", state.revision, toolIndex]]);
+            const sourceCall = sourceCallFor(row) || tool;
+            const hasInputReferences = Array.isArray(sourceCall.requestArgs?.fileUrls) && sourceCall.requestArgs.fileUrls.length > 0;
+            const attribution = categories.attributionReading(row ? { ...row, tool: tool.tool } : undefined, "tool", { hasInputReferences });
             entries.push({ key, actionId: row?.id, startedAt: tool.startedAt, recordKind: "tool",
-                identifiers: [["ID", tool.toolCallId], ["parent invocation", tool.parentToolCallId], ["parallel group", tool.parallelGroup],
+                operation: attribution?.kind === "operation" ? {
+                    label: categories.operation(tool.tool)?.label ?? categories.describe("Search").label, hasInputReferences,
+                } : null,
+                identifiers: [["ID", tool.toolCallId], ["start event", tool.startEventId], ["completion event", tool.completionEventId],
+                    ["parent invocation", tool.parentToolCallId], ["parallel group", tool.parallelGroup],
                     ["error code", row?.outcome === "failure" && tool.failureEvidence?.version === 1
                         && tool.failureEvidence.reason === "error-code-recorded" ? tool.failureEvidence.code : null]], render: () => {
             detailOwner = key;
             const item = viewKey(el("li", "journey-item"), key);
             item.dataset.toolCallId = tool.toolCallId || "";
+            item.dataset.resultDetails = String(results.resultDetails(tool.resultEvidence).length > 0
+                || results.diagnosticDetails(tool.failureEvidence?.diagnostic).length > 0);
             const operation = categories.operation(tool.tool);
-            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, rows: row ? [row] : undefined, inline: true });
+            const recordLabel = callOutcomeLabel(row?.outcome);
+            const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
+            const result = resultLine("tool", row ? results.summarize([row]) : null, { heading: results.heading("tool"), compactSingle: true, singleRecord: true, recordLabel, rows: row ? [row] : undefined, inline: true, includeReturned: !apiRows?.length });
             result.classList.add("journey-result");
             const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
             item.append(heading);
-            const sourceCall = sourceCallFor(row) || tool;
-            const serviceValues = recordedCategory(row ? [{ ...row, tool: tool.tool }] : undefined, "tool");
+            const serviceValues = recordedCategory(row ? [{ ...row, tool: tool.tool }] : undefined, "tool", { includeGap: !attribution });
             serviceValues.classList.add("reader-call-services");
-            heading.querySelector(".reader-call-secondary").prepend(serviceValues);
-            const apiRows = fullRowsFor(scenario.scenarioId, "reported-api")?.filter(r => r.parentCallId === row?.id);
+            if (serviceValues.childElementCount) heading.querySelector(".reader-call-secondary").prepend(serviceValues);
+            if (attribution && attribution.kind !== "operation") {
+                const context = el("p", "reader-call-evidence reader-attribution-context", attribution.text);
+                context.dataset.attributionKind = attribution.kind;
+                item.append(context);
+            }
             if (!sameScope) {
                 actionContext(item, applied.layer === "tool" ? (row ? [row] : canonical ? [] : undefined) : applied.layer === "reported-api" ? apiRows : []);
                 const scope = item.querySelector(".action-context");
@@ -3924,14 +5819,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (targets.childElementCount) expert.append(targets);
             }
             const serviceEvidence = categories.serviceEvidence(row ? { ...row, tool: tool.tool } : row, "tool");
-            const explanation = el("p", "reader-call-evidence", serviceEvidence?.reason === "missing-target" ? ""
+            const explanation = el("p", "reader-call-evidence", tool.tool === "workiq-get_schema"
+                ? "This checks how to use a Work IQ feature; it does not run it."
+                : serviceEvidence?.reason === "missing-target" ? ""
                 : serviceEvidence?.reason === "hosted-routing" ? serviceEvidence.description
                 : tool.tool === "workiq-ask" ? categories.operation(tool.tool).description
                 : (row ? categories.explainRows([row], "tool") : "") || serviceEvidence?.description || operation?.description);
-            const searchScope = categories.requestedSearchScope(sourceCall);
-            if (searchScope && !(input.requestedSources && searchScope.description === "This does not show which sources returned results.")) explanation.append(" " + searchScope.description);
             if (!apiRows && row?.workload !== "Discovery") explanation.append(" API result metadata is unavailable.");
-            if (explanation.textContent.trim()) expert.append(explanation);
+            if (!attribution && explanation.textContent.trim()) expert.append(explanation);
             const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
                 || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
             const completion = fields([
@@ -3939,12 +5834,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ]);
             if (completion.childElementCount) expert.append(completion);
             if (tool.observedGraphHttp) expert.append(el("p", "reader-record-limits", "HTTP directly observed."));
-            if (row?.outcome === "failure" && tool.failureEvidence?.version === 1) {
-                const evidence = tool.failureEvidence;
-                if (evidence.messageStatus != null && evidence.messageStatus !== "text-excluded") {
-                    const reason = help.failureMessageStatus[evidence.messageStatus] ?? "Recorded error-text status: " + JSON.stringify(evidence.messageStatus);
-                    expert.append(el("p", "context-help-note", reason));
-                }
+            const resultFacts = resultDetailBlock(results.resultDetails(tool.resultEvidence, { retainedResultCount: tool.apiResults?.length,
+                omitContent: row?.outcome === "failure" && tool.resultEvidence?.contentStatus === "not-supplied"
+                    || Boolean(apiRows?.length) && tool.resultEvidence?.contentStatus === "partial" }),
+                { errorContext: row?.outcome === "failure" || tool.resultEvidence?.applicationError === true });
+            if (resultFacts) expert.append(resultFacts);
+            if (row?.outcome === "failure") {
+                const diagnostic = failureDiagnostic(tool.failureEvidence?.diagnostic, {
+                    statusShown: tool.resultEvidence?.statusCode != null
+                        && tool.resultEvidence.statusCode === tool.failureEvidence?.diagnostic?.statusCode,
+                });
+                if (diagnostic) expert.append(diagnostic);
+                else expert.append(el("p", "context-help-note reader-failure-guidance", failureGuidance(tool)));
             }
             expert.append(input.node);
             for (const key of ["command", "code", "script"]) if (typeof tool.requestArgs?.[key] === "string") expert.append(recordedBlock(tool.requestArgs[key], { label: "Recorded " + key, copyLabel: "Copy " + key }, visibility));
@@ -4032,13 +5933,35 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         actionsInOrder.forEach(entry => {
             const ordinal = (groupOrdinals.get(entry.scenarioId) ?? 0) + 1;
             groupOrdinals.set(entry.scenarioId, ordinal);
-            const label = ({ tool: "Call", reference: "Reference", graph: "Request site", http: "HTTP record" })[entry.recordKind] + " " + ordinal;
+            const label = entry.recordKind === "tool" ? results.callLabel(ordinal)
+                : ({ reference: "Reference", graph: "Request site", http: "HTTP record" })[entry.recordKind] + " " + ordinal;
             entryLabels.set(entry.key, label);
             const home = sourceHomes.get(entry.scenarioId);
-            const ids = fields((entry.identifiers ?? []).filter(([, value]) => value != null && value !== "")
-                .map(([kind, value]) => [label + " " + kind, identifier(value)]));
-            if (ids.children.length) home.limits.before(ids);
+            if (entry.operation) home.operationEntries.push({ ordinal, ...entry.operation });
+            home.identifiers.push(...(entry.identifiers ?? []).filter(([, value]) => value != null && value !== "")
+                .map(([kind, value]) => [label + " " + kind, value]));
         });
+        for (const [scenarioId, home] of sourceHomes) {
+            if (home.operationEntries.length) {
+                const operations = home.operationEntries;
+                const scope = results.callGroupLabel(operations.map(entry => entry.ordinal));
+                const names = [...new Set(operations.map(entry => entry.label))].join(", ");
+                const note = el("p", "reader-call-evidence reader-operation-context",
+                    `${scope} (${names}) ${operations.length === 1 ? "records a request" : "record requests"}, not confirmed app use. `
+                    + `${operations.length === 1 ? "It stays" : "They stay"} in operation counts; this limit alone needs no action.`);
+                note.dataset.contextGroup = scenarioId;
+                const references = operations.filter(entry => entry.hasInputReferences);
+                if (references.length) note.append(" Input files (" + results.callGroupLabel(references.map(entry => entry.ordinal))
+                    + ") provide context, not app-use evidence.");
+                home.operationHome.append(note);
+            }
+            const toggle = el("button", "quiet reader-identifiers-toggle", "Record identifiers");
+            toggle.type = "button";
+            const detail = el("div", "reader-identifiers");
+            home.provenance.append(toggle, detail);
+            sections.detail({ key: sectionKey("identifiers:" + scenarioId), toggle, body: detail,
+                visibility: sourceSection.visibility, render: () => fields(home.identifiers.map(([name, value]) => [name, identifier(value)])) });
+        }
         for (const entry of entries) insertEntry(entry);
         for (const { scenarioId, relation, host } of responseHosts) {
             if (relation === "selected") sourceSection.element.before(host);
@@ -4050,16 +5973,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (last) last.node.after(item);
             }
         }
-        const copyNotice = el("p", "reader-copy-scope", "Copy uses unmasked text. Other apps and clipboard history may access it.");
-        copyNotice.id = copyNoticeId;
-        body.append(copyNotice);
         const selectedRecord = target.status === "available" ? body.querySelector("#selectedCall") : null;
-        if (selectedRecord) selectedRecord.prepend(contextNote);
+        if (selectedRecord && contextNote) selectedRecord.prepend(contextNote);
         if (linkedList.children.length) {
             linkedContext.append(el("p", "context-help-note", context.boundary), el("p", "context-help-note", context.limitation));
             sourceSection.body.append(linkedContext);
         }
-        const evidenceScope = el("p", "reader-evidence-scope", "Saved messages can have gaps. Tool outcomes do not establish answer correctness or permission. ");
+        const evidenceScope = el("p", "reader-evidence-scope");
         evidenceScope.append(link("Collection coverage", "collection-status", { setting: "collection-details" }, "text-link"));
         sourceSection.body.append(evidenceScope);
         detailOwner = "request:" + route.request;
@@ -4072,32 +5992,81 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const pick = $("requestReportToggle"), next = $("requestReportContinue"), title = $("requestReportTitle");
         const fixedScope = underlyingRoute().view === "reports" && reportScope !== "selected";
         const reportOrigin = fromReportCreation();
+        const readingBlock = nativeReaderSelectionBlock();
         setText(pick, membership.selected ? "Remove from report" : "Add to report");
         pick.hidden = fixedScope || Boolean(periodReport);
-        pick.disabled = membership.disabled || fixedScope;
+        pick.disabled = Boolean(readingBlock) || membership.disabled || fixedScope;
         setText(next, reportOrigin ? reportSetupReturn?.peek ? "Back to report setup" : "Back to activity" : "Continue to report");
-        next.disabled = reportOrigin ? exportWriting : membership.disabled || fixedScope || !membership.selected;
+        next.disabled = reportOrigin ? exportWriting : Boolean(readingBlock) || membership.disabled || fixedScope || !membership.selected;
         next.hidden = !reportOrigin && !membership.selected;
-        setText(title, periodReport ? "This report uses fixed paired periods. Change the comparison in Analyze to change its activity."
+        setText(title, readingBlock || (periodReport ? "This report uses fixed paired periods. Change the comparison in Analyze to change its activity."
             : fixedScope ? membership.included ? "Included by this report's activity scope. Change the scope in Activity."
                 : "Not included with this report's scope and author choices. Change them in Activity."
             : membership.selected && !membership.included ? "Selected; not included with current report choices."
-            : !membership.selected && membership.included ? "Included through the current report scope." : "");
+            : !membership.selected && membership.included ? "Included through the current report scope." : ""));
         title.hidden = !title.textContent;
         const block = reportSelectionBlock();
-        ux.tooltip(pick, block || (membership.disabled ? "This interaction has no reportable activity."
-            : membership.selected ? help.actions.removeRequest : help.actions.selectRequest));
-        ux.tooltip(next, reportOrigin ? reportSetupReturn?.peek ? "Back to report setup" : "Back to activity" : block || (membership.selected ? "Review selected activity and the report's author choices."
-            : "Add this interaction before continuing to the report."));
+        ux.tooltip(pick, readingBlock || block || (membership.disabled ? "This interaction has no reportable activity." : ""));
+        ux.tooltip(next, next.disabled ? readingBlock || block || "Add this interaction before continuing." : "");
     }
     function reportSelection(kind = reportScope) {
         if (periodReport && kind === reportScope) {
             const value = periodReport.value;
-            return reportScopes.resolve(state?.exportCatalog, "selected", [],
+            const resolved = reportScopes.resolve(state?.exportCatalog, "selected", [],
                 [...new Set(Object.values(value.periods).flatMap(side => side.scenarioIds))], authorship.selection(value.options.filters?.promptAuthors));
+            return value.nativePeriods ? { ...resolved, nativeView: true,
+                nativeConversationCount: new Set([...value.nativePeriods.rows.map(row => row.scenarioId),
+                    ...value.nativePeriods.refinement?.contextConversationRefs ?? []]).size } : resolved;
         }
-        const value = reportScopes.resolve(state?.exportCatalog, kind, state ? currentViewScenarios().map((s) => s.scenarioId) : [], [...selected], reportAuthors);
+        let value = reportScopes.resolve(state?.exportCatalog, kind, state ? currentViewScenarios().map((s) => s.scenarioId) : [], [...selected], reportAuthors);
+        if (usesBoundedReportView(kind)) {
+            const native = draft.nativeView(reportNativeView(), state?.revision, reportNativeIntent());
+            if (!native.ready || native.kind !== kind) return { ...value, available: false, nativeView: true };
+            if (kind === "current") value = reportScopes.resolve(state.exportCatalog, "selected", [],
+                native.request.selection.scenarioIds, reportAuthors);
+            return { ...value, nativeView: true, nativeConversationCount: native.conversationCount,
+                selection: () => ({ ...native.request.selection, promptAuthors: [...reportAuthors] }) };
+        }
         return kind === "current" && semanticQuery !== null && !semanticComplete ? { ...value, available: false } : value;
+    }
+    function nativeReportUnenrolled() {
+        return state?.nativeRead?.status === "unavailable"
+            && state.nativeRead.reason === "microsoft-account-not-configured"
+            && state.collection?.sourceAware?.microsoft?.status?.kind === "native-account-unavailable";
+    }
+    function usesBoundedReportView(kind = reportScope) {
+        return !periodReport && sourceCollection.active && (!nativeReportUnenrolled() || selectedNative().hasSelection)
+            && (kind === "all" || kind === "current" && boundedIncludesMicrosoft()
+            || kind === "selected" && selectedNative().hasSelection);
+    }
+    function reportNativeView(kind = reportScope) {
+        return kind === "selected" ? state?.nativeRead : acceptedNativeView();
+    }
+    function reportNativeIntent(kind = reportScope) {
+        if (kind === "selected") return { nativeSelected: selectedNative().items.map(item => item.id) };
+        return { analytics: applied, search: search.trim(), semanticQuery, withinServices: route.withinServices ?? null,
+            nativeGroup: state?.nativeRead?.groupId ?? null, nativeQuery: nativeAnalysisState?.query ?? null,
+            nativeTextMembership: acceptedNativeView()?.textSelection?.membershipRef ?? null };
+    }
+    function acceptNativeReportScope() {
+        if (!usesBoundedReportView()) { draft.clearNativeView(); return; }
+        const scope = reportScopes.resolve(state?.exportCatalog, reportScope,
+            state ? currentViewScenarios().map(scenario => scenario.scenarioId) : [], [...selected], reportAuthors);
+        try {
+            const native = selectedNative();
+            if (reportScope === "selected") {
+                if (!native.ready) throw new Error("The Microsoft selection changed. Clear it and choose current conversations.");
+                draft.bindNativeView(native.view, { ...scope.selection(state.revision),
+                    scenarioIds: [...scope.selection(state.revision).scenarioIds, ...native.items.map(item => item.id)] }, reportNativeIntent());
+            } else draft.bindNativeView(acceptedNativeView(), scope.selection(state?.revision), reportNativeIntent());
+        }
+        catch (error) { announce(error.message, "stale"); }
+    }
+    function reportNativeSummary(value) {
+        const native = value.nativeConversationCount === null ? "Microsoft conversations will be counted when preparing."
+            : `${count(value.nativeConversationCount)} retained Microsoft ${value.nativeConversationCount === 1 ? "conversation" : "conversations"} ${reportScope === "selected" ? "selected" : "in the original view"}.`;
+        return `${count(value.requests.length)} GitHub ${value.requests.length === 1 ? "interaction" : "interactions"}. ${native} Conversations on other pages remain included.`
+            + (nativeAnalysisState && reportScope !== "selected" ? " Search widgets count matching calls; the report includes each matching conversation's complete evidence and may contain more calls." : "");
     }
     function reportSelectionBlock() {
         if (exportWriting || reportJourney?.snapshot().saveUnconfirmed) return "Check or finish the current save before changing report activity.";
@@ -4105,7 +6074,91 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (periodReport) return "This draft uses paired periods. Return to the comparison to change its activity.";
         return "";
     }
+    function reportUnavailability(blocked) {
+        return blocked?.code === "native-report-provenance-unqualified" ? "Reports for Microsoft activity are not available." : blocked?.reason || "";
+    }
+    function nativeReportBlock(kind = reportScope) {
+        const scope = reportSelection(kind);
+        if (scope.issue) return scope.issue;
+        if (scope.nativeConversations && dateSelection().range !== "capture") return "Dated Microsoft report cohorts are not qualified. Use All dates for a retained-conversation report.";
+        if (usesBoundedReportView(kind)) {
+            if (kind !== "selected" && (search.trim() || route.withinServices || semanticQuery !== null && !nativeAnalysisState?.value)) {
+                return "Read complete native Search membership or clear the unsupported local refinement before choosing a report view.";
+            }
+            if (kind === "current" && semanticQuery !== null && !semanticComplete
+                && (!applied.filters.sources?.length || applied.filters.sources.includes("github-copilot"))) {
+                return "GitHub Search membership is not current. A combined Current report cannot use native membership alone.";
+            }
+            if (!scope.available) return "Choose this scope from a current Microsoft view. A changed or expired view must be selected again.";
+            if (scope.nativeConversationCount !== 0 && reportAuthors.length !== authorship.actors.length) return "Choose all prompt authors for a Microsoft conversation report.";
+            if (dateSelection().range !== "capture" && scope.nativeConversationCount !== 0) {
+                return "Dated Microsoft report cohorts are not qualified. Use All dates before selecting this scope.";
+            }
+            return "";
+        }
+        const blocked = state?.exportCatalog?.blockedRequests || [];
+        if (!blocked.length) return "";
+        const ids = periodReport && kind === reportScope ? Array.isArray(periodReport.value.selection.scenarioIds)
+            ? new Set(periodReport.value.selection.scenarioIds) : null
+            : kind === "all" ? null : new Set(kind === "current" ? currentViewScenarios().map(record => record.scenarioId) : selected);
+        return reportUnavailability(blocked.find(record => !ids || ids.has(record.scenarioId)));
+    }
+    function selectedNative() {
+        return draft.nativeSelection(state?.nativeRead, state?.revision, api.controlToken());
+    }
+    function nativeReportItem(id) {
+        return selectedNative().items.find(item => item.id === id) ?? boundedNative.current()?.page.items.find(item => item.id === id);
+    }
+    function nativeSelectionBlock(item, view = boundedNative.current()) {
+        if (!view || view.revision !== state?.revision || view.sourceRevision !== state?.nativeRead?.sourceRevision
+            || !view.page.items.some(value => value.id === item.id && value.sourceId === item.sourceId)) {
+            return "Choose this conversation from a current Microsoft Analyze page.";
+        }
+        const picks = selectedNative();
+        return picks.hasSelection && (!picks.ready || picks.view.selectionRef !== view.selectionRef)
+            ? "Clear the Microsoft selection before choosing conversations from a different view." : "";
+    }
+    function nativeSelectionCheckbox(item, view, reportPicker = false) {
+        const control = el("input"), owner = api.controlToken(), publication = api.publicationToken();
+        const id = item.id;
+        control.type = "checkbox"; control.dataset.nativeReportRequest = item.id;
+        control.id = (reportPicker ? "report-native-select-" : "select-native-request-") + item.id;
+        control.checked = selectedNative().items.some(value => value.id === item.id);
+        control.disabled = Boolean(reportSelectionBlock() || !control.checked && nativeSelectionBlock(item, view));
+        control.setAttribute("aria-label", "Select conversation for report: " + (item.presentation ? item.title : filterState.sourceLabel(item.sourceId)));
+        ux.tooltip(control, control.disabled ? reportSelectionBlock() || nativeSelectionBlock(item, view) : "");
+        control.addEventListener("change", () => {
+            if (!control.isConnected || control.dataset.nativeReportRequest !== id
+                || !api.isCurrent(publication) || api.controlToken() !== owner) return;
+            setNativeReportSelected(id, control.checked, view);
+        }, reportPicker ? { signal: reportPickerEvents.signal } : undefined);
+        return control;
+    }
+    function setNativeReportSelected(id, checked, offered = boundedNative.current()) {
+        const item = nativeReportItem(id);
+        const block = reportSelectionBlock() || (checked ? item ? nativeSelectionBlock(item, offered)
+            : "Choose this conversation from a current Microsoft Analyze page." : "");
+        if (block) { announce(block, "stale"); updateSelection(); return false; }
+        try { draft.selectNative(offered && { ...offered, status: "bounded" }, id, checked, api.controlToken()); }
+        catch (error) { announce(error.message, "stale"); updateSelection(); return false; }
+        reportScope = "selected"; reportEntry = null;
+        acceptNativeReportScope(); invalidatePreview();
+        const focus = $("reportList")?.contains(document.activeElement) ? document.activeElement.id : null;
+        keepAnchor(() => {
+            updateSelection();
+            if (underlyingRoute().view === "reports") renderReportPicker();
+            if (focus) ($(focus) ?? $("reportRequestsTitle"))?.focus({ preventScroll: true });
+        });
+        return true;
+    }
     function reportRequestSelection(scenarioId) {
+        const native = nativeReportItem(scenarioId), picks = selectedNative();
+        if (native) {
+            const chosen = picks.items.some(item => item.id === scenarioId);
+            return { selected: chosen, included: reportScope === "selected" ? chosen
+                    : usesBoundedReportView() && reportSelection().available && Boolean(boundedNative.current()?.page.items.some(item => item.id === scenarioId)),
+                disabled: Boolean(reportSelectionBlock() || !chosen && nativeSelectionBlock(native)) };
+        }
         const catalog = state?.exportCatalog;
         const request = catalog?.requests.find(item => item.scenarioId === scenarioId)
             ?? catalog?.requests.find(item => item.aliases.includes(scenarioId));
@@ -4117,6 +6170,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         };
     }
     function setReportRequestSelected(scenarioId, checked) {
+        if (nativeReportItem(scenarioId)) return setNativeReportSelected(scenarioId, checked);
         const block = reportSelectionBlock();
         const request = state?.exportCatalog?.requests.find(item => item.scenarioId === scenarioId)
             ?? state?.exportCatalog?.requests.find(item => item.aliases.includes(scenarioId));
@@ -4129,6 +6183,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         else for (const id of request.aliases) selected.delete(id);
         reportScope = "selected";
         reportEntry = null;
+        acceptNativeReportScope();
         invalidatePreview();
         if (sidebarIdentity) keepAnchor(updateSelection);
         else updateSelection();
@@ -4144,14 +6199,19 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             announce("Add this interaction to the report before continuing.", "stale");
             return false;
         }
-        const request = state.exportCatalog.requests.find(item => item.scenarioId === scenarioId)
+        const native = nativeReportItem(scenarioId);
+        const request = native ? null : state.exportCatalog.requests.find(item => item.scenarioId === scenarioId)
             ?? state.exportCatalog.requests.find(item => item.aliases.includes(scenarioId));
-        const choices = reportPickerRequests(), target = choices.find(item => item.scenarioId === request.scenarioId);
-        if (!target) { announce("This interaction is no longer available in the report picker.", "stale"); return false; }
-        const query = matchesReportRequest(target, localQuery("reportRequestSearch")) ? localQuery("reportRequestSearch") : "";
-        const matching = choices.filter(item => matchesReportRequest(item, query));
-        presentation.setPage("report:selected:" + query, Math.floor(matching.indexOf(target) / 4));
         reportScope = "selected";
+        const id = native?.id ?? request?.scenarioId;
+        const choices = reportPickerView("").matching, target = choices.find(item => item.id === id);
+        if (!target) { announce("This interaction is no longer available in the report picker.", "stale"); return false; }
+        const query = reportPickerView().matching.some(item => item.id === id) ? localQuery("reportRequestSearch") : "";
+        const view = reportPickerView(query), matching = view.matching;
+        if (view.plan) {
+            const index = native ? boundedNative.presentation().pageIndex : view.github.findIndex(item => item.scenarioId === id) / 4;
+            presentation.setPage(view.key, Math.floor(index));
+        } else presentation.setPage(view.key, Math.floor(matching.findIndex(item => item.id === id) / view.size));
         reportEntry = null;
         updateSelection();
         reportJourney.go(1);
@@ -4160,7 +6220,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const navigation = navigationGeneration, intent = readingIntent;
         const reveal = loaded => {
             if (!loaded || navigation !== navigationGeneration || intent !== readingIntent) return;
-            const control = $("report-select-" + encodeURIComponent(request.scenarioId));
+            if (contextSidebar.open && !sidebarIdentity) {
+                contextSidebar.addEventListener("close", () => reveal(loaded), { once: true });
+                return;
+            }
+            const control = $(native ? "report-native-select-" + id : "report-select-" + encodeURIComponent(id));
             if (!control?.checkVisibility() || !control.checked) {
                 announce("The continued interaction changed. Check the current report selection.", "stale");
                 return;
@@ -4195,6 +6259,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("detail").replaceChildren();
         if (state) { renderActivity(); renderRequest(); renderReports(); }
     }
+    function syncSaveLocks() {
+        $("closeDialog").disabled = exportWriting;
+        $("clearPreviewSelection").disabled = exportWriting || Boolean(reportJourney?.snapshot().saveUnconfirmed);
+        syncNativeSaveAvailability?.();
+    }
     function selectedScenarios() {
         const ids = new Set(reportSelection().requests.map((r) => r.scenarioId));
         return state ? state.scenarios.filter((scenario) => ids.has(scenario.scenarioId)) : [];
@@ -4205,26 +6274,65 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function matchesReportRequest(scenario, query) {
         return localSearch.matches(query, [scenario.userPrompt?.text, scenario.title, scenario.sourceSessionName,
-            sessionSource(scenario.sourceSessionId)?.name, scenario.project, scenario.sourceSessionId]);
+            sessionSource(scenario.sourceSessionId)?.name, scenario.project, scenario.sourceSessionId,
+            nativeActivity.isNative(scenario) ? filterState.sourceLabel(scenario.sourceId) : "GitHub Copilot"]);
     }
-    function reportPickerView() {
+    function reportPickerView(query = localQuery("reportRequestSearch")) {
         const picking = reportScope === "selected" && !periodReport;
         const requests = picking ? reportPickerRequests() : selectedScenarios();
-        const query = localQuery("reportRequestSearch"), matching = requests.filter(scenario => matchesReportRequest(scenario, query));
-        const key = "report:" + reportScope + ":" + query, size = 4;
-        return { picking, requests, query, matching, key, size, page: presentation.page(key, matching.length, size) };
+        const github = requests.filter(scenario => matchesReportRequest(scenario, query));
+        const native = sourceCollection.active && !periodReport ? boundedNative.current() : null, picks = selectedNative();
+        const nativeItems = native && (picking || usesBoundedReportView() && reportSelection().available)
+            ? [...new Map([...(native.page.items ?? []), ...(picking && picks.ready ? picks.items : [])].map(item => [item.id, item])).values()] : [];
+        const nativeMatches = nativeItems.filter(item => localSearch.matches(query,
+            [item.title, filterState.sourceLabel(item.sourceId), ...item.presentation?.tools ?? []]));
+        const matching = [];
+        for (let index = 0; index < Math.max(github.length, nativeMatches.length); index++) {
+            if (github[index]) matching.push({ id: github[index].scenarioId, scenario: github[index] });
+            if (nativeMatches[index]) matching.push({ id: nativeMatches[index].id, nativeItem: nativeMatches[index], nativeView: native });
+        }
+        const base = !periodReport && sourceCollection.active ? acceptedNativeView() : null;
+        const shared = !query && base?.status === "bounded" && (picking || usesBoundedReportView() && reportSelection().available);
+        const key = (shared ? "report:shared:" : "report:") + reportScope + ":" + query, size = 4;
+        let plan;
+        if (shared) {
+            const source = boundedNative.presentation();
+            plan = assessmentFactories.activityPage({ index: presentation.page(key, github.length + base.aggregates.conversations, 1),
+                github: github.length, native: base.aggregates.conversations, githubSize: size, nativeSize: base.page.limit,
+                ...(source.value || source.loading ? { nativeWindow: { index: source.pageIndex, offset: source.pageOffset,
+                    count: source.pageCount, hasNext: source.hasNext } } : {}) });
+        }
+        return { picking, requests, github, nativeItems, native, base, query, matching, key, size, plan,
+            page: plan?.index ?? presentation.page(key, matching.length, size) };
     }
     function updateReportPageSummary(selection = reportSelection()) {
         const summary = $("reportPageSelectionSummary");
         if (!summary || !state) return;
+        if (isLoading || isStale || !selection.available || !reportJourney?.snapshot().scopeReady) {
+            summary.hidden = true;
+            setText(summary, "");
+            return;
+        }
         const view = reportPickerView(), start = view.page * view.size;
-        const pageIds = new Set(view.matching.slice(start, start + view.size).map(scenario => scenario.scenarioId));
-        const outside = selection.requests.filter(request => !pageIds.has(request.scenarioId)).length;
-        const available = !isLoading && !isStale && selection.available && reportJourney?.snapshot().scopeReady;
-        summary.hidden = !available || !outside;
-        setText(summary, available && outside ? `${count(outside)} included outside this page.` : "");
+        const pageIds = new Set(view.plan ? [
+            ...view.github.slice(view.plan.githubOffset, view.plan.githubOffset + view.plan.githubLimit).map(item => item.scenarioId),
+            ...(view.plan.nativePage === boundedNative.presentation().pageIndex ? view.native?.page.items.map(item => item.id) ?? [] : []),
+        ] : view.matching.slice(start, start + view.size).map(entry => entry.id));
+        const nativeOutside = view.picking ? selectedNative().items.filter(item => !pageIds.has(item.id)).length
+            : selection.nativeView && Number.isSafeInteger(selection.nativeConversationCount)
+                ? Math.max(0, selection.nativeConversationCount - [...pageIds].filter(id => view.nativeItems.some(item => item.id === id)).length) : 0;
+        const outside = selection.requests.filter(request => !pageIds.has(request.scenarioId)).length + nativeOutside;
+        summary.hidden = !outside;
+        setText(summary, outside ? `${count(outside)} included outside this page.` : "");
+    }
+    function setReportMetadata(node, facts) {
+        node.classList.add("report-metadata");
+        if (node.childElementCount === facts.length && [...node.children].every((child, index) => child.textContent === facts[index])) return;
+        node.replaceChildren(...facts.flatMap((fact, index) => [...(index ? [document.createTextNode(" ")] : []), el("span", "", fact)]));
     }
     function updateSelection() {
+        if (clearingAccess || !api.publicationToken()) return;
+        syncSaveLocks();
         if (!state) return;
         const savedCount = state.exports?.length || 0;
         const verifiedEmptyLibrary = !savedCount && !isLoading && !isStale;
@@ -4235,12 +6343,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!savedCount) {
             const notice = $("bundleList").querySelector(":scope > p");
             if (notice) setText(notice, isLoading ? "Checking saved reports..." : isStale ? "Saved reports could not be checked. Retry the stored view."
-                : "No local reports have been saved. Create or continue a report, then review it before saving.");
+                : "No saved reports.");
         }
         const value = reportSelection();
+        const hasNativeScope = value.nativeView === true;
+        const nativePicks = selectedNative(), nativePickedIds = new Set(nativePicks.items.map(item => item.id));
+        const hasBaseSelection = value.baseRequests.length > 0 || reportScope === "selected" && nativePicks.hasSelection;
+        if (hasNativeScope && !value.available && activePreview && !exportWriting) {
+            invalidatePreview("The original Microsoft report view changed. Select a current scope before preparing again.");
+        }
+        const hasReportPopulation = value.requests.length > 0 || hasNativeScope
+            && (value.nativeConversationCount === null || value.nativeConversationCount > 0);
         const picked = new Set(reportSelection("selected").baseRequests.map(request => request.scenarioId));
         for (const control of $("reportList").querySelectorAll("input[data-report-request]")) control.checked = picked.has(control.dataset.reportRequest);
         for (const control of document.querySelectorAll("input[data-selected-request]")) control.checked = selected.has(control.dataset.selectedRequest);
+        for (const control of document.querySelectorAll("input[data-native-report-request]")) {
+            const id = control.dataset.nativeReportRequest, item = nativeReportItem(id);
+            control.checked = nativePickedIds.has(id);
+            control.disabled = Boolean(reportSelectionBlock() || !control.checked && (!item || nativeSelectionBlock(item)));
+        }
         const activeAuthors = periodReport ? authorship.selection(periodReport.value.options.filters?.promptAuthors) : reportAuthors;
         if (periodReport) {
             const expected = [...new Set(Object.values(periodReport.value.periods).flatMap(side => side.scenarioIds))].sort();
@@ -4256,7 +6377,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 invalidatePreview("Recorded context changed. Prepare a new preview; ordinary prompt edits are kept.");
             }
             const token = draft.token();
-            draft.select([reportScope, "authors:" + activeAuthors.join(","), ...value.requests.map((r) => r.scenarioId)]);
+            draft.select([reportScope, "authors:" + activeAuthors.join(","), ...value.requests.map((r) => r.scenarioId),
+                ...(reportScope === "selected" ? nativePickedIds : [])]);
             draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : dateSelection());
             if (draft.synchronizeBasis(state, value, { paired: Boolean(periodReport) }) && periodReport) periodReportInvalid = true;
             if (periodReport && JSON.stringify(periodReport.timeContext) !== JSON.stringify(viewerTime)) periodReportInvalid = true;
@@ -4264,14 +6386,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         for (const kind of ["all", "current", "selected"]) {
             const scope = reportSelection(kind), size = scope.requests.length;
-            $("scopeCount-" + kind).textContent = scope.available
-                ? `${scope.sourceSessionCount === null ? "Chat count unavailable" : `${count(scope.sourceSessionCount)} ${scope.sourceSessionCount === 1 ? "chat" : "chats"}`} · ${count(size)} ${size === 1 ? "interaction" : "interactions"}`
-                : "Count unavailable";
+            const unavailable = Boolean(nativeReportBlock(kind)), counter = $("scopeCount-" + kind);
+            counter.hidden = unavailable;
+            setReportMetadata(counter, unavailable ? [] : scope.available && scope.nativeView
+                    ? [`${count(scope.requests.length)} GitHub ${scope.requests.length === 1 ? "interaction" : "interactions"}`,
+                        scope.nativeConversationCount === null ? "Microsoft count checked at preparation"
+                            : `${count(scope.nativeConversationCount)} Microsoft ${scope.nativeConversationCount === 1 ? "conversation" : "conversations"}`]
+                    : scope.available
+                ? [scope.sourceSessionCount === null ? "Chat count unavailable" : `${count(scope.sourceSessionCount)} ${scope.sourceSessionCount === 1 ? "chat" : "chats"}`,
+                    `${count(size)} ${size === 1 ? "interaction" : "interactions"}`]
+                : ["Count unavailable"]);
             document.querySelector(`[name=reportScope][value=${kind}]`).checked = reportScope === kind;
         }
         setText($("reportScopeChoiceHelp"), help.reportScopes[reportScope]);
         $("reportScopeChoiceHelp").hidden = Boolean(periodReport);
         $("scopeSummary").textContent = !state.exportCatalog ? "Report scope is unavailable. Refresh before previewing." : unknownSelected ? "A selected request is no longer available. Choose a fresh selection." : reportScopes.summary(value);
+        if (hasNativeScope && value.available) $("scopeSummary").textContent = reportNativeSummary(value);
+        if (nativeReportBlock()) $("scopeSummary").textContent = nativeReportBlock();
         for (const option of $("reportPromptAuthorFilter").options) option.selected = activeAuthors.includes(option.value);
         $("reportPromptAuthorFilter").disabled = exportWriting || Boolean(periodReport);
         $("reportPromptAuthorFilter").closest(".report-author-choice").hidden = Boolean(periodReport);
@@ -4283,15 +6414,39 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.querySelectorAll("[name=promptMode],#formatOptions input,#manualTerms").forEach(control => { control.disabled = exportWriting; });
         $("reportRecordedContext").checked = draft.options().recordedContext === true && draft.options().promptMode !== "none";
         $("reportRecordedContext").disabled = exportWriting || draft.options().promptMode === "none";
+        $("reportResultText").checked = draft.options().resultText === true;
+        $("reportResultText").disabled = exportWriting;
         $("reportRecordedContextHelp").hidden = !$("reportRecordedContext").checked && draft.options().promptMode !== "none";
         setText($("reportRecordedContextHelp"), draft.options().promptMode === "none"
-            ? "No prompts leaves linked request and reply text out."
-            : $("reportRecordedContext").checked ? "Your author and prompt choices apply. Missing or revoked replies stay unavailable. Review every copy before saving; reading is not permission to export. Linked context is not proof of one task and does not expand the selected activity." : "");
+            ? "No prompts also excludes linked replies."
+            : $("reportRecordedContext").checked ? "Linked context does not expand the measured activity or prove one task. Unavailable replies stay excluded." : "");
         setText($("reportPromptAuthorSummary"), value.available === false ? "Interaction counts are unavailable for this scope."
             : `${count(value.requests.length)} of ${count(value.baseRequests.length)} ${value.baseRequests.length === 1 ? "interaction" : "interactions"} included.${value.authorExcludedRequestGroups ? ` ${count(value.authorExcludedRequestGroups)} excluded by authors. Your selection is kept.` : ""}`);
         $("reportPromptAuthorSummary").hidden = !periodReport && value.available !== false && !value.authorExcludedRequestGroups;
-        $("scopeExplanation").textContent = "";
-        $("scopeExplanation").hidden = true;
+        $("scopeExplanation").replaceChildren();
+        $("scopeExplanation").hidden = !hasNativeScope;
+        if (hasNativeScope) $("reportScopeChoiceHelp").after($("scopeExplanation"));
+        if (hasNativeScope && reportScope === "selected") {
+            const clearNative = button("Clear Microsoft selection", () => {
+                if (exportWriting || reportJourney?.snapshot().saveUnconfirmed) return;
+                draft.clearNativeSelection(); acceptNativeReportScope(); invalidatePreview(); renderReports();
+            }, "quiet");
+            clearNative.disabled = exportWriting || reportJourney?.snapshot().saveUnconfirmed;
+            $("scopeExplanation").append(clearNative);
+        } else if (hasNativeScope && !value.available) {
+            const refreshScope = button("Use current activity for this report scope", async () => {
+                if (exportWriting || isLoading || isStale) return;
+                const scope = reportScope, publication = api.publicationToken();
+                if (!await load({ background: true }) || !api.isCurrent(publication) || reportScope !== scope) return;
+                acceptNativeReportScope(); invalidatePreview(); renderReports();
+            }, "quiet");
+            refreshScope.disabled = exportWriting || isLoading || isStale;
+            $("scopeExplanation").append(refreshScope);
+        }
+        if (hasNativeScope && !nativePublication.available(nativePublicationContext(false))) {
+            $("scopeExplanation").append(el("span", "context-help-note", "Saving Microsoft reports is unavailable in this session."));
+        }
+        $("scopeExplanation").hidden = !$("scopeExplanation").childElementCount;
         const reportIds = new Set(value.requests.flatMap(request => request.aliases));
         const currentIds = new Set(currentViewScenarios().map(s => s.scenarioId));
         const hidden = value.requests.filter(request => !request.aliases.some(id => currentIds.has(id))).length;
@@ -4301,7 +6456,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : "";
         const matching = results.summarize(selectionRows().filter(row => reportIds.has(row.scenarioId) && currentIds.has(row.scenarioId)));
         $("reportMatchingContext").replaceChildren(resultLine(applied?.layer || "tool", matching, { scope: "Matching view results, not the full report", label: `${count(matching?.count)} matching ${results.unit(applied?.layer || "tool", matching?.count)} in the current view` }));
-        $("reportMatchingContext").hidden = !value.requests.length || !currentMembershipAvailable;
+        $("reportMatchingContext").hidden = !value.requests.length || !currentMembershipAvailable || Boolean(value.nativeConversations) || hasNativeScope;
         const x = state.exportCatalog?.excluded;
         const exclusions = $("scopeExclusions");
         exclusions.replaceChildren();
@@ -4312,6 +6467,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ["syntheticRequestGroups", "Synthetic request groups"],
                 ["diagnosticRequestGroups", "Diagnostic request groups"],
                 ["unknownSourceRequestGroups", "Request groups with unknown source identity"],
+                ...(Object.hasOwn(x, "nativeProvenanceUnqualifiedRequestGroups")
+                    ? [["nativeProvenanceUnqualifiedRequestGroups", "Microsoft conversations awaiting report support"]] : []),
                 ["requestGroupsWithoutEligibleEvidence", "Alias-only or excluded request groups"],
                 ["duplicateEvidenceRecords", "Duplicate evidence records"],
                 ["unidentifiableEvidenceRecords", "Unidentifiable evidence records"],
@@ -4332,11 +6489,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             `${count(value.excludedRequestedGroups)} selected request groups have no eligible evidence.`));
         const inclusion = periodReport
             ? `One comparison report / ${periodReport.value.periods.baseline.rowIds.length} matching records in A / ${periodReport.value.periods.later.rowIds.length} in B`
-            : unknownSelected ? "A selected request is no longer available" : reportScopes.inclusion(value);
+            : unknownSelected ? "A selected request is no longer available" : hasNativeScope && value.available
+                ? reportNativeSummary(value) : reportScopes.inclusion(value);
         const activity = route.view === "analyze";
         setText($("activitySelectionSummary"), inclusion);
-        setText($("previewSelectionSummary"), periodReport || unknownSelected || !value.available ? inclusion : !value.requests.length ? "No interactions included"
-            : `${value.sourceSessionCount === null ? "Chat count unavailable" : `${count(value.sourceSessionCount)} ${value.sourceSessionCount === 1 ? "chat" : "chats"}`} · ${count(value.requests.length)} ${value.requests.length === 1 ? "interaction" : "interactions"}`);
+        setReportMetadata($("previewSelectionSummary"), periodReport || unknownSelected || !value.available || hasNativeScope ? [inclusion] : !value.requests.length ? ["No interactions included"]
+            : [value.sourceSessionCount === null ? "Chat count unavailable" : `${count(value.sourceSessionCount)} ${value.sourceSessionCount === 1 ? "chat" : "chats"}`,
+                `${count(value.requests.length)} ${value.requests.length === 1 ? "interaction" : "interactions"}`]);
         let compactSelection = $("activitySelectionCompact");
         if (!compactSelection) {
             compactSelection = el("p");
@@ -4344,24 +6503,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             compactSelection.setAttribute("aria-hidden", "true");
             $("activitySelectionSummary").before(compactSelection);
         }
-        compactSelection.hidden = !activity || unknownSelected;
+        compactSelection.hidden = !activity || unknownSelected || nativePicks.hasSelection && !nativePicks.ready;
         $("activitySelectionSummary").classList.toggle("visually-hidden", activity && !unknownSelected);
-        renderSelectionCount(compactSelection, value.requests.length, state.exportCatalog?.requests?.length ?? state.scenarios.length);
-        $("activitySelectionScope").textContent = activity || value.requests.length ? ({ all: "All collected activity", current: "Current view", selected: "Selected requests" })[reportScope] : "";
-        $("activitySelectionContext").hidden = !activity && !value.baseRequests.length;
-        if (route.view === "request") $("pageAction").hidden = !value.baseRequests.length;
-        $("activityClearSelection").hidden = !activity && !value.baseRequests.length;
+        renderSelectionCount(compactSelection, value.requests.length + (value.nativeConversationCount ?? 0),
+            (state.exportCatalog?.requests?.length ?? state.scenarios.length) + (state.nativeRead?.aggregates?.conversations ?? 0));
+        $("activitySelectionScope").textContent = activity || hasBaseSelection ? ({ all: "All collected activity", current: "Current view", selected: "Selected requests" })[reportScope] : "";
+        $("activitySelectionContext").hidden = !activity && !hasBaseSelection;
+        if (route.view === "request") $("reportContextAction").hidden = !hasBaseSelection;
+        $("activityClearSelection").hidden = !activity && !hasBaseSelection;
         $("reportSelectionBar").hidden = ["request", "reports", "settings", "collection-status"].includes(route.view)
-            || !value.baseRequests.length && !unknownSelected;
+            || !hasBaseSelection && !unknownSelected;
         updateRequestReportActions();
         document.querySelectorAll("[data-clear-selection]").forEach(control => {
-            control.disabled = exportWriting || reportJourney?.snapshot().saveUnconfirmed || control.id === "activityClearSelection" && !value.baseRequests.length;
+            control.disabled = exportWriting || reportJourney?.snapshot().saveUnconfirmed || control.id === "activityClearSelection" && !hasBaseSelection;
         });
-        $("reportClearSelection").hidden = !value.baseRequests.length && !selected.size || ["saved", "unavailable"].includes(reportJourney?.snapshot().phase);
+        $("reportClearSelection").hidden = !hasBaseSelection && !selected.size || ["saved", "unavailable"].includes(reportJourney?.snapshot().phase);
         if (route.view === "reports") {
-            $("pageAction").hidden = !value.requests.length;
-            $("pageAction").classList.add("quiet");
-        } else $("pageAction").classList.remove("quiet");
+            $("reportContextAction").hidden = !hasReportPopulation;
+            $("reportContextAction").classList.add("quiet");
+        } else $("reportContextAction").classList.remove("quiet");
         let pairedSummary = $("periodReportScope");
         if (!pairedSummary) {
             pairedSummary = el("section", "report-period-scope"); pairedSummary.id = "periodReportScope";
@@ -4389,7 +6549,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const from = time.formatDate(period.range.from, periodReport.timeContext, true);
                 const to = time.formatDate(period.range.to, periodReport.timeContext, true);
                 setText(group.querySelector(".report-period-dates"), from === to ? from : `${from} to ${to}`);
-                setText(group.querySelector(".report-period-count"), `${count(period.rowIds.length)} matching ${results.unit(periodReport.value.definitions.layer, period.rowIds.length)}`);
+                const microsoft = periodReport.value.nativePeriods?.summary.map(item => {
+                    const source = item.sourceId === "microsoft-365-chat" ? "Chat" : "Cowork";
+                    const unit = item.unit === "native-tool-call" ? "calls" : item.unit === "native-returned-result-observation" ? "result observations" : "message observations";
+                    return `${count(item[side].count)} ${source} ${unit}`;
+                }).join("; ");
+                setText(group.querySelector(".report-period-count"), `${count(period.rowIds.length)} matching ${results.unit(periodReport.value.definitions.layer, period.rowIds.length)}${microsoft ? `; ${microsoft}` : ""}`);
             }
             setText(pairedSummary.querySelector(".report-period-authors"), `Authors: ${authorship.selectionLabel(activeAuthors)}. Dates use ${time.label(periodReport.timeContext)}.`);
             pairedSummary.querySelector("button").disabled = exportWriting || reportJourney.snapshot().saveUnconfirmed;
@@ -4397,8 +6562,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("scopeSummary").textContent = "Matching records remain separate for Period A and Period B. Recorded timing keeps its original interaction scope.";
             $("reportMatchingContext").hidden = true;
         }
-        const prepareIssue = reportPreparationBlock("report");
-        $("exportBtn").disabled = isLoading || isStale || periodReportInvalid || !state.exportCatalog || value.available === false || unknownSelected || !value.requests.length || !draft.options().formats.length
+        const nativeBlock = nativeReportBlock();
+        const prepareIssue = nativeBlock || reportPreparationBlock("report");
+        $("exportBtn").disabled = isLoading || isStale || periodReportInvalid || !state.exportCatalog || value.available === false || unknownSelected || !hasReportPopulation || !draft.options().formats.length
             || Boolean(prepareIssue) && !reportJourney?.snapshot().hasPreview;
         for (const notice of $("reportReviewBody")?.querySelectorAll(".rebuild-preview") || []) {
             notice.querySelector("button").disabled = $("exportBtn").disabled;
@@ -4406,9 +6572,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         reportJourney?.update({
             requestCount: value.requests.length, sourceSessionCount: value.sourceSessionCount, scope: periodReport ? "period" : reportScope,
+            nativeView: hasNativeScope, nativeConversationCount: value.nativeConversationCount ?? null,
             authorLabel: authorship.selectionLabel(activeAuthors), authorFiltered: activeAuthors.length !== authorship.actors.length,
-            scopeReady: !isLoading && !isStale && !periodReportInvalid && Boolean(state.exportCatalog) && value.available !== false && !unknownSelected,
-            scopeIssue: periodReportInvalid ? "The accepted comparison changed. Return to Analyze and create a new comparison report." : isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : "",
+            scopeReady: !nativeBlock && !isLoading && !isStale && !periodReportInvalid && Boolean(state.exportCatalog) && value.available !== false && !unknownSelected,
+            scopeIssue: nativeBlock || (periodReportInvalid ? "The accepted comparison changed. Return to Analyze and create a new comparison report." : isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : ""),
             promptMode: draft.options().promptMode, formats: draft.options().formats,
             prepareIssue,
             timeLabel: time.label(applied?.timeContext || viewerTime), entry: reportEntry,
@@ -4418,63 +6585,136 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderStoredRefresh();
         renderReportTask();
     }
-    function renderReports() {
-        if (route.bundle) { renderSavedReader(); return; }
-        captureReading();
-        $("reportTimeContext").textContent = `Report dates use ${time.label(applied.timeContext)} (${applied.timeContext.locale}). Source event timestamps stay withheld.`;
-        const host = $("reportList"), { picking, requests, query, matching, key, size } = reportPickerView();
+    function renderReportPicker() {
+        if (sourceCollection.active) seedBoundedNative();
+        const host = $("reportList"), { picking, requests, github, nativeItems, native, base, query, matching, key, size, plan } = reportPickerView();
         $("reportRequestsTitle").textContent = picking ? "Choose interactions" : "Included interactions";
+        $("reportRequestsTitle").tabIndex = -1;
+        reportPickerEvents?.abort();
+        releaseCardPreviews(host);
+        boundedNative.clearCards(host);
+        reportPickerEvents = new AbortController();
         host.replaceChildren();
-        {
-            $("reportRequestSearchCount").hidden = !query;
-            setText($("reportRequestSearchCount"), `${count(matching.length)} of ${count(requests.length)} saved interactions shown.${picking ? " Selections outside this list are kept." : ` All ${count(requests.length)} remain included.`}`);
-            if (!requests.length) host.append(empty(picking ? "No reportable activity saved" : "No interactions included",
-                isStale ? "Activity could not be checked. Retry the stored view." : picking ? "This library uses activity already saved in WIRE." : "Choose another scope or include other prompt authors."));
-            else if (!matching.length) host.append(empty("No interactions match", "Clear this search to show the list. Your report selection is unchanged."));
-            if (matching.length) pagedList(host, matching, { key, size, noun: "report requests", wrapList: list => {
+        $("reportRequestSearchCount").hidden = !query;
+        const candidates = requests.length + nativeItems.length;
+        setText($("reportRequestSearchCount"), native
+            ? `${count(matching.length)} of ${count(candidates)} available cards shown. Search checks these cards and keeps your report scope unchanged.`
+            : `${count(matching.length)} of ${count(requests.length)} saved interactions shown.${picking ? " Selections outside this list are kept." : ` All ${count(requests.length)} remain included.`}`);
+        const listHost = el("div", "report-selection-list");
+        host.append(listHost);
+        const wrapList = list => {
                 list.className = "report-request-page";
                 list.tabIndex = 0;
                 list.setAttribute("role", "region");
                 list.setAttribute("aria-label", "Requests on this report page");
                 updateReportPageSummary();
                 return list;
-            }, renderItem: scenario => {
-            detailOwner = "report:" + scenario.scenarioId;
-            const row = viewKey(el("article", "report-entry"), detailOwner), text = el("div");
-            const requestLink = link("View interaction", "request", { request: scenario.scenarioId }, "request-link text-link");
-            const source = sessionSource(scenario.sourceSessionId);
-            const prompt = textAccess.render(scenario.userPrompt, { key: "report:" + scenario.scenarioId, navigationNode: requestLink, originKind: authorship.originKind(scenario), allowCopy: false });
-            prompt.querySelector(".full-text-preview-state")?.remove();
-            const heading = el("div", "report-prompt-heading");
-            const provenance = prompt.querySelector(".full-text-provenance");
-            if (provenance.querySelector("[data-prompt-actor=unknown]")) {
-                const label = el("span", "full-text-preview-label", "Author unverified");
-                label.dataset.promptActor = "unknown";
-                provenance.replaceChildren(label);
+        };
+        const renderItem = entry => {
+                const { scenario, nativeItem, nativeView } = entry;
+                let selection;
+                if (picking) {
+                    const control = nativeItem ? nativeSelectionCheckbox(nativeItem, nativeView, true) : selectionCheckbox(scenario, true);
+                    if (!nativeItem) control.disabled = reportRequestSelection(scenario.scenarioId).disabled;
+                    selection = el("label", "report-selection-toggle");
+                    selection.htmlFor = control.id; selection.append(control);
+                }
+                const row = nativeItem ? boundedNative.card({ item: nativeItem, view: nativeView, selection,
+                    onOpen: target => navigate(routeFor("request", { request: target.conversationId, nativeSource: target.sourceId,
+                        nativeRevision: String(target.revision), nativeSourceRevision: target.sourceRevision })) })
+                    : requestCard(scenario, { reportPicker: true });
+                if (!row) return el("p", "context-help-note", "This interaction is no longer authorized.");
+                row.classList.add("report-entry");
+                row.dataset.viewKey = "report:" + (nativeItem?.id ?? scenario.scenarioId);
+                if (!nativeItem && selection) row.prepend(selection);
+                if (!nativeItem && picking) {
+                    const request = state.exportCatalog.requests.find(item => item.scenarioId === scenario.scenarioId);
+                    if (!reportAuthors.includes(request.promptAuthor ?? "unknown")) row.querySelector(".request-card-open").append(
+                        el("p", "context-help-note", "Not included with the current prompt-author choice."));
+                }
+                return row;
+        };
+        if (plan) {
+            const source = boundedNative.presentation(), ready = !source.loading && !source.error
+                && (plan.nativePage === null && !source.selected || Boolean(source.value) && (plan.nativePage === null || source.pageIndex === plan.nativePage));
+            const pager = viewKey(el("div", "pager list-pager"), "pager:" + key);
+            pager.setAttribute("aria-label", "Report activity pages");
+            const label = el("span", "", ready ? `${count(plan.first)}-${count(plan.last)} of ${count(plan.total)} available cards`
+                : `Page ${count(plan.index + 1)} / Microsoft page ${source.loading ? "loading" : "unavailable"}`);
+            label.tabIndex = -1; label.dataset.pagePosition = ""; pager.append(label);
+            const move = async index => {
+                if (!pager.isConnected || !api.publicationToken()) return;
+                const publication = api.publicationToken();
+                const anchor = capturePager(pager, index - plan.index);
+                presentation.setPage(key, Math.max(0, index));
+                const next = reportPickerView().plan;
+                if (!next) return;
+                if (next.nativePage !== null && (source.pageIndex !== next.nativePage || source.error)) await boundedNative.pageAt(next.nativePage);
+                if (!api.isCurrent(publication) || underlyingRoute().view !== "reports") return;
+                const current = reportPickerView();
+                if (current.key !== key || current.base?.sourceRevision !== base.sourceRevision
+                    || current.base?.selectionRef !== base.selectionRef) return;
+                renderReportPicker();
+                restorePager(anchor);
+            };
+            if (plan.pages > 1) for (const [name, offset] of [["Previous", -1], ["Next", 1]]) {
+                const control = button(name, () => void move(plan.index + offset), "quiet");
+                control.setAttribute("aria-label", `${name} report requests`);
+                control.dataset.pageDirection = String(offset);
+                control.disabled = source.loading || (offset < 0 ? plan.index === 0 : plan.index >= plan.pages - 1);
+                pager.append(control);
             }
-            heading.append(provenance);
-            prompt.prepend(heading);
-            const identity = el("dl", "report-entry-meta"), chatName = source?.name || scenario.sourceSessionName;
-            if (chatName && chatName !== chatCopy.unnamed) identity.append(cardFact("Copilot Chat", chatName));
-            const activity = interactionSummary(fullRowsFor(scenario.scenarioId, "tool"), "tool", "Full interaction Work IQ calls", "Work IQ calls");
-            const moment = requestTiming.entry(scenario, applied.timeContext);
-            if (moment.label !== "Request time") identity.append(cardFact(moment.label === "Message recorded" ? "Recorded" : moment.label, moment.value));
-            text.append(prompt, activity);
-            if (identity.childElementCount) text.append(identity);
-            if (picking) {
-                const checkbox = selectionCheckbox(scenario, true);
-                checkbox.disabled = reportRequestSelection(scenario.scenarioId).disabled;
-                const pick = el("label", "report-selection-toggle");
-                pick.htmlFor = checkbox.id;
-                pick.append(checkbox);
-                row.append(pick);
-                const request = state.exportCatalog.requests.find(item => item.scenarioId === scenario.scenarioId);
-                if (!reportAuthors.includes(request.promptAuthor ?? "unknown")) text.append(el("p", "context-help-note", "Not included with the current prompt-author choice."));
+            listHost.append(pager);
+            const list = wrapList(el("div"));
+            const available = plan.nativePage !== null && ready ? native?.page.items ?? [] : [];
+            const ordinary = github.slice(plan.githubOffset, plan.githubOffset + plan.githubLimit);
+            for (let index = 0; index < Math.max(ordinary.length, available.length); index++) {
+                if (ordinary[index]) list.append(renderItem({ scenario: ordinary[index] }));
+                if (available[index]) list.append(renderItem({ nativeItem: available[index], nativeView: native }));
             }
-            row.append(text);
-            return row;
-            } });
+            if (!ready) {
+                const notice = el("p", "context-help-note", source.error || "Reading the Microsoft activity page. Your report selection is unchanged.");
+                notice.setAttribute("role", source.error ? "alert" : "status");
+                list.append(notice);
+                if (source.error) list.append(button("Read current activity", () => {
+                    presentation.setPage(key, 0);
+                    boundedNative.invalidate("Reading current Microsoft activity.");
+                    void load();
+                }, "quiet"));
+                else if (!source.loading && source.value) void boundedNative.pageAt(plan.nativePage);
+            }
+            if (ready && !plan.total) list.append(empty("No reportable activity saved", "Collect activity to create a report."));
+            listHost.append(list);
+        } else {
+            if (!candidates && !(sourceCollection.active && !native && boundedIncludesMicrosoft() && !nativeReportUnenrolled())) {
+                listHost.append(empty(picking ? "No reportable activity saved" : "No interactions included",
+                    isStale ? "Activity could not be checked. Retry the stored view." : picking ? "Collect activity to create a report." : "Choose another scope or include other prompt authors."));
+            }
+            else if (candidates && !matching.length) listHost.append(empty("No interactions match", "Clear this search to show the list. Your report selection is unchanged."));
+            if (matching.length) pagedList(listHost, matching, { key, size, noun: "report requests", wrapList, renderItem,
+                beforeReplace: releaseCardPreviews });
         }
+        if (native) {
+            host.append(el("p", "context-help-note report-candidate-coverage", picking
+                ? "Selecting a Microsoft conversation includes its complete saved evidence, not just matching calls."
+                : "This list shows available cards, not the full report population. The original scope is checked when the report is prepared."));
+        } else if (!plan && sourceCollection.active && !periodReport && boundedIncludesMicrosoft() && !nativeReportUnenrolled()) {
+            const source = boundedNative.presentation(), reason = source.error || (source.loading
+                ? "Reading Microsoft activity. Your existing report selection is kept."
+                : "Microsoft activity is unavailable in this source view. It has not been counted as an empty selection.");
+            const notice = el("p", "context-help-note", reason);
+            notice.setAttribute("role", source.loading ? "status" : "alert"); host.append(notice);
+        }
+        if (selectedNative().hasSelection && !selectedNative().ready) {
+            host.append(el("p", "context-help-note", "The Microsoft selection changed. Clear it and choose current conversations."));
+        }
+    }
+    function renderReports() {
+        if (route.bundle) { renderSavedReader(); return; }
+        captureReading();
+        $("reportTimeContext").textContent = `Report dates use ${time.label(applied.timeContext)} (${applied.timeContext.locale}). `
+            + (periodReport?.value.nativePeriods ? "Qualified Microsoft activity dates are included; raw source identifiers stay withheld." : "Source event timestamps stay withheld.");
+        renderReportPicker();
         $("bundleList").replaceChildren();
         const savedCount = state.exports?.length || 0;
         const reportCount = (state.exports || []).filter(bundle => (bundle.kind ?? "report") === "report").length;
@@ -4482,13 +6722,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("savedLibraryTitle").textContent = comparisonCount ? `Saved reports and comparisons (${count(savedCount)})` : savedCount ? `Saved reports (${count(savedCount)})` : "Saved reports";
         $("savedReportCount").textContent = comparisonCount ? `${count(reportCount)} report${reportCount === 1 ? "" : "s"} / ${count(comparisonCount)} comparison${comparisonCount === 1 ? "" : "s"}` : "";
         $("savedReportCount").parentElement.hidden = !comparisonCount;
-        $("deleteAllReports").disabled = !reportCount || isLoading || isStale;
+        $("deleteAllReports").disabled = !reportCount || isLoading || isStale
+            || state.exports.some(bundle => (bundle.kind ?? "report") === "report" && (bundle.canDelete === false || bundle.nativeEvidenceHash));
         (() => {
         $("bundleList").replaceChildren();
         setText($("savedReportSearchCount"), "");
         if (!savedCount) {
             $("bundleList").append(el("p", "", isStale ? "Saved reports could not be checked. Retry the stored view."
-                : "No local reports have been saved."));
+                : "No saved reports."));
             return;
         }
         const history = el("div");
@@ -4501,13 +6742,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const mode = ({ none: "No prompts", masked: "Masked prompts", original: "Original prompts" })[bundle.promptMode];
             const formats = (bundle.formats || []).map(format => format === "markdown" ? "Markdown" : format.toUpperCase()).join(", ");
             const groups = bundle.selectionScope?.requestGroups;
+            const conversations = bundle.selectionScope?.nativeConversations;
+            const hasNative = Number.isSafeInteger(conversations) && conversations >= 0;
             const title = typeof bundle.title === "string" && bundle.title.trim() ? bundle.title.trim()
                 : assessmentFactories.reportIdentity.defaultTitle(bundle);
             const label = [
                 title,
                 date === "Time not recorded" ? "Preparation time unavailable" : `Prepared ${date}`,
                 mode, formats,
-                Number.isSafeInteger(groups) && groups >= 0 ? `${count(groups)} interaction${groups === 1 ? "" : "s"}` : "",
+                Number.isSafeInteger(groups) && groups >= 0 ? `${count(groups)} ${hasNative ? "GitHub " : ""}interaction${groups === 1 ? "" : "s"}` : "",
+                hasNative ? `${count(conversations)} Microsoft conversation${conversations === 1 ? "" : "s"}` : "",
             ].filter(Boolean).join(" / ");
             return { bundle, index, prepared, label, title: savedTitle(bundle) };
         });
@@ -4563,6 +6807,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return ["html", "json", "markdown", "pdf"].find(format => bundle.formats?.includes(format)
             || Object.hasOwn(bundle.files ?? {}, `${prefix}.${format === "markdown" ? "md" : format}`));
     }
+    function savedFileName(bundle, format) {
+        return format === "manifest" ? "coverage-and-redaction-manifest.json"
+            : `${bundle.kind === "comparison" ? "comparison-report" : "product-report"}.${format === "markdown" ? "md" : format}`;
+    }
     function savedTitle(bundle) {
         if (!bundle) return "Report unavailable";
         return assessmentFactories.reportIdentity.title(bundle,
@@ -4590,7 +6838,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 navigationKey: previous.navigationKey, reading: previous.reading });
         }
         else ownSidebarHistory(true);
-        navigate({ ...routeFor("reports"), inspect: bundle.bundleId, savedEntry: key }, Boolean(route.inspect));
+        // A replaced reader entry cannot also be the sidebar's Close destination.
+        if (route.bundle) savedEntries.get(key).navigationKey = null;
+        return navigate({ ...routeFor("reports"), inspect: bundle.bundleId, savedEntry: key }, Boolean(route.inspect || route.bundle));
     }
     function updateSavedRows() {
         for (const row of $("bundleList").querySelectorAll("[data-bundle-id]")) {
@@ -4600,12 +6850,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function backSaved() {
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess) return;
         const entry = savedEntries.get(route.savedEntry);
         const origin = entry?.origin && entry.bundleId === (route.bundle || route.inspect) ? { ...entry.origin, savedEntry: entry.originEntry }
             : { view: "reports", order: route.order, localSearch: route.localSearch };
         // Opaque document section links can add child-frame history entries.
         if (entry?.navigationKey && window.navigation?.entries().some(item => item.key === entry.navigationKey)) {
             window.navigation.traverseTo(entry.navigationKey).finished.catch(error => {
+                if (!api.isCurrent(publication)) return;
                 announce("The previous history entry could not be restored. Returning to the saved origin. " + error.message, "error");
                 applyRoute(origin, { restorePosition: true });
             });
@@ -4614,7 +6867,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function closeSavedInspector(restoreFocus = true, immediate = false) {
         const previous = savedInspector;
         if (!previous) return;
+        savedArtifactUI?.clearEligibility();
         const navigation = navigationGeneration, intent = readingIntent;
+        clearOriginalRead(previous);
         savedInspector = null;
         contextSidebar.inert = true;
         sidebarExit = { bundleId: previous.bundleId, cleanup: () => { previous.body.remove(); previous.footer.remove(); } };
@@ -4633,8 +6888,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         rememberRoute(route, true);
         appliedRoute = { ...route };
     }
-    function savedDownloads(bundle, isCurrent) {
-        const downloads = el("div", "saved-report-downloads"), field = el("label", "saved-file-choice", "File"), select = el("select");
+    function savedDownloads(bundle, isCurrent, openFile) {
+        const downloads = el("div", "saved-report-downloads"), field = el("label", "saved-file-choice", openFile ? "" : "File"), select = el("select");
         select.setAttribute("aria-label", "Saved file");
         for (const name of Object.keys(bundle.files || {}).sort((a, b) => Number(a === "coverage-and-redaction-manifest.json") - Number(b === "coverage-and-redaction-manifest.json"))) {
             const label = name.endsWith(".html") ? "HTML" : name.endsWith(".pdf") ? "PDF" : name.endsWith(".md") ? "Markdown"
@@ -4649,13 +6904,27 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             catch (error) { if (isCurrent()) announce(error.message, "error"); }
             finally { if (isCurrent()) { control.disabled = select.disabled = false; selectControls?.sync(); } }
         }, "quiet");
-        field.append(select); downloads.append(field, control);
+        field.append(select); downloads.append(field);
+        if (openFile) {
+            select.id = "savedInspectorFormat";
+            const open = viewKey(button("Open", event => {
+                if (!isCurrent() || open.hidden) return;
+                const extension = select.value.split(".").at(-1);
+                openFile(select.value === "coverage-and-redaction-manifest.json" ? "manifest" : extension === "md" ? "markdown" : extension, event.currentTarget);
+            }, "primary"), "inspector-open:" + bundle.bundleId);
+            open.setAttribute("aria-label", "Open saved " + (bundle.kind === "comparison" ? "comparison" : "report"));
+            downloads.append(open);
+        }
+        downloads.append(control);
         return downloads;
     }
     function renderSavedInspector() {
+        const publication = api.publicationToken();
         const bundle = state.exports?.find(item => item.bundleId === route.inspect);
+        savedArtifactUI?.observeEligibility();
+        savedInspector?.refreshEligibility?.(state?.revision);
         if (savedInspector?.bundleId === route.inspect && savedInspector.metadata === JSON.stringify(bundle)) return;
-        if (savedInspector) { savedInspector.body.remove(); savedInspector.footer.remove(); savedInspector = null; }
+        if (savedInspector) { clearOriginalRead(savedInspector); savedInspector.body.remove(); savedInspector.footer.remove(); savedInspector = null; }
         if (!contextOwner?.identity.startsWith("saved:")) finishSidebarMotion();
         const body = el("section", "saved-report-inspection"), footer = el("div", "saved-inspector-actions");
         const heading = el("h2", "saved-inspector-title");
@@ -4667,30 +6936,46 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const anchor = trigger?.closest(".saved-library-row") || trigger || keyed("bundle:" + route.inspect);
         const current = { body, heading, footer, bundleId: route.inspect, metadata: JSON.stringify(bundle), focusKey, anchor };
         savedInspector = current;
-        const valid = () => savedInspector === current && bundle && indexedSaved(bundle);
+        const valid = () => api.isCurrent(publication) && savedInspector === current && bundle
+            && state.exports.some(entry => entry.bundleId === bundle.bundleId && JSON.stringify(entry) === current.metadata);
         if (!bundle) body.append(el("p", "error", "This saved item is no longer available. Return to the library and refresh."));
         else {
             const facts = el("dl", "saved-inspector-facts");
             const add = (label, value) => { if (value !== undefined && value !== null && value !== "") facts.append(cardFact(label, value)); };
             add("Prepared", bundle.preparedAtDisplay || time.formatTime(bundle.preparedAt, bundle.timeContext || viewerTime));
             add("Scope", ({ all: "All saved activity", current: "Analyze selection", selected: "Selected interactions" })[bundle.selectionScope?.kind]);
-            if (Number.isSafeInteger(bundle.selectionScope?.requestGroups) && bundle.selectionScope.requestGroups >= 0) add("Interactions", count(bundle.selectionScope.requestGroups));
+            const nativeConversations = bundle.selectionScope?.nativeConversations;
+            const hasNative = Number.isSafeInteger(nativeConversations) && nativeConversations >= 0;
+            if (Number.isSafeInteger(bundle.selectionScope?.requestGroups) && bundle.selectionScope.requestGroups >= 0) add(hasNative ? "GitHub interactions" : "Interactions", count(bundle.selectionScope.requestGroups));
+            if (hasNative) add("Microsoft conversations", count(nativeConversations));
             add("Prompts", ({ none: "None", masked: "Masked", original: "Original" })[bundle.promptMode]);
             if (bundle.timeContext) add("Timezone", time.label(bundle.timeContext));
             body.append(facts);
             if (bundle.reportType === "period-comparison") body.append(el("p", "", "Period A and Period B are fixed saved cohorts."));
-            const files = el("section", "saved-inspector-files");
-            files.append(el("h3", "", "Recorded files"), savedFormatLabels(bundle));
-            body.append(files);
-            body.append(button(bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", event => {
-                if (valid()) savedArtifactUI.open({ artifactKind: bundle.kind === "comparison" ? "comparison" : "report",
-                    artifactId: bundle.bundleId, label: `${savedTitle(bundle)} / ${bundle.bundleId}` }, event.currentTarget);
-            }, "danger"));
+            const target = { artifactKind: bundle.kind === "comparison" ? "comparison" : "report", artifactId: bundle.bundleId };
+            const remove = button(bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", event => {
+                if (valid() && (!isStale || isLoading)) savedArtifactUI.open({
+                    ...target, label: savedTitle(bundle) }, event.currentTarget);
+            }, "danger");
+            body.append(remove);
+            // Collection refresh does not change this saved item; the preview checks current authority.
+            current.refreshEligibility = () => { remove.disabled = !valid() || isStale && !isLoading; };
+            current.refreshEligibility();
+            ux.explainDisabled(remove, () => "The saved report view could not be verified. Retry the stored read.", { compact: true });
             if (savedReadableFormat(bundle)) {
-                const open = viewKey(button("Open saved " + (bundle.kind === "comparison" ? "comparison" : "report"), event => {
+                if (assessmentFactories.reportIdentity.legacyCandidate(bundle)) {
+                    const note = el("section", "saved-original-notice");
+                    note.id = "savedOriginalNotice";
+                    note.append(el("h3", "", "Before opening or downloading"),
+                        el("p", "", "WIRE can't confirm the privacy review from when this file was saved. It may contain information that wasn't approved for disclosure."),
+                        el("p", "", "This does not judge report accuracy or account identity. File identity and integrity checks still apply. Opening or downloading does not approve sharing."));
+                    body.append(note);
+                    footer.append(originalFileControls(bundle, valid, current));
+                } else if (Array.isArray(bundle.formats) && bundle.formats.length) {
+                    footer.append(savedDownloads(bundle, valid, (format, trigger) => openSavedReport(bundle, trigger, format)));
+                } else footer.append(viewKey(button("Open saved " + (bundle.kind === "comparison" ? "comparison" : "report"), event => {
                     if (valid()) openSavedReport(bundle, event.currentTarget);
-                }, "primary"), "inspector-open:" + bundle.bundleId);
-                footer.append(open);
+                }, "primary"), "inspector-open:" + bundle.bundleId));
             } else {
                 footer.append(el("p", "error", "No supported saved format is registered for this report."));
             }
@@ -4700,20 +6985,42 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         contextBody.scrollTop = 0;
         heading.focus({ preventScroll: true });
     }
+    function clearOriginalRead(owner) {
+        owner?.originalBytes?.fill(0);
+        if (owner) owner.originalBytes = owner.originalResult = null;
+    }
     function clearSavedReader() {
-        if (savedReportView) savedReportView.invalid = true;
+        if (savedReportView) {
+            savedReportView.invalid = true;
+            clearOriginalRead(savedReportView);
+            clearOriginalRead(savedReportView.read);
+            clearOriginalRead(savedReportView.downloadRead);
+            savedReportView.preview?.dispose();
+            savedReportView.closeNotice?.();
+            if (savedReportView.headingHome?.isConnected) savedReportView.headingHome.replaceWith($("pageTitle"));
+            savedReportView.downloadValue = null;
+            savedReportView.title = "";
+        }
         savedReportView = null;
         $("savedReportReader").replaceChildren();
     }
     function invalidateSavedReader(message) {
         if (!savedReportView) return;
         savedReportView.invalid = true;
+        clearOriginalRead(savedReportView);
+        clearOriginalRead(savedReportView.read);
+        clearOriginalRead(savedReportView.downloadRead);
+        savedReportView.preview?.dispose();
+        savedReportView.closeNotice?.();
+        savedReportView.downloadValue = null;
         savedReportView.body.replaceChildren(el("p", "error", message));
         savedReportView.actions.replaceChildren();
     }
-    function openSavedReport(bundle, trigger) {
+    function openSavedReport(bundle, trigger, format, original = false) {
         if (reportComparisonUI?.isBusy()) { announce("Wait for the current comparison operation to finish before opening a saved copy."); return false; }
-        const key = savedEntry("reader", bundle, trigger);
+        if (!original && assessmentFactories.reportIdentity.legacyCandidate(bundle))
+            return inspectSavedReport(bundle, trigger);
+        const key = savedEntry("reader", bundle, trigger, { format, original });
         if (route.view === "reports" && route.task === "create") Object.assign(savedEntries.get(key), {
             origin: sessionJourney.returnRoute({ ...route, task: undefined }), originEntry: undefined,
             navigationKey: null, reading: null, focusKey: "open-bundle:" + bundle.bundleId,
@@ -4721,170 +7028,291 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return navigate({ ...routeFor("reports"), bundle: bundle.bundleId, savedEntry: key });
     }
     async function renderSavedReader() {
+        const publication = api.publicationToken();
+        if (!publication || !state) return;
         if (savedReportView?.bundleId === route.bundle && savedReportView.entryKey === route.savedEntry) return;
         clearSavedReader();
         const entry = savedEntries.get(route.savedEntry), bundle = state.exports?.find(item => item.bundleId === route.bundle);
+        if (route.savedAuthority !== "search" && bundle && !entry?.original
+            && assessmentFactories.reportIdentity.legacyCandidate(bundle)) {
+            inspectSavedReport(bundle, keyed("open-bundle:" + bundle.bundleId)); return;
+        }
         const host = $("savedReportReader"), header = el("header", "saved-reader-heading"), body = el("div", "saved-reader-body"), actions = el("div", "saved-reader-actions");
         const backLabel = entry?.searchReturn ? "Back to search" : entry?.origin?.task === "compare" ? "Back to comparison" : "Back to report library";
-        const back = button(backLabel, backSaved, "quiet");
+        const back = button(backLabel, backSaved, "quiet document-back");
+        back.setAttribute("aria-label", backLabel);
         back.prepend(ux.icon("back"));
-        header.append(back);
-        host.replaceChildren(header, actions, body);
-        const current = { body, actions, title: savedTitle(bundle || entry?.value?.artifact), bundleId: route.bundle, identity: savedIdentity(bundle), entryKey: route.savedEntry, invalid: false };
+        const headingHome = document.createComment("saved reader title home");
+        $("pageTitle").before(headingHome);
+        const identity = el("div", "saved-reader-identity"), titleBlock = el("div", "saved-reader-title");
+        titleBlock.append($("pageTitle"));
+        const artifact = bundle || entry?.value?.artifact;
+        if (artifact?.preparedAt || artifact?.preparedAtDisplay) {
+            const meta = el("dl", "saved-reader-meta");
+            meta.append(cardFact("Prepared", artifact.preparedAt
+                ? time.formatDate(artifact.preparedAt, artifact.timeContext || viewerTime, true) : artifact.preparedAtDisplay));
+            titleBlock.append(meta);
+        }
+        identity.append(titleBlock, actions); header.append(back, identity);
+        const stage = el("section", "document-stage"), toolbar = el("div", "document-file-toolbar");
+        stage.append(toolbar, body); host.replaceChildren(header, stage);
+        const current = { body, actions, header, toolbar, headingHome, title: savedTitle(artifact), bundleId: route.bundle, identity: savedIdentity(bundle), entryKey: route.savedEntry, invalid: false };
         savedReportView = current;
         setText($("pageTitle"), current.title);
-        const valid = () => savedReportView === current && !current.invalid && route.bundle === current.bundleId
-            && (route.savedAuthority === "search" ? entry?.isCurrent?.() : bundle && indexedSaved(bundle));
-        body.append(el("p", "", "Opening the saved copy..."));
-        try {
-            if (route.savedAuthority === "search") {
+        const ownsReader = () => api.isCurrent(publication) && savedReportView === current && !current.invalid && route.bundle === current.bundleId;
+        const valid = () => ownsReader() && (route.savedAuthority === "search" ? entry?.isCurrent?.() : bundle && indexedSaved(bundle));
+        if (route.savedAuthority === "search") {
+            try {
                 if (!entry?.value || !valid()) throw new Error("This Search destination is no longer current. Return to Search and open its verified current item.");
                 const value = entry.value;
                 delete entry.value;
-                paintSavedDocument(body, value, valid);
-                return;
-            }
-            if (!bundle) throw new Error("This saved item is no longer available. Nothing was regenerated.");
-            const kind = bundle.kind === "comparison" ? "comparison" : "report";
-            const format = savedReadableFormat(bundle);
-            if (!format) throw new Error("No supported saved format is registered for this report.");
-            const result = kind === "comparison" || format !== "html"
-                ? await api("/api/artifact-file", { bundleId: bundle.bundleId, kind, format })
-                : await api("/api/report/open", { bundleId: bundle.bundleId });
-            if (!valid()) return;
-            let text = result.html;
-            if (kind === "comparison" || format !== "html") {
-                const name = `${kind === "comparison" ? "comparison-report" : "product-report"}.${format === "markdown" ? "md" : format}`;
-                if (result.artifact?.kind !== kind || result.format !== format || result.name !== name
-                    || result.encoding !== "base64" || result.manifestHash !== bundle.manifestHash || typeof result.data !== "string") {
-                    throw new Error("The verified saved file is unavailable. Nothing was regenerated.");
+                toolbar.append(el("span", "saved-reader-format", value.kind === "markdown" ? "Markdown" : value.kind.toUpperCase()));
+                if (value.kind === "pdf") {
+                    current.downloadValue = value;
+                    const download = button("Download", () => {
+                        if (valid() && current.downloadValue) downloadOriginalValue(current.downloadValue, valid);
+                    }, "primary");
+                    download.prepend(ux.icon("download")); actions.append(download);
                 }
-                if (format !== "pdf") text = new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(result.data), c => c.charCodeAt(0)));
-            }
-            if (result.artifact?.bundleId !== bundle.bundleId || result.artifact.kind !== kind || format !== "pdf" && typeof text !== "string"
-                || !indexedSaved(bundle)) throw new Error("This saved artifact is no longer available.");
-            if (Array.isArray(bundle.formats) && bundle.formats.length) actions.append(savedDownloads(bundle, valid));
-            if (format === "pdf") {
-                body.replaceChildren(el("p", "saved-reader-caption", "This report was saved as PDF. Download it to read outside WIRE."));
-            } else paintSavedDocument(body, { kind: format, text, name: result.name, artifact: result.artifact }, valid);
-            selectControls?.sync();
-        } catch (error) {
-            if (savedReportView === current && !current.invalid) {
-                if (route.savedAuthority !== "search" && [404, 422].includes(error.status) && assessmentFactories.reportIdentity.legacyCandidate(bundle)) {
-                    renderLegacyOriginal(current, bundle, valid);
-                } else body.replaceChildren(el("p", "notice error", error.message));
-            }
+                paintSavedDocument(body, value, valid);
+            } catch (error) { if (ownsReader()) body.replaceChildren(el("p", "notice error", error.message)); }
+            return;
         }
-    }
-    function renderLegacyOriginal(current, bundle, valid) {
-        const { body, actions } = current;
-        const indexedIdentity = JSON.stringify(bundle);
-        const originalIsCurrent = () => {
+        if (!bundle) { body.replaceChildren(el("p", "notice error", "This saved item is no longer available. Nothing was regenerated.")); return; }
+        const originalIdentity = JSON.stringify(bundle);
+        const readable = () => {
             if (!valid()) return false;
-            if (state.exports.some(entry => entry.bundleId === bundle.bundleId && JSON.stringify(entry) === indexedIdentity)) return true;
+            if (!entry?.original || state.exports.some(item => item.bundleId === bundle.bundleId && JSON.stringify(item) === originalIdentity)) return true;
             invalidateSavedReader("This saved original changed. Return to the library and open it again.");
             return false;
         };
-        const notice = el("p", "saved-reader-issue",
-            "Original files only. Historical disclosure approval cannot be verified.");
-        actions.before(notice);
-        body.replaceChildren();
-        const controls = el("div", "original-file-controls"), label = el("label", "", "Original file"), format = el("select");
+        if (entry?.original) {
+            const sharing = button("Before sharing", () => showSavedFileNotice(current, readable, sharing, true), "quiet saved-sharing-action");
+            sharing.prepend(ux.icon("info")); actions.append(sharing);
+        }
+        const names = { html: "HTML", pdf: "PDF", markdown: "Markdown", json: "JSON", manifest: "Manifest" };
+        const selector = el("select");
+        selector.id = "savedReaderFormat"; selector.setAttribute("aria-label", "Report format");
+        const formats = Array.isArray(bundle.formats) && bundle.formats.length
+            ? Object.keys(names).filter(format => Object.hasOwn(bundle.files || {}, savedFileName(bundle, format))
+                && (!entry?.original || format !== "manifest"))
+            : [savedReadableFormat(bundle)].filter(Boolean);
+        for (const format of formats) selector.append(option(format, names[format]));
+        selector.value = formats.includes(entry?.format) ? entry.format : savedReadableFormat(bundle);
+        if (formats.length > 1) toolbar.append(selector);
+        else toolbar.append(el("span", "saved-reader-format", names[selector.value] || "File"));
+        const download = button("Download", async () => {
+            if (!readable() || download.disabled) return;
+            const read = current.read, format = selector.value, downloadRead = {};
+            current.downloadRead = downloadRead;
+            const active = () => readable() && current.read === read;
+            download.disabled = true;
+            try {
+                if (entry?.original) {
+                    const value = await readOriginalFile(bundle, format, active, downloadRead, true);
+                    if (value && active()) downloadOriginalValue(value, active);
+                } else await downloadReportFile(bundle, savedFileName(bundle, format), active);
+            } catch (error) { if (active()) announce(error.message, "error"); }
+            finally { if (active()) download.disabled = false; clearOriginalRead(downloadRead); }
+        }, "primary");
+        download.prepend(ux.icon("download"));
+        download.disabled = true;
+        if (Array.isArray(bundle.formats) && bundle.formats.length) actions.append(download);
+        async function show() {
+            if (!readable()) return;
+            clearOriginalRead(current.read); clearOriginalRead(current.downloadRead);
+            current.preview?.dispose(); current.preview = null;
+            const read = {}, format = selector.value, kind = bundle.kind === "comparison" ? "comparison" : "report";
+            current.read = read;
+            if (entry) entry.format = format;
+            const active = () => readable() && current.read === read;
+            download.disabled = true;
+            body.replaceChildren(el("p", "saved-reader-loading", `Opening ${names[format] || "file"}...`));
+            try {
+                if (!format) throw new Error("No supported saved format is registered for this report.");
+                let value;
+                if (entry?.original) {
+                    if (!assessmentFactories.reportIdentity.legacyCandidate(bundle)) throw new Error("This saved original changed. Open its current files from the library.");
+                    value = await readOriginalFile(bundle, format, active, read);
+                    if (!value || !active()) return;
+                } else {
+                    const result = kind === "report" && format === "html"
+                        ? await api("/api/report/open", { bundleId: bundle.bundleId })
+                        : await api("/api/artifact-file", { bundleId: bundle.bundleId, kind, format });
+                    if (!active()) return;
+                    let text = result.html;
+                    if (kind !== "report" || format !== "html") {
+                        if (result.artifact?.kind !== kind || result.format !== format || result.name !== savedFileName(bundle, format)
+                            || result.encoding !== "base64" || result.manifestHash !== bundle.manifestHash || typeof result.data !== "string")
+                            throw new Error("The verified saved file is unavailable. Nothing was regenerated.");
+                        if (format !== "pdf") text = new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(result.data), c => c.charCodeAt(0)));
+                    }
+                    if (result.artifact?.bundleId !== bundle.bundleId || result.artifact.kind !== kind
+                        || format !== "pdf" && typeof text !== "string" || !indexedSaved(bundle)) throw new Error("This saved artifact is no longer available.");
+                    value = { kind: format, text, data: format === "pdf" ? result.data : undefined, name: result.name, artifact: result.artifact };
+                }
+                if (!active()) return;
+                download.disabled = false;
+                paintSavedDocument(body, value, active);
+                selectControls?.sync();
+            } catch (error) { if (active()) body.replaceChildren(el("p", "notice error", error.message)); }
+        }
+        selector.addEventListener("change", show);
+        selectControls?.sync(); await show();
+    }
+    function originalFileControls(bundle, valid, current) {
+        const controls = el("div", "original-file-controls"), label = el("label", "", "File format"), format = el("select");
         format.id = "savedOriginalFormat"; label.htmlFor = format.id;
+        format.setAttribute("aria-describedby", "savedOriginalNotice");
         const names = { html: "HTML", json: "JSON", markdown: "Markdown", pdf: "PDF" };
         for (const name of ["html", "json", "markdown", "pdf"]) if (bundle.formats.includes(name)) format.append(option(name, names[name]));
-        const read = button("", async () => {
-            if (!originalIsCurrent() || read.disabled) return;
-            const selected = format.value, generation = (current.originalGeneration || 0) + 1;
-            current.originalGeneration = generation;
-            const active = () => originalIsCurrent() && current.originalGeneration === generation;
-            read.disabled = format.disabled = true;
-            selectControls?.sync();
-            notice.hidden = true;
-            body.replaceChildren(el("p", "saved-reader-caption", "Reading the unverified original..."));
-            try {
-                const result = await api("/api/report-original", { bundleId: bundle.bundleId, kind: "report", format: selected });
-                if (!active()) return;
-                const extension = selected === "markdown" ? "md" : selected;
-                if (result.source !== "legacy-original" || result.verification !== "unverified" || result.format !== selected
-                    || result.artifact?.bundleId !== bundle.bundleId || result.artifact.kind !== "report"
-                    || result.name !== `product-report.${extension}` || result.encoding !== "base64" || typeof result.data !== "string"
-                    || !/^[a-f0-9]{64}$/.test(result.currentDigest) || result.manifestHash !== undefined) throw new Error("The original-file response did not match this report.");
-                const bytes = Uint8Array.from(atob(result.data), character => character.charCodeAt(0));
-                const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(value => value.toString(16).padStart(2, "0")).join("");
-                if (!active()) return;
-                if (digest !== result.currentDigest) throw new Error("The original-file response changed during this read.");
-                const value = { kind: selected, source: "legacy-original", verification: "unverified", artifact: result.artifact,
-                    name: result.name, ...(selected === "pdf" ? { data: result.data } : { text: new TextDecoder("utf-8", { fatal: true }).decode(bytes) }) };
-                paintSavedDocument(body, value, active);
-            } catch (error) {
-                if (active()) body.replaceChildren(el("p", "notice error", "The original could not be opened. " + error.message));
-            } finally {
-                if (active()) { read.disabled = format.disabled = false; selectControls?.sync(); }
-            }
+        const read = button("Open", event => {
+            if (valid() && !read.disabled) openSavedReport(bundle, event.currentTarget, format.value, true);
         }, "primary");
-        const labelAction = () => setText(read, format.value === "pdf" ? "Download original PDF" : "View original");
+        read.setAttribute("aria-label", "Open original file");
+        const download = button("Download", async () => {
+            if (!valid() || download.disabled) return;
+            const selected = format.value;
+            download.disabled = read.disabled = format.disabled = true;
+            selectControls?.sync();
+            try {
+                const value = await readOriginalFile(bundle, selected, valid, current, true);
+                if (!value || !valid()) return;
+                downloadOriginalValue(value, valid);
+            } catch (error) {
+                if (valid()) announce("The original could not be opened. " + error.message, "error");
+            } finally {
+                if (valid()) {
+                    download.disabled = read.disabled = format.disabled = false; selectControls?.sync();
+                }
+            }
+        }, "quiet");
+        read.setAttribute("aria-describedby", "savedOriginalNotice");
+        download.setAttribute("aria-describedby", "savedOriginalNotice");
+        const labelAction = () => {
+            const pdf = format.value === "pdf";
+            download.setAttribute("aria-label", pdf ? "Download original PDF" : "Download original file");
+        };
         format.addEventListener("change", labelAction);
         labelAction();
         const field = el("div", "original-file-choice");
-        field.append(label, format); controls.append(field, read);
-        actions.replaceChildren(controls);
-        selectControls?.sync();
+        field.append(label, format); controls.append(field, read, download);
+        return controls;
+    }
+    async function readOriginalFile(bundle, format, valid, current, downloadOnly = false) {
+        if (!valid()) return null;
+        let result = await api("/api/report-original", { bundleId: bundle.bundleId, kind: "report", format });
+        if (!valid()) return null;
+        const extension = format === "markdown" ? "md" : format;
+        if (result.source !== "legacy-original" || result.verification !== "unverified" || result.format !== format
+            || result.artifact?.bundleId !== bundle.bundleId || result.artifact.kind !== "report"
+            || result.name !== `product-report.${extension}` || result.encoding !== "base64" || typeof result.data !== "string"
+            || !/^[a-f0-9]{64}$/.test(result.currentDigest) || result.manifestHash !== undefined) throw new Error("The original-file response did not match this report.");
+        current.originalBytes = Uint8Array.from(atob(result.data), character => character.charCodeAt(0));
+        current.originalResult = result; result = null;
+        try {
+            const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", current.originalBytes))].map(value => value.toString(16).padStart(2, "0")).join("");
+            if (!valid()) return null;
+            result = current.originalResult;
+            if (digest !== result.currentDigest) throw new Error("The original-file response changed during this read.");
+            return { kind: format, source: "legacy-original", verification: "unverified", artifact: result.artifact,
+                name: result.name, ...(format === "pdf" || downloadOnly ? { data: result.data } : { text: new TextDecoder("utf-8", { fatal: true }).decode(current.originalBytes) }) };
+        } finally { clearOriginalRead(current); }
     }
     function paintSavedDocument(body, value, valid) {
         if (!valid()) return;
         const artifact = value.artifact;
         if (typeof artifact?.title === "string" && artifact.title.trim()) savedReportView.title = savedTitle(artifact);
         setText($("pageTitle"), savedReportView.title);
-        const prepared = artifact?.preparedAtDisplay || time.formatTime(artifact?.preparedAt, artifact?.timeContext || viewerTime);
-        const sourceLabel = value.source === "legacy-original" ? "Unverified original" : "Saved copy";
-        body.replaceChildren(el("p", "saved-reader-caption", prepared === "Time not recorded" ? `${sourceLabel} · Preparation time unavailable` : `${sourceLabel} · Prepared ${prepared}`));
+        body.replaceChildren();
         if (artifact?.sourceReports?.some(source => !source.available)) body.append(el("p", "muted",
             "An original report is no longer available. This independently reviewed saved copy is unchanged."));
-        if (value.kind === "html") {
-            const frame = assessmentFactories.liveSearch.frozenFrame(value.text);
-            frame.title = savedReportView.title;
-            body.append(frame);
-        } else if (["json", "markdown"].includes(value.kind)) {
-            const text = el("pre", "saved-reader-text", value.text); text.tabIndex = 0;
-            text.setAttribute("aria-label", value.name || value.kind);
-            body.append(text);
-        } else if (value.kind === "pdf") {
-            const bytes = Uint8Array.from(atob(value.data), character => character.charCodeAt(0));
-            if (!valid()) return;
-            const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
-            const anchor = el("a"); anchor.href = url; anchor.download = value.name || "product-report.pdf"; anchor.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-            body.append(el("p", "", value.source === "legacy-original"
-                ? "Original PDF download started. Its saved disclosure is unverified."
-                : "Verified PDF download started. No PDF scripting or external resources run in WIRE."));
-        } else throw new Error("Unsupported verified saved-file format.");
+        const preview = el("div", "saved-reader-file");
+        body.append(preview);
+        const current = savedReportView;
+        const name = value.name || savedFileName(artifact || {}, value.kind);
+        const mounted = mountFileInspection(preview, { [name]: value.kind === "pdf" ? { data: value.data } : value.text }, {
+            id: "savedFileView", toolbar: current.toolbar, title: current.title, isCurrent: valid,
+            onInfo: (file, format, trigger) => showSavedFileNotice(current, valid, trigger, false, { file, format,
+                prepared: artifact?.preparedAtDisplay || time.formatTime(artifact?.preparedAt, artifact?.timeContext || viewerTime) }),
+        });
+        current.preview = mounted;
+        mounted.refresh();
+    }
+    function showSavedFileNotice(current, valid, trigger, sharing, file) {
+        if (!valid()) return;
+        current.closeNotice?.();
+        ux.hideTooltip();
+        const dialog = el("dialog", "saved-file-notice"), heading = el("h2", "", sharing ? "Before you share this file" : "About this file");
+        heading.id = "savedFileNoticeTitle"; heading.tabIndex = -1; dialog.setAttribute("aria-labelledby", heading.id);
+        const top = el("div", "dialog-head"), content = el("div", "dialog-body");
+        const close = button("Close", () => dismiss(), "quiet");
+        close.setAttribute("aria-label", "Close file information");
+        close.replaceChildren(ux.icon("close")); top.append(heading, close);
+        if (sharing) {
+            content.append(el("p", "saved-sharing-lead", "Check that its contents are appropriate to share."),
+                el("p", "", "WIRE can't confirm the privacy review from when this older file was saved. It may contain information that wasn't approved for disclosure."),
+                el("p", "", "Opening or downloading the file does not approve sharing it."),
+                el("p", "saved-sharing-detail", "This notice does not mean the report is inaccurate, your account is unverified, or the file is damaged. File identity and integrity are checked separately."));
+        } else {
+            const facts = el("dl", "saved-inspector-facts");
+            facts.append(cardFact("File", file.file), cardFact("Format", file.format), cardFact("Prepared", file.prepared));
+            content.append(facts, el("p", "", "This is a read-only saved file. Download keeps its original bytes."));
+        }
+        content.append(button("Got it", () => dismiss(), "primary"));
+        dialog.append(top, content);
+        const discard = () => {
+            const walker = document.createTreeWalker(dialog, NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) walker.currentNode.data = "";
+            dialog.replaceChildren(); dialog.remove(); current.closeNotice = null;
+        };
+        const cleanup = () => { discard(); if (valid() && trigger.isConnected) trigger.focus({ preventScroll: true }); };
+        const dismiss = () => { dialog.removeEventListener("close", cleanup); dialog.close(); cleanup(); };
+        dialog.addEventListener("close", cleanup, { once: true });
+        dialog.addEventListener("cancel", event => { event.preventDefault(); dismiss(); });
+        current.closeNotice = () => { dialog.removeEventListener("close", cleanup); dialog.close(); discard(); };
+        document.body.append(dialog); dialog.showModal(); heading.focus({ preventScroll: true });
+    }
+    function downloadOriginalValue(value, valid) {
+        if (!valid()) return;
+        const bytes = Uint8Array.from(atob(value.data), character => character.charCodeAt(0));
+        const anchor = el("a"); anchor.href = privateObjectUrl(bytes); anchor.download = value.name || "product-report.pdf";
+        bytes.fill(0);
+        if (valid()) { anchor.click(); announce(value.source === "legacy-original"
+            ? "Original file download started. Its privacy review is unverified." : "Saved file download started."); }
     }
     async function downloadReportFile(bundle, name, isCurrent = () => true) {
+        const publication = api.publicationToken();
+        if (!publication || !isCurrent()) return;
         const kind = bundle.kind === "comparison" ? "comparison" : "report";
         const prefix = kind === "comparison" ? "comparison-report" : "product-report";
         const formats = { [`${prefix}.html`]: "html", [`${prefix}.pdf`]: "pdf", [`${prefix}.json`]: "json",
             [`${prefix}.md`]: "markdown", "coverage-and-redaction-manifest.json": "manifest" };
         if (!Object.hasOwn(formats, name)) throw new Error("This saved file format is unsupported. No download was started.");
         const result = await api("/api/artifact-file", { bundleId: bundle.bundleId, kind, format: formats[name] });
+        if (!api.isCurrent(publication)) return;
         if (!isCurrent() || !indexedSaved(bundle)
             || result.artifact?.bundleId !== bundle.bundleId || result.artifact?.kind !== kind || result.name !== name
             || result.format !== formats[name] || result.manifestHash !== bundle.manifestHash || result.encoding !== "base64"
             || typeof result.data !== "string") throw new Error("This verified saved file is no longer available. No download was started.");
         const bytes = Uint8Array.from(atob(result.data), c => c.charCodeAt(0));
-        const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+        if (!api.isCurrent(publication) || !isCurrent()) { bytes.fill(0); return; }
+        const url = privateObjectUrl(bytes);
         const anchor = el("a");
         anchor.href = url; anchor.download = name;
+        if (!api.isCurrent(publication) || !isCurrent()) return;
         anchor.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
     async function move(scenario, toState, control) {
+        const publication = api.publicationToken();
+        if (!publication) return;
         if (isStale || isLoading) { announce("Wait for the activity snapshot to finish updating before changing review state.", "stale"); return; }
         control.disabled = true;
         try {
             await api("/api/move", { scenarioId: scenario.scenarioId, toState });
-            if (await load()) announce("Review state updated. Recorded results are unchanged.");
-        } catch (error) { announce(error.message, "error"); control.disabled = false; }
+            if (!api.isCurrent(publication)) return;
+            if (await load() && api.isCurrent(publication)) announce("Review state updated. Recorded results are unchanged.");
+        } catch (error) { if (api.isCurrent(publication)) { announce(error.message, "error"); control.disabled = false; } }
     }
     let coverageDetailsKey;
     function renderCoverage() {
@@ -4960,6 +7388,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function render() {
+        const publication = api.publicationToken();
+        if (clearingAccess || !publication || !state) return;
         if (!state || !analytics) return;
         const requestRoute = route.view === "request" ? route : null;
         if (requestRoute) {
@@ -4968,7 +7398,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 : sessionJourney.returnRoute({ ...requestRoute, view: origin.view, task: origin.task, section: origin.section, setting: origin.setting }, true);
         }
         const withinServices = route.withinServices?.split(",") || [];
-        if (semanticMembership && (semanticMembership.revision !== state.revision
+        if (semanticMembership && (semanticMembership.revision !== state.revision || semanticMembership.nativeRevision !== state.nativeRead?.revision
             || semanticMembership.scopeKey !== JSON.stringify([applied, withinServices]))) {
             semanticComplete = false;
             semanticBound = false;
@@ -4977,12 +7407,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         slice = analysisSlice(state, applied, search, withinServices, semanticMembership);
         analytics = slice.analytics;
+        if (sourceCollection.active) boundedNative.syncInventories(acceptedNativeView(), applied,
+            isStale || Boolean(search.trim()) || Boolean(route.withinServices));
         renderTimeContext();
-        renderControls(); renderNavigation(); renderFilterChips(); renderViewingContext(); renderSessionAnalysis(); renderPeriodFeedback();
+        renderControls(); renderNavigation(requestRoute ? sessionJourney.underlying(requestRoute) : undefined); renderFilterChips(); renderViewingContext();
+        const sourceCoverage = renderSessionAnalysis();
+        analyzeControls.sourceCoverage(sourceCoverage);
+        chartReferenceSourceCoverage = sourceCoverage?.textContent || "";
+        const acceptedDescription = renderPeriodFeedback();
         detailOwner = route.view;
         if (route.view === "analyze") {
+            if (sourceCollection.active) seedBoundedNative();
             renderHome();
             renderActivity();
+            publishAcceptedListScope(acceptedDescription);
+            if (sourceCollection.active) renderBoundedAnalyze();
         }
         if (route.view === "reports") renderReports();
         if (route.view === "settings" && route.section === "privacy") assessmentUI.setup($("assessmentSetup"));
@@ -4995,12 +7434,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             renderRequest();
             if (entering) focusSidebar();
         }
-        periodComparisonUI.update().then(restorePeriodComparisonReading);
+        const comparisonUpdate = periodComparisonUI.update();
+        comparisonUpdate.then(() => {
+            if (!api.isCurrent(publication)) return;
+            restorePeriodComparisonReading(); refreshChartReference();
+        });
+        refreshChartReference();
         liveSearchUI?.changed();
     }
 
     function setText(node, text) {
-        if (node.textContent !== text) node.textContent = text;
+        if (node.textContent !== text) {
+            const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) walker.currentNode.data = "";
+            node.textContent = text;
+        }
     }
     function freshness(value) {
         if (!value || !Number.isFinite(Date.parse(value))) return "not yet";
@@ -5094,28 +7542,43 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     async function refreshCollectionIssues() {
+        const publication = api.publicationToken();
+        if (!publication) return;
         if (route.view !== "collection-status" || issuesLoading) return;
         issuesLoading = true;
         const readGeneration = collectionReadGeneration;
         const message = $("collectionIssuesMessage");
         if (issuesSignature === undefined) { setText(message, "Reading current local history issues..."); message.hidden = false; ux.pending(message, true); }
         try {
-            const detailed = await api("/api/collection/status", { details: true });
-            if (readGeneration !== collectionReadGeneration || collectionBusy) return;
+            const detailed = await readCollectionStatus({ details: true });
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || collectionBusy) return;
             if (!Array.isArray(detailed.historyIssues)) throw new Error("Affected Copilot chats are unavailable. Collection status still shows the last known counts.");
-            renderCollection(detailed);
+            renderCollection(detailed, publication);
             message.hidden = true;
         } catch (error) {
-            if (readGeneration !== collectionReadGeneration || collectionBusy) return;
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || collectionBusy) return;
             setText(message, "Current issue details could not be loaded. Any displayed list is from the previous check. " + error.message);
             message.hidden = false;
-        } finally { issuesLoading = false; ux.pending(message, false); }
+        } finally { if (api.isCurrent(publication)) { issuesLoading = false; ux.pending(message, false); } }
     }
     function renderCollectionNotice() {
-        const hasEvidence = Boolean(state?.scenarios.length);
-        const notice = historyStatus.entry(collection, { hasEvidence, unavailable: Boolean(collectionReadError), reason: collectionReadReason });
+        const publication = api.publicationToken();
+        if (clearingAccess || !publication) return;
+        const hasEvidence = Boolean(state?.scenarios.length || state?.nativeRead?.aggregates?.conversations);
+        let notice = historyStatus.entry(collection, { hasEvidence, unavailable: Boolean(collectionReadError), reason: collectionReadReason });
+        if (sourceCollection.active && collection?.sourceAware) {
+            const accepted = collection, access = api.accessState(), current = sourceCollection.view(access);
+            if (!api.isCurrent(publication) || collection !== accepted) return;
+            notice = historyStatus.sourceEntry(accepted.sourceAware, current, {
+                microsoftState: access.state?.microsoft?.state, unavailable: Boolean(collectionReadError),
+                githubFailure: notice?.severity === "error" ? notice.text : "",
+                microsoftOperationUnconfirmed: Boolean(refreshGesture && refreshGestureCurrent(refreshGesture)
+                    && refreshGesture.branches.microsoft.state !== "superseded"
+                    && refreshGesture.branches.microsoft.dispatched && refreshGesture.branches.microsoft.result?.sourceUnknown),
+            });
+        }
         const host = $("collectionNotice");
-        const model = fresh.snapshot(), recovery = !$("freshActivity").hidden && model.recovery;
+        const model = refreshPresentation(), recovery = (!$("freshActivity").hidden || !$("freshAwayNotice").hidden) && model.recovery;
         const sameSourceFailure = recovery && !collectionReadError && collection?.error
             && collection.state === "error" && Number.isSafeInteger(model.sourceFailure?.revision)
             && typeof model.sourceFailure?.configVersion === "string"
@@ -5140,15 +7603,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText($("collectionNoticeText"), notice.text);
         $("collectionNoticeAction").hidden = false;
         setText($("collectionNoticeAction"), notice.action);
-        $("collectionNoticeAction").href = notice.issues ? "#collection-status?setting=issues"
+        $("collectionNoticeAction").href = notice.href || (notice.issues ? "#collection-status?setting=issues"
             : notice.severity === "error" || notice.action === "View collection details" ? "#collection-status"
-                : !collection?.config?.approved ? "#settings?section=connection&setting=source" : "#settings?section=connection";
+                : !collection?.config?.approved ? "#settings?section=connection&setting=source" : "#settings?section=connection");
     }
-    function collectionUnavailable(error, reason = "") {
+    function collectionUnavailable(error, reason, publication) {
+        if (clearingAccess || !api.isCurrent(publication)) return;
+        sourceCollection.withdraw();
         liveSearchUI?.invalidate("Current collection status could not be verified. Search results were cleared.");
         collectionReadError = error;
         collectionReadReason = reason;
-        collectionSettings?.unavailable(error);
+        collectionSettings?.unavailable(error, publication);
+        sourceSettings?.unavailable(error);
         if (reason === "runtime_unavailable") {
             connectionNeedsSnapshot = true;
             isStale = Boolean(analytics);
@@ -5167,17 +7633,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderFreshActivity();
     }
     function renderFreshActivity() {
-        const host = $("freshActivity"), model = fresh.snapshot(), approved = collection?.config?.approved;
-        const analyze = route.view === "analyze";
+        if (clearingAccess || !api.publicationToken()) return;
+        const host = $("freshActivity"), model = refreshPresentation(), approved = collection?.config?.approved;
+        const recovery = !refreshWorking() && refreshUsesStoredRecovery(model);
+        setText($("analyzeRefreshLabel"), recovery ? "Retry" : "Refresh");
+        $("analyzeRefresh").setAttribute("aria-label", recovery ? "Retry reading saved activity" : "Refresh");
+        ux.pending($("analyzeRefresh"), ["checking", "applying"].includes(model.phase));
+        setText($("analyzeRefreshStatus"), model.message);
         const connection = route.view === "settings" && settingsNavigation.resolve(route).section === "connection";
-        const contextual = analyze || connection || route.view === "collection-status";
-        if (analyze) {
-            if (host.parentElement !== $("activityUpdateSlot")) $("activityUpdateSlot").append(host);
-        } else {
-            const anchor = route.view === "collection-status" ? $("collectionCoverageCounts") : $("connectionPreferences");
-            if (host.nextElementSibling !== anchor) anchor.before(host);
-        }
-        const details = host.querySelector(".fresh-details");
+        const contextual = connection || route.view === "collection-status";
+        const anchor = route.view === "collection-status" ? $("collectionCoverageCounts") : $("connectionPreferences");
+        if (host.nextElementSibling !== anchor) anchor.before(host);
         const refresh = $("checkActivity").closest(".ux-disabled-help") || $("checkActivity");
         const refreshHost = host.querySelector(".fresh-controls");
         if (refresh.parentElement !== refreshHost) refreshHost.prepend(refresh);
@@ -5185,15 +7651,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             host.querySelector(".fresh-controls").append($("freshResult"));
         }
         host.hidden = !contextual;
-        $("freshHeading").hidden = !contextual || analyze;
-        const expanded = renderActivityUpdateEntry();
+        $("freshHeading").hidden = !contextual;
         const globalRecovery = !$("message").hidden && $("message").querySelector("[data-stored-refresh-retry]");
-        const attention = ["checking", "applying", "waiting"].includes(model.phase) || model.recovery
+        const attention = ["checking", "applying", "waiting"].includes(model.phase) || model.recovery || model.combined?.problem
             || refreshOwnsReadFailure() || !globalRecovery && (["error", "unconfirmed"].includes(model.phase) || collectionReadError || isStale && !isLoading);
-        $("freshAwayNotice").hidden = contextual || !attention;
-        setText($("freshAwayStatus"), model.sourceUnknown ? " Source check outcome is unknown; no check will be repeated."
+        const reread = recollectionUI?.snapshot();
+        const recollectionAttention = reread?.needsReceipt || reread?.viewNeedsRead || reread?.phase === "pending";
+        const privacy = route.view === "settings" && settingsNavigation.resolve(route).section === "privacy";
+        const showRecollection = !attention && recollectionAttention && !privacy;
+        const toolbarPending = route.view === "analyze" && $("analyzeRefresh").checkVisibility() && ["checking", "applying"].includes(model.phase)
+            && !model.recovery && !collectionReadError && !isStale;
+        $("freshAwayNotice").hidden = !showRecollection && (contextual || !attention || toolbarPending);
+        $("freshAwayLink").href = showRecollection ? "#settings?section=privacy&setting=recollect-activity"
+            : "#settings?section=connection&setting=collect-now";
+        setText($("freshAwayLink"), showRecollection ? "View recollection result" : "View activity update");
+        setText($("freshAwayStatus"), showRecollection ? ` ${reread.message}`
+            : model.combined ? ` ${model.message}`
+            : model.sourceUnknown ? " Source check outcome is unknown; no check will be repeated."
             : model.sourceBlocked ? " Source checks are read-only in this tab; review the recovery details."
-            : model.phase === "checking" ? " Checking approved history."
+            : model.phase === "checking" ? model.nativeOperationId ? " Collecting screened Microsoft activity." : " Checking approved history."
             : model.phase === "applying" ? " Reading stored activity."
             : model.phase === "waiting" ? " Waiting until the current review or edits finish."
             : model.phase === "error" || model.sourceFailure ? " " + model.message : " Stored activity or its status could not be verified.");
@@ -5201,37 +7677,33 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         host.dataset.checkId = model.check?.id || "";
         host.dataset.revision = model.check ? String(model.check.revision) : "";
         const control = $("checkActivity");
-        const text = "Refresh";
+        const nativePersistence = historyStatus.persistence(collection);
+        const text = nativePersistence ? "Collect now" : "Refresh";
         if (control.lastChild?.nodeType === Node.TEXT_NODE) control.lastChild.textContent = text;
         ux.pending(control, model.phase === "checking" || model.phase === "applying" && (Boolean(model.check) || !approved || Boolean(model.recovery)));
-        setText($("freshHelp").querySelector("summary"), connection ? "About Refresh" : "Update details");
-        details.hidden = analyze && (!expanded || model.phase !== "partial" && !model.sourceWarning);
-        setText($("freshSourceSettings"), approved
-            ? `Local Copilot history · ${collection.config.windowDays}-day window`
-            : "Choose local history in Settings");
-        $("freshScope").hidden = !analyze || !expanded;
-        const completed = ["complete", "partial"].includes(model.phase) && Boolean(model.check);
-        setText($("freshChecked"), completed ? `Manual check ${timestamp(model.check.completedAt)}` : "");
+        setText($("freshHelp").querySelector("summary"), connection ? nativePersistence ? "About collection" : "About Refresh" : "Update details");
+        const completed = model.combined ? Boolean(model.combined.completedAt) && !refreshWorking()
+            : ["complete", "partial"].includes(model.phase) && Boolean(model.check || model.nativeReceipt?.status === "committed");
+        setText($("freshChecked"), completed ? model.combined ? `Finished ${freshness(model.combined.completedAt)}`
+            : model.nativeReceipt ? `Saved ${timestamp(model.nativeReceipt.committedAt)}`
+            : `Checked ${freshness(model.check.completedAt)}` : "");
         $("freshChecked").hidden = !completed;
-        setText($("freshStatus"), model.message || (approved ? "Refresh recorded activity." : "Stored activity only. No source is approved."));
-        ux.pending($("freshStatus"), ["checking", "applying"].includes(model.phase));
+        setText($("freshStatus"), model.message || (nativePersistence ? historyStatus.persistenceReason(collection)
+            || "Collect screened Microsoft activity." : approved ? "Refresh recorded activity." : "Stored activity only. No source is approved."));
         $("freshStatus").hidden = model.phase === "idle";
-        const paused = model.recovery && !collectionReadError && approved && collection?.config?.enabled === false;
+        const paused = model.recovery && !collectionReadError && (nativePersistence
+            ? nativePersistence.configuration?.settings.paused : approved && collection?.config?.enabled === false);
         setText($("freshContextMessage"), [model.context, model.sourceWarning, paused ? "Collection is paused." : ""].filter(Boolean).join(" "));
         $("freshContextMessage").hidden = !model.context && !model.sourceWarning;
         setText($("freshCheckDetails"), model.details);
         $("freshCheckDetails").hidden = !model.details;
         setText($("freshCoverageAnnouncement"), model.coverage);
-        $("freshStatus").dataset.severity = model.phase === "error" || model.sourceFailure ? "error" : model.phase === "partial" ? "warning" : "normal";
-        $("freshIssues").hidden = model.phase !== "partial" && model.recovery !== "source";
-        $("freshIssues").href = model.phase === "partial" ? "#collection-status?setting=issues" : "#settings?section=connection&setting=source-paths";
-        setText($("freshIssues"), model.phase === "partial" ? model.coverage : "Review source");
+        $("freshStatus").dataset.severity = model.phase === "error" || model.sourceFailure ? "error"
+            : model.combined?.problem || model.phase === "partial" ? "warning" : "normal";
+        $("freshIssues").hidden = model.recovery !== "source";
+        $("freshIssues").href = "#settings?section=connection&setting=source-paths";
+        setText($("freshIssues"), "Review source");
         $("freshResult").hidden = $("freshStatus").hidden && !model.context && !model.sourceWarning && !completed && !collectionReadError && !isStale;
-        const reread = recollectionUI?.snapshot();
-        if (analyze && recollectionNoticeVisible && ["pending", "uncertain", "complete"].includes(reread?.phase)
-            && model.phase === "complete" && !model.sourceWarning && !model.sourceFailure && !model.recovery && !collectionReadError && !isStale) {
-            $("freshResult").hidden = true;
-        }
         const gapDetails = $("freshCoverageDetails");
         gapDetails.hidden = model.phase !== "partial";
         if (!gapDetails.hidden && gapDetails.dataset.checkId !== model.check.id) {
@@ -5254,60 +7726,305 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderCollectionNotice();
         renderStoredRefresh();
         renderSettingsRefresh(connection, model);
+        renderAnalyzeScope();
+        refreshChartReference();
     }
     function clearSourceCheckMarker() {
+        if (githubRecoveryPending) return;
+        if (refreshGesture && !refreshGesture.withdrawn
+            && (refreshWorking() || refreshSources.describe(refreshGesture.branches).recovery)) return;
         try {
             sessionStorage.removeItem(sourceCheckKey);
             if (sessionStorage.getItem(sourceCheckKey) !== null) throw new Error("Pending marker remains.");
+            sourcePending = false;
         } catch {
             fresh.blockSource("This tab could not clear its source-check recovery marker. Source refresh stays read-only.");
         }
     }
-    async function checkActivity(event) {
-        renderFreshActivity();
-        if ($("checkActivity").disabled) return null;
+    async function checkActivity(event, source = "both") {
+        const deadline = Date.now() + 300000;
+        if (refreshWorking()) return null;
+        const control = event?.currentTarget;
+        if (control && [$("checkActivity"), $("collectMicrosoftActivity")].includes(control)
+            && (control.getAttribute("aria-label") || control.textContent.trim()) === "Read stored activity") return refreshStoredData(event);
         if (refreshUsesStoredRecovery()) return refreshStoredData(event);
+        if (sourceCollection.active && source === "both") return checkAllActivity(event, deadline);
+        refreshGesture = null;
+        return checkSourceActivity(event, source === "both" ? "github" : source, null, deadline);
+    }
+    function refreshViewHeld() {
+        const report = reportJourney?.snapshot();
+        return $("overlay").open || report?.hasPreview || report?.phase === "scanning"
+            || reportJourney?.isReviewOpen() || collectionSettings?.hasDraft() || sourceSettings?.hasDraft();
+    }
+    function deferRefreshView(gesture) {
+        for (const branch of Object.values(gesture.branches)) {
+            branch.flow?.defer(); settleRefreshBranch(branch);
+        }
+        $("workspace").setAttribute("aria-busy", "false");
+        $("newDataNotice").hidden = false;
+        renderFreshActivity();
+    }
+    async function checkAllActivity(event, deadline) {
+        const publication = api.publicationToken(), owner = api.controlToken();
+        renderStoredRefresh();
+        if (!publication || clearingAccess || !owner || typeof owner.then === "function"
+            || api.isControlCurrent(owner) !== true || $("checkActivity").disabled) return null;
+        let plan;
+        try { plan = refreshSources.capture(sourceCollection.view(api.accessState())); }
+        catch (error) { collectionUnavailable(error.message, "", publication); return false; }
+        const gesture = {
+            publication, owner, runtimeId: api.accessState().runtimeId, plan, running: true, recovering: false,
+            withdrawn: false, completedAt: null, completedRevision: null, branches: {},
+        };
+        for (const source of refreshSources.names) {
+            const intent = source === "microsoft" && plan[source].admitted
+                ? { operationId: crypto.randomUUID(), deadline, owner, confirmed: false, readbackQualification: null } : null;
+            const nativeStatus = intent ? { ...historyStatus, nativeReadbackMatches(receipt, snapshot) {
+                return nativeIntentCurrent(intent) && boundedContract.matchesReadback(intent.readbackQualification, snapshot?.nativeRead, receipt);
+            } } : receiptStatus;
+            gesture.branches[source] = {
+                source, gesture, intent, dispatched: false, state: plan[source].admitted ? "queued" : "skipped",
+                reason: plan[source].reason, result: null, flow: createFreshActivity({ nativeStatus }),
+            };
+        }
+        refreshGesture = gesture;
+        collectionReadGeneration++;
+        collectionSettings?.setChecking(true, publication);
+        sourceSettings?.setChecking(true);
+        if (!Object.values(plan).some(branch => branch.admitted)) {
+            fresh = createFreshActivity({ nativeStatus: receiptStatus });
+            nativeCollectIntent = null;
+            fresh.begin({ checkSource: false });
+        }
+        clearTimeout(pollTimer);
+        renderFreshActivity();
+        try {
+            for (const source of refreshSources.names) {
+                if (!refreshGestureCurrent(gesture)) return false;
+                const branch = gesture.branches[source];
+                if (branch.state !== "queued") continue;
+                if (Object.values(gesture.branches).some(value => value.flow.snapshot().sourceBlocked)) {
+                    branch.state = "skipped"; branch.reason = "recovery storage unavailable"; continue;
+                }
+                if (!refreshGestureCurrent(gesture)) {
+                    branch.state = "skipped"; branch.reason = "access changed"; continue;
+                }
+                try {
+                    const status = await readCollectionStatus();
+                    if (!refreshGestureCurrent(gesture)) { branch.state = "skipped"; branch.reason = "access changed"; continue; }
+                    renderCollection(status, publication);
+                    const admission = refreshSources.admission(plan, source, sourceCollection.view(api.accessState()));
+                    if (!admission.allowed) { branch.state = "skipped"; branch.reason = admission.reason; continue; }
+                    fresh = branch.flow;
+                    nativeCollectIntent = branch.intent;
+                    branch.state = "running";
+                    await checkSourceActivity(event, source, branch);
+                } catch (error) {
+                    if (!refreshGestureCurrent(gesture)) return false;
+                    if (branch.dispatched) {
+                        branch.flow.fail(branch.flow.snapshot().token, error.message, { reason: error.reason });
+                        branch.state = "settled";
+                    } else { branch.state = "skipped"; branch.reason = "status unavailable"; }
+                    if (refreshGestureCurrent(gesture)) collectionUnavailable(error.message, error.reason, publication);
+                } finally {
+                    if (branch.state === "running") branch.state = "settled";
+                    if (!branch.dispatched && nativeCollectIntent === branch.intent) nativeCollectIntent = null;
+                    settleRefreshBranch(branch);
+                }
+            }
+            if (!refreshGestureCurrent(gesture)) return false;
+            if (refreshViewHeld()) deferRefreshView(gesture);
+            else await load({ background: true, refreshOwner: gesture });
+            return true;
+        } finally {
+            if (!gesture.withdrawn) {
+                gesture.running = false;
+                gesture.completedAt = new Date().toISOString();
+                gesture.completedRevision = state?.revision ?? null;
+            }
+            if (refreshGestureCurrent(gesture)) {
+                collectionSettings?.setChecking(false, publication);
+                sourceSettings?.setChecking(false);
+                for (const branch of Object.values(gesture.branches)) settleRefreshBranch(branch);
+                clearSourceCheckMarker();
+                renderFreshActivity();
+                clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 5000);
+            }
+        }
+    }
+    async function recoverRefreshGesture(event) {
+        const gesture = refreshGesture;
+        renderStoredRefresh();
+        if (!gesture || gesture.withdrawn || refreshWorking() || $("refreshBtn").disabled) return false;
+        if (!refreshGestureCurrent(gesture)) {
+            const unconfirmed = refreshSources.describe(gesture.branches).recovery || sourcePending;
+            withdrawRefreshGesture();
+            fresh = createFreshActivity({ nativeStatus: receiptStatus, sourceUnknown: unconfirmed,
+                sourceWarning: unconfirmed ? "The original Refresh owner is no longer available. Only saved activity can be read." : "" });
+            if (nativeCollectIntent) fresh.restoreNative(nativeCollectIntent.operationId);
+            return refreshStoredSourceData(event);
+        }
+        gesture.recovering = true;
+        collectionReadGeneration++;
+        collectionSettings?.setChecking(true, gesture.publication);
+        sourceSettings?.setChecking(true);
+        renderFreshActivity();
+        let expectedSource, statusError;
+        try {
+            for (const source of refreshSources.names) {
+                if (!refreshGestureCurrent(gesture)) return false;
+                const branch = gesture.branches[source], result = branch.result;
+                if (!branch.dispatched || !result || !(result.sourceUnknown || result.readFailed || result.sourceBlocked)) continue;
+                if (!refreshGestureCurrent(gesture)) return false;
+                fresh = branch.flow;
+                nativeCollectIntent = branch.intent;
+                const recovered = await refreshStoredSourceData(event, true);
+                if (recovered?.expectedSource !== undefined) expectedSource = recovered.expectedSource;
+                if (recovered?.statusError) statusError = recovered.statusError;
+                settleRefreshBranch(branch);
+            }
+            if (!refreshGestureCurrent(gesture)) return false;
+            if (refreshViewHeld()) { deferRefreshView(gesture); return false; }
+            const loaded = await load({ background: true, expectedSource, refreshOwner: gesture });
+            if (!refreshGestureCurrent(gesture)) return false;
+            if (statusError && (!loaded || !state?.collection)) collectionUnavailable(statusError.message, statusError.reason, gesture.publication);
+            return loaded;
+        } finally {
+            if (!gesture.withdrawn) gesture.recovering = false;
+            if (refreshGestureCurrent(gesture)) {
+                collectionSettings?.setChecking(false, gesture.publication);
+                sourceSettings?.setChecking(false);
+                clearSourceCheckMarker(); renderFreshActivity();
+                clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 5000);
+            }
+        }
+    }
+    async function checkSourceActivity(event, source = "github", branch = null, deadline = Date.now() + 300000) {
+        const publication = branch ? branch.gesture?.publication : api.publicationToken();
+        if (!publication || clearingAccess) return false;
+        const microsoft = sourceCollection.active && source === "microsoft";
+        renderFreshActivity();
+        if (branch) {
+            if (!refreshGestureCurrent(branch.gesture)) { branch.state = "skipped"; branch.reason = "access changed"; return null; }
+            const admission = refreshSources.admission(branch.gesture.plan, source, sourceCollection.view(api.accessState()));
+            if (!admission.allowed) { branch.state = "skipped"; branch.reason = admission.reason; return null; }
+        } else if (microsoft ? !sourceSettings?.canCollect() : $("checkActivity").disabled) return null;
+        if (!branch && refreshUsesStoredRecovery()) return refreshStoredData(event);
+        const expectedBasis = branch?.gesture.plan[source].expectedBasis;
+        if (sourceCollection.controlsActive && !microsoft) {
+            try { sourceCollection.authorize("/api/collection/now", expectedBasis ? { expectedBasis } : {}, api.accessState()); }
+            catch (error) {
+                if (branch) { branch.state = "skipped"; branch.reason = "status or access changed"; }
+                collectionUnavailable(error.message, error.reason, publication); return false;
+            }
+        }
         const initiatingControl = document.activeElement;
         const initiatingNavigation = navigationGeneration, initiatingIntent = readingIntent;
-        const checkSource = collection?.config?.approved === true;
-        const token = fresh.begin({ checkSource });
+        const nativePersistence = historyStatus.persistence(microsoft ? nativeCollectionStatus(collection) : collection);
+        const checkSource = Boolean(nativePersistence) || collection?.config?.approved === true;
+        let intent = null;
+        if (nativePersistence) {
+            const control = historyStatus.native(collection);
+            if (!nativePersistence.actions.includes("collect-now")
+                || !microsoft && (!control?.enabled || !control.retained || !control.connected)) {
+                announce(historyStatus.persistenceReason(collection) || "Microsoft collection is unavailable.", "stale");
+                return false;
+            }
+            const owner = api.controlToken();
+            if (!owner || typeof owner.then === "function" || api.isControlCurrent(owner) !== true) {
+                announce("The current panel cannot own this Microsoft collection operation.", "stale");
+                return false;
+            }
+            intent = branch?.intent ?? { operationId: crypto.randomUUID(), deadline, owner };
+            if (microsoft) {
+                try { sourceCollection.authorize("/api/collection/microsoft/now",
+                    { operationId: intent.operationId, deadline: intent.deadline, ...(expectedBasis ? { expectedBasis } : {}) }, api.accessState()); }
+                catch (error) {
+                    if (branch) { branch.state = "skipped"; branch.reason = "status or access changed"; }
+                    collectionUnavailable(error.message, error.reason, publication); return false;
+                }
+            }
+        } else if (nativeCollectIntent?.confirmed) {
+            nativeCollectIntent = null;
+            fresh.retireNativeResult();
+        }
+        const token = fresh.begin({ checkSource, nativeOperationId: intent?.operationId });
         if (token === null) return null;
+        if (intent) nativeCollectIntent = intent;
         recollectionNoticeVisible = false;
         const sourceIdentity = { configVersion: collection?.configVersion, revision: collection?.revision, lastCheckId: collection?.lastCheck?.id };
         collectionBusy = true;
         collectionReadGeneration++;
         clearTimeout(pollTimer);
-        collectionSettings?.setChecking(true);
+        collectionSettings?.setChecking(true, publication);
+        sourceSettings?.setChecking(true);
         renderFreshActivity();
         try {
             if (!checkSource) return await load({ background: true });
             try {
                 sessionStorage.setItem(sourceCheckKey, "pending");
                 if (sessionStorage.getItem(sourceCheckKey) !== "pending") throw new Error("Pending marker was not saved.");
+                sourcePending = true;
             } catch {
                 fresh.blockSource("This tab cannot preserve source-check recovery state. No source check was sent; Refresh and Retry remain read-only.");
+                if (branch) { branch.state = "skipped"; branch.reason = "recovery storage unavailable"; }
                 return false;
             }
-            const result = await api("/api/collection/now", {});
-            if (!fresh.collected(token, result.check)) return false;
-            clearSourceCheckMarker();
-            renderCollection(result);
+            const prefix = microsoft ? "/api/collection/microsoft" : "/api/collection";
+            if (branch && !refreshGestureCurrent(branch.gesture)) { branch.state = "skipped"; branch.reason = "access changed"; return false; }
+            if (branch) branch.dispatched = true;
+            let result = await api(prefix + "/now", { ...(intent ? { operationId: intent.operationId,
+                ...(microsoft ? { deadline: intent.deadline } : {}) } : {}), ...(expectedBasis ? { expectedBasis } : {}) });
+            if (!api.isCurrent(publication)) return false;
+            if (intent) {
+                if (intent !== nativeCollectIntent || !nativeIntentCurrent(intent)) throw new Error("The original panel owner changed. This Microsoft operation remains unconfirmed.");
+                if (result.nativePersistenceReceipt) {
+                    const receipt = historyStatus.nativeReceipt(result.nativePersistenceReceipt);
+                    if (receipt.operationId !== intent.operationId) throw new Error("The runtime returned a different Microsoft operation receipt.");
+                }
+                result = await api(prefix + "/status", { operationId: intent.operationId });
+                if (!api.isCurrent(publication)) return false;
+                if (intent !== nativeCollectIntent || !nativeIntentCurrent(intent)) throw new Error("The original panel owner changed. This Microsoft operation remains unconfirmed.");
+                const committed = receiveNativeReceipt(result, intent);
+                if (sourceCollection.active && committed) await qualifyNativeReadback(intent);
+                if (!sourceCollection.controlsActive) renderCollection(result, publication);
+                renderFreshActivity();
+                if (!committed) return false;
+            } else {
+                if (!fresh.collected(token, result.check)) return false;
+                clearSourceCheckMarker();
+            }
+            const status = sourceCollection.controlsActive ? await readCollectionStatus() : result;
+            renderCollection(status, publication);
             renderFreshActivity();
+            if (branch) return result;
             if ($("overlay").open || reportJourney?.isReviewOpen() || collectionSettings?.hasDraft()) {
                 fresh.defer();
                 $("newDataNotice").hidden = false;
             } else await load({ background: true });
+            if (!api.isCurrent(publication)) return false;
             return { ...result, checkMessage: fresh.snapshot().message };
         } catch (error) {
+            if (!api.isCurrent(publication)) return false;
+            if (branch && ["NATIVE_RETENTION_EXPECTED_BASIS_CHANGED", "COLLECTION_EXPECTED_BASIS_CHANGED"].includes(error.reason)) {
+                branch.state = "skipped"; branch.reason = "settings or access changed"; branch.dispatched = false;
+                branch.flow = fresh = createFreshActivity({ nativeStatus: receiptStatus });
+                if (nativeCollectIntent === branch.intent) nativeCollectIntent = null;
+                return false;
+            }
+            if (sourceCollection.controlsActive) collectionUnavailable(error.message, error.reason, publication);
             // A generic 422 can follow dispatch; only a specific pre-read source code settles it.
             const failed = fresh.fail(token, error.message, { rejected: error.code === "request_rejected" && error.status !== 422, reason: error.reason, ...sourceIdentity });
             if (failed && !fresh.snapshot().sourceUnknown) clearSourceCheckMarker();
             return false;
         } finally {
+            if (api.isCurrent(publication)) {
             collectionBusy = false;
-            collectionSettings?.setChecking(false);
+            collectionSettings?.setChecking(refreshWorking(), publication);
+            sourceSettings?.setChecking(refreshWorking());
             renderFreshActivity();
-            if (initiatingControl === $("checkActivity") && navigationGeneration === initiatingNavigation && readingIntent === initiatingIntent
+            if ([$("checkActivity"), $("analyzeRefresh")].includes(initiatingControl) && navigationGeneration === initiatingNavigation && readingIntent === initiatingIntent
                 && document.activeElement === document.body) {
                 const recovery = [$("refreshBtn"), $("collectionRetry"), ...document.querySelectorAll("[data-stored-refresh-retry]")]
                     .find(control => control.checkVisibility() && !control.disabled);
@@ -5315,9 +8032,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             clearTimeout(pollTimer);
             pollTimer = setTimeout(pollCollection, 5000);
+            }
         }
     }
-    function renderCollection(status) {
+    function renderCollection(status, publication) {
+        if (clearingAccess || !api.isCurrent(publication)) return;
+        acceptSourceCollection(status);
+        const nativeStatus = nativeCollectionStatus(status), previousNative = nativeCollectionStatus(collection);
+        const nativeControl = historyStatus.native(status);
+        const nativePersistence = historyStatus.persistence(nativeStatus);
+        const nativeUnavailable = historyStatus.nativeUnavailable(nativeStatus);
+        if (nativeUnavailable) {
+            const observed = api.accessState().state;
+            if (!historyStatus.nativeUnavailableCurrent(nativeStatus, observed)) {
+                throw new Error("Microsoft account setup status does not match current WIRE access.");
+            }
+            if (!historyStatus.nativeUnavailableCurrent(nativeStatus, observed, previousNative)) return;
+        }
+        if (nativePersistence) {
+            const access = api.accessState();
+            if (!api.isCurrent(publication)) return;
+            if (access.state?.generation !== nativePersistence.generation) {
+                throw new Error("Microsoft collection status does not match current WIRE access.");
+            }
+            const previous = historyStatus.persistence(previousNative);
+            if (previous?.accountRef === nativePersistence.accountRef && previous.generation === nativePersistence.generation
+                && previous.revision > nativePersistence.revision) return;
+        }
+        if (nativeControl && historyStatus.native(collection)?.revision > nativeControl.revision) return;
         if (collection && status.configVersion !== undefined && collection.configVersion !== undefined && status.configVersion !== collection.configVersion) {
             invalidatePreview();
             invalidateDialog("Collection settings changed. Prepare a fresh report preview; source approval is not disclosure review.");
@@ -5328,6 +8070,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         collection = status;
         collectionReadError = "";
         collectionReadReason = "";
+        if (!sourceCollection.active && nativePersistence && state && !historyStatus.nativeReadbackCurrent(state, nativeStatus)) {
+            connectionNeedsSnapshot = true;
+            if (nativeCollectIntent?.confirmed && nativeIntentCurrent()) fresh.nativeApplied(state, nativeStatus);
+        }
         if (Array.isArray(status.historyIssues)) issuesStatus = status;
         // Keep counts, source coverage and rows on the same detailed response while it is visible.
         const detail = route.view === "collection-status" && issuesStatus ? issuesStatus : status;
@@ -5338,17 +8084,28 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const statusAction = $("collectionStatusAction");
         statusAction.hidden = !view.action;
         if (view.action) { setText(statusAction, view.action.label); statusAction.href = view.action.href; }
-        $("collectionSourceLink").hidden = view.action?.href === "#settings?section=connection&setting=source";
+        $("collectionSourceLink").hidden = Boolean(nativeControl) || view.action?.href === "#settings?section=connection&setting=source";
+        $("collectionHistoryLink").hidden = Boolean(nativeControl);
+        for (const id of ["collectionTimes", "collectionCoverageCounts", "collectionIssues", "collectionSetup"]) $(id).hidden = Boolean(nativeControl);
         setText($("collectionChecked"), status.lastCheckedAt ? `Last checked ${freshness(status.lastCheckedAt)}` : "Not checked yet");
         setText($("collectionNewActivity"), status.lastNewDataAt ? `Last new evidence ${freshness(status.lastNewDataAt)}` : "No new evidence collected yet");
-        $("collectionChecked").title = `Last local check: ${timestamp(status.lastCheckedAt)}`;
-        $("collectionNewActivity").title = `Last newly collected activity: ${timestamp(status.lastNewDataAt)}`;
+        ux.tooltip($("collectionChecked"), status.lastCheckedAt ? `Last local check: ${timestamp(status.lastCheckedAt)}` : "");
+        $("collectionChecked").tabIndex = status.lastCheckedAt ? 0 : -1;
+        ux.tooltip($("collectionNewActivity"), status.lastNewDataAt ? `Last newly collected activity: ${timestamp(status.lastNewDataAt)}` : "");
+        $("collectionNewActivity").tabIndex = status.lastNewDataAt ? 0 : -1;
         setText($("settingsDiagnosticError"), status.error || status.lastCheckWarning || "");
         $("settingsDiagnosticError").hidden = !status.error && !status.lastCheckWarning;
         const unavailable = c?.unavailable ?? detail.sourceErrors ?? 0, limited = c?.limited ?? 0;
         $("collectionIssues").dataset.severity = c?.eligible > 0 && unavailable === c.eligible ? "error" : "normal";
-        setText($("collectionIssueCounts"), c ? `${count(unavailable)} unavailable · ${count(limited)} limited` : "");
-        setText($("collectionIssueImpact"), unavailable || limited ? "Missing activity may be absent from reports. Previously collected evidence is kept. Open a reason for affected chats and guidance." : "");
+        const issueCounts = $("collectionIssueCounts");
+        issueCounts.replaceChildren();
+        if (c) for (const [total, label] of [[unavailable, "unavailable"], [limited, "limited"]]) {
+            const fact = el("span", "history-status-count");
+            fact.append(el("span", "history-status-value", count(total)), document.createTextNode(` ${label}`));
+            if (issueCounts.childNodes.length) issueCounts.append(document.createTextNode(" "));
+            issueCounts.append(fact);
+        }
+        setText($("collectionIssueImpact"), unavailable || limited ? "Analyze, Search and new reports use only collected activity and known links. Refresh does not rewrite saved reports." : "");
         $("collectionIssueImpact").hidden = !unavailable && !limited;
         renderIssueZeroState(detail, detail.historyIssues, localQuery("issueSearch"));
         setText($("collectionExactCheck"), timestamp(status.lastCheckedAt));
@@ -5361,12 +8118,28 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             : "History coverage is not available until a check completes.");
         setText($("collectionCoveragePending"), c?.pending
             ? `${count(c.pending)} ${c.pending === 1 ? "chat is" : "chats are"} awaiting or still importing history; some may already be readable.` : "");
-        $("collectionCoveragePending").hidden = !c?.pending;
-        collectionSettings.receive(status);
+        $("collectionCoveragePending").hidden = Boolean(nativeControl) || !c?.pending;
+        collectionSettings.receive(status, publication);
+        if (sourceCollection.controlsActive) sourceSettings?.receive(status.sourceAware, publication);
+        if (sourceCollection.active) {
+            const native = state?.nativeRead;
+            const counts = native?.aggregates;
+            sourceSettings?.receiveSavedActivity((savedMicrosoftSummary(native) + (counts
+                ? ` ${count(counts.conversations)} ${counts.conversations === 1 ? "conversation" : "conversations"} / ${count(counts.calls)} ${counts.calls === 1 ? "tool call" : "tool calls"}.` : "")).trim(), publication);
+        }
+        if (!api.isCurrent(publication)) return;
         renderSettingsSearch();
         renderCollectionNotice();
         const m = detail.metrics, inventory = detail.discovery?.counts, diagnostics = $("collectionDiagnostics");
         diagnostics.replaceChildren();
+        const savedCounts = state?.nativeRead?.aggregates;
+        if (sourceCollection.active && savedCounts) {
+            diagnostics.append(el("h3", "", "Saved Microsoft observations"),
+                el("p", "", savedMicrosoftSummary(state.nativeRead)),
+                facts([["Saved observations", count(savedCounts.variants)], ["Message observations", count(savedCounts.messages)],
+                    ["Message parts", count(savedCounts.parts)], ["Task-state observations", count(savedCounts.taskStates)]], { inlineHelp: false }),
+                el("p", "", "Observations may include repeated or partial messages. They are not a count of complete replies."));
+        }
         if (inventory && c) {
             diagnostics.append(el("h3", "", "Source inventory"), facts([
                 ["Copilot chats listed by the source", count(inventory.sessions)],
@@ -5388,7 +8161,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ["Messages with an unsupported text format", count(m.unsupportedPromptContents)],
             ["Chats waiting for an unfinished entry", count(m.partialSources)],
             ["History data read in the last check (bytes)", count(m.lastBytesRead)],
-            ["Time spent in the last check (milliseconds)", count(m.lastDurationMs)],
+            ["Time spent in the last check", timingPresentation.duration(Number.isFinite(m.lastDurationMs) && m.lastDurationMs >= 0 ? m.lastDurationMs : null)],
         ], { inlineHelp: false }));
         diagnostics.append(el("p", "", "The initial read covers at most the last 64 MiB per history file within the selected history window. Older saved activity outside that window is not newly collected; previously collected evidence stays."),
             el("p", "", "Each check reads at most 32 MiB in 4 MiB portions. Pending history needs further checks; an unfinished entry is read after Copilot finishes saving it."),
@@ -5399,14 +8172,32 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderFreshActivity();
     }
     async function pollCollection() {
-        if (pageInactive || document.hidden || !state?.collection) return;
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess || pageInactive || document.hidden || !state?.collection) return;
         const readGeneration = collectionReadGeneration;
         try {
-            if (collectionBusy) return;
+            if (collectionBusy || refreshWorking()) return;
             if (exportWriting ? !Number.isSafeInteger(draft.contextRevision()) : !ensureCurrentTime()) return;
-            const status = await api("/api/collection/status", {});
-            if (readGeneration !== collectionReadGeneration || collectionBusy) return;
-            if (draft.observeContext(status, { writing: exportWriting })) {
+            const status = await readCollectionStatus();
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || collectionBusy || refreshWorking()) return;
+            observeNativeReaderStatus(status);
+            updateRequestReportActions();
+            savedArtifactUI?.observeEligibility(status.revision);
+            savedInspector?.refreshEligibility?.(status.revision);
+            const native = status.sourceAware?.microsoft?.status;
+            const original = state.nativeRead?.readback?.current;
+            const preserveNativeSource = Boolean((activePreview || reportJourney?.isReviewOpen()) && original && native?.configured
+                && native.accountRef === state.collection?.sourceAware?.microsoft?.status?.accountRef
+                && native.generation === original.generation
+                && native.configuration?.configurationRevision === original.configurationRevision
+                && native.configuration?.privacyRevision === original.privacyRevision
+                && status.deletionVersion === state.deletionVersion);
+            const github = status.sourceAware?.github?.status ?? status;
+            const originalGithub = state.collection?.sourceAware?.github?.status ?? state.collection;
+            const preserveCollectedSource = Boolean((activePreview?.collectedSourceFrozen || reportJourney?.snapshot().phase === "scanning")
+                && github.config?.approved === true && JSON.stringify(github.config) === JSON.stringify(originalGithub?.config)
+                && status.assessment?.basis && status.deletionVersion === state.deletionVersion);
+            if (draft.observeContext(status, { writing: exportWriting, preserveNativeSource, preserveCollectedSource })) {
                 scrubContextPreview();
                 if (!exportWriting) invalidatePreview("Recorded context changed or became unavailable. Prepare a new preview; ordinary prompt edits are kept.");
             }
@@ -5440,46 +8231,72 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 await load({ background: true });
                 return;
             }
-            renderCollection(status);
+            renderCollection(status, publication);
             await refreshCollectionIssues();
+            if (!api.isCurrent(publication)) return;
             const action = live.observe(status.revision, state?.revision, {
-                reviewing: $("overlay").open || deletionUI.isOpen() || recollectionUI.isOpen() || reportJourney?.isReviewOpen(), loading: isLoading || collectionBusy || fresh.snapshot().phase === "error",
+                reviewing: $("overlay").open || deletionUI.isOpen() || recollectionUI.isOpen() || Boolean(activePreview) || reportJourney?.isReviewOpen(), loading: isLoading || collectionBusy || fresh.snapshot().phase === "error",
                 editing: collectionSettings.hasDraft() || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) || Boolean(document.querySelector(".select-popup:not([hidden])")),
             });
             setText($("newDataNotice"), fresh.snapshot().phase === "error" ? "Stored evidence has changed. Retry the stored read; the earlier source check is not repeated."
                 : collectionSettings.hasDraft() ? "New evidence is available. Your unsaved Settings changes are kept; save or cancel them to update automatically."
-                : reportJourney?.isReviewOpen() && reportJourney.snapshot().hasPreview ? "New evidence is available. Your report preview stays frozen."
+                : activePreview ? "New evidence is available. Your report preview stays frozen."
                 : "New evidence is available.");
             $("newDataNotice").hidden = action !== "defer" || status.revision === state?.revision;
-            const canApply = !isLoading && !$("overlay").open && !deletionUI.isOpen() && !recollectionUI.isOpen() && !reportJourney?.isReviewOpen() && !collectionSettings.hasDraft()
+            const canApply = !isLoading && !$("overlay").open && !deletionUI.isOpen() && !recollectionUI.isOpen() && !activePreview && !reportJourney?.isReviewOpen() && !collectionSettings.hasDraft()
                 && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) && !document.querySelector(".select-popup:not([hidden])");
             if ((action === "refresh" || (connectionNeedsSnapshot || ["applying", "waiting"].includes(fresh.snapshot().phase)) && canApply) && state) await load({ background: true });
         } catch (error) {
-            if (readGeneration !== collectionReadGeneration || collectionBusy) return;
+            if (!api.isCurrent(publication) || readGeneration !== collectionReadGeneration || collectionBusy) return;
             assessmentUI.clearPrivateText();
-            collectionUnavailable(error.message, error.reason);
+            collectionUnavailable(error.message, error.reason, publication);
         } finally {
             clearTimeout(pollTimer);
-            if (!pageInactive) pollTimer = setTimeout(pollCollection, 5000);
+            if (api.isCurrent(publication) && !pageInactive) pollTimer = setTimeout(pollCollection, 5000);
         }
     }
     async function writeCollection(endpoint, input) {
+        const publication = api.publicationToken();
+        if (!publication) throw new Error("Current WIRE access is required before changing collection.");
+        if (sourceCollection.controlsActive) sourceCollection.authorize(endpoint, input, api.accessState());
+        const nativePrefix = sourceCollection.active ? "/api/collection/microsoft" : "/api/collection";
+        const nativeChange = endpoint === nativePrefix + "/enabled" && Object.hasOwn(input, "expectedNativeRevision");
+        const nativeConfigurationChange = endpoint === nativePrefix + "/configure" && input.schemaVersion === (sourceCollection.active ? 2 : 1)
+            && ["enable", "save"].includes(input.intent);
         if (endpoint === "/api/collection/now") return checkActivity();
         if (collectionBusy) throw new Error("A collection change is already in progress. It has not been repeated.");
         collectionBusy = true;
         collectionReadGeneration++;
-        $("collectionStatus").textContent = "Updating local collection...";
+        collectionSettings?.setChecking(true, publication);
+        sourceSettings?.setChecking(true);
+        setText($("collectionStatus"), nativeConfigurationChange ? "Saving Microsoft collection settings..."
+            : nativeChange ? "Updating Microsoft reads..." : "Updating local collection...");
         try {
             const result = await api(endpoint, input);
-            renderCollection(result);
+            if (!api.isCurrent(publication)) throw Object.assign(new Error("Access changed after this collection action was sent. Its outcome remains unknown."),
+                { code: "request_outcome_unknown", outcome: "unknown" });
+            if (nativeChange && historyStatus.native(result)?.enabled !== input.enabled) {
+                throw new Error("The Microsoft read change was not confirmed. Read the current connection before trying again.");
+            }
+            const status = sourceCollection.controlsActive ? await readCollectionStatus() : result;
+            renderCollection(status, publication);
+            if (nativeChange && !historyStatus.persistence(result)) return result;
             if (!$("overlay").open && !reportJourney?.isReviewOpen()) await load({ background: true });
-            else if (collection.revision !== state?.revision) $("newDataNotice").hidden = false;
+            else if (connectionNeedsSnapshot || collection.revision !== state?.revision) $("newDataNotice").hidden = false;
             return result;
+        } catch (error) {
+            if (sourceCollection.controlsActive && api.isCurrent(publication)) collectionUnavailable(error.message, error.reason, publication);
+            throw error;
         } finally {
-            collectionBusy = false;
+            if (api.isCurrent(publication)) {
+                collectionBusy = false;
+                collectionSettings?.setChecking(false, publication);
+                sourceSettings?.setChecking(false);
+            }
         }
     }
     function openDialog(title) {
+        if (clearingAccess || !api.publicationToken()) throw new Error("Current WIRE access is required to open private content.");
         ux.hideTooltip();
         invalidatePreview();
         $("clearPreviewSelection").hidden = true;
@@ -5563,6 +8380,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     const reportCopyRebuildMessage = "Review your changes in a new preview before saving.";
     function reportPreparationBlock(kind) {
+        if (kind === "report" && nativeReportBlock()) return nativeReportBlock();
         if (kind === "report" && reportComparisonUI?.hasPendingSave()) return "Check the comparison save status before preparing a report.";
         const ordinary = reportJourney?.snapshot();
         if (kind === "comparison" && (ordinary?.phase === "writing" || ordinary?.saveUnconfirmed)) return "Check the report save status before preparing a comparison.";
@@ -5584,6 +8402,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return "";
     }
     async function previewExport() {
+        const publication = api.publicationToken();
+        if (!publication || clearingAccess) return;
         const blocked = reportPreparationBlock("report");
         if (blocked) {
             updateSelection();
@@ -5596,10 +8416,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (exportWriting || reportJourney?.snapshot().phase === "scanning" || !ensureCurrentTime() || isLoading || isStale || $("exportBtn").disabled) return;
         const selection = reportSelection().selection(state.revision);
+        const nativeRequest = usesBoundedReportView() ? draft.nativeView(reportNativeView(), state.revision, reportNativeIntent()).request : null;
+        if (usesBoundedReportView() && !nativeRequest) { updateSelection(); return; }
         invalidatePreview();
         const body = reportJourney.beginScan();
         if (!body) return;
         const operation = draft.token();
+        const publicationContext = nativePublicationContext(), previewStartedAt = performance.now();
         const progress = el("p", "", "Scanning selected evidence locally. No files are being written.");
         progress.setAttribute("role", "status");
         ux.pending(progress, true);
@@ -5608,7 +8431,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const refused = admitReportPreparation("report");
             if (refused) { body.replaceChildren(); reportJourney.failed(refused); return; }
             const preview = await api("/api/preview", { ...(periodReport ? { periodComparison: periodReport.value,
-                ...(periodReport.semanticSelection ? { semanticSelection: periodReport.semanticSelection } : {}) } : { selection }), options: draft.options() });
+                ...(periodReport.semanticSelection ? { semanticSelection: periodReport.semanticSelection } : {}) } : { selection,
+                    ...(nativeRequest ? { nativeViewId: nativeRequest.nativeViewId } : {}) }), options: draft.options() });
+            if (!api.isCurrent(publication)) return;
             if (!ensureCurrentTime() || !draft.current(operation) || !reportJourney.isReviewOpen()) {
                 if (preview.previewId) await api("/api/cancel-preview", { previewId: preview.previewId });
                 return;
@@ -5619,18 +8444,24 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 throw new Error("Recorded context changed while preparing this preview. Read current activity and prepare a new preview.");
             }
             activePreview = preview;
+            if (preview.snapshot?.nativeEvidence) nativePublication.preview(preview, publicationContext, previewStartedAt);
             renderPreview(body, preview, operation);
         } catch (error) {
-            if (!draft.current(operation)) return;
+            if (!api.isCurrent(publication) || !draft.current(operation)) return;
+            if (nativeRequest) draft.rejectNativeView();
             body.replaceChildren();
             reportJourney.failed(error.message + " No files were written. Prepare a new preview.");
+            if (nativeRequest) updateSelection();
         }
     }
     function renderPreview(body, preview, operation) {
+        clearPreviewPayload?.();
+        const publication = api.publicationToken();
         detailOwner = "preview:" + preview.previewId;
         body.replaceChildren();
-        body.dataset.recordedContext = String(Boolean(preview.snapshot?.recordedContext));
+        body.dataset.recordedContext = String(Boolean(preview.snapshot?.recordedContext || preview.snapshot?.nativeEvidence || preview.snapshot?.resultText));
         const contextToken = draft.contextToken();
+        const nativeReport = Boolean(preview.snapshot?.nativeEvidence);
         const modeLabels = { none: "No prompts", masked: "Masked prompts", original: "Original prompts" };
         const mode = preview.promptMode || "none";
         const formats = (preview.formats || ["markdown"]).map((f) => f === "markdown" ? "Markdown" : f.toUpperCase()).join(", ");
@@ -5640,17 +8471,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             block.append(el("p", "report-copy-label", label), text);
             return block;
         }
-        body.append(el("p", "report-privacy-note", mode === "original" ? "Personal wording will be included in local files. Detected credentials are removed even in Original mode. This is not permission to publish or upload." : mode === "none" ? "Request, follow-up and tool question text is omitted. Originals remain available here locally." : "Your retained wording is masked, not rewritten or summarized. Check unlabelled names and confidential meaning yourself."));
+        body.append(el("p", "report-privacy-note", mode === "original" ? "Original wording included; detected credentials removed." : mode === "none"
+            ? preview.snapshot?.resultText ? "Prompt text is omitted. Chosen result text is included only as masked, reviewed copies."
+                : preview.snapshot?.nativeEvidence ? "Microsoft message and context text is omitted."
+                : "Local originals are excluded from saved files."
+            : "Detected personal values are masked. Check confidential meaning."));
         if (preview.snapshot?.recordedContext) {
             const context = preview.snapshot.recordedContext;
             const note = el("section", "report-context-review");
-            note.append(el("h3", "", "Recorded context in this report"),
-                el("p", "", `${context.coverage.entries} context entries; ${context.coverage.included} included, ${context.coverage.omitted} omitted, ${context.coverage.unavailable} unavailable, ${context.coverage.partial} partial. Context does not add analytical requests, calls, timing samples or verdicts.`),
-                el("p", "muted", context.boundary), el("p", "muted", context.limitation));
+            const coverage = [`${count(context.coverage.included)} included`,
+                ...["omitted", "unavailable", "partial"].filter(key => context.coverage[key]).map(key => `${count(context.coverage[key])} ${key}`)];
+            note.append(el("h3", "", "Recorded context"), el("p", "", coverage.join(" / ")),
+                el("p", "muted", "Context does not prove a single task or add measured activity."));
             for (const gap of new Set(context.anchors.flatMap(anchor => anchor.gaps))) note.append(el("p", "context-help-note", gap));
             body.append(note);
         }
         const changed = () => {
+            if (!api.isCurrent(publication) || preview === null || !body.isConnected) return;
             const canRebuild = activePreview === preview || body.querySelector(".rebuild-preview");
             invalidatePreview(canRebuild ? "" : undefined);
             body.querySelectorAll("[data-review-control]").forEach((node) => { node.disabled = true; });
@@ -5663,60 +8500,79 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 body.prepend(warning);
             }
         };
-        const reviewCopies = [...(preview.promptReview ?? []), ...(preview.contextReview ?? [])];
+        const reviewCopies = [...(preview.promptReview ?? []), ...(preview.contextReview ?? []), ...(preview.nativeReview ?? []), ...(preview.resultReview ?? [])];
+        clearPreviewPayload = () => {
+            clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
+            clearPreparedReaders();
+            for (const copy of reviewCopies) for (const key of Object.keys(copy)) delete copy[key];
+            reviewCopies.length = 0;
+            for (const copy of preview?.snapshot?.resultText?.copies ?? []) copy.text = null;
+            preview = null;
+            clearPreviewPayload = null;
+        };
         if (reviewCopies.length) {
             const comparisons = el("section", "prompt-comparisons");
             comparisons.setAttribute("aria-label", "Text in your report");
-            const incomplete = reviewCopies.filter(prompt => prompt.status !== "full" || prompt.original === null).length;
+            if (preview.nativeReview?.length) comparisons.append(el("p", "context-help-note",
+                "Saved Microsoft text may be incomplete. Replies are not verified as final."));
+            const incomplete = reviewCopies.filter(prompt => (prompt.availability
+                ? !["recorded", "recorded-empty"].includes(prompt.availability) : prompt.status !== "full") || prompt.original === null).length;
             const removals = reviewCopies.reduce((sum, prompt) => sum + prompt.changes.length, 0);
-            if (removals || incomplete) comparisons.append(el("p", "prompt-review-summary",
-                [removals ? `${count(removals)} removals` : "", incomplete ? `${count(incomplete)} incomplete, excluded or unavailable sources` : ""].filter(Boolean).join(" · ")));
+            if (removals || incomplete) {
+                const summary = el("p", "prompt-review-summary");
+                setReportMetadata(summary, [removals ? `${count(removals)} removals` : "", incomplete ? `${count(incomplete)} incomplete, excluded or unavailable sources` : ""].filter(Boolean));
+                comparisons.append(summary);
+            }
             const copies = el("div");
             pagedList(copies, reviewCopies, { key: "copies:" + preview.previewId, size: 1, noun: "report copies", renderItem: prompt => {
                 detailOwner = "preview:" + preview.previewId + ":" + prompt.key;
-                const displayLabel = prompt.kind === "response" ? "Recorded reply (context; finality unverified)"
+                const nativeCopy = typeof prompt.key === "string" && prompt.key.startsWith("native-copy-");
+                const resultCopy = typeof prompt.key === "string" && prompt.key.startsWith("result-copy-");
+                const displayLabel = resultCopy ? `${prompt.label}${prompt.entryIndex !== null ? ` / returned API entry ${prompt.entryIndex + 1}` : ""} / masked retained result text`
+                    : nativeCopy ? (`Microsoft ${prompt.purpose === "prompt" ? "user message" : "recorded context"} / ${prompt.author === "unknown" ? "author unknown" : prompt.author} / ${(prompt.kind === "native-message" ? prompt.representationKind || "message" : prompt.kind).replaceAll("-", " ").replaceAll("_", " ")}`)
+                    : prompt.kind === "response" ? "Recorded reply (context; finality unverified)"
                     : prompt.kind === "origin" ? textAccess.caption(prompt) : prompt.kind === "tool" ? `Recorded tool argument (${prompt.label})` : `${prompt.label} / ${textAccess.caption(prompt)}`;
                 const item = el("article", "prompt-comparison");
-                item.append(el("h4", "", `${displayLabel}${prompt.omitted ? " · omitted" : ""}`));
+                item.append(el("h4", "", `${displayLabel}${prompt.omitted ? " (omitted)" : ""}`));
                 const pair = el("div", "prompt-pair");
                 const original = el("div", "prompt-original"), copy = el("div", "prompt-report");
                 if (prompt.original === null) original.append(el("p", "", "Original text is unavailable."));
                 else {
-                    const originalBlock = readableCopy("Local original", el("pre", "", prompt.original));
-                    original.append(mode === "none" ? disclosure("Read local original; not included in report", originalBlock) : originalBlock);
-                    if (prompt.status !== "full") original.append(el("p", "muted", "Only part of the original was recorded. Missing text is not reconstructed."));
+                    const originalBlock = readableCopy(resultCopy ? "Retained result text" : "Local original", el("pre", "", prompt.original));
+                    original.append(mode === "none" && !resultCopy ? disclosure("Read local original; not included in report", originalBlock) : originalBlock);
+                    if (!nativeCopy && prompt.status !== "full") original.append(el("p", "muted", "Only part of the original was recorded. Missing text is not reconstructed."));
                 }
                 const rendered = el("pre");
-                if (prompt.text === null) copy.append(el("p", "", prompt.omitted ? prompt.kind === "response" ? "No reply text included." : "No prompt text included." : "Source text unavailable; not reconstructed."));
+                if (prompt.text === null) copy.append(el("p", "", prompt.omitted ? nativeCopy || resultCopy ? "No text included in this copy." : prompt.kind === "response" ? "No reply text included." : "No prompt text included." : "Source text unavailable; not reconstructed."));
                 else {
                     for (const segment of prompt.segments) {
                         if (segment.category) {
                             const mark = el("mark", segment.mandatory ? "mandatory" : "", segment.text);
                             mark.tabIndex = 0;
-                            rendered.append(ux.tooltip(mark, segment.mandatory ? "Mandatory credential removal. Cannot be restored to an export." : `This span replaces a ${segment.category.replaceAll("_", " ")} match in the report copy. Your local original is unchanged.`));
+                            rendered.append(ux.tooltip(mark, segment.mandatory ? "Credentials are always removed from saved files." : `${segment.category.replaceAll("_", " ")} masked; original unchanged.`));
                         } else rendered.append(document.createTextNode(segment.text));
                     }
                     copy.append(readableCopy("Report copy", rendered));
                 }
                 for (const category of [...new Set(prompt.changes.map((c) => c.category))]) copy.append(el("p", "muted", `${category.replaceAll("_", " ")}: ${prompt.changes.filter((c) => c.category === category).length} removal(s).`));
-                if (prompt.changes.some((c) => c.mandatory)) copy.append(el("p", "notice", "Mandatory credential removal. This copy is not byte-identical to the original."));
-                if (prompt.edited) copy.append(el("p", "muted", "You edited this report copy. It is not the original wording."));
+                if (prompt.edited) copy.append(el("p", "muted", "Edited report copy."));
                 pair.append(original, copy);
                 item.append(pair);
-                if (mode !== "none" && prompt.original !== null) {
+                if ((mode !== "none" || resultCopy) && prompt.original !== null) {
                     const edit = el("details", "detail-disclosure");
                     edit.append(el("summary", "", "Edit or omit this report copy"));
                     const fields = el("fieldset", "report-copy-controls");
                     fields.disabled = exportWriting || reportJourney.snapshot().saveUnconfirmed;
                     const omit = el("input"), omitLabel = el("label", "attestation");
                     omit.type = "checkbox"; omit.checked = prompt.omitted;
-                    omitLabel.append(omit, el("span", "", prompt.scenarioRef ? "Omit this copy from the report" : "Omit this prompt from the report"));
+                    omitLabel.append(omit, el("span", "", prompt.scenarioRef || resultCopy ? "Omit this copy from the report" : "Omit this prompt from the report"));
                     const textarea = el("textarea");
                     const override = draft.options().overrides.find(value => value.key === prompt.key);
                     omit.checked = override?.omit ?? prompt.omitted;
                     textarea.rows = 5; textarea.value = override?.text ?? prompt.text ?? ""; textarea.disabled = omit.checked;
                     textarea.setAttribute("aria-label", `Report copy: ${displayLabel}`);
                     const saveEdit = () => {
+                        if (!api.isCurrent(publication) || preview === null || !textarea.isConnected || !body.contains(textarea)) return;
                         if (exportWriting || reportJourney.snapshot().saveUnconfirmed) return;
                         const overrides = draft.options().overrides.filter((o) => o.key !== prompt.key);
                         overrides.push({ key: prompt.key, omit: omit.checked, ...(omit.checked || prompt.omitted && !textarea.value ? {} : { text: textarea.value }) });
@@ -5724,11 +8580,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         changed();
                     };
                     omit.addEventListener("change", () => {
+                        if (!api.isCurrent(publication) || preview === null || !omit.isConnected || !body.contains(omit)) return;
                         if (exportWriting || reportJourney.snapshot().saveUnconfirmed) return;
                         textarea.disabled = omit.checked; saveEdit();
                     });
                     textarea.addEventListener("input", saveEdit);
-                    fields.append(omitLabel, el("p", "", mode === "masked" ? "Detected credentials and personal values will be masked again." : "Detected credentials will be removed again."), textarea);
+                    fields.append(omitLabel, el("p", "", mode === "masked" || resultCopy ? "Detected credentials and personal values will be masked again." : "Detected credentials will be removed again."), textarea);
                     edit.append(fields);
                     copy.append(edit);
                 }
@@ -5739,26 +8596,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const report = el("div", "report-document"), exactFiles = el("section", "report-file-inspection");
         function showExactFiles(value) {
-            if (value.snapshot?.recordedContext && !draft.contextCurrent(contextToken)) return;
-            if (value.snapshot?.recordedContext) renderedContextBundles.add(value);
-            exactFiles.replaceChildren();
-            for (const [name, text] of Object.entries(value.files)) {
-                if (typeof text === "string") {
-                    const contents = el("pre", "report-exact-text", text);
-                    contents.tabIndex = 0; contents.setAttribute("aria-label", name);
-                    exactFiles.append(disclosure(name, contents));
-                } else exactFiles.append(el("p", "muted", name));
-            }
+            if (!api.isCurrent(publication)) return;
+            if ((value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) && !draft.contextCurrent(contextToken)) return;
+            if (value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) renderedContextBundles.add(value);
+            const selection = preparedFileInspection?.selection();
+            preparedFileInspection?.dispose();
+            preparedFileInspection = mountFileInspection(exactFiles, value.files, {
+                id: "preparedReportFile", selection,
+                isCurrent: () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId
+                    && (!(value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) || draft.contextCurrent(contextToken)),
+            });
+            preparedFileInspection.refresh();
         }
         function showFiles(value) {
-            if (value.snapshot?.recordedContext && !draft.contextCurrent(contextToken)) return;
-            if (value.snapshot?.recordedContext) renderedContextBundles.add(value);
+            if (!api.isCurrent(publication)) return;
+            if ((value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) && !draft.contextCurrent(contextToken)) return;
+            if (value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) renderedContextBundles.add(value);
             report.replaceChildren();
             if (value.previewHtml) {
                 preparedReportReader?.dispose();
                 preparedReportReader = assessmentFactories.preparedFrame(value.previewHtml, assessmentFactories.liveSearch.frozenFrame, {
+                    isCurrent: () => api.isCurrent(publication),
                     onError: message => {
-                        if (!draft.current(operation) || exportWriting) return;
+                        if (!api.isCurrent(publication) || !draft.current(operation) || exportWriting) return;
                         invalidatePreview(message);
                         reportJourney.failed(message);
                     },
@@ -5772,7 +8632,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         body.append(report);
         const scan = el("details", "detail-disclosure report-privacy-findings");
         scan.append(el("summary", "", "What the local privacy scan found"));
-        for (const [category, occurrences] of Object.entries(preview.privacy.categories || {})) if (occurrences) scan.append(el("p", "", `${category.replaceAll("_", " ")}: ${occurrences} source occurrence(s). The report-copy comparison shows what is removed or retained.`));
+        for (const [category, occurrences] of Object.entries(preview.privacy.categories || {})) if (occurrences) scan.append(el("p", "", `${category.replaceAll("_", " ")}: ${occurrences} source occurrence(s).`));
         for (const limitation of preview.privacy.limitations || []) scan.append(el("p", "", limitation));
         if (preview.privacy.context) {
             for (const [category, occurrences] of Object.entries(preview.privacy.context.categories)) if (occurrences) {
@@ -5791,96 +8651,140 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const feedback = el("p", "muted");
         feedback.setAttribute("role", "status");
         const review = button("Approve for local saving", async () => {
+            if (!api.isCurrent(publication)) return;
             if (isLoading || isStale || !ensureCurrentTime() || !checkbox.checked || !draft.current(operation)) return;
             review.disabled = checkbox.disabled = true;
             feedback.textContent = "Recording your disclosure review...";
             ux.pending(review, true);
             try {
                 const result = await api("/api/privacy-review", { previewId: activePreview.previewId, disclosureReviewed: true, timeContext: viewerTime });
-                if (!ensureCurrentTime() || !draft.current(operation) || !reportJourney.isReviewOpen()) return;
+                if (!api.isCurrent(publication) || !ensureCurrentTime() || !draft.current(operation) || !reportJourney.isReviewOpen()) return;
                 if (result.privacy?.reviewerConfirmed !== true || result.privacy?.allSelectedFieldsScanned !== true) throw new Error("The review was not confirmed.");
+                const nativeReady = !nativeReport || nativePublication.review(result, nativePublicationContext());
                 activePreview = result;
                 showExactFiles(result);
                 review.textContent = "Disclosure reviewed";
-                feedback.textContent = "Disclosure approved. Not saved yet.";
-                confirm.disabled = false;
+                feedback.textContent = !nativeReady ? "Disclosure reviewed. " + nativePublication.reason()
+                    : "Reviewed. Not saved yet.";
+                confirm.disabled = !nativeReady;
                 reportJourney.reviewed();
-            } catch (error) { feedback.className = "notice error"; feedback.setAttribute("role", "alert"); feedback.textContent = error.message + " Prepare a new preview."; review.textContent = "Review not confirmed"; reportJourney.failed(feedback.textContent); }
-            finally { ux.pending(review, false); }
+            } catch (error) {
+                if (!api.isCurrent(publication) || !draft.current(operation) || !review.isConnected) return;
+                feedback.className = "notice error"; feedback.setAttribute("role", "alert"); feedback.textContent = error.message + " Prepare a new preview."; review.textContent = "Review not confirmed"; reportJourney.failed(feedback.textContent);
+            }
+            finally { if (api.isCurrent(publication) && review.isConnected) ux.pending(review, false); }
         });
         ux.pending(review, false);
         review.disabled = true;
         review.dataset.reviewControl = "";
-        checkbox.addEventListener("change", () => { review.disabled = !checkbox.checked || !draft.current(operation); });
+        checkbox.addEventListener("change", () => { if (api.isCurrent(publication)) review.disabled = !checkbox.checked || !draft.current(operation); });
         const confirm = button("Save report", async () => {
-            if (exportWriting || isLoading || isStale || !ensureCurrentTime() || !draft.current(operation) || activePreview?.privacy?.reviewerConfirmed !== true || !reportJourney.isReviewOpen()) return;
+            if (nativeReport) syncNativeSaveAvailability?.();
+            if (nativeReport && !nativePublication.canSave(nativePublicationContext())) {
+                syncNativeSaveAvailability?.(); return;
+            }
+            if (!api.isCurrent(publication) || exportWriting || isLoading || isStale || !ensureCurrentTime() || !draft.current(operation) || activePreview?.privacy?.reviewerConfirmed !== true || !reportJourney.isReviewOpen()) return;
             confirm.disabled = true;
             ux.pending(confirm, true);
-            exportWriting = true;
-            reportJourney.writing(true);
-            $("clearPreviewSelection").disabled = true;
-            $("closeDialog").disabled = true;
-            feedback.textContent = "Saving your reviewed files. This save cannot be cancelled or repeated.";
-            const expectedBundleId = activePreview.bundleId, expectedTitle = activePreview.title;
-            const matchesSavedIdentity = item => item?.bundleId === expectedBundleId && (item.kind ?? "report") === "report"
-                && (expectedTitle === undefined || item.title === expectedTitle);
-            let exportResponseReceived = false;
-            const offerSaveRecovery = () => {
-                const recovery = button("Check save status", async () => {
-                    recovery.disabled = true;
-                    try {
-                        const loaded = await load({ afterExport: true });
-                        if (!recovery.isConnected || !reportJourney.snapshot().saveUnconfirmed) return;
-                        if (!loaded) throw new Error("Saved history is unavailable. The outcome remains unconfirmed; no save was repeated.");
-                        const saved = state.exports.find(matchesSavedIdentity);
-                        if (!saved) throw new Error("No registered receipt is available for this report. The outcome remains unconfirmed; no save was repeated.");
-                        preparedReportReader?.dispose(); preparedReportReader = null;
-                        reportJourney.saved(saved, { available: true });
-                        updateSelection();
-                    } catch (error) { if (recovery.isConnected) reportJourney.failed(error.message); }
-                    finally { if (recovery.isConnected) recovery.disabled = false; }
-                });
-                $("reportSaveBody").append(recovery);
-            };
+            let exportResponseReceived = false, dispatched = false;
+            const saving = {};
+            const offerSaveRecovery = () => $("reportSaveBody").append(button("Check save status", () => reportJourney.recoverSave()));
             try {
-                const result = await api("/api/export", { previewId: activePreview.previewId, confirmed: true, timeContext: viewerTime });
+                const identity = await reportJourney.prepareSaveIdentity(activePreview);
+                if (!identity || !api.isCurrent(publication)) return;
+                if (nativeReport) syncNativeSaveAvailability?.();
+                if (nativeReport && !nativePublication.canSave(nativePublicationContext())) {
+                    syncNativeSaveAvailability?.(); return;
+                }
+                if (reportJourney.writing(true) === false) return;
+                exportWriting = true; dispatched = true; pendingSaveOwner = saving;
+                $("clearPreviewSelection").disabled = true;
+                $("closeDialog").disabled = true;
+                feedback.textContent = "Saving your reviewed files. This save cannot be cancelled or repeated.";
+                let response = await api("/api/export", { previewId: identity.previewId, confirmed: true, timeContext: viewerTime });
+                if (!api.isCurrent(publication)) { response = null; return; }
+                pendingSaveResult = response; response = null;
                 exportResponseReceived = true;
-                if (!matchesSavedIdentity(result.bundle)) throw new Error("The saved report receipt did not match the dispatched report.");
+                const matched = await reportJourney.matchesSaveIdentity(pendingSaveResult.bundle);
+                if (!api.isCurrent(publication)) return;
+                if (!matched) throw new Error("The saved report receipt did not match the dispatched report.");
                 activePreview = null;
                 presentation.setPage(savedLibraryPageKey(), 0);
                 const loaded = await load({ afterExport: true });
+                if (!api.isCurrent(publication)) return;
                 if (!loaded) {
                     reportJourney.failed("The report save was confirmed, but its availability could not be checked. Read saved history before downloading; do not save it again.");
                     offerSaveRecovery();
                     announce("The report save was confirmed. Current saved files could not be checked; use Retry without repeating the save.", "stale", true);
                     return;
                 }
-                const indexed = state.exports.find(bundle => bundle.bundleId === expectedBundleId);
-                if (indexed && !matchesSavedIdentity(indexed)) throw new Error("The registered saved report identity differs from this save.");
-                const available = Boolean(indexed);
-                preparedReportReader?.dispose(); preparedReportReader = null;
-                reportJourney.saved(result.bundle, { available });
-                if (route.view !== "reports") announce(available ? "Local report saved: " + savedTitle(result.bundle) + "."
+                const revision = state.revision;
+                let indexed = state.exports.find(bundle => bundle.bundleId === identity.bundleId);
+                const available = Boolean(indexed), verified = indexed ? reportJourney.matchesSaveIdentity(indexed) : Promise.resolve(true);
+                indexed = null;
+                const indexMatches = await verified;
+                if (!api.isCurrent(publication)) return;
+                if (!indexMatches || state.revision !== revision) throw new Error("The registered saved report identity changed while checking this save.");
+                clearPreparedReaders();
+                reportJourney.saved(pendingSaveResult.bundle, { available });
+                if (route.view !== "reports") announce(available ? "Local report saved: " + savedTitle(pendingSaveResult.bundle) + "."
                     : "The saved report is no longer available. Its downloads have been removed.", available ? "" : "stale");
             } catch (error) {
+                if (!api.isCurrent(publication)) return;
                 activePreview = null;
-                const saveRejected = !exportResponseReceived && error.code === "request_rejected";
+                const original = reportJourney.saveIdentity();
+                const refusedBeforePublication = error.reportSave?.outcome === "not-published"
+                    && error.reportSave.kind === "report" && error.reportSave.previewId === original?.previewId
+                    && error.reportSave.bundleId === original?.bundleId;
+                const saveRejected = !dispatched || !exportResponseReceived && (error.code === "request_rejected" || refusedBeforePublication);
                 feedback.className = "notice error"; feedback.setAttribute("role", "alert");
                 feedback.textContent = error.message + (saveRejected
-                    ? " The save was rejected before dispatch. No files were written. Return to Setup and read current state before preparing a new review."
+                    ? " No report was saved. Return to Contents and read current activity before preparing and reviewing again."
                     : " The local write may have completed. Check save status; do not repeat the save.");
                 confirm.textContent = saveRejected ? "Save not sent" : "Export not confirmed";
                 reportJourney.failed(feedback.textContent, { saveRejected });
                 if (!saveRejected) offerSaveRecovery();
             }
-            finally { ux.pending(confirm, false); exportWriting = false; reportJourney.writing(false); $("closeDialog").disabled = false; $("clearPreviewSelection").disabled = false; updateSelection(); }
+            finally {
+                const ownsCompletion = pendingSaveOwner === saving;
+                if (ownsCompletion) { pendingSaveOwner = pendingSaveResult = null; exportWriting = false; }
+                if (api.isCurrent(publication) && (ownsCompletion || !dispatched && !pendingSaveOwner)) {
+                    retirePendingSaveMessage();
+                    ux.pending(confirm, false); reportJourney.writing(false);
+                    syncSaveLocks(); updateSelection();
+                }
+            }
         }, "primary");
         ux.pending(confirm, false);
         confirm.disabled = true;
         confirm.dataset.reviewControl = "";
         const controls = el("div", "dialog-actions");
         controls.append(review, confirm);
-        approval.append(feedback, el("p", "muted", "Nothing is uploaded. Changes require a fresh review."));
+        const saveAvailability = el("p", "muted");
+        saveAvailability.hidden = true;
+        approval.append(feedback, saveAvailability);
+        if (nativeReport) {
+            syncNativeSaveAvailability = () => {
+                if (!api.isCurrent(publication) || !confirm.isConnected || preview === null) return;
+                if (!exportWriting && nativePublication.expired()) {
+                    draft.rejectNativeView();
+                    invalidatePreview("This report preview expired. Read current activity, then prepare and review a new copy. Your draft choices and edits are kept.");
+                    updateSelection();
+                    return;
+                }
+                const ready = nativePublication.canSave(nativePublicationContext());
+                confirm.disabled = !ready || exportWriting || isLoading || isStale || !draft.current(operation)
+                    || activePreview?.privacy?.reviewerConfirmed !== true;
+                if (!exportWriting) {
+                    const issue = nativePublication.reason();
+                    setText(saveAvailability, issue);
+                    saveAvailability.hidden = !issue;
+                }
+            };
+            const deadline = nativePublication.deadline();
+            if (deadline !== null) nativePreviewExpiryTimer = setTimeout(() => syncNativeSaveAvailability?.(),
+                Math.max(0, Math.ceil(deadline - performance.now())));
+        }
         body.append(controls);
         const textPanel = el("section", "report-inspection-panel report-copy-inspection");
         textPanel.id = "reportTextInspection";
@@ -5900,7 +8804,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const top = tab.getBoundingClientRect().top;
                 views.forEach(([other], i) => { other.hidden = i !== index; });
                 tabControls.forEach((control, i) => { control.setAttribute("aria-selected", String(i === index)); control.tabIndex = i === index ? 0 : -1; });
-                window.scrollBy(0, tab.getBoundingClientRect().top - top);
+                renderReportTask();
+                if (index === 2) window.scrollTo(0, 0);
+                else window.scrollBy(0, tab.getBoundingClientRect().top - top);
             }, "quiet");
             tab.id = "reportInspectionTab" + index;
             tab.setAttribute("role", "tab");
@@ -5921,6 +8827,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             tabControls[next].click(); tabControls[next].focus();
         });
         tabs.append(tabList, button("Review & save", () => {
+            tabControls[0].click();
             const offset = (parseFloat(getComputedStyle(tabs).top) || 0) + tabs.getBoundingClientRect().height + 12;
             window.scrollBy(0, approval.getBoundingClientRect().top - offset);
             (checkbox.disabled ? confirm : checkbox).focus({ preventScroll: true });
@@ -5928,6 +8835,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         body.prepend(tabs);
         approval.before(report, textPanel, filesPanel);
         reportJourney.previewReady({ ...preview, promptReview: reviewCopies }, { confirm, feedback });
+        selectControls?.sync();
     }
     function invalidateDialog(message) {
         $("reportReviewBody")?.querySelector(".rebuild-preview")?.remove();
@@ -5941,6 +8849,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function recoverRead() {
+        if (api.accessState().mode !== "unbound") { api.startAccess(); return; }
         draft.clearContext({ writing: exportWriting });
         scrubContextPreview();
         if (exportWriting) return;
@@ -5950,6 +8859,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return load({ background: Boolean(analytics) });
     }
     function handleVisibilityChange() {
+        if (api.accessState().mode !== "unbound") {
+            if (!document.hidden) api.startAccess();
+            return;
+        }
         draft.clearContext({ writing: exportWriting });
         scrubContextPreview();
         if (document.hidden && route.view === "request") {
@@ -5965,24 +8878,28 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!document.hidden) load({ background: Boolean(analytics) });
     }
     document.querySelectorAll("[data-nav]").forEach((node) => node.addEventListener("click", (event) => {
-        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        event.preventDefault(); go(node.dataset.nav, { request: undefined, task: undefined });
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        if (!api.publicationToken()) { navigateAccessShell(node.dataset.nav); return; }
+        if (isComparisonAnalyzeLink(node)) periodComparisonUI.stop();
+        else go(node.dataset.nav, { request: undefined, task: undefined });
     }));
-    $("resultsLink").addEventListener("click", event => { event.preventDefault(); revealResults(); });
-    for (const id of ["pageAction", "exploreLink", "reportLibraryLink", "reportCreateLink", "reportCompareLink"]) $(id).addEventListener("click", (event) => {
+    for (const id of ["pageAction", "reportContextAction", "exploreLink", "reportLibraryLink", "reportCreateLink", "reportCompareLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         const reportTask = event.currentTarget.closest("#reportTaskNav");
         if (!reportTask && (isLoading || isStale)) return;
-        if (id === "reportCreateLink" && ["saved", "unavailable"].includes(reportJourney.snapshot().phase)) clearReportSelection();
+        if (["pageAction", "reportCreateLink"].includes(id) && ["saved", "unavailable"].includes(reportJourney.snapshot().phase)) clearReportSelection();
         navigate({ ...readRoute(new URL(event.currentTarget.href).hash, null), search: route.search, returnToSessions: route.returnToSessions,
             ...(reportTask ? { localSearch: route.localSearch } : {}) });
     });
     $("resetView").addEventListener("click", resetView);
-    document.querySelectorAll("[data-chart]").forEach((node) => node.addEventListener("click", () => go("home", { chart: node.dataset.chart, request: undefined })));
-    for (const [id, key] of Object.entries({ layerFilter: "layer", toolFilter: "tool", serviceAssociationFilter: "services", serviceFilter: "service", projectFilter: "project", chatFilter: "session", scopeFilter: "scope" })) $(id).addEventListener("change", () => {
+    document.querySelectorAll("[data-chart]").forEach((node) => node.addEventListener("click", () => go("home", {
+        chart: node.dataset.chart, nativeGroup: undefined, request: undefined })));
+    for (const [id, key] of Object.entries({ layerFilter: "layer", sourceFilter: "source", toolFilter: "tool", serviceAssociationFilter: "services", serviceFilter: "service", projectFilter: "project", chatFilter: "session", scopeFilter: "scope" })) $(id).addEventListener("change", () => {
         if (restoring) return;
         navigate(routeFor(route.view, { [key]: $(id).value === "all" && key !== "scope" ? undefined : $(id).value,
+            ...(key === "layer" ? { nativeGroup: undefined } : {}),
             ...(key === "layer" && $(id).value !== "tool" && route.service === "Discovery" ? { service: undefined } : {}),
             ...(key === "services" ? { includeMissingService: $(id).value !== "all" ? true : undefined, withinServices: undefined } : {}),
             page: undefined, request: undefined }), false, { keepFocus: true });
@@ -6051,7 +8968,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         appliedRoute = { ...route };
         render();
     });
-    $("openAnalysisSearch").addEventListener("click", () => liveSearchUI.analysisScope());
     $("clearActivitySearch").addEventListener("click", () => {
         $("activitySearch").value = ""; $("activitySearch").dispatchEvent(new Event("input")); $("activitySearch").focus();
     });
@@ -6089,7 +9005,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (event.key === "Escape") { event.preventDefault(); $("clearSettingsSearch").click(); }
     });
     for (const category of settingsNavigation.categories) {
-        const anchor = link("", "settings", { section: category.id, setting: undefined, issues: undefined });
+        const anchor = el("a");
+        anchor.href = routeUrl(routeFor("settings", { section: category.id, setting: undefined, issues: undefined }));
+        // Static shell links use live navigation guards, not a pre-admission data publication.
+        anchor.dataset.settingsLink = "";
         anchor.dataset.category = category.id;
         anchor.append(el("span", "settings-category-label", category.title));
         $("settingsCategoryNav").append(anchor);
@@ -6107,15 +9026,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     settingsSize.observe($("settingsView"));
     $("refreshBtn").addEventListener("click", refreshStoredData);
     $("freshStoredRead").addEventListener("click", refreshStoredData);
-    $("freshRecollect").addEventListener("click", event => {
-        presentation.setOpen("activity-update", true);
-        recollectionUI.open(event.currentTarget);
-    });
-    $("activityUpdateToggle").addEventListener("click", () => {
-        const expanded = $("activityUpdateToggle").getAttribute("aria-expanded") === "true";
-        presentation.setOpen("activity-update", !expanded);
-        renderFreshActivity();
-    });
+    $("analyzeRefresh").addEventListener("click", checkActivity);
     $("deleteAllReports").addEventListener("click", event => savedArtifactUI.open({ scope: "all-reports" }, event.currentTarget));
     $("collectionRetry").addEventListener("click", refreshStoredData);
     $("collectionRetry").setAttribute("aria-describedby", "storedRefreshHelp");
@@ -6135,7 +9046,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         go(target.view, changes);
     }));
-    mountRecorderDiagnostics({ api, openDialog, el, button });
+    recorderUI = mountRecorderDiagnostics({ api, openDialog, el, button });
     $("exportBtn").addEventListener("click", previewExport);
     document.querySelectorAll("[data-clear-selection]").forEach(control => {
         control.addEventListener("click", clearReportSelection);
@@ -6145,6 +9056,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (exportWriting || periodReport) return;
         reportScope = control.value;
         reportEntry = null;
+        acceptNativeReportScope();
         invalidatePreview(); renderReports();
     }));
     $("reportPromptAuthorFilter").addEventListener("change", () => {
@@ -6173,6 +9085,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         draft.change({ recordedContext: $("reportRecordedContext").checked, overrides: [] });
         invalidatePreview(); updateSelection();
     });
+    $("reportResultText").addEventListener("change", () => {
+        if (exportWriting) return;
+        draft.change({ resultText: $("reportResultText").checked,
+            overrides: draft.options().overrides.filter(edit => !edit.key.startsWith("result-copy-")) });
+        invalidatePreview();
+        updateSelection();
+    });
     $("formatOptions").querySelectorAll("input[type=checkbox]").forEach((control) => control.addEventListener("change", () => {
         const formats = [...$("formatOptions").querySelectorAll("input:checked")].map((node) => node.value);
         draft.change({ formats });
@@ -6184,7 +9103,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         invalidatePreview();
     });
     $("closeDialog").addEventListener("click", () => $("overlay").close());
-    $("overlay").addEventListener("close", () => { invalidatePreview(); if (returnFocus?.isConnected) ux.restoreFocus(returnFocus); });
+    $("overlay").addEventListener("close", () => {
+        if (clearingAccess || !api.publicationToken()) return;
+        invalidatePreview(); if (returnFocus?.isConnected) ux.restoreFocus(returnFocus);
+    });
     $("overlay").addEventListener("cancel", (event) => { if (exportWriting) event.preventDefault(); });
     document.querySelector(".skip-link").addEventListener("click", event => {
         event.preventDefault();
@@ -6194,6 +9116,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         heading.scrollIntoView({ block: "start" });
     });
     window.addEventListener("popstate", () => {
+        if (!api.publicationToken()) { route = readRoute(location.hash, null); showAccessUnavailable(api.accessState()); return; }
         const next = readRoute();
         if (next.view === "request" || next.inspect) ownSidebarHistory();
         else if (route.view !== "request" && !route.inspect) restoreSidebarHistoryMode();
@@ -6210,11 +9133,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         });
     });
     window.addEventListener("online", recoverRead);
-    window.addEventListener("focus", () => { if (!exportWriting) ensureCurrentTime(); });
+    window.addEventListener("focus", () => {
+        if (!exportWriting) ensureCurrentTime();
+        void accountProfile?.refresh();
+        void microsoftProfile?.refresh();
+    });
     window.addEventListener("languagechange", () => { if (!exportWriting) ensureCurrentTime(); });
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("pagehide", () => {
         pageInactive = true;
+        if (api.accessState().mode !== "unbound") { api.suspendAccess(); return; }
         generation++;
         if (route.view === "request") {
             if (!requestInvalidated) saveSidebarPosition();
@@ -6223,10 +9151,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("requestContent").replaceChildren(el("p", "notice", "Read current evidence before reopening this interaction."));
         }
         clearReaderSections(); clearSavedReader(); savedEntries.clear(); clearSidebarExit(); finishSidebarMotion();
-        restoreSidebarHistoryMode(); preparedReportReader?.dispose(); preparedReportReader = null;
+        restoreSidebarHistoryMode(); clearPreparedReaders();
         assessmentUI.leave(); savedArtifactUI?.leave(); clearTimeout(pollTimer);
     });
-    window.addEventListener("pageshow", () => { pageInactive = false; clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); });
+    window.addEventListener("pageshow", () => {
+        pageInactive = false;
+        if (api.accessState().mode !== "unbound") { api.startAccess(); return; }
+        clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250);
+    });
     document.addEventListener("visibilitychange", () => { if (sidebarExit) { clearSidebarExit(); finishSidebarMotion(); } assessmentUI.clearPrivateText(); if (!document.hidden) { clearTimeout(pollTimer); pollTimer = setTimeout(pollCollection, 250); } });
     for (const node of document.querySelectorAll("details[id]")) {
         if (!node.dataset.disclosureKey && node.id !== "settingsCategories") bindDetails(node, node.id, undefined, node.id === "bundles");
@@ -6234,8 +9166,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     // The shared panel stays put; the plot's top changes with mode-specific heading controls.
     viewKey($("chart").closest(".analyze-chart-main"), "chart");
     reportJourney = createReportJourney({
+        api, createSaveIdentity: assessmentFactories.createReportSaveIdentity,
+        readSavedReports: async () => {
+            const publication = api.publicationToken(), accepted = state, request = generation;
+            const currentRead = () => api.isCurrent(publication) && request === generation && !pageInactive && !clearingAccess;
+            if (!accepted || !currentRead()) return null;
+            const current = await api("/api/snapshot", query());
+            if (!currentRead() || state !== accepted || !Number.isSafeInteger(current.revision)
+                || current.revision < accepted.revision || !Array.isArray(current.exports)) return null;
+            if (JSON.stringify(accepted.exports || []) !== JSON.stringify(current.exports)) savedArtifactUI?.invalidate();
+            if (!currentRead() || state !== accepted) return null;
+            // Publish only the authorized file inventory; recovery does not replace the accepted activity/source frame.
+            state = { ...accepted, exports: current.exports };
+            return syncSavedReportPresence(currentRead) ? state.exports : null;
+        },
         presentStep: presentReportStep,
-        onStateChange: () => { renderStoredRefresh(); renderReportTask(); updateRequestReportActions(); reportComparisonUI?.syncPreparation(); },
+        onStateChange: () => { syncSaveLocks(); renderStoredRefresh(); renderReportTask(); updateRequestReportActions(); reportComparisonUI?.syncPreparation(); },
         root: $("reportsView"), cancelReview: invalidatePreview, clearSelection: clearReportSelection,
         readCurrent: () => load(),
         showSourceIssues: async () => {
@@ -6248,11 +9194,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     ux.tooltip($("exportBtn"), () => $("exportBtn").textContent);
     reportComparisonUI = assessmentFactories.mountComparison($("comparisonWorkspace"), {
-        api, renderer: assessmentFactories.createReportComparison(), timeContext: () => viewerTime,
+        api, createSaveIdentity: assessmentFactories.createReportSaveIdentity, renderer: assessmentFactories.createReportComparison(), timeContext: () => viewerTime,
+        createFileInspection: mountFileInspection,
         onRead: leaveSavedInspectorContext,
         prepareBlockReason: () => reportPreparationBlock("comparison"),
         beforePrepare: () => admitReportPreparation("comparison"),
-        onStateChange: () => { if (state) { updateSelection(); renderReportTask(); } },
+        onStateChange: () => { if (state) { updateSelection(); renderReportTask(); selectControls?.sync(); } },
         openSaved: (bundleId, trigger) => {
             const bundle = state.exports?.find(entry => entry.bundleId === bundleId);
             if (bundle) openSavedReport(bundle, trigger);
@@ -6283,7 +9230,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
     selectControls = createSelectControls(ux, {
+        pagingFor: nativeInventoryPaging,
+        onClose: select => {
+            boundedNative.cancelInventory(nativeFilterDimensions[select.id]);
+            queueMicrotask(refreshInventoryControls);
+        },
         decorateOption: (node, { id, value, label }) => {
+            if (id === "toolFilter" && label.includes("__")) {
+                const text = document.createDocumentFragment();
+                label.split("__").forEach((part, index) => {
+                    if (index) text.append("__", el("wbr"));
+                    text.append(part);
+                });
+                replacePrivateChoices(node, text);
+                return;
+            }
             if (["promptAuthorFilter", "reportPromptAuthorFilter"].includes(id)) {
                 if (authorship.actors.includes(value)) node.dataset.promptActor = value;
                 else delete node.dataset.promptActor;
@@ -6291,7 +9252,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
             if (id !== "outcomeFilter") return;
             node.classList.add("result-option-value");
-            node.replaceChildren(el("span", "result-option-label", label));
+            replacePrivateChoices(node, el("span", "result-option-label", label));
             if (resultKeys.includes(value) && (applied?.layer !== "code-reference" || value === "unknown")) {
                 const icon = el("span", `result-legend-icon result-tone-${value}`);
                 icon.append(ux.icon(results.icon(value)));
@@ -6300,24 +9261,366 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         },
     });
     collectionSettings = mountCollectionSettings({
-        ux,
+        api, ux, collectionStatus: historyStatus,
+        sourceCollection,
+        createNativeConfigurationState: assessmentFactories.createNativeConfigurationState,
         write: writeCollection,
-        read: async () => { const status = await api("/api/collection/status", {}); renderCollection(status); return status; },
+        read: async () => {
+            const publication = api.publicationToken();
+            const status = await readCollectionStatus();
+            if (!api.isCurrent(publication)) throw new Error("This collection read was retired when WIRE access changed.");
+            renderCollection(status, publication); return status;
+        },
         invalidate: () => { invalidatePreview(); invalidateDialog("Collection settings are changing. Prepare a fresh report preview."); },
         onDraftChange: changed => {
+            retirePendingSaveMessage();
             $("settingsDraftNotice").hidden = route.view === "settings" || !changed;
             $("settingsDraftNotice").querySelector("a").href = $("sourceEditor").hidden ? "#settings?section=connection&setting=history-window" : "#settings?section=connection&setting=source";
             renderSettingsSearch();
             renderFreshActivity();
         },
     });
-    syncControls();
-    rememberRoute(route, true);
-    load().then(ok => {
-        if (!ok) return;
-        if (route.view === "reports" && route.task === "compare" && !route.bundle && !route.inspect) reportComparisonUI.open(undefined, { retain: true, focus: false });
-        if (route.view === "settings") revealSetting();
-        else if (route.view === "collection-status") revealCollectionStatus();
+    sourceSettings = assessmentFactories.mountSourceCollectionSettings({
+        api, ux, sourceCollection, collectionStatus: historyStatus,
+        createNativeConfigurationState: assessmentFactories.createNativeConfigurationState,
+        write: writeCollection,
+        read: async () => {
+            const publication = api.publicationToken(), status = await readCollectionStatus();
+            if (!api.isCurrent(publication)) throw new Error("This collection read was retired when WIRE access changed.");
+            renderCollection(status, publication); return status;
+        },
+        collect: event => checkActivity(event, "microsoft"),
+        needsStoredRead: refreshUsesStoredRecovery,
+        onDraftChange: changed => {
+            $("settingsDraftNotice").hidden = route.view === "settings" || !(changed || githubHasDraft());
+            if (changed) $("settingsDraftNotice").querySelector("a").href = "#settings?section=connection&setting=microsoft-collection";
+            renderFreshActivity();
+        },
     });
-    pollTimer = setTimeout(pollCollection, 250);
+    const githubHasDraft = collectionSettings.hasDraft;
+    collectionSettings.hasDraft = () => githubHasDraft() || sourceSettings.hasDraft();
+    const privateContentIds = [
+        "activityList", "activityListSummary", "activityListScope", "activityPager", "sessionAnalysis", "homeInsights", "homeFindings",
+        "requestContent", "contextSidebarFooter", "contextSidebarTitle", "savedReportReader", "bundleList", "savedReportCount",
+        "detail", "reportList", "reportReviewBody", "reportSaveBody", "reportMatchingContext", "scopeExclusions",
+        "pageTitle", "pageIdentity", "pageIntro", "pageProject", "breadcrumbs", "viewingContext", "serviceEvidenceSummary",
+        "contextReturn", "filterChips", "serviceFocusScope", "resultFilterScope", "promptAuthorFilterHelp",
+        "activitySelectionSummary", "activitySelectionScope", "periodResult", "periodLabel", "meaningMatched", "meaningSources", "meaningBody",
+        "takeaway", "chart", "chartTitle", "chartDataTitle", "chartFooter", "chartReadingNotes", "countTable", "serviceDefinitions", "coverageBody",
+        "collectionEvidenceDetails", "collectionIssueGroups", "collectionIssuesMessage", "collectionDiagnostics",
+        "collectionStatus", "collectionStatusGuidance", "collectionChecked", "collectionNewActivity", "collectionIssueCounts",
+        "collectionIssueImpact", "collectionExactCheck", "collectionExactNew", "collectionExactTimes", "collectionCoverageCounts",
+        "collectionCoveragePending", "collectionNoticeText", "settingsDiagnosticError", "settingsSearchResults", "settingsSearchCount",
+        "wireAnalysisSearchNotice", "freshCoverageDetails", "freshContextMessage", "freshStatus", "freshCheckDetails", "analyzeRefreshStatus",
+        "freshCoverageAnnouncement", "freshChecked", "freshAwayStatus", "freshIssues",
+        "recollectionUpdateStatus", "newDataNotice",
+    ];
+    function accessOwners() {
+        return [liveSearchUI, chartReferenceUI, periodComparisonUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
+            draft, reportJourney, reportComparisonUI, deletionUI, recollectionUI, savedArtifactUI, collectionSettings, sourceSettings, recorderUI,
+            ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
+    }
+    function withdrawPrivateContent() {
+        const privateNarrowing = Boolean(search.trim() || semanticQuery !== null || incomingNavigation);
+        clearingAccess = true;
+        reportPickerEvents?.abort(); reportPickerEvents = null;
+        nativePublication.withdraw(); clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
+        nativeAnalysisState = null; nativeAnalysisRender++;
+        pendingInventoryUpdates.clear();
+        sourceCollection.withdraw();
+        generation++; navigationGeneration++; collectionReadGeneration++; readingIntent++;
+        clearTimeout(pollTimer);
+        $("workspace").hidden = true;
+        contextSidebar.hidden = true;
+        for (const dialog of document.querySelectorAll("dialog:not(#navigationDrawer)")) dialog.style.visibility = "hidden";
+        if (contextOwner?.identity === "report-setup" && contextOwner.footer) $("contextSidebarParking").append(contextOwner.footer);
+        const roots = [...privateContentIds.map($), savedInspector?.body, savedInspector?.footer].filter(Boolean);
+        const privateSelects = ["sourceFilter", "projectFilter", "chatFilter", "toolFilter", "serviceFilter", "serviceAssociationFilter", "outcomeFilter"].map($);
+        const options = privateSelects.flatMap(select => [...select.querySelectorAll("option,optgroup")]);
+        const reusable = new Set([...roots, homeCount, homeUnit]);
+        const textNodes = [], attributes = [], fields = [];
+        // Keep handles until every owner has retired, including nodes they detach during teardown.
+        for (const node of new Set([...roots.flatMap(root => [root, ...root.querySelectorAll("*")]), ...options])) {
+            textNodes.push(...[...node.childNodes].filter(child => child.nodeType === Node.TEXT_NODE));
+            attributes.push(...[...node.attributes].filter(attribute => !reusable.has(node)
+                || attribute.name.startsWith("data-")
+                || ["title", "alt", "aria-label", "aria-description", "href", "src", "srcdoc", "value", "placeholder", "label"].includes(attribute.name)));
+            if (["INPUT", "TEXTAREA", "SELECT", "OPTION"].includes(node.tagName)) fields.push(node);
+        }
+        ux.withdrawAccess(roots);
+        ux.hideTooltip();
+        const selection = window.getSelection();
+        if (selection && roots.some(root => root.contains(selection.anchorNode) || root.contains(selection.focusNode))) selection.removeAllRanges();
+        returnFocus = null; cancelSidebarReading?.(); cancelSidebarReading = null;
+        endReaderResize();
+        readerWidth = null; readerExpanded = false; sidebarTextAnchor = null;
+        document.body.removeAttribute("data-reader-expanded");
+        document.body.style.removeProperty("--context-sidebar-width");
+        document.body.style.removeProperty("--context-anchor-height");
+        $("main").inert = false;
+        sidebarAnimationFinish = null;
+        if (sidebarAnimation) sidebarAnimation.onfinish = null;
+        sidebarAnimation?.cancel(); sidebarColumnAnimation?.cancel();
+        cancelAnimationFrame(sidebarColumnFrame);
+        sidebarColumnFrame = null;
+        sidebarAnimation = sidebarColumnAnimation = sidebarColumnAnchor = null;
+        sidebarIdentity = sidebarOrigin = sidebarReadingFocus = contextOwner = cardEntry = null;
+        sidebarExit = null; requestRenderKey = null; requestInvalidated = true;
+        for (const node of document.querySelectorAll("iframe")) { node.removeAttribute("src"); node.srcdoc = ""; node.title = ""; node.remove(); }
+        clearReaderSections();
+        releaseCardPreviews(document);
+        for (const node of document.querySelectorAll(".full-text")) textAccess.release(node);
+        clearPreparedReaders();
+        clearPreviewPayload?.();
+        clearSavedReader();
+        clearOriginalRead(savedInspector);
+        savedInspector?.body.remove(); savedInspector?.footer.remove();
+        for (const chart of document.querySelectorAll(".dimensional-scroll")) dimensional.disposeView(chart);
+        for (const url of privateObjectUrls) URL.revokeObjectURL(url);
+        privateObjectUrls.clear();
+        for (const key of privateNavigations.keys()) forgetPrivateNavigation(key);
+        for (const saved of readingPositions.values()) forgetReading(saved);
+        forgetReading(chartReferenceOrigin);
+        forgetReading(pendingChartReferenceReading?.position);
+        forgetReading(periodReturnReading?.position);
+        for (const saved of sidebarPositions.values()) for (const key of Object.keys(saved)) delete saved[key];
+        for (const entry of savedEntries.values()) {
+            forgetReading(entry.reading);
+            for (const key of Object.keys(entry)) delete entry[key];
+        }
+        readingPositions.clear(); sidebarPositions.clear(); savedEntries.clear(); issueAttempts.clear();
+        presentation.withdrawAccess();
+        selected.clear();
+        state = analytics = slice = applied = appliedRoute = undefined;
+        collection = issueRows = issuesStatus = undefined;
+        issuesSignature = settingsSearchSignature = undefined;
+        issuesLoading = false; collectionReadError = collectionReadReason = "";
+        isLoading = false; isStale = true; connectionNeedsSnapshot = true;
+        collectionBusy = false;
+        activePreview = pendingSaveOwner = pendingSaveResult = periodReport = reportEntry = contextReturnKey = savedInspector = reportSetupReturn = periodReturnReading = null;
+        exportWriting = false;
+        chartReferenceAccepted = chartReferenceInput = chartReferenceOrigin = pendingChartReferenceReading = null;
+        chartReferenceKeys.clear(); chartReferenceRevision = null; chartReferenceVersion++;
+        chartReferenceSourceCoverage = ""; coverageDetailsKey = undefined;
+        renderedContextBundles.clear();
+        semanticMembership = undefined; semanticQuery = null; semanticComplete = semanticBound = false; semanticStatus = "stale";
+        searchOpenedRequest = searchReturnMarker = null; searchTargetInvalid = true;
+        incomingNavigation = null;
+        if (privateNarrowing) incomingNavigationError = "The earlier private selection was cleared when WIRE access changed. Search again or explicitly open this view without that selection.";
+        search = ""; searchReturnMarker = null;
+        refreshReadFailure = deferredReviewIdentity = null;
+        withdrawRefreshGesture();
+        fresh = createFreshActivity({ sourceUnknown: sourcePending, sourceWarning: sourceStorageWarning, nativeStatus: receiptStatus });
+        if (nativeCollectIntent?.confirmed) nativeCollectIntent = null;
+        else if (nativeCollectIntent) {
+            fresh.restoreNative(nativeCollectIntent.operationId);
+        }
+        for (const select of privateSelects) {
+            select.replaceChildren();
+            delete select.dataset.optionsSignature; delete select.dataset.pendingValue;
+        }
+        $("outcomeFilter").dataset.allLabel = "All results";
+        for (const id of ["homeView", "activityView", "resultSummary", "promptAuthorSummary", "freshActivity", "freshCoverageDetails"]) {
+            for (const name of ["data-revision", "data-check-id", "data-check-key"]) $(id)?.removeAttribute(name);
+        }
+        for (const link of document.querySelectorAll("[data-nav]")) link.href = "#" + link.dataset.nav;
+        $("pageAction").href = "#reports?task=create";
+        $("reportContextAction").href = "#analyze";
+        for (const id of ["activitySearch", "settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch",
+            "reportTitle", "manualTerms", "sourceDatabase", "sourceSessions"]) {
+            if ($(id)) { $(id).value = ""; $(id).removeAttribute("value"); }
+        }
+        const failures = [];
+        for (const owner of accessOwners()) {
+            try {
+                if (typeof owner?.withdrawAccess !== "function") throw new Error("A private-content owner does not support access withdrawal.");
+                owner.withdrawAccess();
+            } catch (error) { failures.push(error); }
+        }
+        for (const node of textNodes) node.data = "";
+        for (const attribute of attributes) {
+            if (attribute.ownerElement?.namespaceURI !== "http://www.w3.org/2000/svg"
+                || !(attribute.ownerElement.localName === "svg" && ["width", "height", "viewBox"].includes(attribute.name))
+                    && !(attribute.ownerElement.localName === "rect" && ["width", "height", "x", "y", "rx", "ry"].includes(attribute.name))
+                    && !(attribute.ownerElement.localName === "circle" && ["cx", "cy", "r"].includes(attribute.name))
+                    && !(attribute.ownerElement.localName === "ellipse" && ["cx", "cy", "rx", "ry"].includes(attribute.name))
+                    && !(["line", "linearGradient"].includes(attribute.ownerElement.localName) && ["x1", "x2", "y1", "y2"].includes(attribute.name))
+                    && !(attribute.ownerElement.localName === "stop" && attribute.name === "offset")) attribute.value = "";
+            attribute.ownerElement?.removeAttributeNode(attribute);
+            attribute.value = "";
+        }
+        for (const field of fields) {
+            field.value = "";
+            if ("checked" in field) field.checked = false;
+            if ("selected" in field) field.selected = false;
+        }
+        for (const root of roots) {
+            root.replaceChildren();
+            for (const name of ["title", "aria-label", "data-revision", "data-view-key", "data-recorded-context"]) root.removeAttribute(name);
+        }
+        homeCount.textContent = homeUnit.textContent = "";
+        $("savedLibraryTitle").textContent = "Saved reports";
+        for (const dialog of document.querySelectorAll("dialog:not(#navigationDrawer)")) if (dialog.open) dialog.close();
+        document.body.removeAttribute("data-context-docked");
+        selectControls?.withdrawAccess();
+        syncSaveLocks();
+        route = readRoute(location.hash, null);
+        clearingAccess = false;
+        if (failures.length) throw new AggregateError(failures, "Private-content clearance is incomplete. Reload before reading activity.");
+    }
+    function showAccessUnavailable(value) {
+        $("workspace").hidden = true;
+        $("workspace").setAttribute("aria-busy", "false");
+        $("analyzeTools").hidden = true;
+        $("analyzeToolbar").hidden = true;
+        document.body.classList.remove("analyze-reading");
+        $("loading").hidden = true;
+        $("accessShell").hidden = false;
+        const active = route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
+        setText($("accessPageTitle"), { analyze: "Analyze", settings: "Settings", reports: "Reports" }[active] || "Analyze");
+        $("accessSettings").hidden = active === "settings";
+        $("accessAccount").disabled = value.mode !== "enforced";
+        $("accessRetry").hidden = !["freshness-expired", "watch-timeout", "watch-unavailable", "connection-unavailable", "invalid-bootstrap"].includes(value.reason);
+        for (const node of document.querySelectorAll("[data-nav]")) {
+            node.href = "#" + node.dataset.nav;
+            if (node.dataset.nav === active) node.setAttribute("aria-current", "page");
+            else node.removeAttribute("aria-current");
+        }
+        const connectionFeedback = accountUI?.unavailableConnectionFeedback() || "";
+        $("message").textContent = value.state?.wire === "signed-out"
+            ? "WIRE is signed out. Collection is stopped and saved activity is hidden. Use WIRE account to sign in."
+            : value.reason === "connection-unavailable"
+                ? ["WIRE is not responding.", connectionFeedback, "Saved activity is hidden until access can be checked."].filter(Boolean).join(" ")
+                : [connectionFeedback, "Checking WIRE access before showing saved activity."].filter(Boolean).join(" ");
+        $("message").hidden = false;
+        $("message").setAttribute("role", "status");
+        const { evidenceView, wireSearchReturn, wirePrivateNavigation, wireAccess, ...safe } = history.state || {};
+        history.replaceState(safe, "");
+    }
+    function navigateAccessShell(view) {
+        if (!["analyze", "reports", "settings"].includes(view) || clearingAccess) return;
+        const hash = "#" + view + (view === "settings" ? "?section=connection" : "");
+        if (api.publicationToken()) return navigate(readRoute(hash, null));
+        history.pushState({}, "", hash);
+        route = readRoute(hash, null);
+        showAccessUnavailable(api.accessState());
+    }
+    $("accessSettings").addEventListener("click", event => {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        navigateAccessShell("settings");
+    });
+    $("accessAccount").addEventListener("click", () => {
+        const trigger = $("wireAccountTrigger");
+        if (trigger && !$("wireAccountEntry").hidden) {
+            if (!trigger.checkVisibility()) $("navigationToggle").click();
+            trigger.click();
+        }
+    });
+    $("accessRetry").addEventListener("click", () => api.startAccess());
+    function showConnectionSettings(value) {
+        if (route.view !== "settings" || settingsNavigation.resolve(route).section !== "connection"
+            || value.mode !== "enforced" || value.state?.wire !== "signed-in"
+            || !value.readable && value.reason !== "generation-changed") return false;
+        for (const id of ["homeView", "activityView", "requestView", "reportsView", "collectionStatusView",
+            "filters", "appliedFilters", "filterChips", "coverage", "coverageNotice", "pagePrimaryActions",
+            "pageIntro", "pageIdentity", "pageProject", "analyzeTools", "analyzeToolbar"]) $(id).hidden = true;
+        $("settingsView").hidden = false;
+        setText($("pageTitle"), "Settings");
+        const home = el("a", "", "Analyze");
+        home.href = "#analyze";
+        $("breadcrumbs").replaceChildren(home, document.createTextNode(" / Settings"));
+        renderSettingsNavigation();
+        const latest = api.accessState();
+        if (latest.epoch !== value.epoch || latest.reason !== value.reason || latest.readable !== value.readable) return false;
+        $("loading").hidden = true;
+        $("accessShell").hidden = true;
+        $("workspace").hidden = false;
+        return true;
+    }
+    let connectedSettingsReady = false, firstConnectionReadPending = false;
+    api.subscribeAccess(value => {
+        const ready = sourceCollection.active && value.readable && value.state?.microsoft?.state === "connected"
+            && value.state.microsoft.actions.includes("microsoft-connect");
+        const firstConnectionReady = ready && !connectedSettingsReady;
+        connectedSettingsReady = ready;
+        if (!ready) firstConnectionReadPending = false;
+        else if (firstConnectionReady) firstConnectionReadPending = true;
+        if (value.mode === "enforced" && !accountUI) {
+            accountUI = assessmentFactories.mountAccountSettings({ api, ux, accountSlot: $("wireAccountEntry"),
+                connectionSlot: $("microsoftConnectionHost"), refreshProfile: () => accountProfile?.refresh(),
+                refreshMicrosoftProfile: () => microsoftProfile?.refresh(),
+                placeMicrosoftCollection: container => sourceSettings.placeInConnection(container),
+                onConnectionChange: () => {
+                    const current = api.accessState();
+                    if (!current.readable && current.reason !== "clearance-failed" && !$("accessShell").hidden) showAccessUnavailable(current);
+                } });
+            accountProfile = assessmentFactories.createAccountProfile({
+                api, visible: () => !document.hidden && !pageInactive,
+                present: (github, token) => accountUI.receive({ github, lifecycle: null }, token),
+            });
+            microsoftProfile = sourceCollection.copilotOnly ? null : assessmentFactories.createAccountProfile({
+                api, provider: "microsoft", visible: () => !document.hidden && !pageInactive,
+                present: (profile, token) => accountUI.receiveMicrosoft(profile, token),
+            });
+        }
+        if (!value.readable) {
+            accountProfile?.withdrawAccess();
+            microsoftProfile?.withdrawAccess();
+            const wasReadable = accessToken !== null;
+            accessToken = null;
+            showAccessUnavailable(value);
+            if (wasReadable) {
+                try { withdrawPrivateContent(); }
+                catch (error) {
+                    $("message").textContent = error.message;
+                    $("message").setAttribute("role", "alert");
+                    throw error;
+                }
+            }
+            accountUI?.receiveAccess(value);
+            if (showConnectionSettings(value)) clearMessage();
+            return;
+        }
+        accountUI?.receiveAccess(value);
+        void accountProfile?.receiveAccess();
+        void microsoftProfile?.receiveAccess();
+        collectionSettings?.receiveAccess?.();
+        sourceSettings?.receiveAccess();
+        savedArtifactUI?.observeEligibility();
+        const current = api.publicationToken();
+        if (accessToken === current) {
+            if (state && state.nativeRead?.reason !== "microsoft-account-not-configured") firstConnectionReadPending = false;
+            if (firstConnectionReadPending
+                && !pageInactive && !document.hidden && !exportWriting && !collectionBusy
+                && !collectionSettings?.isBusy() && !sourceSettings?.isBusy() && !collectionSettings?.hasDraft()
+                && !activePreview && !reportJourney?.isReviewOpen() && !$("overlay").open
+                && !deletionUI?.isOpen() && !recollectionUI?.isOpen()) {
+                firstConnectionReadPending = false;
+                void load({ background: Boolean(analytics) });
+            }
+            return;
+        }
+        if (value.mode === "unbound" && accessToken) { accessToken = current; return; }
+        accessToken = current;
+        if (value.mode !== "unbound") {
+            for (const owner of accessOwners()) owner?.resumeAccess?.();
+            for (const dialog of document.querySelectorAll("dialog:not(#navigationDrawer)")) dialog.style.removeProperty("visibility");
+        }
+        claimIncomingNavigation();
+        route = readRoute();
+        syncControls();
+        rememberRoute(route, true);
+        const firstSettingsRead = !mounted, connectionSettings = showConnectionSettings(value);
+        if (connectionSettings) clearMessage();
+        firstConnectionReadPending = false;
+        load().then(ok => {
+            if (!ok || !api.isCurrent(current)) return;
+            if (route.view === "reports" && route.task === "compare" && !route.bundle && !route.inspect) reportComparisonUI.open(undefined, { retain: true, focus: false });
+            if (route.view === "settings" && (firstSettingsRead || !connectionSettings)) revealSetting();
+            else if (route.view === "collection-status") revealCollectionStatus();
+        });
+        pollTimer = setTimeout(pollCollection, 250);
+    });
+    api.startAccess();
 }

@@ -123,7 +123,7 @@ test("private search has one all-page Analyze cohort across summaries, scoped Ca
     await navigateMain(page, "home"); await homeCount(page, 3);
     await expect(page.locator("#serviceFocusScope")).toContainText("2 known matches; 1 context-only");
     await overviewIds(page, app.snapshot(), ids([0, 6]), true);
-    await expect(page.locator("#outcomeFilter option[value=success]")).toHaveText("Worked (2)");
+    await expect(page.locator("#outcomeFilter option[value=success]")).toHaveText("Tool completed (2)");
     await expect(page.locator("#outcomeFilter option[value=failure]")).toHaveText("Tool failed (3)");
     await page.locator('[data-chart="workload"]').click(); await ready(page);
     await page.locator("#chart").getByRole("link", { name: /^Files:/ }).click(); await ready(page);

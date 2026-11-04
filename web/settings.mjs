@@ -1,4 +1,5 @@
 import { searchFieldMarkup } from "./search-field.mjs";
+import { sourceCollectionMarkup } from "./source-collection-settings.mjs";
 
 export const settingsMarkup = `
 <section id="settingsView" class="settings-view" aria-label="Settings" hidden>
@@ -26,19 +27,19 @@ export const settingsMarkup = `
     </section>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Collected activity</h3>
-    <p id="deleteActivityHelp">Review a date range or all activity before permanent local deletion. Copilot chats and saved reports stay unchanged.</p>
+    <p id="deleteActivityHelp">Permanent local deletion. Copilot chats and saved reports stay.</p>
     </div>
     <button id="deleteActivity" type="button" class="danger" aria-describedby="deleteActivityHelp">Review deletion</button>
     </div>
     <div class="settings-task-row"><div class="settings-row-copy">
     <h3>Read history again</h3>
-    <p id="recollectActivityHelp">Preview available history from approved chats. Missing history, deleted replies and historical annotations cannot be restored.</p>
+    <p id="recollectActivityHelp">Missing history, deleted replies and past annotations aren't restored.</p>
+    <p id="recollectionUpdateStatus" role="status" aria-live="polite" hidden></p>
     </div><button id="recollectActivity" type="button" aria-describedby="recollectActivityHelp">Choose chats</button></div>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3><p>Open or manage reports in the report library.</p></div><a class="button-link" href="#reports" data-settings-link>Open saved reports</a></div>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>Saved reports</h3></div><a class="button-link" href="#reports" data-settings-link>Open saved reports</a></div>
   </section>
   <section class="settings-section" data-settings-section="display" aria-labelledby="displayTitle" hidden>
     <h2 id="displayTitle" tabindex="-1">Display</h2>
-    <p class="settings-intro">Changes apply immediately in this browser. Saved reports stay unchanged.</p>
     <div class="settings-task-row settings-theme-row"><div class="settings-row-copy">
       <h3>Theme</h3>
     </div><button id="settingsThemePreference" type="button" class="theme-trigger" aria-label="Use dark theme" aria-describedby="themeStorageNotice">Change theme</button></div>
@@ -53,13 +54,13 @@ export const settingsMarkup = `
     <section class="settings-section" data-settings-section="connection" aria-labelledby="connectionTitle">
       <h2 id="connectionTitle" tabindex="-1">Connection &amp; updates</h2>
       <section id="connectionSource" class="settings-group" aria-labelledby="connectionSourceTitle">
-      <div class="settings-group-heading"><h3 id="connectionSourceTitle">Local Copilot chats</h3><div class="settings-source-state"><span class="settings-value-label">Collection</span><span id="connectionStatus" class="connection-status">Checking connection</span></div></div>
+      <div class="settings-group-heading"><h3 id="connectionSourceTitle">GitHub Copilot app</h3><div class="settings-source-state"><span id="connectionStatus" class="connection-status">Checking connection</span></div></div>
+      <p id="connectionSourceHelp" class="settings-help" hidden></p>
       <div id="approvedConnection" hidden>
-        <p><span class="settings-value-label">Source permission</span> <span id="connectionApproval" class="approved-label">Approved</span></p>
         <div class="settings-actions"><span id="sourceEditAction"><button id="editSource" type="button">Review source</button></span><button id="pauseCollection" type="button" disabled>Pause collection</button><button id="collectNow" type="button" class="quiet" hidden disabled>Refresh</button><a id="viewApprovedSource" href="#settings?section=connection&setting=source-paths" data-settings-link hidden>View source</a></div>
       </div>
       <div id="unapprovedConnection" hidden>
-        <p>Collect local Copilot activity, including original prompts. Review the source paths before connecting.</p>
+        <p>Collect original prompts and activity from local chats.</p>
         <button id="reviewSource" type="button" class="primary">Review source &amp; connect</button>
       </div>
       <div id="approvedSourceDetails" class="source-paths-read" hidden>
@@ -68,7 +69,7 @@ export const settingsMarkup = `
       </div>
       <div id="sourceEditor" class="source-editor" hidden>
         <h4 id="sourceEditorTitle" class="visually-hidden">Review this source</h4>
-        <p id="sourceChangeImpact" class="settings-help"></p>
+        <p id="sourceChangeImpact" class="settings-help" role="status"></p>
         <p id="sourceSuggestion" class="settings-help" hidden></p>
         <div class="settings-field"><label for="sourceDatabase">Copilot metadata database</label><input id="sourceDatabase" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
         <div class="settings-field"><label for="sourceSessions">Chat history folder</label><input id="sourceSessions" type="text" autocomplete="off" spellcheck="false" aria-describedby="approvalScope settingsMessage"></div>
@@ -78,24 +79,27 @@ export const settingsMarkup = `
         <div class="settings-actions"><button id="connectCollection" type="button" class="primary">Approve source and start collection</button><button id="cancelSource" type="button" class="quiet">Cancel</button></div>
       </div>
       </section>
+      <div id="microsoftConnectionHost" hidden></div>
       <section id="connectionPreferences" class="settings-group" aria-labelledby="preferencesTitle">
       <h3 id="preferencesTitle" class="settings-subheading" tabindex="-1">History and frequency</h3>
-      <p class="settings-help">Previously collected activity stays available. These preferences do not change your source or pause state.</p>
+      <p id="preferencesHelp" class="settings-help" hidden></p>
       <div id="collectionPreferenceFields" class="settings-preferences">
+        <div id="nativeCollectionSourceField" class="settings-field" hidden><label for="nativeCollectionSurfaces">Microsoft sources</label><select id="nativeCollectionSurfaces" disabled></select></div>
         <div class="settings-field"><label for="collectionWindow">History to include</label><select id="collectionWindow"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select></div>
         <div class="settings-field"><label for="collectionCadence">Check frequency</label><select id="collectionCadence"><option value="5" selected>Every 5 seconds</option><option value="15">Every 15 seconds</option><option value="30">Every 30 seconds</option><option value="60">Every 60 seconds</option></select></div>
       </div>
       <div id="preferenceActions" class="settings-actions"><button id="saveCollection" type="button" class="primary" disabled>Save preferences</button><button id="cancelPreferences" type="button" class="quiet" disabled>Cancel changes</button></div>
       <p id="settingsDraftStatus" class="settings-help" role="status"></p>
       </section>
+      ${sourceCollectionMarkup}
     </section>
   </div>
   <section class="settings-section" data-settings-section="troubleshooting" aria-labelledby="troubleshootingTitle" hidden>
     <h2 id="troubleshootingTitle" tabindex="-1">Troubleshooting</h2>
     <section class="settings-group" aria-labelledby="historyHelpTitle">
-      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">Missing history</h3><p>Find chats with gaps and the collection details that explain them.</p></div><a class="button-link" href="#collection-status" data-settings-link>Open collection status</a></div>
+      <div class="settings-task-row"><div class="settings-row-copy"><h3 id="historyHelpTitle">Missing history</h3></div><a class="button-link" href="#collection-status" data-settings-link>Open collection status</a></div>
     </section>
-    <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3><p>Inspect the recorder, not collection. Sending a public test request needs a separate confirmation.</p></div><a class="button-link" href="#collection-status?setting=network-diagnostic" data-settings-link>View diagnostic</a></div>
+    <div class="settings-task-row"><div class="settings-row-copy"><h3>HTTP recorder</h3></div><a class="button-link" href="#collection-status?setting=network-diagnostic" data-settings-link>View diagnostic</a></div>
     <details id="serviceProvenanceHelp" class="settings-advanced"><summary>How services are identified</summary><p>Services come from recorded tool targets, not prompts or citations. Finding a service does not prove it ran.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
     <details id="authorProvenanceHelp" class="settings-advanced"><summary>How prompt authors are identified</summary><p>The author comes from the recorded sender, not the message wording or who ran a tool.</p><a href="#analyze" data-settings-link>Open Activity in Analyze</a></details>
     <details id="settingsSearchDetails" class="settings-advanced"><summary>Missing search results</summary><p>Search matches text in saved activity and reports. Missing history may leave results out. Refresh the stored view, then try again.</p></details>
@@ -113,7 +117,7 @@ export const settingsMarkup = `
     <p id="collectionTimes" class="muted"><span id="collectionChecked"></span><span id="collectionNewActivity"></span></p>
     <p id="collectionCoverageCounts"></p>
     <p id="collectionCoveragePending" class="settings-help" hidden></p>
-    <div class="collection-status-actions"><a id="collectionSourceLink" href="#settings?section=connection&setting=source-paths" data-settings-link>Source &amp; permission</a><a href="#settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="#settings?section=troubleshooting" data-settings-link>Troubleshooting</a><a href="#analyze" data-settings-link>Go to Analyze</a></div>
+    <div class="collection-status-actions"><a id="collectionSourceLink" href="#settings?section=connection&setting=source-paths" data-settings-link>Source &amp; permission</a><a id="collectionHistoryLink" href="#settings?section=connection&setting=history-window" data-settings-link>History and frequency</a><a href="#settings?section=troubleshooting" data-settings-link>Troubleshooting</a><a href="#analyze" data-settings-link>Go to Analyze</a></div>
   </div>
   <section id="collectionIssues" class="collection-issues settings-section" aria-labelledby="collectionIssuesTitle">
     <h2 id="collectionIssuesTitle" tabindex="-1">Chat history</h2>
@@ -224,12 +228,37 @@ export function mountDisplayTimeSettings({ time, onChange }) {
 }
 
 // Serialized into the local shell. Polls update status, never the in-progress form.
-export function mountCollectionSettings({ ux, write, read, invalidate, onDraftChange }) {
+export function mountCollectionSettings({ api, ux, write, read, invalidate, onDraftChange, collectionStatus, createNativeConfigurationState, sourceCollection }) {
+    if (typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function") {
+        throw new TypeError("Collection Settings requires the shared publication interface.");
+    }
     const $ = id => document.getElementById(id);
     const fields = ["sourceDatabase", "sourceSessions", "collectionWindow", "collectionCadence"];
+    const nativeConfiguration = typeof createNativeConfigurationState === "function" ? createNativeConfigurationState() : null;
+    const nativeView = () => nativeConfiguration?.view(api.accessState?.().state);
+    const sourceView = () => sourceCollection?.controlsActive ? sourceCollection.view(api.accessState()) : null;
+    const legacyWindows = [...$("collectionWindow").options].map(option => option.cloneNode(true));
+    let nativeWindows = false, nativeGesture = null;
     const explanations = new Map();
     let latest, baseline, initialized = false, editing = false, busy = false, stale = false, uncertain = false, readError = "", pendingAction = "", checking = false, visibleSection, visibleSetting;
-    function version(status) { return status?.configVersion ?? JSON.stringify(status?.config ?? null); }
+    let sharedRecovery = false, recoveryHidden = true;
+    const publicationCurrent = token => token !== null && token !== undefined
+        && typeof token.then !== "function" && api.isCurrent(token) === true;
+    let withdrawn = !publicationCurrent(api.publicationToken()), epoch = 0, safeDraft = null, pendingOperation = null, revokedWrite = false;
+    const capture = () => ({ token: api.publicationToken(), epoch });
+    const current = stamp => !withdrawn && stamp.epoch === epoch && publicationCurrent(stamp.token);
+    function delivered(token) {
+        if (token === undefined) throw new TypeError("Collection Settings delivery requires its publication token.");
+        return current({ token, epoch });
+    }
+    function native(status = latest) {
+        if (status?.nativeControl === undefined) return null;
+        if (typeof collectionStatus?.native !== "function" || typeof collectionStatus.page !== "function") {
+            throw new TypeError("Microsoft read controls require the shared collection status presentation.");
+        }
+        return collectionStatus.native(status);
+    }
+    function version(status) { return native(status)?.revision ?? status?.configVersion ?? JSON.stringify(status?.config ?? null); }
     function values() {
         return { appDbPath: $("sourceDatabase").value.trim(), sessionRoot: $("sourceSessions").value.trim(),
             windowDays: Number($("collectionWindow").value), pollSeconds: Number($("collectionCadence").value) };
@@ -239,9 +268,47 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         return { appDbPath: source?.appDbPath || "", sessionRoot: source?.sessionRoot || "",
             windowDays: source?.windowDays ?? 30, pollSeconds: source?.pollSeconds ?? 5 };
     }
-    function dirty() { return initialized && JSON.stringify(values()) !== JSON.stringify(sourceValues(baseline)); }
-    function setText(id, text) { if ($(id).textContent !== text) $(id).textContent = text; }
+    function dirty() { return initialized && (native() ? Boolean(nativeView()?.dirty)
+        : JSON.stringify(values()) !== JSON.stringify(sourceValues(baseline))); }
+    function windowOptions(isNative) {
+        if (nativeWindows === isNative) return;
+        nativeWindows = isNative;
+        $("collectionWindow").replaceChildren(...(isNative ? Array.from({ length: 90 }, (_, index) => {
+            const option = document.createElement("option"), days = index + 1;
+            option.value = String(days); option.textContent = `${days} ${days === 1 ? "day" : "days"}`; return option;
+        }) : legacyWindows.map(option => option.cloneNode(true))));
+    }
+    function syncNativeValues() {
+        const configuration = nativeView();
+        windowOptions(Boolean(configuration?.present));
+        for (const id of ["sourceDatabase", "sourceSessions", "collectionCadence"]) { $(id).value = ""; clearAttribute($(id), "value"); }
+        if (!$("nativeCollectionSurfaces").options.length) {
+            for (const [value, label] of [["chat,cowork", "Chat and Cowork"], ["chat", "Chat"], ["cowork", "Cowork"]]) {
+                const option = document.createElement("option"); option.value = value; option.textContent = label;
+                $("nativeCollectionSurfaces").append(option);
+            }
+        }
+        $("nativeCollectionSurfaces").value = configuration?.values?.surfaces.join(",") ?? "";
+        $("collectionWindow").value = configuration?.values ? String(configuration.values.windowDays) : "";
+    }
+    function clearText(element) {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) walker.currentNode.data = "";
+    }
+    function clearAttribute(element, name) {
+        const attribute = element.getAttributeNode(name);
+        if (attribute) { attribute.value = ""; element.removeAttribute(name); }
+    }
+    function setText(id, text) {
+        const element = $(id);
+        if (element.textContent !== text) { clearText(element); element.textContent = text; }
+    }
+    function hideRecovery(value) {
+        recoveryHidden = value;
+        $("reloadSettings").hidden = value || sharedRecovery && !uncertain;
+    }
     function message(text, error = false, origin = visibleSection) {
+        if (!current(capture())) return;
         if (!error && !uncertain && origin !== visibleSection) text = "";
         setText("settingsMessage", text);
         $("settingsMessage").className = "notice" + (error ? " error" : "");
@@ -250,13 +317,140 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
     }
     function reset() {
         baseline = latest;
+        if (native()) {
+            nativeConfiguration?.cancel(); syncNativeValues();
+            initialized = true; editing = false; stale = false;
+            return;
+        }
+        windowOptions(false);
         const next = sourceValues(latest);
         for (const [id, key] of [["sourceDatabase", "appDbPath"], ["sourceSessions", "sessionRoot"], ["collectionWindow", "windowDays"], ["collectionCadence", "pollSeconds"]]) $(id).value = String(next[key]);
         $("sourceDatabase").classList.remove("settings-target");
         initialized = true; editing = false; stale = false;
     }
+    function paintNative(control) {
+        const stamp = capture();
+        if (!current(stamp)) return;
+        const working = busy || checking, state = collectionStatus.page(latest), saved = collectionStatus.persistence(latest);
+        const allowed = control.enabled ? control.canPause : control.canResume;
+        const reason = working ? "Wait for the current Microsoft read setting to finish."
+            : uncertain || readError ? "Read the current connection before another change."
+            : !control.retained ? "Current WIRE access is required."
+            : !allowed ? control.connected ? "This Microsoft read action is not available."
+                : "Microsoft reads cannot resume while the connection is unavailable." : "";
+        for (const id of ["unapprovedConnection", "approvedSourceDetails", "sourceEditAction", "sourceEditor",
+            "connectionPreferences", "preferenceActions", "collectNow", "viewApprovedSource"]) $(id).hidden = true;
+        $("approvedConnection").hidden = false;
+        $("pauseCollection").hidden = false;
+        for (const id of fields.concat(["collectNow", "editSource", "reviewSource", "connectCollection", "saveCollection", "cancelPreferences", "cancelSource"])) $(id).disabled = true;
+        for (const id of ["approvedDatabase", "approvedSessions", "sourceChangeImpact",
+            "sourceSuggestion", "approvalScope", "settingsDraftStatus"]) setText(id, "");
+        setText("connectionSourceTitle", "Microsoft 365 activity");
+        setText("connectionSourceHelp", "");
+        $("connectionSourceHelp").hidden = true;
+        setText("connectionStatus", readError ? "Last known: " + state.label : state.label);
+        setText("pauseCollection", control.enabled ? "Pause Microsoft reads" : "Resume Microsoft reads");
+        $("pauseCollection").disabled = working || uncertain || Boolean(readError) || !control.retained || !allowed;
+        setText("settingsConnectionError", readError ? "Microsoft settings could not be read." : "");
+        $("settingsConnectionError").hidden = !readError || visibleSection !== "connection";
+        hideRecovery(!uncertain && (!readError || visibleSection !== "connection"));
+        $("reloadSettings").disabled = working;
+        explanations.set("pauseCollection", reason);
+        explanations.set("collectNow", saved ? working ? "Update in progress."
+            : uncertain || readError ? "Read current settings."
+            : collectionStatus.persistenceReason(latest) || (saved.actions.includes("collect-now")
+                ? "" : "Collection unavailable.")
+            : "Collection unavailable.");
+        ux.tooltip($("pauseCollection"), reason);
+        if (!current(stamp)) return;
+        ux.explainDisabled($("pauseCollection"), reason, { compact: true });
+        if (!current(stamp)) return;
+        ux.tooltip($("reloadSettings"), working ? reason : "");
+        if (!current(stamp)) return;
+        ux.explainDisabled($("reloadSettings"), working ? reason : "", { compact: true });
+        if (!current(stamp)) return;
+        ux.pending($("settingsDraftStatus"), false);
+        if (!current(stamp)) return;
+        paintNativeConfiguration(control, stamp);
+    }
+    function paintNativeConfiguration(control, stamp) {
+        const configuration = nativeView(), present = configuration?.present === true;
+        $("nativeCollectionSourceField").hidden = !present;
+        $("nativeCollectionSurfaces").disabled = true;
+        $("collectionCadence").closest(".settings-field").hidden = true;
+        if (!present) { onDraftChange(false); return; }
+        const working = busy || checking;
+        const blocker = {
+            NATIVE_CONFIGURATION_ACCOUNT_REQUIRED: "Connect Microsoft 365 first.",
+            NATIVE_CONFIGURATION_IDENTITY_REQUIRED: "Connect Microsoft 365 first.",
+            NATIVE_CONFIGURATION_ACCESS_UNAVAILABLE: "Microsoft access is required.",
+        };
+        const reason = working ? "Update in progress."
+            : uncertain || readError || configuration.needsRead ? "Read current settings."
+            : configuration.stale ? "Settings changed. Cancel edits to reload."
+            : configuration.blockers.length ? blocker[configuration.blockers[0]]
+            : configuration.validation || "";
+        $("connectionPreferences").hidden = $("preferenceActions").hidden = false;
+        setText("preferencesTitle", "Microsoft collection");
+        setText("preferencesHelp", configuration.intent === "enable" ? "Save prompts, replies and tool activity locally. Microsoft may cache activity during sign-in."
+            : configuration.values?.windowDays < latest?.nativePersistence?.configuration?.settings.windowDays ? "Saved activity is kept." : "");
+        $("preferencesHelp").hidden = !$("preferencesHelp").textContent;
+        setText("saveCollection", configuration.intent === "enable" ? "Enable Microsoft collection" : "Save Microsoft preferences");
+        if (configuration.intent === "enable" && !readError && !collectionStatus.persistence(latest)?.configured) {
+            setText("connectionStatus", "Not enabled");
+        }
+        $("saveCollection").disabled = working || uncertain || Boolean(readError) || !configuration.canSubmit;
+        $("cancelPreferences").disabled = working || !(configuration.dirty || configuration.stale);
+        $("nativeCollectionSurfaces").disabled = $("collectionWindow").disabled =
+            working || uncertain || Boolean(readError) || !configuration.canEdit;
+        $("pauseCollection").hidden = configuration.intent === "enable";
+        if (configuration.dirty || configuration.stale) {
+            $("pauseCollection").disabled = true;
+            const hold = reason || "Save or cancel your Microsoft preferences before another collection action.";
+            explanations.set("pauseCollection", hold); explanations.set("collectNow", hold);
+            ux.tooltip($("pauseCollection"), hold);
+            if (!current(stamp)) return;
+            ux.explainDisabled($("pauseCollection"), hold, { compact: true });
+            if (!current(stamp)) return;
+        }
+        const guidance = configuration.stale ? "Settings changed. Cancel edits to reload."
+            : uncertain ? "Change unconfirmed."
+            : working ? "Saving..." : configuration.validation || (configuration.dirty ? "Unsaved changes." : "");
+        setText("settingsDraftStatus", guidance); $("settingsDraftStatus").hidden = !guidance;
+        hideRecovery(!uncertain && !readError && !configuration.needsRead);
+        $("reloadSettings").disabled = working;
+        explanations.set("saveCollection", reason);
+        explanations.set("nativeCollectionSurfaces", reason);
+        explanations.set("collectionWindow", reason);
+        for (const id of ["saveCollection", "cancelPreferences"]) {
+            const help = id === "saveCollection" ? explanations.get(id)
+                : working ? reason : "";
+            ux.tooltip($(id), $(id).disabled ? help : "");
+            if (!current(stamp)) return;
+            ux.explainDisabled($(id), help, { compact: true });
+            if (!current(stamp)) return;
+        }
+        ux.pending($("settingsDraftStatus"), working);
+        if (current(stamp)) onDraftChange(configuration.dirty || configuration.stale);
+    }
     function paint() {
+        if (!current(capture())) return;
+        const sources = sourceView();
+        if (sources && !sources.current && initialized) readError ||= "Collection settings could not be read.";
+        const control = native();
+        if (control) { paintNative(control); return; }
+        $("nativeCollectionSourceField").hidden = true;
+        $("nativeCollectionSurfaces").disabled = true;
+        $("collectionCadence").closest(".settings-field").hidden = false;
+        $("pauseCollection").hidden = sourceCollection?.copilotOnly && sources?.status?.global.paused === true;
+        setText("preferencesTitle", sourceCollection?.active ? "GitHub history and frequency" : "History and frequency");
+        setText("preferencesHelp", latest?.config?.approved && values().windowDays < baseline?.config?.windowDays ? "Saved activity is kept." : "");
+        $("preferencesHelp").hidden = !$("preferencesHelp").textContent;
+        setText("saveCollection", "Save preferences");
         const approved = latest?.config?.approved === true, changed = dirty(), working = busy || checking;
+        setText("connectionSourceTitle", "GitHub Copilot app");
+        setText("connectionSourceHelp", "");
+        $("connectionSourceHelp").hidden = true;
         const inspectingSource = visibleSection === "connection" && ["source", "source-paths"].includes(visibleSetting);
         const sourceChanged = JSON.stringify([values().appDbPath, values().sessionRoot]) !== JSON.stringify([baseline?.config?.appDbPath, baseline?.config?.sessionRoot]);
         $("approvedConnection").hidden = !approved;
@@ -264,7 +458,7 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         $("approvedSourceDetails").hidden = !approved || editing || !inspectingSource;
         $("sourceEditAction").hidden = editing;
         $("sourceEditor").hidden = !editing;
-        $("connectionPreferences").hidden = editing;
+        $("connectionPreferences").hidden = editing || sourceCollection?.active && !approved;
         const preferenceHome = editing ? $("sourcePreferenceSlot") : $("connectionPreferences");
         if ($("collectionPreferenceFields").parentElement !== preferenceHome) {
             if (editing) preferenceHome.append($("collectionPreferenceFields"));
@@ -273,137 +467,207 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
         const draftHome = editing ? $("sourceDraftStatusSlot") : $("connectionPreferences");
         if ($("settingsDraftStatus").parentElement !== draftHome) draftHome.append($("settingsDraftStatus"));
         const connectionState = !latest ? "Checking connection" : !approved ? "Not connected" : latest.error ? "Connection issue"
-            : !latest.config.enabled ? "Paused" : latest.connected ? "Collection on" : "Checking connection";
+            : !latest.config.enabled || sourceCollection?.copilotOnly && sources?.status?.global.paused ? "Paused"
+            : latest.connected ? "Collection on" : "Checking connection";
         setText("connectionStatus", readError ? latest ? `Last known: ${connectionState}` : "Status unavailable" : connectionState);
-        setText("connectionApproval", readError ? "Previously approved" : "Approved");
-        setText("settingsConnectionError", readError ? `Connection status could not be read. ${latest ? "Showing last-known settings. " : ""}${readError}` : "");
+        setText("settingsConnectionError", readError ? "Collection settings could not be read." : "");
         $("settingsConnectionError").hidden = !readError || visibleSection !== "connection";
         setText("approvedDatabase", latest?.config?.appDbPath || "");
         setText("approvedSessions", latest?.config?.sessionRoot || "");
         setText("sourceEditorTitle", approved ? "Change source paths" : "Review this source");
         setText("sourceChangeImpact", approved
-            ? stale ? "Your draft is kept, but the approved connection changed in another panel. Cancel to load its current paths before approving."
-                : uncertain ? "This draft is not confirmed. Read the current connection before trying again; no action is replayed."
-                : pendingAction === "/api/collection/configure" ? "Validating and saving this draft. The source is replaced only if validation succeeds."
+            ? stale ? "Source settings changed. Cancel edits to reload."
+                : uncertain ? "Source change unconfirmed."
+                : pendingAction === "/api/collection/configure" ? "Saving source..."
                 : ""
             : "");
         $("sourceChangeImpact").hidden = !$("sourceChangeImpact").textContent;
-        setText("sourceSuggestion", !approved && latest?.suggestedSource?.error ? latest.suggestedSource.error : "Suggested local paths are not permission to read them.");
-        $("sourceSuggestion").hidden = approved;
+        setText("sourceSuggestion", !approved && latest?.suggestedSource?.error ? latest.suggestedSource.error : "");
+        $("sourceSuggestion").hidden = !$("sourceSuggestion").textContent;
         setText("approvalScope", approved && !sourceChanged ? ""
-            : `Approve reading these local paths and keeping original prompts on this device. ${approved && !latest.config.enabled ? "Collection stays paused." : "Approval enables collection."} History: ${values().windowDays} days; check every ${values().pollSeconds} seconds.`);
+            : "Read these paths and save original prompts on this device." + (approved && !latest.config.enabled ? " Collection stays paused." : ""));
         $("approvalScope").hidden = !$("approvalScope").textContent;
         setText("connectCollection", approved ? sourceChanged ? "Approve and switch source" : "Save preferences" : "Approve source and start collection");
         $("connectCollection").dataset.intent = approved && !sourceChanged ? "save-preferences" : "approve-source";
         setText("pauseCollection", latest?.config?.enabled ? "Pause collection" : "Resume collection");
-        for (const id of fields) $(id).disabled = working;
+        for (const id of fields) $(id).disabled = working || !initialized;
         for (const id of ["collectNow", "pauseCollection", "editSource"]) $(id).disabled = !approved || working || uncertain || readError || stale || changed || editing;
         $("reviewSource").disabled = !latest || working || uncertain || Boolean(readError);
         $("connectCollection").disabled = !editing || working || uncertain || readError || stale || !values().appDbPath || !values().sessionRoot || (approved && !changed);
         $("saveCollection").disabled = !approved || !changed || editing || working || uncertain || readError || stale;
+        if (sources) {
+            for (const id of ["reviewSource", "editSource", "connectCollection", "saveCollection"]) {
+                $(id).disabled ||= !sources.actions.github.includes("configure");
+            }
+            $("pauseCollection").disabled ||= !sources.actions.github.includes("set-interval");
+            $("collectNow").disabled ||= !sources.actions.github.includes("collect-now");
+        }
         $("preferenceActions").hidden = !approved || editing;
         $("cancelPreferences").disabled = (!changed && !stale) || working;
         $("cancelSource").disabled = working;
-        $("reloadSettings").hidden = !uncertain && (!readError || visibleSection !== "connection");
+        hideRecovery(!uncertain && (!readError || visibleSection !== "connection"));
         $("reloadSettings").disabled = working;
-        const progress = checking || pendingAction === "/api/collection/now" ? "A local check is in progress; wait for it to finish."
-            : pendingAction === "/api/collection/status" ? "Wait while the current connection is read."
-            : "Wait while the collection settings are saved.";
+        const progress = revokedWrite && busy ? "Earlier change pending."
+            : busy && !["/api/collection/now", "/api/collection/status"].includes(pendingAction) ? "Saving..." : "Checking...";
         const blocked = working ? progress
-            : uncertain || readError ? "Read the current connection before trying another change."
-            : stale ? "Cancel your edits to load the connection changed in another panel."
-            : editing ? "Approve or cancel the source edits before using this action."
-            : changed ? "Save or cancel your preference changes first."
-            : "Review and approve a local source first.";
-        const help = {
-            editSource: "Open the source editor without changing the approved source.",
-            pauseCollection: latest?.config?.enabled
-                ? "Pause future local collection without removing retained evidence."
-                : "Resume local collection from the previously approved source.",
-            collectNow: "Refresh recorded activity without changing source approval or the pause state.",
-            reviewSource: "Open the local source paths for review before granting permission.",
-            connectCollection: !approved ? "Approve these local paths and start collection with the chosen preferences."
-                : !sourceChanged ? "Save history and frequency, keeping the approved source and collection state."
-                : latest.config.enabled ? "Validate and approve these paths, then collect from the replacement source."
-                : "Validate and approve these paths while keeping collection paused.",
-            cancelSource: "Discard these source edits without changing the current connection.",
-            saveCollection: "Save history and cadence preferences, keeping the approved source and pause state.",
-            cancelPreferences: "Discard preference edits and load the current connection settings.",
-            reloadSettings: "Read the current connection without replaying the previous action.",
-        };
-        for (const [id, consequence] of Object.entries(help)) {
+            : uncertain || readError ? "Read current settings."
+            : stale ? "Cancel edits to reload."
+            : editing ? "Finish source edits first."
+            : changed ? "Save or cancel your changes."
+            : "Approve a source first.";
+        for (const id of ["editSource", "pauseCollection", "collectNow", "reviewSource", "connectCollection",
+            "cancelSource", "saveCollection", "cancelPreferences", "reloadSettings"]) {
             const control = $(id);
             let reason = blocked;
             if (control.disabled) {
-                if (id === "reviewSource" && !latest) reason = "Wait for the current connection to load.";
+                if (id === "reviewSource" && !latest) reason = "Loading settings.";
                 else if (id === "cancelSource") reason = progress;
-                else if (id === "cancelPreferences") reason = busy ? progress : "There are no preference changes to cancel.";
+                else if (id === "cancelPreferences") reason = busy ? progress : "";
                 else if (!busy && !uncertain && !readError && !stale && id === "connectCollection") reason = !values().appDbPath || !values().sessionRoot
-                    ? "Enter both local source paths before approving."
-                    : "Change a source path or preference before saving.";
-                else if (!busy && !uncertain && !readError && !stale && id === "saveCollection" && !changed) reason = "Change a preference before saving.";
+                    ? "Enter both source paths."
+                    : "";
+                else if (!busy && !uncertain && !readError && !stale && id === "saveCollection" && !changed) reason = "";
             }
             if (id !== "collectNow") {
-                ux.tooltip(control, control.disabled ? reason : consequence);
-                ux.explainDisabled(control, reason, { compact: true });
+                ux.tooltip(control, control.disabled ? reason : "");
+                ux.explainDisabled(control, control.disabled ? reason : "", { compact: true });
             }
-            explanations.set(id, control.disabled ? "Unavailable: " + reason : consequence);
+            explanations.set(id, control.disabled ? reason : "");
         }
         explanations.set("sourceDatabase", working || uncertain || readError || stale ? blocked
-            : "Review the open source draft. Opening this result does not save preferences or approve source changes.");
-        setText("settingsDraftStatus", stale ? "Connection settings changed in another panel. Your edits are kept. Cancel changes to load the current connection before saving."
-            : working ? progress
-            : editing ? !approved || sourceChanged ? "Nothing changes until you approve this source. Cancel discards these edits."
-                : changed ? "Unsaved preferences. Save keeps the approved source and collection state." : ""
-            : changed ? approved ? "Unsaved preferences. Save applies only to the approved source and keeps its active or paused state." : "Preferences are not saved until you review and approve a source."
-            : approved ? "" : "Review and approve a source to use these preferences.");
+            : "");
+        setText("settingsDraftStatus", stale ? editing ? "" : "Settings changed. Cancel edits to reload."
+            : busy ? editing ? "" : progress
+            : checking ? ""
+            : uncertain ? editing ? "" : "Change unconfirmed."
+            : changed && approved ? "Unsaved changes." : "");
         $("settingsDraftStatus").hidden = !$("settingsDraftStatus").textContent;
-        ux.pending($("settingsDraftStatus"), working);
+        ux.pending($("settingsDraftStatus"), working && !checking && !editing);
         ux.pending($("sourceChangeImpact"), busy && pendingAction === "/api/collection/configure");
-        onDraftChange(changed || editing);
+        onDraftChange(Boolean(safeDraft?.changed) || changed || editing);
     }
-    function receive(status) {
+    function receive(status, token) {
+        if (!delivered(token)) return false;
+        const control = native(status);
+        const saved = collectionStatus?.persistence?.(status), previousSaved = collectionStatus?.persistence?.(latest);
+        if (saved && previousSaved?.accountRef === saved.accountRef && previousSaved.generation === saved.generation
+            && previousSaved.revision > saved.revision) return false;
+        if (control && native()?.revision > control.revision) return false;
+        if (status.nativeConfigurationOffer !== undefined && (!control || !nativeConfiguration || typeof api.accessState !== "function")) {
+            throw new TypeError("Microsoft collection configuration requires its native Settings interface.");
+        }
+        if (nativeConfiguration && !nativeConfiguration.receive(control ? status.nativeConfigurationOffer : undefined)) return false;
         readError = "";
         latest = status;
-        if (!initialized || (!dirty() && !editing && !busy && !uncertain)) reset();
+        if (control) {
+            safeDraft = null; baseline = latest; syncNativeValues();
+            initialized = true; editing = false; stale = false;
+        }
+        else if (safeDraft) {
+            const saved = safeDraft;
+            reset();
+            if (saved.changed) {
+                $("collectionWindow").value = saved.window;
+                $("collectionCadence").value = saved.cadence;
+            }
+            safeDraft = null;
+        } else if (!initialized || (!dirty() && !editing && !busy && !uncertain)) reset();
         else if (version(status) !== version(baseline)) stale = true;
+        if (revokedWrite && uncertain) message(busy
+            ? "The earlier settings change is still pending. No action was replayed."
+            : "The earlier settings change is unconfirmed. Read the current connection before another change. No action was replayed.", true);
         paint();
+        return delivered(token);
     }
     function cancel() {
-        if (busy) return;
-        const changed = dirty(), sourceEdits = editing;
+        const stamp = capture();
+        if (!current(stamp) || busy) return;
         reset();
-        message(uncertain ? "Read the current connection before another write. The previous response was not confirmed."
-            : !changed ? "" : sourceEdits ? "Source edits discarded. Your approved source is unchanged."
-                : "Preference edits discarded. Saved collection settings are unchanged.");
+        message(uncertain ? "Earlier change unconfirmed. Read current connection." : "");
         paint();
+        if (!current(stamp)) return;
         let target = document.querySelector('[data-settings-section="connection"]:not([hidden])')
-            ? $(latest?.config?.approved ? "editSource" : "reviewSource")
+            ? $(nativeView()?.present ? "nativeCollectionSurfaces" : latest?.config?.approved ? "editSource" : "reviewSource")
             : document.querySelector("[data-settings-section]:not([hidden]) h2");
         ux.restoreFocus(target?.disabled ? target.closest(".ux-disabled-help") : target);
     }
     async function act(endpoint, input, success) {
-        if (busy || uncertain || readError || stale) return;
+        const stamp = capture();
+        if (!current(stamp) || busy || uncertain || readError || stale) return;
         const origin = visibleSection;
-        busy = true; pendingAction = endpoint; message(""); invalidate(); paint();
+        const operation = { kind: "write", dispatched: false };
+        pendingOperation = operation;
+        busy = true; pendingAction = endpoint;
         try {
-            latest = await write(endpoint, input);
+            message("");
+            if (!current(stamp)) return;
+            if (!(native() && endpoint === "/api/collection/enabled")) invalidate();
+            if (!current(stamp)) return;
+            paint();
+            if (!current(stamp)) return;
+            operation.dispatched = true;
+            const request = write(endpoint, input);
+            input = null;
+            const status = await request;
+            if (!current(stamp)) { uncertain = true; revokedWrite = true; return; }
+            const updated = native(status);
+            if (updated && native()?.revision > updated.revision) {
+                throw new Error("Microsoft read settings changed again. Read the current connection.");
+            }
+            latest = status;
             reset();
             message(typeof success === "function" ? success(latest) : success, false, origin);
         } catch (error) {
-            uncertain = true;
-            message(error.message + " No success is assumed. Read the current connection before trying again.", true);
+            if (operation.dispatched) uncertain = true;
+            if (!current(stamp)) { revokedWrite ||= operation.dispatched; return; }
+            const detail = error.reason === "runtime_unavailable" ? "WIRE is not responding."
+                : error.reason === "invalid_response" ? "The response could not be read."
+                : error.reason === "wire_access_stale" ? "WIRE access changed." : error.message;
+            message(detail + (operation.dispatched ? " Change unconfirmed." : " Change not started."), true);
         } finally {
-            busy = false; pendingAction = ""; paint();
-            $("settingsMessage").focus({ preventScroll: true });
+            input = null; success = null;
+            if (pendingOperation === operation) {
+                pendingOperation = null; busy = false; pendingAction = "";
+            }
+            if (current(stamp)) {
+                paint();
+                if (current(stamp)) $("settingsMessage").focus({ preventScroll: true });
+            }
         }
     }
     function guard() {
         return latest?.configVersion !== undefined ? { expectedConfigVersion: baseline.configVersion } : {};
     }
     function configure(reviewingSource) {
-        if (!initialized || busy || stale || uncertain) return;
+        if (!current(capture()) || !initialized || busy || stale || uncertain) return;
         if (reviewingSource ? $("connectCollection").disabled : $("saveCollection").disabled) return;
+        if (native()) {
+            const configuration = nativeView();
+            if (reviewingSource || !configuration?.canSubmit) {
+                message("Read current Microsoft settings before saving.", true); paint(); return;
+            }
+            const command = nativeConfiguration.command(api.accessState().state);
+            const gesture = nativeGesture;
+            nativeGesture = null;
+            if (gesture && (!current(gesture.stamp) || JSON.stringify(gesture.command) !== JSON.stringify(command))) {
+                message("Microsoft settings changed before activation. Review current settings and try again.", true);
+                paint(); return;
+            }
+            const paused = collectionStatus.persistence(latest)?.configuration?.settings.paused;
+            if (command.intent === "save" && typeof paused !== "boolean") {
+                message("The committed Microsoft collection state is unavailable. Read current Settings.", true); return;
+            }
+            act("/api/collection/configure", command, status => {
+                const saved = collectionStatus.persistence(status), result = saved?.configuration;
+                if (!saved?.configured || !result || result.settings.windowDays !== command.windowDays
+                    || JSON.stringify([...result.surfaces].sort()) !== JSON.stringify([...command.surfaces].sort())
+                    || result.settings.paused !== (command.intent === "enable" ? false : paused)) {
+                    throw new Error("The Microsoft settings change was not confirmed.");
+                }
+                return command.intent === "enable" ? "Microsoft collection enabled." : "Preferences saved.";
+            });
+            return;
+        }
         const next = values();
         const sourceApproval = reviewingSource && (baseline?.config?.approved !== true
             || next.appDbPath !== baseline.config.appDbPath || next.sessionRoot !== baseline.config.sessionRoot);
@@ -411,47 +675,165 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
             message("Changed source paths require fresh approval. Review the source before connecting.", true); return;
         }
         act("/api/collection/configure", { ...next, approved: true, enabled: baseline.config?.enabled ?? true, ...guard() },
-            sourceApproval ? "Source approved. " + (baseline.config?.enabled === false ? "Collection remains paused." : "Collection is enabled.") : "Preferences saved. The approved source and collection state are unchanged.");
+            sourceApproval ? "Source approved." : "Preferences saved.");
     }
     $("collectionForm").addEventListener("submit", event => event.preventDefault());
-    for (const id of fields) $(id).addEventListener("input", () => { message(""); paint(); });
+    for (const id of [...fields, "nativeCollectionSurfaces"]) $(id).addEventListener("input", () => {
+        if (!current(capture())) return;
+        if (native() && nativeView()?.present && ["nativeCollectionSurfaces", "collectionWindow"].includes(id)) {
+            nativeConfiguration.edit({ surfaces: $("nativeCollectionSurfaces").value.split(",").filter(Boolean),
+                windowDays: Number($("collectionWindow").value) });
+        }
+        message(""); paint();
+    });
     for (const id of ["reviewSource", "editSource"]) $(id).addEventListener("click", () => {
-        if ($(id).disabled || editing) return;
+        const stamp = capture();
+        if (!current(stamp) || $(id).disabled || editing) return;
         $("approvedSourceTitle").classList.remove("settings-target");
-        editing = true; message(""); paint(); $("sourceDatabase").focus();
+        editing = true; message(""); paint();
+        if (current(stamp)) $("sourceDatabase").focus();
     });
     $("cancelSource").addEventListener("click", cancel);
     $("cancelPreferences").addEventListener("click", cancel);
     $("connectCollection").addEventListener("click", () => configure(true));
+    const captureNativeGesture = () => {
+        if (!nativeView()?.present) return;
+        const stamp = capture();
+        nativeGesture = { stamp, command: current(stamp) && nativeView().canSubmit
+            ? nativeConfiguration.command(api.accessState().state) : null };
+    };
+    $("saveCollection").addEventListener("pointerdown", event => { if (event.button === 0) captureNativeGesture(); });
+    $("saveCollection").addEventListener("keydown", event => {
+        if (["Enter", " "].includes(event.key) && !event.repeat) captureNativeGesture();
+    });
     $("saveCollection").addEventListener("click", () => configure(false));
     $("pauseCollection").addEventListener("click", () => {
-        if ($("pauseCollection").disabled) return;
-        act("/api/collection/enabled", { enabled: !latest.config.enabled, ...guard() }, latest.config.enabled ? "Collection paused. Retained evidence is still available." : "Collection resumed for the approved source.");
+        if (!current(capture()) || $("pauseCollection").disabled) return;
+        const control = native();
+        if (control) {
+            const enabled = !control.enabled;
+            act("/api/collection/enabled", { enabled, expectedNativeRevision: control.revision }, status => {
+                const updated = native(status);
+                if (!updated || updated.enabled !== enabled) throw new Error("The Microsoft read change was not confirmed.");
+                return enabled ? "Microsoft reads resumed." : "Microsoft reads paused.";
+            });
+            return;
+        }
+        act("/api/collection/enabled", { enabled: !latest.config.enabled, ...guard() }, latest.config.enabled ? "Collection paused." : "Collection resumed.");
     });
     $("collectNow").addEventListener("click", () => {
-        if (!$("collectNow").disabled) $("checkActivity").click();
+        if (current(capture()) && !$("collectNow").disabled) $("checkActivity").click();
     });
     $("reloadSettings").addEventListener("click", async () => {
-        if (busy) return;
+        const stamp = capture();
+        if (!current(stamp) || busy) return;
         const origin = visibleSection;
-        busy = true; pendingAction = "/api/collection/status"; paint();
+        const wasUncertain = uncertain;
+        const recoveringNative = uncertain && nativeView()?.present === true;
+        const operation = { kind: "read" };
+        pendingOperation = operation;
+        busy = true; pendingAction = "/api/collection/status";
         try {
+            paint();
+            if (!current(stamp)) return;
             const status = await read();
-            uncertain = false; receive(status);
-            message(stale ? "Current connection read. Your earlier edits have not been reapplied. Cancel changes to review the current settings." : "Current connection read. Review your changes before trying again.", false, origin);
+            if (!current(stamp)) return;
+            uncertain = false; revokedWrite = false;
+            receive(status, stamp.token);
+            if (!current(stamp)) return;
+            if (recoveringNative && nativeView()?.present) {
+                reset();
+            }
+            message(wasUncertain ? "Current settings shown; earlier change unconfirmed." : "", false, origin);
         } catch (error) {
+            if (!current(stamp)) return;
             if (readError && !uncertain) readError = error.message;
-            else message("The connection could not be read. " + error.message, true);
+            else message("Current settings could not be read.", true);
         }
-        finally { busy = false; pendingAction = ""; paint(); }
+        finally {
+            if (pendingOperation === operation) {
+                pendingOperation = null; busy = false; pendingAction = "";
+            }
+            if (current(stamp)) paint();
+        }
     });
+    function withdrawAccess() {
+        if (!withdrawn) {
+            const original = sourceValues(baseline);
+            if (native()) safeDraft = null;
+            else if (!safeDraft || initialized) safeDraft = {
+                window: $("collectionWindow").value, cadence: $("collectionCadence").value,
+                changed: initialized && ($("collectionWindow").value !== String(original.windowDays)
+                    || $("collectionCadence").value !== String(original.pollSeconds)),
+            };
+            epoch++;
+        }
+        withdrawn = true;
+        sharedRecovery = false; recoveryHidden = true;
+        nativeConfiguration?.withdraw();
+        $("nativeCollectionSurfaces").value = "";
+        // A dispatched change stays uncertain; withdrawal is not proof of cancellation.
+        uncertain ||= pendingOperation?.kind === "write" && pendingOperation.dispatched;
+        revokedWrite ||= uncertain;
+        if (pendingOperation?.kind !== "write" || !pendingOperation.dispatched) {
+            pendingOperation = null; busy = false; pendingAction = "";
+        }
+        latest = baseline = null; readError = ""; initialized = false; editing = false; stale = false; checking = false;
+        explanations.clear();
+        for (const id of ["sourceDatabase", "sourceSessions"]) {
+            $(id).value = "";
+            clearAttribute($(id), "value"); clearAttribute($(id), "title");
+        }
+        for (const id of ["approvedDatabase", "approvedSessions", "settingsMessage", "settingsConnectionError",
+            "sourceChangeImpact", "sourceSuggestion", "approvalScope", "settingsDraftStatus", "connectionStatus",
+            "connectionSourceTitle", "connectionSourceHelp", "pauseCollection"]) {
+            clearText($(id)); $(id).replaceChildren();
+        }
+        for (const id of ["approvedConnection", "unapprovedConnection", "approvedSourceDetails", "sourceEditor",
+            "settingsMessage", "settingsConnectionError", "sourceChangeImpact", "sourceSuggestion", "approvalScope",
+            "settingsDraftStatus", "reloadSettings"]) $(id).hidden = true;
+        for (const id of [...fields, "nativeCollectionSurfaces", "collectNow", "pauseCollection", "editSource", "reviewSource", "connectCollection",
+            "saveCollection", "cancelPreferences", "cancelSource", "reloadSettings"]) {
+            $(id).disabled = true;
+            if (id !== "collectNow" && id !== "nativeCollectionSurfaces" && !fields.includes(id)) {
+                ux.tooltip($(id), "Connection access is unavailable.");
+                ux.explainDisabled($(id), "Connection access is unavailable.", { compact: true });
+            }
+        }
+        $("connectCollection").removeAttribute("data-intent");
+        ux.pending($("settingsDraftStatus"), false); ux.pending($("sourceChangeImpact"), false);
+        ux.hideTooltip();
+    }
+    function resumeAccess() {
+        const token = api.publicationToken();
+        if (!publicationCurrent(token)) return false;
+        withdrawn = false;
+        return true;
+    }
     window.addEventListener("beforeunload", event => {
-        if (!dirty() && !busy) return;
+        if (!dirty() && !busy && !safeDraft?.changed) return;
         event.preventDefault(); event.returnValue = "";
     });
-    return { receive, hasDraft: () => dirty() || editing, isBusy: () => busy, explain: id => explanations.get(id) || "",
-        canRefresh: () => !busy && !uncertain && !readError && !stale && !dirty() && !editing,
-        unavailable(error) { readError = error; paint(); },
+    return { receive, withdrawAccess, resumeAccess,
+        setSharedRecovery(value) {
+            sharedRecovery = value;
+            if (current(capture())) hideRecovery(recoveryHidden);
+        },
+        receiveAccess() { if (latest && current(capture())) paint(); },
+        hasNativeConfiguration: () => nativeView()?.present === true,
+        nativeConfigurationIntent: () => nativeView()?.intent ?? null,
+        hasDraft: () => Boolean(safeDraft?.changed) || dirty() || editing || nativeView()?.stale === true, isBusy: () => busy,
+        explain: id => current(capture()) ? explanations.get(id) || "" : "",
+        canRefresh() {
+            if (!current(capture())) return false;
+            if (sourceCollection?.controlsActive && !sourceView().actions.github.includes("collect-now")) return false;
+            const control = native();
+            return (!control || control.enabled && control.retained && control.connected
+                && collectionStatus.persistence(latest)?.actions.includes("collect-now") === true)
+                && initialized && !busy && !uncertain && !readError && !stale && !dirty() && !editing
+                && !nativeView()?.stale && !nativeView()?.needsRead;
+        },
+        unavailable(error, token) { if (!delivered(token)) return false; readError = error; paint(); return delivered(token); },
         setSection(section, setting) {
             if (visibleSection === section && visibleSetting === setting) return;
             const sectionChanged = visibleSection !== section;
@@ -460,5 +842,5 @@ export function mountCollectionSettings({ ux, write, read, invalidate, onDraftCh
             if (sectionChanged && !busy && !uncertain && !$("settingsMessage").classList.contains("error")) message("");
             paint();
         },
-        setChecking(value) { if (checking !== value) { checking = value; paint(); } } };
+        setChecking(value, token) { if (!delivered(token)) return false; if (checking !== value) { checking = value; paint(); } return delivered(token); } };
 }

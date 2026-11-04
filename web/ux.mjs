@@ -23,6 +23,16 @@ export function createEvidenceUX(icons) {
     function listen(node, type, handler, options = {}) {
         node.addEventListener(type, handler, { ...options, signal: events.signal });
     }
+    function setOwnedText(node, value = "") {
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        for (let text = walker.nextNode(); text; text = walker.nextNode()) text.data = "";
+        node.textContent = value;
+    }
+    function removeOwnedAttribute(node, name) {
+        const attribute = node.getAttributeNode(name);
+        if (attribute) attribute.value = "";
+        node.removeAttribute(name);
+    }
     // Keep only the current interaction's identities, not a history of visited controls.
     function identity(node) {
         if (!node) return null;
@@ -43,53 +53,85 @@ export function createEvidenceUX(icons) {
         suppressedFocus = identity(node);
     }
 
-    function tooltipText(node) {
-        const value = descriptions.get(node);
-        return typeof value === "function" ? value() : value;
+    function tooltipText(registration) {
+        const value = registration.text;
+        const text = typeof value === "function" ? value() : value;
+        return text ? String(text) : "";
+    }
+    function currentTooltip(node, registration) {
+        return descriptions.get(node) === registration && node.isConnected && node.checkVisibility();
+    }
+    function retireTooltip(node) {
+        const registration = descriptions.get(node);
+        if (registration) registration.text = null;
+        descriptions.delete(node); tooltipOptions.delete(node);
+        removeOwnedAttribute(node, "data-ux-tooltip");
+    }
+    function visibleTooltipBox(node) {
+        const raw = node.getBoundingClientRect();
+        const box = { left: Math.max(0, raw.left), right: Math.min(document.documentElement.clientWidth, raw.right),
+            top: Math.max(0, raw.top), bottom: Math.min(window.innerHeight, raw.bottom) };
+        if (box.right <= box.left || box.bottom <= box.top) return null;
+        for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+            const css = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+            const left = bounds.left + (parent.clientLeft || 0), top = bounds.top + (parent.clientTop || 0);
+            const boundary = parent.hasAttribute("data-ux-tooltip-boundary");
+            if (boundary || ["hidden", "clip", "auto", "scroll"].includes(css.overflowX)) {
+                box.left = Math.max(box.left, left);
+                box.right = Math.min(box.right, parent instanceof HTMLElement ? left + parent.clientWidth : bounds.right);
+            }
+            if (boundary || ["hidden", "clip", "auto", "scroll"].includes(css.overflowY)) {
+                box.top = Math.max(box.top, top);
+                box.bottom = Math.min(box.bottom, parent instanceof HTMLElement ? top + parent.clientHeight : bounds.bottom);
+            }
+            if (box.right <= box.left || box.bottom <= box.top) return null;
+        }
+        return box;
     }
     function positionTooltip() {
         if (!active) return;
-        if (!active.isConnected || !active.checkVisibility()) { hideTooltip(); return; }
-        const options = tooltipOptions.get(active) || {}, anchor = options.anchor || active;
+        const target = active;
+        if (!target.isConnected || !target.checkVisibility()) { hideTooltip(); return; }
+        const options = tooltipOptions.get(target) || {}, anchor = options.anchor || target;
         if (!anchor.isConnected || !anchor.checkVisibility()) { hideTooltip(); return; }
-        const box = anchor.getBoundingClientRect(), tip = bubble.getBoundingClientRect();
+        const box = visibleTooltipBox(anchor), tip = bubble.getBoundingClientRect();
+        if (!box) { hideTooltip(); return; }
         const width = document.documentElement.clientWidth, height = window.innerHeight;
         const gap = parseFloat(getComputedStyle(bubble).getPropertyValue("--tooltip-gap"));
-        const boundary = active.closest("[data-ux-tooltip-boundary]");
-        if (boundary) {
-            const clip = boundary.getBoundingClientRect(), x = box.left + box.width / 2, y = box.top + box.height / 2;
-            if (x < Math.max(0, clip.left) || x > Math.min(width, clip.right) || y < Math.max(0, clip.top) || y > Math.min(height, clip.bottom)) {
-                hideTooltip();
-                return;
-            }
-        }
-        if (options.placement === "right" && box.right + gap + tip.width <= width - gap) {
-            bubble.style.left = box.right + gap + "px";
-            bubble.style.top = Math.max(gap, Math.min(height - tip.height - gap, box.top + (box.height - tip.height) / 2)) + "px";
-            return;
-        }
-        const above = box.top - tip.height - gap;
-        let top = options.placement === "top" && above >= gap ? above
-            : box.bottom + gap + tip.height <= height - gap ? box.bottom + gap : above;
-        const left = Math.max(gap, Math.min(width - tip.width - gap, box.left + (box.width - tip.width) / 2));
-        top = Math.max(gap, Math.min(height - tip.height - gap, top));
-        // Hoverable help must not intercept neighboring actions when their group wraps.
-        const owner = options.owner || active;
+        const owner = options.owner || target;
         const group = (owner.closest(".ux-disabled-help") || owner).parentElement;
         const neighbors = [...(group?.querySelectorAll("button,a[href],input,select,textarea,summary,[role=button],[role=combobox]") || [])]
-            .filter(node => node !== owner && !node.contains(owner) && !owner.contains(node) && node.checkVisibility({ visibilityProperty: true }))
-            .map(node => node.getBoundingClientRect())
-            .filter(rect => rect.width && rect.height && rect.left < left + tip.width && rect.right > left);
-        const intersects = (y, rect) => y < rect.bottom && y + tip.height > rect.top;
-        if (neighbors.some(rect => intersects(top, rect))) {
-            const candidates = neighbors.flatMap(rect => [rect.top - tip.height - gap, rect.bottom + gap])
-                .filter(y => y >= gap && y + tip.height <= height - gap && !intersects(y, box)
-                    && neighbors.every(rect => !intersects(y, rect)));
-            candidates.sort((a, b) => Math.abs(a - top) - Math.abs(b - top));
-            if (candidates.length) top = candidates[0];
-        }
-        bubble.style.left = left + "px";
-        bubble.style.top = top + "px";
+            .filter(node => node !== owner && !node.contains(owner) && !owner.contains(node));
+        const avoid = typeof options.avoid === "function" ? options.avoid() : options.avoid;
+        if (active !== target || tooltipOptions.get(target) !== options) return;
+        if (!target.isConnected || !target.checkVisibility()) { hideTooltip(); return; }
+        const protectedBoxes = [...new Set([...neighbors, ...(avoid || [])])]
+            .filter(node => node.isConnected && node.checkVisibility({ visibilityProperty: true }))
+            .map(visibleTooltipBox).filter(Boolean);
+        const centerX = (box.left + box.right - tip.width) / 2, centerY = (box.top + box.bottom - tip.height) / 2;
+        const sides = {
+            right: { left: box.right + gap, top: centerY }, left: { left: box.left - tip.width - gap, top: centerY },
+            bottom: { left: centerX, top: box.bottom + gap }, top: { left: centerX, top: box.top - tip.height - gap },
+        };
+        const order = options.placement === "right" ? ["right", "left", "bottom", "top"]
+            : options.placement === "top" ? ["top", "bottom", "right", "left"] : ["bottom", "top", "right", "left"];
+        const preferred = sides[order[0]];
+        const candidates = order.map(side => sides[side]);
+        for (const rect of protectedBoxes) candidates.push(
+            { left: preferred.left, top: rect.top - tip.height - gap },
+            { left: preferred.left, top: rect.bottom + gap });
+        const overlap = (point, rect) => Math.max(0, Math.min(point.left + tip.width, rect.right) - Math.max(point.left, rect.left))
+            * Math.max(0, Math.min(point.top + tip.height, rect.bottom) - Math.max(point.top, rect.top));
+        const ranked = candidates.map((point, index) => {
+            const clamped = { left: Math.max(gap, Math.min(width - tip.width - gap, point.left)),
+                top: Math.max(gap, Math.min(height - tip.height - gap, point.top)) };
+            return { ...clamped, index, ownerOverlap: overlap(clamped, box),
+                overlap: protectedBoxes.reduce((sum, rect) => sum + overlap(clamped, rect), 0),
+                distance: Math.hypot(clamped.left - preferred.left, clamped.top - preferred.top) };
+        }).sort((a, b) => a.ownerOverlap - b.ownerOverlap || a.overlap - b.overlap || a.distance - b.distance || a.index - b.index);
+        const position = ranked[0];
+        if (bubble.style.left !== position.left + "px") bubble.style.left = position.left + "px";
+        if (bubble.style.top !== position.top + "px") bubble.style.top = position.top + "px";
     }
     function clearTooltip() {
         tooltipResize.disconnect();
@@ -101,11 +143,11 @@ export function createEvidenceUX(icons) {
         if (active) {
             const ids = (active.getAttribute("aria-describedby") || "").split(/\s+/).filter((id) => id && id !== bubble.id);
             if (ids.length) active.setAttribute("aria-describedby", ids.join(" "));
-            else active.removeAttribute("aria-describedby");
+            else removeOwnedAttribute(active, "aria-describedby");
         }
         if (bubble.matches(":popover-open")) bubble.hidePopover();
         bubble.hidden = true;
-        bubble.textContent = "";
+        setOwnedText(bubble);
         active = null;
         pinned = null;
     }
@@ -123,15 +165,44 @@ export function createEvidenceUX(icons) {
         if (focused === trigger(node)) focusSource = "restored";
         node.focus({ preventScroll: true });
     }
+    function dismissOnOutside(dialog, requestClose) {
+        if (!(dialog instanceof HTMLDialogElement) || typeof requestClose !== "function") {
+            throw new TypeError("Outside dismissal requires a native dialog and its owner's close handler.");
+        }
+        let outsidePointer = null;
+        const outside = event => {
+            if (event.target !== dialog || !dialog.open || !dialog.matches(":modal")) return false;
+            const box = dialog.getBoundingClientRect();
+            return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+        };
+        listen(dialog, "pointerdown", event => {
+            outsidePointer = event.button === 0 && outside(event) ? event.pointerId : null;
+        });
+        listen(dialog, "pointercancel", () => { outsidePointer = null; });
+        listen(dialog, "close", () => { outsidePointer = null; });
+        listen(dialog, "click", event => {
+            const dismiss = outsidePointer !== null && event.detail > 0 && outside(event);
+            outsidePointer = null;
+            if (!dismiss) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            requestClose();
+        });
+    }
     function showTooltip(node, source = "focus") {
-        if (!node?.isConnected || !node.checkVisibility()) return;
+        if (!node?.isConnected || !node.checkVisibility()) return false;
+        const registration = descriptions.get(node);
+        if (!registration) return false;
         const key = identity(node);
-        if (source !== "help" && (source === "pointer" ? suppressedPointer === key : suppressedFocus === key)) return;
-        const text = tooltipText(node);
-        if (!text) { hideTooltip(); return; }
+        if (source !== "help" && (source === "pointer" ? suppressedPointer === key : suppressedFocus === key)) return false;
+        const text = tooltipText(registration);
+        if (!currentTooltip(node, registration)) return false;
+        if (!text) { hideTooltip(); return false; }
         clearTooltip();
+        if (!currentTooltip(node, registration)) return false;
         active = node;
-        bubble.textContent = text;
+        setOwnedText(bubble, text);
+        bubble.scrollTop = bubble.scrollLeft = 0;
         bubble.dataset.tone = tooltipOptions.get(node)?.tone || "default";
         (node.closest("dialog[open]") || document.body).append(bubble);
         const ids = new Set((node.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
@@ -139,11 +210,13 @@ export function createEvidenceUX(icons) {
         node.setAttribute("aria-describedby", [...ids].join(" "));
         bubble.hidden = false;
         if (typeof bubble.showPopover === "function") bubble.showPopover();
+        if (active !== node || !currentTooltip(node, registration)) return false;
         positionTooltip();
         tooltipResize.observe(bubble);
         tooltipResize.observe(node);
         const anchor = tooltipOptions.get(node)?.anchor;
         if (anchor && anchor !== node) tooltipResize.observe(anchor);
+        return active === node && currentTooltip(node, registration);
     }
     function scheduleClose() {
         clearTimeout(openTimer);
@@ -249,14 +322,21 @@ export function createEvidenceUX(icons) {
         const node = trigger(event.target);
         if (tooltipOptions.get(node)?.helpOnActivate) {
             const owner = tooltipOptions.get(node)?.owner || node;
-            showTooltip(owner, "help");
-            pinned = owner;
+            if (showTooltip(owner, "help")) pinned = owner;
         }
     });
     listen(document, "keydown", (event) => {
         if (event.isTrusted) { restoredPage = false; inputSource = "focus"; }
         // Tab starts a deliberate keyboard visit; rendering never emits a Tab.
         if (event.key === "Tab") suppressedFocus = null;
+        if (active && focused === active && focusSource === "focus" && ["PageDown", "PageUp"].includes(event.key)
+            && !event.target.closest?.("input,textarea,select,[contenteditable],[role=combobox],[role=option],[role=menuitem]")
+            && bubble.scrollHeight > bubble.clientHeight) {
+            bubble.scrollTop += (event.key === "PageDown" ? 1 : -1) * bubble.clientHeight * .8;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+        }
         if (event.key === "Escape" && (active || openTimer)) {
             hideTooltip();
             event.preventDefault();
@@ -282,11 +362,12 @@ export function createEvidenceUX(icons) {
                 enhanceDisclosures(change.target);
                 for (const node of change.addedNodes) if (node instanceof Element) enhanceDisclosures(node);
                 for (const node of change.removedNodes) if (node instanceof Element && !node.isConnected) {
-                    for (const control of [node, ...node.querySelectorAll(".ux-copy")]) copySources.delete(control);
+                    for (const control of [node, ...node.querySelectorAll(".ux-copy,[data-ux-tooltip]")]) retireRegistrations(control);
                 }
             }
         }
         if (active && (!active.isConnected || !active.checkVisibility())) hideTooltip();
+        else if (active) positionTooltip();
         if (opening && (!opening.isConnected || !opening.checkVisibility())) hideTooltip();
         if (hovered && !hovered.isConnected) hovered = null;
         if (focused && !focused.isConnected) { focused = null; focusSource = null; }
@@ -313,14 +394,18 @@ export function createEvidenceUX(icons) {
     }
 
     function tooltip(node, text, options = {}) {
-        descriptions.set(node, text);
+        const previous = descriptions.get(node);
+        if (previous) previous.text = null;
+        const registration = { text };
+        descriptions.set(node, registration);
         tooltipOptions.set(node, options);
         node.dataset.uxTooltip = "";
-        node.removeAttribute("title");
+        removeOwnedAttribute(node, "title");
         if (active === node) {
-            const value = tooltipText(node);
+            const value = tooltipText(registration);
+            if (active !== node || !currentTooltip(node, registration)) return node;
             if (!value) hideTooltip();
-            else { bubble.textContent = value; positionTooltip(); }
+            else { setOwnedText(bubble, value); positionTooltip(); }
         }
         return node;
     }
@@ -385,8 +470,7 @@ export function createEvidenceUX(icons) {
         control.addEventListener("click", (event) => {
             event.preventDefault();
             event.stopPropagation();
-            showTooltip(control, "help");
-            pinned = control;
+            if (showTooltip(control, "help")) pinned = control;
         });
         return control;
     }
@@ -402,7 +486,8 @@ export function createEvidenceUX(icons) {
         const control = document.createElement("button");
         control.type = "button";
         control.className = "ux-copy";
-        copySources.set(control, getText);
+        const source = { read: getText, revoke };
+        copySources.set(control, source);
         getText = null;
         control.setAttribute("aria-label", label);
         function paintIcon(name) {
@@ -415,10 +500,20 @@ export function createEvidenceUX(icons) {
         status.setAttribute("role", "status");
         status.setAttribute("aria-live", "polite");
         status.hidden = true;
-        let pending = false, resetTimer;
+        let pending = false, retired = false, resetTimer;
+        const current = () => !retired && control.isConnected && copySources.get(control) === source;
+        function revoke() {
+            retired = true; source.read = null; label = help = "";
+            clearTimeout(resetTimer);
+            copySources.delete(control);
+            retireTooltip(control);
+            for (const name of ["data-ux-tooltip", "data-copy-state", "aria-label", "aria-disabled", "aria-busy"]) removeOwnedAttribute(control, name);
+            control.disabled = true;
+            setOwnedText(status); status.remove();
+        }
         class CopyUnavailableError extends Error {}
         control.addEventListener("click", async () => {
-            if (!control.isConnected || pending || control.disabled) return;
+            if (retired || !control.isConnected || pending || control.disabled) return;
             clearTimeout(resetTimer);
             pending = true;
             control.setAttribute("aria-disabled", "true");
@@ -429,41 +524,49 @@ export function createEvidenceUX(icons) {
             status.hidden = false;
             status.className = "ux-copy-status visually-hidden";
             status.setAttribute("role", "status");
-            status.textContent = "Writing to clipboard...";
+            setOwnedText(status, "Writing to clipboard...");
             let reading = true;
             try {
-                const text = control.isConnected ? copySources.get(control)?.() : null;
+                let text = control.isConnected ? copySources.get(control)?.read?.() : null;
+                if (!current()) { text = null; return; }
                 if (typeof text !== "string") throw new CopyUnavailableError("The text is unavailable. Reopen this section and try again.");
                 reading = false;
-                if (!navigator.clipboard?.writeText) throw new CopyUnavailableError("Clipboard access is unavailable in this browser. Select the text and copy it manually.");
-                await navigator.clipboard.writeText(text);
-                if (!control.isConnected || !copySources.has(control)) return;
+                const clipboard = navigator.clipboard, write = clipboard?.writeText;
+                if (!current()) { text = null; return; }
+                if (typeof write !== "function") throw new CopyUnavailableError("Clipboard access is unavailable in this browser. Select the text and copy it manually.");
+                const writing = write.call(clipboard, text);
+                text = null;
+                await writing;
+                if (!current()) return;
                 control.dataset.copyState = "success";
                 paintIcon("check");
                 status.className = "ux-copy-status visually-hidden";
-                status.textContent = "Copied to clipboard.";
+                setOwnedText(status, "Copied to clipboard.");
                 tooltip(control, "Copied to clipboard.");
                 resetTimer = setTimeout(() => {
+                    if (!current()) return;
                     control.dataset.copyState = "idle";
                     paintIcon("copy");
                     tooltip(control, help);
                 }, 2200);
             } catch (error) {
-                if (!control.isConnected || !copySources.has(control)) return;
+                if (!current()) return;
                 control.dataset.copyState = "error";
                 paintIcon("copy");
                 status.className = "ux-copy-status error";
                 status.setAttribute("role", "alert");
-                status.textContent = error instanceof CopyUnavailableError ? error.message : reading
+                setOwnedText(status, error instanceof CopyUnavailableError ? error.message : reading
                     ? "The text is unavailable. Reopen this section and try again."
                     : error?.name === "NotAllowedError"
                         ? "Couldn't copy. Clipboard permission was denied. Select the text and copy it manually."
-                        : "Couldn't copy to the clipboard. Select the text and copy it manually.";
+                        : "Couldn't copy to the clipboard. Select the text and copy it manually.");
                 tooltip(control, "Copy failed. Select the text and copy it manually, or try again.");
             } finally {
                 pending = false;
-                control.removeAttribute("aria-disabled");
-                control.removeAttribute("aria-busy");
+                if (current()) {
+                    removeOwnedAttribute(control, "aria-disabled");
+                    removeOwnedAttribute(control, "aria-busy");
+                }
             }
         });
         return control;
@@ -538,7 +641,24 @@ export function createEvidenceUX(icons) {
         }
         marker.classList.toggle("pending-indicator", value);
     }
-    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, pending,
+    function withdrawAccess(roots) {
+        const contains = node => node && roots.some(root => root === node || root.contains(node));
+        suppressedPointer = suppressedFocus = null;
+        pointer = null;
+        if ([active, opening, hovered, focused, pinned].some(contains)) {
+            clearTooltip();
+            active = opening = hovered = focused = pinned = null;
+            suppressedPointer = suppressedFocus = null;
+        }
+        for (const root of roots) for (const node of [root, ...root.querySelectorAll("*")]) {
+            retireRegistrations(node);
+        }
+    }
+    function retireRegistrations(node) {
+        copySources.get(node)?.revoke();
+        retireTooltip(node); disabledReasons.delete(node); pendingIcons.delete(node);
+    }
+    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, pending, withdrawAccess,
         destroy() {
             clearTooltip();
             observer.disconnect();

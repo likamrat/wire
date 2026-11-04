@@ -34,6 +34,9 @@ export const settingsStyles = `
 .collection-status-view .collection-issues>.collection-issues-body>p.settings-help {margin-top:16px}
 .collection-status-view .history-issue-detail {padding-left:0}
 .collection-status-view #collectionIssueLabel {font-size:var(--type-reading);font-weight:600}
+.collection-status-view #collectionIssueCounts:not([hidden]) {display:flex;flex-wrap:wrap;column-gap:var(--space-lg);row-gap:var(--space-sm)}
+#collectionIssueCounts>.history-status-count {min-width:0;overflow-wrap:anywhere}
+#collectionIssueCounts .history-status-value {color:var(--ink);font-weight:var(--weight-strong)}
 .collection-status-view .collection-issues[data-severity=error] #collectionIssueLabel {color:var(--danger)}
 .collection-status-view .history-reason>summary {text-wrap:pretty}
 .collection-status-view .facts {max-width:100%;grid-template-columns:minmax(0,2fr) minmax(0,1fr);font-size:1rem;line-height:1.5}
@@ -94,8 +97,8 @@ export const settingsStyles = `
 .settings-view :is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy):focus-visible::before {outline:2px solid var(--focus);outline-offset:2px}
 .settings-view .ux-disabled-help:focus-visible:has(>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)) {outline:none}
 .settings-view .ux-disabled-help:focus-visible>button:not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy)::before {outline:2px solid var(--focus);outline-offset:2px}
-.settings-view :is(#checkActivity,#refreshBtn) {gap:.375em}
-.settings-view :is(#checkActivity,#refreshBtn)>.wire-icon {width:1rem;height:1rem}
+.settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead) {gap:.375em}
+.settings-view :is(#checkActivity,#refreshBtn,#freshStoredRead)>.wire-icon {width:1rem;height:1rem}
 .settings-view #reloadSettings {margin-bottom:16px}
 .settings-view :is(input[type=text],.select-trigger) {border-radius:var(--settings-field-radius)}
 .settings-section {padding:24px;background:var(--paper);border-radius:var(--radius);margin-bottom:20px}
@@ -103,13 +106,14 @@ export const settingsStyles = `
 .settings-section h3 {font-size:var(--type-body);line-height:var(--leading-ui)}
 .settings-view .settings-section {padding:0;background:transparent;border:0;border-radius:0;margin:0}
 .settings-view .settings-section>h2 {margin:0}
-.settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group) {margin-bottom:20px}
+.settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group),.settings-view .settings-section>h2:has(+.settings-theme-row) {margin-bottom:20px}
 .settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.5rem;line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
 .settings-section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:24px}
 .settings-section-heading p,.settings-help {color:var(--muted)}
 .settings-section p {margin-top:8px;max-width:70ch}
 .settings-section .settings-help {font-size:var(--type-small);line-height:var(--leading-ui)}
+#sourceMicrosoftProgress {white-space:pre-line}
 .settings-view .settings-section-heading p {font-size:var(--type-reading);line-height:var(--leading-reading)}
 .connection-status {font-weight:var(--weight-medium);color:var(--ink);overflow-wrap:anywhere}
 .settings-source-state {display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}
@@ -155,7 +159,8 @@ export const settingsStyles = `
 .settings-row-copy p,.settings-row-copy .settings-help {color:var(--muted);margin:6px 0 0;max-width:52ch}
 .settings-task-row>:is(button,.button-link,.ux-disabled-help) {justify-self:end;max-width:100%}
 #approvedConnection>p {margin:0}
-#approvedConnection>.settings-actions {margin-top:8px}
+#approvedConnection {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 16px}
+#approvedConnection>.settings-actions {margin-top:0}
 #unapprovedConnection>p {margin:0}
 .settings-group {margin:0;padding-block:20px;border-top:1px solid transparent}
 .settings-view .settings-group {padding-block:20px;border-top-color:var(--rule)}
@@ -169,13 +174,12 @@ export const settingsStyles = `
 .settings-view .fresh-controls>:is(#checkActivity,.ux-disabled-help) {grid-column:2;grid-row:1;justify-self:end;align-self:center}
 .settings-view .fresh-details {display:none}
 .settings-view .settings-refresh-context {grid-column:1;grid-row:2;margin:0;color:var(--muted)}
-.settings-view .fresh-result {grid-column:1/-1;grid-row:3;margin-top:0}
-.settings-view .fresh-controls:has(.settings-refresh-context:not([hidden])) .fresh-result {margin-top:8px}
-.settings-view .settings-refresh-details {grid-column:1/-1;grid-row:4;margin-top:8px;color:var(--muted)}
-.settings-view .settings-refresh-details>p:first-child {margin-top:0}
-.settings-view .settings-refresh-details p {font-size:var(--type-small)}
-.settings-view .settings-refresh-details ul {margin:8px 0;padding-inline-start:20px}
-.settings-view .settings-refresh-details li {margin-block:4px}
+.settings-view .fresh-result {grid-column:1/-1;grid-row:3;margin-top:12px}
+.fresh-result-summary {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+.fresh-result-summary #freshChecked {font-size:var(--type-small);font-weight:var(--weight-regular)}
+.settings-view .fresh-result-summary>p {margin:0}
+.settings-view #freshCoverageAnnouncement {display:block;margin-top:4px;color:var(--muted);font-size:var(--type-small)}
+.settings-view .fresh-result-meta {gap:0 16px}
 .settings-group-heading .connection-status {font-size:var(--type-small)}
 #approvedConnection,#unapprovedConnection {padding:0;border:0}
 #connectionSource:has(#approvedConnection[hidden]) .source-editor {margin-top:0;padding-block:0;border-top:0}
@@ -236,7 +240,7 @@ export const settingsStyles = `
 .settings-view [data-settings-section=display]>.settings-theme-row {padding-top:0;border:0}
 .settings-view .settings-theme-row {align-items:center}
 .settings-view .settings-theme-row .theme-trigger {border-radius:var(--radius-pill)}
-.settings-view .settings-section>:last-child {padding-bottom:0}
+.settings-view .settings-section>:nth-last-child(1 of :not([hidden])) {padding-bottom:0}
 .display-time-field p {overflow-wrap:anywhere}
 .permission-boundary {margin-top:20px!important;padding-top:16px;border-top:1px solid var(--rule)}
 #unapprovedConnection>.ux-disabled-help {margin-top:16px}
@@ -266,7 +270,7 @@ export const settingsStyles = `
  .settings-view .settings-refresh-context {grid-column:1;grid-row:2;margin-bottom:8px}
  .settings-view .fresh-controls>:is(#checkActivity,.ux-disabled-help) {grid-column:1;grid-row:3;justify-self:start}
  .settings-view .fresh-result {grid-row:4}
- .settings-view .settings-refresh-details {grid-row:5}
+ .settings-view .settings-refresh-actions {grid-column:1;grid-row:3;justify-content:flex-start}
  .settings-view :is(.settings-actions,.assessment-control-actions) {justify-content:flex-start}
 }
 @media(max-width:699px) {

@@ -1,4 +1,7 @@
-export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallbackFocus }) {
+export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallbackFocus, createEligibilityState }) {
+    if (typeof api !== "function" || typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function") {
+        throw new TypeError("An access-aware API with publicationToken() and isCurrent() is required.");
+    }
     const dialog = document.createElement("dialog");
     dialog.className = "deletion-dialog decision-frame";
     dialog.dataset.decisionKind = "destructive";
@@ -33,21 +36,77 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
     const receiptKey = "wire.saved-artifact-deletion";
     let generation = 0, phase = "closed", preview = null, target = null, trigger = null, operationId = null, receiptToken = null;
     let taskActive = false, restoreOnClose = true;
+    let accessAvailable = true, accessEpoch = 0, suppressedCloses = 0;
+    const publication = () => ({ epoch: accessEpoch, token: api.publicationToken() });
+    const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
+        && api.isCurrent(access.token) === true;
     const busy = () => taskActive || ["loading", "pending", "checking"].includes(phase);
     const dismissalLocked = () => phase === "pending";
+    const eligibilityState = createEligibilityState?.();
+    let eligibility = null;
+    function eligibilityStamp(binding) {
+        if (!binding || !binding.isCurrent() || !current(publication())) return null;
+        const access = api.accessState();
+        return { target: binding.target, revision: binding.getRevision(), publication: api.publicationToken(),
+            owner: api.controlToken(), authorizationRevision: access.state?.authorizationRevision };
+    }
+    function clearEligibility(message = "Read current deletion availability before using Delete.") {
+        const previous = eligibility;
+        eligibility = null; eligibilityState?.invalidate(); previous?.controller.abort();
+        previous?.onChange(false, message);
+    }
+    async function qualify(target, options) {
+        clearEligibility();
+        const binding = { ...options, target: { artifactKind: target.artifactKind, artifactId: target.artifactId },
+            controller: new AbortController() };
+        eligibility = binding;
+        binding.onChange(false, "Checking deletion availability. Nothing is being deleted.");
+        try {
+            if (!eligibilityState || busy() || phase === "unknown") throw new Error("An earlier saved-item operation must be settled first.");
+            const ticket = eligibilityState.begin(eligibilityStamp(binding));
+            const result = await api("/api/artifact-deletion/eligibility", binding.target, { signal: binding.controller.signal });
+            if (eligibility !== binding || binding.controller.signal.aborted) return false;
+            const allowed = eligibilityState.receive(ticket, result, eligibilityStamp(binding));
+            binding.onChange(allowed, allowed ? "Delete opens a separate preview and confirmation; nothing has been deleted."
+                : "Deletion is not available for this saved item in the current access.");
+            return allowed;
+        } catch (error) {
+            if (eligibility !== binding || binding.controller.signal.aborted) return false;
+            eligibilityState?.invalidate();
+            binding.onChange(false, error.status === 403 ? "Deletion is not available for this saved item in the current access."
+                : "Deletion availability could not be verified. " + error.message);
+            return false;
+        }
+    }
+    function eligible(target) {
+        if (!eligibility || target.artifactId !== eligibility.target.artifactId || target.artifactKind !== eligibility.target.artifactKind
+            || busy() || phase === "unknown") return false;
+        return eligibilityState.allowed(eligibilityStamp(eligibility));
+    }
+    function observeEligibility(revision) {
+        if (eligibility && (revision !== undefined && revision !== eligibility.getRevision()
+            || !eligibilityState.current(eligibilityStamp(eligibility)))) clearEligibility();
+    }
     function showRecovery() {
+        const access = publication();
+        if (!current(access)) return;
         const text = document.createElement("p");
         text.textContent = "An earlier saved-item deletion needs checking. No deletion will be repeated.";
         const action = button("Check earlier saved-item deletion", async event => {
+            if (!current(access)) return;
             await open(null, event.currentTarget);
-            if (phase === "unknown") await checkResult();
+            if (current(access) && phase === "unknown") await checkResult();
         });
         action.disabled = busy();
         recoveryNotice.replaceChildren(text, action);
         recoveryNotice.hidden = false;
     }
-    function message(text, error = false) { status.textContent = text; status.setAttribute("role", error ? "alert" : "status"); status.classList.toggle("error", error); }
+    function message(text, error = false) {
+        if (!current(publication())) return;
+        status.textContent = text; status.setAttribute("role", error ? "alert" : "status"); status.classList.toggle("error", error);
+    }
     function paint() {
+        if (!current(publication())) return;
         const displayPhase = phase === "preview" ? "confirm" : phase;
         if (dialog.dataset.decisionPhase !== displayPhase) {
             const role = phase === "complete" ? "check" : ["loading", "pending", "checking"].includes(phase) ? "pending" : "warning";
@@ -98,11 +157,13 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
         catch { onError("The completed deletion receipt could not be cleared from this panel. Checking it again will not repeat deletion."); }
     }
     async function cancelPreview(value) {
-        if (!value?.operationId) return;
+        const access = publication();
+        if (!current(access) || !value?.operationId) return;
         try { await api("/api/artifact-deletion/cancel", { operationId: value.operationId }); }
-        catch (error) { onError("The saved-object preview could not be cancelled. Do not reuse it; it will expire. " + error.message); }
+        catch (error) { if (current(access)) onError("The saved-object preview could not be cancelled. Do not reuse it; it will expire. " + error.message); }
     }
-    async function result(value) {
+    async function result(value, access) {
+        if (!current(access)) return;
         if (!value || value.operationId !== operationId) throw new Error("This deletion receipt belongs to another operation.");
         if (value.phase === "complete") {
             const bulk = value.scope === "all-reports";
@@ -120,7 +181,9 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
                 : "The saved " + (value.artifact.artifactKind === "comparison" ? "comparison" : "report") + " was deleted. Source activity and other saved objects are unchanged.");
             paint();
             const displayedGeneration = generation;
-            if (await onDeleted(bulk ? { scope: value.scope, artifacts: value.artifacts } : value.artifact) === false) message("Deletion completed, but the saved list could not refresh. Use Retry; do not repeat deletion.", true);
+            const applied = await onDeleted(bulk ? { scope: value.scope, artifacts: value.artifacts } : value.artifact);
+            if (!current(access)) return;
+            if (applied === false) message("Deletion completed, but the saved list could not refresh. Use Retry; do not repeat deletion.", true);
             if (dialog.open && generation === displayedGeneration) cancel.focus();
         } else if (value.phase === "not-started") {
             phase = "not-started"; forget(); message("No committed deletion was found. Nothing was retried. Close this dialog and start a fresh preview if needed.");
@@ -134,7 +197,8 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
         paint();
     }
     async function commit() {
-        if (phase !== "preview" || !preview || busy()) return;
+        const access = publication();
+        if (!current(access) || phase !== "preview" || !preview || busy()) return;
         operationId = preview.operationId;
         receiptToken = preview.receiptToken;
         try { sessionStorage.setItem(receiptKey, JSON.stringify({ operationId, receiptToken })); }
@@ -142,20 +206,23 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
         taskActive = true;
         phase = "pending"; message(target?.scope === "all-reports" ? "Deleting only the reviewed reports and their managed copies. Cleanup may finish in stages..."
             : "Deleting only this saved object's managed files and copies..."); paint(); status.focus();
-        try { await result(await api("/api/artifact-deletion/confirm", { operationId, confirmed: true })); }
-        catch (error) { phase = "unknown"; message(error.message + " Check the original deletion result; do not repeat it.", true); paint(); }
-        finally { taskActive = false; paint(); }
+        try { await result(await api("/api/artifact-deletion/confirm", { operationId, confirmed: true }), access); }
+        catch (error) { if (current(access)) { phase = "unknown"; message(error.message + " Check the original deletion result; do not repeat it.", true); paint(); } }
+        finally { if (current(access)) { taskActive = false; paint(); } }
     }
     async function checkResult() {
-        if (phase !== "unknown" || !operationId || busy()) return;
+        const access = publication();
+        if (!current(access) || phase !== "unknown" || !operationId || busy()) return;
         taskActive = true;
         phase = "checking"; paint();
-        try { await result(await api("/api/artifact-deletion/status", { operationId, ...(receiptToken ? { receiptToken } : {}) })); }
-        catch (error) { phase = "unknown"; message(error.message + " No deletion was repeated.", true); paint(); }
-        finally { taskActive = false; paint(); }
+        try { await result(await api("/api/artifact-deletion/status", { operationId, ...(receiptToken ? { receiptToken } : {}) }), access); }
+        catch (error) { if (current(access)) { phase = "unknown"; message(error.message + " No deletion was repeated.", true); paint(); } }
+        finally { if (current(access)) { taskActive = false; paint(); } }
     }
     async function open(value, from) {
-        if (busy()) return;
+        clearEligibility();
+        const access = publication();
+        if (!current(access) || busy()) return;
         restoreOnClose = true;
         trigger = from; target = value; preview = null;
         identity.textContent = ""; scope.textContent = ""; preservation.textContent = ""; dependents.textContent = "";
@@ -201,6 +268,7 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
         paint(); if (!dialog.open) dialog.showModal(); cancel.focus();
         try {
             const response = await api("/api/artifact-deletion/preview", bulk ? { scope: "all-reports" } : { artifactKind: value.artifactKind, artifactId: value.artifactId });
+            if (!current(access)) return;
             if (token !== generation || !dialog.open) { await cancelPreview(response); return; }
             preview = validatePreview(response, value);
             scope.textContent = bulk
@@ -212,15 +280,19 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
                 : "";
             confirm.textContent = bulk ? `Delete ${preview.counts.reports.toLocaleString()} saved reports` : value.artifactKind === "comparison" ? "Delete saved comparison" : "Delete report";
             phase = "preview"; paint();
-        } catch (error) { if (token === generation) { phase = "error"; message(error.message + " Nothing was deleted.", true); paint(); } }
+        } catch (error) { if (current(access) && token === generation) { phase = "error"; message(error.message + " Nothing was deleted.", true); paint(); } }
         finally {
-            taskActive = false;
-            if (!dialog.open && phase === "loading") phase = "closed";
-            paint();
+            if (current(access)) {
+                taskActive = false;
+                if (!dialog.open && phase === "loading") phase = "closed";
+                paint();
+            }
         }
     }
     dialog.addEventListener("cancel", event => { if (dismissalLocked()) event.preventDefault(); });
     dialog.addEventListener("close", () => {
+        if (suppressedCloses) { suppressedCloses--; return; }
+        if (!current(publication())) return;
         if (dialog.open) return;
         generation++;
         if (phase === "preview") cancelPreview(preview);
@@ -237,15 +309,37 @@ export function createSavedArtifactDeletion({ api, ux, onDeleted, onError, fallb
     catch {
         const notice = document.createElement("p");
         notice.textContent = "The panel cannot read its saved-item deletion receipt. No deletion has been requested.";
-        recoveryNotice.replaceChildren(notice); recoveryNotice.hidden = false;
+        if (current(publication())) { recoveryNotice.replaceChildren(notice); recoveryNotice.hidden = false; }
+    }
+    function withdrawAccess() {
+        clearEligibility("Current access is required to check deletion availability.");
+        if (!accessAvailable) return;
+        accessAvailable = false; accessEpoch++; generation++;
+        if (["pending", "checking"].includes(phase)) phase = "unknown";
+        else if (!["unknown", "complete", "not-started"].includes(phase)) phase = "closed";
+        target = null; preview = null; trigger = null; taskActive = false; restoreOnClose = false;
+        if (dialog.open) { suppressedCloses++; dialog.close(); }
+        for (const node of [title, identity, scope, preservation, dependents, status]) node.textContent = "";
+        confirm.textContent = "Delete saved item";
+        recoveryNotice.replaceChildren(); recoveryNotice.hidden = true;
+        delete dialog.dataset.decisionPhase; dialog.removeAttribute("aria-busy");
+        for (const node of [cancel, confirm, check]) node.disabled = true;
     }
     return {
-        open,
+        open, qualify, eligible, observeEligibility, clearEligibility,
+        withdrawAccess,
+        resumeAccess() {
+            const access = publication();
+            if (access.epoch === accessEpoch && access.token != null && api.isCurrent(access.token) === true) accessAvailable = true;
+        },
         leave() {
+            clearEligibility();
             restoreOnClose = false;
             if (dialog.open) dialog.close();
         },
         invalidate() {
+            clearEligibility();
+            if (!current(publication())) return;
             if (phase === "preview" || phase === "loading") {
                 generation++; cancelPreview(preview); preview = null; phase = "error";
                 message("Saved objects changed. Close this dialog and request a fresh deletion preview.", true); paint();

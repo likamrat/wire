@@ -111,11 +111,15 @@ test("human duration rounding crosses minute/hour boundaries without losing exac
 
 test("compact screen duration keeps exact milliseconds and report formatting independent", () => {
     const screen = createTimingPresentation(undefined, { compact: true });
-    for (const [milliseconds, displayed] of [[null, "Not measured"], [0, "0 s"], [0.004, "<0.01 s"],
-        [9, "<0.01 s"], [10, "0.01 s"], [2955, "2.96 s"], [59994, "59.99 s"], [59995, "1:00 min"],
-        [60000, "1:00 min"], [84892, "1:25 min"], [104000, "1:44 min"], [114090, "1:54 min"],
-        [119499, "1:59 min"], [119500, "2:00 min"], [3599499, "59:59 min"], [3599500, "1:00:00 h"],
-        [3600000, "1:00:00 h"], [90061004, "25:01:01 h"]]) {
+    for (const [milliseconds, displayed] of [[null, "Not measured"], [0, "0 ms"], [0.004, "0.004 ms"],
+        [9, "9 ms"], [10, "10 ms"], [325, "325 ms"], [2955, "2,955 ms (2.955 s)"],
+        [11850, "11,850 ms (11.85 s)"], [11845, "11,845 ms (11.845 s)"],
+        [59994, "59,994 ms (59.994 s)"], [59995, "59,995 ms (59.995 s)"],
+        [60000, "60,000 ms (60 s)"], [84892, "84,892 ms (84.892 s)"],
+        [104000, "104,000 ms (104 s)"], [114090, "114,090 ms (114.09 s)"],
+        [119499, "119,499 ms (119.499 s)"], [119500, "119,500 ms (119.5 s)"],
+        [3599499, "3,599,499 ms (3,599.499 s)"], [3599500, "3,599,500 ms (3,599.5 s)"],
+        [3600000, "3,600,000 ms (3,600 s)"], [90061004, "90,061,004 ms (90,061.004 s)"]]) {
         assert.equal(screen.duration(milliseconds), displayed);
         if (milliseconds === null) continue;
         const source = metric([milliseconds]), before = structuredClone(source), shown = screen.fromMetric(source);

@@ -251,7 +251,8 @@ test("real retained readers yield all corpus types, canonical targets and immuta
     assert.match(frozenComparison.target.documentHash, /^[a-f0-9]{64}$/);
     assert.equal(JSON.stringify(items).match(/HIDDEN_NOT_RETAINED|payloadFile|receiptToken|sourceConfigRef|bundleDir|C:\\\\/g)?.join(",") ?? null, null);
     const settings = createSettingsNavigation(), settingsItems = items.filter(item => item.type === "setting");
-    assert.equal(settingsItems.length, 19);
+    assert.ok(settings.entries.length > 0);
+    assert.deepEqual(settingsItems.map(item => item.id).sort(), settings.entries.map(setting => corpusId("setting", setting.id)).sort());
     assert.ok(settingsItems.every(item => !item.target.href.includes("sidebar-motion")));
     for (const item of settingsItems) {
         const [view, query] = item.target.href.slice(1).split("?"), parameters = Object.fromEntries(new URLSearchParams(query));

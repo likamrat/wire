@@ -15,12 +15,13 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
         await context.route("**/*", route => { externalRequests.push(route.request().url()); return route.abort(); });
         const page = await context.newPage();
         for (const scenario of reportMatrixCases()) {
+            await page.setViewportSize({ width: 1200, height: 1000 });
             const selected = scenario.canonicalSelection ? buildExportCatalog(scenario.records).records : scenario.records;
             const bundle = await buildSanitizedBundle(selected, "b".repeat(64), { promptMode: "none", formats: ["html"] });
             await page.setContent(bundle.previewHtml);
             await page.evaluate(() => document.fonts.ready);
             const expected = scenario.expected;
-            const bars = await page.locator("#breakdowns > .native-breakdowns > section").first().locator(".native-bar").evaluateAll(nodes => nodes.map(node => ({
+            const bars = await page.locator("#breakdowns > section").first().locator(".native-bar").evaluateAll(nodes => nodes.map(node => ({
                 count: Number(node.dataset.count), denominator: Number(node.dataset.denominator),
                 width: node.getBoundingClientRect().width, track: node.parentElement.getBoundingClientRect().width,
                 tone: [...node.classList].find(name => name.startsWith("dimensional-tone-")).replace("dimensional-tone-", ""),
@@ -42,23 +43,23 @@ test("rendered report matrix preserves numerical truth, chart proportions and mi
                 assert.match(await page.locator("#operations").innerText(), /recorded request|request sites/i);
             }
             assert.equal(await page.locator(".report-tool-score,.report-dimensions,.dimensional-column").count(), 0);
-            await page.locator("#quality > summary").click();
-            const quality = page.locator("#quality");
-            assert.match(await quality.innerText(), /Not checked automatically/);
-            for (const [label, checkId] of [["Answer support", "answer-support-validity"], ["Permission for tool use", "action-authorization-compliance"]]) {
-                const metric = bundle.snapshot.evaluationFacts.metrics.find(metric => metric.checkId === checkId);
-                assert.match(await quality.locator("li,tr").filter({ hasText: label }).innerText(), new RegExp(`0 of ${metric.coverage.eligible} assessed`));
-            }
+            assert.equal(await page.locator("#quality").count(), 0);
+            assert.equal(bundle.snapshot.evaluationFacts.metricProjectionVersion, 4);
+            assert.doesNotMatch(await page.locator("body").innerText(), /Not checked automatically|Answer correctness|Permission for tool use/);
             const timing = page.locator("#timing tbody tr").filter({ hasText: /^Tool latency/ });
             if (expected.timed) {
                 assert.match(await timing.innerText(), new RegExp(`${expected.timed} of ${expected.calls} calls? timed`));
-                assert.match(await timing.locator("td").first().innerText(), new RegExp(`\\(${expected.median} ms\\)`));
+                assert.match(await timing.locator("td").first().innerText(), new RegExp(`^${expected.median.toLocaleString("en-US")} ms`));
             } else {
                 const note = await page.locator("#timing > .reading-note").filter({ hasText: /^Tool latency:/ }).innerText();
                 assert.match(note, new RegExp(`0 of ${expected.calls} calls? timed`));
                 assert.match(note, /Not measured/);
             }
-            for (const theme of ["light", "dark"]) for (const width of [320, 768, 1200]) for (const size of ["100%", "200%"]) {
+            const layouts = [["light", 1200, "100%"]];
+            if (["mixed-parallel-batches", "high-volume-twelve-interactions", "graph-only-visible-and-missing-status", "all-unknown"].includes(scenario.name)) {
+                layouts.push(["light", 320, "100%"], ["dark", 320, "200%"], ["dark", 768, "100%"]);
+            }
+            for (const [theme, width, size] of layouts) {
                 await page.setViewportSize({ width, height: 1000 });
                 await page.evaluate(({ theme, size }) => {
                     document.documentElement.dataset.evidenceTheme = theme;

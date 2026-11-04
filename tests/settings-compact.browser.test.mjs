@@ -77,7 +77,8 @@ async function geometry(page) {
             const { x, y, width, height, bottom, right } = node.getBoundingClientRect();
             return { x, y, width, height, bottom, right };
         };
-        const rows = [...root.querySelectorAll(":scope>.settings-task-row,:scope>.settings-reply-row,:scope>.settings-group,:scope>.fresh-activity,:scope>.display-time-field,:scope>#automaticScoreSetup>.settings-automatic-row")];
+        const rows = [...root.querySelectorAll(":scope>.settings-task-row,:scope>.settings-reply-row,:scope>.settings-group,:scope>.fresh-activity,:scope>.display-time-field,:scope>#automaticScoreSetup>.settings-automatic-row")]
+            .filter(node => node.checkVisibility());
         return {
             category: root.dataset.settingsSection, pane: box(root),
             overflow: document.documentElement.scrollWidth > innerWidth + 1,
@@ -101,10 +102,11 @@ test("compact Settings keeps four current categories readable, bounded and actio
         for (const category of categories) {
             await navigateSettings(page, category);
             const value = await geometry(page);
+            await capture(page, `${category}-${width}-${theme}`);
             assert.equal(value.overflow, false);
             assert.deepEqual(value.clipped, []);
             for (const copy of value.copy) {
-                assert.ok(copy.lines <= 2, "Ordinary guidance never becomes a four-line narrow column");
+                assert.ok(copy.lines <= 2, `${category} ${width}px guidance (${copy.lines} lines): ${copy.text}`);
                 assert.ok(contrast(copy.color, copy.page) >= 4.5);
             }
             for (let index = 1; index < value.rows.length; index++) {
@@ -112,10 +114,9 @@ test("compact Settings keeps four current categories readable, bounded and actio
             }
             if (width === 1440) {
                 const limits = { connection: 490, privacy: 430, ai: 165, display: 225, troubleshooting: 375 };
-                assert.ok(value.pane.height <= limits[category], `${category} pane stays compact: ${value.pane.height}`);
+                assert.ok(value.pane.height <= limits[category], `${category} pane stays compact: ${value.pane.height}; rows=${JSON.stringify(value.rows)}`);
             }
             measures.push({ theme, width, ...value });
-            await capture(page, `${category}-${width}-${theme}`);
         }
     }
     for (const category of categories) {
@@ -175,7 +176,7 @@ test("consequences appear before independent confirmation; cancel never changes 
         const checkbox = page.locator("#assessmentSetup input[type=checkbox]");
         await checkbox.check();
         await expect(page.locator(".assessment-capture-details")).toBeVisible();
-        await expect(page.locator(".assessment-capture-details")).toContainText("Nothing is sent for AI review");
+        await expect(page.locator(".assessment-capture-details")).toContainText("does not send them to another service");
         await capture(page, `response-permission-${width}-${theme}`);
         await page.getByRole("button", { name: "Discard change", exact: true }).click();
         await expect(checkbox).not.toBeChecked();
@@ -269,9 +270,10 @@ test("a failed connection status read labels last-known settings and recovers by
         ? route.fulfill({ status: 503, json: { error: "Invented collection status unavailable." } }) : route.continue());
     await page.waitForResponse(response => response.url().endsWith("/api/collection/status") && response.status() === 503);
     await capture(page, "connection-read-failure");
-    await expect(page.locator('#settingsView [role=alert]:visible')).toContainText("Connection status could not be read");
+    await expect(page.locator('#settingsView [role=alert]:visible')).toContainText("Collection settings could not be read");
     await expect(page.locator("#connectionStatus")).toHaveText("Last known: Paused");
-    await expect(page.locator("#connectionApproval")).toHaveText("Previously approved");
+    await expect(page.locator("#approvedConnection")).toBeVisible();
+    await expect(page.locator("#connectionStatus")).toContainText("Last known:");
     await expect(page.locator("#pauseCollection")).toBeDisabled();
     await expect(page.locator("#reloadSettings")).toBeVisible();
     await page.locator("#reloadSettings").click();

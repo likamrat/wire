@@ -57,7 +57,7 @@ test("expired export capability is rejected before dispatch and permits a fresh 
     assert.equal((await loadBoardState(context)).exports.length, 0);
     assert.equal(requests.filter(item => item.path === "/api/export").length, 1, "Expired export is never automatically replayed");
     assert.equal(await page.getByRole("button", { name: "Check save status", exact: true }).count(), 0);
-    assert.match(await page.locator("#reportJourneyError").textContent(), /rejected before dispatch.*No files were written/);
+    assert.match(await page.locator("#reportJourneyError").textContent(), /action was not replayed.*No report was saved/);
     assert.equal(await page.getByRole("button", { name: "1. Activity", exact: true }).isEnabled(), true);
     await reportContents(page);
     assert.equal(await page.locator("#reportClearSelection").isEnabled(), true);
@@ -99,13 +99,13 @@ test("guided actual frontend: deliberate one-session scope, three stages and all
         await page.goto(runtime.url + "#activity?session=test-session"); await ready(page);
         const origin = page.url();
         await page.getByRole("button", { name: "Create report for this Copilot chat", exact: true }).click();
-        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 2 interactions");
+        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 2 interactions");
         assert.match(await page.locator(".report-entry-context").textContent(), /Calendar follow-up.*all retained dates and services/);
         assert.equal(await page.locator("[name=reportScope]:checked").inputValue(), "selected");
-        await page.locator("#pageAction").click();
+        await page.locator("#reportContextAction").click();
         assert.equal(page.url(), origin);
         await page.goBack();
-        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 2 interactions");
+        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 2 interactions");
         await reportContents(page);
         assert.equal(await page.locator("#reportStage2").isVisible(), true);
         assert.equal(await page.locator(".export-scope").isVisible(), true, "Activity stays visible beside contextual Contents");
@@ -120,7 +120,7 @@ test("guided actual frontend: deliberate one-session scope, three stages and all
         assert.equal(await page.locator("#reportStage2").isVisible(), false);
         assert.equal(await page.locator("#reportStage3").isVisible(), true);
         assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
-        assert.match(await page.frameLocator(".report-frame").locator(".report-meta").textContent(), /America\/Los_Angeles/);
+        assert.match(await page.frameLocator(".report-frame").locator("main > .report-facts").textContent(), /America\/Los_Angeles/);
         await page.frameLocator(".report-frame").locator("h1").waitFor();
         const rendered = await page.frameLocator(".report-frame").locator("body").textContent();
         assert.equal(rendered.includes("JOURNEY_ORIGINAL"), mode !== "none");
@@ -164,9 +164,13 @@ test("guided actual frontend: deliberate one-session scope, three stages and all
             if (proofs) { await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); }); await page.screenshot({ path: path.join(proofs, `downloads-${theme}-${width}.png`), fullPage: true }); }
         }
         for (const name of ["product-report.html", "product-report.pdf", "product-report.json", "product-report.md"]) {
+            await page.locator("#reportStage3").getByRole("combobox", { name: "Saved file", exact: true }).click();
+            await page.locator(`.select-popup .select-option[data-value="${name}"]`).click();
+            assert.equal(await page.locator("#reportStage3 select").inputValue(), name);
             const pending = page.waitForEvent("download");
-            await page.locator("#reportStage3").getByRole("button", { name: "Download " + name, exact: true }).click();
+            await page.locator("#reportStage3").getByRole("button", { name: "Download", exact: true }).click();
             const item = await pending, bytes = await readFile(await item.path());
+            assert.equal(item.suggestedFilename(), name);
             assert.ok(bytes.length > 100);
             if (name.endsWith(".pdf")) assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
             if (name.endsWith(".json")) assert.deepEqual(JSON.parse(bytes).records, preview.records);
@@ -270,8 +274,8 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     await navigateMain(page, "reports"); await openReportCreation(page);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "reviewed");
     assert.match(await page.locator("#reportPopulationNote").textContent(), /Includes 1 interaction outside the current Analyze view/);
-    assert.match(await page.locator("#scopeCount-current").textContent(), / · 1 interaction$/);
-    assert.match(await page.locator("#scopeCount-all").textContent(), / · 12 interactions$/);
+    assert.match(await page.locator("#scopeCount-current").textContent(), / 1 interaction$/);
+    assert.match(await page.locator("#scopeCount-all").textContent(), / 12 interactions$/);
     assert.equal(requests.filter(item => item.path === "/api/preview").length, 1);
     assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).isEnabled(), true);
 
@@ -324,7 +328,7 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     await navigateMain(page, "activity");
     await restoreLegacySearch(page, "setup target 10");
     await navigateMain(page, "reports"); await openReportCreation(page);
-    assert.match(await page.locator("#scopeCount-current").textContent(), / · 1 interaction$/);
+    assert.match(await page.locator("#scopeCount-current").textContent(), / 1 interaction$/);
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "draft", "Same count is not the same membership");
     const changed = await scanReport(page);
     assert.notDeepEqual(changed.records, current.records);
@@ -333,7 +337,7 @@ test("Setup preserves hidden selected review across verified browsing, gates pen
     await restoreLegacySearch(page, "NO_INCLUDED_INTERACTION");
     await navigateMain(page, "reports"); await openReportCreation(page);
     await page.getByRole("button", { name: "1. Activity", exact: true }).click();
-    assert.match(await page.locator("#scopeCount-current").textContent(), / · 0 interactions$/);
+    assert.match(await page.locator("#scopeCount-current").textContent(), / 0 interactions$/);
     assert.equal(await page.locator("#exportBtn").isDisabled(), true);
     assert.equal(await page.locator("#reportScopeGap").isVisible(), true);
     assert.doesNotMatch(JSON.stringify(requests), /setup target (10|11)/);
@@ -434,7 +438,7 @@ test("Setup names excluded unsupported sources without scanning an empty populat
     const { page, runtime, requests, errors } = await setup(t, [record]);
     await page.goto(runtime.url + "#reports?task=create"); await ready(page);
     await chooseReportScope(page, "all");
-    assert.match(await page.locator("#scopeCount-all").textContent(), / · 0 interactions$/);
+    assert.match(await page.locator("#scopeCount-all").textContent(), / 0 interactions$/);
     assert.equal(await page.locator("#promptOptions").isVisible(), false);
     assert.equal(await page.locator("#formatOptions").isVisible(), false);
     assert.equal(await page.locator("#exportBtn").isDisabled(), true);
@@ -455,6 +459,8 @@ test("keyboard Setup, actual Review and separate Save remain reachable at 375px 
         await page.getByRole("button", { name: "1. Activity", exact: true }).click();
         await page.locator('[name=reportScope][value=selected]').focus();
         await page.keyboard.press("ArrowDown");
+        assert.equal(await page.locator("[name=reportScope]:checked").inputValue(), "current");
+        await page.keyboard.press("ArrowDown");
         assert.equal(await page.locator("[name=reportScope]:checked").inputValue(), "all");
         await page.getByRole("button", { name: "Continue to contents", exact: true }).focus();
         await page.keyboard.press("Enter");
@@ -465,6 +471,7 @@ test("keyboard Setup, actual Review and separate Save remain reachable at 375px 
         await page.keyboard.press("Enter");
         await response;
         await page.locator("#reportsView[data-report-phase=ready]").waitFor();
+        await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
         assert.equal(await page.evaluate(() => document.activeElement.id), "reportStepTitle3");
         await page.locator(".attestation input[data-review-control]").focus();
         await page.keyboard.press("Space");
@@ -494,7 +501,7 @@ test("guided scope and controls stay usable at 375/820/1200 in both themes; no a
         if (await page.locator("#contextSidebar[open]").count()) await page.locator("#closeContextSidebar").click();
         await page.setViewportSize({ width, height: 960 }); await chooseTheme(page, theme);
         await chooseReportScope(page, "all");
-        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 84 interactions");
+        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 84 interactions");
         if (proofs) { await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); }); await page.screenshot({ path: path.join(proofs, `requests-${theme}-${width}.png`), fullPage: true }); }
         await reportContents(page);
         await page.locator("#formatOptions input[value=html]").uncheck();
@@ -525,7 +532,7 @@ test("guided scope and controls stay usable at 375/820/1200 in both themes; no a
     assert.equal(await page.locator(".attestation input[data-review-control]").isChecked(), false);
     assert.doesNotMatch(await page.frameLocator(".report-frame").locator("body").innerText(), /EDIT_SECRET/);
     await navigateMain(page, "activity"); await page.goBack();
-    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 84 interactions");
+    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 84 interactions");
     await page.reload(); await ready(page);
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No interactions included");
     assert.equal(await page.locator("#reportsView").getAttribute("data-report-step"), "1");
@@ -605,9 +612,12 @@ test("final save survives read/lifecycle events, while an uncertain export is ne
         window.dispatchEvent(new Event("online"));
         document.querySelector("#refreshBtn").click();
     });
-
+    await page.locator('nav [data-nav="settings"]').click();
+    await page.locator("#message.pending-save:visible").waitFor();
+    assert.equal(await page.locator("#reportsView").getAttribute("data-report-phase"), "writing");
     release();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
+    assert.equal(await page.locator("#message.pending-save").isVisible(), false);
     assert.equal((await loadBoardState(context)).exports.length, 1);
     assert.equal(requests.filter(request => request.path === "/api/export").length, 1);
     await reportContents(page);
@@ -627,6 +637,7 @@ test("final save survives read/lifecycle events, while an uncertain export is ne
     assert.equal((await loadBoardState(context)).exports.length, 2, "The interrupted response conceals a real synthetic save; do not repeat it");
     await page.getByRole("button", { name: "Check save status", exact: true }).click(); await ready(page);
     await openReportLibrary(page);
+    await page.waitForFunction(() => document.querySelector("#savedLibraryTitle").textContent === "Saved reports (2)");
     assert.equal(await page.locator("#savedLibraryTitle").textContent(), "Saved reports (2)");
     assert.equal(requests.filter(request => request.path === "/api/export").length, 2);
     assert.deepEqual(errors, []);

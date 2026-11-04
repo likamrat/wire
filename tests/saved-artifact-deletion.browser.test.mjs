@@ -35,12 +35,16 @@ async function setup(t, handler, target = artifact) {
     ` });
     await page.evaluate(({ artifact, icons }) => {
         window.deleted = []; window.notices = [];
+        const token = Object.freeze({});
+        const api = async (path, input) => {
+            const result = await window.syntheticArtifactApi(path, input);
+            if (result.failure) throw new Error(result.failure);
+            return result;
+        };
+        api.publicationToken = () => token;
+        api.isCurrent = value => value === token;
         window.flow = window.createArtifactDeletion({
-            api: async (path, input) => {
-                const result = await window.syntheticArtifactApi(path, input);
-                if (result.failure) throw new Error(result.failure);
-                return result;
-            },
+            api,
             ux: window.createUX(icons),
             onDeleted: async value => { window.deleted.push(value); document.getElementById("open")?.remove(); return true; },
             onError: message => window.notices.push(message),

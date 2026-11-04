@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, revealAnalyzeRecords } from "./helpers.mjs";
 
 const ready = page => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
 const frames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -104,11 +104,11 @@ async function geometry(page) {
 
 test("interaction rows group prompt/open and call facts without losing evidence, actions or selection", { timeout: 30000 }, async t => {
     const { page, evidence } = await setup(t);
-    await page.locator("#resultsLink").click(); await frames(page);
+    await revealAnalyzeRecords(page); await frames(page);
     const before = await geometry(page);
     await capture(page, "desktop-light");
     await chooseTheme(page, "dark");
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     await capture(page, "desktop-dark");
     for (const [id, text] of [["short", evidence[0].userPrompt.text], ["missing", evidence[3].userPrompt.text]]) {
         await expect(card(page, id).locator(".full-text-preview")).toHaveText(text);
@@ -175,7 +175,7 @@ test("narrow enlarged rows retain full labels, touch targets and keyboard readin
     const { page, evidence } = await setup(t);
     await page.setViewportSize({ width: 375, height: 900 }); await chooseTheme(page, "dark");
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await page.locator("#resultsLink").click(); await frames(page);
+    await revealAnalyzeRecords(page); await frames(page);
     await capture(page, "narrow-200-results");
     const long = card(page, "long");
     await long.locator(".full-text-toggle").focus(); await page.keyboard.press("Enter");

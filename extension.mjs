@@ -3,8 +3,11 @@ import { BOARD_ID } from "./lib/evidence.mjs";
 import { ANALYTICS_SCHEMA, TIME_CONTEXT_SCHEMA } from "./lib/analytics-input.mjs";
 import { createRuntimeClient } from "./lib/runtime-client.mjs";
 import { PRODUCT_NAME, PRODUCT_DESCRIPTION } from "./lib/branding.mjs";
+import { createCopilotAccountBridge } from "./lib/copilot-account-snapshot.mjs";
 
 const runtime = createRuntimeClient();
+let joinedSession;
+const accountBridge = createCopilotAccountBridge(() => joinedSession);
 const schema = (properties, required = []) => ({ type: "object", additionalProperties: false, properties, required });
 const actions = [
     { name: "get_state", description: "Read local evidence and persisted review state.", inputSchema: schema({}) },
@@ -34,7 +37,8 @@ const actions = [
     { name: "confirm_export", description: "Confirm only this owner’s already reviewed preview; browser disclosure cannot be forged or shared across owners.", inputSchema: schema({ previewId: { type: "string" }, confirmed: { const: true }, timeContext: TIME_CONTEXT_SCHEMA }, ["previewId", "confirmed"]) },
 ];
 
-await joinSession({
+joinedSession = await joinSession({
+    tools: [accountBridge.tool],
     canvases: [createCanvas({
         id: "workiq-evidence-board",
         displayName: PRODUCT_NAME,
@@ -42,7 +46,10 @@ await joinSession({
         inputSchema: schema({ boardId: { const: BOARD_ID } }, ["boardId"]),
         open: async ctx => {
             try { return await runtime.open(ctx.instanceId); }
-            catch { throw new CanvasError("runtime_unavailable", `Start the maintained ${PRODUCT_NAME} project with npm start, then open this canvas. No second server was started.`); }
+            catch (error) {
+                if (error.code === "WIRE_CLIENT_UPDATE_REQUIRED") throw new CanvasError("runtime_update_required", error.message);
+                throw new CanvasError("runtime_unavailable", `Start the maintained ${PRODUCT_NAME} project with npm start, then open this canvas. No second server was started.`);
+            }
         },
         actions: actions.map(action => ({
             ...action,

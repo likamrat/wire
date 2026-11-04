@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { recordedInteractionModels } from "../lib/interaction-model.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, revealAnalyzeRecords } from "./helpers.mjs";
 import { searchFixture } from "./live-search-fixture.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -75,13 +75,13 @@ test("a recorded failure explains its cause with the outcome from card to reader
     const { page } = await setup(t);
     const card = page.locator(".request-card-open");
     await expect(card.locator('[data-outcome="failure"]')).toContainText("1 Tool failed");
-    await expect(card).not.toContainText("Sign-in was required");
+    await expect(card).not.toContainText("Work IQ required sign-in at the time");
     await card.click();
     const call = page.locator('.journey-item[data-tool-call-id="clarity-call"]');
-    await expect(call.locator(".call-heading")).toContainText("Sign-in was required");
+    await expect(call.locator(".call-heading")).toContainText("Work IQ required sign-in at the time");
     await expect(call.locator(".call-heading")).not.toContainText("Tool failed");
     await expect(call.locator(".reader-recorded-signal")).toHaveCount(0);
-    assert.equal((await call.innerText()).match(/Sign-in was required/g)?.length, 1);
+    assert.equal((await call.innerText()).match(/Work IQ required sign-in at the time/g)?.length, 1);
     await expect(call.locator(".reader-call-duration data")).toHaveAttribute("value", "252");
 });
 
@@ -124,7 +124,7 @@ test("model recording reasons compose one qualified statement without losing any
         await expect(note).toHaveCount(1);
         await expect(note).toHaveText(expected);
         await expect(page.locator("#requestContent .model-identity")).toHaveText("recorded-model");
-        await expect(page.locator(".call-heading .result-cause")).toHaveText("Sign-in was required");
+        await expect(page.locator(".call-heading .result-cause")).toHaveText("Work IQ required sign-in at the time");
         assert.ok(((await note.textContent()).match(/Model history/g) ?? []).length <= 1);
         if (reasons.length > 1) for (const theme of ["light", "dark"]) {
             await page.setViewportSize({ width: 1440, height: 1000 });
@@ -176,7 +176,7 @@ test("returned API failures keep their own codes without borrowing the parent si
         "Tool-reported error: InvalidQuery",
     ]);
     await expect(calls.locator(".result-cause")).toHaveCount(0);
-    for (const call of await calls.all()) await expect(call).not.toContainText("Sign-in");
+    for (const call of await calls.all()) await expect(call).not.toContainText(/sign-in/i);
 });
 
 function representativeRecords() {
@@ -288,7 +288,7 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
         await capture(`${theme}-whole-analyze`, true);
-        await page.locator("#resultsLink").click();
+        await revealAnalyzeRecords(page);
         await single.hover();
         await capture(`${theme}-cards-hover`);
         await single.focus();
@@ -323,8 +323,8 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
         assert.ok(Math.abs((await single.boundingBox()).y - box.y) < 3, "Pointer return preserves the selected-card reading anchor");
         await mixed.click();
         await expect(page.locator(".request-context-timeline > [data-context-kind=action]")).toHaveCount(6);
-        await expect(page.locator(".call-heading .result-cause")).toHaveText(["Sign-in was required", "Error detail not recorded", "Access was denied"]);
-        await expect(page.locator('.call-heading [data-outcome="partial"]')).toContainText("Partly worked");
+        await expect(page.locator(".call-heading .result-cause")).toHaveText(["Work IQ required sign-in at the time", "Failure reason was not saved", "Access was denied"]);
+        await expect(page.locator('.call-heading [data-outcome="partial"] .recorded-result-label')).toHaveText("Call 4 partly completed");
         await expect(page.locator('.call-heading [data-outcome="unknown"] .result-cause')).toHaveCount(0);
         await capture(`${theme}-long-plural-reader`);
         const mainScroll = await page.evaluate(() => scrollY);
@@ -342,17 +342,17 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
         await capture(`${theme}-missing-reader`);
         await page.locator("#closeContextSidebar").click(); await settled();
         await page.locator('.request-row[data-view-key="request:clarity-worked"] .request-card-open').click();
-        await expect(page.locator('.call-heading [data-outcome="success"]')).toContainText("Worked");
+        await expect(page.locator('.call-heading [data-outcome="success"] .recorded-result-label')).toHaveText("Call 1 completed");
         await expect(page.locator(".call-heading .result-cause")).toHaveCount(0);
         await capture(`${theme}-worked-reader`);
         await page.locator("#closeContextSidebar").click(); await settled();
     }
     await selectActivityOption(page, "toolFilter", "workiq-fetch");
     await expect(mixed.locator('[data-outcome="failure"]')).toContainText("1 Tool failed");
-    await expect(mixed).not.toContainText("Sign-in");
+    await expect(mixed).not.toContainText(/sign-in/i);
     await mixed.click();
     await expect(page.locator(".reader-scope")).toContainText("2 of 6 Work IQ tool calls match");
-    await expect(page.locator(".request-context-timeline")).toContainText("Sign-in was required");
+    await expect(page.locator(".request-context-timeline")).toContainText("Work IQ required sign-in at the time");
     await expect(page.locator(".action-context").filter({ hasText: /^Matches current view$/ })).toHaveCount(2);
     await page.locator(".reader-scope").scrollIntoViewIfNeeded();
     await capture("filtered-whole-interaction");
@@ -367,14 +367,14 @@ test("populated card-to-detail reading stays coherent across themes, scopes, sea
     await page.locator("#wireSearch").fill("workshop agenda");
     const hit = page.locator(".wire-search-hit").filter({ has: page.locator(".wire-search-title", { hasText: records[0].userPrompt.text }) });
     await expect(hit).toHaveCount(1); await hit.click();
-    await expect(page.locator(".call-heading .result-cause")).toHaveText("Sign-in was required");
+    await expect(page.locator(".call-heading .result-cause")).toHaveText("Work IQ required sign-in at the time");
     await capture("search-reader");
     await page.goBack(); await expect(hit).toBeFocused();
     await hit.click();
     await page.locator("#requestReportToggle").click();
     await page.locator("#requestReportContinue").click();
     const reportEntry = page.locator("#reportList .report-entry").filter({ hasText: records[0].userPrompt.text });
-    await expect(reportEntry.locator(".result-cause")).toHaveText("Sign-in was required");
+    await expect(reportEntry.locator(".result-cause")).toHaveText("Work IQ required sign-in at the time");
     await reportEntry.locator(".request-link").click();
     await expect(page.getByRole("button", { name: "Back to activity", exact: true })).toBeVisible();
     await capture("report-picker-peek");

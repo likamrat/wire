@@ -219,7 +219,7 @@ test("source, project and date deep links preserve distinct API, Graph and nonex
     await page.goto(url + "#activity?layer=code-reference"); await ready(page);
     assert.match(await page.locator("#activityList").innerText(), /1 Execution not observed/);
     assert.equal(await page.locator("#activityList .card-result-scope").count(), 0);
-    assert.doesNotMatch(await page.locator("#activityList").innerText(), /Worked|Tool failed/);
+    assert.doesNotMatch(await page.locator("#activityList").innerText(), /Tool completed|Tool failed/);
     await page.locator("#activityList .request-link").click(); await ready(page);
     assert.match(await page.locator(".journey-item").filter({ hasText: "Graph code reference" }).innerText(), /Execution not observed/);
     await page.goto(url + "#activity?layer=direct-request"); await ready(page);

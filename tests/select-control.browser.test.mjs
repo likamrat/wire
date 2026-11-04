@@ -10,7 +10,12 @@ import { createSelectControls } from "../web/select-control.mjs";
 import { selectStyles } from "../web/select-styles.mjs";
 import { createEvidenceUX } from "../web/ux.mjs";
 import { uxIcons } from "../web/ux-icons.mjs";
-import { fixture, exportCatalogFor, chooseTheme, selectActivityOption, automaticScoreOffSummary } from "./helpers.mjs";
+import { dimensionalIcons } from "../web/dimensional-icons.mjs";
+import { createDimensionalCharts } from "../lib/dimensional-charts.mjs";
+import { createPercentageCharts } from "../lib/percentage-charts.mjs";
+import { createServiceCategories } from "../lib/service-categories.mjs";
+import { createRecordedResults } from "../web/recorded-results.mjs";
+import { fixture, exportCatalogFor, chooseTheme, selectActivityOption, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_SELECT_PROOFS;
 const records = ["/me/events", "/me/messages", "/me/drive"].map((endpoint, index) => {
@@ -21,9 +26,111 @@ const records = ["/me/events", "/me/messages", "/me/drive"].map((endpoint, index
     return record;
 });
 const isolated = process.env.WORKIQ_SELECT_ISOLATED === "1";
+test("select replacement scrubs held attributes without publishing invalid SVG geometry", async t => {
+    const browser = await chromium.launch(), page = await browser.newPage(), errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => {
+        if (message.type() === "error" && /^Error: <[\w:-]+> attribute [\w:-]+:/i.test(message.text())) errors.push(message.text());
+    });
+    t.after(async () => { await browser.close(); assert.deepEqual(errors, []); });
+    await page.setContent(`<style>${selectStyles}</style><label for="privateScope">Source</label>
+        <select id="privateScope"><option value="private-first">First source</option><option value="private-second">Second source</option></select>`);
+    await page.addScriptTag({ content: `
+        const ux = (${createEvidenceUX.toString()})(${JSON.stringify(uxIcons)});
+        window.controls = (${createSelectControls.toString()})(ux, {
+            decorateOption(label) { label.prepend(ux.icon("search")); }
+        });
+        window.oldValue = document.querySelector("#privateScope-control .select-value").lastChild;
+        window.oldSvg = document.querySelector("#privateScope-control .select-value svg");
+        window.oldGeometry = ["width", "height", "viewBox"].map(name => oldSvg.getAttributeNode(name));
+        const circle = oldSvg.querySelector("circle");
+        window.oldCircleGeometry = ["cx", "cy", "r"].map(name => circle.getAttributeNode(name));
+        circle.setAttribute("data-private-record", "private-circle");
+        window.oldCirclePrivate = circle.getAttributeNode("data-private-record");
+        const rect = document.createElementNS(oldSvg.namespaceURI, "rect");
+        for (const [name, value] of Object.entries({x: 2, y: 2, rx: 1, ry: 1, width: 12, height: 12})) rect.setAttribute(name, value);
+        rect.setAttribute("data-private-record", "private-shape");
+        oldSvg.append(rect);
+        window.oldRectGeometry = ["x", "y", "rx", "ry"].map(name => rect.getAttributeNode(name));
+        window.oldRectPrivate = rect.getAttributeNode("data-private-record");
+        oldSvg.setAttribute("data-private-record", "private-first");
+        window.oldSvgPrivate = oldSvg.getAttributeNode("data-private-record");
+        window.removedWithData = [];
+        const remove = Element.prototype.removeAttribute;
+        Element.prototype.removeAttribute = function (name) {
+            const attribute = this.getAttributeNode(name);
+            if ([window.oldOption, oldSvgPrivate, oldRectPrivate, oldCirclePrivate].includes(attribute) && attribute?.value) removedWithData.push(attribute.name);
+            return remove.call(this, name);
+        };
+    ` });
+    await page.locator("#privateScope-control").click();
+    await page.evaluate(() => { window.oldOption = document.querySelector('.select-option[data-value="private-first"]').getAttributeNode("data-value"); });
+    await page.getByRole("option", { name: "Second source", exact: true }).click();
+    assert.deepEqual(await page.evaluate(() => ({ value: oldValue.data, option: oldOption.value,
+        privateSvg: oldSvgPrivate.value, privateRect: oldRectPrivate.value, rectGeometry: oldRectGeometry.map(attribute => attribute.value),
+        privateCircle: oldCirclePrivate.value, circleGeometry: oldCircleGeometry.map(attribute => attribute.value), removedWithData,
+        geometry: oldGeometry.map(attribute => attribute.value), attached: oldSvg.attributes.length })),
+    { value: "", option: "", privateSvg: "", privateRect: "", rectGeometry: ["", "", "", ""],
+        privateCircle: "", circleGeometry: ["", "", ""], removedWithData: [], geometry: ["", "", ""], attached: 0 });
+    await page.evaluate(() => controls.withdrawAccess());
+});
+
+test("shipped icons and chart primitives retire without attribute parser errors", async t => {
+    const browser = await chromium.launch(), page = await browser.newPage(), errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => {
+        if (message.type() === "error" && /^Error: <[\w:-]+> attribute [\w:-]+:/i.test(message.text())) errors.push(message.text());
+    });
+    t.after(async () => { await browser.close(); assert.deepEqual(errors, []); });
+    await page.setContent('<label for="icons">Icons</label><select id="icons"><option>First</option><option>Second</option></select>');
+    await page.addScriptTag({ content: `
+        const icons = ${JSON.stringify({ ...uxIcons, ...dimensionalIcons })}, ux = (${createEvidenceUX.toString()})(icons);
+        const dimensional = (${createDimensionalCharts.toString()})();
+        const chartHost = document.createElement("div");
+        const chart = (${createPercentageCharts.toString()})({dimensional,
+            categories: (${createServiceCategories.toString()})(), results: (${createRecordedResults.toString()})(),
+            ux, icons: ${JSON.stringify(dimensionalIcons)}, createLink: () => {
+                const link = document.createElement("a"); link.href = "#analyze?tool=private-tool"; return link;
+            }}).mount(chartHost);
+        chart.update(${JSON.stringify(buildActivityAnalytics([fixture("geometry-inventory")]))}, {layer: "tool", filters: {}});
+        const flat = dimensional.flatSvg({total: 1, maximum: 1,
+            values: {success: 1, failure: 0, unknown: 0, partial: 0, other: 0, transport: 0}});
+        window.controls = (${createSelectControls.toString()})(ux, {
+            decorateOption(label) {
+                for (const name of Object.keys(icons)) label.append(ux.icon(name));
+                for (const svg of chartHost.querySelectorAll("svg")) label.append(svg.cloneNode(true));
+                label.append(new DOMParser().parseFromString(flat, "image/svg+xml").documentElement);
+            }
+        });
+        const nodes = [...document.querySelectorAll("#icons-control .select-value svg, #icons-control .select-value svg *")];
+        window.heldGeometry = nodes.flatMap(node => [...node.attributes]);
+        const inventory = new Map();
+        for (const node of nodes) {
+            if (!inventory.has(node.localName)) inventory.set(node.localName, new Set());
+            for (const attribute of node.attributes) inventory.get(node.localName).add(attribute.name);
+        }
+        window.svgInventory = Object.fromEntries([...inventory].sort().map(([tag, names]) => [tag, [...names].sort()]));
+        window.privateRemovals = [];
+        const remove = Element.prototype.removeAttribute;
+        Element.prototype.removeAttribute = function (name) {
+            const attribute = this.getAttributeNode(name);
+            if (heldGeometry.includes(attribute) && /^(data-|href$|title$|aria-label$)/.test(name) && attribute.value) privateRemovals.push(name);
+            return remove.call(this, name);
+        };
+        controls.withdrawAccess();
+        chart.withdrawAccess();
+    ` });
+    assert.ok(await page.evaluate(() => heldGeometry.length > 100), "Exercise the actual complete installed icon set.");
+    assert.equal(await page.evaluate(() => heldGeometry.every(attribute => attribute.value === "")), true);
+    assert.deepEqual(await page.evaluate(() => privateRemovals), []);
+    const inventory = await page.evaluate(() => svgInventory);
+    assert.deepEqual(Object.keys(inventory), ["a", "circle", "defs", "ellipse", "g", "line", "linearGradient", "path", "rect", "stop", "svg"]);
+    t.diagnostic(JSON.stringify(inventory));
+});
+
 async function setup(run, options = {}) {
     const errors = [], rejected = [], requests = [];
-    const shell = renderHtmlShell("a".repeat(64), "select-proof");
+    const shell = renderHtmlShell("a".repeat(64), "select-proof", UNBOUND_FIXTURE_BOOTSTRAP);
     const before = process.env.WORKIQ_SELECT_BEFORE ? await readFile(process.env.WORKIQ_SELECT_BEFORE, "utf8") : shell;
     const server = createServer(async (req, res) => {
         if (req.method === "GET" && ["/", "/before"].includes(req.url)) {

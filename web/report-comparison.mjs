@@ -1,6 +1,6 @@
 import { createAssessmentWording } from "./assessment-presentation.mjs";
 
-export function createReportComparison(wording = createAssessmentWording()) {
+export function createReportComparison(wording = createAssessmentWording(), duration = null) {
     const presentation = Object.freeze({ schemaVersion: 1, performanceBands: Object.freeze({
         id: "assessed-pass-share-v1", unit: "percent", thresholds: Object.freeze([50, 75, 90]), unavailable: "neutral",
     }) });
@@ -12,6 +12,119 @@ export function createReportComparison(wording = createAssessmentWording()) {
         "Speed measures tool calls from start to recorded completion. It also measures the time from the recorded request to its final response. Each has its own timed-call or timed-request count. The median is the middle recorded time (the lower middle for an even count). Calls that run at the same time are not added together. A final response does not prove the task succeeded.",
     ]);
     const comparisonNote = "The reports may cover different requests or time periods. A change between them does not tell you what caused it. Returned API entries, recorded Graph sites and HTTP recorder records are counted separately.";
+    const sourceNames = { "github-copilot": "GitHub Copilot", "microsoft-365-chat": "Microsoft 365 Chat", "microsoft-365-cowork": "Microsoft 365 Cowork" };
+    const resultBoundary = "Tool completion is separate from application results and returned API entries. None proves task completion; entry counts are not item or page totals.";
+    function resultComparisonContent(value) {
+        if (!value) return null;
+        if (value.version !== 1) throw new TypeError("Unsupported result-comparison presentation.");
+        const unavailable = {
+            "result-facts-not-saved": "Neither source report saved this result-fact definition.",
+            "baseline-result-facts-not-saved": "The earlier report did not save this result-fact definition.",
+            "later-result-facts-not-saved": "The later report did not save this result-fact definition.",
+            "empty-population": "The selected result cohorts contain no tool calls.",
+            "overlap-unverified": "Call identity overlap is unverified for this cohort choice.",
+            "not-tool-call-cohort": "This comparison uses a different evidence unit. Tool application-result flags are not substituted for that population.",
+            "source-cohort-unavailable": "The selected source cohorts cannot be established with these report definitions.",
+        };
+        const side = (group, state) => state === "cohort-unavailable" ? "Cohort unavailable; source interpretation or call identity is not compatible."
+            : state === "source-not-present" ? "Source population not present in this report."
+            : !group ? "No calls in this selected source cohort."
+            : `${group.calls} ${group.calls === 1 ? "call" : "calls"}; ${group.completions} completed. `
+                + (group.application.known ? `${group.application.errors} application ${group.application.errors === 1 ? "error" : "errors"} among ${group.application.known} explicit result ${group.application.known === 1 ? "flag" : "flags"}.`
+                    : "Application results are unavailable, not zero errors.")
+                + (group.application.known && group.application.unknown ? ` ${group.application.unknown} ${group.application.unknown === 1 ? "call has" : "calls have"} missing or conflicting result flags.` : "");
+        const observation = value => [
+            `Application result: ${value.applicationError === null ? "flag unavailable" : value.applicationError ? "error reported" : "marked non-error"}`,
+            ...(value.statusCode !== null ? [`tool-reported status ${value.statusCode}`] : []),
+            ...(value.statusConflict ? [`conflicting statuses ${value.statusConflict.structured} / ${value.statusConflict.text}`] : []),
+            ...(value.errorCode !== null ? [`recorded error code ${value.errorCode}`] : []),
+            ...(value.errorStatusCode !== null ? [`recorded error status ${value.errorStatusCode}`] : []),
+            ...(value.resultCount !== null ? [`${value.resultCount} supplied response entries; ${value.retainedResultCount ?? "unknown"} retained`] : []),
+            ...(value.paginationPresent === true ? ["next-page indication: recorded"] : []),
+            ...(value.returnedEntries ?? []).map(entry => `returned API entry ${entry.index + 1}: status ${entry.statusCode ?? "unavailable"}${entry.errorCode !== null ? `, code ${entry.errorCode}` : ""}${entry.paginationPresent === true ? ", next-page indication: recorded" : ""}`),
+            value.contentStatus === "partial" ? "partial returned results; total entry count unknown"
+                : `result content: ${(value.contentStatus ?? "definition not saved").replaceAll("-", " ")}`,
+            ...(value.diagnosticStatus ? [`error details: ${value.diagnosticStatus.replaceAll("-", " ")}`] : []),
+            ...(value.descriptionStatus ? [`source description: ${value.descriptionStatus.replaceAll("-", " ")}`] : []),
+        ].join("; ") + ".";
+        return { boundary: resultBoundary,
+            unavailable: value.status === "unavailable" ? (unavailable[value.reason] ?? "Result-level comparison is unavailable.") + " Missing result facts are not zero." : null,
+            shared: value.shared?.count ? `${value.shared.count} ${value.shared.count === 1 ? "call appears" : "calls appear"} in both reports; recorded result details differ for ${value.shared.changedTypedFacts}. These differences do not establish new executions.` : null,
+            changes: (value.changes ?? []).map((change, index) => ({ title: `Changed call ${index + 1}: ${change.tool ?? "Native tool"} (${sourceNames[change.source]})`,
+                baseline: change.baseline.map(observation).join(" Retained observation: "),
+                later: change.later.map(observation).join(" Retained observation: ") })),
+            additional: value.additionalChangedCalls ? `The report manifest lists ${value.additionalChangedCalls} more changed ${value.additionalChangedCalls === 1 ? "call" : "calls"}.` : null,
+            groups: (value.groups ?? []).map(group => ({
+                title: sourceNames[group.source], baseline: side(group.baseline, group.baselineState), later: side(group.later, group.laterState),
+                change: group.applicationErrorDelta === null ? "Application-error change is unavailable: "
+                    + ({ "source-population-missing": "one selected source cohort has no calls.", "source-namespace-differs": "source namespaces differ.",
+                        "source-cohort-unavailable": "the selected source cohort cannot be established.",
+                        "source-interpretation-unverified": "source interpretation or call identity is not verified.",
+                        "application-result-coverage-incomplete": "explicit application-result coverage is incomplete." }[group.reason] ?? "the facts are not compatible.")
+                    : `Recorded application-error share changed by ${group.applicationErrorDelta > 0 ? "+" : ""}${group.applicationErrorDelta.toFixed(1)} percentage points. This compares the selected source populations, not task correctness or a causal improvement.`,
+            })),
+        };
+    }
+    function renderResultComparison(host, value) {
+        const content = resultComparisonContent(value);
+        if (!content) return null;
+        const element = (tag, text) => { const node = host.ownerDocument.createElement(tag); node.textContent = text; return node; };
+        const section = element("section", "");
+        section.className = "comparison-result-evidence";
+        section.append(element("h2", "Application-result comparison"), element("p", content.boundary));
+        if (content.unavailable) section.append(element("p", content.unavailable));
+        if (content.shared) section.append(element("p", content.shared));
+        for (const group of content.groups) {
+            const block = element("section", "");
+            block.append(element("h3", group.title), element("p", "Earlier: " + group.baseline),
+                element("p", "Later: " + group.later), element("p", group.change));
+            section.append(block);
+        }
+        for (const change of content.changes) {
+            section.append(element("h3", change.title), element("p", "Earlier: " + change.baseline), element("p", "Later: " + change.later));
+        }
+        if (content.additional) section.append(element("p", content.additional));
+        host.append(section);
+        return section;
+    }
+    function resultTextNotice(coverage, scope = "this report") {
+        if (coverage.total === 0) return `Result text was selected, but no copies belong to ${scope}.`;
+        return [
+            coverage.included ? `${coverage.included} masked ${coverage.included === 1 ? "copy" : "copies"} included` : "No result text included",
+            ...(coverage.omitted ? [`${coverage.omitted} omitted`] : []),
+            ...(coverage.unavailable ? [`${coverage.unavailable} unavailable`] : []),
+        ].join("; ") + ".";
+    }
+    function resultTextSourcesContent(value) {
+        if (value === null) return [{ title: "Recorded result text", notice: "Result text was not selected for this comparison.", copies: [] }];
+        if (!value) return null;
+        if (value.version !== 1 || value.mode !== "masked" || !Array.isArray(value.sources)) throw new TypeError("Unsupported saved result-text comparison.");
+        return value.sources.map((source, index) => ({
+            title: index ? "Later report: recorded result text" : "Earlier report: recorded result text",
+            notice: !source.resultText ? source.reason === "not-in-source-report"
+                ? "Result text was not included in this saved report. Original activity is not fetched."
+                : "Result-text membership is not qualified for these source versions and this cohort."
+                : resultTextNotice(source.resultText.coverage, "this source cohort")
+                    + (source.unavailableSources?.length ? ` Result text is unavailable for ${source.unavailableSources.map(id => sourceNames[id]).join(", ")} in this cohort.` : ""),
+            copies: (source.resultText?.copies ?? []).filter(copy => copy.text !== null).map(copy => ({
+                key: copy.key, label: copy.label + (copy.entryIndex !== null ? ` / returned API entry ${copy.entryIndex + 1}` : "")
+                    + (copy.representation === "edited-copy" ? " (edited source-report copy, not original wording)" : " (masked source-report copy)"),
+                text: copy.text,
+            })),
+        }));
+    }
+    function renderResultTextSources(host, value) {
+        const groups = resultTextSourcesContent(value);
+        if (!groups) return;
+        const element = (tag, text) => { const node = host.ownerDocument.createElement(tag); node.textContent = text; return node; };
+        for (const group of groups) {
+            const section = element("section", ""); section.className = "comparison-result-text";
+            section.append(element("h2", group.title), element("p", group.notice));
+            for (const copy of group.copies.slice(0, 12)) section.append(element("h3", copy.label), element("pre", copy.text));
+            if (group.copies.length > 12) section.append(element("p", "Additional result-text copies remain in the saved files."));
+            host.append(section);
+        }
+    }
     const readingNotesFor = model => model?.metricProjectionVersion === 4 || model?.definitions?.metricProjectionVersion === 4
         ? ["Missing measurements stay unavailable, not zero. Different definitions or scopes do not establish improvement.", readingNotes[3]]
         : model?.metricProjectionVersion === 3 || model?.definitions?.metricProjectionVersion === 3
@@ -52,13 +165,44 @@ export function createReportComparison(wording = createAssessmentWording()) {
         "not-applicable": "This check does not apply to this recorded interaction",
     };
     const formatNumber = (value, maximumFractionDigits = 1) => new Intl.NumberFormat(undefined, { maximumFractionDigits }).format(value);
-    function formatValue(value, unit) {
+    function nativeRows(model) {
+        const count = (value, state) => value !== null ? formatNumber(value, 0)
+            : state === "source-not-present" ? "Not present" : state === "cohort-unavailable" ? "Cohort unavailable" : "Unavailable";
+        const labels = { "native-conversation": "Conversations", "native-tool-call": "Tool calls",
+            "native-returned-result-observation": "Result observations", "message-representation-observation": "Message observations",
+            "message-representation-part": "Message parts", "native-task-state-observation": "Task states",
+            "chat-source-observation": "Source observations" };
+        const rows = [...model.nativeComparison?.units ?? [],
+            ...(model.nativeComparison?.outcomes ?? []).flatMap(item => ["succeeded", "failed", "unknown"].map(outcome => ({
+                sourceId: item.sourceId, unit: `Tool calls: ${outcome}`, baselineCount: item.baseline?.[outcome] ?? null,
+                laterCount: item.later?.[outcome] ?? null,
+                baselineState: item.baselineState, laterState: item.laterState,
+                delta: item.comparable && item.baseline && item.later ? item.later[outcome] - item.baseline[outcome] : null,
+                failure: outcome === "failed",
+            })))];
+        return rows.map(row => ({
+            source: row.sourceId === "microsoft-365-chat" ? "Microsoft 365 Chat" : "Microsoft 365 Cowork",
+            label: labels[row.unit] ?? row.unit,
+            earlier: count(row.baselineCount, row.baselineState),
+            later: count(row.laterCount, row.laterState),
+            change: row.delta === null ? "Not comparable" : `${row.delta > 0 ? "+" : ""}${formatNumber(row.delta, 0)}`,
+            numeric: [false, row.baselineCount !== null, row.laterCount !== null, row.delta !== null],
+            empty: row.baselineCount === 0 && row.laterCount === 0,
+            failure: row.failure === true,
+        }));
+    }
+    function formatValue(value, unit, { signed = false } = {}) {
         if (!Number.isFinite(value)) throw new TypeError("Comparison values must be finite.");
         if (unit === "percent" || unit === "percentage-points") {
             const suffix = unit === "percent" ? "%" : " pp";
             if (value !== 0 && Math.abs(value) < 0.01) return `${value < 0 ? "−" : ""}<0.01${suffix}`;
             const displayed = unit === "percent" ? Math.floor(value * 100) / 100 : value;
             return `${formatNumber(displayed, 2)}${suffix}`;
+        }
+        if (unit === "ms" && duration) {
+            const sign = value < 0 ? "−" : signed && value > 0 ? "+" : "";
+            const [primary, equivalent] = duration(Math.abs(value)).split(" (");
+            return `${sign}${primary}${equivalent ? ` (${sign}${equivalent}` : ""}`;
         }
         if (unit === "ms") return value > 0 && value < 0.01 ? "<0.01 ms"
             : Math.abs(value) >= 1000 ? `${formatNumber(value / 1000, 2)} s` : `${formatNumber(value, 2)} ms`;
@@ -67,6 +211,11 @@ export function createReportComparison(wording = createAssessmentWording()) {
             return value > 0 && value < 0.000001 ? `<${amount.format(0.000001)}` : amount.format(value);
         }
         throw new TypeError("Unsupported comparison display unit.");
+    }
+    function formatChange(value, unit) {
+        if (!Number.isFinite(value)) throw new TypeError("Comparison changes must be finite.");
+        return unit === "ms" && duration ? formatValue(value, unit, { signed: true })
+            : `${value > 0 ? "+" : value < 0 ? "−" : ""}${formatValue(Math.abs(value), unit)}`;
     }
     function scoreTone(fact) {
         if (fact?.state !== "available" || fact.kind !== "pass-rate" || fact.unit !== "percent") return "";
@@ -271,12 +420,50 @@ export function createReportComparison(wording = createAssessmentWording()) {
             root.replaceChildren(panel);
             return;
         }
-        if (model.narrative) {
+        const scopeChanged = model.scopeDifferences?.some(code => ["selection-kind-differs", "collection-definition-differs"].includes(code));
+        const unverifiedOverlap = model.toolComparison?.overlap?.verified === false && model.primaryLayer === "tool-call"
+            && !["empty-baseline", "empty-later", "no-matched-patterns"].includes(model.toolComparison.reason)
+            && !scopeChanged && model.reason !== "pattern-definition-changed";
+        if (unverifiedOverlap) {
+            panel.append(el("p", "comparison-notice", "Overlap is unverified; the difference may include previously counted calls."));
+        } else if (model.narrative) {
             const narrative = el("div", "comparison-takeaway");
             narrative.append(el("h2", "", model.narrative.heading), el("p", "muted", model.narrative.detail));
             panel.append(narrative);
         } else if (model.status === "unavailable") {
             panel.append(el("p", "comparison-notice", "These report facts are not compatible. The original reports remain unchanged."));
+        }
+        renderResultComparison(panel, model.resultComparison);
+        renderResultTextSources(panel, model.resultTextSources ?? (model.resultProjectionVersion === 1 ? null : undefined));
+        if (model.nativeComparison) {
+            const section = el("section", "comparison-native-results");
+            section.append(el("h2", "", "Microsoft activity"));
+            if (model.nativeComparison.reason) section.append(el("p", "comparison-notice",
+                "Source coverage or definitions differ; some changes cannot be compared."));
+            const makeTable = rows => {
+                const table = el("table", "comparison-metrics"), head = el("thead"), header = el("tr"), body = el("tbody");
+                for (const [index, title] of ["Source and measure", "Earlier", "Later", "Change"].entries()) {
+                    const cell = el("th", index ? "report-numeric" : "", title); cell.scope = "col"; header.append(cell);
+                }
+                head.append(header); table.append(head);
+                for (const row of rows) {
+                    const tr = el("tr"), label = el("th", row.failure ? "report-negative" : "", row.label); label.scope = "row";
+                    label.append(el("span", "comparison-meta", row.source)); tr.append(label);
+                    for (const [index, value] of [row.earlier, row.later, row.change].entries()) {
+                        const td = el("td", row.numeric[index + 1] ? "report-numeric" : "report-cell-text");
+                        td.append(el("span", "comparison-mobile-label", ["Earlier", "Later", "Change"][index]), el("span", "", value)); tr.append(td);
+                    }
+                    body.append(tr);
+                }
+                table.append(body); return table;
+            };
+            const rows = nativeRows(model), populated = rows.filter(row => !row.empty), empty = rows.filter(row => row.empty);
+            if (populated.length) section.append(makeTable(populated));
+            if (empty.length) {
+                const details = el("details");
+                details.append(el("summary", "", `Zero counts (${empty.length})`), makeTable(empty)); section.append(details);
+            }
+            panel.append(section);
         }
         function metricCell(metric, side) {
             const cell = el("td");
@@ -314,7 +501,7 @@ export function createReportComparison(wording = createAssessmentWording()) {
                 change.append(mobile);
                 if (metric.status === "comparable" && metric.delta) {
                     const delta = metric.delta;
-                    change.append(el("strong", "comparison-delta", delta.value === 0 ? "Unchanged" : `${delta.value > 0 ? "+" : "−"}${formatValue(Math.abs(delta.value), delta.unit)}`));
+                    change.append(el("strong", "comparison-delta", delta.value === 0 ? "Unchanged" : formatChange(delta.value, delta.unit)));
                     if (metric.warnings?.includes("coverage-decreased")) change.append(el("span", "comparison-meta", warningLabel("coverage-decreased", metric)));
                     else if (metric.warnings?.includes("total-cost-volume-differs")) change.append(el("span", "comparison-meta", warningLabel("total-cost-volume-differs", metric)));
                     else if (delta.unit === "percentage-points") change.append(el("span", "comparison-meta", "Percentage points"));
@@ -333,7 +520,8 @@ export function createReportComparison(wording = createAssessmentWording()) {
         const evidence = model.primaryEvidence ?? { heading: "Recorded tool results", scoreLabel: "Recorded tool success", unitLabel: "calls", successVerb: "succeeded", note: "Tool execution is separate from answer accuracy and trust." };
         if (tool) {
             const section = el("section", "comparison-tool-results");
-            section.append(el("h2", "", evidence.heading), el("p", "comparison-meta", evidence.note));
+            section.append(el("h2", "", evidence.heading));
+            if (evidence.note && (model.primaryLayer && model.primaryLayer !== "tool-call" || model.resultProjectionVersion === 1)) section.append(el("p", "comparison-meta", evidence.note));
             const pair = el("div", "comparison-score-pair");
             for (const [side, totals] of [["Earlier", tool.raw.baseline], ["Later", tool.raw.later]]) {
                 const card = el("article", "comparison-score");
@@ -435,9 +623,11 @@ export function createReportComparison(wording = createAssessmentWording()) {
         presentation,
         readingNotes, readingNotesFor,
         comparisonNote,
+        resultBoundary, resultComparisonContent, renderResultComparison, resultTextNotice, resultTextSourcesContent, renderResultTextSources,
         scopeNotes,
         outcomeTone,
         formatValue,
+        formatChange,
         metricPresentation,
         metricLabel,
         comparisonLabel,
@@ -447,6 +637,7 @@ export function createReportComparison(wording = createAssessmentWording()) {
         absentPeerLabel,
         comparisonSidePresentation,
         metricGroups,
+        nativeRows,
         definitionLabel: metricDefinitionLabel,
         dimensionLabel(key) {
             if (!Object.hasOwn(dimensions, key)) throw new TypeError("Unknown report dimension.");
@@ -461,6 +652,12 @@ export function createReportComparison(wording = createAssessmentWording()) {
 }
 
 export const reportComparisonStyles = `
+.comparison-native-results .comparison-metrics thead{background:transparent}
+.comparison-native-results .comparison-metrics :is(th,td).report-numeric{text-align:right;font-variant-numeric:tabular-nums}
+.comparison-native-results .comparison-metrics :is(th,td).report-cell-text{text-align:left}
+.comparison-native-results .report-negative{color:var(--danger)}
+.comparison-native-results details{margin-top:.5rem}
+.comparison-native-results summary{min-height:44px;padding:.65rem 0;cursor:pointer}
 .report-comparison{color:var(--ink);font-family:var(--font);font-size:var(--type-body,.875rem);line-height:var(--leading-ui,1.43);font-variant-numeric:tabular-nums;min-width:0}
 .comparison-takeaway{margin:0 0 24px}.comparison-takeaway h2{font-size:var(--type-section,1.125rem);line-height:var(--leading-section,1.333);margin:0 0 6px}.comparison-takeaway p{margin:0;line-height:var(--leading-reading,1.625)}
 .comparison-notice{padding:16px;background:var(--canvas);border:1px solid var(--rule);border-radius:var(--radius)}

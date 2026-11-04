@@ -186,16 +186,24 @@ test("synthetic: duration samples exclude missing/negative; nearest-rank quantil
 test("synthetic: source/project/date/endpoint/outcome/tool/scope filters retain exact denominators", () => {
     const records = [
         scenario("s1", [call("a", { startedAt: "2026-09-01T00:00:00Z" }), call("b", { startedAt: "2026-09-02T00:00:00Z", toolSucceeded: false })]),
-        scenario("s2", [call("c"), call("d", { startedAt: "2026-09-03T00:00:00Z" })], { sourceSessionId: "s2", projectId: null }),
+        scenario("s2", [call("c", { tool: "workiq-retrieve", requestArgs: { query: ["invented"] } }),
+            call("d", { startedAt: "2026-09-03T00:00:00Z", requestArgs: { entityUrls: ["/me/events"] } })], { sourceSessionId: "s2", projectId: null }),
         scenario("s3", [call("legacy")], { isLegacy: true }),
     ];
-    for (const filters of [
-        { from: "2026-09-02", to: "2026-09-03" },
-        { sourceSessionIds: ["test-session"], outcomes: ["failure"] },
-        { projectIds: [null] },
-        { tools: ["workiq-fetch"], endpoints: [normalizeEndpoint("/me/messages").id] },
-        { scope: "legacy" },
-    ]) invariant(buildAnalytics(records, { filters }));
+    for (const [filters, expected] of [
+        [{ from: "2026-09-02", to: "2026-09-03" }, [["test-session", "b"], ["s2", "d"]]],
+        [{ sourceSessionIds: ["test-session"] }, [["test-session", "a"], ["test-session", "b"]]],
+        [{ outcomes: ["failure"] }, [["test-session", "b"]]],
+        [{ projectIds: [null] }, [["s2", "c"], ["s2", "d"]]],
+        [{ tools: ["workiq-fetch"] }, [["test-session", "a"], ["test-session", "b"], ["s2", "d"]]],
+        [{ endpoints: [normalizeEndpoint("/me/messages").id] }, [["test-session", "a"], ["test-session", "b"]]],
+        [{ scope: "legacy" }, [["test-session", "legacy"]]],
+    ]) {
+        const actual = buildAnalytics(records, { filters });
+        invariant(actual);
+        assert.deepEqual(actual.rows.map(row => row.id).sort(), expected.map(identity => `call:${JSON.stringify(identity)}`).sort(),
+            JSON.stringify(filters));
+    }
     const a = buildAnalytics(records, { filters: { from: "2026-09-02", to: "2026-09-03" } });
     assert.equal(a.totals.count, 2);
     assert.equal(a.exclusions.missingFilterDate, 1);
@@ -245,10 +253,9 @@ test("synthetic: reports use sanitized projection only, escape markup and never 
     assert.ok(html.includes("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"));
     assert.ok(md.includes("\\*\\*bold\\*\\*"));
     assert.doesNotMatch(md, /PRIVATE_SIDE|PRIVATE_FOLLOWUP|```json|toolCallId|requestArgs/);
-    assert.ok(md.includes("1 Work IQ tool call"));
-    assert.ok(html.includes("1 Work IQ tool call"));
+    assert.match(md, /\| Work IQ tool calls \| 1 \| 1 succeeded \|/);
+    assert.match(html, /Work IQ tool calls<\/th><td data-label="Count">1<\/td>/);
     assert.ok(html.includes('scope="col"'));
-    assert.ok(html.includes('role="img"'));
     assert.ok(html.includes("Content-Security-Policy"));
     assert.doesNotMatch(html, /src=["']https:|@import|<script/);
 });
@@ -259,28 +266,27 @@ test("synthetic: report inventory includes selected legacy and uses all-scope me
         projected(scenario("legacy", [call("a"), call(null, { startEventId: null })], { isLegacy: true })),
     ];
     const md = renderMarkdownReport(records);
-    assert.ok(md.includes("Selected export inventory: 2 scenario records, including 1 legacy records"));
-    assert.ok(md.includes("1 Work IQ tool call"));
-    assert.ok(md.includes("Records without source chat"));
-    assert.ok(md.includes("Overlapping call records"));
+    assert.match(md, /2 selected evidence records/);
+    assert.match(md, /Selected export inventory includes 1 legacy record\./);
+    assert.match(md, /\| Work IQ tool calls \| 1 \| 1 succeeded \|/);
+    const metrics = buildAnalytics(records, { filters: { scope: "all" } });
+    assert.equal(metrics.exclusions.unidentifiable, 1);
+    assert.equal(metrics.exclusions.duplicateRecords, 1);
 });
 
-test("synthetic: report charts use absolute front heights, not per-category normalization", () => {
+test("synthetic: report operation tables retain distinct exact counts and explicit empty state", () => {
     const records = [projected(scenario("s", [call("a"), call("b"), call("c", { requestArgs: { entityUrls: ["/me/events"] } })]))];
     const html = renderHtmlReport(records);
-    const columns = [...html.matchAll(/data-total="(\d+)" data-maximum="(\d+)" data-front-height="([\d.]+)"/g)]
-        .map(([, total, maximum, height]) => ({ total: Number(total), maximum: Number(maximum), height: Number(height) }));
-    assert.ok(columns.some(column => column.total === 2 && column.maximum === 2 && column.height === 200));
-    assert.ok(columns.some(column => column.total === 1 && column.maximum === 2 && column.height === 100));
-    for (const column of columns) assert.equal(column.height, column.total / column.maximum * 200);
+    assert.match(html, /\/me\/messages<\/th><td>2<\/td>/);
+    assert.match(html, /\/me\/events<\/th><td>1<\/td>/);
     assert.ok(renderMarkdownReport([]).includes("No qualifying records in this layer."));
 });
 
-test("synthetic: privacy summary uses category counts only, never category names or arbitrary audit strings", () => {
+test("synthetic: privacy summary validates counts but discloses no category names or arbitrary audit strings", () => {
     const options = { privacy: { categories: { PRIVATE_CATEGORY: 2, other: 3 }, reviewerConfirmed: false, inputFingerprint: "PRIVATE_FINGERPRINT", note: "PRIVATE_NOTE" } };
     const md = renderMarkdownReport([], options);
-    assert.ok(md.includes("5 category matches across 2 categories"));
-    assert.ok(md.includes("required before writing"));
+    assert.ok(md.includes("Detected credentials are removed."));
+    assert.ok(md.includes("masking is not a privacy guarantee or permission to publish or upload."));
     assert.doesNotMatch(md, /PRIVATE_/);
     assert.throws(() => renderHtmlReport([], { privacy: { categories: { bad: "PRIVATE_VALUE" } } }), TypeError);
 });

@@ -7,7 +7,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, selectActivityOption, chooseTheme, openActivitySessions, automaticScoreOffSummary } from "./helpers.mjs";
+import { exportCatalogFor, selectActivityOption, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_CHART_PROOF_DIR;
 function recordsFor(days) {
@@ -31,7 +31,7 @@ async function fixture(days, run) {
     const server = createServer(async (req, res) => {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "synthetic-chart-nonce")); return;
+            res.end(renderHtmlShell("a".repeat(64), "synthetic-chart-nonce", UNBOUND_FIXTURE_BOOTSTRAP)); return;
         }
         let body = ""; for await (const chunk of req) body += chunk;
         const input = JSON.parse(body);
@@ -111,7 +111,7 @@ test("pointer section inspection survives a small scroll without stealing keyboa
     await column.hover();
     await page.mouse.wheel(0, 1);
     assert.equal(await page.getByRole("tooltip").isVisible(), true);
-    assert.match(await page.getByRole("tooltip").innerText(), /Worked: 14 of 17 Work IQ tool calls/);
+    assert.match(await page.getByRole("tooltip").innerText(), /Tool completed: 14 of 17 Work IQ tool calls/);
     assert.match(await column.getAttribute("aria-label"), /17 Work IQ tool calls/);
     assert.equal(await column.evaluate(node => node.matches(":hover")), true);
     assert.equal(await column.evaluate(node => node === document.activeElement), false, "Pointer inspection never steals keyboard focus");

@@ -1,9 +1,16 @@
 import { createActivityProjection } from "../lib/activity-projection.mjs";
 
-// Native reports keep the default format; screens opt into compact duration text.
+// Historical reports keep the default format; live screens and v3 reports opt into milliseconds.
 // Reuse the canonical nearest-rank calculation, never a percentile of medians.
 export function createTimingPresentation(summarize = createActivityProjection(null, null, ["unknown"]).summarize, { compact = false } = {}) {
     const number = value => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+    function formatMilliseconds(value) {
+        if (value === null) return "Not measured";
+        if (!Number.isFinite(value) || value < 0) throw new TypeError("A duration must be nonnegative milliseconds or null.");
+        const primary = new Intl.NumberFormat("en-US", { maximumFractionDigits: 20 }).format(value);
+        const seconds = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(value / 1000);
+        return `${value > 0 && value < 1e-20 ? "<0.00000000000000000001" : primary} ms${value >= 1000 ? ` (${seconds} s)` : ""}`;
+    }
     const definitions = {
         "tool-start-to-completion": ["Tool latency", "calls", "Call start to recorded completion"],
         "recorded-request-to-final-answer": ["Request to final response", "requests", "Recorded request to final response; not tool-call time"],
@@ -14,17 +21,13 @@ export function createTimingPresentation(summarize = createActivityProjection(nu
     function duration(milliseconds) {
         if (milliseconds === null) return "Not measured";
         if (!Number.isFinite(milliseconds) || milliseconds < 0) throw new TypeError("A duration must be nonnegative milliseconds or null.");
+        if (compact) return formatMilliseconds(milliseconds);
         if (milliseconds > 0 && milliseconds < 10) return "<0.01 s";
         const hundredths = Math.round(milliseconds / 10);
         if (hundredths < 6000) return `${number(hundredths / 100)} s`;
-        if (!compact) {
-            const seconds = number(hundredths % 6000 / 100);
-            return hundredths < 360000 ? `${number(Math.floor(hundredths / 6000))} min ${seconds} s`
-                : `${number(Math.floor(hundredths / 360000))} h ${Math.floor(hundredths % 360000 / 6000)} min ${seconds} s`;
-        }
-        const seconds = Math.round(milliseconds / 1000), pad = value => String(value).padStart(2, "0");
-        return seconds < 3600 ? `${Math.floor(seconds / 60)}:${pad(seconds % 60)} min`
-            : `${number(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds % 3600 / 60))}:${pad(seconds % 60)} h`;
+        const seconds = number(hundredths % 6000 / 100);
+        return hundredths < 360000 ? `${number(Math.floor(hundredths / 6000))} min ${seconds} s`
+            : `${number(Math.floor(hundredths / 360000))} h ${Math.floor(hundredths % 360000 / 6000)} min ${seconds} s`;
     }
     function fromSummary(summary, eligible, boundary) {
         const definition = definitions[boundary];
@@ -57,7 +60,7 @@ export function createTimingPresentation(summarize = createActivityProjection(nu
         }
         return fromSummary(summary, metric.coverage.eligible, metric.boundary);
     }
-    return { duration, fromSummary, fromMetric };
+    return { duration: compact ? formatMilliseconds : duration, milliseconds: formatMilliseconds, fromSummary, fromMetric };
 }
 
 // Human meaning requires the saved check, version and origin, not its dimension alone.
@@ -355,7 +358,8 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         const value = personalVerdict ?? (metric.value === null ? unavailable(metric) : ratio
             ? metric.value > 0 && metric.value * 100 < 0.01 ? "<0.01%" : `${percentages.format(metric.value * 100)}%`
             : cost ? metric.value > 0 && metric.value < 0.000001 ? "<$0.000001" : dollars.format(metric.value)
-                : metric.value > 0 && metric.value < 0.01 ? "<0.01 ms" : `${number(metric.value)} ms`);
+                : timing.duration === timing.milliseconds ? timing.duration(metric.value)
+                    : metric.value > 0 && metric.value < 0.01 ? "<0.01 ms" : `${number(metric.value)} ms`);
         const diagnostic = ["execution", "evidence"].includes(metric.dimension);
         const coverage = ratio && diagnostic
             ? `${number(metric.numerator)} / ${number(metric.denominator)} positive; ${number(metric.coverage.covered)} / ${number(metric.coverage.eligible)} with a recorded binary result`
@@ -387,8 +391,9 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
         if (metric.evaluator) details.push(`Model ${metric.evaluator.model}; rubric ${metric.evaluator.rubricId} v${metric.evaluator.rubricVersion}.`);
         if (metric.dimension === "speed") {
             const row = timing.fromMetric(metric);
-            details.push(`${row.timed === 1 ? "Single sample" : "Median"}: ${metric.value === null ? "Not measured" : `${metric.value} ms`}. `
-                + `P95: ${row.timed > 1 ? `${row.distribution.p95Ms} ms` : "Not shown without multiple samples"}. Nearest rank; retained samples only.`);
+            const exact = value => timing.duration === timing.milliseconds ? timing.duration(value) : value === null ? "Not measured" : `${value} ms`;
+            details.push(`${row.timed === 1 ? "Single sample" : "Median"}: ${exact(metric.value)}. `
+                + `P95: ${row.timed > 1 ? exact(row.distribution.p95Ms) : "Not shown without multiple samples"}. Nearest rank; retained samples only.`);
         }
         const timingSummary = {
             "tool-duration": { label: "Tool latency", unit: "calls" },
@@ -428,7 +433,8 @@ export function createAssessmentPresentation({ validateMetric, metricSlotKey, va
             } else value = `${metric.counts.pass} passed; ${metric.counts.fail} failed`
                 + (metric.counts.evaluatorError ? `; ${metric.counts.evaluatorError} review ${metric.counts.evaluatorError === 1 ? "error" : "errors"}` : "");
         } else if (metric.dimension === "speed") value = metric.value === null
-            ? metric.reason === "unverified-association" ? "Boundary not verified" : "Not measured" : `${metric.value} ms`;
+            ? metric.reason === "unverified-association" ? "Boundary not verified" : "Not measured"
+            : timing.duration === timing.milliseconds ? timing.duration(metric.value) : `${metric.value} ms`;
         else if (metric.checkId === "answer-evidence-present") {
             if (!metric.coverage.eligible) value = "Not applicable";
             else if (metric.value === null && (metric.status === "evaluator-error" || metric.counts.evaluatorError)) {
@@ -1124,12 +1130,6 @@ export function renderRecordedTiming(root, rows, { title = "Recorded timing", ac
         if (text !== undefined) node.textContent = text;
         return node;
     }
-    function exactDuration(milliseconds) {
-        if (milliseconds === null) return "Not measured";
-        if (milliseconds < 1000 || !Number.isSafeInteger(milliseconds)) return `${milliseconds} ms`;
-        const minutes = Math.floor(milliseconds / 60000), seconds = milliseconds % 60000 / 1000;
-        return minutes ? `${minutes} min${seconds ? ` ${seconds} s` : ""}` : `${seconds} s`;
-    }
     const section = el("section", compact ? "assessment-timing timing-summary" : "assessment-timing");
     section.setAttribute("aria-label", title);
     const compactSummary = compact && rows.length === 1;
@@ -1162,7 +1162,11 @@ export function renderRecordedTiming(root, rows, { title = "Recorded timing", ac
             : [[compact ? row.timed === 1 ? "Single sample" : "Duration" : "", row.measurement.value, "single"]];
         for (const [label, milliseconds, statistic] of statistics) {
             const item = el("div");
-            const value = el("data", "assessment-value", exactDuration(milliseconds));
+            const text = statistic === "p95" ? row.display.p95 : row.display.median;
+            const value = el("data", "assessment-value");
+            const [primary, secondary] = text.split(" (");
+            value.append(el("span", "duration-primary", primary));
+            if (secondary) value.append(" ", el("span", "duration-equivalent", "(" + secondary));
             value.dataset.statistic = statistic;
             if (milliseconds !== null) value.value = String(milliseconds);
             if (label) item.append(el(compact ? "dt" : "span", "assessment-cell-label", label));
@@ -1260,6 +1264,8 @@ export const assessmentPresentationStyles = `
 .assessment-cell-label {display:block;font-size:var(--type-caption);line-height:1.5;color:var(--muted);margin-bottom:var(--space-xs)}
 .assessment-timing {margin-block:var(--space-xl);padding-top:var(--space-lg);border-top:1px solid var(--rule)}
 .assessment-timing .assessment-value {display:block;font-size:var(--type-data-value)}
+.duration-primary {display:inline-block;white-space:nowrap;font:inherit;font-variant-numeric:tabular-nums}
+.duration-equivalent {display:inline-block;white-space:nowrap;font-size:var(--type-small);font-weight:var(--weight-regular);color:var(--muted)}
 .assessment-timing .assessment-heading>a {display:inline-flex;align-items:center;min-height:44px}
 .recorded-timing-row {display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-sm) var(--space-xl);padding-block:var(--space-md);min-width:0;overflow-wrap:anywhere}
 .recorded-timing-row+.recorded-timing-row {border-top:1px solid var(--rule)}

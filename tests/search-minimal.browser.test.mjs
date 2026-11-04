@@ -15,6 +15,7 @@ test("compact Search keeps one stationary field and readable live rows without a
     t.after(async () => { await browser.close(); for (const fn of cleanup) await fn(); assert.deepEqual(errors, []); });
     await page.goto(app.runtime.url);
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await chooseTheme(page, "light");
     const input = page.getByRole("searchbox", { name: "Search", exact: true });
     await input.focus();
     await expect(page.locator("#wireSearchPanel")).toBeHidden();
@@ -100,7 +101,7 @@ test("compact Search keeps one stationary field and readable live rows without a
 });
 
 test("minimal row accessible names retain recorded outcomes and partial/unavailable text facts", { timeout: 15000 }, async t => {
-    const results = createRecordedResults();
+    const results = createRecordedResults({ screen: true });
     const records = searchRecords();
     records[1].toolCalls[0].toolSucceeded = null;
     records[1].toolCalls[0].reportedOutcome = "partial";

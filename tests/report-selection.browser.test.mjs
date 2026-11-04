@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption, openActivitySessions, restoreLegacySearch } from "./helpers.mjs";
+import { fixture, privateFixture, navigateMain, chooseTheme, selectActivityOption, openActivitySessions, restoreLegacySearch, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { reportContents, chooseReportScope, inspectReportCopies, cancelReportPreview, openReportCreation, selectAnalyzeRequest } from "./report-journey-helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 
@@ -64,7 +64,7 @@ async function setup(t, { total = 18, sharedPair = [0, 1] } = {}) {
 }
 async function emptySelection(page) {
     assert.equal(await page.locator("[name=reportScope]:checked").inputValue(), "selected");
-    assert.match(await page.locator("#scopeCount-selected").textContent(), / · 0 interactions$/);
+    assert.match(await page.locator("#scopeCount-selected").textContent(), / 0 interactions$/);
     assert.equal(await page.locator("#previewSelectionSummary").textContent(), "No interactions included");
     assert.equal(await page.locator("#activitySelectionSummary").textContent(), "No requests selected");
     assert.equal(await page.locator("#exportBtn").textContent(), "Prepare report");
@@ -107,13 +107,17 @@ test("reader Continue connects canonical selection to report Activity and exact 
     await chooseReportScope(page, "all");
     await navigateMain(page, "activity"); await ready(page);
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
-    const card = page.locator(".request-row").filter({ hasText: "Selection request 01" });
+    await closeAnalyzeFilters(page);
+    const card = page.locator("#activityList .request-row").filter({ hasText: "Selection request 01" });
     const open = card.locator(".request-card-open");
+    await page.evaluate(() => document.fonts.ready);
     await open.scrollIntoViewIfNeeded();
-    const origin = page.url(), entry = await open.boundingBox();
+    const origin = page.url();
+    let entry = await open.boundingBox();
     await page.mouse.click(entry.x + entry.width / 2, entry.y + entry.height / 2); await ready(page);
-    const readerUrl = page.url(), pick = page.locator("#requestReportToggle"), next = page.locator("#requestReportContinue");
-    await expect(next).toBeVisible();
+    let readerUrl = page.url();
+    const pick = page.locator("#requestReportToggle"), next = page.locator("#requestReportContinue");
+    await expect(next).toBeHidden();
     await expect(next).toBeDisabled();
     await expect(page.locator("#requestReportTitle")).toHaveText("Included through the current report scope.");
     await pick.click();
@@ -121,7 +125,7 @@ test("reader Continue connects canonical selection to report Activity and exact 
     await expect(pick).toBeFocused();
     assert.equal(page.url(), readerUrl, "Add only selects; it does not navigate or save");
     await expect(next).toBeEnabled();
-    await pick.click(); await expect(next).toBeDisabled();
+    await pick.click(); await expect(next).toBeHidden(); await expect(next).toBeDisabled();
     await expect(page.locator("#activitySelectionSummary")).toContainText("1 request group included");
     await pick.click();
     await expect(page.locator("#activitySelectionSummary")).toContainText("3 request groups included");
@@ -139,9 +143,21 @@ test("reader Continue connects canonical selection to report Activity and exact 
     assert.deepEqual(await page.evaluate(() => window.readerCopies), ["Selection request 01"]);
     const proof = [];
     for (const [theme, width, scale] of [["dark", 1200, 1], ["light", 375, 2]]) {
+        if (await page.locator("#contextSidebar").evaluate(node => node.open)) {
+            await page.locator("#closeContextSidebar").click();
+            await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
+        }
         await chooseTheme(page, theme);
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(scale => document.documentElement.style.fontSize = `${16 * scale}px`, scale);
+        // Compare each return with its own entry layout, not coordinates from before a viewport change.
+        if (!await page.locator("#contextSidebar").evaluate(node => node.open)) {
+            await page.evaluate(() => document.fonts.ready);
+            await open.scrollIntoViewIfNeeded();
+            entry = await open.boundingBox();
+            await page.mouse.click(entry.x + entry.width / 2, entry.y + entry.height / 2); await ready(page);
+            readerUrl = page.url();
+        }
         await next.focus();
         const position = await next.boundingBox();
         assert.ok(position.height >= 44 && position.width >= 44);
@@ -150,7 +166,7 @@ test("reader Continue connects canonical selection to report Activity and exact 
         await page.keyboard.press("Enter"); await ready(page);
         await expect(page.locator("#reportStage1")).toBeVisible();
         await expect(page.locator("[name=reportScope]:checked")).toHaveValue("selected");
-        await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 3 interactions");
+        await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 3 interactions");
         await expect(page.locator("#report-select-selection-0")).toBeChecked();
         await expect(page.locator("#report-select-selection-1")).toBeChecked();
         await expect(page.locator("#report-select-selection-1").locator("xpath=ancestor::article[1]")).toBeFocused();
@@ -172,14 +188,17 @@ test("reader Continue connects canonical selection to report Activity and exact 
         assert.deepEqual(routeParts(page.url()), routeParts(readerUrl), "Back restores the exact route values, regardless of canonical query ordering");
         await expect(next).toBeFocused();
         assert.ok(Math.abs((await next.boundingBox()).y - position.y) < 3, "Back restores Continue's exact entry position");
-        proof.push({ theme, width, scale, beforeCopy, readerReturnY: (await next.boundingBox()).y, entryY: position.y });
+        const readerReturnY = (await next.boundingBox()).y;
+        await page.locator("#closeContextSidebar").click(); await ready(page);
+        await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
+        assert.equal(page.url(), origin);
+        await expect(open).toBeFocused();
+        const cardReturnY = (await open.boundingBox()).y;
+        assert.ok(Math.abs(cardReturnY - entry.y) < 3, "Reader Back restores the original filtered card in its entry layout");
+        proof.push({ theme, width, scale, beforeCopy, readerReturnY, entryY: position.y, cardEntryY: entry.y, cardReturnY });
     }
     await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => document.documentElement.style.fontSize = "16px");
-    await page.locator("#closeContextSidebar").click(); await ready(page);
-    assert.equal(page.url(), origin);
-    await expect(open).toBeFocused();
-    assert.ok(Math.abs((await open.boundingBox()).y - entry.y) < 3, "Reader Back restores the original filtered card");
     assert.equal(await card.locator("input").count(), 0, "Analyze selection stays in the sidebar, not a card checkbox");
     assert.equal(requests.filter(request => ["/api/preview", "/api/privacy-review", "/api/export"].includes(request.path)).length, 0);
     if (proofDir) await writeFile(path.join(proofDir, "reader-report-join.json"), JSON.stringify(proof, null, 2));
@@ -196,7 +215,10 @@ test("explicit reader Continue reveals a distant selected target despite prior p
     await page.getByText("Additional masking", { exact: true }).click();
     await page.locator("#manualTerms").fill("Keep the invented masking choice");
     await chooseReportScope(page, "selected");
+    await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
     await page.locator("#reportRequestSearch").fill("Selection request 0");
+    await expect(page.locator("#reportRequestSearch")).toHaveValue("Selection request 0");
+    await expect(page.locator("#reportRequestSearchCount")).toContainText("30 of 118");
     await page.getByRole("button", { name: "Next report requests", exact: true }).click();
     await expect(page.locator("#reportList")).toContainText("5-8 of 30");
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
@@ -205,7 +227,7 @@ test("explicit reader Continue reveals a distant selected target despite prior p
     await expect(page.locator("#reportList"), "Ordinary draft return retains its page").toContainText("5-8 of 30");
     await navigateMain(page, "activity"); await ready(page);
     await restoreLegacySearch(page, "Selection request 11");
-    const open = page.locator(".request-row").filter({ hasText: "Selection request 113" }).locator(".request-card-open");
+    const open = page.locator("#activityList .request-row").filter({ hasText: "Selection request 113" }).locator(".request-card-open");
     await open.scrollIntoViewIfNeeded();
     const cardUrl = page.url(), cardBox = await open.boundingBox();
     await page.mouse.click(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2); await ready(page);
@@ -237,7 +259,7 @@ test("explicit reader Continue reveals a distant selected target despite prior p
         assert.equal(await page.locator("#manualTerms").inputValue(), "Keep the invented masking choice");
     };
     await next.press("Enter"); await ready(page);
-    await assertRevealed(113, "1 chat · 3 interactions");
+    await assertRevealed(113, "1 chat 3 interactions");
     if (proofDir) await page.screenshot({ path: path.join(proofDir, "continued-distant-selected.png") });
     const contents = page.getByRole("button", { name: "Continue to contents", exact: true });
     await contents.focus(); await expect(contents).toBeInViewport();
@@ -251,11 +273,11 @@ test("explicit reader Continue reveals a distant selected target despite prior p
     await expect(open).toBeFocused();
     assert.ok(Math.abs((await open.boundingBox()).y - cardBox.y) < 3);
 
-    await page.locator(".request-row").filter({ hasText: "Selection request 112" }).locator(".request-card-open").click();
+    await page.locator("#activityList .request-row").filter({ hasText: "Selection request 112" }).locator(".request-card-open").click();
     await ready(page);
     await expect(page.locator("#requestReportToggle")).toHaveText("Remove from report");
     await next.click(); await ready(page);
-    await assertRevealed(112, "1 chat · 3 interactions");
+    await assertRevealed(112, "1 chat 3 interactions");
     await selectActivityOption(page, "reportPromptAuthorFilter", ["agent"]);
     await page.locator("#reportRequestSearch").fill("Selection request 0");
     await page.getByRole("button", { name: "Next report requests", exact: true }).click();
@@ -270,7 +292,7 @@ test("explicit reader Continue reveals a distant selected target despite prior p
     await page.locator("#reportRequestSearch").fill("Selection request 11");
     await page.getByRole("button", { name: "Next report requests", exact: true }).click();
     await navigateMain(page, "activity"); await ready(page);
-    await page.locator(".request-row").filter({ hasText: "Selection request 112" }).locator(".request-card-open").click(); await ready(page);
+    await page.locator("#activityList .request-row").filter({ hasText: "Selection request 112" }).locator(".request-card-open").click(); await ready(page);
     await next.click(); await ready(page);
     await assertRevealed(112, "No interactions included", "Selection request 11", "1-4 of 9");
     await page.locator("#reportRequestSearch").fill("Selection request 02");
@@ -285,7 +307,7 @@ test("reader aliases and author exclusions stay truthful while pending and stale
     await page.locator("#report-select-selection-1").check();
     await selectActivityOption(page, "reportPromptAuthorFilter", ["agent"]);
     await navigateMain(page, "activity"); await ready(page);
-    await page.locator(".request-row").filter({ hasText: "Selection request 00" }).locator(".request-card-open").click();
+    await page.locator("#activityList .request-row").filter({ hasText: "Selection request 00" }).locator(".request-card-open").click();
     await ready(page);
     const pick = page.locator("#requestReportToggle"), next = page.locator("#requestReportContinue");
     await expect(pick).toHaveText("Remove from report", { timeout: 2000 });
@@ -329,7 +351,7 @@ test("reader report actions cannot change a dispatched save or an unconfirmed wr
     const [existing] = initial.exports;
     const originalFiles = await Promise.all(Object.values(existing.files).map(file => readFile(file)));
     await page.goto(runtime.url); await ready(page);
-    await page.locator(".request-row").filter({ hasText: "Selection request 00" }).locator(".request-card-open").click();
+    await page.locator("#activityList .request-row").filter({ hasText: "Selection request 00" }).locator(".request-card-open").click();
     await ready(page);
     await page.locator("#requestReportToggle").click();
     const staleActions = await page.locator("#requestReportToggle,#requestReportContinue").elementHandles();
@@ -357,7 +379,7 @@ test("reader report actions cannot change a dispatched save or an unconfirmed wr
     release();
     await page.locator("#reportsView[data-report-phase=blocked]").waitFor();
     await navigateMain(page, "activity"); await ready(page);
-    await page.locator(".request-row").filter({ hasText: "Selection request 00" }).locator(".request-card-open").click(); await ready(page);
+    await page.locator("#activityList .request-row").filter({ hasText: "Selection request 00" }).locator(".request-card-open").click(); await ready(page);
     await expect(page.locator("#requestReportToggle")).toBeDisabled();
     await expect(page.locator("#requestReportContinue")).toBeDisabled();
     const location = page.url();
@@ -366,6 +388,8 @@ test("reader report actions cannot change a dispatched save or an unconfirmed wr
     }
     assert.equal(page.url(), location);
     assert.equal(await page.locator("#activitySelectionSummary").textContent(), selection);
+    await page.locator("#closeContextSidebar").click();
+    await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
     await navigateMain(page, "reports"); await openReportCreation(page);
     await page.getByRole("button", { name: "Check save status", exact: true }).click();
     await page.locator("#reportsView[data-report-phase=saved]").waitFor();
@@ -396,7 +420,7 @@ test("reader cannot replace paired report cohorts with individual selection", { 
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
     await page.locator("#createPeriodReport").click(); await ready(page);
     const scope = await page.locator("#periodReportScope").textContent();
-    await page.locator("#reportList").getByRole("link", { name: "View interaction", exact: true }).first().click(); await ready(page);
+    await page.locator("#reportList .request-card-open").first().click(); await ready(page);
     await expect(page.locator("#requestReportToggle")).toBeDisabled();
     await expect(page.locator("#requestReportToggle")).toBeHidden();
     await expect(page.locator("#requestReportContinue")).toHaveText("Back to activity");
@@ -418,7 +442,7 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     await page.goto(runtime.url); await ready(page);
     await navigateMain(page, "reports");
     await emptySelection(page);
-    assert.match(await page.locator("#scopeCount-all").textContent(), / · 18 interactions$/);
+    assert.match(await page.locator("#scopeCount-all").textContent(), / 18 interactions$/);
     assert.equal(await page.locator("#savedLibraryTitle").textContent(), "Saved reports (1)");
     assert.ok(requests.every(request => ["/api/snapshot", "/api/collection/status", "/api/assessment/overview", "/api/evaluation/automatic/summary"].includes(request.path)),
         "Opening Reports only reads stored state and status: " + requests.map(request => request.path).join(", "));
@@ -432,22 +456,22 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     await navigateMain(page, "activity");
     await openActivitySessions(page);
     await selectAnalyzeRequest(page, page.locator("#activityList .request-row").filter({ hasText: "Selection request 01" }));
-    assert.equal(await page.locator("#activitySelectionSummary").textContent(), "One report · 2 request groups included", "One overlapping selection expands to both canonical request owners");
+    assert.equal(await page.locator("#activitySelectionSummary").textContent(), "One report with 2 request groups included", "One overlapping selection expands to both canonical request owners");
     await page.getByRole("navigation", { name: "Analyze result pages", exact: true }).getByRole("button", { name: "Next", exact: true }).click();
     await selectAnalyzeRequest(page, page.locator("#activityList .request-row").first());
-    assert.equal(await page.locator("#activitySelectionSummary").textContent(), "One report · 3 request groups included");
+    assert.equal(await page.locator("#activitySelectionSummary").textContent(), "One report with 3 request groups included");
     const origin = page.url();
     await navigateMain(page, "reports");
     await openReportCreation(page);
-    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 3 interactions");
-    await page.locator("#pageAction").click();
+    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 3 interactions");
+    await page.locator("#reportContextAction").click();
     assert.equal(page.url(), origin, "Back to activity retains the originating page");
     await navigateMain(page, "reports");
     const cancelled = await preview(page);
     assert.equal(cancelled.records.length, 3);
     await cancelReportPreview(page);
     await page.goBack(); await page.goForward();
-    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 3 interactions");
+    assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 3 interactions");
     for (const [index, kind] of ["all", "current", "selected"].entries()) {
         if (index) {
             await navigateMain(page, "activity");
@@ -472,7 +496,7 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" });
     await selectActivityOption(page, "outcomeFilter", "failure"); await ready(page);
     await navigateMain(page, "reports");
-    assert.match(await page.locator("#scopeCount-current").textContent(), / · 7 interactions$/, "Current expands complete eligible requests, including a shared alias owner");
+    assert.match(await page.locator("#scopeCount-current").textContent(), / 7 interactions$/, "Current expands complete eligible requests, including a shared alias owner");
     await chooseReportScope(page, "current");
     await navigateMain(page, "activity");
     const filtered = page.url();
@@ -491,7 +515,9 @@ test("report membership starts empty, spans pages, expands aliases, and clears e
     await page.getByRole("button", { name: "Add to report", exact: true }).click();
     const membership = await page.locator("#activitySelectionSummary").textContent();
     await page.locator("#closeContextSidebar").click(); await page.locator("#contextSidebar[open]").waitFor({ state: "hidden" }); await ready(page);
+    await openAnalyzeFilters(page);
     await page.locator("#resetView").click(); await ready(page);
+    await closeAnalyzeFilters(page);
     assert.match(new URL(page.url()).hash, /^#(?:home|analyze)/);
     assert.equal(await page.locator("#activitySelectionSummary").textContent(), membership, "Reset to Home does not clear explicit report IDs");
     await page.locator("#reportSelectionBar [data-clear-selection]").click();
@@ -658,6 +684,7 @@ test("clear discards per-copy edits and attestation, including late previews and
         arrivedSnapshot(); await snapshotHeld; await route.fulfill({ response });
     }, { times: 1 });
     await selectActivityOption(page, "outcomeFilter", "failure"); await snapshotPending;
+    await closeAnalyzeFilters(page);
     await page.locator("#reportSelectionBar [data-clear-selection]").click();
     releaseSnapshot(); await ready(page);
     await emptySelection(page);
@@ -682,9 +709,10 @@ test("selection summaries and shared filters stay compact and unclipped in both 
         await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `reports-empty-${theme}-${width}.png`), fullPage: true });
         await chooseReportScope(page, "all");
-        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat · 18 interactions");
+        assert.equal(await page.locator("#previewSelectionSummary").textContent(), "1 chat 18 interactions");
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `reports-included-${theme}-${width}.png`), fullPage: true });
         await reportContents(page);
+        await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
         const report = await page.locator("#contextSidebarFooter .report-stage-actions").evaluate(node => {
             const box = node.getBoundingClientRect();
             const button = node.querySelector("#exportBtn"), style = getComputedStyle(button);
@@ -698,6 +726,7 @@ test("selection summaries and shared filters stay compact and unclipped in both 
         await page.locator("#closeContextSidebar").click();
         await navigateMain(page, "activity"); await ready(page);
         await selectActivityOption(page, "serviceFilter", "Calendar"); await ready(page);
+        await openAnalyzeFilters(page);
         const metrics = await page.evaluate(() => {
             const rect = (node, painted = false) => {
                 const style = getComputedStyle(node), box = node.getBoundingClientRect(), paint = getComputedStyle(node, "::before");
@@ -731,6 +760,7 @@ test("selection summaries and shared filters stay compact and unclipped in both 
         await page.keyboard.press("Escape");
         await page.evaluate(() => { document.activeElement.blur(); scrollTo(0, 0); });
         if (proofDir) await page.screenshot({ path: path.join(proofDir, `activity-pills-${theme}-${width}.png`), fullPage: true });
+        await openAnalyzeFilters(page);
         await page.locator("#layerFilter-control").click();
         assert.equal(await page.locator(".select-popup").evaluate(node => getComputedStyle(node).borderRadius), "20px");
         assert.equal(await page.locator(".select-popup .select-option-description").count(), 0);

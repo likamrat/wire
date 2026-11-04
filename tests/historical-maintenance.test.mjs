@@ -63,6 +63,10 @@ async function fixture(t) {
     const config = f.collector.approvedRecollectionSource();
     const indexFile = path.join(f.context.dataDir, "collector", "index.json"), index = await readJson(indexFile);
     const good = await loadBoardState(f.context);
+    // This repair contract predates local diagnostic text and must not silently acquire that authority.
+    for (const record of good.evidence) for (const call of record.toolCalls ?? []) {
+        if (call.failureEvidence) delete call.failureEvidence.diagnostic;
+    }
     const proposals = good.evidence.filter(record => ["selected-A", "outside-C"].includes(record.toolCalls[0]?.toolCallId)).map(record => ({
         scenarioId: record.scenarioId, sourceSessionId: record.sourceSessionId,
         prompt: {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeSnapshot, makeRatio, makeDuration, id } from "./report-comparison-fixtures.mjs";
+import { makeSnapshot, makeRatio, makeDuration, id } from "./assessment-contract-fixtures.mjs";
 import { nativeQualityHtml, nativeQualityMarkdown, nativeReportEvidence, nativeTimingHtml, nativeTimingMarkdown } from "../lib/native-report-output.mjs";
 import { createReportComparison } from "../web/report-comparison.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";

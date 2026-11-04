@@ -9,7 +9,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { currentStatePayload } from "../lib/server.mjs";
 import { assessmentOverview, buildAssessmentModel } from "../lib/assessment-read-model.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { automaticScoreOffSummary, chooseTheme, fixture, selectActivityOption } from "./helpers.mjs";
+import { automaticScoreOffSummary, chooseTheme, fixture, selectActivityOption, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { visualWidgetFixture } from "./visual-widget-fixture.mjs";
 import { qualityDisplayFixture } from "./quality-display-fixtures.mjs";
 import { chooseReportScope } from "./report-journey-helpers.mjs";
@@ -34,7 +34,7 @@ async function setup(t, state = visualWidgetFixture(), { legacy = false } = {}) 
     const server = createServer(async (request, response) => {
         try {
             if (request.method === "GET" && request.url === "/") {
-                response.setHeader("Content-Type", "text/html"); response.end(renderHtmlShell("a".repeat(64), "visual-widgets")); return;
+                response.setHeader("Content-Type", "text/html"); response.end(renderHtmlShell("a".repeat(64), "visual-widgets", UNBOUND_FIXTURE_BOOTSTRAP)); return;
             }
             if (request.method === "GET" && request.url === "/assets/assessment-contract.mjs") {
                 response.setHeader("Content-Type", "text/javascript"); response.end(contract); return;

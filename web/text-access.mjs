@@ -1,26 +1,45 @@
 // Presentation only: callers supply the authorized text, never a lookup for hidden originals.
 export function createTextAccess(ux, presentation, authorship, metadata) {
     const bindings = new WeakMap();
-    const caption = (source, options) => authorship?.label(source, options) ?? "Prompt";
+    function clearOwnedContent(owner, preserveRootId = false) {
+        for (const element of [owner, ...owner.querySelectorAll("*")]) {
+            if (element.matches("button")) element.disabled = true;
+            if (element.hasAttribute("tabindex")) element.tabIndex = -1;
+            for (const name of ["aria-label", "title", "data-ux-tooltip", "data-view-key", "data-prompt-actor",
+                "aria-controls", "aria-labelledby", "aria-describedby", "id"]) {
+                if (name === "id" && element === owner && preserveRootId) continue;
+                const attribute = element.getAttributeNode(name);
+                if (attribute) { attribute.value = ""; element.removeAttributeNode(attribute); }
+            }
+        }
+        const contents = owner.ownerDocument.createTreeWalker(owner, NodeFilter.SHOW_TEXT);
+        while (contents.nextNode()) contents.currentNode.data = "";
+        owner.replaceChildren();
+    }
+    const caption = (source, options) => authorship?.display?.(source, options).label ?? authorship?.label(source, options) ?? "Prompt";
     function retained(source) {
         return source?.status !== "unavailable" && typeof source?.text === "string" && source.text.trim() ? source.text : null;
     }
     function describePrompt(source) {
         const availability = authorship?.availability?.(source);
-        if (retained(source) !== null) return { hasText: true, label: caption(source), notice: availability?.notice ?? null };
+        const display = authorship?.display?.(source);
+        if (retained(source) !== null) return { hasText: true, label: caption(source), notice: availability?.notice ?? null,
+            automatic: display?.automatic ?? false };
         const author = authorship?.read(source), empty = source?.status === "full"
             && typeof source.text === "string" && !source.text.trim();
+        const automatic = availability ? availability.state === "automatic" : empty && author?.basis === "autopilot";
         return {
-            hasText: false,
-            label: (availability ? availability.state === "automatic" : empty && author?.basis === "autopilot") ? "Automatic continuation"
+            hasText: false, automatic,
+            label: automatic ? display?.label ?? `${author?.actor === "agent" ? "Agent prompt" : "Author unverified"} (automatic continuation)`
                 : author?.actor === "user" ? "My activity" : author?.actor === "agent" ? "Agent activity" : "Author unverified",
-            notice: availability?.notice ?? (empty ? "No prompt text retained" : "Prompt text unavailable"),
+            notice: automatic ? "Work continued without a new message." : availability?.notice ?? (empty ? "No prompt text retained" : "Prompt text unavailable"),
         };
     }
     function excerpt(source, limit = 170) {
         const text = retained(source);
-        if (text === null) return authorship?.availability?.(source).state === "automatic" ? "Automatic continuation" : "Prompt not available";
+        if (text === null) return authorship?.availability?.(source).state === "automatic" ? describePrompt(source).label : "Prompt not available";
         const compact = text.replace(/\s+/gu, " ").trim();
+        if (limit === Infinity) return compact;
         const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(compact);
         let end = compact.length, count = 0;
         for (const part of graphemes) {
@@ -30,7 +49,49 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             const boundary = compact.slice(0, end).search(/\s+\S*$/u);
             if (boundary > 0) end = boundary;
         }
-        return end < compact.length ? compact.slice(0, end).trimEnd() + "..." : compact;
+        if (end === compact.length) return compact;
+        // Omission is display metadata, not punctuation belonging to the retained prompt.
+        const prefix = compact.slice(0, end).trimEnd()
+            .replace(/(?:\s+(?:[-=]+>|<[-=]+|[\u2190-\u21ff]))?[\s.,;:!?\u2026]*$/u, "");
+        return (prefix || compact.slice(0, end).trimEnd()) + "\u00a0\u2026";
+    }
+    function renderExcerpt(source, limit = 170) {
+        const text = excerpt(source, limit), fragment = document.createDocumentFragment();
+        const identifiers = /(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\p{L}\p{N}_-])/giu;
+        let cursor = 0;
+        for (const match of text.matchAll(identifiers)) {
+            // Separate an adjacent prose word visually, not inside paths or longer opaque identifiers.
+            if (!/(?:^|[\s(\[{"'\u2018\u201c])\p{L}+$/u.test(text.slice(0, match.index))) continue;
+            const identifier = document.createElement("span");
+            identifier.className = "text-preview-identifier";
+            identifier.textContent = match[0];
+            fragment.append(text.slice(cursor, match.index), identifier);
+            cursor = match.index + match[0].length;
+        }
+        fragment.append(text.slice(cursor));
+        return fragment;
+    }
+    function renderCardPreview(source, onOverflow) {
+        const node = document.createElement("p");
+        node.className = "request-card-prompt";
+        node.dataset.cardPreview = "";
+        node.append(renderExcerpt(source, Infinity));
+        let released = false;
+        const measure = () => {
+            if (!released && node.isConnected && node.clientWidth) onOverflow(node.scrollHeight > node.clientHeight + 1);
+        };
+        const observer = new ResizeObserver(measure);
+        observer.observe(node);
+        document.fonts.ready.then(measure);
+        document.fonts.addEventListener("loadingdone", measure);
+        bindings.set(node, () => {
+            released = true;
+            observer.disconnect();
+            document.fonts.removeEventListener("loadingdone", measure);
+            source = onOverflow = null;
+            clearOwnedContent(node);
+        });
+        return node;
     }
     function render(source, { key, navigationNode, label, copyLabel, allowCopy = true, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
@@ -41,7 +102,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         const initiallyOpen = initialOpen ?? (complete && (subject === "response" || retained(source)?.length <= 1200));
         label ??= "Read " + (complete ? "" : partial ? "retained " : "full ") + noun;
         copyLabel ??= "Copy " + noun;
-        const text = retained(source), preview = text === null && subject === "response" ? "Original not available" : excerpt(source);
+        let text = retained(source), preview = text === null && subject === "response" ? "Original not available" : excerpt(source);
+        let released = false, cleared = false, control = null, onToggle = null, unsubscribe = null;
         const authorNote = label => metadata.item(label, { helpLabel: "prompt author", help: authorship.reason(source)
             + " Author unverified describes message provenance, not an account sign-in failure." });
         const authorGap = {
@@ -69,7 +131,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         heading.textContent = headingLabel ?? (subject === "response" ? contentFirst ? "Recorded response" : "Retained response text"
             : complete && text === null ? describePrompt(source).label : promptLabel);
         if (visibility && subject === "request" && authorship?.read(source).actor === "unknown"
-            && authorship?.availability?.(source).state !== "automatic") heading.textContent = "Author unverified";
+            && !authorship?.display?.(source).automatic) heading.textContent = "Author unverified";
         if (visibility && subject === "response" && actionsHost) heading.classList.add("visually-hidden");
         if (subject === "request") heading.dataset.promptActor = authorship?.read(source).actor ?? "unknown";
         if (complete) {
@@ -92,7 +154,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         const reading = document.createElement("p");
         reading.id = "text-excerpt-" + encodeURIComponent(key);
         reading.classList.add(complete ? "full-text-unavailable" : "full-text-preview");
-        reading.textContent = complete && text !== null ? `${noun === "prompt" ? "Prompt" : "Response"} text is hidden.`
+        if (!complete && text !== null) reading.append(renderExcerpt(source));
+        else reading.textContent = complete && text !== null ? `${noun === "prompt" ? "Prompt" : "Response"} text is hidden.`
             : complete && subject === "request" ? describePrompt(source).notice.replace(/\.?$/, ".") : preview;
         const passage = inline ? document.createElement("div") : root;
         if (inline) {
@@ -165,8 +228,20 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             actions.append(navigationNode);
             root.append(actions);
         }
+        bindings.set(root, () => {
+            if (cleared) return;
+            released = true;
+            source = text = preview = notice = label = copyLabel = headingLabel = null;
+            control?.removeEventListener("click", onToggle);
+            unsubscribe?.();
+            unsubscribe = null;
+            visibility = navigationNode = actionsHost = null;
+            for (const owner of [root, readerActions]) clearOwnedContent(owner, true);
+            readerActions.remove();
+            cleared = true;
+        });
         if (text === null || !complete && text === preview) return root;
-        const control = document.createElement("button");
+        control = document.createElement("button");
         control.type = "button";
         control.className = "full-text-toggle";
         control.id = "text-toggle-" + encodeURIComponent(key);
@@ -184,17 +259,20 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             actions.append(control);
             if (!actions.parentNode) root.append(actions);
         }
-        function paint() {
+        function paint(initial = false) {
+            if (released || !initial && !root.isConnected || visibility?.isCurrent && !visibility.isCurrent()) return;
             const open = visibility ? visibility.isOpen() : presentation.isOpen(stateKey, initiallyOpen);
             control.setAttribute("aria-expanded", String(open));
             const actionLabel = inline ? open ? "Read less" : "Read more" : open ? "Hide " + noun : label;
             ux.utility(control, open ? "hide" : "read", actionLabel, open ? "Hide " + noun : "Read " + noun);
             reading.hidden = open;
             if (previewState) previewState.hidden = open;
-            root.querySelector(".full-text-body")?.remove();
-            readerActions.querySelector(".ux-copy")?.remove();
-            readerActions.querySelector(".ux-copy-status")?.remove();
-            readerActions.querySelector(".reader-copy-scope")?.remove();
+            for (const previous of [root.querySelector(".full-text-body"),
+                ...readerActions.querySelectorAll(".ux-copy,.ux-copy-status,.reader-copy-scope")]) {
+                if (!previous) continue;
+                clearOwnedContent(previous);
+                previous.remove();
+            }
             if (open) {
                 const body = document.createElement("div");
                 body.id = bodyId;
@@ -219,14 +297,14 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                     pre.textContent = text;
                     if (allowCopy) {
                         const copy = ux.copyButton({ label: copyLabel,
-                            getText: () => pre.isConnected && (!visibility || visibility.isCurrent() && visibility.isOpen()) ? pre.textContent : null,
-                            tooltip: "Copy " + noun });
+                            getText: () => !released && root.isConnected && root.contains(pre) && pre.isConnected
+                                && (!visibility || visibility.isCurrent() && visibility.isOpen()) ? pre.textContent : null,
+                            tooltip: "Copy original " + noun + " (unmasked)" });
                         const scope = document.createElement("span");
                         scope.id = noticeId;
-                        scope.className = "reader-copy-scope";
-                        scope.textContent = contentFirst
-                            ? "Copy uses unmasked text. Other apps and clipboard history may access it."
-                            : "Copies original text, unmasked.";
+                        scope.className = contentFirst ? "visually-hidden reader-copy-scope" : "reader-copy-scope";
+                        scope.hidden = contentFirst;
+                        scope.textContent = "Copies original text, unmasked.";
                         copy.setAttribute("aria-describedby", copyNoticeId ?? noticeId);
                         readerActions.append(copy);
                         if (!copyNoticeId) readerActions.append(scope);
@@ -240,23 +318,19 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                 else root.insertBefore(body, details ?? null);
             }
         }
-        control.addEventListener("click", event => {
+        onToggle = event => {
+            if (released || !root.isConnected || visibility?.isCurrent && !visibility.isCurrent()) return;
             event.preventDefault();
             event.stopPropagation();
             presentation.setOpen(stateKey, !presentation.isOpen(stateKey, initiallyOpen));
             paint();
-        });
-        const unsubscribe = visibility?.subscribe(() => { if (root.isConnected) paint(); });
-        bindings.set(root, () => {
-            unsubscribe?.();
-            root.querySelector(".full-text-body")?.remove();
-            if (actionsHost || !allowCopy) readerActions.remove();
-            else readerActions.replaceChildren();
-        });
-        paint();
+        };
+        control.addEventListener("click", onToggle);
+        unsubscribe = visibility?.subscribe(() => paint());
+        paint(true);
         return root;
     }
-    return { excerpt, render, caption, describePrompt,
+    return { excerpt, renderExcerpt, renderCardPreview, render, caption, describePrompt,
         release(root) { bindings.get(root)?.(); bindings.delete(root); },
         isOpen: (key, initial = true) => presentation.isOpen("text:" + key, initial),
         setOpen: (key, open) => presentation.setOpen("text:" + key, open) };

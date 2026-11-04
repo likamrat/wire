@@ -206,7 +206,7 @@ test("context actions retain native destinations, private search, draft membersh
     await page.locator("#activityList input[type=checkbox]").nth(2).check();
     assert.equal(await page.locator("#activitySelectionSummary").textContent(), "One report · 3 request groups included");
     await navigateMain(page, "reports"); await ready(page);
-    const reportBack = page.locator("#pageAction");
+    const reportBack = page.locator("#reportContextAction");
     const point = await reportBack.evaluate(node => {
         const rect = node.getBoundingClientRect();
         const x = rect.left + 5, y = rect.top + rect.height / 2;
@@ -250,14 +250,14 @@ test("long contextual labels wrap inside a narrow panel on a wide host, includin
             document.documentElement.style.fontSize = size + "%";
             const main = document.querySelector("main");
             main.style.width = "375px"; main.style.marginInline = "0";
-            document.querySelector("#pageAction").textContent = "Return to the previously filtered Copilot activity";
+            document.querySelector("#reportContextAction").textContent = "Return to the previously filtered Copilot activity";
             document.querySelector("#reportClearSelection").textContent = "Clear the selected request groups from this report";
             document.querySelector("#reportClearSelection").disabled = true;
             document.querySelector("#resetView").lastChild.textContent = "Reset the current activity view";
             document.activeElement.blur(); scrollTo(0, 0);
         }, text);
         const metrics = await geometry(page); fits(metrics, 375, text);
-        const font = await page.locator("#pageAction").evaluate(node => parseFloat(getComputedStyle(node).fontSize));
+        const font = await page.locator("#reportContextAction").evaluate(node => parseFloat(getComputedStyle(node).fontSize));
         assert.ok(font >= (text === 200 ? 28 : 14), "No control-role font shrink to fit");
         assert.equal(await page.locator("#reportClearSelection").isDisabled(), true);
         await page.locator("#resetView").focus(); await page.keyboard.press("Tab");

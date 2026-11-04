@@ -4,7 +4,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption, closeAnalyzeFilters } from "./helpers.mjs";
 import { reportContents, cancelReportPreview } from "./report-journey-helpers.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -104,7 +104,7 @@ test("one minimal card opens the full log with private input owned by its exact 
     const target = page.locator('[data-tool-call-id="activity-3"]');
     await expect(target).toBeFocused();
     assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollTop), 0);
-    await expect(target.locator(".call-heading")).toContainText("Request timed out (MCP -32001)");
+    await expect(target.locator(".call-heading")).toContainText("The tool did not respond in time");
     await expect(target.locator(".call-heading")).not.toContainText("Tool failed");
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
     await capture(page, "six-call-dark");
@@ -209,8 +209,9 @@ test("changing the applied outcome dismisses private detail and preserves readin
     await expect(page.locator("#contextSidebar")).not.toBeVisible();
     await expect(page.locator("#requestContent")).not.toContainText("PRIVATE_CALL_ARGUMENT");
     await expect(page.locator(".request-card-open [data-outcome=success]")).toHaveAttribute("data-count", "4");
-    await expect(page.locator(".request-card-problem")).toHaveText("Matching tool calls worked.");
+    await expect(page.locator(".request-card-problem")).toHaveText("Matching tool calls completed.");
     await expect(page.locator(".request-card-open [data-outcome=failure]")).toHaveCount(0);
+    await closeAnalyzeFilters(page);
     await page.locator(".request-card-open").click(); await settled(page);
     await expect(page.locator('[data-tool-call-id="activity-3"]')).not.toBeFocused();
     await expect(page.locator('[data-tool-call-id="activity-3"] .reader-call-toggle')).toBeFocused();
@@ -290,7 +291,7 @@ test("forced colors retain keyboard focus and readable failure text without a se
     await expect(target).toBeFocused();
     const outline = await target.evaluate(node => ({ style: getComputedStyle(node).outlineStyle, width: parseFloat(getComputedStyle(node).outlineWidth) }));
     assert.notEqual(outline.style, "none"); assert.ok(outline.width >= 2);
-    await expect(target).toContainText("Request timed out (MCP -32001)");
+    await expect(target).toContainText("The tool did not respond in time");
     await expect(target.locator(".reader-duration-label")).toHaveText("Tool latency:");
     await expect(target.locator(".reader-duration-label")).toBeVisible();
     await expect(page.locator(".reader-timing-column")).toHaveCount(0);
@@ -367,7 +368,11 @@ test("late entry retains labelled per-call timing, identity and exact target wit
 });
 
 test("a success with missing service evidence, partial result and missing prompt stay truthful without failure entry", async t => {
-    for (const [outcome, label] of [["succeeded", "Worked"], ["partial", "Partly worked"], ["unknown", "No result recorded"]]) {
+    for (const [outcome, cardLabel, readerLabel] of [
+        ["succeeded", "completed", "Call 1 completed"],
+        ["partial", "Partial completion", "Call 1 partly completed"],
+        ["unknown", "No result recorded", "Call 1 has no recorded result"],
+    ]) {
         await t.test(outcome, async t => {
             const record = activityRecord(1);
             Object.assign(record.toolCalls[0], {
@@ -377,13 +382,13 @@ test("a success with missing service evidence, partial result and missing prompt
             if (outcome === "unknown") record.userPrompt = { text: null, status: "unavailable",
                 authorship: { actor: "unknown", basis: "missing-source" } };
             const { page } = await setup(t, record);
-            await expect(page.locator(".request-card-open .request-card-problem")).toContainText(new RegExp(label, "i"));
+            await expect(page.locator(".request-card-open .request-card-problem")).toContainText(new RegExp(cardLabel, "i"));
             if (outcome === "unknown") await expect(page.locator(".request-card-open")).toContainText("Prompt text unavailable");
             await page.locator(".request-card-open").click(); await settled(page);
             await expect(page.locator("#contextSidebarTitle")).toBeFocused();
             await expect(page.locator(".reader-call-services")).toContainText("Asked Copilot");
             await expect(page.locator(".call-heading [data-outcome=failure]")).toHaveCount(0);
-            await expect(page.locator(".call-heading")).toContainText(label);
+            await expect(page.locator(".call-heading .recorded-result-label")).toHaveText(readerLabel);
             assert.ok(!(await page.locator("#requestContent").innerHTML()).includes("PRIVATE_CALL_ARGUMENT_1"));
             await capture(page, "one-call-" + outcome);
         });

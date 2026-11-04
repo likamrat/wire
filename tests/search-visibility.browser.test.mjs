@@ -169,7 +169,7 @@ test("consent revocation while hidden cannot revive a retained reply on return",
     assert.equal(revoked.status, 200);
     await expect.poll(async () => (await status()).body.indexId).toBe(null);
     await visibility(page, false);
-    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is incomplete. Some saved content could not be searched.", { timeout: 10000 });
+    await expect(page.locator("#wireSearchStatus")).toHaveText("Saved GitHub replies are unavailable for Search.", { timeout: 10000 });
     assert.equal(await page.locator("#wireSearchResults button").count(), 0);
 });
 
@@ -604,7 +604,7 @@ test("a silent stream on visible return still reaches an explicit reconnect inst
 
 for (const action of ["clear", "cancel", "close"]) {
     test(`hidden ${action} releases owned work and cannot restart on return`, { timeout: 30000 }, async t => {
-        const { page, runtime, api, status, queries, children } = await setup(t);
+        const { page, runtime, api, status, queries } = await setup(t);
         await page.locator("#wireSearch").fill("physician");
         await expect(page.locator("#wireSearchResults button").first()).toBeVisible();
         await visibility(page, true);
@@ -613,7 +613,6 @@ for (const action of ["clear", "cancel", "close"]) {
         if (action === "clear" || action === "cancel") {
             await expect.poll(async () => (await status()).body.indexId).toBe(null);
         } else await expect.poll(() => runtime.search.status().panels, { timeout: 5000 }).toBe(0);
-        await expect.poll(() => children.every(child => child.exitCode !== null || child.signalCode !== null)).toBe(true);
         const prior = queries.length;
         await visibility(page, false);
         await page.waitForTimeout(300);

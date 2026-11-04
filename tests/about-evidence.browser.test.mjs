@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { extractGraphActivities } from "../lib/graph-history.mjs";
-import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const proofs = process.env.WORKIQ_ABOUT_PROOFS;
 const records = [fixture("about-one"), fixture("about-two")];
@@ -35,7 +35,7 @@ async function setup(t, source = records, sourceCoverage = coverage) {
         historyIssues: [], metrics: {}, lastCheckWarning: "Synthetic partial check: a saved chat could not be read.",
     };
     const server = createServer(async (req, res) => {
-        if (req.url === "/" && req.method === "GET") { res.setHeader("Content-Type", "text/html"); return res.end(renderHtmlShell("a".repeat(64), "about-fixture")); }
+        if (req.url === "/" && req.method === "GET") { res.setHeader("Content-Type", "text/html"); return res.end(renderHtmlShell("a".repeat(64), "about-fixture", UNBOUND_FIXTURE_BOOTSTRAP)); }
         if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};

@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords } from "./live-search-fixture.mjs";
-import { chooseTheme, selectActivityOption, openSearchFilters, setLegacyTimeBucket } from "./helpers.mjs";
+import { chooseTheme, selectActivityOption, openSearchFilters, setLegacyTimeBucket, revealAnalyzeRecords, navigateMain } from "./helpers.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { chooseReportScope } from "./report-journey-helpers.mjs";
 
@@ -214,8 +214,8 @@ test("search control: native editing, long query, state feedback and keyboard Op
     await expect(page.locator("#wireSearchPanel")).toBeVisible();
     await selectActivityOption(page, "wireSearchScope", "analysis");
     await input.fill("physician");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Search / Current Analyze scope");
-    await expect(page.locator("#wireAnalysisSearchNotice")).not.toContainText("Search WIRE");
+    await expect(page.locator("#activityListScope")).toHaveText("Search applied");
+    await expect(page.locator("#activityCount")).toHaveText("1");
 });
 
 test("compact Search preserves native input identity, caret and page position throughout typing and dismissal", { timeout: 30000 }, async t => {
@@ -366,8 +366,8 @@ test("compact Search opens the exact retained interaction and restores its resul
     }
 });
 
-test("Search preserves View records through live results, dismissal and record Back without replaying stale reading intent", { timeout: 30000 }, async t => {
-    const { page, runtime } = await setup(t);
+test("Search preserves Analyze records through live results, dismissal and record Back without replaying stale reading intent", { timeout: 30000 }, async t => {
+    const { page, runtime } = await setup(t, { records: searchRecords(12) });
     const input = page.locator("#wireSearch");
     const position = () => page.evaluate(() => ({
         y: scrollY, title: document.querySelector("#activityTitle").getBoundingClientRect().top,
@@ -377,7 +377,8 @@ test("Search preserves View records through live results, dismissal and record B
         await page.goto(runtime.url);
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await page.evaluate(() => document.fonts.ready);
-        await page.getByRole("link", { name: "View records", exact: true }).click();
+        await revealAnalyzeRecords(page);
+        await page.locator("#activityList .request-card-open").nth(6).scrollIntoViewIfNeeded();
         const before = await position();
         assert.ok(before.y > 600, "Exercise deep reading, not the old fixed 420px case");
         await clickVisible(page, input);
@@ -389,7 +390,7 @@ test("Search preserves View records through live results, dismissal and record B
         }
         if (mode === "back") {
             await selectActivityOption(page, "wireSearchType", "interaction");
-            await expect(page.locator("#wireSearchResults button")).toHaveCount(3);
+            await expect(page.locator("#wireSearchResults button")).toHaveCount(12);
             await input.press("ArrowDown");
             const id = await page.locator("#wireSearchResults button:focus").getAttribute("data-search-id");
             await page.keyboard.press("Enter");
@@ -445,7 +446,7 @@ test("Search preserves View records through live results, dismissal and record B
 test("compact result scrolling, paging and Back stay inside the list without changing the underlying page", { timeout: 30000 }, async t => {
     const { page } = await setup(t, { records: searchRecords(45) });
     const input = page.locator("#wireSearch"), panel = page.locator("#wireSearchPanel");
-    await page.getByRole("link", { name: "View records", exact: true }).click();
+    await revealAnalyzeRecords(page);
     const pageY = await page.evaluate(() => scrollY);
     await clickVisible(page, input);
     await page.keyboard.type("Invented local");
@@ -514,7 +515,7 @@ test("compact result scrolling, paging and Back stay inside the list without cha
     }));
     assert.ok(Math.abs(inset.padding - inset.header - 16) < 1, "Ordinary reading inset returns when focus leaves Search");
     await page.mouse.move(0, 0);
-    await page.getByRole("link", { name: "View records", exact: true }).click();
+    await revealAnalyzeRecords(page);
     const titleY = await page.locator("#activityTitle").evaluate(node => node.getBoundingClientRect().top);
     const limit = await page.evaluate(() => ({ y: scrollY, max: document.documentElement.scrollHeight - innerHeight, viewport: innerHeight }));
     assert.ok(titleY >= inset.header && titleY < limit.viewport
@@ -522,7 +523,7 @@ test("compact result scrolling, paging and Back stay inside the list without cha
 });
 
 test("native compact Search keeps deep typing stationary and restores the reading inset only on focus departure", { timeout: 60000 }, async t => {
-    const { page, runtime } = await setup(t, {}, {
+    const { page, runtime } = await setup(t, { records: searchRecords(12) }, {
         channel: process.platform === "win32" ? "msedge" : undefined,
         headless: !process.env.WIRE_SEARCH_NATIVE_HEADFUL, ignoreDefaultArgs: ["--hide-scrollbars"],
     });
@@ -542,7 +543,8 @@ test("native compact Search keeps deep typing stationary and restores the readin
         await expect(page.locator(".display-time-zone")).toHaveCount(0);
         await expect(page.locator(".workspace-utilities > *")).toHaveCount(1);
         await screenshot(page, `native-${theme}-${width}-idle`);
-        await page.getByRole("link", { name: "View records", exact: true }).click();
+        await revealAnalyzeRecords(page);
+        await page.locator("#activityList .request-card-open").nth(6).scrollIntoViewIfNeeded();
         const reading = await page.evaluate(() => scrollY);
         assert.ok(reading > 600);
         await input.evaluate(node => { window.originalSearchInput = node; });
@@ -586,7 +588,7 @@ test("native compact Search keeps deep typing stationary and restores the readin
         await page.keyboard.press("Enter");
         await expect(page.locator("#pageTitle")).toBeFocused();
         assert.ok((await page.locator("#pageTitle").boundingBox()).y >= restored.header);
-        await page.getByRole("link", { name: "View records", exact: true }).click();
+        await revealAnalyzeRecords(page);
         const target = await page.locator("#activityTitle").boundingBox();
         const limit = await page.evaluate(() => ({ y: scrollY, max: document.documentElement.scrollHeight - innerHeight, viewport: innerHeight }));
         assert.ok(target.y >= restored.header && target.y < limit.viewport
@@ -625,7 +627,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     assert.deepEqual(await ids(), allIds, "Navigation search never applies a hidden analytical filter");
     await expect(page.locator("#filterChips")).toBeEmpty();
     await selectActivityOption(page, "wireSearchScope", "analysis");
-    await expect(page.locator("#wireAnalysisSearchNotice")).toContainText("Current search matches");
+    await expect(page.locator("#activityListScope")).toContainText("Search applied");
     await expect(page.locator("#activityCount")).toHaveText("2");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const matchingIds = await ids();
@@ -642,7 +644,7 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
         assert.equal(await page.locator(".flat-time-column").evaluateAll(nodes =>
             nodes.reduce((total, node) => total + Number(node.dataset.total), 0)), 2);
         await expect(page.locator("#filterChips")).toBeEmpty();
-        await expect(page.locator("#scopeCount-current")).toHaveText("1 chat · 2 interactions");
+        await expect(page.locator("#scopeCount-current > span")).toHaveText(["1 chat", "2 interactions"]);
     }
     await page.locator(".time-column").first().click();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -656,11 +658,19 @@ test("compact Search keeps actual Analyze membership, local grouping and Setting
     await expect.poll(ids).toEqual(matchingIds);
     await page.locator("#pageAction").click();
     await chooseReportScope(page, "current");
-    await expect(page.locator("#scopeCount-current")).toHaveText("1 chat · 2 interactions");
+    await expect(page.locator("#scopeCount-current > span")).toHaveText(["1 chat", "2 interactions"]);
     await expect(page.locator("#scopeCount-selected")).toHaveText(/^1 /);
     await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
+    await expect(page.locator("#pageTitle")).toHaveText("Create a report");
+    await navigateMain(page, "settings");
+    await expect(page.locator("#pageTitle")).toHaveText("Settings");
+    await expect(page.locator("#wireAnalysisSearchNotice")).toBeHidden();
+    await expect(input).toHaveValue("physician");
+    await page.goBack();
+    await expect(page.locator("#pageTitle")).toHaveText("Create a report");
     await page.goBack();
     await expect(page.locator("#activityCount")).toHaveText("2");
+    await expect(page.locator("#activityListScope")).toContainText("Search applied");
     assert.equal(new URLSearchParams(page.url().split("?")[1]).get("bucket"), "day");
     await input.focus();
     await selectActivityOption(page, "wireSearchScope", "everywhere");

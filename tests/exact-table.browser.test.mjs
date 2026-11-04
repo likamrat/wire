@@ -6,7 +6,7 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture, exportCatalogFor, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const records = Array.from({ length: 30 }, (_, index) => {
     const record = fixture(`exact-table-${index}`);
@@ -25,7 +25,7 @@ async function setup(t, source = records) {
     const server = createServer(async (req, res) => {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
-            res.end(renderHtmlShell("a".repeat(64), "exact-table-fixture"));
+            res.end(renderHtmlShell("a".repeat(64), "exact-table-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
             return;
         }
         requests.push(req.url);

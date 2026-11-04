@@ -17,7 +17,7 @@ export function lucideIcon(name, size = 20) {
 export const lucideLicense = readFileSync(require.resolve("lucide-static/LICENSE"), "utf8");
 
 export const uxIconSources = Object.freeze({
-    copy: "copy", check: "check", warning: "triangle-alert", unobserved: "circle-question-mark", info: "info",
+    copy: "copy", check: "check", warning: "triangle-alert", unobserved: "circle-question-mark", info: "info", account: "user-round",
     "result-failure": "circle-x", "result-partial": "circle-dashed", "result-other": "info", "result-transport": "unplug",
     "check-compact": "check", "result-failure-compact": "circle-x", "unobserved-compact": "circle-question-mark",
     "result-partial-compact": "circle-dashed", "result-other-compact": "info", "result-transport-compact": "unplug",
@@ -28,14 +28,18 @@ export const uxIconSources = Object.freeze({
     "settings-selected": "settings", "collection-status-selected": "file-search",
     export: "file-output", menu: "menu", "navigation-home": "house", "navigation-analyze": "chart-column",
     "navigation-reports": "clipboard-list", "navigation-settings": "settings",
+    "navigation-records": "rotate-ccw-clock", "navigation-compare": "scale", "navigation-create-report": "file-text",
     "navigation-collapse": "panel-left-close", "navigation-expand": "panel-left-open",
     "search-analysis": "chart-no-axes-combined",
     "search-interaction": "message-square", "search-context": "messages-square", "search-reply": "message-square-reply",
     "search-action": "workflow", "search-tool": "wrench",
     "search-report": "file-text", "search-comparison": "columns-2", "search-view": "panels-top-left", "search-setting": "settings",
+    "compare-periods": "scale",
     "settings-connection": "plug", "settings-privacy": "shield", "settings-ai": "clipboard-check",
     "settings-display": "monitor", "settings-troubleshooting": "wrench",
-    close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download",
+    close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download", code: "file-code",
+    "zoom-in": "plus", "zoom-out": "minus",
+    "reader-maximize": "maximize-2", "reader-restore": "minimize-2",
     search: "search", filter: "funnel", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
     read: "eye", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
     "collapse-sections": "fold-vertical", "expand-sections": "unfold-vertical",

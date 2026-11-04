@@ -4,14 +4,20 @@ import { chromium } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { chooseTheme, selectActivityOption, navigateMain, openActivitySessions } from "./helpers.mjs";
+import { chooseTheme, selectActivityOption, navigateMain, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
+import { selectAnalyzeRequest, openReportCreation, chooseReportScope } from "./report-journey-helpers.mjs";
 import { createControlHelp } from "../lib/control-help.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
 
 const proofs = process.env.WIRE_PRIMARY_FILTER_PROOFS;
-const ids = ["dateFilter", "toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter"];
+const ids = ["dateFilter", "sourceFilter", "toolFilter", "serviceAssociationFilter", "outcomeFilter", "promptAuthorFilter"];
 const help = createControlHelp(serviceCategories);
 const ready = page => page.waitForFunction(() => document.querySelector("#workspace")?.getAttribute("aria-busy") === "false");
+const settled = async page => {
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForFunction(() => document.querySelector("#analyzeFilterDialog").getAnimations({ subtree: true })
+        .every(animation => animation.playState !== "running"));
+};
 
 async function setup(t, touch = false) {
     const app = await authorFilterFixture(t), browser = await chromium.launch();
@@ -28,11 +34,14 @@ async function setup(t, touch = false) {
     });
     app.closeClient(async () => { await browser.close(); assert.deepEqual(errors, []); assert.deepEqual(blocked, []); });
     await page.goto(app.runtime.url); await ready(page);
+    await openAnalyzeFilters(page);
+    await settled(page);
     if (proofs) await mkdir(proofs, { recursive: true });
     return { ...app, page };
 }
 
 async function geometry(page) {
+    await settled(page);
     return page.evaluate(ids => {
         const box = node => {
             const rect = node.getBoundingClientRect();
@@ -58,7 +67,7 @@ async function geometry(page) {
 const range = values => Math.max(...values) - Math.min(...values);
 function aligned(layout) {
     assert.ok(layout.overflow <= 1, "No page-level horizontal overflow");
-    assert.ok(layout.fields.every(field => field.visible), "All five primary filters are visible without an expansion");
+    assert.ok(layout.fields.every(field => field.visible), "All six primary filters are visible without an expansion");
     assert.ok(layout.fields.every(field => field.control.height >= 44 && !field.textClipped), "Labels stay readable with 44px hit targets");
     assert.ok(layout.fields.every(field => !field.labelClipped), "Complete filter titles stay readable");
     assert.ok(range(layout.fields.map(field => field.label.x - field.control.x)) <= 1, "Label insets are consistent");
@@ -75,10 +84,14 @@ test("primary analytical filters wrap readably at desktop, narrow and 200 percen
         }, scale);
         await page.locator("#filters").scrollIntoViewIfNeeded();
         const layout = await geometry(page);
-        if (width >= 1440 && scale === 1) assert.ok(range(layout.fields.map(field => field.control.y)) <= 1, "The five primary defaults share one desktop row");
         if (proofs) {
             await page.screenshot({ path: path.join(proofs, `context-${theme}-${width}-${scale}.png`), fullPage: true });
             await page.locator("#filters").screenshot({ path: path.join(proofs, `primary-${theme}-${width}-${scale}.png`) });
+        }
+        if (width >= 1440 && scale === 1) {
+            assert.ok(range(layout.fields.slice(0, 3).map(field => field.control.y)) <= 1, "Dates, Source and Tool share the first panel row");
+            assert.ok(range(layout.fields.slice(3).map(field => field.control.y)) <= 1, "Service, Outcome and Prompt author share the second panel row");
+            assert.ok(layout.fields[3].control.y > layout.fields[0].control.bottom, "The two field groups do not overlap");
         }
         measurements.push({ theme, width, scale, ...layout });
         for (const id of ids) {
@@ -95,6 +108,7 @@ test("primary analytical filters wrap readably at desktop, narrow and 200 percen
 });
 
 async function applyValues(page, id, values) {
+    await openAnalyzeFilters(page);
     await page.locator(`[data-select-id="${id}"]`).click();
     const popup = page.locator(".select-popup:visible");
     for (const option of await popup.locator(".select-option").all()) {
@@ -166,7 +180,7 @@ test("filter naming exposes real category, context and evidence-layer distinctio
     assert.equal(await page.locator('label[for="projectFilter-control"]').innerText(), "Copilot project");
     assert.match(await page.locator('#dateFilter option[value=week]').innerText(), /Mon-Sun/);
     for (const category of ["Discovery", "Multiple workloads", "Unknown"]) {
-        assert.equal(await page.locator(`#serviceFilter option[value="${category}"]`).innerText(), serviceCategories.describe(category).label);
+        assert.equal(await page.locator(`#serviceFilter option[value="${category}"]`).innerText(), serviceCategories.display(category).label);
     }
     assert.deepEqual(await page.locator("#promptAuthorFilter option").allTextContents(), ["My prompts", "Agent prompts", "Author unverified"]);
     await selectActivityOption(page, "serviceFilter", "Mail"); await ready(page);
@@ -189,13 +203,11 @@ test("filter naming exposes real category, context and evidence-layer distinctio
 
 test("narrow keyboard and touch reach each named filter directly without clipped overlays or applying drafts", { timeout: 45000 }, async t => {
     const { page } = await setup(t, true);
-    const scroll = page.getByRole("region", { name: "Filter row", exact: true });
-    await scroll.focus();
     for (const scale of [1, 2]) {
         await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
-        await scroll.focus();
+        await page.locator("#dateFilter-control").focus();
         for (const id of ids) {
-            await page.keyboard.press("Tab");
+            if (id !== "dateFilter") await page.keyboard.press("Tab");
             assert.equal(await page.evaluate(() => document.activeElement.id), id + "-control", "Tab follows the row's label/control order");
             const bounds = await page.locator("#" + id + "-control").boundingBox();
             assert.ok(bounds.x >= 15 && bounds.x + bounds.width <= 360, `${id}/${scale}: Tab brings the complete focused control into view (${JSON.stringify(bounds)})`);
@@ -205,7 +217,7 @@ test("narrow keyboard and touch reach each named filter directly without clipped
         await activity.tap();
         const popup = page.locator(".select-popup:visible"), box = await popup.boundingBox();
         assert.ok(box.x >= 8 && box.x + box.width <= 367);
-        assert.equal(await popup.evaluate(node => node.parentElement === document.body), true, "Popup is outside the scrolling row");
+        assert.equal(await popup.evaluate(node => node.parentElement.id), "analyzeFilterDialog", "Popup stays in the modal top layer, outside the scrolling row");
         for (const option of await popup.getByRole("option").all()) {
             await option.scrollIntoViewIfNeeded();
             const measure = await option.evaluate(node => {
@@ -231,19 +243,25 @@ test("narrow keyboard and touch reach each named filter directly without clipped
     }
 });
 
-test("the same row and selected request membership survive chat scope, Back and Reset to Home", { timeout: 30000 }, async t => {
-    const { page, cases } = await setup(t);
-    await navigateMain(page, "activity"); await ready(page); await openActivitySessions(page);
-    await page.locator(`.request-row[data-view-key="request:${cases.agentMail.scenarioId}"] input`).check();
+test("the same controls and selected request membership survive chat scope, Back and Reset Analyze", { timeout: 30000 }, async t => {
+    const { page, cases, chatId } = await setup(t);
+    await closeAnalyzeFilters(page);
+    await selectAnalyzeRequest(page, page.locator(`.request-row[data-view-key="request:${cases.agentMail.scenarioId}"]`));
     await applyValues(page, "promptAuthorFilter", ["user"]);
     assert.equal(await page.locator(`.request-row[data-view-key="request:${cases.agentMail.scenarioId}"]`).count(), 0);
-    await page.getByRole("link", { name: "Open analysis for GitHub Copilot chat: Invented author conversation", exact: true }).click(); await ready(page);
+    await selectActivityOption(page, "chatFilter", chatId); await ready(page);
     aligned(await geometry(page));
-    assert.equal(await page.locator(".filter-scroll .period-controls").count(), 1, "Chat scope reuses, rather than duplicates, the primary row");
+    assert.equal(await page.locator(".filter-scroll>.period-controls").count(), 1, "Chat scope reuses, rather than duplicates, the primary controls");
+    assert.equal(await page.locator("#chatFilter-control").count(), 1);
     await page.goBack(); await ready(page);
+    await openAnalyzeFilters(page);
     await page.locator("#resetView").click(); await ready(page);
-    assert.ok(page.url().endsWith("#home"));
+    assert.ok(page.url().endsWith("#analyze"));
     assert.equal(await page.locator("#activityCount").textContent(), "8");
-    await navigateMain(page, "activity"); await ready(page); await openActivitySessions(page);
-    assert.equal(await page.locator(`.request-row[data-view-key="request:${cases.agentMail.scenarioId}"] input`).isChecked(), true, "Reset does not erase hidden report membership");
+    await navigateMain(page, "reports"); await ready(page);
+    await openReportCreation(page); await chooseReportScope(page, "selected");
+    const selected = page.locator("#report-select-" + cases.agentMail.scenarioId);
+    const next = page.getByRole("button", { name: "Next report requests", exact: true });
+    while (!await selected.count() && await next.isEnabled()) await next.click();
+    assert.equal(await selected.isChecked(), true, "Reset does not erase the exact hidden report selection");
 });

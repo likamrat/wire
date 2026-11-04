@@ -243,7 +243,6 @@ test("automatic zone follows device changes; override persists through focus and
     await replaceEvidence(context, () => ({ records: next, importCoverage: { counts: { includedSessions: 1, includedProjects: 1 }, roster: [] } }));
     await expect(page.locator("#activityCount")).toHaveText("7", { timeout: 15000 });
     assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
-    assert.equal(lastSnapshot(requests).timeContext.timeZone, "America/Los_Angeles");
 });
 
 test("invalid saved zone and unavailable list are visible; controls use existing keyboard typeahead", { timeout: 60000 }, async t => {

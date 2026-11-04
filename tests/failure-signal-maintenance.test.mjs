@@ -48,6 +48,7 @@ async function fixture(t) {
     first.events[3].data = { toolCallId: call.toolCallId, success: false,
         error: { code: "failure", message: "Synthetic excluded error prose." } };
     first.record.toolCalls[0] = completeWorkIqCall(call, first.events[3]);
+    first.record.toolCalls[0].failureEvidence = { ...beforeSignal };
     await materializeEvaluationSource(f);
     const collector = await createCollector(f.context, { timers: false });
     try { await collector.collectNow(); } finally { await collector.close(); }
@@ -69,6 +70,9 @@ async function fixture(t) {
     const record = state.evidence.find(record => record.scenarioId === first.record.scenarioId);
     const indexFile = path.join(f.context.dataDir, "collector", "index.json"), index = await readJson(indexFile);
     const checkpointFile = path.join(f.context.dataDir, "collector", index.fingerprint, record.sourceSessionId + ".json");
+    const checkpoint = await readJson(checkpointFile);
+    checkpoint.events.find(event => event.id === first.events[3].id).data.wireFailureEvidence = { ...beforeSignal };
+    await atomicJson(checkpointFile, checkpoint);
     const exited = spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
     const directory = path.dirname(f.context.dataDir);
     const plan = {

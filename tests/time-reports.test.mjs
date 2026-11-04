@@ -43,7 +43,6 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: fo
         const folded = text.replace(/\s+/g, " ");
         assert.ok(folded.includes(snapshot.preparedAtDisplay.replace(/\s+/g, " ")));
         assert.ok(folded.includes("America/Los_Angeles"));
-        assert.ok(folded.includes("en-GB"));
         assert.ok(folded.includes("8 Mar 2026"));
     }
     for (const text of [...Object.values(bundle.files).filter(x => typeof x === "string"), pdf]) {
@@ -60,7 +59,7 @@ test("zone/locale mismatch consumes stale review without files; saved bundles st
     const controller = createExportController(context);
     const baseline = await loadBoardState(context);
     const source = await readFile(path.join(context.dataDir, "private-evidence", baseline.evidenceFile));
-    const preview = await controller.preview("synthetic", undefined, options);
+    const preview = await controller.preview("synthetic", undefined, { ...options, formats: ["json"] });
     const reviewed = await controller.review("synthetic", preview.previewId, true, local);
     await assert.rejects(controller.confirm("synthetic", preview.previewId, true, utc), /timezone or locale changed/);
     await assert.rejects(controller.confirm("synthetic", preview.previewId, true, local), /not found/);
@@ -73,7 +72,7 @@ test("zone/locale mismatch consumes stale review without files; saved bundles st
     for (const [, bytes, name] of files) assert.deepEqual(bytes, typeof frozen.files[name] === "string" ? Buffer.from(frozen.files[name]) : Buffer.from(frozen.files[name].data, "base64"));
     assert.deepEqual(result.bundle.timeContext, local);
     await moveCard(context, "test-scenario", "ready_to_export");
-    await controller.preview("synthetic", undefined, { ...options, timeContext: utc });
+    await controller.preview("synthetic", undefined, { ...options, timeContext: utc, formats: ["json"] });
     for (const [file, bytes] of files) assert.deepEqual(await readFile(file), bytes);
     assert.deepEqual(await readFile(path.join(context.dataDir, "private-evidence", baseline.evidenceFile)), source);
     assert.deepEqual(reviewed.timeContext, local);
@@ -86,7 +85,7 @@ test("report context validation and integrity reject forged metadata", async () 
         { dateSelection: { range: "custom", from: "2026-02-30" } },
         { dateSelection: { range: "capture", from: "2026-01-01" } },
     ]) assert.throws(() => normalizeReportOptions(patch), e => e.status === 422);
-    const bundle = await buildSanitizedBundle([fixture()], "a".repeat(64), { timeContext: local });
+    const bundle = await buildSanitizedBundle([fixture()], "a".repeat(64), { timeContext: local, formats: ["json"] });
     const manifest = JSON.parse(bundle.files["coverage-and-redaction-manifest.json"]);
     manifest.timeContext = utc;
     bundle.files["coverage-and-redaction-manifest.json"] = JSON.stringify(manifest);

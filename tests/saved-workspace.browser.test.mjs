@@ -68,10 +68,11 @@ test("saved close interruption releases the old owner and respects newer focus a
     await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length > 0);
     await row(page, bundles[2].bundleId).locator(".saved-report-summary").click();
     await settle(page);
-    assert.match(await page.locator("#contextSidebarBody").innerText(), new RegExp(bundles[2].bundleId));
-    assert.doesNotMatch(await page.locator("#contextSidebarBody").innerText(), new RegExp(bundles[1].bundleId));
+    await expect(page.locator(`#contextSidebar [data-view-key="inspector-open:${bundles[2].bundleId}"]`)).toHaveCount(1);
+    await expect(page.locator(`#contextSidebar [data-view-key="inspector-open:${bundles[1].bundleId}"]`)).toHaveCount(0);
     assert.equal(await page.locator("#contextSidebar").evaluate(node => node.inert), false);
-    assert.equal(await page.locator("#contextSidebarFooter button").count(), 1);
+    assert.equal(await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).count(), 1);
+    assert.equal(await page.locator("#contextSidebarFooter").getByRole("button", { name: "Download", exact: true }).count(), 1);
     await page.locator("#closeContextSidebar").click();
     await page.locator("#savedReportSearch").click();
     await settle(page);
@@ -147,7 +148,7 @@ test("saved inspection preserves paged sorted origins, real motion anchors, hist
     await shot(page, "library-page-two-inspector-light");
     await b.locator(".saved-report-summary").click();
     assert.equal(await page.locator("#contextSidebar").evaluate(node => node.getAnimations().length), 0, "Switching metadata does not replay entrance");
-    assert.match(await page.locator("#contextSidebarBody").innerText(), new RegExp(bundles[7].bundleId));
+    await expect(page.locator(`#contextSidebar [data-view-key="inspector-open:${bundles[7].bundleId}"]`)).toHaveCount(1);
     await page.locator("#closeContextSidebar").click();
     if (proof) {
         await page.waitForFunction(() => document.querySelector("#contextSidebar").getAnimations().length > 0);
@@ -169,11 +170,11 @@ test("saved inspection preserves paged sorted origins, real motion anchors, hist
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
     await expect(page.locator("#savedReportReader iframe")).toBeVisible();
     await expect(page.locator("#contextSidebar")).toBeHidden();
-    await expect(page.locator("#savedReaderTitle")).toBeFocused();
+    await expect(page.locator("#pageTitle")).toBeFocused();
     assert.equal(await page.locator("#savedReportReader").evaluate(node => node.getBoundingClientRect().width > 1000), true);
     await shot(page, "main-frozen-reader-light");
     await page.goBack();
-    await expect(page.locator("#contextSidebarFooter button")).toBeFocused();
+    await expect(page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true })).toBeFocused();
     assert.match(await page.locator("#bundleList").innerText(), /7-8 of 8/);
     await page.goForward();
     await expect(page.locator("#savedReportReader iframe")).toBeVisible();
@@ -200,7 +201,7 @@ test("saved inspectors and main documents reflow with accessible controls in bot
             const style = getComputedStyle(text), valueStyle = getComputedStyle(text.nextElementSibling);
             return { overflow: document.documentElement.scrollWidth > innerWidth + 1 || panel.scrollWidth > panel.clientWidth + 1,
                 body: rect(document.querySelector("#contextSidebarBody")), close: rect(document.querySelector("#closeContextSidebar")),
-                footer: rect(document.querySelector("#contextSidebarFooter")), button: rect(document.querySelector("#contextSidebarFooter button")),
+                footer: rect(document.querySelector("#contextSidebarFooter")), button: rect(document.querySelector('#contextSidebarFooter [data-view-key^="inspector-open:"]')),
                 foreground: style.color, background: getComputedStyle(panel).backgroundColor,
                 equalType: style.font === valueStyle.font, weight: style.fontWeight, modal: panel.matches(":modal") };
         });
@@ -215,10 +216,10 @@ test("saved inspectors and main documents reflow with accessible controls in bot
             assert.equal(await page.locator("#savedReportSearch").evaluate(node => node === document.activeElement), false);
         }
         await shot(page, `inspector-${theme}-${width}-${height}-${size}`);
-        await page.locator("#contextSidebarFooter button").tap();
+        await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).tap();
         await expect(page.locator("#savedReportReader iframe")).toBeVisible();
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-        await expect(page.locator("#savedReaderTitle")).toBeFocused();
+        await expect(page.locator("#pageTitle")).toBeFocused();
         assert.equal(await page.locator("#savedReportReader iframe").getAttribute("sandbox"), "");
         assert.equal(await page.locator("#savedReportReader iframe").getAttribute("referrerpolicy"), "no-referrer");
         await shot(page, `reader-${theme}-${width}-${height}-${size}`);
@@ -239,20 +240,24 @@ test("pending downloads belong to their inspector, failed HTML offers verified a
     await page.route("**/api/artifact-file", async route => {
         const response = await route.fetch(); entered.resolve(); await release.promise; await route.fulfill({ response });
     }, { times: 1 });
-    await page.locator("#contextSidebar").getByRole("button", { name: `Download product-report.json for ${a.bundleId}`, exact: true }).click();
+    await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
+    await page.locator("#contextSidebar").getByRole("button", { name: "Download", exact: true }).click();
     await entered.promise;
     await row(page, b.bundleId).locator(".saved-report-summary").click();
     const finished = page.waitForResponse(response => response.url().endsWith("/api/artifact-file"));
-    release.resolve(); await finished;
+    release.resolve(); await (await finished).finished();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.deepEqual(downloads, []);
-    assert.match(await page.locator("#contextSidebar").innerText(), new RegExp(b.bundleId));
+    await expect(page.locator(`#contextSidebar [data-view-key="inspector-open:${b.bundleId}"]`)).toHaveCount(1);
     await page.locator("#closeContextSidebar").click();
     await writeFile(a.files["product-report.html"], Buffer.concat([bytes, Buffer.from("\nUNREVIEWED CHANGE")]));
     await row(page, a.bundleId).getByRole("button", { name: "Open saved report", exact: true }).click();
     await expect(page.locator("#savedReportReader .error")).toContainText("changed");
     assert.equal(await page.locator("#savedReportReader iframe").count(), 0);
+    await selectActivityOption(page, "savedReaderFormat", "json");
+    await expect(page.locator("#savedReportReader .saved-json-tree")).toBeVisible();
     const download = page.waitForEvent("download");
-    await page.locator("#savedReportReader").getByRole("button", { name: `Download product-report.json for ${a.bundleId}`, exact: true }).click();
+    await page.locator("#savedReportReader").getByRole("button", { name: "Download", exact: true }).click();
     assert.equal((await download).suggestedFilename(), "product-report.json");
     await writeFile(a.files["product-report.html"], bytes);
     await page.goto(runtime.url + "#report?bundle=" + a.bundleId);

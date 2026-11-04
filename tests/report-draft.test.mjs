@@ -4,6 +4,137 @@ import { createReportDraft } from "../web/report-draft.mjs";
 import { createRequestContext } from "../web/request-context.mjs";
 import { retainedContextFixture } from "./request-context-fixture.mjs";
 
+test("native report drafts bind distinct original Current/All receipts and independent GitHub IDs across content edits", () => {
+    const draft = createReportDraft();
+    const view = { status: "bounded", revision: 7, sourceRevision: "a".repeat(64), viewId: "b".repeat(64), allViewId: "c".repeat(64),
+        definitions: { unit: "native calls" }, readback: { current: { generation: 2 } }, aggregates: { complete: true, conversations: 8 } };
+    const scope = { kind: "current", revision: 7, scenarioIds: ["github-one"] }, intent = { layer: "tool", filters: { sources: ["microsoft-365-chat"] } };
+    draft.bindNativeView(view, scope, intent);
+    assert.deepEqual(draft.nativeView(view, 7, intent).request, { nativeViewId: view.viewId, selection: scope });
+    draft.change({ title: "Edited report", promptMode: "none" });
+    assert.equal(draft.nativeView(view, 7, intent).conversationCount, 8);
+    const nextPage = { ...view, viewId: "d".repeat(64), allViewId: "e".repeat(64), page: { items: [] } };
+    assert.equal(draft.nativeView(nextPage, 7, intent).request.nativeViewId, view.viewId, "Paging/new equivalent receipt does not replace the original binding");
+    draft.bindNativeView(view, { kind: "all", revision: 7 }, intent);
+    assert.equal(draft.nativeView(view, 7, intent).request.nativeViewId, view.allViewId);
+    assert.equal(draft.nativeView(view, 7, intent).conversationCount, null, "Filtered Current totals are not an All count");
+});
+
+test("native report draft invalidation never silently rebinds stale source/filter intent or restores a refused receipt", () => {
+    const draft = createReportDraft();
+    const view = { status: "bounded", revision: 7, sourceRevision: "a".repeat(64), viewId: "b".repeat(64), allViewId: "c".repeat(64),
+        definitions: {}, readback: { current: { generation: 2 } }, aggregates: { complete: true, conversations: 1 } };
+    const scope = { kind: "current", revision: 7, scenarioIds: [] }, intent = { layer: "tool", filters: {} };
+    draft.bindNativeView(view, scope, intent);
+    assert.equal(draft.nativeView({ ...view, revision: 8 }, 8, intent).ready, false);
+    assert.equal(draft.nativeView(view, 7, intent).ready, false, "Stale state cannot revive an earlier receipt");
+    draft.bindNativeView(view, scope, intent);
+    assert.equal(draft.nativeView(view, 7, { ...intent, filters: { outcomes: ["failure"] } }).ready, false);
+    draft.bindNativeView(view, scope, intent);
+    draft.rejectNativeView();
+    assert.equal(draft.nativeView(view, 7, intent).ready, false);
+    draft.bindNativeView(view, scope, intent);
+    draft.withdrawAccess();
+    assert.equal(draft.nativeView(view, 7, intent).ready, false);
+    draft.resumeAccess();
+    assert.equal(draft.nativeView(view, 7, intent).ready, false);
+    assert.throws(() => draft.bindNativeView({ ...view, allViewId: undefined }, scope, intent), TypeError);
+});
+
+test("native report bindings retain original group and text intent rather than rebasing a refined preview", () => {
+    const draft = createReportDraft();
+    const view = { status: "bounded", revision: 7, sourceRevision: "a".repeat(64), viewId: "b".repeat(64), allViewId: "c".repeat(64),
+        definitions: {}, readback: { current: { generation: 2 } }, aggregates: { complete: true, conversations: 1 } };
+    const intent = { nativeGroup: "d".repeat(64), nativeQuery: "term", nativeTextMembership: "e".repeat(64) };
+    draft.bindNativeView(view, { kind: "current", revision: 7, scenarioIds: [] }, intent);
+    draft.change({ title: "Edited title" });
+    assert.equal(draft.nativeView(view, 7, intent).request.nativeViewId, view.viewId);
+    assert.equal(draft.nativeView(view, 7, { ...intent, nativeQuery: "replacement" }).ready, false);
+    draft.bindNativeView(view, { kind: "current", revision: 7, scenarioIds: [] }, intent);
+    assert.equal(draft.nativeView(view, 7, { ...intent, nativeGroup: null }).ready, false);
+});
+
+test("native Selected keeps only exposed conversation IDs and its original view across pages and edits", () => {
+    const draft = createReportDraft(), owner = {};
+    const item = { id: "d".repeat(64), sourceId: "microsoft-365-chat" };
+    const view = { status: "bounded", revision: 7, sourceRevision: "a".repeat(64), viewId: "b".repeat(64), allViewId: "c".repeat(64),
+        selectionRef: "e".repeat(64), definitions: {}, readback: { current: { generation: 2 } },
+        aggregates: { complete: true, conversations: 2 }, page: { items: [item] } };
+    assert.throws(() => draft.selectNative(view, "f".repeat(64), true, owner), /current Microsoft page/);
+    draft.selectNative(view, item.id, true, owner);
+    const next = { ...view, viewId: "f".repeat(64), page: { items: [{ id: "0".repeat(64), sourceId: "microsoft-365-cowork" }] } };
+    draft.selectNative(next, next.page.items[0].id, true, owner);
+    const picked = draft.nativeSelection(next, 7, owner);
+    assert.deepEqual(picked.items.map(value => value.id), [item.id, next.page.items[0].id]);
+    assert.equal(picked.view.viewId, view.viewId);
+    const scope = { kind: "selected", revision: 7, scenarioIds: ["github-one", ...picked.items.map(value => value.id)] };
+    draft.bindNativeView(picked.view, scope, { nativeSelected: scope.scenarioIds.slice(1) });
+    draft.change({ title: "Edited report" });
+    assert.deepEqual(draft.nativeView(next, 7, { nativeSelected: scope.scenarioIds.slice(1) }).request,
+        { nativeViewId: view.viewId, selection: scope });
+    assert.equal(draft.nativeView(next, 7, { nativeSelected: scope.scenarioIds.slice(1) }).conversationCount, 2);
+    assert.throws(() => draft.selectNative({ ...next, selectionRef: "1".repeat(64) }, item.id, true, owner), /different view|current Microsoft page/);
+    assert.equal(draft.nativeSelection({ ...next, revision: 8 }, 8, owner).ready, false);
+    assert.equal(draft.nativeSelection(view, 7, owner).ready, false, "A changed root/revision never revives old picks.");
+    draft.clearSelection();
+    draft.selectNative(view, item.id, true, owner);
+    assert.equal(draft.nativeSelection(view, 7, {}).ready, false);
+    draft.withdrawAccess(); draft.resumeAccess();
+    assert.equal(draft.nativeSelection(view, 7, owner).hasSelection, false);
+});
+
+test("native frozen copies bind disclosure to the actual report revision without invented metric facts", () => {
+    const draft = createReportDraft();
+    const preview = { revision: 8, snapshot: { nativeEvidence: { disclosure: { copies: [
+        { key: "native-prompt", purpose: "prompt" }, { key: "native-context", purpose: "context" },
+    ] } } } };
+    assert.equal(draft.bindContext(preview), true);
+    const token = draft.contextToken();
+    assert.equal(draft.contextCurrent(token), true);
+    draft.change({ overrides: [{ key: "native-prompt", text: "Keep edited prompt" }, { key: "native-context", text: "Retire stale context" }] });
+    assert.equal(draft.observeContext({ revision: 9 }), true);
+    assert.equal(draft.contextCurrent(token), false);
+    assert.deepEqual(draft.options().overrides, [{ key: "native-prompt", text: "Keep edited prompt" }]);
+    assert.equal(draft.bindContext(preview), false);
+});
+
+test("qualified native capture advancement keeps prepared copies but never preserves changed disclosure authority", () => {
+    const draft = createReportDraft();
+    const basis = { sourceRevision: 4, membershipRevision: 4, consentRevision: 1, overrideRevision: 0, deletionEpoch: 0 };
+    const preview = { revision: 8, snapshot: { nativeEvidence: { githubEvaluationFacts: { basis },
+        disclosure: { copies: [{ key: "kept-context", purpose: "context" }] } } } };
+    draft.bindContext(preview);
+    const token = draft.contextToken(), operation = draft.token();
+    assert.equal(draft.observeContext({ revision: 9, assessment: { basis: { ...basis, sourceRevision: 5, membershipRevision: 5 } } },
+        { preserveNativeSource: true }), false);
+    assert.equal(draft.contextCurrent(token), true);
+    assert.equal(draft.current(operation), true);
+    assert.equal(draft.bindContext(preview), true, "A still-authorized original root can finish preparing after collection advances.");
+    assert.equal(draft.observeContext({ revision: 10, assessment: { basis: { ...basis, consentRevision: 2 } } },
+        { preserveNativeSource: true }), true);
+    assert.equal(draft.bindContext(preview), false);
+});
+
+test("qualified collected GitHub context keeps reply edits across capture without accepting changed authority", () => {
+    const draft = createReportDraft();
+    const basis = { sourceRevision: 4, membershipRevision: 4, consentRevision: 1, overrideRevision: 0, deletionEpoch: 0 };
+    const preview = { revision: 8, collectedSourceFrozen: true, snapshot: { evaluationFacts: { basis },
+        recordedContext: { entries: [{ key: "reply-copy", kind: "response" }] } } };
+    draft.bindContext(preview);
+    draft.change({ overrides: [{ key: "reply-copy", text: "My reviewed reply edit" }] });
+    const token = draft.contextToken(), operation = draft.token();
+    assert.equal(draft.observeContext({ revision: 9, assessment: { basis: { ...basis, sourceRevision: 5, membershipRevision: 5 } } },
+        { preserveCollectedSource: true }), false);
+    assert.equal(draft.contextCurrent(token), true);
+    assert.equal(draft.current(operation), true);
+    assert.deepEqual(draft.options().overrides, [{ key: "reply-copy", text: "My reviewed reply edit" }]);
+    assert.equal(draft.bindContext(preview), true);
+    assert.equal(draft.observeContext({ revision: 10, assessment: { basis: { ...basis, consentRevision: 2 } } },
+        { preserveCollectedSource: true }), true);
+    assert.deepEqual(draft.options().overrides, []);
+    assert.equal(draft.bindContext(preview), false);
+});
+
 test("a report title belongs to its draft, survives scope refinement and clears with the whole draft", () => {
     const draft = createReportDraft();
     const token = draft.token();

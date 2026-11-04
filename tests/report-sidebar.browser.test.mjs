@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
-import { fixture, privateFixture, selectActivityOption, chooseTheme } from "./helpers.mjs";
+import { fixture, privateFixture, selectActivityOption, chooseTheme, closeAnalyzeFilters, revealAnalyzeRecords } from "./helpers.mjs";
 import { reportContents, scanReport, findReportCopy, chooseReportScope } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -162,7 +162,7 @@ test("Activity stays interactive beside one mounted setup; peek, return and clos
     await page.locator("#reportList input").first().check();
     await page.getByRole("button", { name: "Next report requests", exact: true }).click();
     await page.locator("#reportList input").first().check();
-    await expect(page.locator("#reportActivitySummary")).toHaveText("1 chat · 2 interactions included");
+    await expect(page.locator("#reportActivitySummary")).toHaveText("1 chat 2 interactions included");
     await expect(page.locator("#reportPageSelectionSummary")).toHaveText("1 included outside this page.");
     await page.getByRole("button", { name: "Next report requests", exact: true }).click();
     await expect(page.locator("#reportPageSelectionSummary")).toHaveText("2 included outside this page.");
@@ -191,12 +191,12 @@ test("Activity stays interactive beside one mounted setup; peek, return and clos
     await inspection.click();
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Interaction");
     await expect(page.locator("#requestReportToggle")).toHaveText("Add to report");
-    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 2 interactions");
+    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 2 interactions");
     await expect(page.getByRole("button", { name: "Back to report setup", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Continue to contents", exact: true, includeHidden: true })).toBeHidden();
     await expect(page.locator("#reportStage1")).toBeVisible();
     await capture(page, "normal-entry-interaction-peek");
-    await page.locator('[data-reader-section="activity"] .reader-section-toggle').click();
+    await page.locator('[data-reader-section="source"] .reader-section-toggle').click();
     const peekTop = await page.locator("#contextSidebarBody").evaluate(node => { node.scrollTop = 200; return node.scrollTop; });
     await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Report setup");
@@ -208,7 +208,7 @@ test("Activity stays interactive beside one mounted setup; peek, return and clos
     await expect(page.locator('[name=promptMode][value=original]')).toBeChecked();
     await expect(page.locator('#formatOptions input[value=json]')).toBeChecked();
     await inspection.click();
-    await expect(page.locator('[data-reader-section="activity"] .reader-section-toggle')).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator('[data-reader-section="source"] .reader-section-toggle')).toHaveAttribute("aria-expanded", "true");
     await expect.poll(() => page.locator("#contextSidebarBody").evaluate(node => node.scrollTop)).toBe(peekTop);
     await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
     await page.getByRole("button", { name: "Next report requests", exact: true }).click();
@@ -254,6 +254,40 @@ test("Activity stays interactive beside one mounted setup; peek, return and clos
     assert.equal((await loadBoardState(context)).exports.length, 0);
 });
 
+test("combined interaction geometry does not change report setup width, retained choices or close ownership", { timeout: 25000 }, async t => {
+    const { page, context, requests } = await setup(t);
+    await page.locator("#pageAction").click();
+    await page.locator("#reportList input").first().check();
+    await reportContents(page);
+    const panel = page.locator("#contextSidebar"), title = page.locator("#contextSidebarTitle");
+    await expect(title).toHaveText("Report setup");
+    await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
+    const width = await panel.evaluate(node => node.getBoundingClientRect().width);
+    await page.locator("#reportTitle").fill("Invented retained setup");
+    await page.locator('[name=promptMode][value=original]').check();
+    await page.locator("#additionalMasking summary").click();
+    await page.locator("#manualTerms").fill("Invented draft term");
+    const before = requests.length;
+    await page.locator("#reportList .request-card-open").first().click();
+    await expect(title).toHaveText("Interaction");
+    await page.locator("#widenInteraction").click();
+    await page.locator("#expandInteraction").click();
+    await expect(panel).toHaveAttribute("data-mode", "expanded");
+    await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
+    await expect(title).toHaveText("Report setup");
+    for (const id of ["readerWidthControls", "readerResize", "expandInteraction"]) await expect(page.locator("#" + id)).toBeHidden();
+    assert.equal(await panel.evaluate(node => node.getBoundingClientRect().width), width);
+    await expect(page.locator("#reportTitle")).toHaveValue("Invented retained setup");
+    await expect(page.locator("#manualTerms")).toHaveValue("Invented draft term");
+    await expect(page.locator('[name=promptMode][value=original]')).toBeChecked();
+    await expect(page.locator("#manualTerms")).toBeFocused();
+    await page.locator("#closeContextSidebar").click();
+    await expect(panel).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue to contents", exact: true })).toBeFocused();
+    assert.equal(requests.slice(before).some(request => /\/api\/(?:preview|privacy-review|export)$/.test(request.url.pathname)), false);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+});
+
 test("real preparation leaves the sidebar for wide Report/Text/Files, copy edits, explicit approval and separate save", { timeout: 30000 }, async t => {
     const { page, context, requests } = await setup(t);
     await page.locator("#pageAction").click();
@@ -272,7 +306,8 @@ test("real preparation leaves the sidebar for wide Report/Text/Files, copy edits
     await capture(page, "actual-prepared-main-document");
     assert.equal(await page.locator(".report-frame").getAttribute("sandbox"), "allow-same-origin");
     await page.getByRole("tab", { name: /^Files \(/ }).click();
-    await expect(page.locator("#reportFileInspection summary").filter({ hasText: "product-report.html" })).toBeVisible();
+    await expect(page.locator("#reportFileInspection").getByRole("navigation", { name: "Files to be saved", exact: true })).toBeVisible();
+    await expect(page.locator("#reportFileInspection .report-frame")).toBeVisible();
     await expect(page.locator("#reportFileInspection>h3")).toHaveCount(0);
     await capture(page, "actual-prepared-files");
     const copy = await findReportCopy(page, "question0");
@@ -374,7 +409,7 @@ test("setup controls and selection survive native close and reader returns witho
     await page.getByRole("button", { name: "1. Activity", exact: true }).click();
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-step", "1");
-    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 1 interaction");
+    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 1 interaction");
     await reportContents(page);
     await expectOptions();
     await page.locator("#reportList .request-link").first().click();
@@ -440,7 +475,7 @@ test("picker search during a peek retains its current query when returning to se
     await page.locator("#reportCreateLink").click();
     await expect(page.locator("#reportRequestSearch")).toHaveValue("question8");
     await expect(page.locator("#reportList")).toContainText("question8");
-    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 1 interaction");
+    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 1 interaction");
 });
 
 test("setup uses the shared responsive panel with visible keyboard and touch actions in both themes", { timeout: 45000 }, async t => {
@@ -520,7 +555,7 @@ test("source invalidation scrubs retained peek subjects and keeps a safe route b
     await page.locator("#reportList .request-link").first().click();
     await expect(page.locator('[data-reader-section="prompt"] pre')).toHaveText(records[0].userPrompt.text);
     const staleCopy = await page.getByRole("button", { name: "Copy prompt", exact: true }).elementHandle();
-    const staleFold = await page.getByRole("button", { name: "Collapse all sections", exact: true }).elementHandle();
+    const staleFold = await page.locator('[data-reader-section="source"] .reader-section-toggle').elementHandle();
     await page.getByRole("button", { name: "Copy prompt", exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.reportCopies), [records[0].userPrompt.text]);
     await replaceEvidence(context, () => ({ records: records.slice(1) }));
@@ -529,6 +564,7 @@ test("source invalidation scrubs retained peek subjects and keeps a safe route b
     await expect(page.locator("#contextSidebarGuard")).toBeHidden();
     await staleCopy.evaluate(node => node.click());
     await staleFold.evaluate(node => node.click());
+    await expect(page.locator("#requestContent")).not.toContainText("question0");
     assert.deepEqual(await page.evaluate(() => window.reportCopies), [records[0].userPrompt.text], "Invalidated owners cannot copy their stale private subject");
     await page.getByRole("button", { name: "Back to report setup", exact: true }).click();
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Report setup");
@@ -667,7 +703,7 @@ test("Search inspection from the saved library keeps the existing explicit Conti
 
 for (const newerInput of [false, true]) test(`Back from report setup restores the Analyze anchor ${newerInput ? "then yields to newer scrolling" : "before closing the returned reader"}`, { timeout: 20000 }, async t => {
     const { page } = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const card = page.locator(".request-card-open").first();
     await card.scrollIntoViewIfNeeded();
     const entry = await card.boundingBox();
@@ -705,7 +741,7 @@ for (const newerInput of [false, true]) test(`Back from report setup restores th
 
 test("responsive adaptation preserves the main card anchor through narrow doubled text and back", { timeout: 20000 }, async t => {
     const { page } = await setup(t, { width: 1200 });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const card = page.locator(".request-card-open").first();
     await card.scrollIntoViewIfNeeded();
     const entry = await card.boundingBox();
@@ -739,7 +775,7 @@ test("the report picker gives the actual prompt a bounded surface with aligned s
     assert.equal(paint.fontStyle, "normal");
     await expect(row.locator(".report-entry-meta")).toContainText("Copilot Chat:");
     await expect(row.locator(".interaction-summary")).toContainText("Work IQ calls:");
-    await expect(row.locator(".interaction-summary")).toContainText("1 Worked");
+    await expect(row.locator(".interaction-summary")).toContainText("1 Tool completed");
     await expect(row.locator(".report-entry-meta")).toContainText("Recorded:");
     await expect(row.locator(".report-entry-meta")).not.toContainText(/Model|Final response|Not recorded/);
     await expect(page.locator("#reportRequestSearch")).toHaveAttribute("placeholder", "Copilot Chat or prompt");
@@ -757,7 +793,7 @@ test("the report picker gives the actual prompt a bounded surface with aligned s
     await expect(page.locator("#contextSidebar[open]")).toHaveCount(0);
     await row.locator(".request-link").click();
     await expect(page.locator("#contextSidebarTitle")).toHaveText("Interaction");
-    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 1 interaction");
+    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 1 interaction");
     assert.equal(requests.filter(request => /\/api\/(?:preview|privacy-review|export)$/.test(request.url.pathname)).length, 0);
 });
 
@@ -785,10 +821,11 @@ test("picker full, long agent, partial unverified and unavailable prompts preser
     const { page, requests } = await setup(t, { recordCases: cases });
     await selectActivityOption(page, "outcomeFilter", "failure");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await closeAnalyzeFilters(page);
     await page.locator("#pageAction").click();
     const row = name => page.locator(`[data-view-key="report:picker-${name}"]`);
     await expect(page.locator("#reportList .full-text-preview-state")).toHaveCount(0);
-    await expect(row("full").locator(".interaction-summary")).toContainText("1 Worked");
+    await expect(row("full").locator(".interaction-summary")).toContainText("1 Tool completed");
     await expect(row("full").locator(".interaction-summary")).toContainText("1 Tool failed");
     await expect(row("agent-long").locator(".full-text-provenance")).toHaveText("Agent prompt");
     await expect(row("agent-long").locator(".interaction-summary")).toContainText("1 Tool failed");
@@ -815,7 +852,7 @@ test("picker full, long agent, partial unverified and unavailable prompts preser
     await selectActivityOption(page, "reportPromptAuthorFilter", ["user"]);
     await expect(row("agent-long")).toContainText("Not included with the current prompt-author choice.");
     await expect(row("agent-long").locator("input")).toBeChecked();
-    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 1 interaction");
+    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 1 interaction");
     await expect(page.locator("#reportList .full-text-preview-state")).toHaveCount(0);
     for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
         await chooseTheme(page, theme);
@@ -870,8 +907,8 @@ test("picker full, long agent, partial unverified and unavailable prompts preser
     await expect(page.locator("#requestContent")).toContainText("Who sent this was not recorded");
     await page.getByRole("button", { name: "Back to activity", exact: true }).click();
     await row("missing").locator(".request-link").click();
-    await expect(page.locator("#requestContent")).toContainText("Prompt not available");
+    await expect(page.locator("#requestContent")).toContainText("Prompt text unavailable.");
     await page.getByRole("button", { name: "Back to activity", exact: true }).click();
-    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat · 1 interaction");
+    await expect(page.locator("#previewSelectionSummary")).toHaveText("1 chat 1 interaction");
     assert.equal(requests.filter(request => /\/api\/(?:preview|privacy-review|export)$/.test(request.url.pathname)).length, 0);
 });

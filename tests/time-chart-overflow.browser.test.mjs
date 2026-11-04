@@ -104,6 +104,16 @@ async function capture(page, name, geometry) {
     await page.screenshot({ path: path.join(directory, `${name}-context.png`), fullPage: true });
     await writeFile(path.join(directory, `${name}.json`), JSON.stringify(geometry, null, 2));
 }
+async function captureFocus(page, name, bounds) {
+    if (!process.env.WIRE_OVERFLOW_PROOFS) return;
+    const directory = process.env.WIRE_OVERFLOW_PROOFS;
+    await mkdir(directory, { recursive: true });
+    const chart = await measure(page), cdp = await page.context().newCDPSession(page);
+    const image = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
+    await cdp.detach();
+    await writeFile(path.join(directory, name + ".png"), Buffer.from(image.data, "base64"));
+    await writeFile(path.join(directory, name + ".json"), JSON.stringify({ bounds, chart, afterCapture: await measure(page) }, null, 2));
+}
 
 test("a fitted seven-bucket Analyze chart has no horizontal scrollbar and keeps every label and column", async t => {
     const page = await setup(t);
@@ -176,8 +186,11 @@ test("native overflow appears only when needed and resize keeps all date targets
             await action.focus();
             const scroll = await page.locator(".flat-time-scroll").boundingBox();
             const count = await action.locator(".dimensional-count").boundingBox();
+            const mark = await action.boundingBox();
+            if (width === 768 && index === 4) await captureFocus(page, `native-focus-${theme}-768`, { scroll, count, mark });
             assert.ok(count.width >= 44 && count.height >= 44);
             assert.ok(count.x >= scroll.x && count.x + count.width <= scroll.x + scroll.width);
+            assert.ok(mark.x >= scroll.x && mark.x + mark.width <= scroll.x + scroll.width);
             assert.equal(await action.locator(".dimensional-count").evaluate(node => parseFloat(getComputedStyle(node).fontSize)), 16 * scale);
         }
         if (width === 390 || width === 1440) await capture(page, `narrow-${theme}-${width}-text${scale}`, await measure(page));
@@ -193,6 +206,8 @@ test("native overflow appears only when needed and resize keeps all date targets
     await expect(page.locator("#activityCount")).toHaveText(String(counts[0]));
     assert.equal(new URL(page.url()).hash, original[0].href);
     await page.goBack(); await ready(page);
+    const filterEntry = page.locator("#openAnalyzeFilters");
+    if (await filterEntry.count()) await filterEntry.click();
     for (const mode of ["workload", "endpoint", "time"]) {
         await page.locator(`[data-chart="${mode}"]`).click(); await ready(page);
         await expect(page.locator("#activityCount")).toHaveText(String(total));
@@ -218,13 +233,15 @@ test("genuinely dense time bins keep a native scroller and the final column at w
         const focused = await measure(page);
         assert.ok(focused.scrollLeft > 0);
         assert.ok(focused.counts.at(-1).x >= focused.scroll.x && focused.counts.at(-1).right <= focused.scroll.right);
+        assert.ok(focused.marks.at(-1).x >= focused.scroll.x && focused.marks.at(-1).right <= focused.scroll.right);
         await capture(page, `dense-${width}-text${scale}`, focused);
     }
 });
 
 test("sidebar animation crosses the fit boundary without a false scrollbar or replaced columns", async t => {
     const page = await setup(t);
-    await page.setViewportSize({ width: 1440, height: 1080 });
+    // The side-by-side outcome column moves the same chart fit boundary 192px wider.
+    await page.setViewportSize({ width: 1632, height: 1080 });
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await ready(page);
     const first = await page.locator(".time-column").first().elementHandle();
@@ -256,4 +273,65 @@ test("sidebar animation crosses the fit boundary without a false scrollbar or re
         samples.push({ expanded, frames });
     }
     if (process.env.WIRE_OVERFLOW_PROOFS) await writeFile(path.join(process.env.WIRE_OVERFLOW_PROOFS, "sidebar-frames.json"), JSON.stringify(samples, null, 2));
+});
+
+test("fractional scrollports reveal the complete focused column and count in both directions", async t => {
+    const page = await setup(t);
+    await page.setViewportSize({ width: 768, height: 1080 });
+    await page.locator(".analyze-chart-main").evaluate(node => { node.style.width = "532.078125px"; });
+    await ready(page);
+    assert.equal((await page.locator(".flat-time-scroll").boundingBox()).width, 490.078125);
+    let step = 0;
+    for (const index of [0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 0]) {
+        const action = page.locator(".time-column").nth(index);
+        await action.focus();
+        const bounds = await action.evaluate(control => {
+            const scroll = control.closest(".dimensional-scroll");
+            return { clip: scroll.getBoundingClientRect().toJSON(), count: control.querySelector(".dimensional-count").getBoundingClientRect().toJSON(),
+                mark: control.getBoundingClientRect().toJSON(), scrollLeft: scroll.scrollLeft };
+        });
+        if (index === 4) await captureFocus(page, `fractional-focus-${step < 7 ? "forward" : "backward"}`, bounds);
+        for (const box of [bounds.count, bounds.mark]) {
+            assert.ok(box.left >= bounds.clip.left && box.right <= bounds.clip.right, JSON.stringify({ index, bounds }));
+        }
+        step++;
+    }
+    for (const theme of ["dark", "light"]) for (const index of [0, 4, 6]) {
+        await chooseTheme(page, theme);
+        const action = page.locator(".time-column").nth(index);
+        await action.focus();
+        for (const [width, scale] of [[322.078125, 2], [532.078125, 1]]) {
+            await page.evaluate(({ width, scale }) => {
+                document.querySelector(".analyze-chart-main").style.width = width + "px";
+                document.documentElement.style.fontSize = `${scale * 100}%`;
+            }, { width, scale });
+            await ready(page);
+            await expect(action).toBeFocused();
+            const geometry = await measure(page);
+            assertChart(geometry, counts);
+            for (const box of [geometry.counts[index], geometry.marks[index]]) {
+                assert.ok(box.x >= geometry.scroll.x && box.right <= geometry.scroll.right);
+            }
+        }
+    }
+    const action = page.locator(".time-column").last(), scroll = page.locator(".flat-time-scroll");
+    await action.focus();
+    const offset = await scroll.evaluate(node => node.scrollLeft);
+    const clip = await scroll.boundingBox();
+    await page.mouse.move(clip.x + clip.width / 2, clip.y + clip.height / 2);
+    await page.mouse.wheel(-60, 0);
+    await page.waitForFunction(offset => document.querySelector(".flat-time-scroll").scrollLeft < offset, offset);
+    const moved = await scroll.evaluate(node => node.scrollLeft);
+    await ready(page);
+    assert.equal(await scroll.evaluate(node => node.scrollLeft), moved, "Focus does not reclaim deliberate horizontal scrolling");
+    await expect(action).toBeFocused();
+
+    const href = await action.getAttribute("href"), originalUrl = page.url();
+    const popupPromise = page.context().waitForEvent("page");
+    await action.locator(".dimensional-count").click({ modifiers: ["Control"] });
+    const popup = await popupPromise;
+    try {
+        await popup.waitForURL(url => url.hash === href);
+        assert.equal(page.url(), originalUrl, "Modified date links retain native new-tab navigation");
+    } finally { await popup.close(); }
 });

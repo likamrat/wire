@@ -111,6 +111,8 @@ test("new human reports lead with their title and data, not repeated headings or
                 text: document.querySelector("main").innerText,
                 overflow: document.documentElement.scrollWidth > innerWidth + 1,
                 font: getComputedStyle(heading).fontFamily,
+                captionWidth: document.querySelector("#overview caption").getBoundingClientRect().width,
+                tableWidth: document.querySelector("#overview table").getBoundingClientRect().width,
             };
         });
         observations.push({ theme, width, scale, ...reading });
@@ -122,6 +124,7 @@ test("new human reports lead with their title and data, not repeated headings or
         fail(/scenario-[a-f0-9]|Request reference:|masked-copy|retained-original|schemaVersion|stored revision/.test(reading.text), "machinery competes with the main report");
         fail(reading.headings.includes("Reviewed prompt copies"), "No-prompts mode has a redundant empty section");
         fail(reading.overflow || !reading.font.includes("Asta Sans"), "reading must reflow without replacing typography");
+        fail(Math.abs(reading.captionWidth - reading.tableWidth) > 1, "the activity caption must not collapse to a narrow strip");
         if (directory) await page.screenshot({ path: path.join(directory, `${theme}-${width}-${scale}.png`), fullPage: true });
     }
     const pdf = await inspectPdf(bundle.files["product-report.pdf"], directory);
@@ -175,12 +178,15 @@ test("new comparison files keep long titles, source facts and readable light, da
             text: document.querySelector("main").innerText,
             paper: getComputedStyle(document.body).backgroundColor,
             failures: [...document.querySelectorAll(".comparison-outcome-failure")].map(node => getComputedStyle(node).backgroundColor),
+            measureSize: parseFloat(getComputedStyle(document.querySelector(".comparison-metric-value")).fontSize),
+            rootSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
         }));
         assert.equal(shape.overflow, false);
         assert.match(shape.font, /Asta Sans/);
         assert.ok(!shape.text.includes(saved.bundleId), "Technical identities belong to coverage, not the reading lead");
         assert.match(shape.text, /Earlier/); assert.match(shape.text, /Later/);
         assert.match(shape.text, /Median tool latency/, "The named timing statistic remains visible beside its value");
+        assert.ok(shape.measureSize <= shape.rootSize, "Table values use readable body type, not oversized headline type");
         assert.ok(shape.failures.length);
         for (const color of shape.failures) {
             assert.ok(hue(color) <= 15 || hue(color) >= 345, "Failed calls must be red, not orange");

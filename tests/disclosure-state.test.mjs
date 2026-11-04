@@ -2,6 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDisclosureState } from "../web/disclosure-state.mjs";
 
+test("withdrawal forgets transient disclosure, page and identity ordering without a replacement snapshot", () => {
+    const state = createDisclosureState();
+    state.setOpen("private-key", true);
+    state.setPage("private-key", 3);
+    state.ordered("private-key", ["private-first", "private-second"], value => value);
+    state.withdrawAccess();
+    state.withdrawAccess();
+    assert.equal(state.isOpen("private-key"), false);
+    assert.equal(state.page("private-key", 50, 5), 0);
+    assert.deepEqual(state.ordered("private-key", ["private-second", "private-first"], value => value), ["private-second", "private-first"]);
+});
+
 test("disclosure state uses stable IDs, explicit defaults, independent bounded pages and panel lifetime", () => {
     const state = createDisclosureState();
     assert.equal(state.isOpen("session:a"), false);

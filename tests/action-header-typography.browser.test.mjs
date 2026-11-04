@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
-import { fixture, exportCatalogFor, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, chooseTheme, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const proofDir = process.env.WORKIQ_ACTION_TYPOGRAPHY_PROOFS;
 const exactPath = "/me/messages/{MessageId}?$select=subject&$filter=contains(subject,'\u65e5\u672c\u8a9e <not-markup>')";
@@ -37,7 +37,7 @@ async function setup(t) {
         if (req.method === "GET") {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-header-type'; style-src 'unsafe-inline'; font-src data:; connect-src 'self'; base-uri 'none'");
-            return res.end(renderHtmlShell("a".repeat(64), "header-type"));
+            return res.end(renderHtmlShell("a".repeat(64), "header-type", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         requests.push(req.url);
         res.setHeader("Content-Type", "application/json");

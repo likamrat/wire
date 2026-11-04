@@ -61,8 +61,13 @@ async function setup(t, source, consent = prior(), beforeWrite, options = {}) {
     await page.evaluate(({ snapshot, stored }) => {
         for (const [key, value] of Object.entries(stored)) sessionStorage.setItem(key, value);
         window.refreshes = 0;
+        const publication = {};
+        const api = Object.assign((...args) => window.syntheticConsentApi(...args), {
+            publicationToken: () => publication,
+            isCurrent: token => token === publication,
+        });
         window.experience = window.makeExperience({
-            api: window.syntheticConsentApi, createPresentation: () => ({}), createControls: window.makeControls,
+            api, createPresentation: () => ({}), createControls: window.makeControls,
             mountConsent: window.mountConsent, ux: { restoreFocus: node => node?.focus() },
             refresh: () => { window.refreshes++; }, onChanged: () => {}, onNotice: message => { throw new Error(message); },
         });

@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { recollectionFixture } from "./recollection-fixture.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { createDeletionController } from "../lib/deletion.mjs";
-import { selectActivityOption, navigateMain, navigateSettings, openSourceEditor, chooseTheme, revealStoredRefresh } from "./helpers.mjs";
+import { selectActivityOption, navigateMain, navigateSettings, openSourceEditor, chooseTheme, revealStoredRefresh, revealSavedDataRead } from "./helpers.mjs";
 import { chooseReportScope, scanReport } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -35,92 +35,7 @@ async function readableDisabled(page, selector) {
     assert.ok(paint.height >= 44);
 }
 
-test("freshness opens the existing guarded local-check and stored-read actions beside the scope", { timeout: 30000 }, async t => {
-    const f = await recollectionFixture(t), browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1466, height: 1000 }, reducedMotion: "reduce" });
-    const errors = [], effects = [];
-    page.on("pageerror", error => errors.push(error.message));
-    page.on("request", request => { if (/\/api\/collection\/(?:now|configure|enabled)$/.test(request.url())) effects.push(new URL(request.url()).pathname); });
-    f.closeClient(async () => { await browser.close(); assert.deepEqual(errors, []); });
-    await page.goto(f.runtime.url);
-    await page.locator("#workspace[aria-busy=false]").waitFor();
-    const entry = page.locator("#activityUpdateToggle");
-    assert.equal(await entry.count(), 1);
-    assert.equal(await entry.evaluate(node => node.closest("#periodMeta") !== null), true);
-    assert.equal(await page.locator("#freshActivity").isVisible(), false);
-    assert.match(await entry.innerText(), /Collection paused/);
-    assert.equal(await page.locator("#collectionNotice").isVisible(), false, "The freshness entry already names an ordinary pause");
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await capture(page, `entry-${theme}-closed`);
-    }
-    const original = await page.locator("#checkActivity").elementHandle();
-    const configFile = path.join(f.context.dataDir, "collector", "config.json"), config = await readFile(configFile);
-    const target = await entry.boundingBox();
-    assert.ok(target.height >= 44);
-    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
-    await page.mouse.down();
-    await capture(page, "entry-dark-pressed");
-    await page.mouse.up();
-    await expect(page.locator("#checkActivity")).toHaveText("Check local history");
-    await expect(page.locator("#freshStoredRead")).toBeVisible();
-    await expect(page.locator("#freshSourceSettings")).toHaveAttribute("href", "#settings?section=connection");
-    assert.equal(await page.locator(".page-heading #checkActivity").count(), 0);
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await capture(page, `entry-${theme}-expanded`);
-    }
-    await page.locator("#checkActivity").hover();
-    await capture(page, "check-dark-hover");
-    await page.locator("#checkActivity").focus();
-    await page.keyboard.press("Tab");
-    await capture(page, "stored-read-dark-keyboard-focus");
-    const read = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
-    await page.locator("#freshStoredRead").click(); await read;
-    await page.locator("#workspace[aria-busy=false]").waitFor();
-    assert.deepEqual(effects, []);
-    assert.equal(await page.locator("#recollectDialog").isVisible(), false);
-    const at = `${f.firstDay}T14:00:00.000Z`, id = randomUUID();
-    await appendFile(f.files[0], [
-        { id: randomUUID(), type: "tool.execution_start", timestamp: at, data: { toolCallId: id, toolName: "workiq-fetch", mcpServerName: "workiq", mcpToolName: "fetch", arguments: { entityUrls: ["/me/messages"] } } },
-        { id: randomUUID(), type: "tool.execution_complete", timestamp: at, data: { toolCallId: id, success: true } },
-    ].map(value => JSON.stringify(value) + "\n").join(""));
-    await page.locator("#checkActivity").click();
-    await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "complete"
-        && document.querySelector("#workspace").getAttribute("aria-busy") === "false");
-    assert.equal(await page.locator("#checkActivity").evaluate((node, original) => node === original, original), true);
-    assert.deepEqual(effects, ["/api/collection/now"]);
-    assert.deepEqual(await readFile(configFile), config);
-    assert.equal((await f.collector.status()).config.enabled, false);
-    assert.equal((await loadBoardState(f.context)).evidence.flatMap(row => row.toolCalls).length, 4);
-    await expect(page.locator("#freshStatus")).toHaveText("1 new activity record.");
-    await capture(page, "check-complete-return");
-    await page.locator(".request-card-open").first().click();
-    await expect(page.locator("#contextSidebar[open]")).toBeVisible();
-    await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);
-    await page.mouse.move(450, 400); await page.mouse.wheel(0, -10000);
-    await page.waitForFunction(() => scrollY === 0);
-    const reader = await page.locator("#contextSidebar").boundingBox(), updates = await entry.boundingBox();
-    assert.ok(updates.x + updates.width <= reader.x, "The entry remains in the activity surface beside the docked reader");
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.mouse.move(450, 400); await page.mouse.wheel(0, -10000);
-        await page.waitForFunction(() => scrollY === 0);
-        await capture(page, `entry-${theme}-docked-reader`);
-    }
-    await page.locator("#closeContextSidebar").click();
-    await page.setViewportSize({ width: 375, height: 1000 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await entry.scrollIntoViewIfNeeded();
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-    for (const id of ["activityUpdateToggle", "checkActivity", "freshStoredRead", "freshRecollect"]) {
-        const box = await page.locator("#" + id).boundingBox();
-        assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= 376, `${id}: ${JSON.stringify(box)}`);
-    }
-    await capture(page, "entry-dark-narrow-enlarged-scrolled");
-});
-
-test("Analyze recollection uses the authoritative preview and preserves the displayed date scope", { timeout: 30000 }, async t => {
+test("Settings recollection uses the authoritative preview and preserves the displayed date scope", { timeout: 30000 }, async t => {
     const f = await recollectionFixture(t);
     const deletion = createDeletionController(f.context);
     const remove = await deletion.preview("fixture", { scope: "all", timeContext: { timeZone: "UTC", locale: "en-US" } });
@@ -133,10 +48,11 @@ test("Analyze recollection uses the authoritative preview and preserves the disp
     f.closeClient(async () => { await browser.close(); assert.deepEqual(errors, []); });
     await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
     await selectActivityOption(page, "dateFilter", "day"); await page.locator("#workspace[aria-busy=false]").waitFor();
-    await page.locator("#activityUpdateToggle").click();
-    assert.equal(await page.locator("#freshRecollect").count(), 1);
-    const trigger = await page.locator("#freshRecollect").elementHandle();
-    await page.locator("#freshRecollect").click();
+    await page.locator("#closeAnalyzeFilters").click();
+    await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
+    assert.equal(await page.locator("#recollectActivity").count(), 1);
+    const trigger = await page.locator("#recollectActivity").elementHandle();
+    await page.locator("#recollectActivity").click();
     await page.waitForFunction(() => document.querySelector("#recollectPreview").dataset.pending === "false"
         && document.querySelectorAll("#recollectSources input").length > 0);
     assert.equal(await page.locator("#recollectPreview").isDisabled(), true, "A source list alone is not a selected preview scope");
@@ -177,8 +93,8 @@ test("Analyze recollection uses the authoritative preview and preserves the disp
     await page.locator("#workspace[aria-busy=false]").waitFor();
     await capture(page, "recollection-complete");
     await page.locator("#recollectClose").click();
-    await page.waitForFunction(() => document.activeElement.id === "freshRecollect");
-    assert.equal(await page.locator("#freshRecollect").evaluate((node, trigger) => node === trigger, trigger), true);
+    await page.waitForFunction(() => document.activeElement.id === "recollectActivity");
+    assert.equal(await page.locator("#recollectActivity").evaluate((node, trigger) => node === trigger, trigger), true);
     assert.equal(await page.locator("#dateFilter").inputValue(), "day");
     assert.equal(await page.locator("#activityCount").innerText(), "0");
     assert.match(await page.locator("#recollectionUpdateStatus").innerText(), /Recollected 1 record/);
@@ -199,7 +115,7 @@ test("reloaded B recovery reads the same receipt without scanning or inventing t
     page.on("request", request => { if (request.url().includes("/api/recollection/")) requests.push({ path: new URL(request.url()).pathname, body: request.postDataJSON() }); });
     f.closeClient(async () => { await browser.close(); assert.deepEqual(errors, []); });
     await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
-    await page.locator("#activityUpdateToggle").click(); await page.locator("#freshRecollect").click();
+    await navigateMain(page, "settings"); await navigateSettings(page, "privacy"); await page.locator("#recollectActivity").click();
     await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
     await page.locator("#recollectFrom").fill(f.firstDay); await page.locator("#recollectTo").fill(f.firstDay);
     await page.locator("#recollectPreview").click(); await expect(page.locator("#recollectDialog")).toHaveAttribute("data-decision-phase", "confirm");
@@ -209,8 +125,11 @@ test("reloaded B recovery reads the same receipt without scanning or inventing t
     const operationId = await page.locator("#recollectDialog").getAttribute("data-operation-id");
     const retainedReceipt = await page.evaluate(() => JSON.parse(sessionStorage.getItem("workiq-evidence.recollection-operation")));
     await page.reload(); await page.locator("#workspace[aria-busy=false]").waitFor();
-    await expect(page.locator("#freshRecollect")).toHaveText("Check recollection result");
-    await page.locator("#freshRecollect").click();
+    await navigateMain(page, "analyze");
+    await expect(page.locator("#freshAwayLink")).toHaveAttribute("href", "#settings?section=privacy&setting=recollect-activity");
+    await page.locator("#freshAwayLink").focus(); await page.keyboard.press("Enter");
+    await expect(page.locator("#recollectActivity")).toHaveText("Check recollection result");
+    await page.locator("#recollectActivity").click();
     await expect(page.locator("#recollectScopeUnavailable")).toBeVisible();
     assert.equal(await page.locator("#recollectConfirmation").isVisible(), false);
     assert.equal(await page.locator("#recollectConfirm").isVisible(), false);
@@ -225,7 +144,7 @@ test("reloaded B recovery reads the same receipt without scanning or inventing t
         assert.equal(await page.locator("#recollectClose").isEnabled(), true);
         await capture(page, "receipt-read-pending");
         await page.locator("#recollectClose").click();
-        await page.waitForFunction(() => document.activeElement.id === "freshRecollect");
+        await page.waitForFunction(() => document.activeElement.id === "recollectActivity");
         await navigateMain(page, "reports"); await chooseReportScope(page, "all"); await scanReport(page);
         frozen = page.locator("#reportReviewBody iframe"); frozenNode = await frozen.elementHandle();
         frozenHtml = await frozen.getAttribute("srcdoc");
@@ -257,8 +176,8 @@ test("B actions preserve dirty Settings and a frozen report without dispatch", {
     await navigateMain(page, "settings"); await navigateSettings(page, "connection"); await openSourceEditor(page);
     const draft = await page.locator("#sourceSessions").inputValue() + "-unsaved";
     await page.locator("#sourceSessions").fill(draft);
-    await navigateMain(page, "analyze"); await page.locator("#activityUpdateToggle").click();
-    for (const id of ["checkActivity", "freshStoredRead", "freshRecollect"]) await expect(page.locator("#" + id)).toBeDisabled();
+    await navigateMain(page, "analyze"); await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
+    for (const id of ["checkActivity", "freshStoredRead", "recollectActivity"]) await expect(page.locator("#" + id)).toBeDisabled();
     await capture(page, "entry-dirty-settings");
     await navigateMain(page, "settings"); await navigateSettings(page, "connection");
     assert.equal(await page.locator("#sourceSessions").inputValue(), draft);
@@ -266,7 +185,7 @@ test("B actions preserve dirty Settings and a frozen report without dispatch", {
     await navigateMain(page, "reports"); await chooseReportScope(page, "all"); await scanReport(page);
     const frozen = await page.locator("#reportReviewBody iframe").getAttribute("srcdoc");
     await navigateMain(page, "analyze");
-    for (const id of ["checkActivity", "freshStoredRead", "freshRecollect"]) await expect(page.locator("#" + id)).toBeDisabled();
+    for (const id of ["checkActivity", "freshStoredRead", "recollectActivity"]) await expect(page.locator("#" + id)).toBeDisabled();
     assert.equal(await page.locator("#reportReviewBody iframe").getAttribute("srcdoc"), frozen);
     assert.deepEqual(effects, []);
 });
@@ -281,7 +200,7 @@ test("failed or incomplete previews cannot commit and a failed result view recov
     page.on("request", request => { if (request.url().endsWith("/api/recollection/confirm")) confirmations++; });
     await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
     await chooseTheme(page, "dark");
-    await page.locator("#activityUpdateToggle").click(); await page.locator("#freshRecollect").click();
+    await navigateMain(page, "settings"); await navigateSettings(page, "privacy"); await page.locator("#recollectActivity").click();
     await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
     await page.locator("#recollectFrom").fill(f.firstDay); await page.locator("#recollectTo").fill(f.firstDay);
     await page.route("**/api/recollection/preview", route => route.fulfill({ status: 503, json: { error: "Synthetic source read failure" } }));
@@ -325,6 +244,7 @@ test("failed or incomplete previews cannot commit and a failed result view recov
     failView = false;
     const recovery = await revealStoredRefresh(page);
     await recovery.click(); await page.locator("#workspace[aria-busy=false]").waitFor();
+    await navigateSettings(page, "privacy");
     await expect(page.locator("#recollectionUpdateStatus")).toContainText("Recollected 1 record");
     await expect(page.locator("#recollectionUpdateStatus")).toContainText("Current filters are kept");
     assert.equal(await page.locator("#freshResult").isVisible(), false, "The confirmed recollection owns its successful return message");
@@ -342,14 +262,14 @@ test("a reloaded not-started receipt settles without automatically reading sourc
     page.setDefaultTimeout(7000);
     page.on("request", request => { if (request.url().includes("/api/recollection/")) paths.push(new URL(request.url()).pathname); });
     await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
-    await page.locator("#activityUpdateToggle").click(); await page.locator("#freshRecollect").click();
+    await navigateMain(page, "settings"); await navigateSettings(page, "privacy"); await page.locator("#recollectActivity").click();
     await page.locator(`#recollectSources input[value="${f.sourceId}"]`).check();
     await page.locator("#recollectFrom").fill(f.firstDay); await page.locator("#recollectTo").fill(f.firstDay);
     await page.locator("#recollectPreview").click(); await expect(page.locator("#recollectConfirm")).toBeEnabled();
     await page.route("**/api/recollection/confirm", route => route.abort("failed"));
     await page.locator("#recollectConfirm").click(); await expect(page.locator("#recollectCheck")).toBeVisible();
     await page.reload(); await page.locator("#workspace[aria-busy=false]").waitFor();
-    await page.locator("#freshRecollect").click();
+    await page.locator("#recollectActivity").click();
     const before = paths.length;
     await page.locator("#recollectCheck").click();
     await expect(page.locator("#recollectStatus")).toContainText("No committed recollection");
@@ -359,86 +279,13 @@ test("a reloaded not-started receipt settles without automatically reading sourc
     assert.equal(await page.locator("#recollectForm").isVisible(), false);
     await capture(page, "receipt-not-started-no-source-read");
     await page.locator("#recollectClose").click();
-    await expect(page.locator("#freshRecollect")).toBeFocused();
+    await expect(page.locator("#recollectActivity")).toBeFocused();
     await expect(page.locator("#recollectionUpdateStatus")).toContainText("No committed recollection");
     assert.deepEqual((await loadBoardState(f.context)).evidence, []);
-    await page.locator("#freshRecollect").click();
+    await page.locator("#recollectActivity").click();
     await expect(page.locator("#recollectSources input")).toHaveCount(2);
     assert.equal(paths.filter(value => value.endsWith("/sources")).length, 2, "Only a separate user intent reads the source list again");
     assert.equal(paths.filter(value => value.endsWith("/confirm")).length, 1);
-});
-
-test("one contextual update entry survives Compare and stored reads without changing paired or ordinary scopes", { timeout: 30000 }, async t => {
-    const f = await recollectionFixture(t), browser = await chromium.launch();
-    f.closeClient(() => browser.close());
-    const page = await browser.newPage({ viewport: { width: 1466, height: 1000 }, timezoneId: "UTC", reducedMotion: "reduce" });
-    page.setDefaultTimeout(7000);
-    const effects = [];
-    page.on("request", request => {
-        if (/\/api\/(?:collection\/(?:now|configure|enabled)|recollection\/)/.test(request.url())) effects.push(new URL(request.url()).pathname);
-    });
-    await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
-    await selectActivityOption(page, "dateFilter", "custom");
-    await page.locator("#fromFilter").fill(f.firstDay); await page.locator("#toFilter").fill(f.firstDay);
-    await page.locator("#applyDates").click(); await page.locator("#workspace[aria-busy=false]").waitFor();
-    await selectActivityOption(page, "outcomeFilter", ["success"]); await page.locator("#workspace[aria-busy=false]").waitFor();
-    const entry = page.locator("#activityUpdateToggle"), original = await entry.elementHandle();
-    await expect(page.locator("#periodResult")).toBeVisible();
-    await expect(page.locator("#activityCount")).toHaveText("2");
-    await page.locator("#comparePeriods").click();
-    assert.equal(await entry.isVisible(), true, "Compare must not hide the only activity-update entry");
-    const periods = [
-        ["Period A from", f.firstDay], ["Period A to", f.firstDay],
-        ["Period B from", f.secondDay], ["Period B to", f.secondDay],
-    ];
-    for (const [label, value] of periods) await page.getByLabel(label, { exact: true }).fill(value);
-    const response = page.waitForResponse(response => response.url().endsWith("/api/period-comparison") && response.ok());
-    await page.locator("#applyPeriodComparison").click(); await response;
-    await expect(page.locator("#periodComparisonResultsTitle")).toBeVisible();
-    for (const id of ["periodResult", "periodHint", "periodActions", "periodCoverage"]) await expect(page.locator("#" + id)).toBeHidden();
-    assert.equal(await entry.evaluate((node, original) => node === original, original), true);
-    assert.equal(await page.locator("#activityUpdateToggle,#checkActivity").count(), 2, "No duplicate update entry or check control");
-    assert.equal(await entry.evaluate(node => Boolean(node.closest("#periodFeedback")
-        .compareDocumentPosition(document.getElementById("periodComparison")) & Node.DOCUMENT_POSITION_FOLLOWING)), true,
-    "Updates precede the comparison results, not its long record roster");
-    await page.mouse.move(400, 400); await page.mouse.wheel(0, -10000); await page.waitForFunction(() => scrollY === 0);
-    await capture(page, "comparison-update-closed");
-    await entry.click(); await expect(page.locator("#freshStoredRead")).toBeVisible();
-    assert.deepEqual(effects, [], "Opening contextual updates never checks source history");
-    const results = await page.locator("#periodComparisonResults").innerText();
-    const read = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
-    await page.locator("#freshStoredRead").click(); await read; await page.locator("#workspace[aria-busy=false]").waitFor();
-    await expect(page.locator("#freshStoredRead")).toBeFocused();
-    for (const [label, value] of periods) await expect(page.getByLabel(label, { exact: true })).toHaveValue(value);
-    assert.equal(await page.locator("#periodComparisonResults").innerText(), results);
-    assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
-    assert.deepEqual(effects, []);
-    for (const theme of ["light", "dark"]) {
-        await chooseTheme(page, theme);
-        await page.mouse.move(400, 400); await page.mouse.wheel(0, -10000); await page.waitForFunction(() => scrollY === 0);
-        await capture(page, `comparison-update-${theme}`);
-    }
-    await page.setViewportSize({ width: 375, height: 1000 });
-    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-    await entry.scrollIntoViewIfNeeded();
-    const geometry = await page.evaluate(() => ({
-        updatesBottom: document.getElementById("periodFeedback").getBoundingClientRect().bottom,
-        resultsTop: document.getElementById("periodComparison").getBoundingClientRect().top,
-        overflow: document.documentElement.scrollWidth - innerWidth,
-    }));
-    assert.ok(geometry.updatesBottom <= geometry.resultsTop && geometry.overflow <= 1, JSON.stringify(geometry));
-    await capture(page, "comparison-update-dark-narrow-scrolled");
-    await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
-    await page.setViewportSize({ width: 1466, height: 1000 });
-    await page.getByRole("button", { name: "Stop comparing", exact: true }).click();
-    await expect(page.locator("#comparePeriods")).toBeFocused();
-    await expect(page.locator("#periodComparison")).toBeHidden();
-    await expect(page.locator("#periodResult")).toBeVisible();
-    await expect(page.locator("#activityCount")).toHaveText("2");
-    await expect(page.locator("#fromFilter")).toHaveValue(f.firstDay); await expect(page.locator("#toFilter")).toHaveValue(f.firstDay);
-    assert.equal(await page.locator("#outcomeFilter").inputValue(), "success");
-    assert.equal(await entry.evaluate((node, original) => node === original, original), true);
-    assert.deepEqual(effects, []);
 });
 
 for (const [name, raw, unreadable] of [
@@ -476,8 +323,8 @@ for (const [name, raw, unreadable] of [
         page.on("request", request => { if (request.url().includes("/api/recollection/")) requests.push(new URL(request.url()).pathname); });
         await page.goto(f.runtime.url); await page.locator("#workspace[aria-busy=false]").waitFor();
         if (name === "malformed JSON") await chooseTheme(page, "dark");
-        if (await page.locator("#activityUpdateToggle").getAttribute("aria-expanded") === "false") await page.locator("#activityUpdateToggle").click();
-        await page.locator("#freshRecollect").click();
+        await navigateMain(page, "settings"); await navigateSettings(page, "privacy");
+        await page.locator("#recollectActivity").click();
         assert.equal(await page.locator("#recollectForm").isVisible(), false, "An unreadable retained receipt cannot open fresh source selection");
         await expect(page.locator("#recollectTitle")).toHaveText("Recollection recovery unavailable");
         await expect(page.locator("#recollectStatus")).toContainText("could not be read or verified");
@@ -490,10 +337,12 @@ for (const [name, raw, unreadable] of [
         if (name === "malformed JSON") await capture(page, "blocked-recollection-receipt-dark");
         await page.locator("#recollectClose").click();
         await expect(page.locator("#recollectionUpdateStatus")).toContainText("could not be read or verified");
+        await navigateSettings(page, "connection");
         const read = page.waitForResponse(response => response.url().endsWith("/api/snapshot"));
-        await page.locator("#freshStoredRead").click(); await read; await page.locator("#workspace[aria-busy=false]").waitFor();
+        await (await revealSavedDataRead(page)).click(); await read; await page.locator("#workspace[aria-busy=false]").waitFor();
         if (name === "malformed JSON") await chooseTheme(page, "light");
-        await page.locator("#freshRecollect").click();
+        await navigateSettings(page, "privacy");
+        await page.locator("#recollectActivity").click();
         await expect(page.locator("#recollectTitle")).toHaveText("Recollection recovery unavailable");
         if (name === "malformed JSON") await capture(page, "blocked-recollection-receipt-light");
         await page.locator("#recollectClose").click();

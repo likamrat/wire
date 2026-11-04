@@ -7,7 +7,7 @@ import { chromium, expect } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createCollectionStatus } from "../lib/collection-status.mjs";
-import { fixture, exportCatalogFor, navigateMain, chooseTheme, selectActivityOption, openSourceEditor } from "./helpers.mjs";
+import { fixture, exportCatalogFor, navigateMain, chooseTheme, selectActivityOption, openSourceEditor, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { chooseReportScope } from "./report-journey-helpers.mjs";
 import { contrast } from "./color-measurements.mjs";
 
@@ -43,7 +43,7 @@ async function setup(t, approved = true) {
     };
     const requests = [], failures = [], writes = [];
     const server = createServer(async (req, res) => {
-        if (req.url === "/" && req.method === "GET") { res.setHeader("Content-Type", "text/html"); return res.end(renderHtmlShell("a".repeat(64), "search-proof")); }
+        if (req.url === "/" && req.method === "GET") { res.setHeader("Content-Type", "text/html"); return res.end(renderHtmlShell("a".repeat(64), "search-proof", UNBOUND_FIXTURE_BOOTSTRAP)); }
         if (req.url === "/favicon.ico") return res.writeHead(204).end();
         let body = ""; for await (const part of req) body += part;
         const input = body ? JSON.parse(body) : {};

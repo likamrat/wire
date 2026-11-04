@@ -64,7 +64,7 @@ test("normal tool-view snapshot includes owned evidence with source readers and 
     });
     t.after(async () => { await runtime.close(); for (const cleanup of cleanups.reverse()) await cleanup(); assert.deepEqual(invoked, []); });
     const origin = new URL(runtime.url).origin;
-    const headers = { Origin: origin, "Content-Type": "application/json" };
+    const headers = { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
     const nativeFetch = globalThis.fetch;
     t.mock.method(globalThis, "fetch", (input, options) => {
         if (new URL(typeof input === "string" ? input : input.url).origin !== origin) throw Error("Only this test's loopback snapshot endpoint is allowed.");

@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateMain, selectActivityOption, revealAnalyzeRecords } from "./helpers.mjs";
 import { shadowPaint } from "./color-measurements.mjs";
 
 const proofs = process.env.WIRE_MOTION_DEPTH_PROOFS;
@@ -157,7 +157,7 @@ test("retired motion setting is absent from global Search and cannot return thro
 
 test("docked contextual glide moves the real main edge with the painted sidebar in both directions", async t => {
     const page = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const frames = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar"), main = document.querySelector("#main");
         const samples = [], frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -186,6 +186,56 @@ test("docked contextual glide moves the real main edge with the painted sidebar 
         assert.ok(widths >= 3, `${phase}: main width snaps instead of following the sidebar (${widths} painted width)`);
         assert.ok(maxGap < 2, `${phase}: main edge must follow the actual exposed sidebar edge, gap ${maxGap}`);
     }
+});
+
+test("combined geometry keeps exact origin and history through rapid reversal without leaking into saved inspection", async t => {
+    const page = await setup(t, { savedReports: 1 });
+    await revealAnalyzeRecords(page);
+    const card = page.locator(".request-card-open").nth(2);
+    await card.scrollIntoViewIfNeeded();
+    const before = await page.evaluate(() => ({ y: scrollY, url: location.href, top: document.querySelectorAll(".request-card-open")[2].getBoundingClientRect().top }));
+    const box = await card.boundingBox();
+    await page.mouse.click(box.x + 30, box.y + 20);
+    await page.locator("#contextSidebar[open]").waitFor();
+    const panel = page.locator("#contextSidebar");
+    const request = page.url();
+    const changes = await page.evaluate(() => {
+        const values = [];
+        for (const id of ["expandInteraction", "expandInteraction", "widenInteraction", "expandInteraction"]) {
+            document.getElementById(id).click();
+            values.push({ id, y: scrollY, top: document.querySelectorAll(".request-card-open")[2].getBoundingClientRect().top });
+        }
+        return values;
+    });
+    await expect(panel).toHaveAttribute("data-mode", "expanded");
+    await page.goBack();
+    await panel.waitFor({ state: "hidden" });
+    await expect(card).toBeFocused();
+    assert.equal(page.url(), before.url);
+    const after = await page.evaluate(() => ({ y: scrollY, top: document.querySelectorAll(".request-card-open")[2].getBoundingClientRect().top }));
+    assert.ok(Math.abs(after.y - before.y) <= 2, `Close returns exact main scroll despite maximized reflow: ${JSON.stringify({ before, changes, after })}`);
+    await page.goForward();
+    await panel.waitFor();
+    assert.equal(page.url(), request);
+    await expect(panel).toHaveAttribute("data-mode", "docked");
+    await page.evaluate(() => {
+        document.querySelector("#expandInteraction").click();
+        document.querySelector("#expandInteraction").click();
+        document.querySelector("#closeContextSidebar").click();
+    });
+    await panel.waitFor({ state: "hidden" });
+    await expect(card).toBeFocused();
+    assert.ok(Math.abs(await page.evaluate(() => scrollY) - before.y) <= 2);
+    await navigateMain(page, "reports");
+    await page.locator(".saved-report-summary").first().click();
+    await panel.waitFor();
+    for (const id of ["readerWidthControls", "readerResize", "expandInteraction"]) await expect(page.locator("#" + id)).toBeHidden();
+    assert.equal(await panel.evaluate(node => node.hasAttribute("data-interaction-reader")), false);
+    assert.equal(await page.locator("#main").evaluate(node => node.inert), false);
+    assert.equal(await page.evaluate(() => document.body.style.getPropertyValue("--context-sidebar-width")), "");
+    await page.locator("#closeContextSidebar").click();
+    await panel.waitFor({ state: "hidden" });
+    await expect(page.locator(".saved-report-summary").first()).toBeFocused();
 });
 
 test("sidebar paint preserves light depth and distinguishes dark inset navigation from contextual depth", async t => {
@@ -220,7 +270,7 @@ test("sidebar paint preserves light depth and distinguishes dark inset navigatio
 
 test("unpaused shared motion reverses and replaces content without stale geometry or hit targets", async t => {
     const page = await setup(t);
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const trace = await page.evaluate(async () => {
         const panel = document.querySelector("#contextSidebar"), main = document.querySelector("#main");
         const rail = document.querySelector("#sidebar"), rows = [...document.querySelectorAll(".request-card-open")];
@@ -342,7 +392,7 @@ test("native-modal and docked surfaces keep their proper main layout at normal a
 test("painted synthetic film contains moving edges for both sides and directions", async t => {
     const page = await setup(t);
     await chooseTheme(page, "light");
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const cdp = await page.context().newCDPSession(page), frames = [], acknowledgements = [];
     const onFrame = event => {
         frames.push(event);
@@ -404,7 +454,7 @@ test("painted synthetic film contains moving edges for both sides and directions
 
 test("native scrollbar gutters keep main and sidebar edges registered throughout reflow", async t => {
     const page = await setup(t, { nativeScrollbars: true });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const evidence = await page.evaluate(async () => {
         const main = document.querySelector("#main"), panel = document.querySelector("#contextSidebar"), frames = [];
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -574,7 +624,7 @@ test("saved-item replacement keeps its entrance and reverses exit without stale 
 
 test("trusted main-page scrolling revokes exit compensation for a reflow-sensitive anchor", async t => {
     const page = await setup(t, { nativeScrollbars: true });
-    await page.locator("#resultsLink").click();
+    await revealAnalyzeRecords(page);
     const wideTop = await page.locator(".request-card-open").first().evaluate(node => node.getBoundingClientRect().top + scrollY);
     await page.locator(".request-card-open").first().click();
     await page.waitForFunction(() => !document.querySelector("#contextSidebar").getAnimations().length);

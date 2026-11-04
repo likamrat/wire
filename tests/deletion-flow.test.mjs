@@ -19,3 +19,19 @@ test("scope changes revoke a preview; uncertain confirmation can only read its o
     flow.result({ phase: "complete", operationId: "sealed" });
     assert.equal(flow.snapshot().phase, "complete");
 });
+
+test("withdrawal forgets private deletion state while retaining only the dispatched operation and uncertainty", () => {
+    const flow = createDeletionFlow();
+    const token = flow.edit({ scope: "range", from: "2026-10-01", to: "2026-10-02" });
+    flow.accept(token, { operationId: "original", counts: { records: 3 }, privateScope: "PRIVATE_SCOPE" });
+    flow.begin();
+    flow.withdrawAccess();
+    assert.deepEqual(flow.snapshot(), { phase: "uncertain", operationId: "original" });
+    assert.equal(flow.accept(token, { operationId: "late", counts: { records: 8 } }), false);
+    assert.equal(flow.begin(), null);
+    flow.withdrawAccess();
+    assert.deepEqual(flow.snapshot(), { phase: "uncertain", operationId: "original" });
+    flow.result({ operationId: "original", phase: "complete", counts: { records: 3 } });
+    flow.withdrawAccess();
+    assert.deepEqual(flow.snapshot(), { phase: "complete", operationId: "original" });
+});

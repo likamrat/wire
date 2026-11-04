@@ -9,7 +9,7 @@ import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
 import { createControlHelp } from "../lib/control-help.mjs";
 import { serviceCategories } from "../lib/service-categories.mjs";
-import { fixture, exportCatalogFor, navigateMain, navigateSettings, chooseTheme, openActivitySessions, automaticScoreOffSummary } from "./helpers.mjs";
+import { fixture, exportCatalogFor, navigateMain, navigateSettings, chooseTheme, openActivitySessions, automaticScoreOffSummary, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const help = createControlHelp(serviceCategories);
 const proofDir = process.env.WORKIQ_HELP_PROOFS;
@@ -29,11 +29,12 @@ const records = ["/me/events", "/me/messages", "/me/drive"].map((endpoint, index
 
 async function setup(run, options = {}) {
     const errors = [], requests = [], rejected = [];
+    const collectionStatus = { state: "needs-setup", config: { approved: false, enabled: false }, historyIssues: [] };
     const server = createServer(async (req, res) => {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-help-proof'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'");
-            return res.end(renderHtmlShell("a".repeat(64), "help-proof"));
+            return res.end(renderHtmlShell("a".repeat(64), "help-proof", UNBOUND_FIXTURE_BOOTSTRAP));
         }
         if (req.method === "GET" && req.url === "/favicon.ico") return res.writeHead(204).end();
         if (req.method === "POST" && req.url === "/api/evaluation/automatic/summary") {
@@ -49,7 +50,7 @@ async function setup(run, options = {}) {
         if (req.method === "POST" && ["/api/collection/status", "/api/record/status"].includes(req.url)) {
             res.setHeader("Content-Type", "application/json");
             return res.end(JSON.stringify(req.url === "/api/record/status" ? { attempt: null }
-                : { state: "needs-setup", config: { approved: false, enabled: false }, historyIssues: [] }));
+                : collectionStatus));
         }
         if (req.method !== "POST" || req.url !== "/api/snapshot") {
             rejected.push(`${req.method} ${req.url}`);
@@ -61,6 +62,7 @@ async function setup(run, options = {}) {
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify({
             revision: 1, scenarios: records, exports: [], exportCatalog: exportCatalogFor(records),
+            collection: collectionStatus,
             coverage: { since: "2026-09-01", until: "2026-09-30", notes: ["Synthetic help proof; no private collection is accessed."] },
             analytics: { ...buildActivityAnalytics(records, input), revision: 1 },
         }));
@@ -287,10 +289,10 @@ test("report scopes, privacy and source meanings are available before actions wi
     await chooseReportScope(page, "all");
     await reportContents(page);
     await page.locator("[name=promptMode][value=original]").check();
-    assert.match(await page.locator("#reportsView").innerText(), /Detected credentials are still removed/);
-    assert.match(await page.locator("#reportsView").innerText(), /saving locally is not permission to share/);
+    assert.match(await page.locator("#reportsView").innerText(), /detected credentials are still removed/i);
+    assert.match(await page.locator("#reportsView").innerText(), /Local saving isn't permission to share/);
     await page.locator("[name=promptMode][value=masked]").check();
-    await readTooltip(page, page.locator("#exportBtn"), help.actions.exportBtn);
+    assert.equal(await page.locator("#exportBtn").getAttribute("data-ux-tooltip"), null);
     await page.getByRole("button", { name: "1. Activity", exact: true }).click();
     await page.locator(".report-scope-details > summary").click();
     await readTooltip(page, page.getByRole("button", { name: "About Ready for report", exact: true }), help.reviewStates.ready_to_export);
@@ -302,9 +304,11 @@ test("report scopes, privacy and source meanings are available before actions wi
     await ready(page);
     const reader = page.locator(".request-original .full-text-toggle");
     if (await reader.getAttribute("aria-expanded") === "false") await reader.click();
-    assert.match(await page.locator("#reader-copy-notice").innerText(), /unmasked.*Other apps.*clipboard/);
+    assert.equal(await page.locator("#reader-copy-notice").count(), 0);
     assert.match(await page.locator(".request-link-details").innerText(), /recorded message ID.*not inferred task boundaries/);
     const copy = page.locator("#selectedContext").getByRole("button", { name: "Copy prompt", exact: true });
+    const description = await copy.getAttribute("aria-describedby");
+    assert.match(await page.locator(`[id="${description}"]`).textContent(), /original.*unmasked/);
     await copy.focus(); await page.getByRole("tooltip").waitFor({ state: "visible" });
     assert.equal(await copy.locator("svg").count(), 1);
     assert.deepEqual(await page.locator("button button, a button, label button")

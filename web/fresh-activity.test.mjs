@@ -2,6 +2,70 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createFreshActivity } from "./fresh-activity.mjs";
 
+test("withdrawal erases owned payloads and makes old flow callbacks inert", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    const receipt = { schemaVersion: 2, id: "private-check", beforeRevision: 1, revision: 2, configVersion: "private-source",
+        startedAt: "2026-10-27T10:00:00Z", completedAt: "2026-10-27T10:00:01Z", outcome: "complete",
+        changes: { added: 1, updated: 0, items: [{ id: "private-call", sourceSessionId: "private-session" }] },
+        sourcesChecked: 1, eligibleSources: 1 };
+    flow.collected(token, receipt);
+    const held = flow.snapshot().check, items = held.changes.items, item = items[0], copy = structuredClone(flow.snapshot());
+    flow.withdrawAccess(copy);
+    assert.deepEqual(held, {});
+    assert.deepEqual(items, []);
+    assert.deepEqual(item, {});
+    assert.deepEqual(copy, {});
+    assert.equal(flow.snapshot().check, null);
+    assert.equal(flow.begin(), null);
+    assert.equal(flow.collected(token, receipt), false);
+    assert.equal(flow.applied(2, "private-source", []), false);
+    assert.equal(flow.fail(token, "late failure"), false);
+    flow.restoreNative("late-operation");
+    flow.nativeRecoveryFailed("late private context");
+    flow.blockSource("late private warning");
+    assert.equal(flow.snapshot().nativeOperationId, null);
+    assert.equal(flow.snapshot().context, "");
+    assert.equal(flow.snapshot().sourceWarning, "");
+    assert.equal(receipt.changes.items[0].sourceSessionId, "private-session", "The operation owns its own erasable copy");
+});
+
+test("a completed zero-change check cannot describe a later accepted activity revision", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.collected(token, { schemaVersion: 2, id: "manual-zero", beforeRevision: 3, revision: 3, configVersion: "approved",
+        startedAt: "2026-10-27T15:40:30Z", completedAt: "2026-10-27T15:40:31Z", outcome: "partial",
+        changes: { added: 0, updated: 0, items: [] }, coverage: { unavailable: 1, limited: 0 },
+        sourcesChecked: 2, eligibleSources: 2, pendingSources: 0, partialSources: 0, skippedSources: 0 });
+    flow.applied(3, "approved", []);
+    assert.equal(flow.snapshot().phase, "partial");
+    flow.applied(4, "approved", [{ id: "later-retained-call", toolCallId: "later-call" }]);
+    assert.equal(flow.snapshot().phase, "idle", "An old manual result must not remain the headline of a newer accepted view.");
+    assert.equal(flow.snapshot().check, null);
+    assert.equal(flow.snapshot().message, "");
+});
+
+test("partial coverage is readable prose without merging overlapping history populations", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.collected(token, { schemaVersion: 2, id: "all-history-statuses", revision: 3, configVersion: "approved",
+        startedAt: "2026-10-20T12:00:00Z", completedAt: "2026-10-20T12:00:01Z", outcome: "partial",
+        changes: { added: 0, updated: 0, items: [] }, coverage: { unavailable: 2, limited: 1 },
+        pendingSources: 3, partialSources: 1, skippedSources: 2, sourcesChecked: 10, eligibleSources: 12 });
+    flow.applied(3, "approved", []);
+    assert.equal(flow.snapshot().coverage, "Chat history: 2 unavailable, 1 with limits, 3 still reading, 1 awaiting a saved entry, 2 beyond the discovery limit, 2 not checked this cycle.");
+    assert.equal(flow.snapshot().phase, "partial");
+    assert.match(flow.snapshot().details, /Missing history is not a Work IQ service error/);
+    assert.match(flow.snapshot().details, /repeating the check does not remove that limit/);
+});
+
+test("unknown partial coverage remains incomplete rather than becoming an empty success", () => {
+    const flow = createFreshActivity(), token = flow.begin();
+    flow.collected(token, { schemaVersion: 2, id: "unknown-coverage", revision: 3, configVersion: "approved",
+        completedAt: "2026-10-20T12:00:01Z", outcome: "partial",
+        changes: { added: 0, updated: 0, items: [] }, sourcesChecked: 1, eligibleSources: 1 });
+    flow.applied(3, "approved", []);
+    assert.equal(flow.snapshot().coverage, "History coverage is incomplete.");
+    assert.equal(flow.snapshot().phase, "partial");
+});
+
 test("the contextual entry cannot turn an unknown check into a newer successful history check", () => {
     const flow = createFreshActivity(), token = flow.begin();
     flow.fail(token, "Response lost");
@@ -18,14 +82,31 @@ test("the contextual entry cannot turn an unknown check into a newer successful 
 
 test("the contextual entry distinguishes approved history, paused collection and stored-only reads", () => {
     const flow = createFreshActivity();
-    assert.equal(flow.entry({ approved: true, enabled: true, checked: "5 minutes ago" }).label, "History checked 5 minutes ago");
+    for (const checked of ["", "just now", "5 minutes ago"]) {
+        assert.equal(flow.entry({ approved: true, enabled: true, checked }).label, "Activity updates");
+    }
     assert.equal(flow.entry({ approved: true, enabled: false, checked: "5 minutes ago" }).label, "Collection paused");
     assert.equal(flow.entry({ approved: false, checked: "5 minutes ago" }).label, "Stored activity only");
-    assert.equal(flow.entry({ approved: true, readError: true }).label, "Stored view not updated");
+    assert.equal(flow.entry({ approved: true, readError: true }).label, "Update status unavailable");
+    assert.equal(flow.entry({ approved: true, stale: true }).label, "Stored view not updated");
     assert.equal(flow.entry({ approved: true, readError: true }).storedOnly, true);
     assert.equal(flow.entry({ approved: true, collectionState: "error" }).label, "Local history needs attention");
     flow.begin({ checkSource: false }); flow.applied(4, "approved", []);
-    assert.equal(flow.entry({ approved: true, enabled: true, checked: "just now" }).label, "Stored activity read");
+    assert.equal(flow.entry({ approved: true, enabled: true, checked: "just now" }).label, "Saved view refreshed");
+});
+
+test("the entry names new or changed records only after its own receipt is applied", () => {
+    for (const [added, updated, label] of [[0, 0, "No additional activity in this check"], [1, 0, "1 new record"],
+        [0, 1, "1 updated record"], [2, 0, "2 new records"], [0, 2, "2 updated records"], [1, 2, "3 records changed"]]) {
+        const flow = createFreshActivity(), token = flow.begin(), context = { approved: true, enabled: true };
+        flow.collected(token, { schemaVersion: 2, id: "manual", beforeRevision: 2, revision: 3, configVersion: "approved",
+            completedAt: "2026-10-20T12:00:01Z", outcome: "complete", changes: { added, updated, items: [] } });
+        assert.equal(flow.entry(context).label, "Reading stored activity...");
+        flow.applied(2, "approved", []);
+        assert.equal(flow.entry(context).label, "Reading stored activity...");
+        flow.applied(3, "approved", []);
+        assert.equal(flow.entry(context).label, label);
+    }
 });
 
 test("the contextual entry keeps deferred, partial and read-only states distinct", () => {
@@ -131,7 +212,7 @@ test("a storage safety latch blocks dispatch without denying an already confirme
         completedAt: "2026-10-05T20:00:00Z", outcome: "complete", changes: { added: 0, updated: 0, items: [] } });
     flow.blockSource("Recovery marker could not be cleared.");
     flow.applied(9, "approved", []);
-    assert.equal(flow.snapshot().message, "No new recorded activity.");
+    assert.equal(flow.snapshot().message, "No additional activity in this check.");
     assert.equal(flow.snapshot().check.id, "known");
     assert.equal(flow.snapshot().sourceUnknown, false);
     assert.equal(flow.snapshot().sourceBlocked, true);
@@ -211,7 +292,7 @@ test("a check completes only after its committed revision is applied; excluded c
     assert.equal(flow.snapshot().context, "", "Completed check context follows subsequently applied filters");
     assert.equal(flow.applied(10, "different-approved-config", []), false);
     assert.equal(flow.snapshot().phase, "idle");
-    assert.match(flow.snapshot().message, /settings changed/);
+    assert.equal(flow.snapshot().message, "", "The already-retired receipt cannot describe another configuration");
 });
 
 test("late failures cannot overwrite a newer check and failed reads never claim applied success", () => {
@@ -243,14 +324,14 @@ test("novelty and partial coverage are separate facts, without claiming a comple
         outcome: "partial", changes: { added: 0, updated: 0, items: [] }, coverage: { unavailable: 19, limited: 62 },
         sourcesChecked: 90, eligibleSources: 90, pendingSources: 0, partialSources: 0, skippedSources: 0 };
     flow.collected(token, check); flow.applied(8, "approved", []);
-    assert.equal(flow.snapshot().message, "No new recorded activity.");
-    assert.equal(flow.snapshot().coverage, "Chat history: 19 unavailable · 62 with limits");
+    assert.equal(flow.snapshot().message, "No additional activity in this check.");
+    assert.equal(flow.snapshot().coverage, "Chat history: 19 unavailable, 62 with limits.");
     assert.match(flow.snapshot().details, /90 of 90 eligible Copilot chats in 12 ms/);
     assert.match(flow.snapshot().details, /19 histories unavailable; 62 with limits/);
     assert.doesNotMatch(flow.snapshot().message, /up to date|view updated|Partial|19|62/);
     assert.equal(flow.snapshot().check.completedAt, check.completedAt);
     flow.applied(10, "approved", []);
-    assert.equal(flow.snapshot().check.completedAt, check.completedAt, "Later accepted snapshots cannot replace the manual check time");
+    assert.equal(flow.snapshot().check, null, "Later accepted snapshots retire the old result instead of assigning it a newer time");
 });
 
 test("partial summaries name only known chat coverage categories and keep exclusions separate", () => {
@@ -259,18 +340,18 @@ test("partial summaries name only known chat coverage categories and keep exclus
         outcome: "partial", changes: { added: 0, updated: 0, items: [] },
         sourcesChecked: 3, eligibleSources: 3, pendingSources: 0, partialSources: 0, skippedSources: 0 };
     for (const [changes, expected] of [
-        [{ coverage: { unavailable: 1 } }, "Chat history: 1 unavailable"],
-        [{ coverage: { limited: 2 } }, "Chat history: 2 with limits"],
-        [{ coverage: {}, pendingSources: 2 }, "Chat history: 2 still reading"],
-        [{ coverage: {}, partialSources: 1 }, "Chat history: 1 awaiting a saved entry"],
-        [{ coverage: {}, skippedSources: 4 }, "Chat history: 4 beyond the discovery limit"],
-        [{ coverage: {}, sourcesChecked: 1 }, "Chat history: 2 not checked this cycle"],
-        [{ coverage: { unavailable: 0, limited: 0, excluded: { archived: 10 } } }, "History coverage incomplete"],
+        [{ coverage: { unavailable: 1 } }, "Chat history: 1 unavailable."],
+        [{ coverage: { limited: 2 } }, "Chat history: 2 with limits."],
+        [{ coverage: {}, pendingSources: 2 }, "Chat history: 2 still reading."],
+        [{ coverage: {}, partialSources: 1 }, "Chat history: 1 awaiting a saved entry."],
+        [{ coverage: {}, skippedSources: 4 }, "Chat history: 4 beyond the discovery limit."],
+        [{ coverage: {}, sourcesChecked: 1 }, "Chat history: 2 not checked this cycle."],
+        [{ coverage: { unavailable: 0, limited: 0, excluded: { archived: 10 } } }, "History coverage is incomplete."],
     ]) {
         const flow = createFreshActivity(), token = flow.begin();
         flow.collected(token, { ...base, ...changes }); flow.applied(8, "approved", []);
         assert.equal(flow.snapshot().coverage, expected);
-        assert.equal(flow.snapshot().message, "No new recorded activity.");
+        assert.equal(flow.snapshot().message, "No additional activity in this check.");
         assert.doesNotMatch(flow.snapshot().coverage, /failed|archived|10/);
     }
     const flow = createFreshActivity(), token = flow.begin();

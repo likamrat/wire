@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFile, unlink } from "node:fs/promises";
+import { appendFile, mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { searchFixture, searchRecords, streamPanel } from "./live-search-fixture.mjs";
-import { selectActivityOption } from "./helpers.mjs";
+import { chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createSearchWireContract, searchWireContract } from "../lib/search-wire-contract.mjs";
 
@@ -71,6 +71,84 @@ test("normal Analyze search remains usable when only an unrelated report is corr
     await expect(page.locator("#activityCount")).toHaveText("1");
     await expect(page.locator("#wireSearchResults")).toContainText("Only part of this text was saved.");
     assert.deepEqual(errors, []);
+});
+
+test("Search count and coverage are distinct readable facts through partial, scoped and native return states", { timeout: 30000 }, async t => {
+    const cleanups = [], app = await corruptedReportFixture({ after: action => cleanups.push(action) });
+    const browser = await chromium.launch(), page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "no-preference" });
+    const errors = [], nonlocal = [], measurements = [], proofs = process.env.WIRE_SEARCH_COVERAGE_PROOFS;
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", route => {
+        if (new URL(route.request().url()).origin !== new URL(app.runtime.url).origin) {
+            nonlocal.push(route.request().url()); return route.abort();
+        }
+        return route.continue();
+    });
+    t.after(async () => {
+        await browser.close(); for (const cleanup of cleanups) await cleanup();
+        assert.deepEqual(errors, []); assert.deepEqual(nonlocal, []);
+    });
+    if (proofs) await mkdir(proofs, { recursive: true });
+    await page.goto(app.runtime.url);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    const input = page.locator("#wireSearch"), rows = page.locator(".wire-search-hit");
+    const heading = page.locator("#wireSearchMatchesTitle"), coverage = page.locator("#wireSearchCoverage");
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 100], [390, 200]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale + "%"; }, scale);
+        await chooseTheme(page, theme);
+        await input.fill("physician");
+        await selectActivityOption(page, "wireSearchType", "");
+        await expect(rows).toHaveCount(2);
+        await expect(coverage).toHaveText("Changed report files could not be verified.");
+        const facts = await heading.evaluate(node => {
+            const count = document.getElementById("wireSearchCount"), coverage = document.getElementById("wireSearchCoverage");
+            const box = element => {
+                const { x, y, width, height, right, bottom } = element.getBoundingClientRect();
+                return { x, y, width, height, right, bottom };
+            };
+            const range = document.createRange(); range.selectNodeContents(coverage);
+            return { count: box(count), coverage: box(coverage), panel: box(document.getElementById("wireSearchPanel")),
+                lines: [...range.getClientRects()].map(rect => ({ x: rect.x, right: rect.right, bottom: rect.bottom })),
+                text: node.textContent, before: getComputedStyle(coverage, "::before").content,
+                gap: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--space-md")),
+                overflow: document.documentElement.scrollWidth > innerWidth };
+        });
+        if (proofs) await page.screenshot({ path: path.join(proofs, `coverage-${theme}-${width}-${scale}.png`) });
+        assert.ok(["none", "normal"].includes(facts.before), "Distinct coverage facts must not be joined by a generated decorative dot");
+        assert.match(facts.text, /2 matches\s+Changed report files could not be verified\./, "Readable literal boundary also exists without CSS");
+        await expect(heading).toHaveAccessibleName("2 matches Changed report files could not be verified.");
+        assert.equal(facts.overflow, false);
+        if (Math.abs(facts.coverage.y - facts.count.y) < 1) assert.ok(facts.coverage.x - facts.count.right >= facts.gap - 1);
+        else assert.ok(facts.coverage.y >= facts.count.bottom && Math.abs(facts.coverage.x - facts.count.x) < 1);
+        for (const line of facts.lines) assert.ok(line.x >= facts.panel.x && line.right <= facts.panel.right && line.bottom <= facts.panel.bottom);
+        await expect(page.locator("#wireSearchStatus")).toHaveAttribute("role", "status");
+        await expect(page.locator("#wireSearchStatus")).toHaveAttribute("aria-live", "polite");
+        await expect(page.locator("#wireSearchStatus")).toHaveText("2 available matches");
+        const id = await rows.first().getAttribute("data-search-id");
+        await input.focus(); await input.press("ArrowDown"); await rows.first().press("Enter");
+        await expect(page.locator("#contextSidebar[open]")).toBeVisible();
+        await page.goBack();
+        await expect(rows.first()).toBeFocused(); await expect(rows.first()).toHaveAttribute("data-search-id", id);
+        await expect(input).toHaveValue("physician");
+        await expect(coverage).toHaveText("Changed report files could not be verified.");
+        measurements.push({ theme, viewport: width, scale, ...facts });
+    }
+    await input.fill("invented query without any match");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("Search is incomplete. Some saved content could not be searched.");
+    await expect(page.locator("#wireSearchMatches")).toBeHidden();
+    await selectActivityOption(page, "wireSearchType", "interaction");
+    await expect(page.locator("#wireSearchStatus")).toHaveText("No matches. Try different words.");
+    await input.fill("physician");
+    await expect(rows).toHaveCount(2); await expect(coverage).toBeHidden();
+    app.runtime.search.invalidate();
+    await expect(page.locator("#wireSearchRetry")).toBeVisible();
+    await page.locator("#wireSearchRetry").click();
+    await expect(rows).toHaveCount(2); await expect(coverage).toBeHidden();
+    await page.locator("#wireSearchClear").click();
+    await expect(input).toBeFocused(); await expect(input).toHaveValue("");
+    await expect(page.locator("#wireSearchPanel")).toBeHidden();
+    if (proofs) await writeFile(path.join(proofs, "coverage-geometry.json"), JSON.stringify(measurements, null, 2));
 });
 
 test("type-scoped analytical coverage reaches both periods and reports but fails on relevant missing text", { timeout: 40000 }, async t => {

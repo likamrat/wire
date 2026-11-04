@@ -2,16 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createBoardTransport } from "../lib/client-transport.mjs";
 
+const runtimeId = "00000000-0000-4000-8000-000000000001";
+const accessBootstrap = { schemaVersion: 1, mode: "unbound", runtimeId };
+const renewedSession = () => ({ capability: "b".repeat(64), runtimeId, accessBootstrap });
+
 test("caller cancellation is bounded to search and never gives mutations automatic retry", async t => {
     const original = globalThis.fetch, requests = [];
     t.after(() => { globalThis.fetch = original; });
     globalThis.fetch = async (url, options) => {
         requests.push({ url, options });
-        if (url === "/api/session") return Response.json({ capability: "b".repeat(64) });
+        if (url === "/api/session") return Response.json(renewedSession());
         return Response.json({ code: "session_expired" }, { status: 403 });
     };
     let changes = 0;
-    const api = createBoardTransport("a".repeat(64), () => { changes++; });
+    const api = createBoardTransport("a".repeat(64), () => { changes++; }, accessBootstrap);
     await assert.rejects(api("/api/export", {}, { signal: new AbortController().signal }), /limited to owned search/);
     assert.equal(requests.length, 0);
     await assert.rejects(api("/api/export", { confirmed: true }), error => error.code === "request_rejected");
@@ -47,7 +51,7 @@ test("ordered search stream uses the caller's contract version, capability heade
             controller.close();
         } }));
     };
-    const api = createBoardTransport("a".repeat(64));
+    const api = createBoardTransport("a".repeat(64), undefined, accessBootstrap);
     await assert.rejects(api.searchEvents(event => seen.push(event), { signal: new AbortController().signal, schemaVersion: 3 }), /disconnected/);
     assert.deepEqual(bodies, [{ schemaVersion: 3 }]);
     assert.deepEqual(seen, frames);
@@ -58,12 +62,12 @@ test("search renewal preserves the supplied version and invalid versions never d
     t.after(() => { globalThis.fetch = original; });
     globalThis.fetch = async (url, options) => {
         requests.push({ url, body: JSON.parse(options.body), capability: options.headers["X-Board-Capability"] });
-        if (url === "/api/session") return Response.json({ capability: "b".repeat(64) });
+        if (url === "/api/session") return Response.json(renewedSession());
         if (options.headers["X-Board-Capability"] === "a".repeat(64)) return Response.json({ code: "session_expired" }, { status: 403 });
         return new Response(new ReadableStream({ start(controller) { controller.close(); } }));
     };
     let renewed = 0;
-    const api = createBoardTransport("a".repeat(64), () => renewed++);
+    const api = createBoardTransport("a".repeat(64), () => renewed++, accessBootstrap);
     for (const schemaVersion of [undefined, null, 0, -1, 3.5, Number.NaN]) {
         await assert.rejects(api.searchEvents(() => {}, { signal: new AbortController().signal, schemaVersion }), /current contract version/);
     }
@@ -89,7 +93,7 @@ test("only clean stream EOF is classified as owner closure, never truncated or m
         globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) {
             controller.enqueue(bytes); controller.close();
         } }));
-        const api = createBoardTransport("a".repeat(64));
+        const api = createBoardTransport("a".repeat(64), undefined, accessBootstrap);
         await assert.rejects(api.searchEvents(() => {}, { signal: new AbortController().signal, schemaVersion: 3 }),
             error => (error.reason === "search-stream-ended") === ended);
     }
@@ -103,7 +107,7 @@ test("split UTF-8 and a complete fence retain clean EOF but explicit cancellatio
     globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) {
         controller.enqueue(bytes.slice(0, split)); controller.enqueue(bytes.slice(split)); controller.close();
     } }));
-    const api = createBoardTransport("a".repeat(64));
+    const api = createBoardTransport("a".repeat(64), undefined, accessBootstrap);
     await assert.rejects(api.searchEvents(event => events.push(event), { signal: new AbortController().signal, schemaVersion: 3 }),
         error => error.reason === "search-stream-ended");
     assert.deepEqual(events, [{ event: "fence", reason: "idle", label: "\u20ac" }]);

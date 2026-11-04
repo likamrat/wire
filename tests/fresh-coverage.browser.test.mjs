@@ -94,8 +94,8 @@ test("freshness groups source help with the action and explains check-wide gaps"
     assert.equal(idle.result.height, 0);
     await page.locator("#checkActivity").focus();
     await page.keyboard.press("Tab");
-    await expect(page.locator("#freshStoredRead")).toBeFocused();
-    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator("#freshStoredRead")).toBeHidden();
+    await page.locator("#checkActivity").focus();
     await expect(page.locator("#checkActivity")).toBeFocused();
     await page.mouse.click(idle.action.x + 15, idle.action.y + idle.action.height / 2);
     await page.waitForFunction(() => document.querySelector("#freshActivity").dataset.phase === "partial");

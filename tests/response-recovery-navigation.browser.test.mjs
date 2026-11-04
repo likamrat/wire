@@ -5,7 +5,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics, buildRequestActivity } from "../lib/activity-analytics.mjs";
-import { fixture, exportCatalogFor, automaticScoreOffSummary, navigateSettings, navigateMain, chooseTheme } from "./helpers.mjs";
+import { fixture, exportCatalogFor, automaticScoreOffSummary, navigateSettings, navigateMain, chooseTheme, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 import { enabledConsent } from "./assessment-contract-fixtures.mjs";
 import * as contract from "../lib/assessment-contract.mjs";
 
@@ -38,7 +38,7 @@ for (const [theme, width, scale] of [["light", 1440, 100], ["dark", 375, 200]]) 
             const json = value => route.fulfill({ contentType: "application/json", body: JSON.stringify(value) });
             if (url.origin !== "https://wire.invalid") { unexpected.push(url.href); return route.abort(); }
             if (request.method() === "GET") {
-                if (url.pathname === "/") return route.fulfill({ contentType: "text/html", body: renderHtmlShell("a".repeat(64), "recovery-navigation") });
+                if (url.pathname === "/") return route.fulfill({ contentType: "text/html", body: renderHtmlShell("a".repeat(64), "recovery-navigation", UNBOUND_FIXTURE_BOOTSTRAP) });
                 if (url.pathname === "/assets/assessment-contract.mjs") return route.fulfill({ contentType: "text/javascript", body: contractSource });
                 if (url.pathname === "/favicon.svg") return route.fulfill({ status: 204 });
             }

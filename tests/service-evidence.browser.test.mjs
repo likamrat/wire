@@ -7,6 +7,34 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController, buildSanitizedBundle } from "../lib/export.mjs";
 import { serviceEvidenceFixture } from "./service-evidence-fixtures.mjs";
 import { privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
+import { createServiceCategories } from "../lib/service-categories.mjs";
+import { createEvidenceUX } from "../web/ux.mjs";
+import { uxIcons } from "../web/ux-icons.mjs";
+
+test("requested-source help names recorded choices and only adds a real unsupported-source qualification", async t => {
+    const browser = await chromium.launch(), page = await browser.newPage(), errors = [];
+    t.after(async () => { await browser.close(); assert.deepEqual(errors, []); });
+    page.on("pageerror", error => errors.push(error.message));
+    await page.setContent("<main></main>");
+    await page.addScriptTag({ content: `window.categories = (${createServiceCategories.toString()})();
+        window.ux = (${createEvidenceUX.toString()})(${JSON.stringify(uxIcons)});` });
+    for (const [capabilities, expected] of [
+        [[{ name: "Email" }, { name: "TeamsMessages" }], "Requested sources: email and Teams messages."],
+        [[{ name: "Email" }, { name: "InventedUnknown" }], "Requested sources: email. Some requested sources could not be identified."],
+        [[{ name: "InventedUnknown" }], "Requested sources not identified. The recorded source choices are not recognized."],
+    ]) {
+        await page.evaluate(capabilities => {
+            const scope = window.categories.requestedSearchScope({ tool: "workiq-retrieve", requestArgs: { capabilities }, toolSucceeded: false });
+            document.querySelector("main").replaceChildren(window.ux.helpButton("Search and retrieval",
+                [scope.label + ".", scope.description].filter(Boolean).join(" ")));
+        }, capabilities);
+        await page.getByRole("button", { name: "About Search and retrieval", exact: true }).click();
+        await expect(page.getByRole("tooltip")).toHaveText(expected);
+        await expect(page.getByRole("tooltip")).not.toContainText("returned results");
+        await expect(page.getByRole("tooltip")).not.toContainText("InventedUnknown");
+        await page.keyboard.press("Escape");
+    }
+});
 
 const proofDir = process.env.WIRE_SERVICE_EVIDENCE_PROOFS;
 async function shot(page, name) {
@@ -52,9 +80,9 @@ test("normal entry explains invented search, preparation and service gaps withou
         await page.getByRole("button", { name: `About ${category}; recorded activity categories`, exact: true }).click();
         assert.match(await page.getByRole("tooltip").innerText(), explanation);
         if (category === "Search and retrieval") {
-            assert.match(await page.getByRole("tooltip").innerText(), /Requested scope: Teams messages and email/);
-            assert.match(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
-        } else assert.doesNotMatch(await page.getByRole("tooltip").innerText(), /Requested scope/);
+            assert.match(await page.getByRole("tooltip").innerText(), /Requested sources: Teams messages and email/);
+            assert.doesNotMatch(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
+        } else assert.doesNotMatch(await page.getByRole("tooltip").innerText(), /Requested sources/);
         await page.keyboard.press("Escape");
     }
     for (const [category, tool, name] of [["People", "workiq-fetch", "profile"], ["Search", "workiq-retrieve", "retrieval"],
@@ -71,16 +99,16 @@ test("normal entry explains invented search, preparation and service gaps withou
     assert.equal(await page.locator("#activityList .matched-action").count(), 1);
     const retrieval = page.locator("#activityList .matched-action");
     await retrieval.getByRole("button", { name: "About Search and retrieval", exact: true }).click();
-    assert.match(await page.getByRole("tooltip").innerText(), /Requested scope: Teams messages and email/);
-    assert.match(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
+    assert.match(await page.getByRole("tooltip").innerText(), /Requested sources: Teams messages and email/);
+    assert.doesNotMatch(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
     assert.equal(await retrieval.locator("dt").filter({ hasText: /^Purpose:/ }).count(), 0, "Scope qualifies existing help, not a new card row");
     await page.keyboard.press("Escape");
     await retrieval.getByRole("link", { name: "Open exact call in context", exact: true }).click(); await ready(page);
     const readerCall = page.locator('[data-tool-call-id="meaning-retrieval"]');
     assert.equal(await readerCall.locator(".action-service-heading .service-cue").innerText(), "Search and retrieval");
     await readerCall.getByRole("button", { name: "About Search and retrieval", exact: true }).click();
-    assert.match(await page.getByRole("tooltip").innerText(), /Requested scope: Teams messages and email/);
-    assert.match(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
+    assert.match(await page.getByRole("tooltip").innerText(), /Requested sources: Teams messages and email/);
+    assert.doesNotMatch(await page.getByRole("tooltip").innerText(), /does not show which sources returned results/);
     assert.equal(await readerCall.locator("dt").filter({ hasText: /^Purpose$/ }).count(), 0, "Reader scope stays in its existing category help");
     assert.deepEqual(errors, []);
 });
@@ -306,7 +334,7 @@ test("whole category view and detail explain remaining service evidence without 
     assert.match(page.url(), /service=Unknown/);
     await selectActivityOption(page, "outcomeFilter", ["failure"]); await ready(page);
     assert.equal(await page.locator(".percentage-section").getAttribute("data-total"), "0");
-    assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /No activity in this applied view/);
+    assert.match(await page.locator('[data-percentage-card="services"]').innerText(), /No matching activity/);
 });
 
 test("new readable report retains the neutral evidence reasons and safe shared-file paths", { timeout: 30000 }, async t => {

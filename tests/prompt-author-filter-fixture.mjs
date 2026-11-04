@@ -8,7 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import assert from "node:assert/strict";
 
-export async function authorFilterFixture(t, { serviceCases = false } = {}) {
+export async function authorFilterFixture(t, { serviceCases = false, longNames = false } = {}) {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-author-filter-"));
     const config = { appDbPath: path.join(root, "data.db"), sessionRoot: path.join(root, "session-state"),
         approved: true, enabled: false, windowDays: 30, pollSeconds: 5 };
@@ -38,10 +38,12 @@ export async function authorFilterFixture(t, { serviceCases = false } = {}) {
             ["assistance", "unknown", null, [true], older, "Invented assistance with no downstream target.", "ask"],
         ] : []),
     ];
-    for (const [id, name] of [[projectId, "Invented project A"], [otherProjectId, "Invented project B"]]) db.prepare("INSERT INTO projects VALUES(?,?)").run(id, name);
+    for (const [id, name] of [[projectId, longNames ? "Invented lighthouse research and cross-functional operational readiness planning project" : "Invented project A"],
+        [otherProjectId, "Invented project B"]]) db.prepare("INSERT INTO projects VALUES(?,?)").run(id, name);
     const event = (type, data, timestamp) => ({ id: randomUUID(), type, data, timestamp: new Date(timestamp).toISOString() });
     const sourceFiles = [];
-    for (const [id, project, name] of [[chatId, projectId, "Invented author conversation"], [otherChatId, otherProjectId, "Invented other conversation"]]) {
+    for (const [id, project, name] of [[chatId, projectId, longNames ? "Invented harbor research conversation about long-running coordination and information availability" : "Invented author conversation"],
+        [otherChatId, otherProjectId, "Invented other conversation"]]) {
         db.prepare("INSERT INTO sessions VALUES(?,?,?,?,?)").run(id, name, "project", null, "local");
         db.prepare("INSERT INTO workspaces VALUES(?,?,?,?,?,?,?,?,?)").run(randomUUID(), id, project, name, null, "local", "folder", "user", null);
         const events = [event("session.start", { version: 1, sessionId: id }, older - 1000)];

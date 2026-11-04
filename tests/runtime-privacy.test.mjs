@@ -31,7 +31,7 @@ test("a second browser or renewed session cannot confirm another owner's preview
         runtime = await startServer(context, createExportController(context), { port: 0 });
         const origin = runtime.url.slice(0, -1);
         const post = (route, body, capability) => fetch(origin + route, {
-            method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...(capability ? { "X-Board-Capability": capability } : {}) },
+            method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1", ...(capability ? { "X-Board-Capability": capability } : {}) },
             body: JSON.stringify(body),
         });
         const a = (await (await post("/api/session", {})).json()).capability;

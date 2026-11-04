@@ -21,6 +21,12 @@ export function createDeletionFlow() {
             return state.operationId;
         },
         uncertain(message) { state = { ...state, phase: "uncertain", message }; },
+        recover(operationId) { version++; state = { phase: "uncertain", operationId }; },
+        withdrawAccess() {
+            version++;
+            state = { phase: locked() ? "uncertain" : state.phase === "complete" ? "complete" : "editing",
+                ...(state.operationId ? { operationId: state.operationId } : {}) };
+        },
         result(result) {
             if (result.operationId !== state.operationId) throw new Error("Deletion receipt does not match the confirmed operation.");
             state = { ...state, phase: ["pending", "in-progress"].includes(result.phase) ? "uncertain" : result.phase, result };
@@ -29,9 +35,16 @@ export function createDeletionFlow() {
 }
 
 export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
+    if (typeof api !== "function" || typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function") {
+        throw new TypeError("An access-aware API with publicationToken() and isCurrent() is required.");
+    }
     const $ = id => document.getElementById(id);
     const dialog = $("deleteDialog"), form = $("deleteScopeForm");
     let trigger, previewBusy = false, readBusy = false;
+    let accessAvailable = true, accessEpoch = 0, suppressedCloses = 0;
+    const publication = () => ({ epoch: accessEpoch, token: api.publicationToken() });
+    const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
+        && api.isCurrent(access.token) === true;
     const key = "workiq-evidence.deletion-operation";
     const setStatus = (message, error = false) => {
         $("deleteStatus").textContent = message;
@@ -43,6 +56,7 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         return value.scope === "all" ? value : { ...value, from: $("deleteFrom").value, to: $("deleteTo").value };
     }
     function edited() {
+        if (!current(publication())) return;
         const previous = flow.snapshot();
         if (flow.edit(scope()) === null) return;
         cancelPreview(previous);
@@ -56,12 +70,15 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         setStatus("");
     }
     function cancelPreview(previous) {
-        if (previous.phase !== "preview") return;
+        const access = publication();
+        if (!current(access) || previous.phase !== "preview") return;
         api("/api/deletion/cancel", { operationId: previous.preview.operationId }).catch(() => {
+            if (!current(access)) return;
             setStatus("The previous preview could not be cancelled on the runtime. It cannot be used here and will expire; no deletion was requested.", true);
         });
     }
     function update() {
+        if (!current(publication())) return;
         const state = flow.snapshot(), pending = state.phase === "pending", uncertain = state.phase === "uncertain";
         const hasTargets = Boolean(state.preview?.counts.records || state.preview?.counts.localCopies);
         const phase = pending ? "pending" : uncertain ? readBusy ? "checking" : "unknown"
@@ -98,7 +115,8 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         ux.pending($("deleteConfirm"), pending);
         ux.pending($("deleteCheck"), readBusy);
     }
-    async function showResult(result) {
+    async function showResult(result, access) {
+        if (!current(access)) return;
         flow.result(result);
         if (result.phase === "complete") {
             try { sessionStorage.removeItem(key); } catch { /* The visible operation receipt remains available. */ }
@@ -110,7 +128,9 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             setStatus(`Deleted ${result.counts.records} records${result.linkedInsights?.interactions ? " and dependent local data" : ""}. Saved reports and comparisons, source files and collection preferences are unchanged. New activity can still be collected.`);
             update();
             if (dialog.open) $("deleteCancel").focus();
-            if (!await onCommitted()) setStatus(`Deleted ${result.counts.records} records. The view could not refresh; use Retry. Do not repeat deletion. Saved reports are unchanged.`, true);
+            const applied = await onCommitted();
+            if (!current(access)) return;
+            if (!applied) setStatus(`Deleted ${result.counts.records} records. The view could not refresh; use Retry. Do not repeat deletion. Saved reports are unchanged.`, true);
         } else if (result.phase === "not-started") {
             flow.edit(scope());
             form.hidden = false;
@@ -126,22 +146,24 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         update();
     }
     async function check() {
-        if (readBusy) return;
+        const access = publication();
+        if (!current(access) || readBusy || flow.snapshot().phase !== "uncertain") return;
         readBusy = true; update();
-        try { await showResult(await api("/api/deletion/status", { operationId: flow.snapshot().operationId })); }
-        catch (error) { setStatus(`${error.message} Check the saved result; no deletion was repeated.`, true); }
-        finally { readBusy = false; update(); }
+        try { await showResult(await api("/api/deletion/status", { operationId: flow.snapshot().operationId }), access); }
+        catch (error) { if (current(access)) setStatus(`${error.message} Check the saved result; no deletion was repeated.`, true); }
+        finally { if (current(access)) { readBusy = false; update(); } }
     }
     async function preview(event) {
         event.preventDefault();
-        if (previewBusy || ["pending", "uncertain"].includes(flow.snapshot().phase)) return;
+        const access = publication();
+        if (!current(access) || previewBusy || ["pending", "uncertain"].includes(flow.snapshot().phase)) return;
         edited();
         const token = flow.token();
         previewBusy = true; update();
         setStatus("Reading the exact local records and supporting copies. Nothing is being deleted.");
         try {
             const result = await api("/api/deletion/preview", scope());
-            if (!flow.accept(token, result)) return;
+            if (!current(access) || !flow.accept(token, result)) return;
             const c = result.counts;
             $("deleteSummary").textContent = result.scope.scope === "all"
                 ? `All collected activity: ${c.records} records across ${c.requestGroups} current request groups.`
@@ -181,33 +203,38 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
                 $("deleteCancel").focus();
             }
         } catch (error) {
-            if (token === flow.token()) {
+            if (current(access) && token === flow.token()) {
                 edited();
                 setStatus(`Preview failed. Nothing deleted. ${error.message}`, true);
             }
         }
-        finally { previewBusy = false; update(); }
+        finally { if (current(access)) { previewBusy = false; update(); } }
     }
     async function confirm() {
+        const access = publication();
+        if (!current(access)) return;
         const operationId = flow.begin();
         if (!operationId) return;
         try { sessionStorage.setItem(key, operationId); }
         catch {
             flow.uncertain("Operation receipt could not be stored.");
-            await showResult({ operationId, phase: "not-started" });
+            await showResult({ operationId, phase: "not-started" }, access);
+            if (!current(access)) return;
             setStatus("This browser cannot save the recovery receipt. Nothing deleted. Allow session storage before retrying.", true);
             return;
         }
         update();
         setStatus("Deleting the confirmed records and cleaning local copies. Keep this panel open.");
         $("deleteStatus").focus();
-        try { await showResult(await api("/api/deletion/confirm", { operationId, confirmed: true })); }
+        try { await showResult(await api("/api/deletion/confirm", { operationId, confirmed: true }), access); }
         catch (error) {
+            if (!current(access)) return;
             flow.uncertain(error.message);
             setStatus(`${error.message} Use Check deletion result to read this operation's receipt. No deletion will be repeated.`, true);
-        } finally { update(); }
+        } finally { if (current(access)) update(); }
     }
     function open() {
+        if (!current(publication())) return;
         trigger = document.activeElement;
         if (!["pending", "uncertain"].includes(flow.snapshot().phase)) {
             $("deleteRange").checked = true;
@@ -218,10 +245,10 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
             try { receipt = sessionStorage.getItem(key); }
             catch { setStatus("Session storage is unavailable. Confirmation will be blocked unless a recovery receipt can be saved.", true); }
             if (receipt && /^[a-f0-9-]{36}$/.test(receipt)) {
-                flow.accept(flow.token(), { operationId: receipt, counts: { records: 1 } });
-                flow.begin(); flow.uncertain("A prior deletion response needs checking.");
+                flow.recover(receipt);
                 setStatus("A prior deletion needs checking. Read its saved result before starting another deletion.", true);
             }
+            if (flow.snapshot().phase === "uncertain") setStatus("A prior deletion needs checking. Read its saved result before starting another deletion.", true);
         }
         update();
         if (!dialog.open) dialog.showModal();
@@ -231,11 +258,11 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
     for (const id of ["deleteAll", "deleteRange", "deleteFrom", "deleteTo"]) $(id).addEventListener("input", () => { edited(); update(); });
     $("deleteConfirm").addEventListener("click", confirm);
     $("deleteCheck").addEventListener("click", check);
-    $("deleteChangeScope").addEventListener("click", () => { edited(); update(); $("deleteRange").focus(); });
+    $("deleteChangeScope").addEventListener("click", () => { if (!current(publication())) return; edited(); update(); $("deleteRange").focus(); });
     $("deleteCancel").addEventListener("click", () => dialog.close());
     dialog.addEventListener("cancel", event => { if (flow.snapshot().phase === "pending") event.preventDefault(); });
     dialog.addEventListener("keydown", event => {
-        if (event.key !== "Tab") return;
+        if (!current(publication()) || event.key !== "Tab") return;
         const controls = [...dialog.querySelectorAll("button,input,a[href],summary")].filter(node => !node.disabled && !node.closest("[inert]") && node.checkVisibility());
         if (!controls.length) { event.preventDefault(); $("deleteStatus").focus(); return; }
         const first = controls[0], last = controls.at(-1);
@@ -246,14 +273,37 @@ export function mountDeletion({ api, flow, timeContext, ux, onCommitted }) {
         }
     });
     dialog.addEventListener("close", () => {
+        if (suppressedCloses) { suppressedCloses--; return; }
+        if (!current(publication())) return;
         const previous = flow.snapshot();
         if (!["pending", "uncertain"].includes(previous.phase)) { flow.edit(scope()); cancelPreview(previous); }
         if (trigger?.isConnected) ux.restoreFocus(trigger);
     });
     $("deleteActivity").addEventListener("click", open);
     update();
+    function withdrawAccess() {
+        if (!accessAvailable) return;
+        accessAvailable = false; accessEpoch++;
+        flow.withdrawAccess(); previewBusy = false; readBusy = false; trigger = null;
+        if (dialog.open) { suppressedCloses++; dialog.close(); }
+        for (const id of ["deleteTitle", "deleteSummary", "deleteZone", "deleteBreakdown", "deleteCopies", "deleteLinkedInsights", "deleteLinkedDetails", "deleteStatus"]) {
+            if ($(id)) $(id).textContent = "";
+        }
+        $("deleteFrom").value = ""; $("deleteTo").value = "";
+        $("deleteRange").checked = true; $("deleteAll").checked = false;
+        $("deleteConfirm").textContent = "Delete selected activity";
+        $("deleteConfirmation").hidden = true; form.hidden = true; form.inert = true;
+        delete dialog.dataset.decisionPhase;
+        for (const button of dialog.querySelectorAll("button")) button.disabled = true;
+    }
     return { open, isOpen: () => dialog.open,
+        withdrawAccess,
+        resumeAccess() {
+            const access = publication();
+            if (access.epoch === accessEpoch && access.token != null && api.isCurrent(access.token) === true) accessAvailable = true;
+        },
         invalidate() {
+            if (!current(publication())) return;
             if (flow.snapshot().phase === "preview") {
                 edited(); update();
                 setStatus("The connection or display time zone changed. Preview again before confirming.", true);

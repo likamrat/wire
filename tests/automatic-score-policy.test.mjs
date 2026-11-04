@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { AUTOMATIC_SCORE_METHOD, validateAutomaticScoreApproval, automaticScoreAttemptKey, planAutomaticScore } from "../lib/automatic-score-policy.mjs";
 import { fixture } from "./helpers.mjs";
+import { sessionCreditLimit } from "../lib/evaluation-budget.mjs";
 
 const ref = (kind, letter) => kind + "-" + letter.repeat(32);
 function input() {
@@ -28,6 +29,10 @@ function input() {
     };
 }
 test("unreferenced automatic policy requires score-specific approval and a positive explicit allowance", () => {
+    assert.equal(sessionCreditLimit(60, 30), 30);
+    assert.equal(sessionCreditLimit(30, 60), 30);
+    assert.equal(sessionCreditLimit(60, 30.1), 30.1);
+    assert.throws(() => sessionCreditLimit(60, 29.999999), error => error.code === "session-credit-minimum");
     assert.deepEqual(planAutomaticScore({ approval: null }), { state: "off", reason: "not-approved", next: null, exclusions: [] });
     const value = input();
     assert.equal(planAutomaticScore(value).next.interactionRef, value.candidates[0].interactionRef);

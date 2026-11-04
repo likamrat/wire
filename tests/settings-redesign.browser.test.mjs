@@ -13,7 +13,7 @@ import { contrast } from "./color-measurements.mjs";
 const proofs = process.env.WIRE_SETTINGS_REDESIGN_PROOFS;
 const categories = ["connection", "privacy", "display", "troubleshooting"];
 
-async function setup(t, { unknownBilling = false, preferenceSave = false } = {}) {
+async function setup(t, { unknownBilling = false, preferenceSave = false, announcementProbe = false } = {}) {
     if (proofs) await mkdir(proofs, { recursive: true });
     const cleanups = [], denied = [], errors = [], posts = [];
     const f = await evaluationFixture({ after: action => cleanups.push(action) });
@@ -44,6 +44,12 @@ async function setup(t, { unknownBilling = false, preferenceSave = false } = {})
             return route.abort("blockedbyclient");
         }
         if (request.method() === "POST") posts.push(url.pathname);
+        if (announcementProbe && url.pathname === "/") {
+            const response = await route.fetch(), body = await response.text();
+            const marker = 'function announce(text, kind = "", retry = false) {';
+            assert.equal(body.split(marker).length, 2);
+            return route.fulfill({ response, body: body.replace(marker, `window.settingsAnnounceForTest = announce;\n${marker}`) });
+        }
         if (unknownBilling && url.pathname === "/api/evaluation/automatic/summary") {
             const response = await route.fetch(), data = await response.json();
             data.snapshot = { ...data.snapshot, state: "paused", reason: "unknown-billing", approval: { state: "enabled" } };
@@ -354,7 +360,7 @@ test("Settings action edges stay visible through real hover, press, focus and na
 test("Settings button family keeps visible labels, compact faces and balanced icon/text geometry in complete rows", { timeout: 45000 }, async t => {
     const { page, posts } = await setup(t), measurements = [];
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
+    await expect(page.locator("#checkActivity")).toHaveText("Check GitHub");
     await expect(page.locator("#checkActivity .settings-action-label")).toBeVisible();
     await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "idle");
     const original = await page.locator("#checkActivity").elementHandle();
@@ -363,7 +369,7 @@ test("Settings button family keeps visible labels, compact faces and balanced ic
         await page.evaluate(scale => { document.documentElement.style.fontSize = scale * 100 + "%"; }, scale);
         await chooseTheme(page, theme);
         await navigateSettings(page, "connection");
-        await expect(page.locator("#checkActivity")).toHaveAccessibleName("Refresh");
+        await expect(page.locator("#checkActivity")).toHaveAccessibleName("Check GitHub");
         await expect(page.locator("#freshActivity")).toContainText("Collection stays paused.");
         const value = await page.locator("#checkActivity").evaluate(node => {
             const box = node.getBoundingClientRect(), style = getComputedStyle(node), face = getComputedStyle(node, "::before");
@@ -418,7 +424,7 @@ test("Settings button family keeps visible labels, compact faces and balanced ic
         assert.equal(await original.evaluate(node => node === document.getElementById("checkActivity")), true);
         await expect(page.locator("#checkActivity")).toHaveClass(/icon-only/);
         await expect(page.locator("#checkActivity .settings-action-label")).toBeHidden();
-        assert.equal(await page.locator("#checkActivity").innerText(), "", "The unrelated Analyze placement/presentation is unchanged");
+        await expect(page.locator("#checkActivity")).not.toBeVisible();
         await navigateMain(page, "settings");
     }
     assert.equal(posts.some(value => /\/(?:configure|enabled|now|confirm)$/.test(value)), false);
@@ -440,7 +446,7 @@ test("Settings search locates without acting; source and preference drafts survi
     }
     await selectActivityOption(page, "collectionCadence", "15");
     await expect(page.locator("#saveCollection")).toBeEnabled();
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Unsaved preferences");
+    await expect(page.locator("#settingsDraftStatus")).toContainText("Unsaved changes");
     await navigateSettings(page, "display");
     await navigateSettings(page, "connection");
     await expect(page.locator("#collectionCadence")).toHaveValue("15");
@@ -550,7 +556,7 @@ test("Settings source errors and pending unknown saves retain visible recovery w
     await selectActivityOption(page, "collectionCadence", "15");
     await page.locator("#saveCollection").click();
     await expect(page.locator("#collectionCadence")).toBeDisabled();
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Wait while");
+    await expect(page.locator("#settingsDraftStatus")).toContainText("Saving");
     const pendingGeometry = await geometry(page);
     assert.deepEqual(pendingGeometry.overlaps, []);
     assert.deepEqual(pendingGeometry.clipped, []);
@@ -558,10 +564,14 @@ test("Settings source errors and pending unknown saves retain visible recovery w
     await capture(page, "connection-save-pending");
     await page.locator('#settingsCategoryNav a[data-category="privacy"]').click();
     await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
+    await expect(page.locator("#message")).toContainText("Wait for the current local save to finish");
     release();
     await expect(page.locator("#reloadSettings")).toBeVisible();
-    await expect(page.locator("#settingsMessage")).toContainText("No success is assumed");
+    await expect(page.locator("#settingsMessage")).toContainText("unconfirmed");
     await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#message")).toBeHidden();
+    await expect(page.locator("#reloadSettings")).toBeEnabled();
+    await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
     await capture(page, "connection-save-unknown");
     await page.locator("#reloadSettings").click();
     await expect(page.locator("#reloadSettings")).not.toBeVisible();
@@ -584,6 +594,59 @@ test("Settings source errors and pending unknown saves retain visible recovery w
         assert.deepEqual(layout.clipped, []);
         assert.deepEqual(layout.overlaps, []);
     }
+    assert.equal(writes, 1);
+});
+
+test("settled Settings save retires its blocked-history announcement without replaying navigation", { timeout: 30000 }, async t => {
+    const { page, runtime } = await setup(t, { preferenceSave: true });
+    const held = Promise.withResolvers();
+    let writes = 0;
+    t.after(() => held.resolve());
+    await page.route("**/api/collection/configure", async route => {
+        writes++;
+        await held.promise;
+        await route.fallback();
+    });
+    await selectActivityOption(page, "collectionCadence", "15");
+    await page.locator("#saveCollection").click();
+    await expect(page.locator("#collectionCadence")).toBeDisabled();
+    await page.evaluate(() => { location.hash = "#settings?section=privacy"; });
+    await expect(page.locator("#message.pending-save")).toContainText("Wait for the current local save to finish");
+    await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
+    await expect(page).toHaveURL(/#settings\?section=connection$/);
+    held.resolve();
+    await expect(page.locator("#settingsMessage")).toContainText("Preferences saved.");
+    await expect(page.locator("#message")).toBeHidden();
+    await expect(page.locator("[data-settings-section=connection]")).toBeVisible();
+    assert.equal((await runtime.collector.status()).config.pollSeconds, 15);
+    assert.equal(writes, 1);
+    await navigateSettings(page, "privacy");
+    await expect(page.locator("[data-settings-section=privacy]")).toBeVisible();
+    assert.equal(writes, 1);
+});
+
+test("unknown Settings save preserves an unrelated newer announcement", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, { announcementProbe: true });
+    const held = Promise.withResolvers();
+    let writes = 0;
+    t.after(() => held.resolve());
+    await page.route("**/api/collection/configure", async route => {
+        writes++;
+        await held.promise;
+        await route.abort("failed");
+    });
+    await selectActivityOption(page, "collectionCadence", "15");
+    await page.locator("#saveCollection").click();
+    await expect(page.locator("#collectionCadence")).toBeDisabled();
+    await page.locator('#settingsCategoryNav a[data-category="privacy"]').click();
+    await expect(page.locator("#message.pending-save")).toBeVisible();
+    await page.evaluate(() => settingsAnnounceForTest("Synthetic newer status.", "stale"));
+    held.resolve();
+    await expect(page.locator("#settingsMessage")).toContainText("unconfirmed");
+    await expect(page.locator("#reloadSettings")).toBeEnabled();
+    await expect(page.locator("#saveCollection")).toBeDisabled();
+    await expect(page.locator("#message.stale")).toHaveText("Synthetic newer status.");
+    await expect(page.locator("#message")).toBeVisible();
     assert.equal(writes, 1);
 });
 
@@ -630,7 +693,7 @@ test("Settings disclosure, search-empty and popup controls remain reachable with
 test("Settings saved preferences persist in the isolated source without resuming collection or changing evidence", { timeout: 30000 }, async t => {
     const { page, runtime, posts, config } = await setup(t, { preferenceSave: true });
     await selectActivityOption(page, "collectionCadence", "15");
-    await expect(page.locator("#settingsDraftStatus")).toContainText("Unsaved preferences");
+    await expect(page.locator("#settingsDraftStatus")).toContainText("Unsaved changes");
     await capture(page, "connection-preferences-dirty");
     await page.locator("#saveCollection").click();
     await expect(page.locator("#settingsMessage")).toContainText("Preferences saved.");
@@ -651,11 +714,12 @@ test("Settings distinguishes labels, source permission and collection state with
     const { page, posts } = await setup(t), measurements = [];
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
-        await expect(page.locator("#connectionSourceTitle")).toHaveText("Local Copilot chats");
-        await expect(page.locator("#connectionSource")).toContainText("Source permission");
-        await expect(page.locator("#connectionApproval")).toHaveText("Approved");
+        await expect(page.locator("#connectionSourceTitle")).toHaveText("GitHub Copilot app");
+        await expect(page.locator("#connectionSource").getByText("WIRE uses the GitHub Copilot app by default.", { exact: true })).toHaveCount(0);
+        await expect(page.locator("#connectionSource")).not.toContainText("Source permission");
+        await expect(page.locator("#approvedConnection")).toBeVisible();
         await expect(page.locator("#connectionStatus")).toHaveText("Paused");
-        await expect(page.locator("#connectionSource").getByText("Local Copilot chats", { exact: true })).toHaveCount(1);
+        await expect(page.locator("#connectionSource").getByText("GitHub Copilot app", { exact: true })).toHaveCount(1);
         await inspectSourcePaths(page);
         const paths = await page.locator(".settings-paths").evaluate(root => {
             const labels = [...root.querySelectorAll("dt")], values = [...root.querySelectorAll("dd")];
@@ -704,7 +768,8 @@ test("Settings unapproved-source presentation reviews paths without granting per
         await expect(page.locator("#sourceDatabase")).toBeFocused();
         await expect(page.locator("#sourceDatabase")).toHaveValue(config.appDbPath);
         await expect(page.locator("#connectCollection")).toBeEnabled();
-        await expect(page.locator("#sourceSuggestion")).toContainText("not permission");
+        await expect(page.locator("#sourceSuggestion")).toBeHidden();
+        await expect(page.locator("#approvalScope")).toContainText("original prompts");
         await capture(page, `source-permission-review-${width}-${theme}`);
         const measure = await geometry(page);
         assert.equal(measure.overflow, false);
@@ -791,22 +856,35 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
     await page.locator("#checkActivity").click({ position: { x: refreshBounds.width / 2, y: 2 } });
     await expect(page.locator("#checkActivity")).toBeDisabled();
     await expect(page.locator("#checkActivity")).toHaveAttribute("aria-busy", "true");
-    await expect(page.locator("#checkActivity")).toHaveText("Refresh");
+    await expect(page.locator("#checkActivity")).toHaveText("Check GitHub");
+    await expect(page.locator("#settingsDraftStatus")).toBeHidden();
     assert.equal((await page.locator("#checkActivity").boundingBox()).width, refreshBounds.width);
-    for (const theme of ["light", "dark"]) {
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale * 100 + "%"; }, scale);
         await chooseTheme(page, theme);
-        await capture(page, `connection-refresh-pending-${theme}`);
-        assert.equal(await page.locator("#checkActivity .wire-icon").evaluate(node => node.getBoundingClientRect().width), 16);
+        await capture(page, `connection-refresh-pending-${theme}-${width}-${scale}x`);
+        assert.equal(await page.locator("#checkActivity .wire-icon").evaluate(node => node.getBoundingClientRect().width), 16 * scale);
+        const layout = await geometry(page);
+        assert.equal(layout.overflow, false);
+        assert.deepEqual(layout.clipped, []);
+        assert.deepEqual(layout.overlaps, []);
     }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     assert.equal(sourceChecks, 1);
     release();
     await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "partial");
     await expect(page.locator("#freshCheckDetails")).toContainText("Partial check");
     await expect(page.locator("#freshCheckDetails")).not.toBeVisible();
     await expect(page.locator("#freshCoverageDetails")).not.toBeVisible();
-    await expect(page.locator("#freshStatus")).toHaveText("History check incomplete. Checked 1 of 2 chats.");
-    await expect(page.locator("#settingsRefreshDetails")).toContainText("1 Copilot chat with unavailable history");
-    await expect(page.locator('#freshActivity a[href="#collection-status?setting=issues"]:visible')).toHaveCount(1);
+    await expect(page.locator("#freshStatus")).toHaveText("No additional activity in this check.");
+    await expect(page.locator("#settingsRefreshDetails")).toHaveCount(0);
+    await expect(page.locator("#freshCheckDetails")).toContainText("Checked 1 of 2");
+    await expect(page.locator("#freshCheckDetails")).toContainText("1 still reading");
+    await expect(page.locator("#freshCoverageAnnouncement")).toBeVisible();
+    await expect(page.locator("#freshCoverageAnnouncement")).toContainText("more history remains to read");
+    await expect(page.locator("#freshIssues")).toBeHidden();
     assert.equal(sourceChecks, 1);
     await page.evaluate(() => {
         window.settingsDetailIdentity = ["freshCheckDetails", "freshCoverageDetails", "freshResult", "checkActivity"]
@@ -831,8 +909,8 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
     assert.equal((await observe("Connection")).detailHome, "freshHelpBody");
     await navigateSettings(page, "display");
     assert.equal((await observe("Display")).detailHome, "freshHelpBody");
-    await navigateMain(page, "analyze");
-    assert.equal((await observe("Analyze")).helpHidden, false);
+    await navigateMain(page, "collection-status");
+    assert.equal((await observe("Collection status")).helpHidden, false);
     if (!await page.locator("#freshHelp").evaluate(node => node.open)) await page.locator("#freshHelp > summary").click();
     await page.goBack();
     await expect(page.locator("[data-settings-section=display]")).toBeVisible();
@@ -852,6 +930,17 @@ test("Settings Refresh is one task without a help gate and preserves read-only d
     }
     await selectActivityOption(page, "collectionCadence", "15");
     await expect(page.locator("#checkActivity")).toBeDisabled();
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [375, 2]]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = scale * 100 + "%"; }, scale);
+        await chooseTheme(page, theme);
+        await expect(page.locator("#freshStoredRead")).toBeDisabled();
+        const layout = await geometry(page);
+        assert.equal(layout.overflow, false);
+        assert.deepEqual(layout.clipped, []);
+        assert.deepEqual(layout.overlaps, []);
+        await capture(page, `connection-refresh-disabled-${theme}-${width}-${scale}x`);
+    }
     await page.locator("#cancelPreferences").click();
     await expect(page.locator("#checkActivity")).toBeEnabled();
     if (proofs) await writeFile(path.join(proofs, "refresh-navigation.json"), JSON.stringify(observations, null, 2));
@@ -920,7 +1009,7 @@ for (const problem of ["unknown", "source-error"]) test(`Settings ${problem} Ref
         await page.reload();
         await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
         await expect(page.locator("#freshContextMessage")).toContainText("will not be repeated");
-        await expect(page.locator("#settingsRefreshContext")).toContainText("No new history check");
+        await expect(page.locator("#settingsRefreshContext")).toBeHidden();
         await expect(page.locator("#checkActivity")).not.toBeVisible();
         await expect(page.locator("#refreshBtn")).toBeVisible();
     } else {
@@ -1027,6 +1116,93 @@ test("The unified source decision retains pending, rejected, read-result and can
     await capture(page, "connection-source-switch-cancelled");
 });
 
+test("Refresh explains the effect of incomplete history without making diagnostics the user's task", { timeout: 30000 }, async t => {
+    const { page, runtime, context } = await setup(t);
+    const status = await runtime.collector.status(), state = await loadBoardState(context);
+    let checks = 0;
+    await page.route("**/api/collection/now", route => {
+        checks++;
+        return route.fulfill({ json: { ...status, check: {
+            schemaVersion: 2, id: "human-impact-check", revision: state.revision, configVersion: status.configVersion,
+            startedAt: "2026-10-23T10:27:01.958Z", completedAt: "2026-10-23T10:27:02.205Z",
+            outcome: "partial", changes: { added: 0, updated: 0, items: [] }, sourcesChecked: 1158, eligibleSources: 1158,
+            pendingSources: 0, partialSources: 0, skippedSources: 0,
+            coverage: { eligible: 1158, unavailable: 19, limited: 101, affected: 120,
+                groups: { missing: 19, truncated: 16, oversized: 28, context: 57 } },
+        } } });
+    });
+    await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter");
+    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "partial");
+    await expect(page.locator("#freshStatus")).toHaveText("No additional activity in this check.");
+    await expect(page.locator("#freshCoverageAnnouncement")).toHaveText("GitHub history: 19 Copilot chats unavailable; 101 Copilot chats incomplete.");
+    await expect(page.locator("#settingsRefreshDetails")).toHaveCount(0);
+    await expect(page.locator("#freshIssues")).toBeHidden();
+    const visible = await page.locator("#freshActivity").innerText();
+    assert.doesNotMatch(visible, /19 unavailable|101 with limits|Checked 1,158|History coverage is incomplete/);
+    assert.doesNotMatch(visible, /up to date|No action is needed|Repair source/i);
+    for (const theme of ["light", "dark"]) for (const [width, scale] of [[1440, 1], [390, 1], [390, 2]]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale * 100}%`; }, scale);
+        const layout = await geometry(page);
+        assert.equal(layout.overflow, false);
+        assert.deepEqual(layout.clipped, []);
+        assert.deepEqual(layout.overlaps, []);
+        await capture(page, `human-impact-${theme}-${width}-${scale}x`);
+        if (proofs && width === 1440) {
+            const html = await page.evaluate(() => {
+                const copy = document.documentElement.cloneNode(true);
+                copy.querySelectorAll("script").forEach(node => node.remove());
+                return "<!doctype html>" + copy.outerHTML;
+            });
+            await writeFile(path.join(proofs, `human-impact-${theme}.html`), html);
+        }
+    }
+    await page.locator("#settingsStatusLink a").click();
+    await page.locator("#freshHelp>summary").click();
+    await expect(page.locator("#freshCheckDetails")).toContainText("1,158");
+    await expect(page.locator("#freshCoverageDetails")).toContainText("19 Copilot chats");
+    await expect(page.locator("#freshCoverageDetails")).toContainText("57 Copilot chats");
+    await expect(page.locator("#freshCoverageDetails")).toContainText("64 MiB");
+    await expect(page.locator("#freshCoverageDetails")).toContainText("1 MiB");
+    assert.equal(checks, 1, "Inspecting affected history must not retry collection");
+});
+
+test("Refresh renders context-only gaps and pending reads without inventing unreadable history", { timeout: 30000 }, async t => {
+    const { page, runtime, context } = await setup(t);
+    const status = await runtime.collector.status(), state = await loadBoardState(context);
+    let checks = 0;
+    await page.route("**/api/collection/now", route => {
+        checks++;
+        return route.fulfill({ json: { ...status, check: {
+            schemaVersion: 2, id: "context-pending-check", revision: state.revision, configVersion: status.configVersion,
+            startedAt: "2026-10-23T10:27:01.958Z", completedAt: "2026-10-23T10:27:02.205Z",
+            outcome: "partial", changes: { added: 0, updated: 0, items: [] },
+            sourcesChecked: 3, eligibleSources: 3, pendingSources: 1, partialSources: 0, skippedSources: 0,
+            coverage: { eligible: 3, readable: 3, pending: 1, unavailable: 0, limited: 3, affected: 3, groups: { context: 3 } },
+        } } });
+    });
+    await page.locator("#checkActivity").focus(); await page.keyboard.press("Enter");
+    await expect(page.locator("#freshActivity")).toHaveAttribute("data-phase", "partial");
+    await expect(page.locator("#freshStatus")).toHaveText("No additional activity in this check.");
+    await expect(page.locator("#freshCoverageAnnouncement")).toContainText("3 Copilot chats incomplete");
+    await expect(page.locator("#freshCoverageAnnouncement")).toContainText("more history remains to read");
+    assert.doesNotMatch(await page.locator("#freshCoverageAnnouncement").innerText(), /couldn't be read|couldn't be fully included/);
+    await expect(page.locator("#settingsRefreshDetails")).toHaveCount(0);
+    await expect(page.locator("#freshIssues")).toBeHidden();
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    const layout = await geometry(page);
+    assert.equal(layout.overflow, false);
+    assert.deepEqual(layout.clipped, []);
+    assert.deepEqual(layout.overlaps, []);
+    await page.locator("#settingsStatusLink a").click();
+    await page.locator("#freshHelp>summary").click();
+    await expect(page.locator("#freshCheckDetails")).toContainText("1 still reading");
+    await expect(page.locator("#freshCoverageDetails")).toContainText("3 Copilot chats");
+    assert.equal(checks, 1);
+});
+
 test("Refresh keeps missing checked-scope counts explicit rather than inventing complete coverage", { timeout: 30000 }, async t => {
     const { page, runtime, context } = await setup(t);
     const status = await runtime.collector.status(), state = await loadBoardState(context);
@@ -1036,8 +1212,14 @@ test("Refresh keeps missing checked-scope counts explicit rather than inventing 
         changes: { added: 0, updated: 0, items: [] }, coverage: { unavailable: 1 },
     } } }));
     await page.locator("#checkActivity").click();
-    await expect(page.locator("#freshStatus")).toHaveText("History check incomplete. Checked chat counts are unavailable.");
-    await expect(page.locator("#settingsRefreshDetails")).toContainText("No reason breakdown is available");
-    await expect(page.locator('#freshActivity a[href="#collection-status?setting=issues"]:visible')).toHaveCount(1);
+    await expect(page.locator("#freshStatus")).toHaveText("No additional activity in this check.");
+    await expect(page.locator("#freshCheckDetails")).toContainText("Checked chat counts are unavailable.");
+    await expect(page.locator("#freshCheckDetails")).toContainText("1 unavailable");
+    await expect(page.locator("#freshCoverageAnnouncement")).toBeVisible();
+    await expect(page.locator("#freshCoverageAnnouncement")).toHaveText("GitHub history: 1 Copilot chat unavailable.");
+    await expect(page.locator("#freshIssues")).toBeHidden();
     await capture(page, "connection-counts-unavailable");
+    await page.locator("#settingsStatusLink a").click();
+    await page.locator("#freshHelp>summary").click();
+    await expect(page.locator("#freshCoverageDetails")).toContainText("No per-reason breakdown was retained for this check.");
 });

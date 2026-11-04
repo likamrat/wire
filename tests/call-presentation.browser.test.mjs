@@ -140,7 +140,7 @@ test("Calls identify the tool and labeled result, with concise sorting and exact
     assert.doesNotMatch(sortCopy, /canonical record ID|for one record, not task latency/, "Implementation mechanics must not dominate the sort bar");
     assert.ok(geometry.tool.y > geometry.card.y, "The actual prompt leads the separately labeled call facts");
     await expect(target.locator(".card-outcomes")).toHaveAccessibleName("Tool completion: 1 Work IQ tool call");
-    await expect(target.locator(".card-outcomes")).toHaveText("1 Worked");
+    await expect(target.locator(".card-outcomes")).toHaveText("1 Tool completed");
     const failed = page.locator(".matched-action").filter({ has: page.locator('.request-link[href*="harbor-planning"]') });
     await expect(failed.locator(".action-error")).toHaveText("Reported HTTP 401: SignInRequired");
     await expect(failed.locator("[data-outcome=failure]")).toHaveAttribute("data-count", "1");

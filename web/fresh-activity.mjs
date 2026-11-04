@@ -1,7 +1,21 @@
 // Serialized with the client. Source completion needs its receipt AND an applied snapshot.
-export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" } = {}) {
+export function createFreshActivity({ sourceUnknown = false, sourceWarning = "", nativeStatus } = {}) {
     let sequence = 0, phase = "idle", check = null, message = "", context = "", coverage = "", details = "";
     let sourceFailure = null, readFailed = false;
+    let nativeOperationId = null, nativeReceipt = null;
+    let withdrawn = false;
+    function erase(value, seen = new Set()) {
+        if (!value || typeof value !== "object" || seen.has(value)) return;
+        seen.add(value);
+        for (const key of Object.keys(value)) { erase(value[key], seen); delete value[key]; }
+        if (Array.isArray(value)) value.length = 0;
+    }
+    function nativeUnconfirmed(text) {
+        phase = "unconfirmed"; sourceUnknown = true;
+        message = text;
+        context = "Read this operation's status and saved activity. Collection will not be repeated.";
+        coverage = ""; details = "";
+    }
     const sourceMessage = reason => reason === "source_paths_invalid" ? "Source paths need attention."
         : reason === "source_metadata_unavailable" ? "Local history could not be read."
         : reason === "source_mapping_unsupported" ? "Local history format is not supported."
@@ -15,30 +29,54 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
         context = "Only stored activity can be refreshed; the earlier check will not be repeated.";
     }
     return {
+        releaseSnapshot: erase,
+        withdrawAccess(...ownedCopies) {
+            if (!withdrawn) sequence++;
+            withdrawn = true;
+            for (const value of [check, nativeReceipt, sourceFailure, ...ownedCopies]) erase(value);
+            phase = "idle"; check = nativeReceipt = sourceFailure = nativeOperationId = null;
+            message = context = coverage = details = sourceWarning = "";
+            sourceUnknown = readFailed = false;
+        },
         snapshot: () => ({ token: sequence, phase, check, message, context, coverage, details, sourceUnknown, sourceWarning,
+            nativeOperationId, nativeReceipt,
             sourceBlocked: Boolean(sourceWarning), sourceFailure, readFailed,
             recovery: readFailed || sourceUnknown || sourceWarning ? "stored" : sourceFailure ? "source" : null }),
         busy: () => ["checking", "applying", "waiting"].includes(phase),
-        entry({ approved = false, enabled, checked = "", readError = false, stale = false, collectionState } = {}) {
+        entry({ approved = false, enabled, readError = false, stale = false, collectionState, nativePersistence = false } = {}) {
             const pending = ["checking", "applying"].includes(phase);
+            const added = check?.changes.added || 0, updated = check?.changes.updated || 0;
+            const changed = added + updated;
+            const result = changed ? added && updated ? `${changed.toLocaleString()} records changed`
+                : `${changed.toLocaleString()} ${added ? "new" : "updated"} record${changed === 1 ? "" : "s"}`
+                : "No additional activity in this check";
             return {
-                label: phase === "checking" ? "Checking local history..." : phase === "applying" ? "Reading stored activity..."
+                label: nativeOperationId ? readError || stale ? "Microsoft saved view is not current"
+                    : phase === "checking" ? "Collecting Microsoft activity..."
+                    : phase === "applying" ? "Verifying saved Microsoft activity..."
+                    : phase === "waiting" ? "Microsoft activity update waiting"
+                    : phase === "complete" ? "Microsoft collection completed"
+                    : "Microsoft collection unconfirmed"
+                    : phase === "checking" ? "Checking local history..." : phase === "applying" ? "Reading stored activity..."
                     : phase === "waiting" ? "Activity update waiting"
-                    : readFailed || readError || stale ? "Stored view not updated"
+                    : readFailed || stale ? "Stored view not updated"
+                    : readError ? "Update status unavailable"
                     : sourceUnknown ? "Local check unconfirmed"
                     : sourceWarning ? "Source checks are read-only"
                     : sourceFailure || collectionState === "error" ? "Local history needs attention"
+                    : nativePersistence ? enabled === false ? "Microsoft collection paused" : "Microsoft activity updates"
                     : !approved ? "Stored activity only"
                     : phase === "partial" ? "Some history is incomplete"
                     : enabled === false ? "Collection paused"
-                    : phase === "complete" && !check ? "Stored activity read"
-                    : checked ? `History checked ${checked}` : "Update recorded activity",
+                    : phase === "complete" ? check ? result : "Saved view refreshed"
+                    : "Activity updates",
                 pending,
                 attention: pending || phase === "waiting" || sourceUnknown || Boolean(sourceWarning) || readFailed || readError || stale || Boolean(sourceFailure) || collectionState === "error",
-                storedOnly: !approved || sourceUnknown || Boolean(sourceWarning) || phase === "error" || readError || stale,
+                storedOnly: !approved && !nativePersistence || sourceUnknown || Boolean(sourceWarning) || phase === "error" || readError || stale,
             };
         },
         blockSource(reason) {
+            if (withdrawn) return;
             sourceWarning = reason;
             if (phase === "checking") {
                 phase = "error";
@@ -47,7 +85,13 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
             }
         },
         fail(token, error, { rejected = false, reason = "", configVersion, revision, lastCheckId } = {}) {
-            if (token !== sequence || !["checking", "applying"].includes(phase)) return false;
+            if (withdrawn || token !== sequence || !["checking", "applying"].includes(phase)) return false;
+            if (nativeOperationId) {
+                readFailed = phase === "applying";
+                nativeUnconfirmed("Microsoft collection is unconfirmed.");
+                context = error + (reason ? ` (${reason})` : "") + " No collection will be repeated. Read the original operation's status.";
+                return true;
+            }
             const checking = phase === "checking";
             if (checking) {
                 const knownSourceFailure = ["source_paths_invalid", "source_metadata_unavailable", "source_mapping_unsupported"].includes(reason);
@@ -67,32 +111,100 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
             return true;
         },
         defer() {
-            if (phase === "applying") {
+            if (!withdrawn && phase === "applying") {
                 phase = "waiting";
                 message = check ? "Check finished; view waiting." : "Stored view waiting.";
                 context = "Close the current review or finish editing to apply it. Your preview stays frozen.";
             }
         },
         retryApply({ configVersion } = {}) {
+            if (withdrawn) return;
+            if (nativeOperationId) {
+                if (nativeReceipt?.status === "committed") {
+                    phase = "applying";
+                    message = "Verifying saved Microsoft activity...";
+                    context = "Read the committed result without collecting again.";
+                } else nativeUnconfirmed("Microsoft collection is unconfirmed.");
+                return;
+            }
             if (["error", "waiting", "unconfirmed", "applying"].includes(phase)) {
-                if (check && configVersion !== undefined && configVersion !== check.configVersion) check = null;
+                if (check && configVersion !== undefined && configVersion !== check.configVersion) { erase(check); check = null; }
                 phase = "applying";
                 message = check ? "Applying checked activity..." : "Reading stored activity...";
                 context = "Reading stored evidence; collection is not repeated.";
             }
         },
-        begin({ checkSource = true } = {}) {
-            if (["checking", "applying", "waiting"].includes(phase) || checkSource && (sourceUnknown || sourceWarning)) return null;
+        begin({ checkSource = true, nativeOperationId: operationId = null } = {}) {
+            if (withdrawn || ["checking", "applying", "waiting"].includes(phase) || checkSource && (sourceUnknown || sourceWarning)) return null;
+            if (operationId && (typeof nativeStatus?.nativeReceipt !== "function" || typeof nativeStatus?.nativeReadbackMatches !== "function")) {
+                throw new TypeError("Microsoft collection requires its native receipt contract.");
+            }
             sequence++;
+            erase(check);
             phase = checkSource ? "checking" : "applying"; check = null;
-            if (checkSource) sourceFailure = null;
+            if (checkSource) { erase(nativeReceipt); nativeOperationId = operationId; nativeReceipt = null; }
+            if (checkSource) { erase(sourceFailure); sourceFailure = null; }
             readFailed = false;
-            message = checkSource ? "Checking local Copilot history..." : "Reading stored activity...";
+            message = operationId ? "Collecting Microsoft activity..." : checkSource ? "Checking local Copilot history..." : "Reading stored activity...";
             context = ""; coverage = ""; details = "";
             return sequence;
         },
+        restoreNative(operationId) {
+            if (withdrawn || !operationId || nativeOperationId) return;
+            nativeOperationId = operationId;
+            nativeUnconfirmed("Microsoft collection is unconfirmed.");
+        },
+        nativeRecoveryFailed(error, reason = "") {
+            if (withdrawn || !nativeOperationId) return;
+            erase(nativeReceipt);
+            nativeReceipt = null;
+            nativeUnconfirmed("Microsoft collection status could not be verified.");
+            context = error + (reason ? ` (${reason})` : "") + " The original operation is not replayed.";
+        },
+        nativeReceived(token, receipt) {
+            if (withdrawn || token !== sequence || !nativeOperationId) return false;
+            if (receipt !== null) {
+                nativeStatus.nativeReceipt(receipt);
+                if (receipt.operationId !== nativeOperationId) throw new Error("The Microsoft receipt belongs to a different operation.");
+            }
+            const nextReceipt = receipt === null ? null : structuredClone(receipt);
+            erase(nativeReceipt);
+            nativeReceipt = nextReceipt;
+            if (nativeReceipt?.status !== "committed") {
+                nativeUnconfirmed(nativeReceipt?.status === "pending"
+                    ? "Microsoft collection is still pending." : "Microsoft collection is unconfirmed.");
+                return false;
+            }
+            sourceUnknown = true; phase = "applying";
+            message = "Verifying saved Microsoft activity...";
+            context = "";
+            return true;
+        },
+        nativeApplied(snapshot, status) {
+            if (withdrawn || !nativeOperationId || nativeReceipt?.status !== "committed") return false;
+            if (!nativeStatus.nativeReadbackMatches(nativeReceipt, snapshot, status)) {
+                nativeUnconfirmed("The displayed Microsoft activity does not match this collection receipt.");
+                return false;
+            }
+            phase = "complete"; sourceUnknown = false; readFailed = false;
+            message = "Microsoft collection completed.";
+            context = "";
+            const counts = nativeReceipt.changes;
+            details = `${counts.addedObservations.toLocaleString()} observations added; ${counts.reusedObservations.toLocaleString()} reused; `
+                + `${counts.suppressedObservations.toLocaleString()} kept deleted.`;
+            coverage = "";
+            return true;
+        },
+        retireNativeResult() {
+            if (withdrawn || !nativeOperationId) return;
+            erase(nativeReceipt); erase(check);
+            nativeOperationId = nativeReceipt = null;
+            phase = "idle"; check = null;
+            sourceUnknown = false; readFailed = false;
+            message = context = coverage = details = "";
+        },
         collected(token, receipt) {
-            if (token !== sequence || phase !== "checking") return false;
+            if (withdrawn || token !== sequence || phase !== "checking") return false;
             if (receipt?.schemaVersion !== 2 || !receipt.id || !Number.isSafeInteger(receipt.revision) || !receipt.configVersion
                 || !Number.isFinite(Date.parse(receipt.completedAt)) || !["complete", "partial"].includes(receipt.outcome)
                 || !Array.isArray(receipt.changes?.items) || !Number.isSafeInteger(receipt.changes.added) || !Number.isSafeInteger(receipt.changes.updated)) {
@@ -101,12 +213,15 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
             if (receipt.changes.added + receipt.changes.updated > 0 && (!Number.isSafeInteger(receipt.beforeRevision) || receipt.revision <= receipt.beforeRevision)) {
                 throw new Error("The check claimed new evidence without a newer committed revision. Retry the stored read; no collection was repeated.");
             }
-            check = receipt; phase = "applying"; message = "Applying checked activity...";
+            check = structuredClone(receipt); phase = "applying"; message = "Applying checked activity...";
             sourceUnknown = false;
             return true;
         },
         applied(revision, configVersion, rows) {
+            if (withdrawn) return false;
+            if (nativeOperationId) return false;
             if (sourceFailure?.configVersion !== undefined && configVersion !== undefined && configVersion !== sourceFailure.configVersion) {
+                erase(sourceFailure);
                 sourceFailure = null;
                 if (!readFailed && !check && ["error", "complete"].includes(phase)) phase = "applying";
             }
@@ -131,11 +246,18 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
             if (!["applying", "waiting", "complete", "partial"].includes(phase) || !check || revision < check.revision) return false;
             if (configVersion !== check.configVersion) {
                 if (phase === "applying") throw new Error("The approved source changed during this check. Review the current connection before checking again.");
+                erase(check);
                 phase = "idle"; check = null;
                 message = "Collection settings changed.";
                 context = "Check the current approved source for new activity.";
                 coverage = ""; details = "";
                 return false;
+            }
+            if (["complete", "partial"].includes(phase) && revision > check.revision) {
+                erase(check);
+                phase = "idle"; check = null;
+                message = ""; context = ""; coverage = ""; details = "";
+                return true;
             }
             const { added, updated, items } = check.changes;
             const changes = added + updated;
@@ -143,7 +265,7 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
                 ? row.id === item.rowId || row.parentCallId === item.rowId
                 : row.sourceSessionId === item.sourceSessionId && (item.kind === "tool" ? row.toolCallId === item.id : row.activityId === item.id))).length;
             const counts = [added ? `${added.toLocaleString()} new` : "", updated ? `${updated.toLocaleString()} updated` : ""].filter(Boolean).join(", ");
-            message = changes ? `${counts} activity record${changes === 1 ? "" : "s"}.` : "No new recorded activity.";
+            message = changes ? `${counts} activity record${changes === 1 ? "" : "s"}.` : "No additional activity in this check.";
             context = changes && visible < changes
                 ? `${visible ? "Some updates are" : "Updates are"} outside this view's filters or evidence layer.`
                 : "";
@@ -165,7 +287,7 @@ export function createFreshActivity({ sourceUnknown = false, sourceWarning = "" 
                     [check.skippedSources, "beyond the discovery limit"], [check.eligibleSources - check.sourcesChecked, "not checked this cycle"]]) {
                     if (amount > 0) summary.push(`${amount.toLocaleString()} ${label}`);
                 }
-                coverage = summary.length ? `Chat history: ${summary.join(" · ")}` : "History coverage incomplete";
+                coverage = summary.length ? `Chat history: ${summary.join(", ")}.` : "History coverage is incomplete.";
                 details += `Partial check: ${gaps.join("; ") || "coverage is incomplete"}. Results cover only the history read. Missing history is not a Work IQ service error.`;
                 if (check.pendingSources || check.sourcesChecked < check.eligibleSources) details += " Further checks can continue reading pending history.";
                 if (check.partialSources) details += " An unfinished entry can be read after Copilot finishes saving it.";

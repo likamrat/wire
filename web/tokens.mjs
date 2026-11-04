@@ -81,6 +81,7 @@ const screenLight = `
  --chart-success:#286336;--screen-success-high:#60906e;--screen-success-low:#325f40;
  --chart-failure:#b3261e;--screen-failure-high:#c17169;--screen-failure-low:#9e403a;
  --screen-service-files:#007357;
+ --screen-activity-assistance:#9b3c82;
  --screen-prompt-user:#365f7a;
  --screen-prompt-agent:#806018;
  --search-interaction:#235eaa;--search-context:#795997;--search-reply:#006c74;
@@ -106,6 +107,7 @@ const screenDark = `
  --chart-success:#83d494;--screen-success-high:#83d494;--screen-success-low:#528d5e;
  --chart-failure:#f28b82;--screen-failure-high:#f28b82;--screen-failure-low:#be635c;
  --screen-service-files:#10b981;
+ --screen-activity-assistance:#f2a2dd;
  --chart-fade-strength:74%;
  --screen-prompt-user:#95b9d2;
  --screen-prompt-agent:#e2c27b;
@@ -140,7 +142,7 @@ export const screenTokens = `${tokens}
  --font:${screenFontStack};
  --weight-regular:400;--weight-medium:500;--weight-strong:600;--tracking-heading:0;
  --radius:12px;--radius-small:10px;--radius-dialog:12px;--radius-field:8px;
- --pill-fill:var(--paper);--pill-border:var(--surface-edge);--shadow:var(--surface-shadow);
+ --pill-fill:var(--paper);--pill-border:var(--control);--shadow:var(--surface-shadow);
  --navigation-paper:var(--paper);--context-paper:var(--paper);--floating-paper:var(--paper);
  --state-transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease,box-shadow 140ms ease;
 }

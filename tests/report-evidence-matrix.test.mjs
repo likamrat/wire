@@ -7,7 +7,6 @@ import { reportHash } from "../lib/report-artifacts.mjs";
 import { privateFixture } from "./helpers.mjs";
 import { reportMatrixCases } from "./report-evidence-matrix-fixtures.mjs";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { createReportComparison } from "../web/report-comparison.mjs";
 
 for (const scenario of reportMatrixCases()) test(`report evidence matrix: ${scenario.name}`, { timeout: 60000 }, async t => {
     const { context } = await privateFixture(t, scenario.records);
@@ -36,20 +35,19 @@ for (const scenario of reportMatrixCases()) test(`report evidence matrix: ${scen
         assert.equal(timing.boundary, "tool-start-to-completion");
         assert.equal(timing.observedTime.state === "available", false, "Raw source times must not be disclosed in the snapshot");
     }
-    for (const dimension of ["accuracy", "answer-trust", "action-trust"]) {
-        const metrics = facts.metrics.filter(metric => metric.dimension === dimension);
-        assert.ok(metrics.length > 0);
-        assert.ok(metrics.every(metric => metric.value === null && metric.coverage.covered === 0), `${dimension} is not inferred from execution`);
-    }
-    assert.ok(facts.metrics.filter(metric => metric.dimension === "cost").every(metric => metric.value === null && metric.status === "not-measured"));
-    assert.ok(facts.metrics.filter(metric => metric.definitionId === "interaction-latency").every(metric => metric.value === null), "Parallel call durations must not become summed task latency");
+    assert.equal(facts.metricProjectionVersion, 4);
+    assert.deepEqual(facts.assessments, []);
+    assert.ok(facts.metrics.every(metric => metric.dimension === "speed" && metric.origin === "automatic-local"),
+        "Current output never infers judgments or cost from recorded completion.");
+    assert.equal(facts.metrics.some(metric => metric.definitionId === "interaction-latency"), false,
+        "Parallel call durations must not become summed task latency or an unavailable review placeholder.");
     if (scenario.name === "successful-wrapper-failed-api") {
         assert.equal(facts.recordedOutcomes.filter(outcome => outcome.kind === "returned-api-entry" && outcome.outcome === "failure").length, 6);
     }
     if (expected.calls && expected.success + expected.failure === 0) assert.doesNotMatch(preview.previewHtml, /aria-label="Recorded tool success"/);
     for (const contents of [preview.files["product-report.json"], preview.files["product-report.md"], preview.previewHtml]) {
         assert.doesNotMatch(contents, /PRIVATE_MATRIX_|SYNTHETIC_PRIVATE|email@example|SYNTHETIC_LITERAL/);
-        assert.match(contents, /accuracy|Answer correctness/);
+        assert.doesNotMatch(contents, /"dimension":"accuracy"|Answer correctness|Not checked automatically/);
     }
     const reviewed = await controller.review("matrix", preview.previewId, true);
     const saved = (await controller.confirm("matrix", preview.previewId, true)).bundle;
@@ -76,8 +74,7 @@ for (const scenario of reportMatrixCases()) test(`report evidence matrix: ${scen
                 }
                 pages.push(content.items.map(item => item.str ?? "").join(""));
             }
-            assert.match(pages.join("\n"), /Answer correctness/);
-            assert.match(pages.join("\n"), /Not checked automatically|Not applicable/);
+            assert.doesNotMatch(pages.join("\n"), /Answer correctness|Not checked automatically/);
             assert.match(pages.join("\n"), /Not measured/);
             const compact = pages.join("").replace(/\s+/g, "");
             if (expected.calls && expected.success + expected.failure > 0) {
@@ -85,7 +82,7 @@ for (const scenario of reportMatrixCases()) test(`report evidence matrix: ${scen
                 if (expected.failure) assert.ok(compact.includes(`${expected.failure}failed`), "The PDF includes the actual failed-call count");
             }
             if (expected.median !== null) {
-                assert.ok(compact.includes(`(${expected.median}ms)`), "The PDF keeps the exact independently calculated timing value");
+                assert.ok(compact.includes(`${expected.median.toLocaleString("en-US")}ms`), "The PDF keeps the exact independently calculated timing value");
             }
         } finally { await task.destroy(); }
     }

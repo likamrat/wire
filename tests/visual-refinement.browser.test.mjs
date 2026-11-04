@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { chromium } from "@playwright/test";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { exportCatalogFor, navigateMain, selectActivityOption, chooseTheme, openActivitySessions } from "./helpers.mjs";
+import { exportCatalogFor, navigateMain, selectActivityOption, chooseTheme, openActivitySessions, UNBOUND_FIXTURE_BOOTSTRAP } from "./helpers.mjs";
 
 const scenarios = ["IQ-OS", "skills", null].map((project, index) => ({
     scenarioId: `synthetic-visual-${index}`, sourceSessionId: `synthetic-session-${index}`, sourceHost: "copilot-app",
@@ -30,7 +30,7 @@ async function fixture(run) {
         if (req.method === "GET" && req.url === "/") {
             res.setHeader("Content-Type", "text/html");
             res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-visual-fixture'; style-src 'unsafe-inline'; font-src data:; connect-src 'self'; base-uri 'none'");
-            res.end(renderHtmlShell("a".repeat(64), "visual-fixture"));
+            res.end(renderHtmlShell("a".repeat(64), "visual-fixture", UNBOUND_FIXTURE_BOOTSTRAP));
             return;
         }
         res.setHeader("Content-Type", "application/json");

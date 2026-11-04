@@ -84,11 +84,19 @@ export const recollectionStyles = `
 
 // Serialized into the page; dependencies stay inside the mount function.
 export function mountRecollection({ api, time, timeContext, search, pageSources, ux, searchFields, describe, canAct, onChanged, onNotice, onCommitted }) {
+    if (typeof api !== "function" || typeof api.publicationToken !== "function" || typeof api.isCurrent !== "function") {
+        throw new TypeError("An access-aware API with publicationToken() and isCurrent() is required.");
+    }
     const $ = id => document.getElementById(id), dialog = $("recollectDialog");
     const storageKey = "workiq-evidence.recollection-operation";
     let phase = "editing", token = 0, preview, receipt, trigger, busy = false, sourcesReady = false;
     let result, statusError = false, viewNeedsRead = false, mounted = false;
-    let sources = [], selectedOnly = false;
+    let sources = [], sourceMatches = [], selectedOnly = false;
+    let accessAvailable = true, accessEpoch = 0, suppressedCloses = 0;
+    const publication = () => ({ epoch: accessEpoch, token: api.publicationToken() });
+    const current = access => accessAvailable && access?.epoch === accessEpoch && access.token != null
+        && api.isCurrent(access.token) === true;
+    const blockedMessage = "The saved recollection receipt could not be read or verified. An earlier operation may be unconfirmed. Recollection is blocked; the saved entry has not been changed. Stored activity is still available.";
     const selectedSources = new Set();
     const locked = () => ["pending", "uncertain", "blocked"].includes(phase);
     const validReceipt = value => typeof value?.operationId === "string"
@@ -97,8 +105,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     const snapshot = () => ({ phase, busy, needsReceipt: ["uncertain", "blocked"].includes(phase), hasReceipt: Boolean(receipt), operationId: receipt?.operationId,
         message: ["pending", "uncertain", "complete", "not-started", "blocked"].includes(phase) ? $("recollectStatus").textContent : "",
         result, viewNeedsRead });
-    const notify = () => { if (mounted) onChanged?.(snapshot()); };
+    const notify = () => { if (mounted && current(publication())) onChanged?.(snapshot()); };
     function allowed(action) {
+        if (!current(publication())) return false;
         const reason = canAct?.(action);
         if (!reason) return true;
         if (dialog.open) status(reason, true); else onNotice?.(reason);
@@ -118,8 +127,11 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         for (const input of $("recollectSources").querySelectorAll("input")) input.disabled = selectedSources.size >= 128 && !input.checked;
     }
     function renderSources(reset = true) {
+        const access = publication();
+        if (!current(access)) return;
         const query = $("recollectSearch").value;
-        const matches = sources.filter(source => (!selectedOnly || selectedSources.has(source.sourceSessionId))
+        sourceMatches.length = 0;
+        const matches = sourceMatches = sources.filter(source => (!selectedOnly || selectedSources.has(source.sourceSessionId))
             && search.matches(query, [source.name]));
         searchField.sync();
         pageSources($("recollectSources"), matches, source => {
@@ -131,7 +143,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             name.textContent = source.name + (source.available ? "" : " - history unavailable");
             label.append(input, name);
             return label;
-        }, reset);
+        }, reset, () => current(access));
         if (!matches.length) {
             const empty = document.createElement("p");
             empty.textContent = selectedOnly ? "No selected chats match this search." : "No chats match. Try another name.";
@@ -140,12 +152,14 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         selectionCount();
     }
     function status(text, error = false) {
+        if (!current(publication())) return;
         statusError = error;
         if ($("recollectStatus").textContent !== text) $("recollectStatus").textContent = text;
         $("recollectStatus").classList.toggle("error", error);
         notify();
     }
     function update() {
+        if (!current(publication())) return;
         const view = describe(phase, { preview, result, busy, error: statusError });
         const reason = canAct?.(["uncertain", "blocked"].includes(phase) ? "receipt" : "preview");
         $("recollectTitle").textContent = view.title;
@@ -165,6 +179,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         $("recollectConfirm").disabled = !view.canConfirm || Boolean(reason);
         $("recollectConfirm").textContent = view.confirmLabel;
         $("recollectChange").hidden = phase !== "preview";
+        $("recollectChange").disabled = busy || locked();
         $("recollectCheck").hidden = phase !== "uncertain";
         $("recollectCheck").disabled = busy || Boolean(reason);
         $("recollectClose").disabled = phase === "pending";
@@ -181,15 +196,17 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         notify();
     }
     function cancelPreview() {
-        if (!preview) return;
+        const access = publication();
+        if (!current(access) || !preview) return;
         const operationId = preview.operationId;
         preview = undefined;
         api("/api/recollection/cancel", { operationId }).catch(error => {
+            if (!current(access)) return;
             status(`Preview cancellation could not be confirmed. No recollection was requested; it will expire. ${error.message}`, true);
         });
     }
     function edit() {
-        if (locked()) return;
+        if (!current(publication()) || locked()) return;
         token++;
         cancelPreview();
         phase = "editing";
@@ -201,6 +218,8 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             restorePrompts: $("recollectPrompts").checked };
     }
     async function readSources() {
+        const access = publication();
+        if (!current(access)) return;
         const version = ++token;
         $("recollectSources").replaceChildren();
         sources = []; selectedSources.clear(); selectedOnly = false; searchField.sync(""); selectionCount();
@@ -208,7 +227,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         status("Reading eligible chats from your approved local source. No evidence is being changed.");
         try {
             const result = await api("/api/recollection/sources", {});
-            if (version !== token || !dialog.open) return;
+            if (!current(access) || version !== token || !dialog.open) return;
             sources = result.sources.toSorted((a, b) => a.name.localeCompare(b.name) || a.sourceSessionId.localeCompare(b.sourceSessionId));
             renderSources();
             $("recollectWindow").textContent = `Approved history: ${period(result.since, result.until, timeContext())} (${result.windowDays} days).`;
@@ -217,10 +236,11 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             status(sourcesReady ? (result.skippedSources ? `${result.skippedSources} chats are outside the discovery limit and cannot be selected.` : "")
                 : "No eligible local chats are available from the approved source.");
         } catch (error) {
-            if (version === token) status(`Source list unavailable. Nothing changed. ${error.message}`, true);
-        } finally { busy = false; update(); }
+            if (current(access) && version === token) status(`Source list unavailable. Nothing changed. ${error.message}`, true);
+        } finally { if (current(access) && version === token) { busy = false; update(); } }
     }
-    async function showResult(next) {
+    async function showResult(next, access) {
+        if (!current(access)) return;
         if (next.operationId !== receipt?.operationId) throw new Error("Recollection receipt does not match this operation.");
         if (next.phase === "complete") {
             result = next;
@@ -235,7 +255,9 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             const deferred = canAct?.("view");
             if (deferred) status(`${completed.resultMessage} ${deferred} Read stored activity when ready; do not repeat recollection.`);
             else {
-                viewNeedsRead = !await onCommitted(next);
+                const applied = await onCommitted(next);
+                if (!current(access)) return;
+                viewNeedsRead = !applied;
                 if (viewNeedsRead) status(`${completed.resultMessage} The view could not refresh. Read stored activity; do not repeat recollection.`, true);
             }
             notify();
@@ -251,6 +273,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
     }
     $("recollectForm").addEventListener("submit", async event => {
         event.preventDefault();
+        const access = publication();
         if (busy || locked() || !allowed("preview")) return;
         if (!selectedSources.size) { status("Choose at least one chat.", true); $("recollectSearch").focus(); return; }
         edit();
@@ -259,7 +282,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         status("Reading available source events for this preview. Nothing is being recollected.");
         try {
             const result = await api("/api/recollection/preview", scope());
-            if (version !== token || !dialog.open) return;
+            if (!current(access) || version !== token || !dialog.open) return;
             if (!validReceipt(result)
                 || !result.scope?.timeContext || !Array.isArray(result.availability)
                 || !["from", "to", "since", "until"].every(key => Number.isFinite(Date.parse(result.scope?.[key])))
@@ -303,31 +326,35 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
                 : view.records ? (partial ? "Some history is unavailable or incomplete. Only the records shown will be recollected. See source details."
                     : "") : "No eligible records are available in this scope. Nothing can be recollected.", view.records === null);
             dialog.querySelector(".decision-body").scrollTop = 0; $("recollectClose").focus();
-        } catch (error) { if (version === token) status(`Preview failed. Nothing changed. ${error.message}`, true); }
-        finally { busy = false; update(); }
+        } catch (error) { if (current(access) && version === token) status(`Preview failed. Nothing changed. ${error.message}`, true); }
+        finally { if (current(access) && version === token) { busy = false; update(); } }
     });
     $("recollectConfirm").addEventListener("click", async () => {
+        const access = publication();
         if (!describe(phase, { preview, busy }).canConfirm || !allowed("confirm")) return;
         receipt = { operationId: preview.operationId, receiptToken: preview.receiptToken };
         try { sessionStorage.setItem(storageKey, JSON.stringify(receipt)); }
         catch { status("This browser cannot save the recovery receipt. Nothing recollected. Allow session storage before confirming.", true); return; }
         phase = "pending"; update(); status("Re-reading and committing only the confirmed source records. Keep this panel open.");
         $("recollectStatus").focus();
-        try { await showResult(await api("/api/recollection/confirm", { operationId: receipt.operationId, confirmed: true })); }
+        try { await showResult(await api("/api/recollection/confirm", { operationId: receipt.operationId, confirmed: true }), access); }
         catch (error) {
+            if (!current(access)) return;
             phase = "uncertain";
             status(`${error.message} Use Check recollection result. No mutation will be replayed.`, true);
-        } finally { update(); }
+        } finally { if (current(access)) update(); }
     });
     $("recollectCheck").addEventListener("click", async () => {
+        const access = publication();
         if (busy || !receipt || !allowed("receipt")) return;
         busy = true; update();
-        try { await showResult(await api("/api/recollection/status", receipt)); }
-        catch (error) { status(`Could not read this operation's result. ${error.message} No recollection was repeated.`, true); }
-        finally { busy = false; update(); }
+        try { await showResult(await api("/api/recollection/status", receipt), access); }
+        catch (error) { if (current(access)) status(`Could not read this operation's result. ${error.message} No recollection was repeated.`, true); }
+        finally { if (current(access)) { busy = false; update(); } }
     });
-    $("recollectChange").addEventListener("click", () => { edit(); status(""); $("recollectSources").focus(); });
+    $("recollectChange").addEventListener("click", () => { if (!current(publication())) return; edit(); status(""); $("recollectSources").focus(); });
     $("recollectSources").addEventListener("input", event => {
+        if (!current(publication())) return;
         const input = event.target;
         if (input.type !== "checkbox") return;
         if (input.checked && selectedSources.size >= 128) { input.checked = false; status("Choose up to 128 chats.", true); return; }
@@ -335,18 +362,21 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         edit(); selectionCount(); status("");
     });
     const searchField = searchFields.mount($("recollectSearch"), { clearLabel: "Clear search", onInput: () => renderSources() });
-    $("recollectShowSelected").addEventListener("click", () => { selectedOnly = !selectedOnly; searchField.sync(""); renderSources(); });
+    $("recollectShowSelected").addEventListener("click", () => { if (!current(publication())) return; selectedOnly = !selectedOnly; searchField.sync(""); renderSources(); });
     for (const id of ["recollectFrom", "recollectTo", "recollectPrompts"]) $(id).addEventListener("input", () => { edit(); status(""); });
     $("recollectClose").addEventListener("click", () => dialog.close());
     dialog.addEventListener("cancel", event => { if (phase === "pending") event.preventDefault(); });
     dialog.addEventListener("close", () => {
+        if (suppressedCloses) { suppressedCloses--; return; }
+        if (!current(publication())) return;
         token++;
+        if (!locked()) busy = false;
         if (!locked() && !["complete", "not-started"].includes(phase)) { cancelPreview(); phase = "editing"; }
         if (trigger?.isConnected && trigger.checkVisibility()) ux.restoreFocus(trigger.disabled ? trigger.closest(".ux-disabled-help") || trigger : trigger);
         notify();
     });
     dialog.addEventListener("keydown", event => {
-        if (event.key !== "Tab") return;
+        if (!current(publication()) || event.key !== "Tab") return;
         const controls = [...dialog.querySelectorAll("button,input,select,summary")].filter(node => !node.disabled && !node.closest("[inert]") && node.checkVisibility());
         if (!controls.length) { event.preventDefault(); $("recollectStatus").focus(); return; }
         const first = controls[0], last = controls.at(-1);
@@ -363,7 +393,7 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
             status("A previous recollection needs checking. Read its saved receipt before starting another operation.", true);
         } catch {
             receipt = undefined; phase = "blocked";
-            status("The saved recollection receipt could not be read or verified. An earlier operation may be unconfirmed. Recollection is blocked; the saved entry has not been changed. Stored activity is still available.", true);
+            status(blockedMessage, true);
         }
     }
     async function open(initiator = document.activeElement) {
@@ -377,16 +407,43 @@ export function mountRecollection({ api, time, timeContext, search, pageSources,
         update(); if (!dialog.open) dialog.showModal();
         dialog.querySelector(".decision-body").scrollTop = 0; $("recollectClose").focus();
         if (phase === "uncertain") status("A previous recollection needs checking. Read its saved receipt before starting another operation.", true);
-        else if (phase !== "blocked") await readSources();
+        else if (phase === "blocked") status(blockedMessage, true);
+        else await readSources();
         return true;
     }
     $("recollectActivity").addEventListener("click", event => open(event.currentTarget));
     restoreReceipt(); update(); mounted = true;
-    return { open, snapshot, isOpen: () => dialog.open, viewApplied(operationId) {
+    function withdrawAccess() {
+        if (!accessAvailable) return;
+        accessAvailable = false; accessEpoch++; token++;
+        if (phase === "pending") phase = "uncertain";
+        if (!["uncertain", "blocked", "complete", "not-started"].includes(phase)) phase = "editing";
+        sources.length = 0; sourceMatches.length = 0; selectedSources.clear(); selectedOnly = false;
+        preview = undefined; result = undefined; trigger = null; busy = false; sourcesReady = false; viewNeedsRead = false;
+        if (dialog.open) { suppressedCloses++; dialog.close(); }
+        $("recollectSources").replaceChildren(); $("recollectAvailability").replaceChildren();
+        searchField.sync(""); $("recollectSearch").readOnly = true;
+        $("recollectFrom").value = ""; $("recollectTo").value = ""; $("recollectPrompts").checked = false;
+        for (const id of ["recollectTitle", "recollectWindow", "recollectZone", "recollectSelected", "recollectScope",
+            "recollectClipped", "recollectSummary", "recollectPromptSummary", "recollectPreserved", "recollectBounds", "recollectPolicy", "recollectStatus"]) $(id).textContent = "";
+        $("recollectConfirm").textContent = "Read selected history again";
+        $("recollectForm").hidden = true; $("recollectForm").inert = true; $("recollectConfirmation").hidden = true;
+        delete dialog.dataset.operationId; delete dialog.dataset.decisionPhase;
+        for (const button of dialog.querySelectorAll("button")) button.disabled = true;
+    }
+    return { open, snapshot, isOpen: () => dialog.open, withdrawAccess,
+        resumeAccess() {
+            const access = publication();
+            if (access.epoch === accessEpoch && access.token != null && api.isCurrent(access.token) === true) {
+                accessAvailable = true; $("recollectSearch").readOnly = false;
+            }
+        }, viewApplied(operationId) {
+        if (!current(publication())) return;
         if (phase === "complete" && viewNeedsRead && operationId === result?.operationId) {
             viewNeedsRead = false; status(describe(phase, { result }).resultMessage, describe(phase, { result }).records === null);
         }
     }, invalidate() {
+        if (!current(publication())) return;
         if (["editing", "preview"].includes(phase) && dialog.open) {
             edit(); status("The connection or display time zone changed. Read the source list and preview again.", true); readSources();
         }
