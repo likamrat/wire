@@ -35,7 +35,20 @@ See [Architecture](docs/architecture.md) for the local runtime and storage bound
 
 ## Start
 
-You need Node.js 24 or newer and access to this repository.
+### Platforms
+
+Run WIRE with Node.js 24 or newer on:
+
+- Windows
+- WSL
+- Linux
+- macOS
+
+Collection also needs accessible, supported GitHub Copilot app history.
+See [platform setup](docs/development.md#windows-wsl-and-linux) for source
+requirements and running separate instances.
+
+### Install and run
 
 ```sh
 git clone https://github.com/likamrat/wire.git
@@ -44,33 +57,37 @@ npm ci
 npm start
 ```
 
-WIRE runs locally on **port 4000 by default**. Open
-[http://127.0.0.1:4000/](http://127.0.0.1:4000/) and keep the terminal running.
-For another port or a separate Windows/WSL instance, see
-[platform setup](docs/development.md#windows-wsl-and-linux).
+Open the address printed in the terminal; the default port is `4000`.
+Keep the terminal running while you use WIRE.
 
-In **Settings > Connection & updates**, choose **Review source & connect**.
-Check the local Copilot paths and history window, then approve collection.
-The [first-run guide](docs/user-guide.md#connect-local-history) walks through
-these choices. Starting WIRE alone does not approve a source.
+### Connect your history
 
-Collected activity and saved reports stay in a per-user folder outside the
-repository. See [data locations](docs/collection.md#store-ownership) for
-Windows, Linux, macOS and WSL defaults and how to choose another folder.
-Independent instances can read the same approved Copilot source using distinct
-data folders and ports; each store has one writer and its own source approval,
-collection progress and saved reports. Saving Copilot replies needs separate
-approval. Review report copies before sharing because local masking can miss
-confidential information.
+In **Settings > Connection & updates**, choose **Review source & connect**,
+check the paths and history window, then approve collection.
+Follow the [first-run guide](docs/user-guide.md#connect-local-history) for details.
 
-## Comparisons and reports
+### Your data
 
-Compare recorded call outcomes and timings across two periods.
+- Activity and reports stay in a [per-user data folder](docs/collection.md#store-ownership)
+  outside the repository.
+- Independent instances need separate data folders and ports, with their own
+  source approval, collection progress and reports.
+- Saving Copilot replies needs separate approval. Review report copies before
+  sharing; local masking can miss confidential information.
+
+## Comparisons
+
+Compare periods to see where failure rates or call timings changed, then inspect
+the calls behind those changes. Use those differences to decide which agent
+behaviors need closer investigation.
 
 [![A comparison of two periods showing call outcomes and tool latency side by side.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
-Open a saved report to read its selected activity, tool and service patterns,
-and recorded results.
+## Reports
+
+Turn selected interactions into a portable record of prompts, tool calls and
+results. Review the included text, then share the report with people building
+evaluations so they can turn real-use patterns and failures into concrete eval cases.
 
 [![A saved HTML report open in WIRE, showing its scope, activity counts, tools and services.](docs/images/saved-report.png)](docs/images/saved-report.png)
 
@@ -83,11 +100,14 @@ and recorded results.
 
 ## Contributing
 
-[Open an issue](https://github.com/likamrat/wire/issues) with a reproducible
-problem or a proposed improvement. For a change, open a focused pull request
-that explains the behavior, updates the relevant guide and includes the checks
-you ran. See [Development](docs/development.md#check-a-change) for local checks
-and code entry points.
+[Report a bug or suggest an improvement](https://github.com/likamrat/wire/issues),
+or see [Contributing](CONTRIBUTING.md) to submit a change.
 
-Use invented examples in tests and screenshots. Keep personal histories,
-prompts, reports, credentials and local configuration out of issues and commits.
+## Security
+
+Follow the [security reporting guide](SECURITY.md) for suspected vulnerabilities.
+
+## License
+
+WIRE is licensed under the [MIT License](LICENSE). Third-party components
+retain their own licenses and notices.

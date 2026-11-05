@@ -2,6 +2,7 @@
   "name": "work-iq-evidence",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "WIRE (Work IQ Request Explorer): inspect recorded Work IQ activity and prepare reviewed product feedback reports.",
   "engines": {

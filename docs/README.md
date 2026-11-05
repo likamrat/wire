@@ -11,7 +11,7 @@ Start with [installation](../README.md), then choose the task you need.
 | Work on the source or troubleshoot a local installation | [Development](development.md) |
 | Understand source approval, retention, deletion or recovery | [Collection and private data](collection.md) |
 
-To propose a fix or improvement, see [Contributing](../README.md#contributing).
+To propose a fix or improvement, see [Contributing](../CONTRIBUTING.md).
 
 ## Contributor references
 
