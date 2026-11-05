@@ -15,6 +15,8 @@ Missing, ambiguous or unsupported profile data keeps the neutral fallback.
 The sidebar shows the display name and avatar without a second handle line.
 Keep the handle in the opened account menu; use it as the sidebar fallback only
 when the source has no display name.
+Renew a still-current profile before its deadline without clearing or remounting
+the avatar. Failed reads, expired identity and access withdrawal still clear it.
 
 ## One coherent workspace
 

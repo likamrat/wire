@@ -6,13 +6,14 @@ export function createAccountProfile({ api, present, provider = "github", visibl
         throw new TypeError("Account profiles require the shared publication interface.");
     }
     let token = null, revision = 0, pending = null, again = false, timer, disposed = false, connection = null;
+    let currentUntil = 0;
     const synchronous = value => value !== null && value !== undefined && typeof value.then !== "function";
     function current(owner, version) {
         return !disposed && visible() && synchronous(owner) && token === owner && revision === version
             && api.isCurrent(owner) === true && !disposed && token === owner && revision === version;
     }
     function withdrawAccess() {
-        revision++; token = null; again = false; connection = null;
+        revision++; token = null; again = false; connection = null; currentUntil = 0;
         clearTimeout(timer);
     }
     function refresh() {
@@ -27,19 +28,25 @@ export function createAccountProfile({ api, present, provider = "github", visibl
         pending = request;
         request.promise = (async () => {
             try {
-                if (present({ phase: "loading", profile: null }, owner) !== true || !current(owner, version)) return false;
+                if (Date.now() >= currentUntil && present({ phase: "loading", profile: null }, owner) !== true
+                    || !current(owner, version)) return false;
                 const profile = await api("/api/profile/" + provider);
                 if (!current(owner, version)) return false;
                 if (present({ phase: "ready", profile }, owner) !== true || !current(owner, version)) return false;
+                currentUntil = provider === "github" && profile.identity?.state === "verified"
+                    ? Math.min(...[profile.identity.expiresAt, profile.avatar?.expiresAt].filter(Number.isFinite)) : 0;
                 if (profile.identity?.state === "verified" || Number.isFinite(profile.refreshAt)) {
                     const deadlines = [Date.now() + 15000, profile.refreshAt, profile.identity.expiresAt, profile.avatar?.expiresAt]
                         .filter(value => Number.isFinite(value));
                     const deadline = Math.min(...deadlines);
-                    if (deadline > Date.now()) timer = setTimeout(() => { void refresh(); }, deadline - Date.now());
+                    const remaining = deadline - Date.now();
+                    // Renew before presentation expiry; its hard clearing timers stay in force.
+                    const lead = provider === "github" && profile.identity?.state === "verified" ? Math.min(5000, remaining / 2) : 0;
+                    if (remaining > 0) timer = setTimeout(() => { void refresh(); }, remaining - lead);
                 }
                 return true;
             } catch {
-                if (current(owner, version)) present({ phase: "error", profile: null }, owner);
+                if (current(owner, version)) { currentUntil = 0; present({ phase: "error", profile: null }, owner); }
                 return false;
             } finally {
                 if (pending === request) pending = null;

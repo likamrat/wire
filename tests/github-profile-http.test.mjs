@@ -117,6 +117,38 @@ test("image tickets expire, are bounded per owner and cannot outlive owner autho
     routes.close();
 });
 
+test("authorized profile renewal preserves an unchanged image ticket without making it permanent", async () => {
+    let clock = 0, active = true, revision = "same-image";
+    const profile = {
+        read: async () => ({ avatar: { revision, state: "current" } }),
+        image: async () => ({ contentType: "image/png", bytes: png }),
+        assertImageCurrent() {},
+    };
+    const routes = createGitHubProfileRoutes(profile, { now: () => clock, ownerActive: () => active });
+    const first = await routes.read("panel");
+    const request = url => ({ method: "GET", url, headers: { "sec-fetch-site": "same-origin" } });
+    const response = { writeHead() {}, end() {} };
+    for (clock = 10000; clock <= 120000; clock += 10000) {
+        const renewed = await routes.read("panel");
+        assert.equal(renewed.avatar.url, first.avatar.url);
+        assert.equal(renewed.avatar.expiresAt, clock + 60000,
+            "An authorized unchanged-profile read renews the ticket, rather than remounting its image each minute.");
+        await routes.image(request(first.avatar.url), response);
+    }
+    clock = 180000;
+    await assert.rejects(routes.image(request(first.avatar.url), response), { status: 404 },
+        "Image requests alone never renew a ticket.");
+    const second = await routes.read("panel");
+    assert.notEqual(second.avatar.url, first.avatar.url);
+    revision = "replacement-image";
+    const replacement = await routes.read("panel");
+    assert.notEqual(replacement.avatar.url, second.avatar.url);
+    await assert.rejects(routes.image(request(second.avatar.url), response), { status: 404 });
+    active = false;
+    await assert.rejects(routes.image(request(replacement.avatar.url), response), { status: 404 });
+    routes.close();
+});
+
 test("owner expiry while image bytes are pending is rechecked before sending", async () => {
     let active = true, release;
     const profile = {

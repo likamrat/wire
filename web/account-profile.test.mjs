@@ -55,6 +55,59 @@ test("verified presentation revalidates by its shorter lease and stops while hid
     } finally { state.profile.dispose(); }
 });
 
+test("renewing a current GitHub profile does not publish an empty loading presentation", async t => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 100000 });
+    const state = fixture(), held = Promise.withResolvers();
+    state.read = () => ({ identity: { state: "verified", expiresAt: Date.now() + 15000 },
+        avatar: { expiresAt: Date.now() + 60000 } });
+    try {
+        await state.profile.receiveAccess();
+        state.read = () => held.promise;
+        const refreshing = state.profile.refresh();
+        assert.deepEqual(state.deliveries.map(value => value.github.phase), ["loading", "ready"],
+            "Same-owner renewal must leave the still-current profile on screen.");
+        held.resolve({ identity: { state: "verified", expiresAt: Date.now() + 15000 } });
+        await refreshing;
+        assert.deepEqual(state.deliveries.map(value => value.github.phase), ["loading", "ready", "ready"]);
+    } finally { held.resolve(null); state.profile.dispose(); }
+});
+
+test("GitHub profile renewal starts before the hard identity and image deadlines", async t => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 100000 });
+    const state = fixture();
+    state.read = () => ({ identity: { state: "verified", expiresAt: Date.now() + 15000 },
+        avatar: { expiresAt: Date.now() + 60000 } });
+    try {
+        await state.profile.receiveAccess();
+        t.mock.timers.tick(10000);
+        await state.profile.receiveAccess();
+        assert.equal(state.calls.length, 2, "Renew with five seconds left, not when the presentation must expire.");
+    } finally { state.profile.dispose(); }
+});
+
+test("failed, unavailable and expired renewals never retain the previous presentation", async t => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 100000 });
+    for (const outcome of ["error", "unavailable", "expired"]) {
+        const state = fixture();
+        state.read = () => ({ identity: { state: "verified", expiresAt: Date.now() + 15000 } });
+        try {
+            await state.profile.receiveAccess();
+            if (outcome === "error") state.read = () => { throw new Error("Private read failure"); };
+            else state.read = () => ({ identity: { state: "unavailable" } });
+            if (outcome === "expired") t.mock.timers.setTime(Date.now() + 15000);
+            await state.profile.refresh();
+            const latest = state.deliveries.at(-1).github;
+            assert.equal(latest.phase, outcome === "error" ? "error" : "ready");
+            assert.notEqual(latest.profile?.identity?.state, "verified");
+            if (outcome === "expired") assert.equal(state.deliveries.at(-2).github.phase, "loading");
+            const count = state.deliveries.length;
+            state.read = () => ({ identity: { state: "unavailable" } });
+            await state.profile.refresh();
+            assert.equal(state.deliveries[count].github.phase, "loading", "A retired profile is not reused by later refreshes.");
+        } finally { state.profile.dispose(); }
+    }
+});
+
 test("an unavailable app profile rechecks its bounded source deadline and recovers without a new access grant", async t => {
     t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 100000 });
     const state = fixture();

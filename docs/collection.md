@@ -75,6 +75,8 @@ selection and profile metadata, including `settings_json.avatarUrl`, leave the r
 tokens and history are not read by this projection. WIRE fetches supported
 GitHub-hosted images through its local image route, with an account-bound cache
 and short-lived tickets. It rechecks the profile within 15 seconds while visible.
+Successful same-profile reads renew the image ticket without replacing the image;
+image requests alone do not renew it.
 The display association neither grants access nor assigns ownership of history.
 
 Native metadata access uses the local read-only SQLite projection. For
