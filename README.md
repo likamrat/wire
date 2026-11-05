@@ -17,6 +17,22 @@ find patterns and failures, improve your agents and build better evaluation case
 Search runs on-device without AI or provider calls. Review report text before
 saving HTML, PDF, JSON or Markdown.
 
+## How WIRE fits
+
+WIRE reads recorded Work IQ activity from the **GitHub Copilot app** without
+rerunning its calls, then keeps local evidence for inspection and reviewed reports.
+
+<a href="docs/images/wire-evidence-flow.png">
+  <picture>
+    <source media="(max-width: 767px) and (prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-narrow-dark.png">
+    <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow.png">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-dark.png">
+    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved app history into its own local evidence store for Analyze, literal Search and reviewed reports." width="800">
+  </picture>
+</a>
+
+See [Architecture](docs/architecture.md) for the local runtime and storage boundaries.
+
 ## Start
 
 You need Node.js 24 or newer and access to this repository.
