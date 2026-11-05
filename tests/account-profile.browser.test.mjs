@@ -7,7 +7,7 @@ import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { createCopilotAccountBridge } from "../lib/copilot-account-snapshot.mjs";
 import { createMicrosoftSession, MicrosoftSessionError } from "../lib/microsoft-session.mjs";
-import { createFixtureRuntimeAccess, createNativeRuntimeAccess } from "../lib/runtime-access.mjs";
+import { createFixtureRuntimeAccess, createNativeRuntimeAccess, createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createNativePersistence } from "../lib/native-persistence.mjs";
 import { createMicrosoftNativeReadTransport } from "../lib/microsoft-native-transport.mjs";
 import { startServer } from "../lib/server.mjs";
@@ -33,12 +33,12 @@ function syntheticImage() {
         chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
 }
 const png = syntheticImage();
-async function setup(t, { qualified = true, sourceAware = false, connect, observedUPN } = {}) {
+async function setup(t, { qualified = true, sourceAware = false, copilotOnly = false, connect, observedUPN } = {}) {
     const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) });
     let lifecycle, persistence, access, bridge, runtime, browser;
     const errors = [], external = [], calls = [];
     t.after(async () => {
-        await browser?.close(); await runtime?.close(); bridge?.close(); access?.close(); persistence?.close(); await lifecycle?.close();
+        await browser?.close(); await runtime?.close(); bridge?.close(); await access?.close(); persistence?.close(); await lifecycle?.close();
         for (const work of cleanup.reverse()) await work();
         assert.deepEqual(errors, []); assert.deepEqual(external, []);
     });
@@ -54,11 +54,11 @@ async function setup(t, { qualified = true, sourceAware = false, connect, observ
         },
         async stop() { return { processExited: true, profileReleased: true }; },
     }) : undefined;
-    lifecycle = await createMicrosoftSession(context, { collection: { paused: true, windowDays: 30 },
+    lifecycle = copilotOnly ? null : await createMicrosoftSession(context, { collection: { paused: true, windowDays: 30 },
         ...(sourceAware ? { sourceAware: true, globalCollection: null, transport,
             persistCollectionSettings: (settings, token) => persistence.persistCollectionSettings(settings, token) } : {}) });
     persistence = sourceAware ? await createNativePersistence(context, { lifecycle, transport, preAccount: "metadata-only", configurationIntents: true }) : null;
-    access = sourceAware ? await createNativeRuntimeAccess(context, {
+    access = copilotOnly ? await createCopilotRuntimeAccess(context) : sourceAware ? await createNativeRuntimeAccess(context, {
         lifecycle, nativePersistence: persistence, sourceAware: true, nativeAcquisition: false, nativeConnection: Boolean(connect),
         async acquireNative() { assert.fail("Enrollment proof must not collect activity."); },
     }) : await createFixtureRuntimeAccess(context, { lifecycle });
@@ -87,7 +87,7 @@ async function setup(t, { qualified = true, sourceAware = false, connect, observ
     const origin = new URL(runtime.url).origin;
     const session = await fetch(origin + "/api/session", { method: "POST",
         headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" }, body: "{}" }).then(response => response.json());
-    await fetch(origin + "/api/access/command", { method: "POST",
+    if (!copilotOnly) await fetch(origin + "/api/access/command", { method: "POST",
         headers: { Origin: origin, "Content-Type": "application/json", "X-Board-Capability": session.capability },
         body: JSON.stringify({ schemaVersion: 1, action: "wire-sign-in", operationId: randomUUID(), generation: (await lifecycle.status()).generation }) });
     browser = await chromium.launch({ channel: process.platform === "win32" ? "msedge" : undefined });
@@ -101,10 +101,10 @@ async function setup(t, { qualified = true, sourceAware = false, connect, observ
         await page.route(url => url.origin !== origin, route => { external.push(route.request().url()); return route.abort(); });
         if (beforeNavigate) await beforeNavigate(page);
         await page.goto(runtime.url + "#settings?section=connection");
-        await expect(page.locator("#wireMicrosoftConnection")).toBeVisible();
+        await expect(page.locator(copilotOnly ? "#connectionSourceTitle" : "#wireMicrosoftConnection")).toBeVisible();
         return page;
     }
-    return { panel, host, calls, lifecycle, context, runtime };
+    return { panel, host, calls, lifecycle, access, context, runtime };
 }
 async function gate(page, label) {
     if (await page.locator("#wireAccountTrigger").getAttribute("aria-expanded") !== "true") await page.locator("#wireAccountTrigger").click();
@@ -138,7 +138,7 @@ test("the ordinary client delivers the qualified existing-host profile and withd
         while (walker.nextNode()) if (/Riley|synthetic-riley/.test(walker.currentNode.data)) profileNodes.push(walker.currentNode);
         window.profileImage = document.querySelector("#wireAccountTrigger img").getAttributeNode("src");
     });
-    await gate(first, "Sign out of WIRE");
+    await gate(first, "Sign out of this instance");
     await expect(second.locator("#message")).toContainText("signed out");
     await expect(second.locator("#wireAccountTrigger")).not.toContainText("Riley");
     await expect(second.locator("#wireAccountTrigger img")).toHaveCount(0);
@@ -156,10 +156,14 @@ test("the ordinary client delivers the qualified existing-host profile and withd
 });
 
 test("the ordinary account menu keeps a neutral fallback and action without a default tutorial", { timeout: 30000 }, async t => {
-    const app = await setup(t, { qualified: false }), page = await app.panel();
+    const app = await setup(t, { qualified: false, copilotOnly: true }), page = await app.panel();
     await page.locator("#wireAccountTrigger").click();
     await expect(page.locator("#wireAccountProfileMessage")).toBeHidden();
-    await expect(page.locator("#wireAccountMenu > p:visible")).toHaveCount(0);
+    await expect(page.locator("#wireAccountMenu > p:visible")).toHaveCount(1);
+    await expect(page.locator(".wire-account-identity")).toHaveText("Local WIRE access", { useInnerText: true });
+    await expect(page.locator("#wireAccountTrigger")).toContainText("This instance");
+    await expect(page.locator("#wireAccountGate")).toHaveAccessibleDescription(
+        "Stops collection and hides saved activity. Does not delete data or sign out of GitHub or Copilot.");
     await expect(page.locator("#wireAccountProfileRetry")).toBeHidden();
     await expect(page.locator("#wireAccountGate")).toBeEnabled();
     await expect(page.locator("#wireAccountTrigger [data-lucide-icon='user-round']")).toBeVisible();
@@ -167,8 +171,35 @@ test("the ordinary account menu keeps a neutral fallback and action without a de
     await capture(page, "ordinary-unbound-profile");
 });
 
+test("Copilot-only sign-out is instance-local and reentry restores retained access without a GitHub login", { timeout: 45000 }, async t => {
+    const app = await setup(t, { qualified: false, copilotOnly: true });
+    const independent = await setup(t, { qualified: false, copilotOnly: true });
+    const first = await app.panel(), second = await app.panel(), other = await independent.panel();
+    const before = await loadBoardState(app.context), otherBefore = await loadBoardState(independent.context);
+    await gate(first, "Sign out of this instance");
+    await expect(second.locator("#message")).toContainText("signed out");
+    await expect(other.locator("#workspace")).toBeVisible();
+    assert.equal((await app.access.status()).retained, false);
+    assert.equal((await independent.access.status()).retained, true);
+    await second.reload();
+    await expect(second.locator("#message")).toContainText("signed out");
+    await second.locator("#wireAccountTrigger").click();
+    await expect(second.locator("#wireAccountGateScope")).toBeHidden();
+    await expect(second.locator("#wireAccountGate")).toHaveText("Sign in to WIRE");
+    await gate(first, "Sign in to WIRE");
+    await expect(second.locator("#workspace")).toBeVisible();
+    assert.equal((await app.access.status()).retained, true);
+    assert.deepEqual(await loadBoardState(app.context), before);
+    assert.deepEqual(await loadBoardState(independent.context), otherBefore);
+    assert.equal(app.host.calls + independent.host.calls, 0);
+    assert.deepEqual([...app.host.publicCalls, ...independent.host.publicCalls], []);
+    assert.deepEqual(app.calls.filter(call => call.path === "/api/access/command").map(call => call.body.action),
+        ["wire-sign-out", "wire-sign-in"]);
+    assert.equal(independent.calls.some(call => call.path === "/api/access/command"), false);
+});
+
 test("actual account presentation handles profile failure, replacement identity and compact themed layouts", { timeout: 60000 }, async t => {
-    const app = await setup(t), page = await app.panel();
+    const app = await setup(t, { copilotOnly: true }), page = await app.panel();
     await expect(page.locator("#wireAccountTrigger")).toContainText("Riley Chen");
     await page.route("**/api/profile/github", route => route.fulfill({ status: 503, json: { error: "PRIVATE ERROR" } }));
     await page.evaluate(() => dispatchEvent(new Event("focus")));
@@ -201,16 +232,17 @@ test("actual account presentation handles profile failure, replacement identity 
         await capture(page, `ordinary-account-${theme}-collapsed`);
         await page.keyboard.press("Escape");
         await page.locator("#navigationCollapse").click();
-    }
-    for (const width of [768, 414, 390, 375, 320]) {
-        await page.setViewportSize({ width, height: 1000 });
-        if (width < 700) await page.locator("#navigationToggle").click();
-        await page.locator("#wireAccountTrigger").click();
-        await expect(page.locator("#wireAccountGate")).toBeFocused();
-        await capture(page, `ordinary-account-${width}`);
-        await page.keyboard.press("Escape");
-        await expect(page.locator("#wireAccountTrigger")).toBeFocused();
-        if (width < 700) await page.keyboard.press("Escape");
+        for (const width of [768, 390, 320]) {
+            await page.setViewportSize({ width, height: 1000 });
+            if (width < 700) await page.locator("#navigationToggle").click();
+            await page.locator("#wireAccountTrigger").click();
+            await expect(page.locator("#wireAccountGate")).toBeFocused();
+            await capture(page, `ordinary-account-${theme}-${width}`);
+            await page.keyboard.press("Escape");
+            await expect(page.locator("#wireAccountTrigger")).toBeFocused();
+            if (width < 700) await page.keyboard.press("Escape");
+        }
+        await page.setViewportSize({ width: 1440, height: 1000 });
     }
     await page.setViewportSize({ width: 390, height: 1000 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
@@ -461,7 +493,7 @@ test("enrollment pending, rejected reads and logout retire preparation without s
     await page.locator("#wireMicrosoftPrepare").click();
     await expect(page.locator("#wireMicrosoftPrepare")).toHaveText("Connecting...");
     await expect(page.locator("#wireMicrosoftPrepare")).toBeDisabled();
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await expect(page.locator("#wireMicrosoftConnection")).toBeHidden();
     held.resolve();
     await gate(page, "Sign in to WIRE");
@@ -499,7 +531,7 @@ test("the GitHub footer and Microsoft Settings identity stay distinct through Co
     await expect(second.locator("#settingsConnectionError")).toBeHidden();
     await second.locator("#wireAccountTrigger").click();
     await expect(second.locator("#wireAccountProfileMessage")).toBeHidden();
-    await expect(second.locator("#wireAccountMenu > p:visible")).toHaveCount(0);
+    await expect(second.locator("#wireAccountMenu > p:visible")).toHaveCount(1);
     await expect(second.locator("#wireAccountTrigger img")).toBeVisible();
     await capture(second, "distinct-github-and-microsoft-identities");
     await second.keyboard.press("Escape");
@@ -521,7 +553,7 @@ test("the GitHub footer and Microsoft Settings identity stay distinct through Co
         window.heldGitHubImage = document.querySelector("#wireAccountTrigger img").getAttributeNode("src");
         window.heldConnectionEmail = document.getElementById("wireMicrosoftAccount").firstChild;
     });
-    await gate(first, "Sign out of WIRE");
+    await gate(first, "Sign out of this instance");
     await expect(second.locator("#message")).toContainText("signed out");
     assert.equal(await second.evaluate(() => heldGitHubLogin.data), "");
     assert.equal(await second.evaluate(() => heldGitHubImage.value), "");
@@ -651,7 +683,7 @@ test("Microsoft presentation expiry clears its captured email without clearing t
     await expect(page.locator("#wireMicrosoftAccount")).toBeHidden();
     assert.equal(await heldEmail.evaluate(node => node.data), "");
     await expect(page.locator("#wireAccountTrigger")).toContainText("Riley Chen");
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     release.resolve();
     await expect(page.locator("#message")).toContainText("signed out");
     await expect(page.locator("#wireMicrosoftAccount")).toBeHidden();

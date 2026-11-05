@@ -169,7 +169,7 @@ test("the actual account button signs the real fixture gate in and out without M
     await (await gate(page, "Sign in to WIRE")).click();
     await expect.poll(async () => (await app.lifecycle.status()).wire).toBe("signed-in");
     await expect.poll(() => page.evaluate(() => gateApi.accessState().readable)).toBe(true);
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     const statusReads = app.calls.filter(call => call.path === "/api/access/status").length;
     const watches = app.calls.filter(call => call.path === "/api/access/watch").length;
     await page.waitForTimeout(2200);
@@ -179,7 +179,7 @@ test("the actual account button signs the real fixture gate in and out without M
     const state = await page.evaluate(() => gateApi("/api/state"));
     assert.ok(state);
     await page.evaluate(() => { window.beforeSignOutPublication = gateApi.publicationToken(); });
-    await (await gate(page, "Sign out of WIRE")).click();
+    await (await gate(page, "Sign out of this instance")).click();
     await expect.poll(async () => (await app.lifecycle.status()).wire).toBe("signed-out");
     await expect.poll(() => page.evaluate(() => gateApi.accessState().readable)).toBe(false);
     await assert.rejects(page.evaluate(() => gateApi("/api/state")), /unavailable|retired|revoked/i);
@@ -385,7 +385,7 @@ test("opt-in native Settings recovery is a separate advertised cleanup command, 
     await expect(control).toBeEnabled();
     await control.click();
     await expect(control).toHaveText("Reconnect Microsoft 365");
-    await (await gate(page, "Sign out of WIRE")).click();
+    await (await gate(page, "Sign out of this instance")).click();
     await (await gate(page, "Sign in to WIRE")).click();
     await expect.poll(() => page.evaluate(() => gateApi.accessState().readable)).toBe(true);
     await showConnectionFixture(page);
@@ -406,7 +406,7 @@ test("the real one-button gate remains keyboard operable in the native narrow na
     const signIn = await gate(page, "Sign in to WIRE");
     await signIn.focus(); await page.keyboard.press("Enter");
     await expect.poll(async () => (await app.lifecycle.status()).wire).toBe("signed-in");
-    const signOut = await gate(page, "Sign out of WIRE");
+    const signOut = await gate(page, "Sign out of this instance");
     await signOut.focus();
     if (process.env.WIRE_ACCOUNT_GATE_PROOF) {
         await mkdir(process.env.WIRE_ACCOUNT_GATE_PROOF, { recursive: true });
@@ -442,7 +442,7 @@ test("a lost sign-out response recovers only its real original receipt and dupli
     t.after(() => held.resolve());
     const app = await setup(t), page = await app.panel();
     await (await gate(page, "Sign in to WIRE")).click();
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await page.evaluate(() => { window.originalOwner = gateApi.controlToken(); });
     let original;
     await page.route("**/api/access/command", async route => {
@@ -490,7 +490,7 @@ test("owner replacement leaves the original action unknown and sends no receipt 
     t.after(() => held.resolve());
     const app = await setup(t), page = await app.panel();
     await (await gate(page, "Sign in to WIRE")).click();
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await page.evaluate(() => { window.originalOwner = gateApi.controlToken(); });
     await page.route("**/api/access/command", async route => {
         const response = await route.fetch();
@@ -519,7 +519,7 @@ test("an old Sign out click cannot turn into Sign in after another real panel ch
     t.after(() => held.resolve());
     const app = await setup(t), a = await app.panel(), b = await app.panel();
     await (await gate(a, "Sign in to WIRE")).click();
-    await gate(a, "Sign out of WIRE"); await gate(b, "Sign out of WIRE");
+    await gate(a, "Sign out of this instance"); await gate(b, "Sign out of this instance");
     await a.route("**/api/access/status", async route => {
         const response = await route.fetch();
         entered.resolve();
@@ -558,7 +558,7 @@ test("a malformed enforced status is not an unbound fallback and retry remains r
 test("missing or mismatched receipts stay unknown until the original real receipt is read", { timeout: 45000 }, async t => {
     const app = await setup(t), page = await app.panel();
     await (await gate(page, "Sign in to WIRE")).click();
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await page.route("**/api/access/command", async route => {
         await route.fetch();
         await route.abort("failed");
@@ -615,13 +615,13 @@ test("backend-projected actions stay authoritative and Pause leaves the private 
     assert.equal(app.calls.some(call => call.path === "/api/access/command"), false);
     await app.lifecycle.updateCollection({ paused: false, windowDays: 30 });
     await (await gate(page, "Sign in to WIRE")).click();
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await page.evaluate(() => { window.beforePause = gateApi.publicationToken(); window.ownerBeforePause = gateApi.controlToken(); });
     await app.lifecycle.updateCollection({ paused: true, windowDays: 30 });
     await expect.poll(() => page.evaluate(() => gateApi.accessState().state?.collection)).toBe("paused");
     assert.equal(await page.evaluate(() => gateApi.isCurrent(beforePause)), true);
     assert.equal(await page.evaluate(() => gateApi.isControlCurrent(ownerBeforePause)), true);
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     assert.equal(app.calls.filter(call => call.path === "/api/access/command").length, 1);
     assert.equal(await page.locator("#wireMicrosoftAction").isDisabled(), true);
 });
@@ -629,7 +629,7 @@ test("backend-projected actions stay authoritative and Pause leaves the private 
 test("a gesture begun on Sign out cannot activate Sign in after an external gate change", { timeout: 45000 }, async t => {
     const app = await setup(t), a = await app.panel(), b = await app.panel();
     await (await gate(a, "Sign in to WIRE")).click();
-    await gate(a, "Sign out of WIRE"); await gate(b, "Sign out of WIRE");
+    await gate(a, "Sign out of this instance"); await gate(b, "Sign out of this instance");
     const box = await a.locator("#wireAccountGate").boundingBox();
     await a.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await a.mouse.down();
@@ -677,13 +677,13 @@ test("missing or partial shared API rejects before any host or DOM mutation", as
 test("missing and stale profile tokens paint nothing and request no image under a current grant", async t => {
     const app = await setup(t), page = await app.panel();
     await (await gate(page, "Sign in to WIRE")).click();
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await page.evaluate(() => {
         window.staleProfileToken = gateApi.publicationToken();
         gateApi.suspendAccess(); gateApi.startAccess();
     });
     await expect.poll(() => page.evaluate(() => gateApi.publicationToken() !== null && !gateApi.isCurrent(staleProfileToken))).toBe(true);
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     const result = await page.evaluate(() => {
         const forbidden = { github: { phase: "ready", profile: {
             schemaVersion: 1, provider: "github", generation: "forbidden-old-result",

@@ -170,7 +170,7 @@ test("normal refresh preserves an actionable nonprivate shell through access che
     await other.goto(app.url + "#analyze");
     await expect(other.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     const retained = await app.retained();
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await expect(other.locator("#message")).toContainText("signed out");
     await privateContentAbsent(page); await privateContentAbsent(other);
     await capture("06-wire-signed-out");
@@ -316,7 +316,7 @@ test("real shared watch clears an idle Search query and held result text without
         for (let text = walker.nextNode(); text; text = walker.nextNode()) if (text.data.includes(query)) return text;
         throw new Error("The synthetic private Search result must exist before withdrawal.");
     }, query);
-    await gate(controller, "Sign out of WIRE");
+    await gate(controller, "Sign out of this instance");
     await expect(reader.locator("#message")).toBeVisible();
     await expect(reader.locator("#wireSearch")).toHaveValue("");
     await expect(reader.locator("#wireSearchResults button")).toHaveCount(0);
@@ -352,7 +352,7 @@ test("real shared watch clears an idle guide's exact rows and source notes befor
         document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode());
     assert.ok((await cell.evaluate(node => node.data)).length > 0);
     const before = app.calls.filter(call => call.page === reader && call.path === "/api/snapshot").length;
-    await gate(controller, "Sign out of WIRE");
+    await gate(controller, "Sign out of this instance");
     await expect(reader.locator("#message")).toBeVisible();
     await expect(reader.locator("#meaning")).toBeHidden();
     for (const id of ["countTable", "chartReferenceData", "chartReferenceQualification", "meaningMatched", "meaningSources", "meaningBody"]) {
@@ -391,7 +391,7 @@ for (const emptyB of [false, true]) test(`real shared watch preserves selected $
     assert.ok((await oldTarget.evaluate(attribute => attribute.value)).includes("test-earlier"));
     const canonical = reader.url();
     const before = app.calls.filter(call => call.page === reader && call.path === "/api/period-comparison").length;
-    await gate(controller, "Sign out of WIRE");
+    await gate(controller, "Sign out of this instance");
     await expect(reader.locator("#message")).toBeVisible();
     await expect(reader.locator("#periodComparisonResults")).toBeEmpty();
     assert.equal(await oldCaption.textContent(), "");
@@ -420,7 +420,7 @@ test("real shared watch erases idle Settings source drafts but preserves an unse
     await reader.locator("#sourceDatabase").fill(database);
     await reader.locator("#sourceSessions").fill(sessions);
     await selectActivityOption(reader, "collectionWindow", "90");
-    await gate(controller, "Sign out of WIRE");
+    await gate(controller, "Sign out of this instance");
     await expect(reader.locator("#message")).toBeVisible();
     await expect(reader.locator("#sourceDatabase")).toHaveValue("");
     await expect(reader.locator("#sourceSessions")).toHaveValue("");
@@ -474,7 +474,7 @@ test("a real private cross-tab handoff waits for recipient authority and cannot 
         await pendingWatch.promise;
         assert.equal(await source.evaluate(() => window.fixtureHandoffClaims), 0);
         assert.deepEqual(popupRequests.filter(path => !["/api/access/watch", "/api/access/status", "/api/session"].includes(path)), []);
-        await gate(controller, "Sign out of WIRE");
+        await gate(controller, "Sign out of this instance");
         await expect(source.locator("#message")).toBeVisible();
         deliverWatch.resolve();
         await expect(recipient.locator("#message")).toContainText("signed out");
@@ -628,7 +628,7 @@ test("real sign-out clears a private report draft while preserving unsent format
     await page.locator("#formatOptions input[value=json]").check();
     await page.locator("#additionalMasking > summary").click();
     await page.locator("#manualTerms").fill("PRIVATE_MASKING_TERM");
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await expect(page.locator("#message")).toBeVisible();
     await privateContentAbsent(page);
     assert.equal(await page.locator("#manualTerms").inputValue(), "");
@@ -710,7 +710,7 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
         const readsBefore = app.requests.filter(path => path === "/api/snapshot").length;
         assert.equal(await idle.evaluate(() => document.hidden), false);
         await expect(idle.locator("#requestContent")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
-        await gate(active, "Sign out of WIRE");
+        await gate(active, "Sign out of this instance");
         for (const panel of [active, idle]) {
             await expect(panel.locator("#message")).toBeVisible();
             await expect(panel.locator("#message")).toContainText("signed out");
@@ -762,7 +762,7 @@ test("real WIRE Sign out clears active and idle panels, preserves an original un
         await active.getByRole("button", { name: "Open saved report", exact: true }).click();
         await expect(active.locator("#savedReportReader iframe")).toBeVisible();
         const frozen = await active.locator("#savedReportReader iframe").elementHandle();
-        await gate(idle, "Sign out of WIRE");
+        await gate(idle, "Sign out of this instance");
         for (const panel of [active, idle]) {
             await expect(panel.locator("#message")).toBeVisible();
             await expect(panel.locator("#message")).toContainText("signed out");

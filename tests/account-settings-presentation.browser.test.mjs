@@ -73,7 +73,7 @@ async function setup(t, options = {}) {
 test("unqualified real-shell presentation is neutral and all account operations are unavailable", async t => {
     const { page } = await setup(t);
     await expect(page.locator("#wireAccountTrigger .wire-account-copy>span")).toHaveText("Account");
-    await expect(page.locator("#wireAccountTrigger")).toContainText("Signed in");
+    await expect(page.locator("#wireAccountTrigger")).toContainText("This instance");
     await expect(page.locator("#wireMicrosoftStatus")).toHaveText("Unavailable");
     await expect(page.locator("#wireMicrosoftAction")).toBeDisabled();
     await expect(page.locator("#connectionSourceTitle")).toHaveText("GitHub Copilot app");
@@ -158,7 +158,7 @@ test("GitHub loading, read failure and provider sign-out never become WIRE sign-
     profile.fallback = { kind: "neutral", text: null, source: "unavailable" };
     await receive(page, snapshot);
     await page.locator("#wireAccountTrigger").click();
-    await expect(page.locator("#wireAccountGate")).toHaveText("Sign out of WIRE");
+    await expect(page.locator("#wireAccountGate")).toHaveText("Sign out of this instance");
     await expect(page.locator("#wireAccountTrigger")).not.toContainText("riley");
     await expect(page.locator("#workspace")).toBeVisible();
     snapshot.lifecycle.wire = "signed-out";

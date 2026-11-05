@@ -5,8 +5,10 @@ choose evidence for a report. Design around those reading and decision tasks,
 not around the implementation's status objects.
 
 The supported source is local GitHub Copilot app history. Settings should expose
-only supported connections. Account keeps the local WIRE sign-in/out action
-and stays neutral without a qualified desktop-selected GitHub profile.
+only supported connections. Account keeps the local WIRE sign-in/out action.
+Sign-out names this instance and explains that collection stops and saved
+activity is hidden, not deleted; GitHub and Copilot sign-ins are unchanged.
+The profile stays neutral without a qualified desktop-selected GitHub identity.
 
 ## One coherent workspace
 

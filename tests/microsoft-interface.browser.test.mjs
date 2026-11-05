@@ -197,7 +197,7 @@ test("Microsoft records use the existing source, widget, reader, Search and acco
     const messageHandle = await idle.locator(".reader-native-message").first().evaluateHandle(node => ({
         id: node.getAttributeNode("id"), text: node.querySelector(".reader-message-text").firstChild,
     }));
-    await gate(page, "Sign out of WIRE");
+    await gate(page, "Sign out of this instance");
     await expect(idle.locator("#workspace")).toBeHidden();
     await expect(page.locator("#workspace")).toBeHidden();
     assert.equal(await textHandle.evaluate(node => node.data), "");

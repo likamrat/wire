@@ -19,7 +19,7 @@ provider. Microsoft 365 Chat and Cowork are not supported sources.
 | Save Copilot replies locally | Separate permission for bounded, screened assistant text from the same approved source. |
 | Review deletion | Previews an exact retained-activity scope; a separate confirmation deletes it. |
 | Read history again | Separately previews and confirms rereading selected approved chats/dates, including an independent original-prompt restoration choice. |
-| Sign out of WIRE | Stops collection and hides private retained content without deleting it or signing other apps out. |
+| Sign out of this instance | Stops collection and hides private retained content across this instance's tabs, without deleting it or signing out of GitHub, Copilot or other independent WIRE instances. |
 
 View dates, Search, opening an interaction, report selection and report
 disclosure do not grant collection or reply-saving permission.

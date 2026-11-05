@@ -313,7 +313,7 @@ test("fresh Copilot-only ordinary app preserves Settings category navigation and
         await page.setViewportSize({ width: 1440, height: 1000 });
         const categoryLink = await page.locator("#settingsCategoryNav [data-category=privacy]").elementHandle();
         await page.locator("#wireAccountTrigger").click();
-        await expect(page.locator("#wireAccountGate")).toHaveText("Sign out of WIRE");
+        await expect(page.locator("#wireAccountGate")).toHaveText("Sign out of this instance");
         await page.locator("#wireAccountGate").click();
         await expect(page.locator("#accessShell")).toBeVisible();
         await expect(page.locator("#workspace")).toBeHidden();

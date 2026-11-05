@@ -72,16 +72,18 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
     profileMessage.id = "wireAccountProfileMessage"; profileMessage.hidden = true;
     const profileRetry = typeof refreshProfile === "function" ? button("wireAccountProfileRetry", "Read profile again") : null;
     if (profileRetry) { profileRetry.className = "wire-account-action"; profileRetry.setAttribute("role", "menuitem"); profileRetry.hidden = true; }
-    const gate = button("wireAccountGate", "Sign out of WIRE");
+    const gate = button("wireAccountGate", "Sign out of this instance");
     gate.className = "wire-account-action";
     gate.setAttribute("role", "menuitem"); gate.disabled = true;
+    const gateScope = node("p", "wire-connection-effect");
+    gateScope.id = "wireAccountGateScope";
     const gateMessage = node("p", "wire-account-error");
     gateMessage.id = "wireAccountGateMessage"; gateMessage.hidden = true;
     gateMessage.setAttribute("role", "status"); gateMessage.setAttribute("aria-live", "polite");
     gateMessage.setAttribute("aria-atomic", "true");
     menu.append(identity, profileMessage);
     if (profileRetry) menu.append(profileRetry);
-    menu.append(gate, gateMessage);
+    menu.append(gate, gateScope, gateMessage);
     document.body.append(menu);
 
     const section = node("section", "settings-group wire-microsoft-connection");
@@ -217,22 +219,23 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         const imageChanged = nextImageKey !== imageKey;
         if (imageChanged) { retireImages(); imageKey = nextImageKey; }
         const revision = imageRevision;
-        let name = "WIRE account", detail = hasControlStatus ? "Signed in" : "Checking access";
+        let name = "Local WIRE access", detail = hasControlStatus ? "This instance" : "Checking access";
         let fallback = "";
         if (verified) {
             name = profile.displayName.value || profile.identity.login;
             detail = "@" + profile.identity.login;
             fallback = profile.fallback.kind === "initials" ? profile.fallback.text : "";
         } else if (wireHidden) {
-            name = "WIRE account";
+            name = "Local WIRE access";
             detail = "Signed out";
         } else if (github.phase === "loading") {
             detail = "Checking profile";
         }
         setText(triggerName, verified ? name : "Account"); setText(menuName, name);
         setText(triggerDetail, detail); setText(menuDetail, detail);
+        menuDetail.hidden = !verified && detail === "This instance";
         const needsRead = github.phase === "error" || verified === false && profile?.identity.reason === "account-snapshot-expired";
-        const profileHelp = !wireHidden && needsRead ? "Account details could not be read." : "";
+        const profileHelp = !wireHidden && needsRead ? "GitHub profile could not be read." : "";
         setText(profileMessage, profileHelp); profileMessage.hidden = !profileHelp;
         if (profileRetry) {
             profileRetry.hidden = wireHidden || !needsRead;
@@ -358,7 +361,7 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         if (disposed) return;
         const presentation = presentationRevision, view = accessView, value = controlStatus, operation = pendingGate;
         const available = view?.mode === "enforced";
-        let text = value?.wire === "signed-out" ? "Sign in to WIRE" : "Sign out of WIRE";
+        let text = value?.wire === "signed-out" ? "Sign in to WIRE" : "Sign out of this instance";
         let disabled = true, feedback = gateError;
         if (operation) {
             const word = operation.action === "wire-sign-in" ? "sign-in" : "sign-out";
@@ -383,6 +386,11 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         connectionSlot.hidden = copilotOnly || !available || !view.readable
             && !(view.reason === "generation-changed" && view.state?.wire === "signed-in");
         gate.textContent = text; gate.disabled = disabled;
+        gateScope.hidden = value?.wire === "signed-out";
+        gateScope.textContent = gateScope.hidden ? ""
+            : "Stops collection and hides saved activity. Does not delete data or sign out of GitHub or Copilot.";
+        if (gateScope.hidden) gate.removeAttribute("aria-describedby");
+        else gate.setAttribute("aria-describedby", gateScope.id);
         gateMessage.textContent = feedback; gateMessage.hidden = !feedback;
         if (menu.matches(":popover-open")) position();
         paintNativeConnection();
