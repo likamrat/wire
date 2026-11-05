@@ -2,17 +2,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import path from "node:path";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
+import { readSourceMetadata } from "../lib/source-reader.mjs";
 import { createProfileSource, profilePNG } from "./source-profile-fixture.mjs";
 import { privateFixture, chooseTheme } from "./helpers.mjs";
 
-for (const expires of [false, true]) test(expires
+for (const scenario of ["current", "expired", ...(process.platform === "win32" ? ["metadata-churn"] : [])]) test(scenario === "expired"
     ? "a delayed automatic renewal still clears the avatar and name at their hard deadline"
-    : "automatic profile renewal keeps the loaded avatar visible and mounted", { timeout: 30000 }, async t => {
+    : scenario === "metadata-churn" ? "automatic renewal stays visible through unrelated source-native metadata churn"
+        : "automatic profile renewal keeps the loaded avatar visible and mounted", { timeout: 30000 }, async t => {
+    const expires = scenario === "expired";
     const cleanups = [], { root, context } = await privateFixture({ after: work => cleanups.push(work) });
     const source = await createProfileSource(root), errors = [];
     let access, runtime, browser;
@@ -24,8 +30,21 @@ for (const expires of [false, true]) test(expires
         assert.deepEqual(errors, []);
     });
     access = await createCopilotRuntimeAccess(context);
+    let sourceReads = 0;
+    const execute = promisify(execFile), helper = fileURLToPath(new URL("../scripts/read-copilot-metadata.mjs", import.meta.url));
+    if (scenario === "metadata-churn") source.db.exec("PRAGMA journal_mode=WAL; UPDATE projects SET name='Initial WAL state'");
+    const readAppProfile = () => readSourceMetadata({
+        databaseFile: () => source.appDbPath, windowsDatabase: source.appDbPath, assertCurrent() {},
+    }, { profileOnly: true, run: async (command, args, options) => {
+        if (command === "wslpath") return { stdout: helper + "\n" };
+        assert.equal(command, "node.exe");
+        const result = await execute(process.execPath, args, options);
+        source.db.prepare("UPDATE projects SET name=?").run("Unrelated metadata update " + ++sourceReads);
+        return result;
+    } });
     runtime = await startServer(context, createExportController(context), { port: 0, access, collector: { timers: false },
-        githubProfile: { fetch: async () => new Response(profilePNG, { headers: { "content-type": "image/png" } }) } });
+        githubProfile: { ...(scenario === "metadata-churn" ? { readAppProfile } : {}),
+            fetch: async () => new Response(profilePNG, { headers: { "content-type": "image/png" } }) } });
     const origin = new URL(runtime.url).origin;
     const session = await fetch(origin + "/api/session", { method: "POST",
         headers: { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" }, body: "{}" }).then(response => response.json());
@@ -85,6 +104,7 @@ for (const expires of [false, true]) test(expires
         sameMenuImage: document.querySelector("#wireAccountMenu img") === originalMenuAvatar,
         removals: avatarRemovals, sourceChanges: avatarSourceChanges, blankFrames: profileBlankFrames,
     })), { sameImage: true, sameMenuImage: true, removals: 0, sourceChanges: 0, blankFrames: 0 });
+    if (scenario === "metadata-churn") assert.ok(sourceReads >= 8, "Actual helper responses were followed by unrelated committed writes.");
 });
 
 test("ordinary approved-source profile inherits workspace/default avatars and clears changes across local logout", { timeout: 60000 }, async t => {

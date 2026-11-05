@@ -77,6 +77,10 @@ GitHub-hosted images through its local image route, with an account-bound cache
 and short-lived tickets. It rechecks the profile within 15 seconds while visible.
 Successful same-profile reads renew the image ticket without replacing the image;
 image requests alone do not renew it.
+If unrelated metadata changes during a profile read, WIRE makes one fresh
+read-only check of the selected profile. It accepts matching profile facts from
+the same database, not an old cached identity; changed or unreadable results
+remain unavailable. History collection keeps its whole-metadata change checks.
 The display association neither grants access nor assigns ownership of history.
 
 Native metadata access uses the local read-only SQLite projection. For

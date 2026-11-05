@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { readSourceProfileProjection, unavailableSourceProfile } from "../lib/source-profile.mjs";
 import { readSourceMetadata } from "../lib/source-reader.mjs";
@@ -15,6 +19,115 @@ async function fixture(t) {
     t.after(async () => { source.db.close(); for (const cleanup of cleanups.reverse()) await cleanup(); });
     return { ...source, root, context };
 }
+
+test("unrelated metadata churn after the actual Windows helper does not withdraw an unchanged profile", {
+    skip: process.platform !== "win32",
+}, async t => {
+    const app = await fixture(t), execute = promisify(execFile), failures = [];
+    app.db.exec("PRAGMA journal_mode=WAL; UPDATE projects SET name='Initial WAL state'");
+    const helper = fileURLToPath(new URL("../scripts/read-copilot-metadata.mjs", import.meta.url));
+    const files = { databaseFile: () => app.appDbPath, windowsDatabase: app.appDbPath, assertCurrent() {} };
+    let churn = false, writes = 0;
+    const run = async (command, args, options) => {
+        if (command === "wslpath") return { stdout: helper + "\n" };
+        assert.equal(command, "node.exe");
+        const result = await execute(process.execPath, args, options);
+        if (churn) app.db.prepare("UPDATE projects SET name=?").run("Unrelated metadata update " + ++writes);
+        return result;
+    };
+    const profile = createGitHubProfile(app.context, {
+        readAppProfile: async () => {
+            const started = Date.now();
+            try { return await readSourceMetadata(files, { profileOnly: true, run }); }
+            catch (error) {
+                failures.push({ code: error.code, sourceChange: error.sourceChange, elapsedMs: Date.now() - started });
+                throw error;
+            }
+        },
+        fetch: async () => new Response(profilePNG, { headers: { "content-type": "image/png" } }),
+    });
+    t.after(() => profile.close());
+    const initial = await profile.read();
+    assert.equal(initial.identity.state, "verified", JSON.stringify({ failures, reason: initial.identity.reason }));
+    churn = true;
+    const renewed = await profile.read();
+    assert.equal(renewed.identity.state, "verified", JSON.stringify({ failures, reason: renewed.identity.reason }));
+    assert.equal(renewed.identity.generation, initial.identity.generation);
+    assert.equal(renewed.avatar.revision, initial.avatar.revision);
+    assert.equal(writes, 4, "Each of the two identity reads uses at most one profile recheck, even with churn after every helper.");
+});
+
+for (const changesProfile of [false, true]) test(`native profile transaction distinguishes ${changesProfile ? "selected-profile" : "unrelated"} writes during SQL`, async t => {
+    const app = await fixture(t);
+    app.db.exec("PRAGMA journal_mode=WAL; UPDATE projects SET name='Initial WAL state'");
+    const files = { databaseFile: () => app.appDbPath, windowsDatabase: null, assertCurrent() {} };
+    const prepare = DatabaseSync.prototype.prepare;
+    let projections = 0;
+    t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+        const statement = prepare.call(this, sql);
+        if (sql.startsWith("SELECT id,login,name,host,")) {
+            const get = statement.get.bind(statement);
+            statement.get = (...args) => {
+                const row = get(...args);
+                projections++;
+                if (changesProfile) app.db.prepare("UPDATE accounts SET name=? WHERE id='workspace'").run("Changed name " + projections);
+                else app.db.prepare("UPDATE projects SET name=?").run("Unrelated name " + projections);
+                return row;
+            };
+        }
+        return statement;
+    });
+    if (changesProfile) await assert.rejects(readSourceMetadata(files, { profileOnly: true }),
+        { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "profile-read" });
+    else {
+        const result = await readSourceMetadata(files, { profileOnly: true });
+        assert.equal(result.account.name, "Morgan Rivera");
+    }
+    assert.equal(projections, 2, "Revalidation is bounded to one fresh transaction, not a read-until-quiet loop.");
+});
+
+test("profile revalidation rejects removed accounts, unreadable verification and changed source access", async t => {
+    const app = await fixture(t);
+    const files = { databaseFile: () => app.appDbPath, windowsDatabase: "C:\\synthetic\\data.db", assertCurrent() {} };
+    const reply = () => ({ stdout: JSON.stringify({ schemaVersion: SOURCE_METADATA_READER_VERSION, platform: "win32",
+        projection: readSourceProfileProjection(app.appDbPath), readVersion: metadataReadVersion(app.appDbPath) }) });
+    for (const kind of ["unavailable", "removed-account", "source-access"]) {
+        let calls = 0, current = true;
+        files.assertCurrent = () => { if (!current) throw Object.assign(new Error("Source access changed"), { code: "source_store_foreign" }); };
+        await assert.rejects(readSourceMetadata(files, { profileOnly: true, run: async command => {
+            if (command === "wslpath") return { stdout: "C:\\synthetic\\read-copilot-metadata.mjs\n" };
+            calls++;
+            if (calls === 2 && kind === "unavailable") throw Object.assign(new Error("Reader timed out"), { killed: true });
+            const result = reply();
+            if (calls === 1) {
+                app.db.prepare("UPDATE projects SET name=?").run("Churn for " + kind);
+                if (kind === "removed-account") app.db.exec("DELETE FROM accounts WHERE id='workspace'");
+                if (kind === "source-access") current = false;
+            }
+            return result;
+        } }), { code: kind === "unavailable" ? "source_reader_unavailable"
+            : kind === "source-access" ? "source_store_foreign" : "COLLECTION_SOURCE_CHANGED" });
+        assert.ok(calls <= 2);
+    }
+});
+
+test("matching profile facts cannot conceal a source database replacement between reads", async t => {
+    const app = await fixture(t), replacement = await fixture(t);
+    let file = app.appDbPath, checks = 0, calls = 0;
+    const files = {
+        databaseFile: () => file, windowsDatabase: "C:\\synthetic\\data.db",
+        assertCurrent() { if (++checks === 3) file = replacement.appDbPath; },
+    };
+    await assert.rejects(readSourceMetadata(files, { profileOnly: true, run: async command => {
+        if (command === "wslpath") return { stdout: "C:\\synthetic\\read-copilot-metadata.mjs\n" };
+        calls++;
+        const result = { stdout: JSON.stringify({ schemaVersion: SOURCE_METADATA_READER_VERSION, platform: "win32",
+            projection: readSourceProfileProjection(file), readVersion: metadataReadVersion(file) }) };
+        if (calls === 1) app.db.exec("UPDATE projects SET name='Unrelated churn'");
+        return result;
+    } }), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "profile-read" });
+    assert.equal(calls, 2);
+});
 
 test("desktop profile selection follows the recorded workspace, then GitHub default, then creation order", async t => {
     const app = await fixture(t);
@@ -124,6 +237,8 @@ test("app cached avatar bypasses public user lookup, preserves managed login and
 
 test("source failures, cache restart, source changes during fetch and untrusted avatar URLs remain fenced", async t => {
     const app = await fixture(t);
+    const diagnostics = [];
+    t.mock.method(console, "warn", (...args) => diagnostics.push(args));
     const source = () => readSourceProfileProjection(app.appDbPath);
     const initial = createGitHubProfile(app.context, { readAppProfile: source,
         fetch: async () => new Response(profilePNG, { headers: { "content-type": "image/png" } }) });
@@ -138,6 +253,10 @@ test("source failures, cache restart, source changes during fetch and untrusted 
     assert.deepEqual(unavailable.issues, ["app-profile-read-failed"]);
     assert.ok(unavailable.refreshAt > Date.now());
     assert.doesNotMatch(JSON.stringify(unavailable), /PRIVATE SOURCE/);
+    assert.equal(diagnostics[0][0], "[workiq-profile] source read failed");
+    assert.equal(diagnostics[0][1].code, "source_metadata_unavailable");
+    assert.ok(diagnostics[0][1].elapsedMs >= 0);
+    assert.doesNotMatch(JSON.stringify(diagnostics), /PRIVATE SOURCE|synthetic|avatars|access_token/);
     await invalid.close();
     app.db.exec(`UPDATE accounts SET settings_json='{"avatarUrl":"https://untrusted.example/avatar.png"}' WHERE id='workspace'`);
     const unsafe = createGitHubProfile(app.context, { readAppProfile: source, fetch: () => assert.fail("Untrusted avatar URL must not be fetched.") });

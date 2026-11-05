@@ -15,8 +15,6 @@ try {
     let snapshot;
     if (profileOnly) {
         const readVersion = metadataReadVersion(file), projection = readSourceProfileProjection(file);
-        if (metadataReadVersion(file) !== readVersion) throw Object.assign(new Error("App profile changed during its read."),
-            { code: "COLLECTION_SOURCE_CHANGED", status: 409 });
         snapshot = { projection, readVersion };
     } else snapshot = readMetadataSnapshot(file);
     const output = JSON.stringify({ schemaVersion: SOURCE_METADATA_READER_VERSION, platform: process.platform, ...snapshot });
