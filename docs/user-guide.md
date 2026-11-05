@@ -3,7 +3,8 @@
 Use WIRE to inspect recorded Work IQ activity, find saved text and prepare
 reports from your local GitHub Copilot app history.
 
-Follow [setup](../README.md#start) first.
+Follow [setup](../README.md#start) first. For WSL or a second instance beside
+Windows, see [platform setup](development.md#windows-wsl-and-linux).
 
 ## Connect local history
 
@@ -14,6 +15,11 @@ Follow [setup](../README.md#start) first.
    **Approve source and start collection**.
 4. Open **Analyze** to read the collected activity. If expected calls are missing,
    open **Collection status** in Settings to see known history gaps.
+
+Repeat source approval in each independent instance. They keep separate
+collection progress, settings, consent and saved reports. Collection can be on
+while older history is still catching up; **Collection status** shows pending,
+blocked, missing or bounded history rather than guaranteeing complete coverage.
 
 Approval lets WIRE read that local history; it does not rerun prompts or make
 new Work IQ requests. Microsoft 365 Chat and Cowork are not supported connections

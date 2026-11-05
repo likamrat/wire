@@ -46,7 +46,8 @@ npm start
 
 WIRE runs locally on **port 4000 by default**. Open
 [http://127.0.0.1:4000/](http://127.0.0.1:4000/) and keep the terminal running.
-You can [choose a different port](docs/development.md#changing-the-local-port).
+For another port or a separate Windows/WSL instance, see
+[platform setup](docs/development.md#windows-wsl-and-linux).
 
 In **Settings > Connection & updates**, choose **Review source & connect**.
 Check the local Copilot paths and history window, then approve collection.
@@ -57,9 +58,9 @@ Collected activity and saved reports stay in a per-user folder outside the
 repository. See [data locations](docs/collection.md#store-ownership) for
 Windows, Linux, macOS and WSL defaults and how to choose another folder.
 Independent instances can read the same approved Copilot source using distinct
-data folders and ports; each store has one writer. Settings and saved reports
-are not synchronized. Saving Copilot replies needs separate
-approval; review report copies before sharing because local masking can miss
+data folders and ports; each store has one writer and its own source approval,
+collection progress and saved reports. Saving Copilot replies needs separate
+approval. Review report copies before sharing because local masking can miss
 confidential information.
 
 ## Comparisons and reports

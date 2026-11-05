@@ -39,15 +39,17 @@ Windows profile. These are storage defaults, not a guarantee that Copilot
 history is available in that environment; source paths still need review and approval.
 
 Set `WORKIQ_EVIDENCE_DATA_DIR` to an absolute path outside the source directory
-to choose another folder. The store is independent of a conversation or checkout;
-a second checkout can use the same store. Only one runtime may write it, even
-on a different port.
+to choose another folder. A store has one writer, regardless of its port or
+checkout. On the same host, a replacement checkout can use that store after
+its current runtime has stopped.
 
-For simultaneous instances, choose distinct data directories and reachable
-ports. They may independently approve the same Copilot input, but their cached
-activity, settings, consent and saved reports remain separate. Existing cursors
-are not adopted across hosts; no store copying or report synchronization is
-performed.
+Concurrent instances need distinct data directories and reachable ports.
+They may each approve the same Copilot input, but cached activity, cursors,
+settings, source approval, reply consent and saved reports are instance-owned.
+An independent instance reads history using its own window and progress; it
+does not borrow another instance's cursor or consent, or synchronize reports.
+Windows and WSL can run together without moving the Windows store. For a
+concrete launch example, see [platform setup](development.md#windows-wsl-and-linux).
 
 Content-addressed evidence snapshots are separate from atomic state
 metadata. A process lock rejects a live writer; an unverified owner is not
@@ -57,33 +59,32 @@ fail explicitly, not be stripped, reset or bypassed with empty data.
 
 ## Source mapping and bounded reads
 
-The suggested source comes from `COPILOT_HOME`, otherwise the documented
-`.copilot` home: `data.db` and `session-state`. WIRE checks those named paths,
-not repositories, credentials or arbitrary home-directory contents. Approval
-and schema validation precede history reads.
+The suggested source comes from `COPILOT_HOME`, otherwise `.copilot` in the
+home directory of the user running WIRE: `data.db` and `session-state`.
+In WSL, these defaults do not automatically locate a Windows user's source.
+Choose the actual paths in source review; WSL can qualify Windows drive paths
+or their mounted equivalents. WIRE checks those named paths, not arbitrary
+home-directory contents. Approval and schema validation precede history reads.
 
-Native source access uses the local read-only SQLite projection. When WSL reads
-a Windows-owned source, Linux cannot safely open the live Windows WAL shared
-memory. WIRE instead runs that same fixed metadata projection in a short-lived
-Windows Node 24+ process through existing WSL interop (`node.exe`). This is a
-source-native subprocess, not another WIRE instance or a persistent service.
-It accepts only the approved database path, returns bounded metadata and exits.
-The returned version brackets the SQL read itself, not helper startup. WSL
-checks that version against the current database/WAL size and exact modification
-times before binding its local publication stamp; a replaced database or a
-change during or after the read still refuses.
-History files are still read through qualified filesystem paths. An unavailable
-reader, changed metadata or unsupported mapping refuses without copying the
-database, bypassing SQLite locks or replacing last good evidence.
+Native metadata access uses the local read-only SQLite projection. For
+Windows-owned live metadata, WSL runs that same projection through an existing
+Windows Node 24+ executable (`node.exe`) using WSL interop. This bounded,
+short-lived helper avoids opening Windows WAL shared memory from Linux. It
+accepts only the approved database path, returns metadata and exits; it is
+not a second WIRE server, daemon or database copy.
 
-During publication, unrelated metadata changes are re-read through the same
-bounded projection. Publication continues only if the selected sources retain
-their eligibility, membership and provenance. Source-file changes, authority
-expiry and conflicting store changes still refuse; an interrupted write is
-not relabeled as success.
-A metadata change caught in the final pre-write validation can trigger one
-fresh membership check before the same rename. No write is repeated, and a
-second freshness change still refuses.
+The source reader preserves these checks:
+
+- The helper's version covers the actual SQL read. WSL checks database identity,
+  database/WAL sizes and exact modification times before accepting it.
+- History files use qualified filesystem paths. Unavailable readers or
+  unsupported mappings refuse without bypassing locks or replacing saved evidence.
+- Metadata changes during publication require a fresh bounded projection and
+  unchanged selected-source eligibility, membership and provenance. Source-file,
+  authority or store conflicts still refuse.
+- Final pre-write validation allows one fresh membership check before the
+  same rename. A second freshness change refuses; no write is repeated or
+  interrupted write relabeled as success.
 
 The current adapter checks the consumed ordinary `sessions`, `workspaces` and
 `projects` mapping, required text/null values and sole `id` primary keys.
@@ -125,6 +126,8 @@ unknown result without adding a call; rotation/truncation cannot erase
 retained evidence. The bounded-history index barrier preserves committed
 progress. Source-reader instances use schema 3 to bind the store to its host
 and make older readers refuse rather than ignore that ownership.
+Use a compatible reader when restarting an existing store; do not remove its
+owner binding or writer lock to make an older or different-host reader accept it.
 Within the same approved WSL store/source, a Windows-drive remount may change
 only the virtual device number. The reader preserves the saved identity when
 the qualified Windows path, inode, birth time, startup event and saved anchors

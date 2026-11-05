@@ -6,7 +6,9 @@ on the source, checking a change and troubleshooting a local installation.
 
 ## Run locally
 
-Use Node.js 24 or newer.
+Use Node.js 24 or newer in the environment that will run WIRE. On WSL or Linux,
+use native Linux Node and install dependencies there; do not reuse a Windows
+`node_modules` directory.
 
 ```text
 npm ci
@@ -20,22 +22,38 @@ To update an existing checkout, stop its WIRE process, pull the changes, run
 `npm ci` and restart. If the port is already in use, check whether WIRE is
 already running rather than stopping an unfamiliar process.
 
-## Keep development data separate
+## Windows, WSL and Linux
 
-All checkouts default to the same per-user store. A disposable fixture must
-provide an explicit owned data directory outside source, disable collection
-timers and use invented source paths. Never point a fixture at the normal store,
-an existing browser profile or original history.
+Starting the server and accessing Copilot history are separate requirements:
 
-Browser tests set up temporary stores through
-[`tests/helpers.mjs`](../tests/helpers.mjs) and close their own resources.
-Reuse that pattern for tests and image capture.
+| Source location | What collection needs |
+| --- | --- |
+| Supported local metadata on the same OS as WIRE | Read access to the approved metadata database and history folder; WIRE opens SQLite read-only |
+| Windows-owned live metadata read from WSL | Readable Windows source paths and an existing Windows Node 24+ available as `node.exe` through WSL interop, in addition to Linux Node running WIRE |
 
-Windows and WSL have separate default stores. Concurrent instances use distinct
-data directories and reachable ports, even when they read the same approved
-Copilot source. A store's existing cursors belong to its host; a different host
-must not adopt them or remove its writer lock. There is no automatic data move,
-report synchronization or shared writable store.
+For the WSL case, WIRE runs the same bounded metadata reader in a short-lived
+Windows helper. It is not another WIRE server or daemon and does not copy the
+database. See [source access](collection.md#source-mapping-and-bounded-reads).
+Installing Node or running WIRE on an OS does not by itself make a supported
+Copilot source available.
+
+If Windows WIRE is already on port 4000, run a second instance from a separate
+WSL checkout. Run `npm ci` there, then choose a separate data folder and unused port:
+
+```sh
+WORKIQ_EVIDENCE_DATA_DIR="$HOME/.local/share/wire-wsl/data" npm start -- --port 4001
+```
+
+Port **4001 is an explicit example**, not a WSL default. Open the printed URL
+in a browser that can reach the WSL listener; access from a Windows browser
+depends on WSL localhost forwarding. The Windows instance can keep running:
+there is no need to move its store or stop it to start an independent WSL instance.
+
+Each instance needs its own source approval and optional reply-saving consent.
+Its cached activity, collection cursors, settings and reports remain separate,
+even when both instances read the same approved source. Use the
+[data-location rules](collection.md#store-ownership) to select other folders;
+do not point WSL at the Windows instance's writable store.
 
 ## Changing the local port
 
@@ -54,6 +72,17 @@ operations in the current tab. Browser preferences, drafts and recovery markers
 belong to that address and do not transfer. Never repeat an uncertain operation
 at a new address.
 
+## Keep development data separate
+
+A disposable fixture needs an explicit owned data directory outside source,
+disabled collection timers and invented source paths. Never point it at a
+normal store, existing browser profile or original history.
+
+Browser tests set up temporary stores through
+[`tests/helpers.mjs`](../tests/helpers.mjs) and close their own resources.
+Reuse that pattern for tests and image capture. A different port alone does
+not create a separate store.
+
 ## Check a change
 
 Run the syntax check and the tests for the behavior you changed. For example,
@@ -69,15 +98,13 @@ input contracts. Use `npm test` for the default suite when a change needs
 broader coverage. In your pull request, describe the scenario checked and any
 failures or skips.
 
-The opt-in Windows/WSL fixture lane is
-`node --test --test-concurrency=1 tests/wsl-portability.qualification.mjs`.
-Set `WIRE_WSL_DISTRO`, `WIRE_WSL_NODE` and `WIRE_WSL_SOURCE` to an owned native
-Linux installation of the same candidate with separate Linux dependencies.
-It uses disposable invented stores, never the default store or original history.
-It covers a live Windows WAL source, separate Windows/WSL stores, restart,
-incremental reads and refusals. WSL must have an existing Windows Node 24+
-executable available as `node.exe`; the fixed source reader uses it briefly,
-without starting a Windows WIRE server.
+For source-reader changes, the opt-in
+`tests/wsl-portability.qualification.mjs` suite runs from Windows against
+an owned WSL installation of the same revision. Set `WIRE_WSL_DISTRO`,
+`WIRE_WSL_NODE` and `WIRE_WSL_SOURCE` to its distribution name, absolute Linux
+Node executable and checkout path. It uses invented sources and disposable
+stores to check concurrent readers, restart, incremental reads and refusals;
+the Windows helper requirement above still applies.
 
 Packaging changes have a separate lane:
 
@@ -116,6 +143,7 @@ with capture evidence, and add a visible caption only when it helps explain the 
 | --- | --- |
 | WIRE cannot start because the port is owned | Use the existing WIRE window, or stop the WIRE process you started before restarting. |
 | The page opens but no activity appears | Review the source paths and history window in Settings. Open Collection status for missing or unsupported history. See [Connect local history](user-guide.md#connect-local-history). |
+| WSL reports that the Windows source reader is unavailable | Make an existing Windows Node 24+ executable available as `node.exe` through WSL interop, and check access to the selected Windows paths. Do not copy the live database or share WIRE stores as a workaround. |
 | PDF preparation cannot find a browser | Install Chromium with the command above, or deselect PDF and prepare a new review. Other formats do not need that browser. |
 | A save or deletion has an uncertain result | Use its status/result check. Do not repeat the action to see whether it worked. See [collection and recovery](collection.md#refresh-and-uncertain-outcomes) or [report saving](reporting.md#approve-save-and-reopen). |
 
