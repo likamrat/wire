@@ -55,6 +55,21 @@ test("verified presentation revalidates by its shorter lease and stops while hid
     } finally { state.profile.dispose(); }
 });
 
+test("an unavailable app profile rechecks its bounded source deadline and recovers without a new access grant", async t => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 100000 });
+    const state = fixture();
+    state.read = () => ({ identity: { state: "unavailable" }, refreshAt: Date.now() + 15000 });
+    try {
+        await state.profile.receiveAccess();
+        t.mock.timers.tick(15000);
+        await state.profile.receiveAccess();
+        assert.equal(state.calls.length, 2);
+        state.profile.withdrawAccess();
+        t.mock.timers.tick(30000);
+        assert.equal(state.calls.length, 2);
+    } finally { state.profile.dispose(); }
+});
+
 test("withdrawal fences pending profiles and coalesces a fresh replacement read", async () => {
     const state = fixture(), old = Promise.withResolvers();
     state.read = () => old.promise;

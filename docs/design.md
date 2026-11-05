@@ -8,7 +8,10 @@ The supported source is local GitHub Copilot app history. Settings should expose
 only supported connections. Account keeps the local WIRE sign-in/out action.
 Sign-out names this instance and explains that collection stops and saved
 activity is hidden, not deleted; GitHub and Copilot sign-ins are unchanged.
-The profile stays neutral without a qualified desktop-selected GitHub identity.
+The profile inherits the approved Copilot app source's recorded account and
+cached avatar. It is display context, not authentication or ownership of
+history. Do not replace it with a CLI account or a manually chosen username.
+Missing, ambiguous or unsupported profile data keeps the neutral fallback.
 
 ## One coherent workspace
 

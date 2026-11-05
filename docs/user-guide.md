@@ -114,8 +114,11 @@ explains missing files, bounded reads and other known coverage gaps.
 **Account > Sign out of this instance** stops collection and hides saved private
 activity in every tab of that WIRE instance, without deleting it. It does not
 sign out of GitHub, the Copilot app or another independent WIRE instance.
-A neutral Account icon means WIRE has no verified desktop-selected profile,
-not that collection needs a different GitHub CLI login.
+Account inherits the GitHub name and avatar from the approved Copilot app
+source: the recorded workspace's linked account, otherwise the app's GitHub
+default. This display profile does not control access to history. A neutral
+icon means the profile is unavailable, not that collection needs a different
+GitHub CLI login.
 
 In **Privacy & saved data**, **Review deletion** previews an exact activity
 scope before separate confirmation. **Read history again > Choose chats**

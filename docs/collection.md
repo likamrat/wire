@@ -66,6 +66,17 @@ Choose the actual paths in source review; WSL can qualify Windows drive paths
 or their mounted equivalents. WIRE checks those named paths, not arbitrary
 home-directory contents. Approval and schema validation precede history reads.
 
+Account presentation uses a separate, bounded profile-only read of that approved
+database. For the supported account mapping (schema 207 or later), it follows
+`app_state.activeWorkspaceId` to the workspace's linked GitHub account, then the
+app's GitHub default or first GitHub account in creation order. A missing link
+requiring repair or an ambiguous selection stays unavailable. Only bounded
+selection and profile metadata, including `settings_json.avatarUrl`, leave the reader;
+tokens and history are not read by this projection. WIRE fetches supported
+GitHub-hosted images through its local image route, with an account-bound cache
+and short-lived tickets. It rechecks the profile within 15 seconds while visible.
+The display association neither grants access nor assigns ownership of history.
+
 Native metadata access uses the local read-only SQLite projection. For
 Windows-owned live metadata, WSL runs that same projection through an existing
 Windows Node 24+ executable (`node.exe`) using WSL interop. This bounded,

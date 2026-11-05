@@ -214,6 +214,7 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
         const wireHidden = (hasControlStatus ? controlStatus.wire : accessView?.state?.wire) === "signed-out";
         const verified = !wireHidden && github.phase === "ready" && profile?.identity.state === "verified"
             && (leased === undefined || leased > Date.now());
+        const appProfile = profile?.identity.source === "copilot-app-profile";
         const nextImageKey = verified && profile.avatar.url && profile.avatar.expiresAt > Date.now()
             ? JSON.stringify([profile.generation, profile.identity.generation, profile.avatar.url]) : null;
         const imageChanged = nextImageKey !== imageKey;
@@ -232,16 +233,17 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
             detail = "Checking profile";
         }
         setText(triggerName, verified ? name : "Account"); setText(menuName, name);
-        setText(triggerDetail, detail); setText(menuDetail, detail);
+        setText(triggerDetail, detail); setText(menuDetail, verified && appProfile ? "GitHub profile: " + detail : detail);
         menuDetail.hidden = !verified && detail === "This instance";
-        const needsRead = github.phase === "error" || verified === false && profile?.identity.reason === "account-snapshot-expired";
+        const needsRead = github.phase === "error" || verified === false
+            && (profile?.identity.reason === "account-snapshot-expired" || profile?.issues?.length > 0);
         const profileHelp = !wireHidden && needsRead ? "GitHub profile could not be read." : "";
         setText(profileMessage, profileHelp); profileMessage.hidden = !profileHelp;
         if (profileRetry) {
             profileRetry.hidden = wireHidden || !needsRead;
             profileRetry.disabled = !accessView?.readable;
         }
-        const label = `WIRE account: ${name}, ${detail}`;
+        const label = `${verified && appProfile ? "Copilot app profile" : "WIRE account"}: ${name}, ${detail}`;
         if (trigger.getAttribute("aria-label") !== label) {
             clearAttribute(trigger, "aria-label"); trigger.setAttribute("aria-label", label);
         }
@@ -307,8 +309,10 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
             }
             return;
         }
+        const loginPattern = p.identity.source === "copilot-app-profile" ? /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/ : /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$/;
         if (p.identity.state === "verified" && (p.identity.host !== "github.com"
-            || typeof p.identity.login !== "string" || !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$/.test(p.identity.login))) throw new TypeError("Verified GitHub identity requires its supported host and login.");
+            || typeof p.identity.login !== "string" || !loginPattern.test(p.identity.login))) throw new TypeError("Verified GitHub identity requires its supported host and login.");
+        if (p.refreshAt !== undefined && !Number.isFinite(p.refreshAt)) throw new TypeError("Profile refresh must be an epoch timestamp.");
         if (p.displayName.value !== null && typeof p.displayName.value !== "string") throw new TypeError("Public profile name must be text or null.");
         if (p.identity.expiresAt !== undefined && !Number.isFinite(p.identity.expiresAt)) throw new TypeError("Profile lease must be an epoch timestamp.");
         if (p.avatar.url !== null && (typeof p.avatar.url !== "string"

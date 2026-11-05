@@ -31,8 +31,8 @@ export function createAccountProfile({ api, present, provider = "github", visibl
                 const profile = await api("/api/profile/" + provider);
                 if (!current(owner, version)) return false;
                 if (present({ phase: "ready", profile }, owner) !== true || !current(owner, version)) return false;
-                if (profile.identity?.state === "verified") {
-                    const deadlines = [Date.now() + 15000, profile.identity.expiresAt, profile.avatar?.expiresAt]
+                if (profile.identity?.state === "verified" || Number.isFinite(profile.refreshAt)) {
+                    const deadlines = [Date.now() + 15000, profile.refreshAt, profile.identity.expiresAt, profile.avatar?.expiresAt]
                         .filter(value => Number.isFinite(value));
                     const deadline = Math.min(...deadlines);
                     if (deadline > Date.now()) timer = setTimeout(() => { void refresh(); }, deadline - Date.now());
