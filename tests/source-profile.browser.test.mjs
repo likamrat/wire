@@ -52,19 +52,30 @@ test("ordinary approved-source profile inherits workspace/default avatars and cl
         await expect(page.locator("#wireAccountTrigger")).toContainText("Morgan Rivera");
         await expect(page.locator("#wireAccountTrigger img")).toBeVisible();
         assert.equal(await page.locator("#wireAccountTrigger img").evaluate(image => image.complete && image.naturalWidth > 0), true);
-        await expect(page.locator("#wireAccountTrigger")).toHaveAccessibleName("Copilot app profile: Morgan Rivera, @synthetic-morgan");
+        await expect(page.locator("#wireAccountTrigger")).toHaveAccessibleName("Copilot app profile: Morgan Rivera");
+        await expect(page.locator("#wireAccountTrigger .wire-account-copy")).toHaveText("Morgan Rivera");
+        await expect(page.locator("#wireAccountTrigger .wire-account-copy small")).toBeHidden();
         pages.push(page);
     }
     const [page, second] = pages, oldURL = await page.locator("#wireAccountTrigger img").getAttribute("src");
     source.db.exec("DELETE FROM app_state WHERE key='activeWorkspaceId'");
     for (const panel of pages) {
         await panel.evaluate(() => dispatchEvent(new Event("focus")));
-        await expect(panel.locator("#wireAccountTrigger")).toContainText("riley_managed");
+        await expect(panel.locator("#wireAccountTrigger .wire-account-copy")).toHaveText("Riley Chen");
+        await expect(panel.locator("#wireAccountTrigger")).not.toContainText("riley_managed");
         await expect(panel.locator("#wireAccountTrigger img")).toBeVisible();
     }
     assert.equal((await fetch(origin + oldURL, { headers: { "Sec-Fetch-Site": "same-origin" } })).status, 404);
     for (const theme of ["light", "dark"]) {
         await chooseTheme(page, theme);
+        await page.locator("#wireAccountTrigger").click();
+        await expect(page.locator("#wireAccountGate")).toBeFocused();
+        if (process.env.WIRE_ACCOUNT_PRESENTATION_PROOFS) {
+            await mkdir(process.env.WIRE_ACCOUNT_PRESENTATION_PROOFS, { recursive: true });
+            await page.screenshot({ path: path.join(process.env.WIRE_ACCOUNT_PRESENTATION_PROOFS, `inherited-${theme}-desktop.png`) });
+        }
+        await page.keyboard.press("Escape");
+        await expect(page.locator("#wireAccountTrigger")).toBeFocused();
         await page.setViewportSize({ width: 390, height: 1000 });
         await page.locator("#navigationToggle").click();
         await page.locator("#wireAccountTrigger").click();
@@ -93,7 +104,7 @@ test("ordinary approved-source profile inherits workspace/default avatars and cl
     if (!await page.locator("#wireAccountMenu").isVisible()) await page.locator("#wireAccountTrigger").click();
     await expect(page.locator("#wireAccountGate")).toHaveText("Sign in to WIRE");
     await page.locator("#wireAccountGate").click();
-    await expect(second.locator("#wireAccountTrigger")).toContainText("riley_managed");
+    await expect(second.locator("#wireAccountTrigger .wire-account-copy")).toHaveText("Riley Chen");
     await expect(second.locator("#wireAccountTrigger img")).toBeVisible();
     assert.deepEqual(await loadBoardState(context), before);
     source.db.exec("DELETE FROM accounts WHERE kind='github'");

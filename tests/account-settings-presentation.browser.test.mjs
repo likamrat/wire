@@ -153,6 +153,8 @@ test("GitHub loading, read failure and provider sign-out never become WIRE sign-
     snapshot.github = { phase: "ready", profile };
     await receive(page, snapshot);
     await expect(page.locator("#wireAccountTrigger")).toContainText("riley-chen");
+    await expect(page.locator("#wireAccountTrigger .wire-account-copy")).toHaveText("riley-chen");
+    await expect(page.locator("#wireAccountTrigger .wire-account-copy small")).toBeHidden();
     await expect(page.locator(".wire-account-trigger .wire-account-avatar")).toHaveText("R");
     profile.identity = { state: "signed-out", reason: "copilot-signed-out", host: null, login: null };
     profile.fallback = { kind: "neutral", text: null, source: "unavailable" };
@@ -187,15 +189,21 @@ test("profile identity leases clear all old identity while ticket expiry preserv
     await receive(page, presentationFixture(null, profile));
     await expect(page.locator("#wireAccountTrigger img")).toBeVisible();
     const oldImage = await page.locator("#wireAccountTrigger img").elementHandle();
+    await expect(page.locator("#wireAccountTrigger .wire-account-copy")).toHaveText("Riley Chen");
+    await expect(page.locator("#wireAccountTrigger")).toHaveAccessibleName("WIRE account: Riley Chen");
+    await expect(page.locator("#wireAccountTrigger .wire-account-copy small")).toBeHidden();
+    await expect(page.locator(".wire-account-identity small")).toHaveText("@riley-chen");
+    profile.displayName.value = "Riley Updated";
     await page.evaluate(() => { window.retiredImageSource = document.querySelector("#wireAccountTrigger img").getAttributeNode("src"); });
     await receive(page, presentationFixture("disconnected", profile));
+    await expect(page.locator("#wireAccountTrigger .wire-account-copy")).toHaveText("Riley Updated");
     assert.equal(await oldImage.evaluate(image => image === document.querySelector("#wireAccountTrigger img")), true,
-        "Unrelated lifecycle updates do not reload the same controlled image.");
+        "Display-name and unrelated lifecycle updates do not reload the same controlled image.");
     await page.clock.fastForward(1100);
     await expect(page.locator("#wireAccountTrigger img")).toHaveCount(0);
     assert.equal(await oldImage.getAttribute("src"), null, "Retired detached images do not retain their ticket URL.");
     assert.equal(await page.evaluate(() => retiredImageSource.value), "", "Held image attributes are scrubbed before removal.");
-    await expect(page.locator("#wireAccountTrigger")).toContainText("Riley Chen");
+    await expect(page.locator("#wireAccountTrigger")).toContainText("Riley Updated");
     await expect(page.locator("#wireAccountTrigger .wire-account-avatar")).toHaveText("R");
     const afterTicketExpiry = requests;
     await page.clock.fastForward(1000);

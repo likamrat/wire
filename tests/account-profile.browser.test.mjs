@@ -142,7 +142,7 @@ test("the ordinary client delivers the qualified existing-host profile and withd
     await expect(second.locator("#message")).toContainText("signed out");
     await expect(second.locator("#wireAccountTrigger")).not.toContainText("Riley");
     await expect(second.locator("#wireAccountTrigger img")).toHaveCount(0);
-    assert.deepEqual(await second.evaluate(() => profileNodes.map(node => node.data)), ["", ""]);
+    assert.deepEqual(await second.evaluate(() => profileNodes.map(node => node.data)), [""]);
     assert.equal(await second.evaluate(() => profileImage.value), "");
     const reads = app.calls.filter(call => call.page === second && call.path === "/api/profile/github").length;
     await second.reload();
@@ -549,7 +549,7 @@ test("the GitHub footer and Microsoft Settings identity stay distinct through Co
     await second.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
     await second.setViewportSize({ width: 1440, height: 1000 });
     await second.evaluate(() => {
-        window.heldGitHubLogin = document.querySelector("#wireAccountTrigger .wire-account-copy small").firstChild;
+        window.heldGitHubLogin = document.querySelector("#wireAccountMenu .wire-account-identity small").firstChild;
         window.heldGitHubImage = document.querySelector("#wireAccountTrigger img").getAttributeNode("src");
         window.heldConnectionEmail = document.getElementById("wireMicrosoftAccount").firstChild;
     });

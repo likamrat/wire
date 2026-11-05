@@ -233,7 +233,8 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
             detail = "Checking profile";
         }
         setText(triggerName, verified ? name : "Account"); setText(menuName, name);
-        setText(triggerDetail, detail); setText(menuDetail, verified && appProfile ? "GitHub profile: " + detail : detail);
+        setText(triggerDetail, verified ? "" : detail); triggerDetail.hidden = verified;
+        setText(menuDetail, verified && appProfile ? "GitHub profile: " + detail : detail);
         menuDetail.hidden = !verified && detail === "This instance";
         const needsRead = github.phase === "error" || verified === false
             && (profile?.identity.reason === "account-snapshot-expired" || profile?.issues?.length > 0);
@@ -243,7 +244,7 @@ export function mountAccountSettingsPresentation({ api, ux, accountSlot, connect
             profileRetry.hidden = wireHidden || !needsRead;
             profileRetry.disabled = !accessView?.readable;
         }
-        const label = `${verified && appProfile ? "Copilot app profile" : "WIRE account"}: ${name}, ${detail}`;
+        const label = `${verified && appProfile ? "Copilot app profile" : "WIRE account"}: ${name}${verified ? "" : ", " + detail}`;
         if (trigger.getAttribute("aria-label") !== label) {
             clearAttribute(trigger, "aria-label"); trigger.setAttribute("aria-label", label);
         }

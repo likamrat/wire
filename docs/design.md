@@ -12,6 +12,9 @@ The profile inherits the approved Copilot app source's recorded account and
 cached avatar. It is display context, not authentication or ownership of
 history. Do not replace it with a CLI account or a manually chosen username.
 Missing, ambiguous or unsupported profile data keeps the neutral fallback.
+The sidebar shows the display name and avatar without a second handle line.
+Keep the handle in the opened account menu; use it as the sidebar fallback only
+when the source has no display name.
 
 ## One coherent workspace
 
