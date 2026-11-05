@@ -15,6 +15,10 @@ before starting implementation.
 
 ## Make a change
 
+If you use Copilot, the repository includes eight optional
+[WIRE development skills](docs/development.md#wire-development-skills).
+Contributions do not require an AI tool.
+
 1. Follow [Development](docs/development.md) to run WIRE and find the relevant code.
 2. Keep the change focused. Preserve source permissions, evidence meaning and
    saved report bytes; read the [relevant contract](docs/README.md#contributor-references).

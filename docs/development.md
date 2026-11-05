@@ -4,6 +4,32 @@ WIRE runs as a local Node server with a browser interface. Start with the
 [README](../README.md#start) to clone and install it. This guide covers working
 on the source, checking a change and troubleshooting a local installation.
 
+## WIRE development skills
+
+For contributors using Copilot, the repository includes eight WIRE-specific
+[project skills](https://docs.github.com/en/copilot/concepts/customizations/agent-skills)
+in [`.github/skills`](../.github/skills). Open a Copilot session in this checkout
+and ask it to use a skill by name, for example, "Use wire-local-search to fix
+Search highlighting." Copilot can also select a relevant skill from its description.
+Human contributions do not require Copilot or skills.
+
+| Work | Skill |
+| --- | --- |
+| Coordinate outcomes and ownership | [wire-coordination](../.github/skills/wire-coordination/SKILL.md) |
+| Implement and deliver a complete change | [wire-end-to-end-delivery](../.github/skills/wire-end-to-end-delivery/SKILL.md) |
+| Preserve evidence meaning and unknowns | [wire-evidence-semantics](../.github/skills/wire-evidence-semantics/SKILL.md) |
+| Change literal on-device Search | [wire-local-search](../.github/skills/wire-local-search/SKILL.md) |
+| Change reports without altering frozen facts | [wire-report-integrity](../.github/skills/wire-report-integrity/SKILL.md) |
+| Handle Refresh, repair or uncertain operations | [wire-safe-recovery](../.github/skills/wire-safe-recovery/SKILL.md) |
+| Change collection or source access | [wire-source-integration](../.github/skills/wire-source-integration/SKILL.md) |
+| Finish reading and interaction journeys | [wire-ux-finish](../.github/skills/wire-ux-finish/SKILL.md) |
+
+These workflows and their required references are part of WIRE under its
+[MIT license](../LICENSE). They grant no permission to access private data,
+collect sources, change accounts, replace a runtime or publish work.
+No global installation or extra app configuration is needed. If an existing
+session still shows an older skill catalog, use a new session in this checkout.
+
 ## Run locally
 
 Use Node.js 24 or newer in the environment that will run WIRE. On WSL or Linux,
