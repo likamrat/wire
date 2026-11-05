@@ -25,7 +25,7 @@ The GitHub Copilot app's metadata database (SQLite) and history files are
 WIRE's data directory holds its own content-addressed evidence snapshots,
 state, collection cursors, settings, consent and saved report files. Each
 directory has one writer. Concurrent instances need distinct data directories
-and reachable ports; they do not share writable SQLite or synchronize reports.
+and reachable ports; each instance's writable state and saved reports remain separate.
 See [store ownership](collection.md#store-ownership).
 
 When WSL reads Windows-owned live metadata, a bounded, short-lived Windows
