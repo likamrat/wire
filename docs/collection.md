@@ -125,6 +125,10 @@ unknown result without adding a call; rotation/truncation cannot erase
 retained evidence. The bounded-history index barrier preserves committed
 progress. Source-reader instances use schema 3 to bind the store to its host
 and make older readers refuse rather than ignore that ownership.
+Within the same approved WSL store/source, a Windows-drive remount may change
+only the virtual device number. The reader preserves the saved identity when
+the qualified Windows path, inode, birth time, startup event and saved anchors
+still agree. It does not reset cursors or adopt another host's store.
 
 ## Evidence fidelity
 

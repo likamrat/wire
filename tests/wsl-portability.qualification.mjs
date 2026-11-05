@@ -101,6 +101,14 @@ test("source-native failure preserves existing WSL evidence and cursors without 
     assert.equal(after.records, 1);
 });
 
+test("WSL remount device numbers do not invalidate the same qualified Windows history prefix", async t => {
+    const app = await setup(t);
+    const result = await app.native("remount", app.linuxData);
+    assert.equal(result.unchangedWindowsHistoryResumed, true);
+    assert.equal(result.changedSourceAndAnchorRefused, true);
+    assert.equal(result.nativePosixDeviceStillStrict, true);
+});
+
 test("independent instances cannot take a live foreign store or adopt its released cursors", async t => {
     const app = await setup(t);
     await app.collector.collectNow();

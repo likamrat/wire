@@ -9,6 +9,7 @@ import { createExportController } from "../lib/export.mjs";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { loadBoardState, mergeEvidenceWithState } from "../lib/store.mjs";
 import { hostPaths } from "../lib/host-paths.mjs";
+import { readTail, TAIL_LIMITS } from "../lib/collector-io.mjs";
 
 const [action, sourceRoot, nonce, dataDir] = process.argv.slice(2);
 assert.equal(process.platform, "linux");
@@ -30,7 +31,38 @@ if (action === "init") {
     assert.equal(path.basename(dataDir), "data");
     assert.match(path.basename(root), /^wire-source-reader-/);
     assert.equal(JSON.parse(await readFile(path.join(root, "fixture.json"), "utf8")).nonce, nonce);
-    if (action === "cleanup") {
+    if (action === "remount") {
+        const { discoverSources } = await import("../lib/source-discovery.mjs");
+        const discovery = await discoverSources(config);
+        const id = discovery.roster.find(row => row.eligible).sessionId;
+        const file = path.join(sourceRoot, "session-state", id, "events.jsonl");
+        const initial = await readTail(file, id, undefined, TAIL_LIMITS.chunkBytes, { startAtBeginning: true });
+        const oldIdentity = initial.cursor.identity.replace(/^\d+:/, "999999:");
+        const previous = { ...initial.cursor, identity: oldIdentity };
+        const fence = { identity: oldIdentity, endOffset: initial.cursor.offset, anchor: initial.cursor.anchor };
+        const prefix = await readTail(file, id, undefined, TAIL_LIMITS.chunkBytes, { startAtBeginning: true, fence });
+        assert.equal(prefix.cursor.identity, oldIdentity);
+        assert.equal(prefix.cursor.offset, initial.cursor.offset);
+        const resumed = await readTail(file, id, previous);
+        assert.equal(resumed.reset, false);
+        assert.equal(resumed.cursor.identity, oldIdentity);
+        assert.equal(resumed.events.length, 0);
+        for (const identity of [
+            oldIdentity.replace(/^([^:]+):([^:]+)/, "$1:1234567"),
+            oldIdentity + "-different-start",
+        ]) await assert.rejects(readTail(file, id, undefined, TAIL_LIMITS.chunkBytes,
+            { startAtBeginning: true, fence: { ...fence, identity } }), { code: "BACKFILL_GENERATION_CHANGED" });
+        await assert.rejects(readTail(file, id, undefined, TAIL_LIMITS.chunkBytes,
+            { startAtBeginning: true, fence: { ...fence, anchor: "0".repeat(64) } }), { code: "BACKFILL_GENERATION_CHANGED" });
+        const posix = path.join(root, "native-events.jsonl");
+        await writeFile(posix, await readFile(file));
+        const local = await readTail(posix, id, undefined, TAIL_LIMITS.chunkBytes, { startAtBeginning: true });
+        await assert.rejects(readTail(posix, id, undefined, TAIL_LIMITS.chunkBytes,
+            { startAtBeginning: true, fence: { ...fence, identity: local.cursor.identity.replace(/^\d+:/, "999999:") } }),
+        { code: "BACKFILL_GENERATION_CHANGED" });
+        console.log(JSON.stringify({ platform: process.platform, unchangedWindowsHistoryResumed: true,
+            changedSourceAndAnchorRefused: true, nativePosixDeviceStillStrict: true }));
+    } else if (action === "cleanup") {
         assert.notEqual(root, sourceRoot);
         await rm(root, { recursive: true });
         console.log(JSON.stringify({ platform: process.platform, cleaned: true }));
