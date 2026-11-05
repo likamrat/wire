@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs/promises";
+import nativeFs from "node:fs";
 import { mkdtemp, mkdir, writeFile, appendFile, readFile, readdir, rm } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { setImmediate } from "node:timers/promises";
@@ -1375,7 +1376,7 @@ async function appendOmittedPrefix(app, id) {
     } finally { await padding.close(); }
 }
 
-for (const churnPoint of ["board", "prefix", "unrelated-tail"]) test(`automatic prefix publication persists across unrelated live changes at ${churnPoint}`, async t => {
+for (const churnPoint of ["board", "prefix", "unrelated-tail", "final-check"]) test(`automatic prefix publication persists across unrelated live changes at ${churnPoint}`, async t => {
     shortenNativePolling(t);
     const app = await fixture(t, { timers: true });
     await appendOmittedPrefix(app, "prefix-metadata-churn");
@@ -1388,7 +1389,15 @@ for (const churnPoint of ["board", "prefix", "unrelated-tail"]) test(`automatic 
     await writeFile(unrelatedFile, lines([event("session.start", { sessionId: unrelated, version: 1 })]));
     const update = db.prepare("UPDATE sessions SET title=? WHERE id=?");
     const originalOpen = fs.open, failures = [];
-    let changes = 0;
+    let changes = 0, finalCheckArmed = false;
+    const originalStat = nativeFs.statSync;
+    if (churnPoint === "final-check") t.mock.method(nativeFs, "statSync", (file, ...args) => {
+        if (file === app.sourceFile && finalCheckArmed) {
+            finalCheckArmed = false;
+            update.run(`Unrelated final-check change ${++changes}`, unrelated);
+        }
+        return originalStat(file, ...args);
+    });
     t.mock.method(console, "error", (...args) => {
         if (args[0] === "[workiq-collector] collection failed") failures.push(args[1]?.code);
     });
@@ -1400,6 +1409,7 @@ for (const churnPoint of ["board", "prefix", "unrelated-tail"]) test(`automatic 
             const sync = handle.sync.bind(handle);
             handle.sync = async () => {
                 await sync();
+                if (churnPoint === "final-check") { finalCheckArmed = true; return; }
                 changes++;
                 if (churnPoint === "unrelated-tail") await appendFile(unrelatedFile, lines(interaction(`unrelated-${changes}`)));
                 else update.run(`Unrelated change ${changes}`, unrelated);
@@ -1435,7 +1445,7 @@ for (const churnPoint of ["board", "prefix", "unrelated-tail"]) test(`automatic 
     }
 });
 
-for (const change of ["selected-membership", "source-tail-growth", "source-identity"]) {
+for (const change of ["selected-membership", "source-tail-growth", "source-identity", "unsettled-metadata"]) {
     test(`automatic prefix publication still refuses ${change} after fsync`, async t => {
         shortenNativePolling(t);
         const app = await fixture(t, { timers: true });
@@ -1445,6 +1455,14 @@ for (const change of ["selected-membership", "source-tail-growth", "source-ident
         db.prepare("UPDATE sessions SET title=? WHERE id=?").run("Invented guarded prefix", app.sourceId);
         const originalOpen = fs.open, failures = [], diagnostics = [];
         let changed = false;
+        let metadataChanges = 0;
+        const originalStat = nativeFs.statSync;
+        if (change === "unsettled-metadata") t.mock.method(nativeFs, "statSync", (file, ...args) => {
+            if (file === app.sourceFile && changed) {
+                db.prepare("UPDATE sessions SET title=? WHERE id=?").run(`Still changing ${++metadataChanges}`, app.sourceId);
+            }
+            return originalStat(file, ...args);
+        });
         t.mock.method(console, "error", (...args) => {
             if (args[0] === "[workiq-collector] collection failed") {
                 failures.push(args[1]?.code);
@@ -1459,6 +1477,7 @@ for (const change of ["selected-membership", "source-tail-growth", "source-ident
                     await sync();
                     if (changed) return;
                     changed = true;
+                    if (change === "unsettled-metadata") return;
                     if (change === "selected-membership") db.prepare("UPDATE sessions SET archived_at=? WHERE id=?")
                         .run(new Date().toISOString(), app.sourceId);
                     else if (change === "source-tail-growth") await app.append(interaction("later-source-tail"));
@@ -1479,9 +1498,12 @@ for (const change of ["selected-membership", "source-tail-growth", "source-ident
             assert.equal(failures[0], "wire_access_admission_failed");
             assert.deepEqual(diagnostics[0], {
                 code: "wire_access_admission_failed", stage: "prefix",
-                sourceChange: change === "selected-membership" ? "membership" : change === "source-tail-growth" ? "history-size" : "history-identity",
+                sourceChange: change === "selected-membership" ? "membership" : change === "source-tail-growth" ? "history-size"
+                    : change === "unsettled-metadata" ? "metadata-stamp" : "history-identity",
                 causeCodes: ["COLLECTION_SOURCE_CHANGED"],
             }, "Only fixed stage/reason and recognized codes may be logged, never source text, paths or stacks.");
+            if (change === "unsettled-metadata") assert.ok(metadataChanges > 0 && metadataChanges <= 3,
+                "Pre-write validation must be bounded, not an unlimited retry until success.");
             await app.collector.close();
             await assert.rejects(readFile(path.join(app.context.dataDir, "collector", BACKFILL_DIRECTORY, app.sourceId + ".json")),
                 { code: "ENOENT" });

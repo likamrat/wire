@@ -81,6 +81,9 @@ bounded projection. Publication continues only if the selected sources retain
 their eligibility, membership and provenance. Source-file changes, authority
 expiry and conflicting store changes still refuse; an interrupted write is
 not relabeled as success.
+A metadata change caught in the final pre-write validation can trigger one
+fresh membership check before the same rename. No write is repeated, and a
+second freshness change still refuses.
 
 The current adapter checks the consumed ordinary `sessions`, `workspaces` and
 `projects` mapping, required text/null values and sole `id` primary keys.
