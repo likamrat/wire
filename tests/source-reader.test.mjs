@@ -1,12 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
-import { readMetadataProjection, validateMetadataProjection, SOURCE_METADATA_MAX_BYTES } from "../lib/source-metadata.mjs";
+import { readMetadataProjection, readMetadataSnapshot, validateMetadataProjection, metadataReadVersion,
+    SOURCE_METADATA_MAX_BYTES, SOURCE_METADATA_READER_VERSION } from "../lib/source-metadata.mjs";
 import { readSourceMetadata } from "../lib/source-reader.mjs";
+
+test("source-native metadata changes before SQL begins are included rather than rejected as stale", async t => {
+    const app = await fixture(t);
+    const result = await readSourceMetadata(app.files, { run: async (...args) => {
+        if (args[0] === "node.exe") {
+            const database = new DatabaseSync(app.file);
+            database.exec("UPDATE sessions SET title='Freshly committed before the read'");
+            database.close();
+            const current = await fixtureResponse(app.file);
+            return { stdout: JSON.stringify(current) };
+        }
+        return app.run(...args);
+    } });
+    assert.equal(result.roster[0].name, "Freshly committed before the read");
+});
+
+async function fixtureResponse(file) {
+    return { schemaVersion: SOURCE_METADATA_READER_VERSION, platform: "win32", ...readMetadataSnapshot(file) };
+}
 
 async function fixture(t) {
     const root = await mkdtemp(path.join(os.tmpdir(), "wire-source-reader-test-"));
@@ -27,7 +47,7 @@ async function fixture(t) {
         assert.equal(options.maxBuffer, SOURCE_METADATA_MAX_BYTES);
         assert.ok(Object.keys(options.env).every(key =>
             ["PATH", "WSL_INTEROP", "WSL_DISTRO_NAME", "LANG", "SystemRoot", "WINDIR", "PATHEXT", "TEMP", "TMP"].includes(key)));
-        return { stdout: JSON.stringify({ schemaVersion: 1, platform: "win32", projection }) };
+        return { stdout: JSON.stringify(await fixtureResponse(file)) };
     };
     return { file, files, projection, calls, run };
 }
@@ -67,6 +87,43 @@ test("source changes during the metadata read invalidate its stamp before public
     } }), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-read" });
 });
 
+test("a source-native database replacement during launch cannot adopt another identity", async t => {
+    const app = await fixture(t);
+    await assert.rejects(readSourceMetadata(app.files, { run: async (...args) => {
+        if (args[0] !== "node.exe") return app.run(...args);
+        await rename(app.file, app.file + ".old");
+        const db = new DatabaseSync(app.file);
+        db.close();
+        return { stdout: JSON.stringify({ ...await fixtureResponse(app.file + ".old"),
+            readVersion: metadataReadVersion(app.file) }) };
+    } }), { code: "COLLECTION_SOURCE_CHANGED", sourceChange: "metadata-read" });
+});
+
+test("changes inside the actual SQL read still invalidate the source-native snapshot", async t => {
+    const app = await fixture(t);
+    const writer = new DatabaseSync(app.file);
+    writer.exec("PRAGMA journal_mode=WAL; UPDATE sessions SET title='Before read'");
+    const prepare = DatabaseSync.prototype.prepare;
+    let changed = false;
+    t.mock.method(DatabaseSync.prototype, "prepare", function (sql) {
+        const statement = prepare.call(this, sql);
+        if (sql === "PRAGMA user_version") {
+            const get = statement.get.bind(statement);
+            statement.get = () => {
+                const result = get();
+                changed = true;
+                writer.exec("UPDATE sessions SET title='Changed during read'");
+                return result;
+            };
+        }
+        return statement;
+    });
+    try {
+        assert.throws(() => readMetadataSnapshot(app.file), { code: "COLLECTION_SOURCE_CHANGED" });
+        assert.equal(changed, true);
+    } finally { writer.close(); }
+});
+
 test("helper timeout, missing runtime, excessive output and unsuccessful exit never fall back to local SQLite", async t => {
     const app = await fixture(t);
     for (const error of [
@@ -74,7 +131,7 @@ test("helper timeout, missing runtime, excessive output and unsuccessful exit ne
         Object.assign(new Error("timeout"), { killed: true }),
         Object.assign(new Error("output limit"), { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }),
         Object.assign(new Error("failed after output"), { code: 1,
-            stdout: JSON.stringify({ schemaVersion: 1, platform: "win32", projection: app.projection }) }),
+            stdout: JSON.stringify(await fixtureResponse(app.file)) }),
     ]) {
         const calls = [];
         await assert.rejects(readSourceMetadata(app.files, { run: async (...args) => {
@@ -89,9 +146,10 @@ test("helper timeout, missing runtime, excessive output and unsuccessful exit ne
 test("malformed, wrong-host and inconsistent projections are refused instead of becoming empty success", async t => {
     const app = await fixture(t), invalid = structuredClone(app.projection);
     invalid.counts.eligible = 0;
-    for (const stdout of ["not-json", JSON.stringify({ schemaVersion: 2 }),
-        JSON.stringify({ schemaVersion: 1, platform: "linux", projection: app.projection }),
-        JSON.stringify({ schemaVersion: 1, platform: "win32", projection: invalid })]) {
+    for (const stdout of ["not-json", JSON.stringify({ schemaVersion: 1 }),
+        JSON.stringify({ schemaVersion: SOURCE_METADATA_READER_VERSION, platform: "linux", projection: app.projection }),
+        JSON.stringify({ ...await fixtureResponse(app.file), projection: invalid }),
+        JSON.stringify({ schemaVersion: SOURCE_METADATA_READER_VERSION, platform: "win32", projection: app.projection })]) {
         await assert.rejects(readSourceMetadata(app.files, {
             run: (...args) => args[0] === "node.exe" ? { stdout } : app.run(...args),
         }), { code: "source_metadata_invalid" });
@@ -103,14 +161,15 @@ test("a source-native schema refusal retains its existing public status and reas
     await assert.rejects(readSourceMetadata(app.files, { run: (...args) => {
         if (args[0] !== "node.exe") return app.run(...args);
         throw Object.assign(new Error("exit"), { code: 1, stdout: JSON.stringify({
-            schemaVersion: 1, error: { code: "source_mapping_unsupported", status: 422, message: "Unsupported sessions mapping." },
+            schemaVersion: SOURCE_METADATA_READER_VERSION, error: { code: "source_mapping_unsupported", status: 422, message: "Unsupported sessions mapping." },
         }) });
     } }), { code: "source_mapping_unsupported", status: 422, message: "Unsupported sessions mapping." });
 });
 
 test("native and helper projections share the exact output-byte limit", async t => {
     const app = await fixture(t), projection = structuredClone(app.projection);
-    const overhead = Buffer.byteLength(JSON.stringify({ schemaVersion: 1, platform: "win32", projection }))
+    const overhead = Buffer.byteLength(JSON.stringify({ schemaVersion: SOURCE_METADATA_READER_VERSION, platform: "win32",
+        projection, readVersion: "0".repeat(64) }))
         - Buffer.byteLength(projection.roster[0].name);
     projection.roster[0].name = "x".repeat(SOURCE_METADATA_MAX_BYTES - overhead);
     assert.equal(validateMetadataProjection(projection), projection);

@@ -68,6 +68,10 @@ memory. WIRE instead runs that same fixed metadata projection in a short-lived
 Windows Node 24+ process through existing WSL interop (`node.exe`). This is a
 source-native subprocess, not another WIRE instance or a persistent service.
 It accepts only the approved database path, returns bounded metadata and exits.
+The returned version brackets the SQL read itself, not helper startup. WSL
+checks that version against the current database/WAL size and exact modification
+times before binding its local publication stamp; a replaced database or a
+change during or after the read still refuses.
 History files are still read through qualified filesystem paths. An unavailable
 reader, changed metadata or unsupported mapping refuses without copying the
 database, bypassing SQLite locks or replacing last good evidence.
