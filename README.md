@@ -5,12 +5,20 @@
   </picture>
 </p>
 
-I built WIRE (Work IQ Request Explorer) to understand real Work IQ interactions.
-Curated evals are valuable, but real people phrase requests differently,
-leave context unstated and change direction. Their agents generate prompts too.
+Synthetic evals are essential, but they will always have a blind spot: how people
+actually work with AI. People phrase requests differently, bring different context
+and take different paths through multi-turn conversations. Those choices shape
+both their own prompts and the prompts their agents generate, influencing the
+tool calls and results that follow.
 
-WIRE puts those prompts beside their recorded tool calls and results, so you can
-find patterns and failures, improve your agents and build better evaluation cases.
+I built WIRE (Work IQ Request Explorer) to help you understand that blind spot
+in your own work. It puts recorded human and agent-generated prompts beside their
+Work IQ calls and results, so you can inspect personal patterns, unexpected
+behavior and failures.
+
+Those real interactions can become the basis for better synthetic eval cases.
+Product teams and customers building agents on Work IQ APIs and MCP can use
+that evidence to test the behaviors people rely on and improve their agents.
 
 [![WIRE showing weekly activity, outcomes, models, tools and services beside an interaction with completed and failed calls.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
