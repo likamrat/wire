@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { get } from "node:http";
+import { get, request } from "node:http";
 import { registerHooks } from "node:module";
 import { randomUUID } from "node:crypto";
 import { startServer } from "../lib/server.mjs";
@@ -47,6 +47,67 @@ function browserFetch(origin, calls) {
         return nativeFetch(origin + route, { ...options, headers: { ...options.headers, Origin: origin } });
     };
 }
+
+function entryRequest(origin, { host, method = "GET", route = "/", headers = {} } = {}) {
+    return new Promise((resolve, reject) => {
+        const req = request(origin + route, { method, headers: { Host: host, ...headers } }, response => {
+            const chunks = [];
+            response.on("data", chunk => chunks.push(chunk));
+            response.on("end", () => resolve({ status: response.statusCode, headers: response.headers,
+                body: Buffer.concat(chunks).toString("utf8") }));
+        });
+        req.once("error", reject);
+        req.end(method === "POST" ? "{}" : undefined);
+    });
+}
+
+test("localhost root redirects to the actual canonical port without serving content or allocating panel authority", async t => {
+    const { origin, runtime } = await fixture(t, { collector: { timers: false } });
+    const host = `localhost:${new URL(origin).port}`;
+    for (let index = 0; index < 130; index++) {
+        const response = await entryRequest(origin, { host });
+        assert.equal(response.status, 302);
+        assert.equal(response.headers.location, runtime.url);
+        assert.equal(response.body, "");
+        assert.equal(response.headers["set-cookie"], undefined);
+        assert.equal(response.headers["cache-control"], "no-store");
+        assert.equal(response.headers["access-control-allow-origin"], undefined);
+    }
+    assert.equal((await nativeFetch(runtime.url)).status, 200);
+    const authority = await session(origin);
+    assert.equal((await post(origin, "/api/snapshot", {}, authority)).status, 200);
+    const forwarded = await entryRequest(origin, { host, headers: {
+        "X-Forwarded-Host": "foreign.example", "X-Forwarded-Proto": "https",
+    } });
+    assert.equal(forwarded.headers.location, runtime.url);
+});
+
+test("localhost is not an API, write, foreign-origin or arbitrary-host alias", async t => {
+    const { origin } = await fixture(t, { collector: { timers: false } });
+    const port = new URL(origin).port, host = `localhost:${port}`, authority = await session(origin);
+    const rejected = [
+        ...["foreign.example", `localhost.foreign.example:${port}`, `sub.localhost:${port}`,
+            `localhost.:${port}`, "localhost:1", `127.0.0.1.foreign.example:${port}`].map(host => ({ host })),
+        ...["https://foreign.example", "null", origin, `http://${host}`].map(Origin => ({ host, headers: { Origin } })),
+        ...["/api/state", "/api/session", "/api/collection/configure", "/health", "/favicon.svg", "/?next=https://foreign.example"].map(route => ({ host, route })),
+        { host, method: "HEAD" }, { host, method: "POST" },
+        { host, headers: { "Sec-Fetch-Mode": "cors" } },
+        { host, headers: { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Mode": "navigate" } },
+        { host, method: "POST", route: "/api/session", headers: { Origin: `http://${host}`,
+            "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" } },
+        { host, method: "POST", route: "/api/collection/configure", headers: { Origin: origin,
+            "Content-Type": "application/json", "X-Board-Capability": authority } },
+        { host: new URL(origin).host, method: "POST", route: "/api/session",
+            headers: { Origin: `http://${host}`, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" } },
+    ];
+    for (const input of rejected) {
+        const response = await entryRequest(origin, input);
+        assert.equal(response.status, 403, JSON.stringify(input));
+        assert.equal(response.headers.location, undefined);
+        assert.equal(response.headers["set-cookie"], undefined);
+    }
+    assert.equal((await post(origin, "/api/snapshot", {}, authority)).status, 200);
+});
 
 test("unsupported session handshakes require an update before consuming any of the 128 panel authorities", async t => {
     const { origin } = await fixture(t);

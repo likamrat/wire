@@ -57,8 +57,8 @@ npm ci
 npm start
 ```
 
-Open the address printed in the terminal; the default port is `4000`.
-Keep the terminal running while you use WIRE.
+The default browser address is `localhost:4000`. Keep the terminal running
+while you use WIRE.
 
 ### Connect your history
 
