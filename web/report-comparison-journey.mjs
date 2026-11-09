@@ -1,5 +1,5 @@
 // The report controller owns facts, privacy approval, and frozen files.
-export function mountReportComparisonJourney(root, { api, renderer, timeContext, refresh, onError, inspectSource, openSaved, onRead, prepareBlockReason, beforePrepare, onStateChange, createSaveIdentity, createFileInspection }) {
+export function mountReportComparisonJourney(root, { api, renderer, timeContext, refresh, onError, inspectSource, openSaved, onRead, prepareBlockReason, beforePrepare, onStateChange, createSaveIdentity, createFileInspection, createPreparedFrame }) {
     if (!root?.ownerDocument || typeof api?.publicationToken !== "function" || typeof api?.isCurrent !== "function" || typeof createSaveIdentity !== "function") {
         throw new TypeError("Mounted comparison journeys require publication authority and a save-identity factory.");
     }
@@ -12,7 +12,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
     let generation = 0, preview = null, approved = false, writing = false, unknownSave = false, comparison = null, artifacts = [], savedMode = false, savedArtifactId = null, artifactPending = false;
     let dispatchedSave = null, checkingSave = false, showingPrepared = false, preparing = false;
     let choicesLoaded = false, choicesLoading = false, inventoryIds = null, inventoryVersion = 0;
-    let draftTitle = "", savedResult = null, savedDocumentTitle = "";
+    let draftTitle = "", savedResult = null, savedDocumentTitle = "", updateTimer, preparedReader;
     let accessWithdrawn = false, saveChoices = null, recoveryEntries = null, recoveryVersion = 0;
     const pendingSignatures = new Map();
     const publication = () => api.publicationToken();
@@ -73,12 +73,13 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         const label = el("label"), input = el("input");
         input.type = "checkbox"; input.value = value; input.checked = value === "html";
         label.append(input, doc.createTextNode(title)); formatChoices.append(label);
-        input.addEventListener("change", () => invalidate("Formats changed. Prepare and review a fresh comparison copy."));
+        input.addEventListener("change", () => updateCopy());
     }
     const reviewHost = el("section", undefined, "comparison-review");
     const preparedFiles = el("section", undefined, "comparison-prepared-files");
     let fileInspection;
     function clearPreparedFiles() {
+        preparedReader?.dispose(); preparedReader = null;
         fileInspection?.dispose(); fileInspection = null;
         preparedFiles.replaceChildren();
     }
@@ -98,7 +99,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
             delete comparison.resultTextSources;
             renderer.render(content, comparison);
         }
-        invalidate("Result-text choices changed. Prepare and review a fresh comparison copy.");
+        updateCopy();
     };
     resultTextChoice.addEventListener("change", resultTextChanged);
     resultTerms.addEventListener("input", resultTextChanged);
@@ -109,13 +110,16 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
     titleInput.addEventListener("input", () => {
         if (accessWithdrawn || writing || dispatchedSave) { titleInput.value = draftTitle; return; }
         draftTitle = titleInput.value;
-        invalidate("Title changed. Prepare and review a fresh comparison copy.");
+        preparedReader?.setTitle(draftTitle || "Report comparison");
+        updateCopy();
     });
     titleField.append(titleLabel, titleInput, el("p", "Private values in titles are masked.", "muted"));
     const preparationIssue = el("p", undefined, "comparison-prepare-issue");
     preparationIssue.id = "comparisonPrepareIssue"; preparationIssue.tabIndex = -1;
     preparationIssue.setAttribute("role", "status");
-    copyOptions.append(titleField, formats, resultTextLabel, resultTermsField, preparationIssue, prepare);
+    const customize = el("details", undefined, "comparison-customize");
+    customize.append(el("summary", "Change formats or included error text"), formats, resultTextLabel, resultTermsField);
+    copyOptions.append(titleField, customize, preparationIssue, prepare);
     const reviewLabel = el("label"), reviewCheck = el("input");
     reviewCheck.type = "checkbox";
     reviewLabel.append(reviewCheck, doc.createTextNode("I reviewed this frozen comparison for disclosure."));
@@ -189,16 +193,18 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         discard.disabled = writing || locked;
         formats.disabled = writing || locked;
         reviewHost.hidden = !comparison && !preview && !unknownSave;
-        copyOptions.hidden = !comparison || reviewing || unknownSave;
+        copyOptions.hidden = !comparison || unknownSave || Boolean(savedResult);
+        prepare.hidden = Boolean(preview);
         prepare.textContent = preview ? "Return to review" : "Prepare comparison copy";
         syncPreparation();
         decision.hidden = !reviewing;
-        reviewLabel.hidden = !preview || unknownSave;
-        approve.hidden = !preview || unknownSave || approved;
+        const local = preview?.localSaveRequest?.version === 1;
+        reviewLabel.hidden = !preview || unknownSave || local;
+        approve.hidden = !preview || unknownSave || approved || local;
         reviewCheck.disabled = writing || locked || approved;
         approve.disabled = writing || artifactPending || locked || !reviewCheck.checked || approved;
-        save.hidden = !preview || unknownSave || !approved;
-        save.disabled = writing || artifactPending || locked || !approved || !reviewCheck.checked;
+        save.hidden = !preview || unknownSave || !approved && !local;
+        save.disabled = writing || artifactPending || locked || !local && (!approved || !reviewCheck.checked);
         readSaved.hidden = !unknownSave;
         readSaved.disabled = writing || artifactPending || checkingSave;
         preparedFiles.hidden = !reviewing;
@@ -217,6 +223,12 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         }
         onStateChange?.();
     }
+    function updateCopy() {
+        if (accessWithdrawn || writing || dispatchedSave) return;
+        invalidate("");
+        clearTimeout(updateTimer);
+        updateTimer = setTimeout(() => { if (!accessWithdrawn && comparison) void prepareCopy(); }, 350);
+    }
     async function cancelPrevious(previous, access = publication()) {
         const token = generation;
         if (!current(token, access) || !previous?.previewId) return;
@@ -226,6 +238,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         catch (error) { if (current(token, access)) onError("The old comparison preview could not be cancelled. Do not reuse it. " + error.message); }
     }
     function invalidate(text = "Comparison inputs changed. Compare and review again.", clear = false, { force = false } = {}) {
+        clearTimeout(updateTimer);
         if (accessWithdrawn) return false;
         if (dispatchedSave) {
             // Revoking a draft cannot settle or cancel a write already dispatched.
@@ -281,6 +294,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
             content.tabIndex = -1; content.focus({ preventScroll: true });
         } catch (error) { if (current(token, access)) message(error.message, true); }
         finally { pendingSignatures.delete(token); if (current(token, access)) { writing = false; paint(); } }
+        if (current(token, access) && comparison) await prepareCopy();
     }
     async function prepareCopy() {
         if (accessWithdrawn || dispatchedSave || writing || artifactPending) return;
@@ -309,7 +323,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         pendingSignatures.set(token, signature());
         preparing = writing = true; message("Preparing a comparison copy for your review..."); paint();
         try {
-            const result = await api("/api/report-comparison/preview", { ...pair(), ...(draftTitle.trim() ? { title: draftTitle } : {}),
+            const result = await api("/api/report-comparison/preview", { ...pair(), saveMode: "local", ...(draftTitle.trim() ? { title: draftTitle } : {}),
                 formats: selectedFormats(), timeContext: timeContext(), ...(resultTextChoice.checked ? { resultText: true,
                     manualTerms: resultTerms.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean) } : {}) });
             if (!current(token, access) || pendingSignatures.get(token) !== signature()) {
@@ -320,11 +334,18 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
                 || typeof result.previewHtml !== "string" || !result.files || !Object.keys(result.files).length) throw new Error("A complete reviewed-comparison preview was not returned.");
             preview = result; approved = false; reviewCheck.checked = false;
             comparison = result.comparison; renderer.render(content, comparison);
-            const frame = el("iframe", undefined, "report-frame");
+            preparedReader?.dispose();
+            preparedReader = createPreparedFrame?.(result.previewHtml, {
+                isCurrent: () => current(token, access),
+                onError: error => { if (current(token, access)) invalidate(error); },
+            });
+            const frame = preparedReader?.frame ?? el("iframe", undefined, "report-frame");
             frame.title = result.title || "Prepared comparison copy";
-            frame.setAttribute("sandbox", "");
-            frame.setAttribute("referrerpolicy", "no-referrer");
-            frame.srcdoc = result.previewHtml;
+            if (!preparedReader) {
+                frame.setAttribute("sandbox", "");
+                frame.setAttribute("referrerpolicy", "no-referrer");
+                frame.srcdoc = result.previewHtml;
+            }
             const reportPanel = el("section"), filePanel = el("section", undefined, "comparison-exact-files");
             reportPanel.append(frame);
             fileInspection?.dispose();
@@ -364,10 +385,10 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
                 controls[next].click(); controls[next].focus();
             });
             const tabActions = el("div", undefined, "comparison-inspection-actions");
-            tabActions.append(button("Disclosure & save", () => {
+            tabActions.append(button("Save controls", () => {
                 controls[0].click();
                 decision.scrollIntoView({ block: "center" });
-                const control = approved ? save : reviewCheck;
+                const control = preview?.localSaveRequest ? save : approved ? save : reviewCheck;
                 if (!control.disabled) control.focus({ preventScroll: true });
             }));
             tabs.append(tabList, tabActions);
@@ -425,9 +446,10 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         operation.confirmed = false;
         saveChoices = { pair: pair(), formats: selectedFormats() };
         dispatchedSave = operation;
-        writing = true; paint(); message("Saving the reviewed comparison...");
+        writing = true; paint(); message("Saving the comparison on this device...");
         try {
-            let result = await api("/api/report-comparison/save", { previewId: operation.previewId, confirmed: true, timeContext: timeContext() });
+            let result = await api("/api/report-comparison/save", { previewId: operation.previewId, confirmed: true, timeContext: timeContext(),
+                ...(preview.localSaveRequest ? { localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } } : {}) });
             if (!current(token, access) || dispatchedSave !== operation) return;
             recoveryEntries = [result?.bundle]; result = null;
             const matches = await saveVerifier.matchesSaveIdentity(recoveryEntries[0]);
@@ -636,6 +658,7 @@ export function mountReportComparisonJourney(root, { api, renderer, timeContext,
         paint();
     }
     function withdrawAccess() {
+        clearTimeout(updateTimer);
         if (accessWithdrawn) return;
         accessWithdrawn = true; generation++; recoveryVersion++; inventoryVersion++;
         saveVerifier.withdrawAccess();

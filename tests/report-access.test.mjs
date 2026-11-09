@@ -93,7 +93,7 @@ test("ordinary report invalidation during hashing cannot install a successor sav
     }) });
     journey.update({ scopeReady: true, requestCount: 1 });
     journey.beginScan(); journey.previewReady(preview("PRIVATE TITLE"));
-    await assert.rejects(journey.prepareSaveIdentity(preview("PRIVATE TITLE")), /disclosure-approved/);
+    await assert.rejects(journey.prepareSaveIdentity(preview("PRIVATE TITLE")), /current prepared report/);
     journey.reviewed();
     const pending = journey.prepareSaveIdentity(preview("PRIVATE TITLE"));
     journey.invalidate("Contents changed"); gate.resolve();
@@ -112,6 +112,20 @@ test("same-grant resume is idempotent and cannot retire a current identity hash"
     identity.resumeAccess(); identity.resumeAccess(); gate.resolve();
     assert.equal((await preparing).bundleId, "bundle-original");
     assert.equal(identity.dispatched(), true);
+});
+
+test("direct local-save recovery requires the original content binding, not just its title and bundle", async () => {
+    const { api } = authority(), owner = createReportSaveIdentity({ kind: "report", api });
+    const prepared = { ...preview("Private title"), localSaveRequest: { version: 1, bundleId: "bundle-original", contentHash: "a".repeat(64) } };
+    const identity = await owner.prepareSaveIdentity(prepared);
+    assert.equal(identity.expectedLocalSave, true);
+    assert.doesNotMatch(JSON.stringify(identity), /Private title|a{64}/);
+    const receipt = { ...saved("Private title"), privacyReview: { reviewerConfirmed: false,
+        localSave: { method: "explicit-local-save", contentHash: "a".repeat(64) } } };
+    assert.equal(await owner.matchesSaveIdentity(receipt), true);
+    receipt.privacyReview.localSave.contentHash = "b".repeat(64);
+    assert.equal(await owner.matchesSaveIdentity(receipt), false);
+    assert.equal(await owner.matchesSaveIdentity(saved("Private title")), false);
 });
 
 test("ordinary journey preserves UNKNOWN escrow through scrub and fresh authorized recovery without another save", async () => {

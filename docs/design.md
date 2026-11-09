@@ -207,16 +207,31 @@ an active task offers Back to Reports instead of competing navigation.
 Rows lead with title, registered formats and Open/unavailable status.
 Inspection does not read a file, download or delete it.
 
-Creation is Activity -> Contents -> Review & save. Activity owns full scope,
-authors, selection and paging; Contents uses the contextual sidebar beside the
-picker. Inspecting an interaction temporarily replaces that panel without
-discarding the draft. Close retains memory-only choices and does not invent a
-Save/Discard gate.
+Creation opens five compact, equal-sized tile rows: All activity, Errors &
+failures, Completed calls, My prompts and Agent prompts. Compare periods stays
+in Analyze. The period is visible, defaults to Last 7 days, and offers 14/30/custom
+choices. Custom dates opens its calendar directly. A fresh report ignores old
+Analyze restrictions; Selected and Current remain deliberate secondary entries.
 
-Prepare opens the actual document in the main reading workspace with
-Report/Text/Files views. Original/copy text is selectable.
-Edits and omissions require rebuild.
-Disclosure approval and Save stay separate actions in the same workspace.
+Choosing a tile opens the actual report immediately. A compact toolbar owns its
+name, period, personal-detail choice and formats, with Save beside the name.
+The name updates the document heading without remounting its input. Optional
+changes regenerate files; Save stays unavailable while the preview is stale.
+The report surface and border complement the current screen theme without
+changing frozen output. Example notes and copy edits stay beside their evidence.
+
+Hide personal details and HTML are defaults. Errors & failures visibly includes
+retained masked error details. Notes are authored context, never recorded facts.
+Keep chat details invokes one warning at Save, with equal-sized Hide details
+and save / Save with chat details actions. Go back has a small arrow and safe
+initial focus. Hide-and-save must regenerate real masked bytes before writing.
+New saves do not claim a human text review.
+
+Use explicit nearby help icons only for meaningful limits: mixed errors,
+completed calls versus task success, masking and file formats. Card hover and
+the period control do not open help. Labels and focus outlines have sufficient
+shared spacing at enlarged text sizes. Keep Asta Sans, official Lucide geometry
+and the existing navigation owners.
 
 Saved reading uses actual files, a clear title/format toolbar and one Download
 action. HTML remains opaque; Markdown/JSON/PDF use their existing safe local

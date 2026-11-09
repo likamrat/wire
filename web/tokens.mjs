@@ -65,6 +65,7 @@ export const tokens = `
 
 // Screen surfaces are separate from the tokens embedded in saved reports and PDFs.
 const screenLight = `
+ --report-sheet:#ffffff;--report-note:#f1f5fb;
  --page:#f1f3f7;--paper:#ffffff;--canvas:#f4f5f8;--hover:#f7f7f7;
  --surface-edge:#20202012;--surface-divider:#20202024;
  --panel-shadow:0 1px 2px #26344d0a,0 6px 18px #26344d0d;
@@ -120,6 +121,7 @@ const screenDark = `
 
 // Native forced colors retain the base palette; ordinary dark screens use these material roles.
 const darkScreenSurfaces = `
+ --report-sheet:#24354a;--report-note:#1c2b3f;
  --page:#10161f;--paper:#192330;--navigation-paper:var(--page);
  --context-paper:#1c2939;--floating-paper:#202c3b;--canvas:#14212f;--hover:#1e2b3b;
  --ink:#f2f4f8;--muted:#bbc5d4;--rule:#3d4e64;--control:#8b9cb2;

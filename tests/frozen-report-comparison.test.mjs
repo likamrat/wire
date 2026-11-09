@@ -78,8 +78,9 @@ test("older normalized fact versions remain unsupported rather than implicitly u
     assert.equal(result.toolComparison, null);
 });
 
-test("unreviewed facts and dimension relabeling fail before comparison", () => {
-    assert.throws(() => compareFrozenReportFacts(report("a"), report("b", { disclosureReviewed: false })), /disclosure-reviewed/);
+test("unconfirmed facts and dimension relabeling fail before comparison", () => {
+    assert.throws(() => compareFrozenReportFacts(report("a"), report("b", { disclosureReviewed: false })), /save confirmation/);
+    assert.doesNotThrow(() => compareFrozenReportFacts(report("a"), report("b", { disclosureReviewed: false, localSaveConfirmed: true })));
     assert.throws(() => compareFrozenReportFacts(report("a"), report("b", { metrics: { accuracy: passRate("answer-trust", 8) } })), /dimension identities/);
 });
 

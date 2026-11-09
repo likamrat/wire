@@ -27,6 +27,26 @@ function servicesFor(app, views, viewId, nativeIds = []) {
     };
 }
 
+test("native publication accepts exact local-save intent without a fabricated disclosure review", async t => {
+    const app = await committedNativeReportFixture(t, { segmented: true });
+    const views = createNativeRetainedViews(app.context, app.persistence, app.lifecycle);
+    t.after(() => views.close());
+    const page = await views.query(query(), app.services.nativeReportAdmission);
+    const services = servicesFor(app, views, page.viewId), controller = createExportController(app.context);
+    const preview = await controller.preview(app.owner, undefined,
+        { promptMode: "masked", formats: ["html", "json"], saveMode: "local" },
+        { kind: "current", revision: page.revision, scenarioIds: [] }, undefined, services);
+    assert.equal(preview.privacy.reviewerConfirmed, false);
+    const saved = await controller.confirm(app.owner, preview.previewId, true, undefined,
+        { ...services, localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } });
+    assert.equal(saved.bundle.privacyReview.reviewerConfirmed, false);
+    assert.equal(saved.bundle.savePolicy, "local-save-v1");
+    assert.equal(saved.bundle.privacyReview.localSave.method, "explicit-local-save");
+    assert.deepEqual(await readFile(saved.bundle.files["product-report.html"]), Buffer.from(preview.files["product-report.html"]));
+    await assert.rejects(controller.confirm(app.owner, preview.previewId, true, undefined,
+        { ...services, localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } }), /Preview not found/);
+});
+
 test("prepared native reports publish their exact original root while later captures continue", async t => {
     for (const segmented of [false, true]) {
         const envelopes = [...chatFixture(), ...coworkFixture()];

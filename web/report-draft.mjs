@@ -20,8 +20,12 @@ export function createReportSaveIdentity({ kind, api, digest = bytes => crypto.s
             if (typeof preview?.previewId !== "string" || !preview.previewId || typeof preview.bundleId !== "string" || !preview.bundleId
                 || preview.title !== undefined && typeof preview.title !== "string") throw new TypeError("The prepared report identity is incomplete.");
             const next = { previewId: preview.previewId, bundleId: preview.bundleId, kind,
-                expectedTitleRequired: preview.title !== undefined, fingerprint: "", dispatched: false, unknown: false };
-            const pending = hash([kind, next.bundleId, next.expectedTitleRequired, next.expectedTitleRequired ? preview.title : null]);
+                expectedTitleRequired: preview.title !== undefined, ...(preview.localSaveRequest !== undefined ? { expectedLocalSave: true } : {}),
+                fingerprint: "", dispatched: false, unknown: false };
+            if (next.expectedLocalSave && (preview.localSaveRequest.version !== 1 || preview.localSaveRequest.bundleId !== next.bundleId
+                || !/^[a-f0-9]{64}$/.test(preview.localSaveRequest.contentHash ?? ""))) throw new TypeError("The prepared report save binding is incomplete.");
+            const pending = hash([kind, next.bundleId, next.expectedTitleRequired, next.expectedTitleRequired ? preview.title : null,
+                ...(next.expectedLocalSave ? [preview.localSaveRequest.contentHash] : [])]);
             preview = null;
             const fingerprint = hex(await pending);
             if (!current(version, token)) return null;
@@ -37,7 +41,11 @@ export function createReportSaveIdentity({ kind, api, digest = bytes => crypto.s
             if (item?.bundleId !== expected.bundleId || itemKind !== kind
                 || expected.expectedTitleRequired && typeof item.title !== "string"
                 || kind === "comparison" && !expected.expectedTitleRequired && item.title !== undefined) return false;
-            const pending = hash([kind, item.bundleId, expected.expectedTitleRequired, expected.expectedTitleRequired ? item.title : null]);
+            if (expected.expectedLocalSave && (item.privacyReview?.reviewerConfirmed !== false
+                || item.privacyReview?.localSave?.method !== "explicit-local-save"
+                || !/^[a-f0-9]{64}$/.test(item.privacyReview.localSave.contentHash ?? ""))) return false;
+            const pending = hash([kind, item.bundleId, expected.expectedTitleRequired, expected.expectedTitleRequired ? item.title : null,
+                ...(expected.expectedLocalSave ? [item.privacyReview.localSave.contentHash] : [])]);
             item = null;
             const fingerprint = hex(await pending);
             return expected === identity && current(version, token) && fingerprint === expected.fingerprint;
@@ -275,6 +283,9 @@ export function createReportDraft({ contextSelector } = {}) {
             basis = authorityBasis = undefined;
             delete options.title;
             delete options.resultText;
+            delete options.reportFocus;
+            delete options.reportNotes;
+            delete options.resultTextKind;
             options.overrides = [];
             context = undefined;
             nativeView = nativePicks = undefined;

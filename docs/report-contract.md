@@ -33,8 +33,10 @@ execution.
 | Current | Resolve the complete accepted analytical membership, then include complete eligible parent interactions. Chart-matching calls and full report counts are different. |
 | All | All retained reportable activity, including eligible preserved records; independent of Analyze filters/Search/paging and never a source scan. |
 
-New panels start empty Selected. Scope and author choices remain panel memory,
-not inferred from opening Reports or persisted across reload. `Authors in
+Fresh creation opens five built-in choices with a Last 7 days period, inclusive
+of today in the selected IANA zone. It does not inherit Analyze restrictions.
+Explicit Selected and Current entries retain their own membership. Scope and
+author choices remain panel memory, not persisted across reload. `Authors in
 report` filters whole originating interactions; My plus Agent excludes
 unverified. Calls executed by agents stay with their originating interaction.
 No prompts removes prose, not membership.
@@ -76,6 +78,26 @@ different definitions and must not be substituted for one another.
 
 Missing timing remains unavailable, not zero.
 
+### Report presets and notes
+
+`reportPopulation` v1 freezes metadata-only reference membership and the included
+interaction IDs separately. The reference cohort applies the same source,
+authors, dates and services before the outcome restriction. Failure frequency
+uses distinct interactions, not calls or the failure subset as its denominator.
+Only included cases supply prompt, reply or diagnostic copies.
+
+An error case has a qualified failed call or explicit application/API error.
+Mixed interactions qualify. Completed-only requires at least one eligible call,
+every call completed and no recorded errors. Unknown evidence is neither failure
+nor success. Unverified authors remain available through All.
+
+`reportPatterns` v1 binds normalized operations and distinct error channels to
+their calls and interactions. It does not infer root causes or prompt similarity.
+`reportNotes` v1 contains report-author context scoped to included pseudonymous
+interaction IDs. Notes share privacy treatment and the existing copy budget,
+but never enter metrics. Matching namespace hashes are required in the manifest
+and snapshot; malformed or expanded fields are rejected.
+
 ## Preparation, disclosure and Save
 
 The report controller owns the sequence:
@@ -84,8 +106,9 @@ The report controller owns the sequence:
    write no export.
 2. Prepare a preview. Freeze membership, options, source facts, time context
    and prepared bytes.
-3. Review the disclosure and approve it.
-4. Confirm Save separately, then verify saved readback.
+3. Optionally inspect, mask, edit or omit copies and add report-author notes.
+4. Confirm local Save, then verify saved readback. Keeping chat details requires
+   the warning's explicit choice for that save.
 
 Qualified GitHub previews pin the original content-addressed evidence file.
 Later collection can add follow-ups without changing reviewed copies.
@@ -93,8 +116,9 @@ Later collection can add follow-ups without changing reviewed copies.
 | Change after preparation | Effect |
 | --- | --- |
 | Ordinary Back/browsing with unchanged facts and authority | Preview can survive |
-| Material scope, author, text or format change | Fresh preparation and disclosure |
-| Material source/configuration, consent, deletion, key or owner change | Fresh preparation/disclosure under current authority; old preparation cannot bypass it |
+| Scope, author, date or service change | Fresh membership and preparation |
+| Title, note, privacy, copy or format change | Regenerate bytes against the original frozen reference and included populations |
+| Material source/configuration, consent, deletion, key or owner change | Fresh preparation under current authority; old preparation cannot bypass it |
 
 Original evidence-file identity also keys the report read model, so reading
 a saved report cannot replace current Analyze facts. Saving appends to current
@@ -107,14 +131,30 @@ state; it never restores the preview's evidence snapshot over newer collection.
 | Original | Retain wording, still removing credentials |
 | Additional terms and manual edits | Affect copies, not source records; credential removal still applies |
 | Title | One line, at most 200 characters, always masked metadata |
-| Include recorded result text (masked) | Starts off, independently of prompt/reply choices; admits screened diagnostics and qualified descriptions, never raw response bodies |
+| Error details in a preset report | Retained masked diagnostics only; enabled by default for Errors & failures, independent of prompt/reply mode; no raw bodies or unrelated descriptions |
 
-Names and confidential meaning require human review; masking is not complete
-DLP or privacy certification. Result copies keep original entry/fact
+Masking can miss names and confidential meaning; it is not complete DLP or
+privacy certification. Optional review remains available. Result copies keep original entry/fact
 associations and edited/omitted/disclosure status.
 
 Snapshot, manifest and index must agree on a declared title. `canonicalTitle`
 comes only from the verified declared manifest binding.
+
+New reports use `savePolicy: "local-save-v1"`. A preparation supplies a one-save
+challenge binding its bundle, snapshot, prompt mode, formats and exact file
+inventory. The receipt records `explicit-local-save`, with both reviewer flags
+false. Its keep-chat-details flag is true exactly when original wording was
+chosen. Historical attested bundles keep their existing interpretation.
+
+Hide details and save regenerates masked bytes before binding the save intent.
+Cancellation writes nothing. Later content or authority changes retire that
+intent. A dispatched or uncertain save keeps its original exact-content
+recovery identity rather than preparing or writing another bundle.
+
+Content-only `rebuildFrom` is limited to the same owner's unexpired ordinary
+preset preview. It preserves the pinned reference and included populations,
+scope and undated coverage. It cannot change dates, time zone or focus, and
+cannot admit interactions collected after preparation.
 
 ### Prepared bytes and recovery
 
@@ -124,7 +164,7 @@ format omission or weakened file limit. PDF is generated locally before review,
 not swapped for HTML after a failure.
 
 The version-3 manifest freezes source/prompt coverage, transformations,
-snapshot identity, exact file SHA-256 values and attestation. It contains no
+snapshot identity, exact file SHA-256 values and save authorization. It contains no
 matched private snippets or masking terms. Report JSON is an object, not JSONL.
 
 Staging reserves a new bundle, writes every selected format, atomically

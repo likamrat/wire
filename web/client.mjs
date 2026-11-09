@@ -208,6 +208,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let viewerTime = time.detect();
     let displayTimeSettings;
     const draft = createReportDraft({ contextSelector: createRequestContext() });
+    draft.change({ saveMode: "local" });
+    let reportExperience, reportDates = { range: "7", ...time.preset("7", viewerTime.timeZone) };
+    let reportBaseExplicit = false, reportDatesReplaced = false, reportRebuildFrom = null, reportUpdateTimer;
+    let reportPreparing = false, reportPreparationOwner = null, reportUpdateAgain = false, saveAfterMask = false;
+    const reportSaveWarning = assessmentFactories.createReportSaveWarning({
+        icon: name => ux.icon(name), current: () => !clearingAccess && Boolean(api.publicationToken()),
+    });
     const nativePublication = assessmentFactories.createNativeReportPublicationState();
     let syncNativeSaveAvailability = null, nativePreviewExpiryTimer;
     function nativePublicationContext(includeDraft = true) {
@@ -1855,7 +1862,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             route = { ...route, ...preset };
             rememberRoute(route, true);
         }
-        if (draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : dateSelection())) {
+        const reportPreset = time.preset(reportDates.range, viewerTime.timeZone);
+        if (reportPreset && !activePreview && !reportRebuildFrom && !reportPreparing) reportDates = { range: reportDates.range, ...reportPreset };
+        if (draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : reportDates)) {
             invalidatePreview("The report time or date basis changed. Return to Setup and scan again.");
         }
         renderTimeContext();
@@ -2246,7 +2255,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             periodReportInvalid = false;
             for (const id of ids) selected.add(id);
             draft.clearSelection();
+            draft.change({ saveMode: "local" });
+            reportBaseExplicit = true;
             go("reports", { task: "create", request: undefined });
+            updateSelection(); void previewExport();
         },
         recordLink: (row, side, value) => link(row.tool, "request", {
             request: row.scenarioId, call: row.id, callRevision: value.definitions.layer === "reported-api" ? String(value.revision) : undefined,
@@ -2274,6 +2286,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             scrubContextPreview();
         }
         if (exportWriting) return;
+        clearTimeout(reportUpdateTimer); reportUpdateAgain = false; saveAfterMask = false;
         nativePublication.invalidate(); clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
         clearPreparedReaders();
         draft.invalidate();
@@ -2281,7 +2294,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportJourney?.invalidate(message);
         const preview = activePreview;
         activePreview = null;
-        if (preview?.previewId) api("/api/cancel-preview", { previewId: preview.previewId }).catch(() => {
+        const previewId = preview?.previewId ?? reportRebuildFrom;
+        reportRebuildFrom = null;
+        if (previewId) api("/api/cancel-preview", { previewId }).catch(() => {
             if (api.isCurrent(publication)) announce("The previous preview could not be cancelled on the runtime. Do not reuse it; prepare a new preview before reviewing.", "error");
         });
     }
@@ -2572,6 +2587,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         periodReport = null; periodReportInvalid = false;
         for (const id of requestIds) selected.add(id);
         reportScope = "selected";
+        reportBaseExplicit = true; reportDatesReplaced = false; reportDates = { range: "capture" };
         reportEntry = { scope: "selected", sessionId: source.sessionId, sessionName: source.name, projectId: source.projectId, projectName: source.project, requestIds, returnTo: { ...route, view: "activity", request: undefined } };
         draft.clearSelection();
         invalidatePreview();
@@ -4048,8 +4064,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.view === "reports") $("coverage").hidden = true;
         const current = reportJourney?.snapshot();
         if (route.view === "reports" && creating) setText($("pageTitle"), current?.step === 3
-            ? current.title || (current.phase === "saved" ? "Report saved" : current.phase === "unavailable" ? "Report unavailable"
-                : current.saveUnconfirmed ? "Report save status" : "Review report") : "Create a report");
+            ? current.phase === "saved" ? "Report saved" : current.phase === "unavailable" ? "Report unavailable"
+                : current.saveUnconfirmed ? "Report save status" : "Your report" : "Create a report");
         if (route.view === "reports" && comparing) setText($("pageTitle"), reportComparisonUI?.title() || "Compare saved reports");
         const unfinished = current && !["saved", "unavailable"].includes(current.phase)
             && (current.requestCount > 0 || current.step > 1 || current.promptMode !== "masked"
@@ -4066,6 +4082,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (active) control.setAttribute("aria-current", "page");
             else control.removeAttribute("aria-current");
         }
+        reportExperience?.sync();
     }
     function renderViewingContext() {
         const host = $("viewingContext");
@@ -6203,6 +6220,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const request = native ? null : state.exportCatalog.requests.find(item => item.scenarioId === scenarioId)
             ?? state.exportCatalog.requests.find(item => item.aliases.includes(scenarioId));
         reportScope = "selected";
+        reportBaseExplicit = true; reportDatesReplaced = false; reportDates = { range: "capture" };
         const id = native?.id ?? request?.scenarioId;
         const choices = reportPickerView("").matching, target = choices.find(item => item.id === id);
         if (!target) { announce("This interaction is no longer available in the report picker.", "stale"); return false; }
@@ -6220,24 +6238,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const navigation = navigationGeneration, intent = readingIntent;
         const reveal = loaded => {
             if (!loaded || navigation !== navigationGeneration || intent !== readingIntent) return;
-            if (contextSidebar.open && !sidebarIdentity) {
-                contextSidebar.addEventListener("close", () => reveal(loaded), { once: true });
-                return;
-            }
-            const control = $(native ? "report-native-select-" + id : "report-select-" + encodeURIComponent(id));
-            if (!control?.checkVisibility() || !control.checked) {
-                announce("The continued interaction changed. Check the current report selection.", "stale");
-                return;
-            }
-            const entry = control.closest(".report-entry"), actions = $("reportStage1").querySelector(".report-stage-actions");
-            entry.tabIndex = -1;
-            entry.focus({ preventScroll: true });
-            const inset = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
-            const entryBox = entry.getBoundingClientRect(), actionsBox = actions.getBoundingClientRect();
-            const top = Math.min(entryBox.top, actionsBox.top), bottom = Math.max(entryBox.bottom, actionsBox.bottom);
-            if (bottom - top <= innerHeight - inset - 16) {
-                window.scrollTo({ top: scrollY + top - inset });
-            } else control.scrollIntoView({ block: "center", inline: "nearest" });
+            updateSelection(); void chooseReportPreset("all");
         };
         if (moved instanceof Promise) moved.then(reveal);
         else reveal(moved);
@@ -6250,6 +6251,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         periodReport = null; periodReportInvalid = false;
         selected.clear();
         draft.clearSelection();
+        draft.change({ saveMode: "local", promptMode: "masked", formats: ["html"], manualTerms: [], recordedContext: false });
+        reportDates = { range: "7", ...time.preset("7", viewerTime.timeZone) };
+        reportBaseExplicit = reportDatesReplaced = false;
         invalidatePreview();
         reportJourney?.clear();
         if ($("overlay").open) {
@@ -6352,7 +6356,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (hasNativeScope && !value.available && activePreview && !exportWriting) {
             invalidatePreview("The original Microsoft report view changed. Select a current scope before preparing again.");
         }
-        const hasReportPopulation = value.requests.length > 0 || hasNativeScope
+        const hasReportPopulation = reportDatesReplaced && reportScope === "current" || value.requests.length > 0 || hasNativeScope
             && (value.nativeConversationCount === null || value.nativeConversationCount > 0);
         const picked = new Set(reportSelection("selected").baseRequests.map(request => request.scenarioId));
         for (const control of $("reportList").querySelectorAll("input[data-report-request]")) control.checked = picked.has(control.dataset.reportRequest);
@@ -6371,7 +6375,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         }
         const unknownSelected = reportScope === "selected" && [...selected].some((id) => !state.scenarios.some((s) => s.scenarioId === id));
-        if (!exportWriting && !isLoading && !isStale && value.available) {
+        if (!exportWriting && !isLoading && !isStale && value.available && !activePreview?.collectedSourceFrozen && !reportRebuildFrom && !reportPreparing) {
             if (draft.observeContext({ revision: state.revision, assessment: state.assessment })) {
                 scrubContextPreview();
                 invalidatePreview("Recorded context changed. Prepare a new preview; ordinary prompt edits are kept.");
@@ -6379,7 +6383,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const token = draft.token();
             draft.select([reportScope, "authors:" + activeAuthors.join(","), ...value.requests.map((r) => r.scenarioId),
                 ...(reportScope === "selected" ? nativePickedIds : [])]);
-            draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : dateSelection());
+            draft.synchronizeTime(periodReport?.timeContext ?? viewerTime, periodReport ? { range: "capture" } : reportDates);
             if (draft.synchronizeBasis(state, value, { paired: Boolean(periodReport) }) && periodReport) periodReportInvalid = true;
             if (periodReport && JSON.stringify(periodReport.timeContext) !== JSON.stringify(viewerTime)) periodReportInvalid = true;
             if (!draft.current(token)) invalidatePreview("The report scope, source or review basis changed. Return to Setup and scan again; unchanged draft choices are kept.");
@@ -6406,7 +6410,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const option of $("reportPromptAuthorFilter").options) option.selected = activeAuthors.includes(option.value);
         $("reportPromptAuthorFilter").disabled = exportWriting || Boolean(periodReport);
         $("reportPromptAuthorFilter").closest(".report-author-choice").hidden = Boolean(periodReport);
-        if ($("reportTitle").value !== (draft.options().title || "")) $("reportTitle").value = draft.options().title || "";
+        const reportTitleValue = draft.options().title ?? activePreview?.title ?? "";
+        if ($("reportTitle").value !== reportTitleValue) $("reportTitle").value = reportTitleValue;
         $("reportTitle").placeholder = assessmentFactories.reportIdentity.defaultTitle({ kind: "report", selectionScope: { kind: reportScope },
             ...(periodReport ? { reportType: "period-comparison" } : {}) });
         $("reportTitle").disabled = exportWriting || reportJourney?.snapshot().saveUnconfirmed;
@@ -6573,6 +6578,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportJourney?.update({
             requestCount: value.requests.length, sourceSessionCount: value.sourceSessionCount, scope: periodReport ? "period" : reportScope,
             nativeView: hasNativeScope, nativeConversationCount: value.nativeConversationCount ?? null,
+            resolveReportView: reportDatesReplaced && reportScope === "current",
             authorLabel: authorship.selectionLabel(activeAuthors), authorFiltered: activeAuthors.length !== authorship.actors.length,
             scopeReady: !nativeBlock && !isLoading && !isStale && !periodReportInvalid && Boolean(state.exportCatalog) && value.available !== false && !unknownSelected,
             scopeIssue: nativeBlock || (periodReportInvalid ? "The accepted comparison changed. Return to Analyze and create a new comparison report." : isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : ""),
@@ -6776,6 +6782,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             summary.setAttribute("aria-expanded", String(route.inspect === bundle.bundleId));
             const identity = el("span", "saved-report-identity");
             identity.append(el("span", "saved-report-name", title));
+            if (bundle.reportPurpose !== undefined) {
+                const purpose = ({ all: "All activity", errors: "Errors & failures", completed: "Completed calls",
+                    mine: "My prompts", agent: "Agent prompts", custom: "Activity report" })[bundle.reportPurpose];
+                const period = bundle.reportPeriod;
+                const dates = period?.range === "capture" ? "All retained dates" : period?.from && period?.to
+                    ? `${time.formatDate(period.from, bundle.timeContext, true)} to ${time.formatDate(period.to, bundle.timeContext, true)}` : "";
+                const privacy = ({ masked: "Personal details hidden where detected", original: "Chat details kept", none: "Prompts and replies left out" })[bundle.promptMode];
+                identity.append(el("span", "saved-report-purpose", [purpose, dates, privacy].filter(Boolean).join(" · ")));
+            }
             summary.append(identity, savedFormatLabels(bundle));
             outer.append(summary);
             if (savedReadableFormat(bundle)) {
@@ -8394,14 +8409,53 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (ordinary?.hasPreview || ordinary?.phase === "scanning") {
                 invalidatePreview("");
                 reportJourney.invalidate("Preparing a comparison replaced this report preview. Prepare it again before reviewing or saving.");
-                reportJourney.go(2);
+                reportJourney.go(1);
             }
         } else if (reportComparisonUI?.hasPreviewWork()) {
             reportComparisonUI.invalidate("Preparing a report replaced this comparison preview. Prepare a new comparison copy before saving.", false, { force: true });
         }
         return "";
     }
-    async function previewExport() {
+    async function chooseReportPreset(preset) {
+        if (reportSelectionBlock() || reportPreparing) return;
+        const dates = time.preset(reportDates.range, viewerTime.timeZone);
+        if (dates) reportDates = { range: reportDates.range, ...dates };
+        if (!reportBaseExplicit) reportScope = "all";
+        reportAuthors = authorship.selection(preset === "mine" ? ["user"] : preset === "agent" ? ["agent"] : undefined);
+        invalidatePreview();
+        draft.change({
+            saveMode: "local", title: undefined, promptMode: "masked", formats: ["html"], overrides: [], manualTerms: [],
+            reportNotes: [], recordedContext: false, resultText: preset === "errors", resultTextKind: "errors",
+            reportFocus: { version: 1, preset, outcome: ["errors", "completed"].includes(preset) ? preset : "all", services: [] },
+        });
+        draft.synchronizeTime(viewerTime, reportDates);
+        acceptNativeReportScope(); updateSelection();
+        await previewExport();
+    }
+    function updateReportContent({ hide = false, delay = 350 } = {}) {
+        if (exportWriting || reportJourney.snapshot().saveUnconfirmed) return;
+        saveAfterMask = false;
+        clearTimeout(reportUpdateTimer);
+        if (activePreview?.snapshot?.reportPopulation) reportRebuildFrom ??= activePreview.previewId;
+        else if (activePreview) invalidatePreview("");
+        activePreview = null;
+        reportJourney.invalidate("");
+        $("reportSaveActions").querySelectorAll("button").forEach(control => { control.disabled = true; });
+        if (hide) { clearPreparedReaders(); clearPreviewPayload?.(); $("reportReviewBody").replaceChildren(); }
+        if (reportPreparing) { reportUpdateAgain = true; return; }
+        reportUpdateTimer = setTimeout(() => { void previewExport({ contentOnly: true }); }, delay);
+        reportExperience?.sync();
+    }
+    async function changeReportDates(dates) {
+        if (exportWriting || reportJourney.snapshot().saveUnconfirmed || periodReport) return;
+        const prepared = reportJourney.snapshot().step === 3;
+        invalidatePreview(); reportDates = dates; reportDatesReplaced = reportBaseExplicit && reportScope === "current";
+        draft.change({ reportNotes: [], overrides: [] });
+        draft.synchronizeTime(viewerTime, reportDates);
+        updateSelection();
+        if (prepared) await previewExport();
+    }
+    async function previewExport({ contentOnly = false } = {}) {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const blocked = reportPreparationBlock("report");
@@ -8415,12 +8469,23 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return;
         }
         if (exportWriting || reportJourney?.snapshot().phase === "scanning" || !ensureCurrentTime() || isLoading || isStale || $("exportBtn").disabled) return;
-        const selection = reportSelection().selection(state.revision);
+        let selection = reportSelection().selection(state.revision);
         const nativeRequest = usesBoundedReportView() ? draft.nativeView(reportNativeView(), state.revision, reportNativeIntent()).request : null;
         if (usesBoundedReportView() && !nativeRequest) { updateSelection(); return; }
-        invalidatePreview();
-        const body = reportJourney.beginScan();
+        const rebuilding = contentOnly && reportRebuildFrom;
+        if (!rebuilding) {
+            const pendingMaskSave = contentOnly && saveAfterMask;
+            invalidatePreview();
+            saveAfterMask = pendingMaskSave;
+        }
+        draft.change({ saveMode: "local", ...(!periodReport && !nativeRequest && !draft.options().reportFocus ? {
+            reportFocus: { version: 1, preset: "custom", outcome: "all", services: [] }, resultTextKind: "errors",
+        } : {}) });
+        const body = reportJourney.beginScan({ focus: !contentOnly });
         if (!body) return;
+        const preparationOwner = {};
+        reportPreparationOwner = preparationOwner;
+        reportPreparing = true;
         const operation = draft.token();
         const publicationContext = nativePublicationContext(), previewStartedAt = performance.now();
         const progress = el("p", "", "Scanning selected evidence locally. No files are being written.");
@@ -8430,12 +8495,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         try {
             const refused = admitReportPreparation("report");
             if (refused) { body.replaceChildren(); reportJourney.failed(refused); return; }
-            const preview = await api("/api/preview", { ...(periodReport ? { periodComparison: periodReport.value,
+            const reportView = !rebuilding && !periodReport && !nativeRequest && reportScope === "current" && draft.options().reportFocus ? {
+                analytics: applied,
+                withinServices: route.withinServices?.split(",").filter(Boolean) ?? [],
+                ...(search.trim() ? { withinScenarioIds: analysisSlice.legacyScenarioIds(state, search) } : {}),
+                ...(semanticQuery !== null ? { semanticSelection: { receipt: semanticMembership?.receipt } } : {}),
+            } : null;
+            const preview = await api("/api/preview", { ...(rebuilding ? { rebuildFrom: rebuilding } : periodReport ? { periodComparison: periodReport.value,
                 ...(periodReport.semanticSelection ? { semanticSelection: periodReport.semanticSelection } : {}) } : { selection,
-                    ...(nativeRequest ? { nativeViewId: nativeRequest.nativeViewId } : {}) }), options: draft.options() });
+                    ...(nativeRequest ? { nativeViewId: nativeRequest.nativeViewId } : {}),
+                    ...(reportView ? { reportView } : {}) }), options: draft.options() });
             if (!api.isCurrent(publication)) return;
             if (!ensureCurrentTime() || !draft.current(operation) || !reportJourney.isReviewOpen()) {
-                if (preview.previewId) await api("/api/cancel-preview", { previewId: preview.previewId });
+                if (reportUpdateAgain && preview.snapshot?.reportPopulation) reportRebuildFrom = preview.previewId;
+                else if (preview.previewId) await api("/api/cancel-preview", { previewId: preview.previewId });
                 return;
             }
             if (preview.privacy?.allSelectedFieldsScanned !== true || !preview.files || !preview.previewId) throw new Error("The local privacy scan is incomplete. Export is blocked.");
@@ -8444,24 +8517,40 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 throw new Error("Recorded context changed while preparing this preview. Read current activity and prepare a new preview.");
             }
             activePreview = preview;
+            reportRebuildFrom = null;
             if (preview.snapshot?.nativeEvidence) nativePublication.preview(preview, publicationContext, previewStartedAt);
-            renderPreview(body, preview, operation);
+            renderPreview(body, preview, operation, { focus: !contentOnly });
+            if (saveAfterMask && preview.promptMode === "masked" && draft.current(operation)) {
+                saveAfterMask = false;
+                $("reportSaveActions").querySelector("button")?.click();
+            }
         } catch (error) {
             if (!api.isCurrent(publication) || !draft.current(operation)) return;
             if (nativeRequest) draft.rejectNativeView();
             body.replaceChildren();
             reportJourney.failed(error.message + " No files were written. Prepare a new preview.");
             if (nativeRequest) updateSelection();
+        } finally {
+            if (reportPreparationOwner === preparationOwner) {
+                reportPreparing = false; reportPreparationOwner = null;
+                if (api.isCurrent(publication)) reportExperience?.sync();
+                if (api.isCurrent(publication) && reportUpdateAgain) {
+                    reportUpdateAgain = false;
+                    reportUpdateTimer = setTimeout(() => { void previewExport({ contentOnly: true }); }, 0);
+                }
+            }
         }
     }
-    function renderPreview(body, preview, operation) {
+    function renderPreview(body, preview, operation, { focus = true } = {}) {
         clearPreviewPayload?.();
         const publication = api.publicationToken();
+        if (document.activeElement !== $("reportTitle") && !draft.options().title?.trim()) $("reportTitle").value = preview.title ?? "";
         detailOwner = "preview:" + preview.previewId;
         body.replaceChildren();
         body.dataset.recordedContext = String(Boolean(preview.snapshot?.recordedContext || preview.snapshot?.nativeEvidence || preview.snapshot?.resultText));
         const contextToken = draft.contextToken();
         const nativeReport = Boolean(preview.snapshot?.nativeEvidence);
+        const localSave = preview.localSaveRequest?.version === 1;
         const modeLabels = { none: "No prompts", masked: "Masked prompts", original: "Original prompts" };
         const mode = preview.promptMode || "none";
         const formats = (preview.formats || ["markdown"]).map((f) => f === "markdown" ? "Markdown" : f.toUpperCase()).join(", ");
@@ -8488,6 +8577,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const changed = () => {
             if (!api.isCurrent(publication) || preview === null || !body.isConnected) return;
+            if (localSave) { updateReportContent(); return; }
             const canRebuild = activePreview === preview || body.querySelector(".rebuild-preview");
             invalidatePreview(canRebuild ? "" : undefined);
             body.querySelectorAll("[data-review-control]").forEach((node) => { node.disabled = true; });
@@ -8507,6 +8597,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             for (const copy of reviewCopies) for (const key of Object.keys(copy)) delete copy[key];
             reviewCopies.length = 0;
             for (const copy of preview?.snapshot?.resultText?.copies ?? []) copy.text = null;
+            for (const note of preview?.snapshot?.reportNotes?.entries ?? []) note.text = "";
             preview = null;
             clearPreviewPayload = null;
         };
@@ -8582,10 +8673,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     omit.addEventListener("change", () => {
                         if (!api.isCurrent(publication) || preview === null || !omit.isConnected || !body.contains(omit)) return;
                         if (exportWriting || reportJourney.snapshot().saveUnconfirmed) return;
-                        textarea.disabled = omit.checked; saveEdit();
+                        textarea.disabled = omit.checked;
+                        if (!localSave) saveEdit();
                     });
-                    textarea.addEventListener("input", saveEdit);
+                    if (!localSave) textarea.addEventListener("input", saveEdit);
                     fields.append(omitLabel, el("p", "", mode === "masked" || resultCopy ? "Detected credentials and personal values will be masked again." : "Detected credentials will be removed again."), textarea);
+                    if (localSave) fields.append(button("Update report copy", saveEdit));
                     edit.append(fields);
                     copy.append(edit);
                 }
@@ -8617,6 +8710,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 preparedReportReader?.dispose();
                 preparedReportReader = assessmentFactories.preparedFrame(value.previewHtml, assessmentFactories.liveSearch.frozenFrame, {
                     isCurrent: () => api.isCurrent(publication),
+                    onReady: (source, refresh) => assessmentFactories.decoratePreparedReport(source, {
+                        preview: value, notes: draft.options().reportNotes ?? [],
+                        current: () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId,
+                        refresh,
+                        onNote: (scenarioId, text) => {
+                            const reportNotes = (draft.options().reportNotes ?? []).filter(note => note.scenarioId !== scenarioId);
+                            if (text.trim()) reportNotes.push({ scenarioId, text });
+                            draft.change({ reportNotes }); updateReportContent();
+                        },
+                        onCopy: (key, text, omit) => {
+                            const overrides = draft.options().overrides.filter(copy => copy.key !== key);
+                            overrides.push({ key, ...(omit ? { omit: true } : { text }) });
+                            draft.change({ overrides }); updateReportContent();
+                        },
+                    }),
                     onError: message => {
                         if (!api.isCurrent(publication) || !draft.current(operation) || exportWriting) return;
                         invalidatePreview(message);
@@ -8646,7 +8754,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         attestation.append(checkbox, el("span", "", `I reviewed this report, its text changes and limits. I approve ${modeLabels[mode].toLowerCase()} in ${formats} for local files.`));
         const approval = el("section", "report-approval");
         approval.id = "reportApproval";
-        approval.append(attestation);
+        if (!localSave) approval.append(attestation);
         body.append(approval);
         const feedback = el("p", "muted");
         feedback.setAttribute("role", "status");
@@ -8679,11 +8787,28 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         review.dataset.reviewControl = "";
         checkbox.addEventListener("change", () => { if (api.isCurrent(publication)) review.disabled = !checkbox.checked || !draft.current(operation); });
         const confirm = button("Save report", async () => {
+            if (!api.isCurrent(publication) || exportWriting || !draft.current(operation) || !activePreview) return;
+            let keepChatDetailsConfirmed = false;
+            if (localSave && activePreview.promptMode === "original") {
+                confirm.disabled = true;
+                const choice = await reportSaveWarning.choose();
+                if (!api.isCurrent(publication) || !draft.current(operation) || !activePreview || !confirm.isConnected) return;
+                confirm.disabled = false;
+                if (!choice) return;
+                if (choice === "masked") {
+                    draft.change({ promptMode: "masked" });
+                    updateReportContent({ hide: true, delay: 0 });
+                    saveAfterMask = true;
+                    return;
+                }
+                keepChatDetailsConfirmed = true;
+            }
             if (nativeReport) syncNativeSaveAvailability?.();
             if (nativeReport && !nativePublication.canSave(nativePublicationContext())) {
                 syncNativeSaveAvailability?.(); return;
             }
-            if (!api.isCurrent(publication) || exportWriting || isLoading || isStale || !ensureCurrentTime() || !draft.current(operation) || activePreview?.privacy?.reviewerConfirmed !== true || !reportJourney.isReviewOpen()) return;
+            if (!api.isCurrent(publication) || exportWriting || isLoading || isStale || !ensureCurrentTime() || !draft.current(operation)
+                || !localSave && activePreview?.privacy?.reviewerConfirmed !== true || !reportJourney.isReviewOpen()) return;
             confirm.disabled = true;
             ux.pending(confirm, true);
             let exportResponseReceived = false, dispatched = false;
@@ -8700,8 +8825,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 exportWriting = true; dispatched = true; pendingSaveOwner = saving;
                 $("clearPreviewSelection").disabled = true;
                 $("closeDialog").disabled = true;
-                feedback.textContent = "Saving your reviewed files. This save cannot be cancelled or repeated.";
-                let response = await api("/api/export", { previewId: identity.previewId, confirmed: true, timeContext: viewerTime });
+                feedback.textContent = "Saving on this device. This save cannot be cancelled or repeated.";
+                let response = await api("/api/export", { previewId: identity.previewId, confirmed: true, timeContext: viewerTime,
+                    ...(localSave ? { localSave: { ...activePreview.localSaveRequest, keepChatDetailsConfirmed } } : {}) });
                 if (!api.isCurrent(publication)) { response = null; return; }
                 pendingSaveResult = response; response = null;
                 exportResponseReceived = true;
@@ -8739,7 +8865,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const saveRejected = !dispatched || !exportResponseReceived && (error.code === "request_rejected" || refusedBeforePublication);
                 feedback.className = "notice error"; feedback.setAttribute("role", "alert");
                 feedback.textContent = error.message + (saveRejected
-                    ? " No report was saved. Return to Contents and read current activity before preparing and reviewing again."
+                    ? " No report was saved. Read current activity, then prepare a new report."
                     : " The local write may have completed. Check save status; do not repeat the save.");
                 confirm.textContent = saveRejected ? "Save not sent" : "Export not confirmed";
                 reportJourney.failed(feedback.textContent, { saveRejected });
@@ -8756,10 +8882,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             }
         }, "primary");
         ux.pending(confirm, false);
-        confirm.disabled = true;
+        confirm.disabled = !localSave;
         confirm.dataset.reviewControl = "";
         const controls = el("div", "dialog-actions");
-        controls.append(review, confirm);
+        if (!localSave) controls.append(review);
+        controls.append(confirm);
         const saveAvailability = el("p", "muted");
         saveAvailability.hidden = true;
         approval.append(feedback, saveAvailability);
@@ -8774,7 +8901,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }
                 const ready = nativePublication.canSave(nativePublicationContext());
                 confirm.disabled = !ready || exportWriting || isLoading || isStale || !draft.current(operation)
-                    || activePreview?.privacy?.reviewerConfirmed !== true;
+                    || !localSave && activePreview?.privacy?.reviewerConfirmed !== true;
                 if (!exportWriting) {
                     const issue = nativePublication.reason();
                     setText(saveAvailability, issue);
@@ -8786,6 +8913,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 Math.max(0, Math.ceil(deadline - performance.now())));
         }
         body.append(controls);
+        if (localSave) {
+            const optionalText = el("details", "report-optional-copies");
+            optionalText.append(el("summary", "", "Inspect or edit report text"));
+            for (const node of body.querySelectorAll(":scope > .report-privacy-note,:scope > .report-context-review,:scope > .prompt-comparisons,:scope > .report-privacy-findings")) optionalText.append(node);
+            const optionalFiles = el("details", "report-optional-files");
+            optionalFiles.append(el("summary", "", "Inspect prepared files"), exactFiles);
+            body.append(optionalText, optionalFiles);
+            reportJourney.previewReady({ ...preview, promptReview: reviewCopies }, { confirm, feedback, focus });
+            reportExperience?.sync(); selectControls?.sync();
+            return;
+        }
         const textPanel = el("section", "report-inspection-panel report-copy-inspection");
         textPanel.id = "reportTextInspection";
         for (const node of body.querySelectorAll(":scope > .report-privacy-note,:scope > .report-context-review,:scope > .prompt-comparisons,:scope > .report-privacy-findings")) textPanel.append(node);
@@ -9055,6 +9193,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     document.querySelectorAll("[name=reportScope]").forEach((control) => control.addEventListener("change", () => {
         if (exportWriting || periodReport) return;
         reportScope = control.value;
+        reportBaseExplicit = true; reportDatesReplaced = false;
+        reportDates = reportScope === "current" ? dateSelection() : { range: "capture" };
+        draft.synchronizeTime(viewerTime, reportDates);
         reportEntry = null;
         acceptNativeReportScope();
         invalidatePreview(); renderReports();
@@ -9062,8 +9203,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("reportPromptAuthorFilter").addEventListener("change", () => {
         if (exportWriting || periodReport) return;
         reportAuthors = authorship.selection([...$("reportPromptAuthorFilter").selectedOptions].map(option => option.value));
-        invalidatePreview("Prompt authors changed. Review the updated report membership before saving.");
+        const prepared = reportJourney.snapshot().step === 3;
+        invalidatePreview();
+        draft.change({ reportNotes: [], overrides: [] });
         renderReports();
+        if (prepared) void previewExport();
     });
     ux.explainDisabled($("exportBtn"), () => isStale || isLoading ? "Wait for a current activity snapshot." : !draft.options().formats.length ? "Select at least one file format." : "Choose interactions in Activity, or use Current Analyze view or All saved sessions.");
     $("reportTitle").addEventListener("input", () => {
@@ -9073,34 +9217,34 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             return;
         }
         draft.change({ title: $("reportTitle").value });
-        invalidatePreview("");
-        updateSelection();
+        preparedReportReader?.setTitle($("reportTitle").value || activePreview?.title || "Activity report");
+        updateReportContent();
     });
     document.querySelectorAll("[name=promptMode]").forEach((control) => control.addEventListener("change", () => {
         draft.change({ promptMode: control.value, overrides: [], ...(control.value === "none" ? { recordedContext: false } : {}) });
-        invalidatePreview(); updateSelection();
+        updateReportContent({ hide: true }); updateSelection();
     }));
     $("reportRecordedContext").addEventListener("change", () => {
         if (exportWriting) return;
         draft.change({ recordedContext: $("reportRecordedContext").checked, overrides: [] });
-        invalidatePreview(); updateSelection();
+        updateReportContent({ hide: true }); updateSelection();
     });
     $("reportResultText").addEventListener("change", () => {
         if (exportWriting) return;
         draft.change({ resultText: $("reportResultText").checked,
             overrides: draft.options().overrides.filter(edit => !edit.key.startsWith("result-copy-")) });
-        invalidatePreview();
+        updateReportContent({ hide: !$("reportResultText").checked });
         updateSelection();
     });
     $("formatOptions").querySelectorAll("input[type=checkbox]").forEach((control) => control.addEventListener("change", () => {
         const formats = [...$("formatOptions").querySelectorAll("input:checked")].map((node) => node.value);
         draft.change({ formats });
         $("formatError").hidden = formats.length > 0;
-        invalidatePreview(); updateSelection();
+        updateReportContent(); updateSelection();
     }));
     $("manualTerms").addEventListener("input", () => {
         draft.change({ manualTerms: $("manualTerms").value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) });
-        invalidatePreview();
+        updateReportContent({ hide: true });
     });
     $("closeDialog").addEventListener("click", () => $("overlay").close());
     $("overlay").addEventListener("close", () => {
@@ -9166,6 +9310,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     // The shared panel stays put; the plot's top changes with mode-specific heading controls.
     viewKey($("chart").closest(".analyze-chart-main"), "chart");
     reportJourney = createReportJourney({
+        reportFirst: true,
         api, createSaveIdentity: assessmentFactories.createReportSaveIdentity,
         readSavedReports: async () => {
             const publication = api.publicationToken(), accepted = state, request = generation;
@@ -9192,10 +9337,36 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         icon: name => ux.icon(name),
         utility: (...args) => ux.utility(...args),
     });
+    reportExperience = assessmentFactories.createReportExperience({
+        root: $("reportsView"), time, ux,
+        current: () => !clearingAccess && Boolean(api.publicationToken()),
+        read: () => ({
+            dates: reportDates, timeContext: viewerTime, options: draft.options(),
+            prepared: reportJourney.snapshot().step === 3, saved: ["saved", "unavailable"].includes(reportJourney.snapshot().phase),
+            paired: Boolean(periodReport), locked: exportWriting || reportJourney.snapshot().saveUnconfirmed,
+            loading: isLoading || isStale || reportPreparing,
+            scopeLabel: !reportBaseExplicit ? "All retained activity in this period"
+                : reportScope === "current" ? reportDatesReplaced ? "Based on Analyze filters" : "Current Analyze view"
+                    : reportScope === "selected" ? "Selected interactions" : "All retained activity",
+            services: categories.entries.filter(entry => !["Multiple workloads", "Platform metadata", "Unknown"].includes(entry.id)).map(entry => entry.id),
+        }),
+        choose: chooseReportPreset, changeDates: changeReportDates,
+        changeFocus: patch => {
+            if (exportWriting || reportJourney.snapshot().saveUnconfirmed || !draft.options().reportFocus) return;
+            invalidatePreview();
+            draft.change({ reportFocus: { ...draft.options().reportFocus, preset: "custom", ...patch }, reportNotes: [], overrides: [] });
+            updateSelection(); void previewExport();
+        },
+        edit: action => {
+            if (action === "comparison") $("periodReportScope")?.querySelector("button")?.click();
+            else reportJourney.go(1);
+        },
+    });
     ux.tooltip($("exportBtn"), () => $("exportBtn").textContent);
     reportComparisonUI = assessmentFactories.mountComparison($("comparisonWorkspace"), {
         api, createSaveIdentity: assessmentFactories.createReportSaveIdentity, renderer: assessmentFactories.createReportComparison(), timeContext: () => viewerTime,
         createFileInspection: mountFileInspection,
+        createPreparedFrame: (html, options) => assessmentFactories.preparedFrame(html, assessmentFactories.liveSearch.frozenFrame, options),
         onRead: leaveSavedInspectorContext,
         prepareBlockReason: () => reportPreparationBlock("comparison"),
         beforePrepare: () => admitReportPreparation("comparison"),
@@ -9317,12 +9488,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     ];
     function accessOwners() {
         return [liveSearchUI, chartReferenceUI, periodComparisonUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
-            draft, reportJourney, reportComparisonUI, deletionUI, recollectionUI, savedArtifactUI, collectionSettings, sourceSettings, recorderUI,
+            draft, reportJourney, reportExperience, reportSaveWarning, reportComparisonUI, deletionUI, recollectionUI, savedArtifactUI, collectionSettings, sourceSettings, recorderUI,
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }
     function withdrawPrivateContent() {
         const privateNarrowing = Boolean(search.trim() || semanticQuery !== null || incomingNavigation);
         clearingAccess = true;
+        clearTimeout(reportUpdateTimer); reportRebuildFrom = null; reportUpdateAgain = saveAfterMask = false;
+        reportPreparing = false; reportPreparationOwner = null;
+        reportBaseExplicit = reportDatesReplaced = false;
+        reportDates = { range: "7", ...time.preset("7", viewerTime.timeZone) };
         reportPickerEvents?.abort(); reportPickerEvents = null;
         nativePublication.withdraw(); clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
         nativeAnalysisState = null; nativeAnalysisRender++;

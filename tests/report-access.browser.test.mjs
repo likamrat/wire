@@ -164,9 +164,7 @@ for (const held of ["inspect", "preview", "review", "save", "open", "hash", "mat
         await choices.nth(1).selectOption("later-private");
         await page.getByRole("button", { name: "Compare reports", exact: true }).click();
         if (held !== "inspect") {
-            await page.locator("#comparisonReportTitle").fill("PRIVATE REVIEW TITLE");
-            await page.getByRole("button", { name: "Prepare comparison copy", exact: true }).click();
-            if (!["preview"].includes(held)) {
+            if (held !== "preview") {
                 await page.locator("iframe").waitFor();
                 await page.getByRole("checkbox", { name: /reviewed this frozen comparison/ }).check();
                 await page.getByRole("button", { name: "Approve for local saving" }).click();

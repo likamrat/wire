@@ -83,6 +83,22 @@ restore previously omitted replies.
 **Add to report** changes selection only. To choose contents and create a
 file, continue with [Create and compare reports](reporting.md).
 
+## Make a report
+
+Open **Reports > Create a report** and choose a ready-made report. It opens
+immediately with detected personal details hidden. The visible period starts
+at Last 7 days, independently of your Analyze filters.
+
+Use **Errors & failures** to find recorded problems and inspect their examples.
+You can add a note about what you expected, edit a report copy, or change its
+period and formats. **Save report** keeps the files on this device. If you keep
+chat details, the warning lets you hide details and save, save with those
+details, or go back without writing anything.
+
+Reports preserve their original cohort and files. A completed call does not
+prove that your task succeeded. See the [report guide](reporting.md) for scopes,
+privacy choices, comparisons and uncertain-save recovery.
+
 ## Find saved text
 
 Type in the stationary **Search** field. Results appear as you type; there is

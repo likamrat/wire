@@ -35,6 +35,7 @@ export const uxIconSources = Object.freeze({
     "search-action": "workflow", "search-tool": "wrench",
     "search-report": "file-text", "search-comparison": "columns-2", "search-view": "panels-top-left", "search-setting": "settings",
     "compare-periods": "scale",
+    "report-all": "layers", "report-agent": "bot",
     "settings-connection": "plug", "settings-privacy": "shield", "settings-ai": "clipboard-check",
     "settings-display": "monitor", "settings-troubleshooting": "wrench",
     close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download", code: "file-code",

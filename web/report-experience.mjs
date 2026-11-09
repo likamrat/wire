@@ -1,0 +1,338 @@
+// Presentation only. The existing report draft, preparation and Save owners retain authority.
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, edit, current }) {
+    const doc = root.ownerDocument, byId = id => doc.getElementById(id);
+    const presets = [
+        ["all", "All activity", "Your prompts and agent prompts, with Work IQ calls and results.", "report-all"],
+        ["errors", "Errors & failures", "Find prompts whose Work IQ calls hit errors.", "warning"],
+        ["completed", "Completed calls", "Prompts whose calls finished without recorded errors.", "check"],
+        ["mine", "My prompts", "Your requests and the Work IQ calls that followed.", "account"],
+        ["agent", "Agent prompts", "Requests written by your agents.", "report-agent"],
+    ];
+    const help = {
+        errors: "At least one Work IQ call failed or reported an error. Other calls in the interaction may have completed.",
+        completed: "The calls finished without a recorded error. The answer can still be wrong or incomplete.",
+        privacy: "WIRE hides details it recognizes in prompts, included replies and notes, such as email addresses and phone numbers. It may miss names or sensitive context. Your saved chats stay unchanged.",
+        formats: "HTML is a web page; PDF is for reading and printing. JSON keeps structured facts; Markdown is portable text.",
+    };
+    function el(tag, cls, text) {
+        const node = doc.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    function button(label, action, cls = "quiet") {
+        const node = el("button", cls, label); node.type = "button";
+        node.addEventListener("click", event => { if (node.isConnected && current() && !node.disabled) action(event); });
+        return node;
+    }
+    function helpButton(key, label) {
+        const node = button("", () => {}, "report-help ux-help");
+        node.setAttribute("aria-label", label); node.append(ux.icon("info"));
+        ux.tooltip(node, help[key], { anchor: node.querySelector("svg"), helpOnActivate: true });
+        return node;
+    }
+    function popover(id, title) {
+        const panel = el("section", "report-options-popover"); panel.id = id;
+        panel.setAttribute("popover", "auto"); panel.setAttribute("role", "dialog");
+        const heading = el("h2", "", title); heading.id = id + "Title";
+        panel.setAttribute("aria-labelledby", heading.id); panel.append(heading); root.append(panel);
+        return panel;
+    }
+    function opener(label, panel) {
+        const control = button(label, () => {}, "report-toolbar-choice");
+        control.setAttribute("popovertarget", panel.id); control.append(ux.icon("chevron"));
+        return control;
+    }
+    function done(panel) {
+        const row = el("div", "report-popover-actions");
+        row.append(button("Done", () => panel.hidePopover())); panel.append(row);
+    }
+    const gallery = el("section", "report-gallery"); gallery.id = "reportGallery";
+    const period = el("div", "report-period-choices"); period.setAttribute("role", "group"); period.setAttribute("aria-label", "Report period");
+    const periodCaption = el("p", "report-period-caption");
+    period.append(el("span", "", "Period"));
+    for (const range of ["7", "14", "30", "custom"]) {
+        const control = button(range === "custom" ? "Custom dates" : `Last ${range} days`, () => {
+            if (range === "custom") openCalendar();
+            else changeDates({ range, ...time.preset(range, read().timeContext.timeZone) });
+        });
+        control.dataset.reportRange = range; period.append(control);
+    }
+    const tiles = el("div", "report-tiles"); tiles.setAttribute("role", "group"); tiles.setAttribute("aria-label", "Ready-made reports");
+    for (const [id, title, description, glyph] of presets) {
+        const row = el("article", "report-tile"); row.dataset.preset = id;
+        const control = button("", () => choose(id), "report-tile-open"); control.dataset.reportPreset = id;
+        control.append(ux.icon(glyph), el("strong", "", title), el("span", "", description));
+        row.append(control);
+        if (help[id]) row.append(helpButton(id, "About " + title.toLowerCase()));
+        tiles.append(row);
+    }
+    gallery.append(period, periodCaption, el("h2", "", "What would you like to include?"), tiles,
+        el("p", "report-gallery-note", "Reports hide detected personal details by default."));
+    const stage = byId("reportStage1"), selection = el("details", "report-explicit-selection");
+    selection.append(el("summary", "", "Use selected interactions or the Analyze view"));
+    for (const node of [...stage.children]) if (node.id !== "reportStepTitle1") selection.append(node);
+    stage.append(gallery, selection); byId("reportStepTitle1").hidden = true;
+    byId("reportContinue").textContent = "Show report";
+    const toolbar = el("section", "report-edit-toolbar"); toolbar.id = "reportEditToolbar"; toolbar.hidden = true;
+    const nameRow = el("div", "report-name-row");
+    nameRow.append(root.querySelector(".report-title-field"));
+    const saveSlot = el("div", "report-save-slot"); saveSlot.id = "reportSaveSlot"; nameRow.append(saveSlot);
+    const choices = el("div", "report-toolbar-choices");
+    const periodPanel = popover("reportPeriodChoices", "Report period"), periodHost = el("div");
+    periodPanel.append(periodHost);
+    const dateButton = opener("Last 7 days", periodPanel);
+    const privacy = popover("reportPrivacyOptions", "Prompts and replies");
+    privacy.append(byId("promptOptions"), byId("additionalMasking")); done(privacy);
+    const privacyButton = opener("Hide personal details", privacy);
+    const formats = popover("reportFileOptions", "Save as"); formats.append(byId("formatOptions")); done(formats);
+    const formatButton = opener("HTML", formats);
+    const refine = popover("reportIncludeOptions", "Choose what to include");
+    const author = root.querySelector(".report-author-choice");
+    refine.append(author);
+    function select(id, label, entries) {
+        const field = el("div", "report-field"), caption = el("label", "", label), control = el("select");
+        caption.htmlFor = id; control.id = id;
+        for (const [value, text] of entries) { const option = el("option", "", text); option.value = value; control.append(option); }
+        field.append(caption, control); refine.append(field); return control;
+    }
+    const outcome = select("reportOutcome", "Calls to include", [
+        ["all", "All calls"], ["errors", "With errors or failures"], ["completed", "Completed, no recorded errors"], ["unknown", "Outcome unknown"],
+    ]);
+    const service = select("reportService", "Service", [["", "All services"], ...read().services.map(value => [value, value])]);
+    outcome.addEventListener("change", () => { if (current()) changeFocus({ outcome: outcome.value }); });
+    service.addEventListener("change", () => { if (current()) changeFocus({ services: service.value ? [service.value] : [] }); });
+    refine.append(byId("reportResultText").closest("label"), byId("reportRecordedContext").closest("label"), byId("reportRecordedContextHelp"));
+    const scope = button("Change activity selection", () => { refine.hidePopover(); showGallery(true); });
+    refine.append(scope); done(refine);
+    const refineButton = opener("Change what's included", refine);
+    const privacyGroup = el("div", "report-toolbar-group"), formatGroup = el("div", "report-toolbar-group");
+    privacyGroup.append(privacyButton, helpButton("privacy", "About hiding personal details"));
+    formatGroup.append(formatButton, helpButton("formats", "About report file formats"));
+    choices.append(dateButton, privacyGroup, formatGroup, refineButton);
+    const scopeCaption = el("p", "report-period-caption"); scopeCaption.id = "reportExperienceScope";
+    toolbar.append(nameRow, choices, scopeCaption);
+    byId("reportStage3").prepend(toolbar);
+    const galleryBack = button("Choose another report", () => read().paired ? edit("comparison") : showGallery());
+    galleryBack.id = "reportChooseAnother"; byId("reportTaskNav").prepend(galleryBack);
+
+    const calendar = popover("reportCustomDates", "Custom dates"), dateFields = el("div", "report-date-fields");
+    let calendarMonth, fromDraft = "", toDraft = "", selectingEnd = false;
+    const fields = {};
+    for (const [id, label] of [["from", "From"], ["to", "Through"]]) {
+        const field = el("div", "report-field"), caption = el("label", "", label), input = el("input");
+        input.type = "date"; input.id = "reportDate" + id; caption.htmlFor = input.id; fields[id] = input;
+        input.addEventListener("change", () => {
+            if (!current()) return;
+            fromDraft = fields.from.value; toDraft = fields.to.value; renderCalendar();
+        });
+        field.append(caption, input); dateFields.append(field);
+    }
+    const calendarBody = el("div", "report-calendar"), calendarStatus = el("p", "report-period-caption");
+    calendarStatus.setAttribute("role", "status");
+    const calendarActions = el("div", "report-popover-actions");
+    const applyDates = button("Use dates", () => {
+        if (!validDates()) return;
+        calendar.hidePopover(); changeDates({ range: "custom", from: fromDraft, to: toDraft });
+    }, "primary");
+    calendarActions.append(button("Cancel", () => calendar.hidePopover()), applyDates);
+    calendar.append(dateFields, calendarBody, calendarStatus, calendarActions);
+    function validDates() {
+        try { time.calendar(fromDraft); time.calendar(toDraft); time.range({ from: fromDraft, to: toDraft }, read().timeContext.timeZone); return fromDraft <= toDraft; }
+        catch (error) { if (!(error instanceof RangeError)) throw error; return false; }
+    }
+    function renderCalendar(focusDay) {
+        const month = new Date(calendarMonth + "-01T12:00:00Z");
+        const header = el("div", "report-calendar-header");
+        function shift(amount) { month.setUTCMonth(month.getUTCMonth() + amount); calendarMonth = month.toISOString().slice(0, 7); renderCalendar(); }
+        const previous = button("", () => shift(-1)), next = button("", () => shift(1));
+        previous.setAttribute("aria-label", "Previous month"); previous.append(ux.icon("previous"));
+        next.setAttribute("aria-label", "Next month"); next.append(ux.icon("next"));
+        header.append(previous, el("h3", "", new Intl.DateTimeFormat(read().timeContext.locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(month)), next);
+        const grid = el("div", "report-calendar-grid"); grid.setAttribute("role", "group"); grid.setAttribute("aria-label", "Choose start and end dates");
+        for (const day of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) grid.append(el("span", "", day));
+        for (let i = 0; i < month.getUTCDay(); i++) grid.append(el("span"));
+        const count = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
+        const focused = focusDay || (fromDraft.startsWith(calendarMonth) ? fromDraft : calendarMonth + "-01");
+        for (let i = 1; i <= count; i++) {
+            const day = `${calendarMonth}-${String(i).padStart(2, "0")}`;
+            const cell = button(String(i), () => {
+                if (!selectingEnd) { fromDraft = day; toDraft = ""; selectingEnd = true; }
+                else { [fromDraft, toDraft] = [fromDraft, day].sort(); selectingEnd = false; }
+                renderCalendar(day);
+            }, "report-calendar-day");
+            cell.dataset.day = day; cell.tabIndex = day === focused ? 0 : -1;
+            cell.setAttribute("aria-label", time.formatDate(day, read().timeContext, true));
+            cell.setAttribute("aria-pressed", String(day === fromDraft || day === toDraft));
+            cell.classList.toggle("in-range", day >= fromDraft && day <= toDraft);
+            cell.addEventListener("keydown", event => {
+                const date = new Date(day + "T12:00:00Z");
+                const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, Home: -date.getUTCDay(), End: 6 - date.getUTCDay() }[event.key];
+                if (delta === undefined) return;
+                event.preventDefault(); date.setUTCDate(date.getUTCDate() + delta);
+                const nextDay = date.toISOString().slice(0, 10); calendarMonth = nextDay.slice(0, 7); renderCalendar(nextDay);
+            });
+            grid.append(cell);
+        }
+        calendarBody.replaceChildren(header, grid);
+        fields.from.value = fromDraft; fields.to.value = toDraft;
+        applyDates.disabled = !validDates();
+        calendarStatus.textContent = !toDraft ? "Choose an end date." : validDates()
+            ? `${read().timeContext.timeZone}. Both days included.` : "The end date must be on or after the start date.";
+        if (focusDay) grid.querySelector(`[data-day="${focusDay}"]`)?.focus();
+    }
+    function openCalendar() {
+        const value = read(), dates = value.dates.range === "capture" ? time.preset("7", value.timeContext.timeZone) : value.dates;
+        fromDraft = dates.from; toDraft = dates.to; calendarMonth = dates.from.slice(0, 7); selectingEnd = false;
+        periodPanel.hidePopover(); renderCalendar(); calendar.showPopover();
+        calendarBody.querySelector('[tabindex="0"]')?.focus();
+    }
+    function showGallery(explicit = false) {
+        if (read().locked) return;
+        edit("gallery");
+        selection.open = explicit;
+        if (explicit) selection.scrollIntoView({ block: "nearest" });
+    }
+    function labelDates(value) {
+        if (value.range === "capture") return "All retained dates";
+        return `${time.formatDate(value.from, read().timeContext, true)} to ${time.formatDate(value.to, read().timeContext, true)}`;
+    }
+    function sync() {
+        if (!current()) return;
+        const value = read();
+        toolbar.hidden = !value.prepared;
+        galleryBack.hidden = !value.prepared || value.saved;
+        galleryBack.disabled = value.locked;
+        galleryBack.textContent = value.paired ? "Change comparison in Analyze" : "Choose another report";
+        gallery.hidden = value.paired;
+        if (value.prepared && period.parentElement !== periodHost) periodHost.append(period);
+        else if (!value.prepared && period.parentElement !== gallery) gallery.prepend(period);
+        periodCaption.textContent = labelDates(value.dates);
+        for (const control of period.querySelectorAll("button")) {
+            control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
+            control.disabled = value.locked;
+        }
+        for (const control of tiles.querySelectorAll("[data-report-preset]")) control.disabled = value.locked || value.loading;
+        const setLabel = (node, label) => { if (node.firstChild?.nodeType === 3) node.firstChild.data = label; };
+        setLabel(dateButton, value.dates.range === "capture" ? "All retained dates" : value.dates.range === "custom" ? "Custom dates" : `Last ${value.dates.range} days`);
+        dateButton.hidden = value.paired;
+        setLabel(privacyButton, ({ masked: "Hide personal details", original: "Keep chat details", none: "Prompts left out" })[value.options.promptMode]);
+        setLabel(formatButton, value.options.formats.map(format => format === "markdown" ? "Markdown" : format.toUpperCase()).join(" + ") || "Choose a format");
+        privacyButton.classList.toggle("chat-details-kept", value.options.promptMode === "original");
+        outcome.value = value.options.reportFocus?.outcome ?? "all"; service.value = value.options.reportFocus?.services[0] ?? "";
+        outcome.disabled = service.disabled = value.locked || !value.options.reportFocus;
+        scopeCaption.textContent = value.paired ? "The accepted comparison keeps its two periods and filters."
+            : `${labelDates(value.dates)} · ${value.scopeLabel} · ${value.timeContext.timeZone}${value.options.resultText ? " · Masked error details included" : ""}`;
+        for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
+        const save = byId("reportSaveActions");
+        if (save && save.parentElement !== saveSlot) saveSlot.append(save);
+        for (const input of doc.querySelectorAll("[name=promptMode]")) input.checked = input.value === value.options.promptMode;
+        for (const input of byId("formatOptions").querySelectorAll("input")) input.checked = value.options.formats.includes(input.value);
+    }
+    return {
+        sync, openCalendar,
+        showSelection: () => showGallery(true),
+        withdrawAccess() {
+            for (const panel of [privacy, formats, refine, periodPanel, calendar]) if (panel.matches(":popover-open")) panel.hidePopover();
+            fromDraft = toDraft = ""; calendarMonth = null;
+            fields.from.value = fields.to.value = ""; calendarBody.replaceChildren(); calendarStatus.textContent = "";
+            periodCaption.textContent = scopeCaption.textContent = "";
+        },
+        resumeAccess: sync,
+    };
+}
+
+export function decoratePreparedReport(source, { host = document, preview, notes, onNote, onCopy, current, refresh }) {
+    const style = source.createElement("style");
+    style.textContent = `
+body{background:var(--report-sheet);color:var(--ink)}main{background:transparent}
+:root{--font:var(--screen-font)}h1,h2,h3,h4,p,table,pre{color:inherit}
+.report-author-note,.reading-notes{background:var(--report-note)}
+.wire-example-editor{margin:20px 0;padding-top:12px;border-top:1px solid var(--rule);font-family:var(--font)}
+.wire-example-editor summary{cursor:pointer;min-height:44px;align-content:center;color:var(--muted)}
+.wire-example-editor label{display:block;margin:16px 0 10px}
+.wire-example-editor textarea{display:block;width:100%;box-sizing:border-box;min-height:90px;padding:12px;border:1px solid var(--rule);border-radius:8px;background:var(--report-note);color:var(--ink);font:inherit;line-height:1.6;resize:vertical}
+.wire-example-editor button{min-height:44px;padding:8px 14px;margin:12px 8px 0 0;border:1px solid var(--rule);border-radius:8px;background:var(--report-note);color:var(--ink);font:inherit;cursor:pointer}
+.wire-example-editor :focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.wire-example-editor .wire-omit{display:flex;align-items:center;gap:8px;min-height:44px}
+`;
+    source.head.append(style);
+    function theme() {
+        if (!current()) return;
+        const values = host.defaultView.getComputedStyle(host.documentElement), dark = host.documentElement.dataset.evidenceTheme === "dark";
+        source.documentElement.dataset.evidenceTheme = dark ? "dark" : "light";
+        for (const key of ["ink", "muted", "rule", "control", "focus"]) source.documentElement.style.setProperty("--" + key, values.getPropertyValue("--" + key));
+        source.documentElement.style.setProperty("--screen-font", values.getPropertyValue("--font"));
+        source.documentElement.style.setProperty("--report-sheet", values.getPropertyValue("--report-sheet"));
+        source.documentElement.style.setProperty("--report-note", values.getPropertyValue("--report-note"));
+        refresh();
+    }
+    const observer = new host.defaultView.MutationObserver(theme);
+    observer.observe(host.documentElement, { attributes: true, attributeFilter: ["data-evidence-theme", "style", "class"] }); theme();
+    for (const section of source.querySelectorAll("[data-report-scenario]")) {
+        const id = section.dataset.reportScenario;
+        const record = preview.records.find(record => record.scenarioId === id);
+        const editor = source.createElement("details"); editor.className = "wire-example-editor";
+        const summary = source.createElement("summary"); summary.textContent = "Add a note or edit this example"; editor.append(summary);
+        const label = source.createElement("label"), note = source.createElement("textarea");
+        label.textContent = "Your note"; note.id = "note-" + id; label.htmlFor = note.id;
+        note.setAttribute("placeholder", "What you expected, or why this matters");
+        note.value = notes.find(entry => entry.scenarioId === id)?.text ?? "";
+        const save = source.createElement("button"); save.type = "button"; save.textContent = "Update note";
+        save.addEventListener("click", () => { if (current() && save.isConnected) onNote(id, note.value); });
+        editor.append(label, note, save);
+        const copy = preview.promptReview?.find(copy => record?.prompts.some(prompt => prompt.key === copy.key) && copy.kind === "origin");
+        if (copy && preview.promptMode !== "none" && copy.original !== null) {
+            const copyKey = copy.key, copyLabel = source.createElement("label"), input = source.createElement("textarea");
+            input.id = "copy-" + id; copyLabel.htmlFor = input.id; copyLabel.textContent = "Prompt in this report";
+            input.value = copy.text ?? ""; input.disabled = copy.omitted;
+            const omitLabel = source.createElement("label"), omit = source.createElement("input");
+            omit.type = "checkbox"; omit.checked = copy.omitted; omitLabel.className = "wire-omit";
+            omit.addEventListener("change", () => { input.disabled = omit.checked; });
+            omitLabel.append(omit, source.createTextNode("Leave out this prompt"));
+            const apply = source.createElement("button"); apply.type = "button"; apply.textContent = "Update prompt copy";
+            apply.addEventListener("click", () => { if (current() && apply.isConnected) onCopy(copyKey, input.value, omit.checked); });
+            editor.append(copyLabel, input, omitLabel, apply);
+        }
+        section.append(editor);
+    }
+    preview = null; notes = null;
+    return () => observer.disconnect();
+}
+
+export function createReportSaveWarning({ doc = document, icon, current }) {
+    let dialog = null, settle = null, trigger = null;
+    function close(choice = null) {
+        const resolve = settle; settle = null;
+        if (dialog) { dialog.close(); dialog.remove(); dialog = null; }
+        if (current() && trigger?.isConnected) trigger.focus({ preventScroll: true });
+        trigger = null; resolve?.(choice);
+    }
+    return {
+        choose() {
+            if (dialog || !current()) return Promise.resolve(null);
+            trigger = doc.activeElement;
+            dialog = doc.createElement("dialog"); dialog.className = "report-save-warning";
+            dialog.setAttribute("aria-labelledby", "reportSaveWarningTitle"); dialog.setAttribute("aria-describedby", "reportSaveWarningCopy");
+            const title = doc.createElement("h2"); title.id = "reportSaveWarningTitle";
+            const glyph = doc.createElement("span"); glyph.append(icon("warning"));
+            title.append(glyph, doc.createTextNode("Save details from your chats?"));
+            const copy = doc.createElement("p"); copy.id = "reportSaveWarningCopy";
+            copy.textContent = "Your prompts, chat replies and notes may include names, email addresses, project details or other sensitive information. WIRE can hide details it recognizes, but it may not catch everything sensitive.";
+            const detail = doc.createElement("p"); detail.className = "muted";
+            detail.textContent = "Saved on this device. Detected passwords and other credentials are removed.";
+            const actions = doc.createElement("div"); actions.className = "report-warning-actions";
+            for (const [choice, label, cls] of [["masked", "Hide details and save", "primary"], ["original", "Save with chat details", "chat-details-kept"], [null, "Go back", "quiet report-warning-back"]]) {
+                const button = doc.createElement("button"); button.type = "button"; button.className = cls;
+                if (!choice) { button.append(icon("back")); button.autofocus = true; }
+                button.append(doc.createTextNode(label)); button.addEventListener("click", () => close(current() ? choice : null)); actions.append(button);
+            }
+            dialog.append(title, copy, detail, actions); doc.body.append(dialog);
+            dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
+            const result = new Promise(resolve => { settle = resolve; }); dialog.showModal();
+            actions.lastElementChild.focus();
+            return result;
+        },
+        withdrawAccess: () => close(),
+    };
+}

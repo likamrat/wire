@@ -53,7 +53,9 @@ export function createNativeReportPublicationState({ now = () => performance.now
                 return unavailable("The report preview or privacy scan is incomplete.");
             }
             bound = { context: { ...context }, previewId: value.previewId, bundleId: value.bundleId,
-                fingerprint: value.privacy.inputFingerprint, deadline: startedAt + value.expiresInSeconds * 1000, reviewed: false };
+                fingerprint: value.privacy.inputFingerprint, deadline: startedAt + value.expiresInSeconds * 1000, reviewed: false,
+                localSave: value.localSaveRequest?.version === 1 && value.localSaveRequest.bundleId === value.bundleId
+                    && /^[a-f0-9]{64}$/.test(value.localSaveRequest.contentHash ?? "") };
             message = "";
             return current(context);
         },
@@ -66,7 +68,7 @@ export function createNativeReportPublicationState({ now = () => performance.now
             }
             bound.reviewed = true; message = ""; return true;
         },
-        canSave: context => current(context) && bound.reviewed,
+        canSave: context => current(context) && (bound.reviewed || bound.localSave),
         available: context => Boolean(snapshot && sameRuntime(snapshot, context)),
         invalidate() { bound = null; expiredPreview = false; message = "Prepare and review a report before saving."; },
         withdraw() { snapshot = bound = null; expiredPreview = false; message = "Current WIRE access is required before saving."; },
