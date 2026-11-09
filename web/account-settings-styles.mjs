@@ -1,7 +1,7 @@
 export const accountSettingsStyles = `
 .wire-account-slot {margin-top:auto;min-width:0}
 .wire-account-entry {width:170px;max-width:100%;padding-top:20px}
-.wire-account-trigger {display:grid;grid-template-columns:32px minmax(0,1fr) 16px;gap:8px;align-items:center;width:100%;min-height:44px;padding:6px 4px;text-align:left;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--ink)}
+.wire-account-trigger {display:grid;grid-template-columns:32px minmax(0,1fr) 16px;gap:8px;align-items:center;justify-content:start;width:100%;min-height:44px;padding:6px;text-align:left;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--ink)}
 .wire-account-trigger::before {display:none}
 .wire-account-trigger:is(:hover,[aria-expanded=true]) {background:var(--hover)}
 .wire-account-trigger:active {background:var(--pill-pressed)}
@@ -46,8 +46,8 @@ export const accountSettingsStyles = `
  .app-sidebar:has(.wire-account-slot:not([hidden])) {display:flex;flex-direction:column}
  .app-sidebar:has(.wire-account-slot:not([hidden]))>.navigation-content {flex:1;min-height:0}
  :root[data-navigation=collapsed] .app-sidebar .wire-account-entry {width:44px}
- :root[data-navigation=collapsed] .app-sidebar .wire-account-trigger {grid-template-columns:32px;gap:0;justify-content:center}
- :root[data-navigation=collapsed] .app-sidebar .wire-account-copy,:root[data-navigation=collapsed] .app-sidebar .wire-account-trigger>svg {display:none}
+ :root[data-navigation=collapsed] .app-sidebar .wire-account-trigger {grid-template-columns:32px 0 0;gap:0}
+ :root[data-navigation=collapsed] .app-sidebar .wire-account-copy,:root[data-navigation=collapsed] .app-sidebar .wire-account-trigger>svg {width:0;opacity:0;visibility:hidden}
 }
 @media(max-width:699px) {
  .navigation-drawer:has(.wire-account-slot:not([hidden]))[open] {display:flex;flex-direction:column}

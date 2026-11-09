@@ -14,6 +14,7 @@ import { createSearchMembership as mapSearchMembership } from "../web/search-mem
 import { searchWireContract } from "../lib/search-wire-contract.mjs";
 import { projectRetainedNativeRecords } from "../lib/retained-population.mjs";
 import { chatFixture } from "./native-read-model-fixtures.mjs";
+import { extractGraphActivities } from "../lib/graph-history.mjs";
 
 const createSearchMembership = (snapshot, options, within, hits, receipt) => mapSearchMembership(snapshot, options, within, hits, {
     schemaVersion: 3, panelId: "11111111-1111-4111-8111-111111111111", epoch: 0, requestId: 1, generation: 1,
@@ -48,6 +49,32 @@ function exact(slice, ids, scenarioIds) {
         assert.deepEqual(sorted(group.drilldownIds), sorted(model.rows.filter(row => row.serviceAssociation.services.includes(group.label)).map(row => row.id)));
     }
 }
+
+test("context rows retain the exact full-analytics attribution without building discarded chart projections", () => {
+    const records = [...scopeRecords(), ...projectRetainedNativeRecords(chatFixture()).records];
+    records.push(...extractGraphActivities([
+        { id: "context-prompt", type: "user.message", timestamp: "2026-10-01T10:00:00Z", data: { content: "Read the invented calendar." } },
+        { id: "context-start", type: "tool.execution_start", timestamp: "2026-10-01T10:00:01Z",
+            data: { toolCallId: "context-graph", toolName: "powershell", arguments: { command: "curl https://graph.microsoft.com/v1.0/me/events" } } },
+        { id: "context-end", type: "tool.execution_complete", timestamp: "2026-10-01T10:00:02Z",
+            data: { toolCallId: "context-graph", success: true, result: { content: "HTTP/2 200" } } },
+    ], { sessionId: "context-graph-source", projectId: "context-project", eligible: true,
+        checkedAt: "2026-10-02T00:00:00Z", archiveEvidence: { archived_at: null, workspaces: [] } }).scenarios);
+    records[1].httpRecords = [{ recordId: "context-http", classification: "direct-graph-http", synthetic: false,
+        observedGraphHttp: true, responseOrigin: "https://graph.microsoft.com", method: "GET", apiVersion: "v1.0",
+        responsePath: { path: "/me/messages", query: [] }, startedAt: "2026-10-01T10:00:00Z", durationMs: 12, status: 200, transportError: null }];
+    records.push({ ...structuredClone(records[0]), scenarioId: "context-alias" });
+    const context = buildRequestActivity(records);
+    for (const layer of ["tool", "reported-api", "direct-request", "recorded-http", "http"]) assert.ok(context[layer].length > 0, layer);
+    for (const [layer, rows] of Object.entries(context)) {
+        const complete = buildActivityAnalytics(records, { layer, bucket: "month", filters: { scope: "all", includeMetadata: true } }).rows;
+        const fields = ["id", "scenarioId", "scenarioIds", "sourceSessionId", "sourceId", "sourceScope", "toolCallId", "activityId",
+            "recordId", "parentCallId", "observationKey", "resultIndex", "outcome", "status", "workload", "endpoint", "serviceAssociation",
+            "countUnit", "nativeToolNames", "nativeOutcome", "nativeConflicts"];
+        assert.deepEqual(rows, complete.map(row => Object.fromEntries(fields.map(key => [key, row[key]]))), layer);
+    }
+    assert.throws(() => buildRequestActivity([records[1], records[1]]), /Population refinement/);
+});
 
 test("accepted no-call native conversations survive list and literal Search without becoming widget calls", () => {
     const input = snapshot(), nativeRecord = projectRetainedNativeRecords(chatFixture()).records[0];

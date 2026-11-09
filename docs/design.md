@@ -41,6 +41,14 @@ Private Search state never becomes a copied public URL or a broader fallback.
 Peer destinations have no fabricated Analyze / Reports breadcrumb. Subordinate
 reading keeps one return to its actual origin. Entering Compare opens it rather
 than toggling it off; Analyze and Compare retain independent accepted scopes.
+When a destination needs a new stored read, select it and show its loading
+state immediately. Do not present the old charts as its accepted population.
+Failed reads restore the accepted origin; later navigation wins over held reads.
+
+The account avatar keeps the same internal horizontal alignment throughout
+sidebar motion. Its image, name and chevron stay mounted; fade and clip the
+copy with the moving footer rather than switching its grid to a centered
+alignment before the rail has moved. Reversals start at the painted position.
 
 ## Reading hierarchy
 
@@ -86,8 +94,11 @@ preserve the established
 44px targets, focus indications and wrapping labels.
 
 Use one restrained screen hierarchy throughout the application. Routine Analyze
-charts sit on the workspace without filled card frames; individual interactions
-remain distinct, and contextual readers and open menus carry the stronger surface.
+charts have separate quiet surfaces with each heading inside its group.
+Use a visible tone boundary and restrained edge in both themes; keep chart
+heights content-sized and avoid nested card frames around individual rows.
+Individual interactions remain distinct, and contextual readers and open menus
+carry the stronger surface.
 Resting panels have no drop shadow. Navigation uses neutral selection without
 an outlined card or redundant Workspace caption. Settings follows the shared
 page and section type scale.
@@ -100,6 +111,11 @@ and visible Go to page action. PDF paging keeps its existing commit behavior.
 Checkboxes and switches use the setting-state color, not outcome green.
 Keep hover, pressed, selected and keyboard focus distinct; a smaller painted
 control is not permission to remove its focus ring or hit area.
+Settings categories use a compact neutral selection mark and transient text
+hover/press feedback, not competing full-row gray blocks.
+Saved-report titles lead with the report/document icon; privacy and file actions
+keep their separate meaning. Reflow the period under the title based on the
+list's available width and text size before secondary columns squeeze the name.
 
 Outcome words/icons accompany color. Completed calls use the current success
 role; failures use red, partial states retain their separate warning role and

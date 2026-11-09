@@ -3558,7 +3558,22 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (!controlsOnly) assessmentUI.leave();
         let update = true;
-        if (!analytics || queryChanged || isLoading) update = load({ refinement });
+        if (!analytics || queryChanged || isLoading) {
+            if (analytics && (route.view !== previousRoute.view || route.compare !== previousRoute.compare)) {
+                const destination = browseName(route) === "compare" ? "compare" : route.view;
+                const name = { analyze: "Analyze", compare: "Compare periods", reports: "Reports", settings: "Settings",
+                    request: "Interaction", "collection-status": "Collection status" }[destination];
+                const active = destination === "request" ? "analyze" : destination === "collection-status" ? "settings" : destination;
+                for (const node of document.querySelectorAll("nav [data-nav]")) {
+                    if (node.dataset.nav === active) node.setAttribute("aria-current", "page");
+                    else node.removeAttribute("aria-current");
+                }
+                $("workspace").setAttribute("data-navigation-pending", "");
+                $("navigationPending").hidden = false;
+                setText($("navigationPending"), `Opening ${name}...`);
+            }
+            update = load({ refinement });
+        }
         else {
             appliedRoute = { ...route };
             if (controlsOnly) { renderNavigation(); renderFilterChips(); updateSelection(); }
@@ -6907,7 +6922,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (current()) openSavedReport(bundle, event.currentTarget);
             }, "saved-report-title"), "open-bundle:" + bundle.bundleId);
             summary.disabled = !readable;
-            summary.replaceChildren(ux.icon("read"), el("span", "saved-report-name", title));
+            summary.replaceChildren(ux.icon("reports"), el("span", "saved-report-name", title));
             summary.setAttribute("aria-label", "View report: " + title);
             ux.tooltip(summary, "View report");
             const identity = el("span", "saved-report-identity");
@@ -7661,6 +7676,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const publication = api.publicationToken();
         if (clearingAccess || !publication || !state) return;
         if (!state || !analytics) return;
+        if (isLoading && $("workspace").hasAttribute("data-navigation-pending")) return;
+        $("workspace").removeAttribute("data-navigation-pending");
+        $("navigationPending").hidden = true;
         const requestRoute = route.view === "request" ? route : null;
         if (requestRoute) {
             const origin = underlyingRoute();

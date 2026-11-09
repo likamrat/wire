@@ -54,11 +54,10 @@ export const settingsStyles = `
 .settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:12px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
 .settings-categories a>.wire-icon {width:20px;height:20px;margin-top:0;flex:none}
 .settings-category-label {min-width:0;overflow-wrap:anywhere}
-.settings-categories a:hover {background:var(--hover);color:var(--ink);text-decoration:none}
-.settings-categories a:active {background:var(--pill-pressed);color:var(--ink)}
-.settings-categories a[aria-current=page] {background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-medium);box-shadow:none}
-.settings-categories a[aria-current=page]:hover {background:var(--hover)}
-.settings-categories a[aria-current=page]:active {background:var(--pill-pressed)}
+.settings-categories a:hover {background:transparent;color:var(--ink);text-decoration:underline;text-underline-offset:.25em}
+.settings-categories a:active {background:transparent;color:var(--ink);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.25em}
+.settings-categories a[aria-current=page] {background:transparent;color:var(--ink);font-weight:var(--weight-medium);box-shadow:none}
+.settings-categories a[aria-current=page]::before {content:"";position:absolute;inset-inline-start:0;width:2px;height:1.25em;border-radius:2px;background:currentColor}
 .settings-categories>summary {padding:10px 12px;background:var(--canvas);color:var(--ink);border:0;border-radius:var(--settings-nav-radius);cursor:pointer;min-height:44px;overflow-wrap:anywhere}
 .settings-view .settings-search {width:100%;margin:0 0 var(--space-md)}
 .settings-rail .settings-status-link {display:flex;flex-direction:column;align-items:flex-start;padding:12px;font-size:var(--type-small);line-height:var(--leading-ui)}

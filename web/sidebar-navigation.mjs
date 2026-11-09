@@ -83,7 +83,7 @@ export function mountSidebarNavigation(ux, preference) {
             width: rail.getBoundingClientRect().width,
             brand: captureBrand(),
             footer: captureFooter(),
-            labels: [...content.querySelectorAll(".navigation-label,.navigation-group-label")].map(node => {
+            labels: [...content.querySelectorAll(".navigation-label,.navigation-group-label,.wire-account-copy,.wire-account-trigger>svg")].map(node => {
                 const style = getComputedStyle(node), bounds = node.getBoundingClientRect();
                 return { node, width: bounds.width, height: bounds.height, opacity: style.opacity,
                     paddingTop: style.paddingTop, paddingBottom: style.paddingBottom };
@@ -165,7 +165,7 @@ export function mountSidebarNavigation(ux, preference) {
                 Object.assign(last, { height: target.height + "px", paddingTop: target.paddingTop, paddingBottom: target.paddingBottom });
             }
             animate(target.node, [first, last]);
-            animate(target.node, [{ opacity: origin.opacity }, { opacity: target.opacity }],
+            animate(target.node, [{ opacity: origin.opacity, visibility: "visible" }, { opacity: target.opacity, visibility: "visible" }],
                 { ...timing, duration: collapsed ? 120 : 200, delay: collapsed ? 0 : 60 });
         }
         for (const [index, target] of to.rows.entries()) animate(target.node, [{ columnGap: from.rows[index].gap }, { columnGap: target.gap }]);

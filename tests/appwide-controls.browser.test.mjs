@@ -90,7 +90,7 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
         }));
         assert.equal(nav.icon, 18); assert.ok(nav.target >= 44);
         assert.ok(contrast(nav.ink, nav.paper) >= 4.5, JSON.stringify({ theme, ...nav }));
-        assert.equal(await page.locator(".analyze-chart-main").evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)");
+        assert.notEqual(await page.locator(".analyze-chart-main").evaluate(node => getComputedStyle(node).backgroundColor), "rgba(0, 0, 0, 0)");
         await capture(page, "analyze-" + theme);
     }
     const reads = snapshots.length, beforeWidth = (await page.locator("#main").boundingBox()).width;

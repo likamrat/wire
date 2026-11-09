@@ -30,6 +30,8 @@ ${fontFaceStyles}
 html,body {margin:0;min-width:0}
 html {background:var(--page);font-family:var(--font);scroll-padding-top:100px}
 body {background:var(--page);color:var(--ink);font:var(--type-body)/var(--leading-ui) var(--font);font-variant-numeric:tabular-nums;color-scheme:inherit}
+#workspace[data-navigation-pending]>:not(#navigationPending) {display:none!important}
+.navigation-pending {padding:24px 0;color:var(--muted)}
 button,input,select,.button-link {font:var(--type-control)/var(--leading-control) var(--font);letter-spacing:var(--tracking-ui);color:inherit}
 button,select,input:not([type=checkbox]),.button-link {min-height:var(--pill-height);border:1px solid var(--control);border-radius:var(--radius-small);padding:8px 14px;background:var(--paper);max-width:100%;min-width:0}
 button,.button-link {border-radius:var(--action-radius,var(--radius-control))}

@@ -488,6 +488,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-warning-back{grid-column:1 / -1;justify-self:start;display:inline-flex;align-items:center;gap:8px;border-color:transparent}
 .report-warning-back svg{width:16px;height:16px}
 .saved-report-purpose{display:block;color:var(--muted);font-size:var(--type-control);font-weight:400;margin-top:8px;line-height:1.5}
+.saved-report-table{container:saved-library / inline-size}
 #reportsView.report-workspace-landing .report-first{margin-bottom:30px}
 #reportsView #savedReportsPanel #bundles{padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
 #reportsView .saved-library-row,.saved-library-columns{display:grid;grid-template-columns:minmax(0,1fr) 13rem 64px 44px;column-gap:16px;align-items:center}
@@ -521,6 +522,14 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 #reportActivityOptions .report-activity-actions{position:static;background:transparent}
 #reportActivityOptions .report-scope-layout{margin-bottom:16px}
 @media(hover:none){.report-tile>.report-help,.saved-report-row-options{opacity:1}}
+@container saved-library (max-width:42rem){
+ .saved-library-columns{display:none}
+ #reportsView .saved-library-row{grid-template-columns:minmax(0,1fr) 44px 44px;gap:0 6px;min-height:76px}
+ .saved-report-identity{grid-column:1;grid-row:1}
+ .saved-report-period{grid-column:1;grid-row:2}
+ .saved-report-files{grid-column:2;grid-row:1 / 3}
+ .saved-report-row-options{grid-column:3;grid-row:1 / 3}
+}
 @media(max-width:900px){.report-tile-open{grid-template-columns:20px 9rem minmax(0,1fr) 44px 16px}.saved-library-tools{width:100%;margin-left:0}}
 @media(max-width:700px){
  .report-first{padding:0}.report-name-row{flex-wrap:wrap;gap:16px}.report-name-row>.report-title-field{flex-basis:100%}.report-save-slot{margin-left:auto}.report-toolbar-choice:last-child{margin-left:0}.report-options-popover{padding:20px}.report-save-warning{padding:20px}
