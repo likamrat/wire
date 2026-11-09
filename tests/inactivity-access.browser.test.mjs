@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { privateFixture } from "./helpers.mjs";
 
-async function setup(t, view = "analyze") {
+async function setup(t, view = "analyze", initialize) {
     const cleanup = [];
     const { context } = await privateFixture({ after: work => cleanup.push(work) });
     const access = await createCopilotRuntimeAccess(context);
@@ -30,6 +30,7 @@ async function setup(t, view = "analyze") {
         for (const work of cleanup) await work();
         assert.deepEqual(errors, []);
     });
+    if (initialize) await page.addInitScript(initialize);
     await page.goto(runtime.url + "#" + view);
     if (view === "analyze") await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -83,6 +84,64 @@ for (const view of ["analyze", "reports"]) test(`still-authorized background ret
         assert.equal(navigations, 0);
         assert.equal(requests.some(value => value === "/api/access/command"), false);
     } finally { held.resolve(); }
+});
+
+test("a still-fresh watch after a renderer stall keeps Reports painted without rereading", { timeout: 20000 }, async t => {
+    const { page, requests } = await setup(t, "reports", () => {
+        const nativeFetch = fetch.bind(window), nativeJSON = Response.prototype.json;
+        const starts = new WeakMap();
+        window.watchStall = { count: 0, armed: false };
+        window.fetch = async (...args) => {
+            const start = performance.now(), response = await nativeFetch(...args);
+            if (response.url.endsWith("/api/access/watch")) starts.set(response, start);
+            return response;
+        };
+        Response.prototype.json = async function () {
+            const value = await nativeJSON.call(this);
+            if (!starts.has(this)) return value;
+            const start = starts.get(this), previousDeadline = window.watchStall.deadline;
+            window.watchStall.count++;
+            if (window.watchStall.armed) {
+                window.watchStall.armed = false;
+                const end = performance.now() + 3500;
+                while (performance.now() < end) { /* Model queued work during a suspended renderer's return. */ }
+                window.watchStall.returned = { at: performance.now(), previousDeadline, deadline: start + 5000 };
+                const nextHeartbeats = window.watchStall.count + 2;
+                window.watchStall.frames = [];
+                const sample = () => {
+                    window.watchStall.frames.push({
+                        workspace: !document.getElementById("workspace").hidden,
+                        checking: !document.getElementById("accessShell").hidden,
+                    });
+                    if (window.watchStall.count < nextHeartbeats) requestAnimationFrame(sample);
+                    else window.watchStall.complete = true;
+                };
+                requestAnimationFrame(sample);
+            }
+            window.watchStall.deadline = start + 5000;
+            return value;
+        };
+    });
+    await page.waitForFunction(() => window.watchStall.count >= 2);
+    const content = page.locator("#reportsView").getByRole("button", { name: /^All activity / });
+    const owner = await content.elementHandle(), snapshots = requests.filter(path => path === "/api/snapshot").length;
+    const release = Promise.withResolvers();
+    await page.route("**/api/snapshot", async route => { await release.promise; await route.continue(); });
+    try {
+        await page.evaluate(() => { window.watchStall.armed = true; });
+        await page.waitForFunction(() => window.watchStall.complete);
+        const { returned, frames } = await page.evaluate(() => window.watchStall);
+        t.diagnostic(JSON.stringify({ returned, firstVisibleFrame: frames[0],
+            blankFrames: frames.filter(frame => !frame.workspace || frame.checking).length }));
+        assert.ok(returned.at >= returned.previousDeadline, "The predecessor deadline was crossed.");
+        assert.ok(returned.at < returned.deadline, "The incoming watch itself remains fresh.");
+        await capture(page, "reports-stall-first-frame");
+        assert.ok(frames.every(frame => frame.workspace && !frame.checking),
+            "Keep the first return frame and the following two watch deliveries painted.");
+        assert.equal(await owner.evaluate(node => node.isConnected), true);
+        assert.equal(requests.filter(path => path === "/api/snapshot").length, snapshots);
+        assert.equal(requests.filter(path => path === "/api/session").length, 0);
+    } finally { release.resolve(); }
 });
 
 test("background logout still clears the accepted view and return never signs in", { timeout: 15000 }, async t => {

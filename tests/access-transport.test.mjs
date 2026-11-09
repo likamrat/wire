@@ -277,6 +277,47 @@ test("native control receipt decoding is exact-operation and same-account, with 
     ]) assert.throws(() => api.decodeMicrosoftReceipt(invalid, operation), TypeError);
 });
 
+test("a fresh watch decoded after its predecessor deadline preserves unretired authority", async t => {
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    const app = watched(t);
+    await app.respond(seed({ retained: true, wire: "signed-in" }));
+    now = 1000;
+    await app.respond(seed({ retained: true, wire: "signed-in" }));
+    const original = app.api.publicationToken(), count = app.events.length;
+    now = 5500;
+    await app.respond(seed({ retained: true, wire: "signed-in" }));
+    assert.equal(app.api.publicationToken(), original,
+        "The incoming watch is still within its own request-start deadline; no intervening withdrawal occurred.");
+    assert.equal(app.events.slice(count).some(event => !event.readable), false);
+    assert.equal(app.watches.at(-1).input.after, null, "The existing next watch must not wait on a nearly spent grant.");
+    now = 6000;
+    assert.equal(app.api.isCurrent(original), false, "Freshness still ends at the incoming request's original deadline.");
+});
+
+test("delayed delivery catches up through one immediate watch, then returns to normal long polling", async t => {
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    const app = watched(t);
+    await app.respond(seed({ retained: true, wire: "signed-in" }));
+    now = 1000;
+    await app.respond(seed({ retained: true, wire: "signed-in" }));
+    const original = app.api.publicationToken();
+    assert.deepEqual(app.watches.at(-1).input.after, { runtimeId, authorizationRevision: 0 });
+    now = 4500;
+    await app.respond(seed({ retained: true, wire: "signed-in" }));
+    assert.equal(app.api.publicationToken(), original);
+    assert.equal(app.watches.at(-1).input.after, null);
+    now = 4501;
+    await app.respond(seed({ retained: true, wire: "signed-in" }));
+    assert.equal(app.api.publicationToken(), original);
+    assert.deepEqual(app.watches.at(-1).input.after, { runtimeId, authorizationRevision: 0 });
+    assert.equal(app.watches.length, 5);
+    assert.ok(app.requests.every(request => request.path === "/api/access/watch"));
+    now = 9500;
+    assert.equal(app.api.isCurrent(original), false, "The catch-up response does not extend its own request-start deadline.");
+});
+
 test("request-start freshness expires at 5000 even with held timers and delayed watch delivery", async t => {
     let now = 0;
     t.mock.method(performance, "now", () => now);
@@ -301,6 +342,26 @@ test("request-start freshness expires at 5000 even with held timers and delayed 
     late.resolve(Response.json(seed({ retained: true, wire: "signed-in" })));
     await tick();
     assert.equal(app.api.publicationToken(), null);
+});
+
+test("a fresh delayed watch still withdraws the predecessor on logout or generation replacement", async t => {
+    let now = 0;
+    t.mock.method(performance, "now", () => now);
+    for (const retained of [false, true]) {
+        now = 0;
+        const app = watched(t);
+        await app.respond(seed({ retained: true, wire: "signed-in" }));
+        now = 1000;
+        await app.respond(seed({ retained: true, wire: "signed-in" }));
+        const original = app.api.publicationToken(), count = app.events.length;
+        now = 5500;
+        await app.respond(seed({ retained, wire: retained ? "signed-in" : "signed-out",
+            generation: 1, authorizationRevision: 1 }));
+        assert.equal(app.api.isCurrent(original), false);
+        assert.equal(app.events.slice(count).some(event => !event.readable), true);
+        assert.equal(Boolean(app.api.publicationToken()), retained);
+        app.api.suspendAccess();
+    }
 });
 
 test("withdrawal aborts reads and fences held decoding; a dispatched write stays unknown with no replay", async t => {

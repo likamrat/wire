@@ -67,6 +67,16 @@ response receipt. Check monotonic freshness on dispatch, decode, publication
 and resume; late timers/responses cannot extend it. Status/watch are safe
 control observations, not independent private-read grants.
 
+On delivery, validate the incoming watch against its own request-start deadline,
+not the preceding observation's deadline. A still-fresh, same-generation watch
+can preserve an unretired view after a renderer pause. It cannot revive a token
+already withdrawn by an expiry check, logout, generation change or page departure.
+If delivery leaves at most two maximum server waits of freshness, the existing
+next watch uses a null cursor for an immediate current-state response. This
+reserves room for the wait and its delivery; ordinary long polling resumes once
+freshness is replenished. It adds no overlapping watch, timer or capability
+renewal and changes neither the five-second bound nor capability TTL.
+
 | Transition | Client effect |
 | --- | --- |
 | Hidden tab with current authority | Keep the watch and accepted content |
@@ -75,10 +85,11 @@ control observations, not independent private-read grants.
 | Readiness returns | Allow new authorized reads; do not restore old DOM, queries or mutations |
 
 A hidden tab is not necessarily a suspended renderer. If the browser stops
-delivering watch responses or running the client long enough to lose freshness,
-return must clear the old view and confirm access before reading again. Keeping
-the watch active avoids needless blanking; it cannot guarantee uninterrupted
-reading across browser suspension, server unavailability or expired authority.
+delivering responses or running the client long enough that no current watch
+can establish fresh authority, return must clear the old view and confirm access
+before reading again. Keeping the watch active avoids needless blanking; it
+cannot guarantee uninterrupted reading across server unavailability or expired
+authority.
 
 Withdrawal cannot erase copies already made outside WIRE.
 
