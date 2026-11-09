@@ -43,9 +43,10 @@ or a persistent bridge; see [source reading](collection.md#source-mapping-and-bo
   retained content and verified saved files, without AI or provider queries.
   Its index is process-private, not a new collection source. See
   [Search](live-search.md) and the [authorized corpus](search-corpus.md).
-- **Review is separate from Save.** Report preparation freezes the selected
-  facts and file bytes. Disclosure approval does not save them; Save is a
-  separate action. Later collection does not rewrite saved reports. See
+- **Preparation does not save.** Choosing a report freezes its facts and file
+  bytes. Text inspection and edits are optional; Save records the local-save
+  choice for those exact files. Keeping chat details requires its warning
+  confirmation. Later collection does not rewrite saved reports. See
   [the report contract](report-contract.md#preparation-disclosure-and-save).
 
 Source approval, withdrawal and uncertain operations follow

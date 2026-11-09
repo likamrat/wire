@@ -22,20 +22,20 @@ that evidence to test the behaviors people rely on and improve their agents.
 
 [![WIRE showing weekly activity, outcomes, models, tools and services beside an interaction with completed and failed calls.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
-Search runs on-device without AI or provider calls. Review report text before
-saving HTML, PDF, JSON or Markdown.
+Search runs on-device without AI or provider calls. Reports save locally as
+HTML, PDF, JSON or Markdown, with detected personal details hidden by default.
 
 ## How WIRE fits
 
 WIRE reads recorded Work IQ activity from the **GitHub Copilot app** without
-rerunning its calls, then keeps local evidence for inspection and reviewed reports.
+rerunning its calls, then keeps local evidence for inspection and reports.
 
 <a href="docs/images/wire-evidence-flow.png">
   <picture>
     <source media="(max-width: 767px) and (prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-narrow-dark.png">
     <source media="(max-width: 767px)" srcset="docs/images/wire-evidence-flow-narrow.png">
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/wire-evidence-flow-dark.png">
-    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved app history into its own local evidence store for Analyze, literal Search and reviewed reports." width="800">
+    <img src="docs/images/wire-evidence-flow.png" alt="The GitHub Copilot app calls Work IQ and records the results. WIRE reads approved app history into its own local evidence store for Analyze, literal Search and locally saved reports." width="800">
   </picture>
 </a>
 
@@ -93,11 +93,12 @@ behaviors need closer investigation.
 
 ## Reports
 
-Turn selected interactions into a portable record of prompts, tool calls and
-results. Review the included text, then share the report with people building
-evaluations so they can turn real-use patterns and failures into concrete eval cases.
+Choose a ready-made report to see recorded patterns and their examples.
+**Errors & failures** shows which interactions hit problems and how often.
+Add context or adjust copies if needed, then save. Review the files before
+sharing them with people building eval cases.
 
-[![A saved HTML report open in WIRE, showing its scope, activity counts, tools and services.](docs/images/saved-report.png)](docs/images/saved-report.png)
+[![An error report showing recorded failures, their frequency and prompt authors, with optional privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
 ## Guides
 

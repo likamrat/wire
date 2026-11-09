@@ -23,7 +23,9 @@ Contributions do not require an AI tool.
 2. Keep the change focused. Preserve source permissions, evidence meaning and
    saved report bytes; read the [relevant contract](docs/README.md#contributor-references).
 3. Add regression coverage for changed behavior and run the
-   [appropriate checks](docs/development.md#check-a-change). Update affected instructions.
+   [appropriate checks](docs/development.md#check-a-change). Update affected
+   instructions and screenshots in the same change, using the shipped behavior
+   and invented data.
 4. Open a pull request explaining the problem, the change and how you checked it.
    Include known limitations or failing checks.
 

@@ -14,6 +14,8 @@ Open **Reports > Create a report**, choose a period, then choose a report.
 The report opens immediately. **Save report** saves its current files locally;
 there is no required setup or text-review checklist.
 
+![Five report choices beneath Last 7, 14, 30 and custom date controls.](images/report-choices.png)
+
 | Report | Includes |
 | --- | --- |
 | All activity | Your prompts and agent prompts, with Work IQ calls and results. Eligible interactions with an unverified author remain included. |
@@ -36,6 +38,10 @@ entry, expand **Use selected interactions or the Analyze view**:
 | Current Analyze view | Every matching interaction across pages, with its complete eligible evidence, not just the individual calls matching a chart. |
 | All collected activity | Retained reportable activity independently of Analyze dates, filters, Search and paging. It does not collect new history or include complete original chat transcripts. |
 
+Choose the scope, select interactions if needed, then use **Show report**.
+You can also use **Add to report > Continue to report** in an interaction reader.
+Reading or selecting an interaction alone does not save a report.
+
 Selected entry keeps all chosen dates initially. Changing report dates does
 not remove your picks. In a Current-derived report, changing dates replaces
 only that restriction; applicable filters and authorized Search membership
@@ -44,21 +50,27 @@ remain. Analyze itself does not change.
 ## Read and adjust
 
 The report shows its period, scope and recorded patterns. An error report
-can say, for example, that 12 of 80 interactions contained a recorded error.
-Only those 12 cases contribute prompt or diagnostic copies. The other
+can say, for example, that 4 of 12 interactions contained a recorded error.
+Only those 4 cases contribute prompt or diagnostic copies. The other
 interactions supply the frozen reference count, not additional disclosed text.
+
+![An error report with the frequency of affected interactions, recorded operation and error groups, and the Save report toolbar.](images/report-preview.png)
 
 Every included interaction remains accessible. **Add a note or edit this
 example** lets you explain what you expected, change a prompt copy or omit it.
 Notes are the report author's context; they do not change recorded outcomes or
 metrics. Select **Update note** or **Update prompt copy** to apply an edit.
 
+![An included interaction with its prompt and recorded calls above an optional note and editable prompt copy.](images/report-example.png)
+
 The toolbar changes the report name, personal-detail treatment and file formats.
 **Change what's included** holds author/service/outcome choices and optional
 linked context. **Inspect or edit report text** provides original/copy
 inspection and edits for the other included text. **Inspect prepared files**
-shows exact output. These controls are optional.
-Choose **Update report copy** after editing text in the inspection area.
+shows exact output. Choose **Update report copy** after editing text in the
+inspection area. These controls are optional.
+To hide a specific name or phrase throughout the copies, open the personal-detail
+control, expand **Additional masking**, and enter one exact term per line.
 
 | Choice | Effect |
 | --- | --- |
@@ -92,14 +104,17 @@ and sensitive information that may be included:
 | Save with chat details | Confirms this particular local save with chat details kept. |
 | Go back | Writes nothing. |
 
+![The keep-chat-details warning offering Hide details and save, Save with chat details, and Go back.](images/report-save-warning.png)
+
 New receipts record local-save intent, not an assertion that someone reviewed
 every copy. Older reports retain their original disclosure attestations.
 
 Choose **Open saved report** to read the saved file. To find it later, open
-**Reports** and choose the report in the library. The file selector changes
-formats; **Download** retrieves the original saved file.
+**Reports** and use its **Open** action. New library rows show the report's
+purpose, period, formats and personal-detail treatment. The file selector
+changes formats; **Download** retrieves the original saved file.
 
-![The saved HTML report open in WIRE with its title, selected scope, separate evidence counts and Download action.](images/saved-report.png)
+![A saved error report open with its frozen frequency and operation groups, file selector and Download action.](images/saved-report.png)
 
 Saved reports retain their frozen facts, text choices and time context.
 Later collection, browsing filters or screen-theme changes do not rewrite them.

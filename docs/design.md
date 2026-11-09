@@ -25,7 +25,7 @@ the avatar. Failed reads, expired identity and access withdrawal still clear it.
 | Sliding left sidebar | Analyze/Reports under Workspace; Analyze tools in their own group; Account/Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
-| Right contextual surface | Interaction reading, report setup and saved-item inspection; one header, scroll area and fixed action region |
+| Right contextual surface | Interaction reading and saved-item inspection; one header, scroll area and fixed action region |
 | Main workspace | Prepared and saved report reading |
 
 Opening the contextual surface reduces the main column's actual width.
@@ -179,7 +179,7 @@ new line or layout shift. Failure remains explicit with manual-copy guidance.
 No Clipboard read is required.
 
 The fixed reader footer owns Add/Remove and Continue to report. Reading does
-not select, approve or save. Broader report scopes explain membership instead
+not select or save. Broader report scopes explain membership instead
 of silently switching to Selected.
 
 ## Search
@@ -204,7 +204,8 @@ no match, failure and unavailable content stay distinct. See
 
 Reports opens the saved library. Create and Compare are explicit tasks;
 an active task offers Back to Reports instead of competing navigation.
-Rows lead with title, registered formats and Open/unavailable status.
+Rows lead with title, registered formats and Open/unavailable status. New reports
+also show their frozen purpose, period and personal-detail treatment.
 Inspection does not read a file, download or delete it.
 
 Creation opens five compact, equal-sized tile rows: All activity, Errors &
@@ -286,7 +287,7 @@ immediately instead of retaining an exit animation.
 
 Reader width/maximize controls belong only to interaction reading. They preserve
 the current visible text anchor and mounted disclosure/focus owners; report
-setup and saved inspection do not inherit them. Narrow modal focus remains
+creation and saved inspection do not inherit them. Narrow modal focus remains
 independent of the navigation drawer.
 
 | Interaction state | Treatment |

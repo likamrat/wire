@@ -13,9 +13,11 @@ scoring or personal feedback.
 
 ## Preserve selection and authority
 
-Trace normal selection -> preparation -> disclosure review -> separate Save ->
-verified saved Open. Preserve author/privacy choices, hidden selections and
-return navigation. Current, Selected and All scopes use their canonical
+Trace report choice/selection -> preparation -> optional copy edits -> explicit
+local Save -> verified saved Open. Keeping chat details requires its warning
+choice for that exact save; new receipts must not claim a human text review.
+Preserve historical attested bundles, author/privacy choices, hidden selections
+and return navigation. Current, Selected and All scopes use their canonical
 populations, not pagination or whatever rows the browser has loaded.
 
 Bind prepared membership to its authoritative source, selectors and account.
@@ -24,7 +26,7 @@ Period replacement changes Dates explicitly while preserving applicable Search,
 group and other selectors. A parent conversation can support the frame without
 becoming measured membership. Keep undated observations explicit.
 
-## Freeze what was reviewed
+## Freeze prepared facts and copies
 
 Background collection may continue while an already prepared report stays frozen,
 subject to actual authority/revocation rules. Avoid recapturing a moving live

@@ -152,7 +152,7 @@ npx playwright install chromium
 ```
 
 This is an optional browser download. HTML, JSON and Markdown do not need it.
-If Chromium is unavailable, install it or deselect PDF and prepare a new review.
+If Chromium is unavailable, install it or deselect PDF and prepare the report again.
 
 Saved-PDF reading uses PDF.js locally and does not require Chromium. It reads
 the text layer, not OCR; no remote conversion service is used.
@@ -170,8 +170,8 @@ with capture evidence, and add a visible caption only when it helps explain the 
 | WIRE cannot start because the port is owned | Use the existing WIRE window, or stop the WIRE process you started before restarting. |
 | The page opens but no activity appears | Review the source paths and history window in Settings. Open Collection status for missing or unsupported history. See [Connect local history](user-guide.md#connect-local-history). |
 | WSL reports that the Windows source reader is unavailable | Make an existing Windows Node 24+ executable available as `node.exe` through WSL interop, and check access to the selected Windows paths. Do not copy the live database or share WIRE stores as a workaround. |
-| PDF preparation cannot find a browser | Install Chromium with the command above, or deselect PDF and prepare a new review. Other formats do not need that browser. |
-| A save or deletion has an uncertain result | Use its status/result check. Do not repeat the action to see whether it worked. See [collection and recovery](collection.md#refresh-and-uncertain-outcomes) or [report saving](reporting.md#approve-save-and-reopen). |
+| PDF preparation cannot find a browser | Install Chromium with the command above, or deselect PDF and prepare the report again. Other formats do not need that browser. |
+| A save or deletion has an uncertain result | Use its status/result check. Do not repeat the action to see whether it worked. See [collection and recovery](collection.md#refresh-and-uncertain-outcomes) or [report saving](reporting.md#save-and-reopen). |
 
 ## Find the owning code
 

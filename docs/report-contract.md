@@ -36,10 +36,10 @@ execution.
 Fresh creation opens five built-in choices with a Last 7 days period, inclusive
 of today in the selected IANA zone. It does not inherit Analyze restrictions.
 Explicit Selected and Current entries retain their own membership. Scope and
-author choices remain panel memory, not persisted across reload. `Authors in
-report` filters whole originating interactions; My plus Agent excludes
+author choices remain panel memory, not persisted across reload. **Authors in
+report** filters whole originating interactions; My plus Agent excludes
 unverified. Calls executed by agents stay with their originating interaction.
-No prompts removes prose, not membership.
+Leaving out prompts and replies removes those copies, not membership.
 
 Synthetic, diagnostic, unknown-source and unidentifiable records retain
 explicit exclusions; missing project context alone is not exclusion. Counts
@@ -111,7 +111,7 @@ The report controller owns the sequence:
    the warning's explicit choice for that save.
 
 Qualified GitHub previews pin the original content-addressed evidence file.
-Later collection can add follow-ups without changing reviewed copies.
+Later collection can add follow-ups without changing prepared copies.
 
 | Change after preparation | Effect |
 | --- | --- |
@@ -160,7 +160,7 @@ cannot admit interactions collected after preparation.
 
 Selected and contextual copies share the existing 3,000-copy/4 MiB budget.
 Oversize or unreadable output refuses as a whole; no silent truncation,
-format omission or weakened file limit. PDF is generated locally before review,
+format omission or weakened file limit. PDF is generated locally during preparation,
 not swapped for HTML after a failure.
 
 The version-3 manifest freezes source/prompt coverage, transformations,
@@ -179,8 +179,8 @@ Existing bundles stay unchanged.
 | Partial files or absent receipt | Not rollback proof |
 
 Ordinary reports and saved comparisons share one preview owner. New Prepare
-retires the other transient preparation/approval but preserves its ordinary
-choices. Neither task can replace a dispatched/unconfirmed Save. Withdrawal
+retires the other transient preparation and save authorization but preserves
+its ordinary choices. Neither task can replace a dispatched/unconfirmed Save. Withdrawal
 scrubs private content while retaining only minimal original recovery identity;
 fresh readiness does not restore an old preview or replay its operations.
 
@@ -254,8 +254,8 @@ Comparisons use recorded outcomes and timing. Separately selected result copies
 must already be frozen and masked; additional masking is allowed, but fetching
 missing source text is not.
 
-Reading a pair is independent of preparation, disclosure, separate Save and
-original-identity recovery.
+Reading a pair does not save it. Preparation and explicit local Save retain
+their source checks and original-identity recovery.
 
 ### Report a retained-period comparison
 
@@ -277,14 +277,14 @@ cohorts; B-minus-A shares use percentage points, not relative percent.
 A saved period report is one artifact with two cohorts, not an ordinary
 single-source input to saved-report comparison. New preparation never
 manufactures two source reports. Changed selected facts/authority invalidate
-review; unrelated accepted activity need not.
+preparation; unrelated accepted activity need not.
 
 ## Saved-artifact deletion
 
 | Deletion | Included / preserved |
 | --- | --- |
 | One report | Remove managed bundle, recognized copies and index entry; preserve source activity and external downloads |
-| Input to a saved comparison | Saved comparison survives with an unavailable input link; dependent unsaved comparisons/approval are invalidated |
+| Input to a saved comparison | Saved comparison survives with an unavailable input link; dependent unsaved preparations/save authorizations are invalidated |
 | All saved reports | Counted, membership/hash-bound two-minute preview across all pages/search |
 | Excluded from bulk deletion | Later reports, saved comparisons, activity, drafts and external downloads |
 

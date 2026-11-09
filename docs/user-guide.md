@@ -80,8 +80,8 @@ Copy controls copy the exact retained original, unmasked. A saved Copilot reply
 is the assistant's text, not a tool result. Enabling reply saving does not
 restore previously omitted replies.
 
-**Add to report** changes selection only. To choose contents and create a
-file, continue with [Create and compare reports](reporting.md).
+**Add to report** changes selection only. **Continue to report** opens a report
+of those selections. Use **Save report** to keep its files.
 
 ## Make a report
 
@@ -95,9 +95,11 @@ period and formats. **Save report** keeps the files on this device. If you keep
 chat details, the warning lets you hide details and save, save with those
 details, or go back without writing anything.
 
-Reports preserve their original cohort and files. A completed call does not
-prove that your task succeeded. See the [report guide](reporting.md) for scopes,
-privacy choices, comparisons and uncertain-save recovery.
+Changing text or formats keeps the prepared cohort; changing dates or filters
+prepares a new selection. Saved reports preserve their original files.
+A completed call does not prove that your task succeeded. See the
+[report guide](reporting.md) for scopes, privacy choices, comparisons and
+uncertain-save recovery.
 
 ## Find saved text
 
