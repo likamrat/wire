@@ -42,10 +42,11 @@ Choose the scope, select interactions if needed, then use **Show report**.
 You can also use **Add to report > Continue to report** in an interaction reader.
 Reading or selecting an interaction alone does not save a report.
 
-Selected entry keeps all chosen dates initially. Changing report dates does
-not remove your picks. In a Current-derived report, changing dates replaces
-only that restriction; applicable filters and authorized Search membership
-remain. Analyze itself does not change.
+**Selected interactions** initially includes your picks across all dates.
+Changing report dates does not remove those picks. If you start from
+**Current Analyze view**, changing the report dates replaces only the date
+restriction. Other applicable filters and authorized Search membership stay
+in place; Analyze itself does not change.
 
 ## Read and adjust
 
@@ -83,9 +84,10 @@ control, expand **Additional masking**, and enter one exact term per line.
 Choose HTML or PDF for reading, JSON for complete structured records, or Markdown
 for portable text. You can select more than one. PDF generation needs the
 [optional local browser setup](development.md#pdf-and-browser-tools); the other
-formats do not. Titles are always masked metadata. Changing the name, text,
-notes or formats regenerates prepared files while keeping the original
-interaction cohort. Save is unavailable until the update finishes.
+formats do not. Detected personal details in report names are hidden in every
+text mode. Changing the name, text, notes or formats regenerates prepared
+files while keeping the original interaction cohort. Save is unavailable
+until the update finishes.
 
 Additional masking terms, edits and omissions affect report copies only.
 Missing or partial text stays qualified; editing does not recover source text.
@@ -106,8 +108,9 @@ and sensitive information that may be included:
 
 ![The keep-chat-details warning offering Hide details and save, Save with chat details, and Go back.](images/report-save-warning.png)
 
-New receipts record local-save intent, not an assertion that someone reviewed
-every copy. Older reports retain their original disclosure attestations.
+The save receipt records your choice to save locally, not a claim that you
+reviewed every copy. Older reports keep the review confirmation recorded
+when they were saved.
 
 Choose **Open saved report** to read the saved file. To find it later, open
 **Reports** and use its **Open** action. New library rows show the report's
