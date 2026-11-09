@@ -74,6 +74,12 @@ control observations, not independent private-read grants.
 | Failure, expiry, logout or generation loss | Clear private owners, including hidden ones |
 | Readiness returns | Allow new authorized reads; do not restore old DOM, queries or mutations |
 
+A hidden tab is not necessarily a suspended renderer. If the browser stops
+delivering watch responses or running the client long enough to lose freshness,
+return must clear the old view and confirm access before reading again. Keeping
+the watch active avoids needless blanking; it cannot guarantee uninterrupted
+reading across browser suspension, server unavailability or expired authority.
+
 Withdrawal cannot erase copies already made outside WIRE.
 
 ## Client publication and withdrawal

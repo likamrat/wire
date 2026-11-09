@@ -8,7 +8,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { privateFixture } from "./helpers.mjs";
 
-async function setup(t) {
+async function setup(t, view = "analyze") {
     const cleanup = [];
     const { context } = await privateFixture({ after: work => cleanup.push(work) });
     const access = await createCopilotRuntimeAccess(context);
@@ -30,9 +30,10 @@ async function setup(t) {
         for (const work of cleanup) await work();
         assert.deepEqual(errors, []);
     });
-    await page.goto(runtime.url + "#analyze");
-    await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+    await page.goto(runtime.url + "#" + view);
+    if (view === "analyze") await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await expect(page.locator(view === "analyze" ? "#activityView" : "#reportsView")).toBeVisible();
     return { page, profile, requests, url: runtime.url };
 }
 
@@ -55,13 +56,15 @@ async function capture(page, name) {
     await page.screenshot({ path: path.join(process.env.WIRE_INACTIVITY_PROOFS, name + ".png") });
 }
 
-test("still-authorized background return keeps Analyze painted without a replacement snapshot", { timeout: 20000 }, async t => {
-    const { page, requests } = await setup(t);
-    const card = await page.locator(".request-card-open").first().elementHandle();
+for (const view of ["analyze", "reports"]) test(`still-authorized background return keeps ${view} painted without a replacement snapshot`, { timeout: 20000 }, async t => {
+    const { page, requests } = await setup(t, view);
+    const content = view === "analyze" ? page.locator(".request-card-open").first()
+        : page.locator("#reportsView").getByRole("button", { name: /^All activity / });
+    const owner = await content.elementHandle();
     const snapshots = requests.filter(value => value === "/api/snapshot").length;
     let navigations = 0;
     page.on("request", request => { if (request.isNavigationRequest()) navigations++; });
-    await capture(page, "01-readable");
+    await capture(page, `${view}-01-readable`);
     await visibility(page, true);
     // Longer than the unchanged five-second grant: only continuing real watches can keep it current.
     await page.waitForTimeout(6000);
@@ -69,11 +72,12 @@ test("still-authorized background return keeps Analyze painted without a replace
     await page.route("**/api/snapshot", async route => { await held.promise; await route.continue(); });
     try {
         const firstFrame = await visibility(page, false);
-        await capture(page, "02-return-first-frame");
+        await capture(page, `${view}-02-return-first-frame`);
         assert.deepEqual(firstFrame, { workspace: true, checking: false },
             "Returning to current authority must not paint the whole-page access-check shell.");
-        await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
-        assert.equal(await card.evaluate(node => node.isConnected), true, "Keep the accepted view, not a reconstruction.");
+        if (view === "analyze") await expect(page.locator("#activityList")).toContainText("SYNTHETIC_PRIVATE_PROMPT");
+        await expect(content).toBeVisible();
+        assert.equal(await owner.evaluate(node => node.isConnected), true, "Keep the accepted view, not a reconstruction.");
         assert.equal(requests.filter(value => value === "/api/snapshot").length, snapshots);
         assert.equal(requests.filter(value => value === "/api/session").length, 0);
         assert.equal(navigations, 0);
