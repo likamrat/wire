@@ -16,10 +16,13 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         ["agent", "Agent prompts", "Requests written by your agents.", "report-agent"],
     ];
     const help = {
+        all: "All eligible interactions in this period, including your prompts, agent prompts and prompts whose author was not recorded.",
         errors: "At least one Work IQ call failed or reported an error. Other calls in the interaction may have completed.",
         completed: "The calls finished without a recorded error. The answer can still be wrong or incomplete.",
+        mine: "Interactions whose starting prompt is recorded as yours. Calls made by an agent while handling your request stay included.",
+        agent: "Interactions whose starting prompt is recorded as agent-written. Prompts with an unknown author are not included.",
         privacy: "WIRE hides details it recognizes in prompts, included replies and notes, such as email addresses and phone numbers. It may miss names or sensitive context. Your saved chats stay unchanged.",
-        formats: "HTML is a web page; PDF is for reading and printing. JSON keeps structured facts; Markdown is portable text.",
+        formats: "Choose which files Save report writes. Use View to preview a format.",
     };
     function el(tag, cls, text) {
         const node = doc.createElement(tag);
@@ -98,7 +101,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     privacy.append(byId("promptOptions"), byId("additionalMasking")); done(privacy);
     const privacyButton = opener("Hide personal details", privacy);
     const formats = popover("reportFileOptions", "Save as"); formats.append(byId("formatOptions")); done(formats);
-    const formatButton = opener("HTML", formats);
+    const formatButton = opener("Save as: HTML", formats);
     const refine = popover("reportIncludeOptions", "Choose what to include");
     const author = root.querySelector(".report-author-choice");
     refine.append(author);
@@ -167,12 +170,13 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         setLabel(dateButton, value.dates.range === "capture" ? "All retained dates" : value.dates.range === "custom" ? "Custom dates" : `Last ${value.dates.range} days`);
         dateButton.hidden = value.paired;
         setLabel(privacyButton, ({ masked: "Hide personal details", original: "Keep chat details", none: "Prompts left out" })[value.options.promptMode]);
-        setLabel(formatButton, value.options.formats.map(format => format === "markdown" ? "Markdown" : format.toUpperCase()).join(" + ") || "Choose a format");
+        setLabel(formatButton, "Save as: " + (value.options.formats.length > 1 ? `${value.options.formats.length} formats`
+            : value.options.formats.map(format => format === "markdown" ? "Markdown" : format.toUpperCase()).join("") || "Choose a format"));
         privacyButton.classList.toggle("chat-details-kept", value.options.promptMode === "original");
         outcome.value = value.options.reportFocus?.outcome ?? "all"; service.value = value.options.reportFocus?.services[0] ?? "";
         outcome.disabled = service.disabled = value.locked || !value.options.reportFocus;
-        scopeCaption.textContent = value.paired ? "The accepted comparison keeps its two periods and filters."
-            : `${labelDates(value.dates)} · ${value.scopeLabel} · ${value.timeContext.timeZone}${value.options.resultText ? " · Masked error details included" : ""}`;
+        scopeCaption.textContent = value.paired ? "Two periods with the same filters."
+            : `${labelDates(value.dates)} · ${value.scopeLabel}`;
         for (const control of choices.querySelectorAll("button")) control.disabled = value.locked;
         const save = byId("reportSaveActions");
         if (save && save.parentElement !== saveSlot) saveSlot.append(save);
@@ -196,10 +200,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
 export function decoratePreparedReport(source, { host = document, preview, notes, onNote, onCopy, current, refresh }) {
     const style = source.createElement("style");
     style.textContent = `
-body{background:var(--report-sheet);color:var(--ink)}main{background:transparent}
+html,body{background:var(--report-sheet);color:var(--ink)}main{background:transparent}
 :root{--font:var(--screen-font)}h1,h2,h3,h4,p,table,pre{color:inherit}
 .report-author-note,.reading-notes{background:var(--report-note)}
-.wire-example-editor{margin:20px 0;padding-top:12px;border-top:1px solid var(--rule);font-family:var(--font)}
+.wire-example-editor{margin:20px 0;padding-top:12px;border-top:1px solid var(--rule);font-family:var(--font);background:transparent}
 .wire-example-editor summary{cursor:pointer;min-height:44px;align-content:center;color:var(--muted)}
 .wire-example-editor label{display:block;margin:16px 0 10px}
 .wire-example-editor textarea{display:block;width:100%;box-sizing:border-box;min-height:90px;padding:12px;border:1px solid var(--rule);border-radius:8px;background:var(--report-note);color:var(--ink);font:inherit;line-height:1.6;resize:vertical}
@@ -212,7 +216,7 @@ body{background:var(--report-sheet);color:var(--ink)}main{background:transparent
         if (!current()) return;
         const values = host.defaultView.getComputedStyle(host.documentElement), dark = host.documentElement.dataset.evidenceTheme === "dark";
         source.documentElement.dataset.evidenceTheme = dark ? "dark" : "light";
-        for (const key of ["ink", "muted", "rule", "control", "focus"]) source.documentElement.style.setProperty("--" + key, values.getPropertyValue("--" + key));
+        for (const key of ["ink", "muted", "rule", "control", "focus", "danger", "warning", "chart-success"]) source.documentElement.style.setProperty("--" + key, values.getPropertyValue("--" + key));
         source.documentElement.style.setProperty("--screen-font", values.getPropertyValue("--font"));
         source.documentElement.style.setProperty("--report-sheet", values.getPropertyValue("--report-sheet"));
         source.documentElement.style.setProperty("--report-note", values.getPropertyValue("--report-note"));

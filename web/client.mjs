@@ -1395,7 +1395,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         renderBody?.(node.open);
         return node;
     }
-    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false, pageLabel = "Saved library page", onPage, isCurrent, beforeReplace }) {
+    function pagedList(host, items, { key, size = 6, noun = "items", renderItem, listTag = "div", listClass = "", wrapList = list => list, jump = false, pageLabel = "Saved library page", pagerAfter = false, onPage, isCurrent, beforeReplace }) {
         const publication = api.publicationToken();
         const paint = (position = null) => {
             if (!api.isCurrent(publication) || isCurrent && !isCurrent()) return;
@@ -1449,7 +1449,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             for (const item of items.slice(start, start + size)) list.append(renderItem(item));
             beforeReplace?.(host);
             if (!api.isCurrent(publication) || isCurrent && !isCurrent()) { beforeReplace?.(list); return; }
-            host.replaceChildren(pager, wrapList(list));
+            const content = wrapList(list);
+            host.replaceChildren(...(pagerAfter ? [content, pager] : [pager, content]));
             if (position) restorePager(position);
         };
         paint();
@@ -6886,7 +6887,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ]));
         setText($("savedReportSearchCount"), query ? `${count(matching.length)} of ${count(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
         if (!matching.length) { $("bundleList").append(empty("No saved reports match", "Try a title, date or file format, or clear this search.")); return; }
-        pagedList(history, matching, { key: savedLibraryPageKey(), noun: comparisonCount ? "saved items" : "saved reports", jump: true,
+        pagedList(history, matching, { key: savedLibraryPageKey(), noun: comparisonCount ? "saved items" : "saved reports", jump: true, pagerAfter: true,
             onPage: () => leaveSavedInspectorContext(), wrapList: list => {
                 const host = el("div", "saved-report-table"), columns = el("div", "saved-library-columns");
                 columns.setAttribute("aria-hidden", "true");
@@ -6903,7 +6904,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (current()) openSavedReport(bundle, event.currentTarget);
             }, "saved-report-title"), "open-bundle:" + bundle.bundleId);
             summary.disabled = !readable;
-            summary.setAttribute("aria-label", "Open " + title);
+            summary.replaceChildren(ux.icon("read"), el("span", "saved-report-name", title));
+            summary.setAttribute("aria-label", "View report: " + title);
+            ux.tooltip(summary, "View report");
             const identity = el("span", "saved-report-identity");
             const privacyLabel = ({ masked: "Personal details hidden where detected", original: "Chat details kept",
                 none: "Prompts and replies left out" })[bundle.promptMode] ?? "Text treatment not recorded";
@@ -7177,6 +7180,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             clearOriginalRead(savedReportView.read);
             clearOriginalRead(savedReportView.downloadRead);
             savedReportView.preview?.dispose();
+            savedReportView.reportPreview?.dispose();
+            savedReportView.reportValue = null;
             savedReportView.closeNotice?.();
             if (savedReportView.headingHome?.isConnected) savedReportView.headingHome.replaceWith($("pageTitle"));
             savedReportView.downloadValue = null;
@@ -7192,6 +7197,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         clearOriginalRead(savedReportView.read);
         clearOriginalRead(savedReportView.downloadRead);
         savedReportView.preview?.dispose();
+        savedReportView.reportPreview?.dispose();
+        savedReportView.reportValue = null;
         savedReportView.closeNotice?.();
         savedReportView.downloadValue = null;
         savedReportView.body.replaceChildren(el("p", "error", message));
@@ -7201,7 +7208,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (reportComparisonUI?.isBusy()) { announce("Wait for the current comparison operation to finish before opening a saved copy."); return false; }
         if (!original && assessmentFactories.reportIdentity.legacyCandidate(bundle))
             return inspectSavedReport(bundle, trigger);
-        const key = savedEntry("reader", bundle, trigger, { format, original });
+        const key = savedEntry("reader", bundle, trigger, { format, original, reportView: format === undefined });
         if (route.view === "reports" && route.task === "create" && reportJourney.snapshot().step === 3) {
             const origin = periodReport?.returnTo ?? sessionJourney.returnRoute({ ...route, task: undefined });
             Object.assign(savedEntries.get(key), {
@@ -7278,15 +7285,21 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const names = { html: "HTML", pdf: "PDF", markdown: "Markdown", json: "JSON", manifest: "Manifest" };
         const selector = el("select");
-        selector.id = "savedReaderFormat"; selector.setAttribute("aria-label", "Report format");
+        selector.id = "savedReaderFormat"; selector.setAttribute("aria-label", "Saved report view");
         const formats = Array.isArray(bundle.formats) && bundle.formats.length
             ? Object.keys(names).filter(format => Object.hasOwn(bundle.files || {}, savedFileName(bundle, format))
                 && (!entry?.original || format !== "manifest"))
             : [savedReadableFormat(bundle)].filter(Boolean);
-        for (const format of formats) selector.append(option(format, names[format]));
-        selector.value = formats.includes(entry?.format) ? entry.format : savedReadableFormat(bundle);
-        if (formats.length > 1) toolbar.append(selector);
-        else toolbar.append(el("span", "saved-reader-format", names[selector.value] || "File"));
+        selector.append(option("report", "Report"));
+        for (const format of formats) selector.append(option(format, names[format] + " file"));
+        selector.value = (entry?.reportView ?? !entry?.format) ? "report"
+            : formats.includes(entry?.format) ? entry.format : savedReadableFormat(bundle);
+        toolbar.append(selector);
+        const expand = button("Expand sections", () => {
+            current.expanded = !current.expanded; void show();
+        }, "quiet");
+        current.expand = expand;
+        toolbar.append(expand);
         const download = button("Download", async () => {
             if (!readable() || download.disabled) return;
             const read = current.read, format = selector.value, downloadRead = {};
@@ -7308,16 +7321,41 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!readable()) return;
             clearOriginalRead(current.read); clearOriginalRead(current.downloadRead);
             current.preview?.dispose(); current.preview = null;
-            const read = {}, format = selector.value, kind = bundle.kind === "comparison" ? "comparison" : "report";
+            if (current.reportHost) current.reportHost.hidden = true;
+            const showingReport = selector.value === "report";
+            const read = {}, format = showingReport ? savedReadableFormat(bundle) : selector.value;
+            const kind = bundle.kind === "comparison" ? "comparison" : "report";
+            if (!showingReport && current.reportValue?.kind === "pdf") {
+                current.reportPreview?.dispose(); current.reportHost?.remove();
+                current.reportPreview = current.reportHost = current.reportValue = null;
+            }
             current.read = read;
-            if (entry) entry.format = format;
+            if (entry) { entry.format = format; entry.reportView = showingReport; }
+            download.hidden = showingReport;
+            expand.hidden = !showingReport;
+            expand.textContent = current.expanded ? "Collapse sections" : "Expand sections";
             const active = () => readable() && current.read === read;
             download.disabled = true;
-            body.replaceChildren(el("p", "saved-reader-loading", `Opening ${names[format] || "file"}...`));
+            for (const child of [...body.children]) if (child !== current.reportHost) child.remove();
+            body.append(el("p", "saved-reader-loading", showingReport ? "Opening report..." : `Opening ${names[format] || "file"}...`));
             try {
                 if (!format) throw new Error("No supported saved format is registered for this report.");
                 let value;
-                if (entry?.original) {
+                if (showingReport) {
+                    value = await api("/api/report/open", { bundleId: bundle.bundleId, kind, view: true,
+                        ...(entry?.original ? { original: true } : {}) });
+                    if (!active()) return;
+                    if (value.artifact?.bundleId !== bundle.bundleId || value.artifact.kind !== kind
+                        || !["html", "markdown", "pdf"].includes(value.format)
+                        || value.sourceFormat !== savedReadableFormat(bundle)
+                        || (value.format === "pdf" ? typeof value.data !== "string" : typeof value.text !== "string")
+                        || (entry?.original ? value.source !== "legacy-original" || value.verification !== "unverified"
+                            : value.source !== undefined || value.verification !== undefined)) {
+                        throw new Error("The saved report view did not match this report.");
+                    }
+                    value = { ...value, kind: value.format };
+                    expand.hidden = value.kind !== "html";
+                } else if (entry?.original) {
                     if (!assessmentFactories.reportIdentity.legacyCandidate(bundle)) throw new Error("This saved original changed. Open its current files from the library.");
                     value = await readOriginalFile(bundle, format, active, read);
                     if (!value || !active()) return;
@@ -7339,9 +7377,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }
                 if (!active()) return;
                 download.disabled = false;
-                paintSavedDocument(body, value, active);
+                paintSavedDocument(body, value, active, showingReport);
                 selectControls?.sync();
-            } catch (error) { if (active()) body.replaceChildren(el("p", "notice error", error.message)); }
+            } catch (error) {
+                if (active()) {
+                    current.reportPreview?.dispose(); current.reportHost?.remove();
+                    current.reportPreview = current.reportHost = current.reportValue = null;
+                    const notice = el("p", "notice error", error.message); notice.setAttribute("role", "alert");
+                    body.replaceChildren(notice);
+                }
+            }
         }
         selector.addEventListener("change", show);
         selectControls?.sync(); await show();
@@ -7356,6 +7401,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (valid() && !read.disabled) openSavedReport(bundle, event.currentTarget, format.value, true);
         }, "primary");
         read.setAttribute("aria-label", "Open original file");
+        const view = button("View report", event => {
+            if (valid()) openSavedReport(bundle, event.currentTarget, undefined, true);
+        }, "primary");
+        view.setAttribute("aria-describedby", "savedOriginalNotice");
         const download = button("Download", async () => {
             if (!valid() || download.disabled) return;
             const selected = format.value;
@@ -7382,7 +7431,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         format.addEventListener("change", labelAction);
         labelAction();
         const field = el("div", "original-file-choice");
-        field.append(label, format); controls.append(field, read, download);
+        field.append(label, format); controls.append(view, field, read, download);
         return controls;
     }
     async function readOriginalFile(bundle, format, valid, current, downloadOnly = false) {
@@ -7405,17 +7454,49 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 name: result.name, ...(format === "pdf" || downloadOnly ? { data: result.data } : { text: new TextDecoder("utf-8", { fatal: true }).decode(current.originalBytes) }) };
         } finally { clearOriginalRead(current); }
     }
-    function paintSavedDocument(body, value, valid) {
+    function paintSavedDocument(body, value, valid, reportView = false) {
         if (!valid()) return;
         const artifact = value.artifact;
         if (typeof artifact?.title === "string" && artifact.title.trim()) savedReportView.title = savedTitle(artifact);
         setText($("pageTitle"), savedReportView.title);
-        body.replaceChildren();
+        const current = savedReportView;
+        for (const child of [...body.children]) if (child !== current.reportHost) child.remove();
         if (artifact?.sourceReports?.some(source => !source.available)) body.append(el("p", "muted",
             "An original report is no longer available. This independently reviewed saved copy is unchanged."));
+        if (reportView) {
+            const previous = current.reportValue;
+            if (previous?.kind === value.kind && previous.text === value.text && previous.data === value.data
+                && previous.expanded === current.expanded) {
+                current.reportHost.hidden = false;
+                current.expand.hidden = value.kind !== "html" || previous.expandable === false;
+                return;
+            }
+            current.reportPreview?.dispose(); current.reportHost?.remove();
+            const preview = el("div", "saved-reader-file");
+            current.reportHost = preview; body.append(preview);
+            current.reportValue = { kind: value.kind, text: value.text, data: value.data, expanded: current.expanded };
+            const publication = api.publicationToken(), held = current.reportValue;
+            const currentReport = () => api.isCurrent(publication) && savedReportView === current && !current.invalid
+                && current.reportValue === held && route.bundle === current.bundleId
+                && state.exports?.some(entry => savedIdentity(entry) === current.identity);
+            current.reportPreview = assessmentFactories.savedFilePreview(preview, value, {
+                frozenFrame: assessmentFactories.liveSearch.frozenFrame, isCurrent: currentReport, toolbar: current.toolbar,
+                icon: ux.icon, title: current.title, brand: cloneReportBrand,
+                readingDocument: source => {
+                    assessmentFactories.enhanceReportReading(source, { expanded: current.expanded });
+                    held.expandable = Boolean(source.querySelector(".wire-reading-section,.wire-reading-interaction"));
+                    current.expand.hidden = !held.expandable;
+                },
+                onError: error => {
+                    if (!currentReport()) return;
+                    const notice = el("p", "notice error", error.message); notice.setAttribute("role", "alert");
+                    body.replaceChildren(notice);
+                },
+            });
+            return;
+        }
         const preview = el("div", "saved-reader-file");
         body.append(preview);
-        const current = savedReportView;
         const name = value.name || savedFileName(artifact || {}, value.kind);
         const mounted = mountFileInspection(preview, { [name]: value.kind === "pdf" ? { data: value.data } : value.text }, {
             id: "savedFileView", toolbar: current.toolbar, title: current.title, isCurrent: valid,
@@ -8887,7 +8968,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const selection = preparedFileInspection?.selection();
             preparedFileInspection?.dispose();
             preparedFileInspection = mountFileInspection(exactFiles, value.files, {
-                id: "preparedReportFile", selection,
+                id: "preparedReportFile", selection, hideRail: localSave,
                 isCurrent: () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId
                     && (!(value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) || draft.contextCurrent(contextToken)),
             });
@@ -8902,21 +8983,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 preparedReportReader?.dispose();
                 preparedReportReader = assessmentFactories.preparedFrame(value.previewHtml, assessmentFactories.liveSearch.frozenFrame, {
                     isCurrent: () => api.isCurrent(publication),
-                    onReady: (source, refresh) => assessmentFactories.decoratePreparedReport(source, {
-                        preview: value, notes: draft.options().reportNotes ?? [],
-                        current: () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId,
-                        refresh,
-                        onNote: (scenarioId, text) => {
-                            const reportNotes = (draft.options().reportNotes ?? []).filter(note => note.scenarioId !== scenarioId);
-                            if (text.trim()) reportNotes.push({ scenarioId, text });
-                            draft.change({ reportNotes }); updateReportContent();
-                        },
-                        onCopy: (key, text, omit) => {
-                            const overrides = draft.options().overrides.filter(copy => copy.key !== key);
-                            overrides.push({ key, ...(omit ? { omit: true } : { text }) });
-                            draft.change({ overrides }); updateReportContent();
-                        },
-                    }),
+                    contained: localSave,
+                    onReady: (source, refresh) => {
+                        if (localSave) assessmentFactories.enhanceReportReading(source);
+                        return assessmentFactories.decoratePreparedReport(source, {
+                            preview: value, notes: draft.options().reportNotes ?? [],
+                            current: () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId,
+                            refresh,
+                            onNote: (scenarioId, text) => {
+                                const reportNotes = (draft.options().reportNotes ?? []).filter(note => note.scenarioId !== scenarioId);
+                                if (text.trim()) reportNotes.push({ scenarioId, text });
+                                draft.change({ reportNotes }); updateReportContent();
+                            },
+                            onCopy: (key, text, omit) => {
+                                const overrides = draft.options().overrides.filter(copy => copy.key !== key);
+                                overrides.push({ key, ...(omit ? { omit: true } : { text }) });
+                                draft.change({ overrides }); updateReportContent();
+                            },
+                        });
+                    },
                     onError: message => {
                         if (!api.isCurrent(publication) || !draft.current(operation) || exportWriting) return;
                         invalidatePreview(message);
@@ -9106,12 +9191,35 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         body.append(controls);
         if (localSave) {
+            const viewBar = el("div", "report-reading-toolbar"), label = el("label", "", "View"), view = el("select");
+            view.id = "preparedReportView"; view.setAttribute("aria-label", "Prepared report view");
+            view.append(option("report", "Report"));
+            const names = { html: "HTML", pdf: "PDF", json: "JSON", md: "Markdown" };
+            for (const name of Object.keys(preview.files)) {
+                const format = name === "coverage-and-redaction-manifest.json" ? "Manifest" : names[name.split(".").at(-1)];
+                view.append(option(name, format + " file"));
+            }
+            label.append(view);
+            let expanded = false;
+            const expand = button("Expand sections", () => {
+                expanded = !expanded; preparedReportReader?.expand(expanded);
+                expand.textContent = expanded ? "Collapse sections" : "Expand sections";
+            }, "quiet");
+            viewBar.append(label, expand); report.prepend(viewBar);
+            exactFiles.id = "reportFileInspection"; exactFiles.hidden = true;
+            const reportFrame = preparedReportReader?.frame;
+            view.addEventListener("change", () => {
+                if (!api.isCurrent(publication) || !view.isConnected) return;
+                const reading = view.value === "report";
+                if (reportFrame) reportFrame.hidden = !reading;
+                exactFiles.hidden = reading; expand.hidden = !reading;
+                if (!reading) preparedFileInspection.select(view.value);
+                renderReportTask();
+            });
             const optionalText = el("details", "report-optional-copies");
             optionalText.append(el("summary", "", "Inspect or edit report text"));
             for (const node of body.querySelectorAll(":scope > .report-privacy-note,:scope > .report-context-review,:scope > .prompt-comparisons,:scope > .report-privacy-findings")) optionalText.append(node);
-            const optionalFiles = el("details", "report-optional-files");
-            optionalFiles.append(el("summary", "", "Inspect prepared files"), exactFiles);
-            body.append(optionalText, optionalFiles);
+            body.append(optionalText);
             reportJourney.previewReady({ ...preview, promptReview: reviewCopies }, { confirm, feedback, focus });
             reportExperience?.sync(); selectControls?.sync();
             return;

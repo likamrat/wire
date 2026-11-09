@@ -225,6 +225,9 @@ hover/focus/touch help without claiming complete anonymization. Missing metadata
 is not inferred. A secondary Options menu preserves inspection and deletion;
 the header menu preserves bulk deletion with its existing confirmation.
 Inspection alone does not read, download or delete a file.
+Every report choice has accessible help. Saved-report paging follows the rows
+in visual and keyboard order. The view icon and report name open in-app reading;
+Files remains a separate action.
 
 Back restores saved search, order, paging, scroll and activating control.
 It preserves the authorized unfinished copy without another visible resume
@@ -237,6 +240,16 @@ The name updates the document heading without remounting its input. Optional
 changes regenerate files; Save stays unavailable while the preview is stale.
 The report surface and border complement the current screen theme without
 changing frozen output. Example notes and copy edits stay beside their evidence.
+Report view uses a contained reading pane with persistent section links,
+collapsible sections and individual interaction disclosures. All evidence stays
+reachable; a pattern link opens its exact interaction. Keep only scope and dates
+at the top, with other metadata under Report details in Coverage. Recorded
+failure/success/partial words retain their semantic colors.
+
+Save as chooses output files. View chooses Report or an actual format preview,
+with PDF pages, a JSON tree or HTML/Markdown Preview/Source. Returning from a file
+to the same authorized HTML report keeps its open sections and reading position.
+JSON-only saves can render a readable page from their verified frozen snapshot.
 
 Hide personal details and HTML are defaults. Errors & failures visibly includes
 retained masked error details. Notes are authored context, never recorded facts.

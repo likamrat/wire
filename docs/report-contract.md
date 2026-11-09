@@ -242,6 +242,18 @@ Failed verification cannot silently downgrade to an unchecked reading path.
 Unsupported schemas and missing facts remain explicit; current activity cannot
 fill gaps in a saved report.
 
+Report view is separate from original-file inspection and Download. When HTML
+is absent, supported saved JSON can supply a read-only HTML view after snapshot,
+manifest, ownership and disclosure checks. Markdown/PDF-only saves use their
+local readable representations. A declared missing or altered preferred file
+still refuses; this is not a fallback or repair path. Legacy-original viewing
+retains its explicit warning and unverified status.
+
+Screen-only section and interaction disclosures preserve all content and
+original anchor identities. Color repeats recorded outcome words, never a new
+success judgment. Collapse, navigation and format switching do not change
+membership, facts, file bytes or print/export completeness.
+
 Saved metadata search does not read prompt/report bodies. Global Search
 extracts only permitted text from independently verified saved files through
 the [corpus contract](search-corpus.md). Its receipt authority is not

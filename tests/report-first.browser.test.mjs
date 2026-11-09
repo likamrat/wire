@@ -4,7 +4,7 @@ import { chromium, expect } from "@playwright/test";
 import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
-import { fixture, privateFixture, chooseTheme } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { time } from "../lib/time.mjs";
 import { readFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -69,7 +69,7 @@ test("gallery opens a real report and direct Save preserves the frozen failure c
     const updated = await (await rebuilt).json();
     assert.deepEqual(updated.snapshot.reportPopulation, initial.snapshot.reportPopulation);
     await expect(page.getByLabel("Report name", { exact: true })).toBeFocused();
-    await page.getByRole("button", { name: "HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
     let preparedFiles = updated.files;
     for (const format of ["pdf", "json", "markdown"]) {
         const response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -90,9 +90,10 @@ test("gallery opens a real report and direct Save preserves the frozen failure c
     assert.equal(requests.filter(request => request.path === "/api/privacy-review").length, 0);
     assert.equal(requests.filter(request => request.path === "/api/export").length, 1);
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await selectActivityOption(page, "savedReaderFormat", "html");
     for (const [format, name] of [["html", "product-report.html"], ["pdf", "product-report.pdf"], ["json", "product-report.json"], ["markdown", "product-report.md"]]) {
         if (format !== "html") {
-            await page.getByRole("combobox", { name: "Report format", exact: true }).click();
+            await page.getByRole("combobox", { name: "Saved report view", exact: true }).click();
             await page.locator(`.select-popup [data-value="${format}"]`).click();
         }
         const download = page.waitForEvent("download");
@@ -144,6 +145,76 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     assert.deepEqual(errors, []);
 });
 
+test("JSON-only saved reports open as readable reports independently of their files", { timeout: 30000 }, async t => {
+    const { page, context, requests, errors } = await setup(t);
+    const downloads = [];
+    page.on("download", download => downloads.push(download));
+    await prepare(page);
+    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    for (const [format, selected] of [["json", true], ["html", false]]) {
+        const ready = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator(`#formatOptions input[value="${format}"]`).setChecked(selected); await ready;
+    }
+    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const before = await loadBoardState(context), saved = before.exports[0];
+    assert.deepEqual(saved.formats, ["json"]);
+    const bytes = await readFile(saved.files["product-report.json"]);
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    const row = page.locator(".saved-library-row");
+    await row.getByRole("button", { name: "View report: Errors & failures", exact: true }).click();
+    const reader = page.locator("#savedReportReader");
+    await expect(reader.frameLocator("iframe").locator("h1")).toHaveText("Errors & failures");
+    await expect(reader.frameLocator("iframe").locator("body")).toContainText("2 of 8 interactions had recorded errors.");
+    await expect(reader.locator(".saved-json-tree")).toHaveCount(0);
+    await expect(reader.getByRole("button", { name: "Download", exact: true })).toBeHidden();
+    const reads = requests.filter(request => request.path === "/api/preview").length;
+    await selectActivityOption(page, "savedReaderFormat", "json");
+    await expect(reader.locator(".saved-json-tree")).toBeVisible();
+    await expect(reader.getByRole("button", { name: "Download", exact: true })).toBeVisible();
+    await selectActivityOption(page, "savedReaderFormat", "report");
+    await expect(reader.frameLocator("iframe").locator("h1")).toHaveText("Errors & failures");
+    assert.equal(requests.filter(request => request.path === "/api/preview").length, reads, "Saved reading never prepares current activity.");
+    assert.deepEqual(downloads, []);
+    assert.deepEqual(await readFile(saved.files["product-report.json"]), bytes);
+    assert.deepEqual(await loadBoardState(context), before);
+    await selectActivityOption(page, "savedReaderFormat", "json");
+    const pending = Promise.withResolvers(), release = Promise.withResolvers();
+    t.after(() => release.resolve());
+    await page.route("**/api/report/open", async route => {
+        const response = await route.fetch(); pending.resolve();
+        await release.promise; await route.fulfill({ response });
+    }, { times: 1 });
+    const late = page.waitForResponse(response => response.url().endsWith("/api/report/open"));
+    await selectActivityOption(page, "savedReaderFormat", "report"); await pending.promise;
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    release.resolve(); await (await late).finished();
+    await expect(reader).toBeHidden();
+    await expect(reader).toBeEmpty();
+    assert.deepEqual(errors, []);
+});
+
+test("withdrawal clears a hidden cached report while an original file is being viewed", { timeout: 30000 }, async t => {
+    const { page, runtime, errors } = await setup(t, { enforced: true });
+    await prepare(page);
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await expect(page.frameLocator("#savedReportReader iframe").locator("h1")).toBeVisible();
+    await page.evaluate(() => { window.heldReportFrame = document.querySelector("#savedReportReader iframe"); });
+    await selectActivityOption(page, "savedReaderFormat", "html");
+    assert.equal(await page.evaluate(() => heldReportFrame.isConnected && !heldReportFrame.checkVisibility()), true);
+    const controller = await page.context().newPage();
+    await controller.goto(runtime.url);
+    await expect(controller.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await controller.locator("#wireAccountTrigger").click();
+    await controller.locator("#wireAccountGate").click();
+    await expect(page.locator("#workspace")).toBeHidden();
+    assert.deepEqual(await page.evaluate(() => [heldReportFrame.isConnected, heldReportFrame.srcdoc]), [false, ""]);
+    assert.deepEqual(errors, []);
+});
+
 for (const paired of [false, true]) test(`a lost ${paired ? "paired " : ""}direct-Save response recovers the original exact-content receipt without a second write`, { timeout: 60000 }, async t => {
     const { page, context, requests, errors } = await setup(t, paired ? { source: periodFixture().records,
         route: "#analyze?compare=periods&aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09" } : {});
@@ -177,6 +248,11 @@ test("new library metadata and saved comparisons use frozen files and direct loc
     const { page, context, requests, errors } = await setup(t);
     for (const preset of ["errors", "all"]) {
         await prepare(page, preset);
+        if (preset === "all") {
+            const patterns = page.frameLocator(".report-contained-frame").locator("#patterns");
+            await expect(patterns.locator("h2")).toHaveCount(2);
+            await expect(patterns.locator("h2").first()).toBeVisible();
+        }
         await page.getByRole("button", { name: "Save report", exact: true }).click();
         await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
         await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
@@ -226,7 +302,7 @@ test("retained-period comparison opens its report directly and saves the accepte
     await expect(page.locator("#reportStage3")).toBeVisible();
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
     let preparedFiles = prepared.files;
-    await page.getByRole("button", { name: "HTML", exact: true }).click();
+    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
     for (const format of ["pdf", "json", "markdown"]) {
         const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
         await page.locator(`#formatOptions input[value="${format}"]`).check();
@@ -249,9 +325,10 @@ test("retained-period comparison opens its report directly and saves the accepte
     assert.equal((await loadBoardState(context)).exports[0].reportType, "period-comparison");
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
     await expect(page.locator(".saved-reader-heading .document-back")).toHaveText("Back to comparison");
+    await selectActivityOption(page, "savedReaderFormat", "html");
     for (const [format, name] of [["html", "product-report.html"], ["pdf", "product-report.pdf"], ["json", "product-report.json"], ["markdown", "product-report.md"]]) {
         if (format !== "html") {
-            await page.getByRole("combobox", { name: "Report format", exact: true }).click();
+            await page.getByRole("combobox", { name: "Saved report view", exact: true }).click();
             await page.locator(`.select-popup [data-value="${format}"]`).click();
         }
         const downloaded = page.waitForEvent("download");
@@ -271,6 +348,7 @@ test("access withdrawal erases held example editors and never resumes their old 
     const { page, runtime, context, requests, errors } = await setup(t, { enforced: true });
     await prepare(page);
     const frame = page.frameLocator(".report-frame");
+    await frame.locator(".wire-reading-interaction>summary").first().click();
     await frame.locator(".wire-example-editor summary").first().click();
     const note = frame.getByLabel("Your note", { exact: true }).first();
     await note.fill("PRIVATE_UNSAVED_NOTE");
@@ -296,6 +374,7 @@ test("keep-details warning can cancel or regenerate masked notes and copies befo
     const { page, context, requests, errors } = await setup(t);
     await prepare(page);
     const frame = page.frameLocator(".report-frame");
+    await frame.locator(".wire-reading-interaction>summary").first().click();
     await frame.locator(".wire-example-editor summary").first().click();
     await frame.getByLabel("Your note", { exact: true }).first().fill("Expected a result for note@example.invalid.");
     let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -349,6 +428,7 @@ test("one Reports entry retains an edited frozen draft across Back, same-tile re
     const renamed = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.getByLabel("Report name", { exact: true }).fill("Unfinished mailbox report"); await renamed;
     const frame = page.frameLocator(".report-frame");
+    await frame.locator(".wire-reading-interaction>summary").first().click();
     await frame.locator(".wire-example-editor summary").first().click();
     await frame.getByLabel("Your note", { exact: true }).first().fill("Check this permission boundary.");
     const noted = page.waitForResponse(response => response.url().endsWith("/api/preview"));
@@ -392,6 +472,9 @@ test("saved names, Files and options preserve exact files, paging, search, focus
     await page.locator("#savedReportSearch").fill("Return report");
     await page.locator("#savedReportOrder-control").click();
     await page.locator('.select-popup [data-value="oldest"]').click();
+    assert.equal(await page.locator("#bundleList .list-pager").evaluate(node =>
+        Boolean(node.previousElementSibling?.classList.contains("saved-report-table"))), true,
+    "Saved-report paging follows the rows in both reading and keyboard order.");
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     await expect(page.locator(".saved-report-title")).toHaveCount(2);
     const title = page.locator(".saved-report-title").first();
@@ -487,7 +570,7 @@ test("withdrawal scrubs retained saved-row titles and menu labels and blocks the
     await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     await page.locator(".saved-report-files").click();
     await page.evaluate(() => {
-        window.heldSavedTitle = document.querySelector(".saved-report-title").firstChild;
+        window.heldSavedTitle = document.querySelector(".saved-report-name").firstChild;
         window.heldSavedLabel = document.querySelector(".saved-report-files").getAttributeNode("aria-label");
         window.heldSavedMenuLabel = document.querySelector(".saved-library-row .saved-report-menu").getAttributeNode("aria-label");
         window.heldSavedAction = document.querySelector(".saved-report-menu button");
@@ -518,6 +601,16 @@ test("report-first controls retain equal geometry, readable themes and narrow en
     }
     await page.locator('[data-report-preset="errors"]').hover();
     await expect(page.getByRole("tooltip")).toBeHidden();
+    for (const label of ["all activity", "errors & failures", "completed calls", "my prompts", "agent prompts"]) {
+        const control = page.getByRole("button", { name: "About " + label, exact: true });
+        await control.focus();
+        await expect(page.getByRole("tooltip")).toBeVisible();
+        assert.ok((await page.getByRole("tooltip").textContent()).length > 20);
+        await page.keyboard.press("Escape");
+        await control.click();
+        await expect(page.getByRole("tooltip")).toBeVisible();
+        await page.keyboard.press("Escape");
+    }
     await page.getByRole("button", { name: "About errors & failures", exact: true }).click();
     await expect(page.getByRole("tooltip")).toBeVisible();
     const help = await page.getByRole("button", { name: "About errors & failures", exact: true }).boundingBox();

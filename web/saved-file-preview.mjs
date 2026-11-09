@@ -1,5 +1,5 @@
 // Serialized into the shell; file contents never become executable page code.
-export function createSavedFilePreview(host, value, { frozenFrame, isCurrent, onError, toolbar, icon, title, brand }) {
+export function createSavedFilePreview(host, value, { frozenFrame, isCurrent, onError, toolbar, icon, title, brand, readingDocument }) {
     const doc = host.ownerDocument, win = doc.defaultView;
     const state = { value, json: null, scalars: null, bytes: null };
     value = null;
@@ -310,7 +310,14 @@ export function createSavedFilePreview(host, value, { frozenFrame, isCurrent, on
         try {
             if (!live()) return;
             if (state.value.kind === "html") {
-                frame = frozenFrame(state.value.text, doc);
+                let html = state.value.text;
+                if (readingDocument) {
+                    const source = doc.implementation.createHTMLDocument("");
+                    source.documentElement.innerHTML = html;
+                    readingDocument(source);
+                    html = "<!doctype html>" + source.documentElement.outerHTML;
+                }
+                frame = frozenFrame(html, doc);
                 frame.title = title || typeof state.value.artifact?.title === "string" && state.value.artifact.title.trim() || "HTML report";
                 state.value = null; host.replaceChildren(frame);
             } else if (state.value.kind === "markdown") {
@@ -329,7 +336,7 @@ export function createSavedFilePreview(host, value, { frozenFrame, isCurrent, on
     return { ready, dispose };
 }
 
-export function createPreparedFileInspection(host, files, { id, createPreview, isCurrent, selection, toolbar: externalToolbar, icon, onInfo, title, brand } = {}) {
+export function createPreparedFileInspection(host, files, { id, createPreview, isCurrent, selection, toolbar: externalToolbar, icon, onInfo, title, brand, hideRail = false } = {}) {
     const doc = host.ownerDocument, win = doc.defaultView, sources = new Map();
     let disposed = false, mounted = null, sourceMode = selection?.source === true, shownName, shownValue;
     const el = (tag, text, cls) => {
@@ -376,6 +383,7 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
     let selectedName = selection?.name && Object.hasOwn(files, selection.name) ? selection.name : choices.keys().next().value;
     viewer.append(...(externalToolbar ? [] : [toolbar]), preview, originals);
     host.classList.add(externalToolbar ? "saved-file-inspection" : "prepared-file-reader");
+    if (hideRail) { rail.hidden = true; host.classList.add("prepared-file-reader-single"); }
     host.replaceChildren(...(externalToolbar ? [] : [rail]), viewer);
     const live = () => !disposed && host.isConnected && isCurrent() && !disposed && host.isConnected;
     function refresh() {
@@ -442,7 +450,12 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
         }
         controls.remove(); sources.clear(); choices.clear(); files = null; selectedName = shownName = shownValue = undefined; host.replaceChildren();
     }
-    return { refresh, dispose, selection: () => ({ name: selectedName, source: sourceMode }) };
+    return { refresh, dispose, selection: () => ({ name: selectedName, source: sourceMode }),
+        select(name) {
+            if (!live()) return false;
+            if (!choices.has(name)) throw new TypeError("That prepared file is not available.");
+            selectedName = name; sourceMode = false; refresh(); return true;
+        } };
 }
 
 export const savedFilePreviewStyles = `

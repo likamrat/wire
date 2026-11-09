@@ -14,6 +14,7 @@ Open **Reports**, choose a period, then choose a report. Saved reports are
 directly below the five choices. Choosing a tile opens the report in the main
 reading area. **Save report** saves its current files locally; there is no
 required setup or text-review checklist.
+Each choice has a help icon available by pointer, keyboard or touch.
 
 ![Reports with five report choices, period controls and saved reports below.](images/report-choices.png)
 
@@ -61,20 +62,25 @@ can say, for example, that 4 of 12 interactions contained a recorded error.
 Only those 4 cases contribute prompt or diagnostic copies. The other
 interactions supply the frozen reference count, not additional disclosed text.
 
-![An error report with the frequency of affected interactions, recorded operation and error groups, and the Save report toolbar.](images/report-preview.png)
+![An error report with its frozen frequency, section links and separate Save as and View controls.](images/report-preview.png)
 
-Every included interaction remains accessible. **Add a note or edit this
+Use the section links to jump to patterns, interactions, timing or coverage.
+Open a section or interaction to read its full evidence. **Expand sections**
+opens everything; collapsing changes only the view, not the report's contents.
+The reader keeps its navigation visible while you scroll. **Report details**
+under Coverage holds the preparation and time-zone metadata.
+
+Every included interaction remains accessible. Open it, then **Add a note or edit this
 example** lets you explain what you expected, change a prompt copy or omit it.
 Notes are the report author's context; they do not change recorded outcomes or
 metrics. Select **Update note** or **Update prompt copy** to apply an edit.
 
-![An included interaction with its prompt and recorded calls above an optional note and editable prompt copy.](images/report-example.png)
+![An interaction's optional note and editable prompt copy, with separate update controls.](images/report-example.png)
 
-The toolbar changes the report name, personal-detail treatment and file formats.
+The toolbar changes the report name, personal-detail treatment and files to save.
 **Change what's included** holds author/service/outcome choices and optional
 linked context. **Inspect or edit report text** provides original/copy
-inspection and edits for the other included text. **Inspect prepared files**
-shows exact output. Choose **Update report copy** after editing text in the
+inspection and edits for the other included text. Choose **Update report copy** after editing text in the
 inspection area. These controls are optional.
 To hide a specific name or phrase throughout the copies, open the personal-detail
 control, expand **Additional masking**, and enter one exact term per line.
@@ -87,13 +93,18 @@ control, expand **Additional masking**, and enter one exact term per line.
 | Include linked requests and replies | Adds available, authorized context up to one linked request before and after each included interaction. It is not the whole chat or a reply-saving permission. |
 | Include error messages from the calls | Adds already-retained error details, always masked. Error reports start with it on. It does not add raw response bodies or unrelated source descriptions. |
 
-Choose HTML or PDF for reading, JSON for complete structured records, or Markdown
-for portable text. You can select more than one. PDF generation needs the
+**Save as** chooses HTML, PDF, JSON or Markdown files; you can select more than
+one. **View** changes what you are reading: **Report** is the readable page,
+while a file choice shows that actual format. PDF has page controls, JSON has
+a field tree, and HTML and Markdown offer Preview/Source. Switching views does
+not prepare new activity or download anything. PDF generation needs the
 [optional local browser setup](development.md#pdf-and-browser-tools); the other
 formats do not. Detected personal details in report names are hidden in every
 text mode. Changing the name, text, notes or formats regenerates prepared
 files while keeping the original interaction cohort. Save is unavailable
 until the update finishes.
+
+![PDF selected under View, with page navigation and a separate Save as control.](images/report-file-preview.png)
 
 Additional masking terms, edits and omissions affect report copies only.
 Missing or partial text stays qualified; editing does not recover source text.
@@ -118,20 +129,25 @@ The save receipt records your choice to save locally, not a claim that you
 reviewed every copy. Older reports keep the review confirmation recorded
 when they were saved.
 
-Choose **Open saved report** to read the saved file. To find it later, open
-**Reports** and select its name in the saved list. **Files** offers its available
-formats. The mark beside the name explains how its text was treated; missing
+Choose **Open saved report** to read it inside WIRE. To find it later, open
+**Reports** and select its name beside the view icon. JSON-only reports also
+open as readable pages, using their verified saved facts. No download is needed.
+**Files** opens a specific saved format. The mark beside the name explains how its text was treated; missing
 older metadata stays unrecorded. **Options > Inspect details** shows its other
-metadata. In the reader, the file selector changes formats and **Download**
-retrieves the original saved file.
+metadata. In the reader, choose **Report** to return from a file preview, or
+**Download** to retrieve that file's original bytes.
 
-![A saved error report open with its frozen frequency and operation groups, file selector and Download action.](images/saved-report.png)
+![A saved report open inside WIRE with section navigation and expandable evidence.](images/saved-report.png)
+
+Older unverified reports keep their warning before **View report**. Missing,
+altered or unsupported saved content remains unavailable; WIRE does not rebuild
+it from current activity or silently open another format.
 
 Saved reports retain their frozen facts, text choices and time context.
 Later collection, browsing filters or screen-theme changes do not rewrite them.
 The saved list's search finds metadata; global Search can also find supported
 saved-file content. **Back to Reports** restores the list's search, order, page
-and reading position.
+and reading position. Page controls are below the saved rows.
 
 If Save is unconfirmed, use **Check save status** rather than Save again.
 A missing receipt is not proof that nothing was written. Review files before

@@ -94,6 +94,7 @@ test("saved files preview every format and switch without changing bytes or down
         if (index) await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
         await page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"] .saved-report-title`).click();
         const reader = page.locator("#savedReportReader");
+        await selectActivityOption(page, "savedReaderFormat", bundle.formats[0]);
         assert.equal(downloads.length, 0, "Open must not download or run a PDF");
         await reader.getByRole("button", { name: "Download", exact: true }).waitFor();
         assert.equal(await page.locator("#pageTitle").textContent(), bundle.title);
@@ -156,7 +157,7 @@ test("saved files preview every format and switch without changing bytes or down
     let oldCanvas;
     for (const format of ["markdown", "pdf", "json", "manifest", "html"]) {
         await selectActivityOption(page, "savedReaderFormat", format);
-        const preview = page.locator("#savedReportReader .saved-file-preview");
+        const preview = page.locator("#savedReportReader .saved-file-preview:visible");
         if (format === "pdf") await preview.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
         else if (format === "html") await preview.frameLocator("iframe").locator("h1").waitFor();
         else await preview.locator(format === "markdown" ? ".saved-markdown" : ".saved-json-tree").waitFor();
@@ -320,7 +321,7 @@ test("activity, period and comparison reports preview and download their actual 
         if (folder) await mkdir(folder, { recursive: true });
         for (const format of [...formats, "manifest"]) {
             await selectActivityOption(page, "savedReaderFormat", format);
-            const preview = page.locator("#savedReportReader .saved-file-preview");
+            const preview = page.locator("#savedReportReader .saved-file-preview:visible");
             if (format === "html") await preview.frameLocator("iframe").getByRole("heading", { level: 1 }).waitFor();
             else if (format === "pdf") await preview.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
             else await preview.locator(format === "markdown" ? ".saved-markdown" : ".saved-json-tree").waitFor();
@@ -561,7 +562,7 @@ test("a legacy report opens or downloads directly from its warned sidebar withou
     page.on("request", request => { if (request.method() === "POST") reads.push(new URL(request.url()).pathname); });
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    assert.equal(await page.locator(".saved-report-title").textContent(), title);
+    assert.equal(await page.locator(".saved-report-name").textContent(), title);
     await page.locator(".saved-report-title").click();
     assert.equal(await page.locator("#contextSidebarTitle").textContent(), title);
     await page.locator("#savedOriginalNotice").waitFor();

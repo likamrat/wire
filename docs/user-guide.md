@@ -111,10 +111,15 @@ period and formats. **Save report** keeps the files on this device. If you keep
 chat details, the warning lets you hide details and save, save with those
 details, or go back without writing anything.
 
+Use section links and expandable interactions to read long reports. **Save as**
+chooses files to write; **View** switches between the readable report and an
+actual HTML, PDF, JSON or Markdown preview.
+
 Changing text or formats keeps the prepared cohort; changing dates or filters
 prepares a new selection. Saved reports preserve their original files.
 They appear below the report choices; select a saved name to read it, or use
 **Files** to choose a format. **Back to Reports** returns to that workspace.
+JSON-only saves also open as readable report pages without downloading.
 Choosing the same tile again resumes an unchanged unfinished copy.
 A completed call does not prove that your task succeeded. See the
 [report guide](reporting.md) for scopes, privacy choices, comparisons and

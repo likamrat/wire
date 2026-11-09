@@ -495,7 +495,8 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .saved-library-columns>:nth-child(3){text-align:center}
 #reportsView .saved-library-row{padding:10px 0;min-height:64px}
 .saved-report-identity{display:flex;align-items:center;gap:4px;min-width:0}
-.saved-report-title{display:block;min-width:0;min-height:44px;padding:0;border:0;background:transparent;text-align:left;white-space:normal;font-weight:500}
+.saved-report-title{display:flex;align-items:center;gap:8px;min-width:0;min-height:44px;padding:0;border:0;background:transparent;text-align:left;white-space:normal;font-weight:500}
+.saved-report-title>.wire-icon{flex:none;width:18px;height:18px;color:var(--muted)}
 .saved-report-title:hover{background:transparent;text-decoration:underline;text-underline-offset:4px}
 .saved-report-privacy{flex:none}.saved-report-privacy svg{width:15px;height:15px}
 .saved-report-period{color:var(--muted);font-size:var(--type-control);line-height:1.5;overflow-wrap:anywhere}
@@ -508,6 +509,14 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 #reportsView .saved-report-menu>button::before{display:none}
 #reportsView .saved-report-menu>button:hover{background:var(--hover)}
 #reportActivityOptions{width:min(60rem,calc(100vw - 32px))}
+.report-reading-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 16px;border:1px solid var(--rule);border-bottom:0;border-radius:8px 8px 0 0;background:var(--paper)}
+.report-reading-toolbar>label{display:flex;align-items:center;gap:8px;margin:0}
+#reportsView .report-reading-toolbar>.select-field{flex-direction:row;align-items:center;gap:8px}
+#reportsView .report-reading-toolbar>.select-field>label{padding:0}
+.report-reading-toolbar .select-control{min-width:9rem}
+.report-contained-frame{height:70dvh;min-height:24rem;max-height:56rem}
+.report-document:has(.report-reading-toolbar)>.report-frame{border-radius:0 0 8px 8px}
+.prepared-file-reader.prepared-file-reader-single{grid-template-columns:minmax(0,1fr)}
 #reportActivityOptions .scope-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 #reportActivityOptions .report-activity-actions{position:static;background:transparent}
 #reportActivityOptions .report-scope-layout{margin-bottom:16px}

@@ -1,11 +1,12 @@
 // Prepared copies alone permit parent measurement; saved readers keep their opaque sandbox.
-export function createPreparedReportFrame(html, frozenFrame, { onError, onReady, doc = document, isCurrent = () => true } = {}) {
+export function createPreparedReportFrame(html, frozenFrame, { onError, onReady, doc = document, isCurrent = () => true, contained = false } = {}) {
     if (typeof frozenFrame !== "function" || typeof onError !== "function") throw new TypeError("Prepared reports require sanitization and an error handler.");
     const frame = frozenFrame(html, doc), view = doc.defaultView;
     html = null;
     frame.title = "Prepared report";
     frame.setAttribute("sandbox", "allow-same-origin");
-    frame.style.height = "1px";
+    if (contained) frame.classList.add("report-contained-frame");
+    else frame.style.height = "1px";
     let active = true, source, cleanup, scheduled = 0, lastWidth = -1, selfResizes = 0;
     const bodySize = new view.ResizeObserver(schedule);
     const frameSize = new view.ResizeObserver(() => {
@@ -26,6 +27,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
         if (!current() || !frame.checkVisibility()) return;
         const fontSize = view.getComputedStyle(doc.documentElement).fontSize;
         if (source.documentElement.style.fontSize !== fontSize) source.documentElement.style.fontSize = fontSize;
+        if (contained) return;
         const body = source.body, style = frame.contentWindow.getComputedStyle(body);
         const frameStyle = view.getComputedStyle(frame);
         const edges = frameStyle.boxSizing === "border-box"
@@ -49,6 +51,15 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
         const target = id && source.getElementById(id);
         if (!target) return;
         for (let parent = target.parentElement; parent; parent = parent.parentElement) if (parent.localName === "details") parent.open = true;
+        if (contained) {
+            const offset = source.querySelector(".report-nav")?.getBoundingClientRect().height || 0;
+            const summary = target.closest(".wire-reading-interaction")?.querySelector(":scope>summary");
+            if (!target.hasAttribute("tabindex")) target.tabIndex = -1;
+            target.focus({ preventScroll: true });
+            frame.contentWindow.scrollTo({ top: frame.contentWindow.scrollY + target.getBoundingClientRect().top
+                - offset - (summary?.getBoundingClientRect().height || 0) - 16 });
+            return;
+        }
         measure();
         const toolbar = frame.closest(".report-review-body")?.querySelector(".report-inspection-tabs");
         const offset = (toolbar?.getBoundingClientRect().bottom ?? parseFloat(view.getComputedStyle(doc.documentElement).scrollPaddingTop)) || 0;
@@ -103,6 +114,11 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
     textSize.observe(doc.head, { childList: true, subtree: true, characterData: true });
     removal.observe(doc.body, { childList: true, subtree: true });
     return { frame, dispose, withdrawAccess: dispose,
+        expand(expanded) {
+            if (!current()) return;
+            for (const details of source.querySelectorAll("details:not(.wire-example-editor)")) details.open = expanded;
+            refresh();
+        },
         setTitle(title) { if (current()) { source.querySelector("h1").textContent = title; refresh(); } } };
 }
 
