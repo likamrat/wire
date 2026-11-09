@@ -51,6 +51,24 @@ test("normalized patterns retain every selected interaction and keep authored no
     assert.throws(() => validateReportPatterns(altered, { facts: json.evaluationFacts, results: json.resultFacts, records: json.records }), /patterns/);
 });
 
+test("a singleton operation remains included without claiming repetition", async t => {
+    const record = fixture("singleton-operation");
+    record.followUpPrompts = [];
+    const { context } = await privateFixture(t, [record]), state = await loadBoardState(context);
+    const preview = await createExportController(context).preview("owner", undefined, {
+        saveMode: "local", formats: ["html", "json", "markdown"],
+        reportFocus: { version: 1, preset: "all", outcome: "all", services: [] },
+    }, { kind: "all", revision: state.revision });
+    const groups = preview.snapshot.reportPatterns.groups.filter(group => group.kind === "operation");
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].callRefs.length, 1);
+    assert.equal(groups[0].interactionRefs.length, 1);
+    assert.equal(preview.records.length, 1);
+    assert.match(preview.previewHtml, /<h2>Recorded operations<\/h2>/);
+    assert.match(preview.files["product-report.md"], /### Recorded operations/);
+    for (const body of [preview.previewHtml, preview.files["product-report.md"]]) assert.doesNotMatch(body, /Repeated operations/);
+});
+
 test("error-message selection does not also disclose retained source descriptions", () => {
     const record = fixture("diagnostic-selection");
     record.toolCalls[0].resultEvidence = {
