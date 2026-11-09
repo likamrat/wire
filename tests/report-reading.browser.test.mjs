@@ -6,7 +6,7 @@ import { chromium, expect } from "@playwright/test";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
-import { loadBoardState } from "../lib/store.mjs";
+import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 
 test("older Activity disclosure owns its following tool and service breakdowns", { timeout: 30000 }, async t => {
     const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) },
@@ -95,6 +95,8 @@ test("long reports keep complete evidence behind working navigation and real for
         return record;
     });
     const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) }, records);
+    // Make the first hash-sorted pattern reference target the last visible interaction.
+    await updateBoardState(context, state => { state.pseudonymKey = "1".padStart(64, "0"); });
     const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
     const browser = await chromium.launch();
     t.after(async () => { await browser.close(); await runtime.close(); for (const work of cleanup) await work(); });
@@ -155,7 +157,15 @@ test("long reports keep complete evidence behind working navigation and real for
     assert.equal(await report.locator(`[id="${targetId}"]`).evaluate(node =>
         node.closest("details").querySelector("summary").getBoundingClientRect().top
             >= document.querySelector(".report-nav").getBoundingClientRect().bottom), true);
+    assert.equal(await report.locator(".wire-reading-interaction").last().evaluate((node, id) =>
+        node.contains(document.getElementById(id)), targetId), true);
     await report.locator('.report-nav a[href$="#examples"]').click();
+    await expect(report.locator(".wire-reading-interaction").last()).toHaveAttribute("open", "");
+    await report.locator(".wire-reading-interaction>summary").last().focus();
+    assert.equal(await report.locator(".wire-reading-interaction>summary").last().evaluate(node =>
+        document.hasFocus() && document.activeElement === node), true);
+    await page.keyboard.press("Enter");
+    await expect(report.locator(".wire-reading-interaction").last()).not.toHaveAttribute("open", "");
     await report.locator(".wire-reading-interaction>summary").last().focus();
     await page.keyboard.press("Enter");
     await expect(report.locator(".wire-reading-interaction").last()).toHaveAttribute("open", "");
