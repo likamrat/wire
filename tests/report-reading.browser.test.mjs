@@ -8,6 +8,74 @@ import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 
+test("older Activity disclosure owns its following tool and service breakdowns", { timeout: 30000 }, async t => {
+    const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) },
+        [fixture("older-activity-a"), fixture("older-activity-b")]);
+    const controller = createExportController(context), state = await loadBoardState(context);
+    const prepared = await controller.preview("older-reader", undefined,
+        { title: "Archived activity example", formats: ["html"], promptMode: "none" },
+        { kind: "all", revision: state.revision });
+    assert.equal(prepared.snapshot.reportPopulation, undefined, "Use the supported older non-preset report structure.");
+    await controller.review("older-reader", prepared.previewId, true);
+    const bundle = (await controller.confirm("older-reader", prepared.previewId, true)).bundle;
+    const originals = new Map();
+    for (const file of Object.values(bundle.files)) originals.set(file, await readFile(file));
+    const savedState = await loadBoardState(context);
+    const runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); for (const work of cleanup) await work(); });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+    const errors = [], outside = [], downloads = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("download", item => downloads.push(item));
+    await page.route("**/*", route => {
+        if (new URL(route.request().url()).origin !== new URL(runtime.url).origin) {
+            outside.push(route.request().url()); return route.abort();
+        }
+        return route.continue();
+    });
+    await page.goto(runtime.url + "#reports");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await page.getByRole("button", { name: "Files for Archived activity example", exact: true }).click();
+    await page.getByRole("dialog", { name: "Files for Archived activity example", exact: true })
+        .getByRole("button", { name: "HTML", exact: true }).click();
+    const frame = page.frameLocator("#savedReportReader .saved-file-preview:visible iframe");
+    await expect(frame.locator("#breakdowns")).toBeVisible();
+    assert.equal(await frame.locator("#breakdowns").evaluate(node =>
+        node.parentElement.localName === "main" && node.previousElementSibling.id === "overview"), true);
+    const breakdownText = await frame.locator("#breakdowns").textContent();
+    await selectActivityOption(page, "savedReaderFormat", "report");
+    const activity = frame.locator(".wire-reading-section:has(> #overview)");
+    await expect(activity).not.toHaveAttribute("open", "");
+    await expect(frame.locator("#overview table")).toBeHidden();
+    await expect(frame.locator("#breakdowns")).toBeHidden();
+    await activity.locator(":scope>summary").click();
+    await expect(frame.locator("#overview table")).toBeVisible();
+    await expect(frame.locator("#breakdowns")).toBeVisible();
+    assert.equal(await frame.locator("#breakdowns").textContent(), breakdownText);
+    await activity.locator(":scope>summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(frame.locator("#breakdowns")).toBeHidden();
+    await frame.locator('.report-nav a[href$="#overview"]').click();
+    await expect(frame.locator("#breakdowns")).toBeVisible();
+    await expect(frame.locator("#overview,#breakdowns,#timing,#examples")).toHaveCount(4);
+    await expect(activity.locator("#timing")).toHaveCount(0);
+    await expect(frame.locator("main>.report-nav,main>.report-footer")).toHaveCount(2);
+    assert.equal(await frame.locator("#breakdowns").evaluate(node =>
+        node.closest("details") === document.querySelector("#overview").closest("details")), true);
+    const proofs = process.env.WIRE_REPORT_READING_PROOFS;
+    if (proofs) {
+        await mkdir(proofs, { recursive: true });
+        await activity.locator(":scope>summary").click();
+        await page.screenshot({ path: path.join(proofs, "older-activity-closed.png") });
+        await activity.locator(":scope>summary").click();
+        await page.screenshot({ path: path.join(proofs, "older-activity-open.png") });
+    }
+    assert.deepEqual(await loadBoardState(context), savedState);
+    for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);
+    assert.deepEqual(errors, []); assert.deepEqual(outside, []); assert.deepEqual(downloads, []);
+});
+
 test("long reports keep complete evidence behind working navigation and real format previews", { timeout: 90000 }, async t => {
     const records = Array.from({ length: 52 }, (_, index) => {
         const record = fixture("reading-" + index);

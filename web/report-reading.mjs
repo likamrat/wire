@@ -12,7 +12,10 @@ export function enhanceReportReading(source, { expanded } = {}) {
         if (child.localName === "h2") {
             section = source.createElement("section"); section.id = "wire-section-" + ordinal++;
             child.before(section); section.append(child);
-        } else if (["section", "details", "nav", "header", "h1"].includes(child.localName)) section = null;
+        } else if (child.localName === "section") {
+            section = child.querySelector(":scope>h2") ? child : null;
+        } else if (["details", "nav", "header", "footer", "h1"].includes(child.localName)
+            || child.classList.contains("report-footer")) section = null;
         else if (section) section.append(child);
     }
     for (const parent of main.querySelectorAll(":scope>section")) {

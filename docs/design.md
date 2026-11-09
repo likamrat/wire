@@ -243,7 +243,9 @@ changing frozen output. Example notes and copy edits stay beside their evidence.
 Report view uses a contained reading pane with persistent section links,
 collapsible sections and individual interaction disclosures. All evidence stays
 reachable; a pattern link opens its exact interaction. Keep only scope and dates
-at the top, with other metadata under Report details in Coverage. Recorded
+at the top. Older layouts' companion charts belong inside their section's
+disclosure, not below a closed marker. Keep other metadata
+under Report details in Coverage. Recorded
 failure/success/partial words retain their semantic colors.
 
 Save as chooses output files. View chooses Report or an actual format preview,
