@@ -10,11 +10,12 @@ For report schemas, membership and privacy, see the
 
 ## Open a report
 
-Open **Reports > Create a report**, choose a period, then choose a report.
-The report opens immediately. **Save report** saves its current files locally;
-there is no required setup or text-review checklist.
+Open **Reports**, choose a period, then choose a report. Saved reports are
+directly below the five choices. Choosing a tile opens the report in the main
+reading area. **Save report** saves its current files locally; there is no
+required setup or text-review checklist.
 
-![Five report choices beneath Last 7, 14, 30 and custom date controls.](images/report-choices.png)
+![Reports with five report choices, period controls and saved reports below.](images/report-choices.png)
 
 | Report | Includes |
 | --- | --- |
@@ -29,8 +30,8 @@ zone. **Last 14 days**, **Last 30 days** and **Custom dates** are also available
 Custom dates opens the calendar directly; Cancel leaves the accepted dates
 unchanged. Undated activity is not assigned to a dated period.
 
-A fresh report is independent of Analyze filters. For a deliberate narrower
-entry, expand **Use selected interactions or the Analyze view**:
+A fresh report is independent of Analyze filters. To narrow an open report,
+use **Change what's included > Change activity selection**:
 
 | Scope | Includes |
 | --- | --- |
@@ -41,6 +42,11 @@ entry, expand **Use selected interactions or the Analyze view**:
 Choose the scope, select interactions if needed, then use **Show report**.
 You can also use **Add to report > Continue to report** in an interaction reader.
 Reading or selecting an interaction alone does not save a report.
+
+**Back to Reports** returns to the choices and saved list. It keeps an unfinished
+copy in memory. Choose the same tile again without changing its dates to resume
+that copy, including its name and notes. Choosing another type replaces the
+unfinished copy. Reports entered from Analyze keep their contextual return.
 
 **Selected interactions** initially includes your picks across all dates.
 Changing report dates does not remove those picks. If you start from
@@ -113,16 +119,19 @@ reviewed every copy. Older reports keep the review confirmation recorded
 when they were saved.
 
 Choose **Open saved report** to read the saved file. To find it later, open
-**Reports** and use its **Open** action. New library rows show the report's
-purpose, period, formats and personal-detail treatment. The file selector
-changes formats; **Download** retrieves the original saved file.
+**Reports** and select its name in the saved list. **Files** offers its available
+formats. The mark beside the name explains how its text was treated; missing
+older metadata stays unrecorded. **Options > Inspect details** shows its other
+metadata. In the reader, the file selector changes formats and **Download**
+retrieves the original saved file.
 
 ![A saved error report open with its frozen frequency and operation groups, file selector and Download action.](images/saved-report.png)
 
 Saved reports retain their frozen facts, text choices and time context.
 Later collection, browsing filters or screen-theme changes do not rewrite them.
-In the Reports library, search finds saved metadata; global Search can also
-find supported saved-file content.
+The saved list's search finds metadata; global Search can also find supported
+saved-file content. **Back to Reports** restores the list's search, order, page
+and reading position.
 
 If Save is unconfirmed, use **Check save status** rather than Save again.
 A missing receipt is not proof that nothing was written. Review files before
@@ -166,10 +175,11 @@ input report is deleted. Notes remain authored context, not comparable metrics.
 
 ## Remove a saved copy
 
-**Delete report** or **Delete saved comparison** removes that managed bundle
-after its own confirmation, not original source activity or external downloads.
-**Delete all saved reports** previews all report bundles across pages and search,
-not just visible rows; saved comparisons remain.
+Open a saved row's **Options** and choose **Delete report** or **Delete saved
+comparison**. Its confirmation removes that managed bundle, not original source
+activity or external downloads. **Saved-report options > Delete all saved
+reports** previews all report bundles across pages and search, not just visible
+rows; saved comparisons remain.
 
 Deleting collected activity is a separate Settings operation and does not
 remove independently saved reports. For an interrupted deletion, read its

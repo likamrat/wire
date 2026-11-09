@@ -93,7 +93,7 @@ behaviors need closer investigation.
 
 ## Reports
 
-Choose a ready-made report to see recorded patterns and their examples.
+Open **Reports** to choose a ready-made report or revisit a saved one.
 **Errors & failures** shows which interactions hit problems and how often.
 Add context or adjust copies if needed, then save. Review the files before
 sharing them with people building eval cases.

@@ -85,7 +85,7 @@ of those selections. Use **Save report** to keep its files.
 
 ## Make a report
 
-Open **Reports > Create a report** and choose a ready-made report. It opens
+Open **Reports** and choose a ready-made report. It opens
 immediately with detected personal details hidden. The visible period starts
 at Last 7 days, independently of your Analyze filters.
 
@@ -97,6 +97,9 @@ details, or go back without writing anything.
 
 Changing text or formats keeps the prepared cohort; changing dates or filters
 prepares a new selection. Saved reports preserve their original files.
+They appear below the report choices; select a saved name to read it, or use
+**Files** to choose a format. **Back to Reports** returns to that workspace.
+Choosing the same tile again resumes an unchanged unfinished copy.
 A completed call does not prove that your task succeeded. See the
 [report guide](reporting.md) for scopes, privacy choices, comparisons and
 uncertain-save recovery.

@@ -44,7 +44,7 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     await selectActivityOption(page, "collectionWindow", "7");
     await expect(page.locator("#saveCollection")).toBeEnabled();
     const preference = await page.locator("#collectionWindow").elementHandle();
-    const controls = await page.evaluateHandle(() => ["comparePeriods", "pageAction"].map(id => document.getElementById(id)));
+    const controls = await page.evaluateHandle(() => ["comparePeriods"].map(id => document.getElementById(id)));
     await page.setViewportSize({ width, height: 1000 });
     await page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, width < 700 ? 200 : 100);
     await chooseTheme(page, width < 700 ? "dark" : "light");
@@ -56,7 +56,7 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
         const drawer = page.locator("#navigationDrawer");
         if (width < 700 && !await drawer.isVisible()) await page.locator("#navigationToggle").click();
         await expect(page.locator("#analyzeTools")).toBeVisible();
-        await expect(page.locator("#analyzeTools #pageAction")).toHaveText("Create report");
+        await expect(page.locator("#pageAction")).toBeHidden();
         await expect(page.locator("#openAnalyzeFilters")).toBeHidden();
         await expect(page.locator('#navigationFooter [data-nav="settings"]')).toHaveAttribute("aria-current", "page");
         const control = page.locator("#analyzeTools #" + id);
@@ -87,11 +87,12 @@ for (const width of [1440, 390]) test(`Settings sidebar shortcuts keep their ori
     await expect(page.locator("#periodComparisonSetup")).toBeHidden();
     assert.equal(new URL(page.url()).hash.includes("compare=periods"), false);
     await navigateMain(page, "settings"); await ready(page);
-    await shortcut("pageAction", "Create report");
+    await navigateMain(page, "reports"); await ready(page);
     await expect(page.locator("#reportsView")).toBeVisible();
-    await expect(page.locator("#pageTitle")).toHaveText("Create a report");
-    assert.equal(new URL(page.url()).hash.startsWith("#reports?"), true);
-    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("task"), "create");
+    await expect(page.locator("#pageTitle")).toHaveText("Reports");
+    await expect(page.locator("#reportGallery")).toBeVisible();
+    await expect(page.locator("#savedReportsPanel")).toBeVisible();
+    assert.equal(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).has("task"), false);
     await navigateMain(page, "settings"); await ready(page);
     await navigateSettings(page, "connection");
     await expect(page.locator("#collectionWindow")).toHaveValue("7");

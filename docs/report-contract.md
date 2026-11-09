@@ -113,6 +113,14 @@ The report controller owns the sequence:
 Qualified GitHub previews pin the original content-addressed evidence file.
 Later collection can add follow-ups without changing prepared copies.
 
+The Reports landing combines choices and saved access. Back is not discard,
+preparation or Save. Selecting the same type with unchanged dates can reopen
+the authorized in-memory preview, including its edits, without recapturing
+membership. Legacy create URLs and Selected/Current/contextual entry retain
+their scope. An unconfirmed write cannot be hidden behind the landing or
+replayed through a tile. Saved-list menus use the current authorized index;
+withdrawal retires their held text and actions with the existing readers.
+
 | Change after preparation | Effect |
 | --- | --- |
 | Ordinary Back/browsing with unchanged facts and authority | Preview can survive |

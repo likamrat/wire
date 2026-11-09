@@ -1,5 +1,12 @@
+export function reportWorkspacePresentation(route, journey = {}) {
+    const saved = Boolean(route.bundle);
+    const comparing = !saved && route.task === "compare";
+    const prepared = !saved && !comparing && (route.task === "create" && journey.step === 3 || journey.saveUnconfirmed === true);
+    return { landing: !saved && !comparing && !prepared, prepared, saved, comparing };
+}
+
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, edit, current }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, current }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
         ["all", "All activity", "Your prompts and agent prompts, with Work IQ calls and results.", "report-all"],
@@ -61,19 +68,24 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const tiles = el("div", "report-tiles"); tiles.setAttribute("role", "group"); tiles.setAttribute("aria-label", "Ready-made reports");
     for (const [id, title, description, glyph] of presets) {
         const row = el("article", "report-tile"); row.dataset.preset = id;
-        const control = button("", () => choose(id), "report-tile-open"); control.dataset.reportPreset = id;
+        const control = button("", event => choose(id, event.currentTarget), "report-tile-open"); control.dataset.reportPreset = id;
+        control.id = "reportPreset-" + id;
         control.append(ux.icon(glyph), el("strong", "", title), el("span", "", description));
+        const next = ux.icon("next"); next.classList.add("report-tile-next"); control.append(next);
         row.append(control);
         if (help[id]) row.append(helpButton(id, "About " + title.toLowerCase()));
         tiles.append(row);
     }
-    gallery.append(period, periodCaption, el("h2", "", "What would you like to include?"), tiles,
-        el("p", "report-gallery-note", "Reports hide detected personal details by default."));
-    const stage = byId("reportStage1"), selection = el("details", "report-explicit-selection");
-    selection.append(el("summary", "", "Use selected interactions or the Analyze view"));
+    const galleryHeading = el("div", "report-gallery-heading");
+    galleryHeading.append(el("h2", "", "What would you like to include?"), period);
+    gallery.append(galleryHeading, periodCaption, tiles);
+    const stage = byId("reportStage1"), selection = popover("reportActivityOptions", "Choose activity");
+    selection.classList.add("report-explicit-selection");
     for (const node of [...stage.children]) if (node.id !== "reportStepTitle1") selection.append(node);
-    stage.append(gallery, selection); byId("reportStepTitle1").hidden = true;
+    stage.append(gallery); byId("reportStepTitle1").hidden = true;
     byId("reportContinue").textContent = "Show report";
+    byId("reportContinue").addEventListener("click", () => selection.hidePopover());
+    byId("exportBtn").addEventListener("click", () => selection.hidePopover());
     const toolbar = el("section", "report-edit-toolbar"); toolbar.id = "reportEditToolbar"; toolbar.hidden = true;
     const nameRow = el("div", "report-name-row");
     nameRow.append(root.querySelector(".report-title-field"));
@@ -103,7 +115,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     outcome.addEventListener("change", () => { if (current()) changeFocus({ outcome: outcome.value }); });
     service.addEventListener("change", () => { if (current()) changeFocus({ services: service.value ? [service.value] : [] }); });
     refine.append(byId("reportResultText").closest("label"), byId("reportRecordedContext").closest("label"), byId("reportRecordedContextHelp"));
-    const scope = button("Change activity selection", () => { refine.hidePopover(); showGallery(true); });
+    const scope = button("Change activity selection", () => { refine.hidePopover(); showSelection(); });
     refine.append(scope); done(refine);
     const refineButton = opener("Change what's included", refine);
     const privacyGroup = el("div", "report-toolbar-group"), formatGroup = el("div", "report-toolbar-group");
@@ -113,8 +125,6 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     const scopeCaption = el("p", "report-period-caption"); scopeCaption.id = "reportExperienceScope";
     toolbar.append(nameRow, choices, scopeCaption);
     byId("reportStage3").prepend(toolbar);
-    const galleryBack = button("Choose another report", () => read().paired ? edit("comparison") : showGallery());
-    galleryBack.id = "reportChooseAnother"; byId("reportTaskNav").prepend(galleryBack);
 
     const calendar = popover("reportCustomDates", "Custom dates"), dateFields = el("div", "report-date-fields");
     let calendarMonth, fromDraft = "", toDraft = "", selectingEnd = false;
@@ -187,11 +197,10 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         periodPanel.hidePopover(); renderCalendar(); calendar.showPopover();
         calendarBody.querySelector('[tabindex="0"]')?.focus();
     }
-    function showGallery(explicit = false) {
+    function showSelection() {
         if (read().locked) return;
-        edit("gallery");
-        selection.open = explicit;
-        if (explicit) selection.scrollIntoView({ block: "nearest" });
+        selection.showPopover();
+        selection.querySelector('input[name="reportScope"]:checked')?.focus();
     }
     function labelDates(value) {
         if (value.range === "capture") return "All retained dates";
@@ -201,12 +210,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         if (!current()) return;
         const value = read();
         toolbar.hidden = !value.prepared;
-        galleryBack.hidden = !value.prepared || value.saved;
-        galleryBack.disabled = value.locked;
-        galleryBack.textContent = value.paired ? "Change comparison in Analyze" : "Choose another report";
-        gallery.hidden = value.paired;
+        gallery.hidden = value.paired && value.prepared;
         if (value.prepared && period.parentElement !== periodHost) periodHost.append(period);
-        else if (!value.prepared && period.parentElement !== gallery) gallery.prepend(period);
+        else if (!value.prepared && period.parentElement !== galleryHeading) galleryHeading.append(period);
         periodCaption.textContent = labelDates(value.dates);
         for (const control of period.querySelectorAll("button")) {
             control.setAttribute("aria-pressed", String(control.dataset.reportRange === value.dates.range));
@@ -230,10 +236,12 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         for (const input of byId("formatOptions").querySelectorAll("input")) input.checked = value.options.formats.includes(input.value);
     }
     return {
-        sync, openCalendar,
-        showSelection: () => showGallery(true),
+        sync, openCalendar, showSelection,
+        closeOptions() {
+            for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) if (panel.matches(":popover-open")) panel.hidePopover();
+        },
         withdrawAccess() {
-            for (const panel of [privacy, formats, refine, periodPanel, calendar]) if (panel.matches(":popover-open")) panel.hidePopover();
+            for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) if (panel.matches(":popover-open")) panel.hidePopover();
             fromDraft = toDraft = ""; calendarMonth = null;
             fields.from.value = fields.to.value = ""; calendarBody.replaceChildren(); calendarStatus.textContent = "";
             periodCaption.textContent = scopeCaption.textContent = "";

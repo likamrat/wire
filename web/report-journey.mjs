@@ -673,7 +673,7 @@ export function createReportJourney({ root, cancelReview, clearSelection, readCu
                 saveHost.replaceChildren(message);
                 const actions = el("div", "report-saved-actions");
                 if (openSavedReport) actions.append(button("Open saved report", event => { if (currentSaved() && event.currentTarget.isConnected) openSavedReport(bundle, event.currentTarget); }, "primary"));
-                actions.append(button("Start a new report", () => clearSelection?.()));
+                if (!reportFirst) actions.append(button("Start a new report", () => clearSelection?.()));
                 saveHost.append(actions);
                 const downloads = el("div", "report-downloads saved-report-downloads");
                 downloads.setAttribute("role", "group");

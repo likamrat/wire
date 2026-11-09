@@ -35,6 +35,8 @@ use the same native modal.
 Keep existing route, reading-position and focus owners. A return restores the
 actual origin only while its authority and reading intent remain current.
 Later user input wins over delayed navigation, reads and motion callbacks.
+Pointer presses must not trigger older scroll restoration that moves the
+targeted control before release.
 Private Search state never becomes a copied public URL or a broader fallback.
 
 ## Reading hierarchy
@@ -202,17 +204,29 @@ no match, failure and unavailable content stay distinct. See
 
 ## Reports
 
-Reports opens the saved library. Create and Compare are explicit tasks;
-an active task offers Back to Reports instead of competing navigation.
-Rows lead with title, registered formats and Open/unavailable status. New reports
-also show their frozen purpose, period and personal-detail treatment.
-Inspection does not read a file, download or delete it.
+Reports is one workspace: report choices first, saved reports directly below.
+There is no separate Create report navigation entry. Choosing a tile or a saved
+name replaces the landing with full-area reading. Reports-origin reading has one
+Back to Reports action; context-qualified entries retain their own origin.
 
-Creation opens five compact, equal-sized tile rows: All activity, Errors &
+The landing has five compact, equal-sized full-width tile rows: All activity, Errors &
 failures, Completed calls, My prompts and Agent prompts. Compare periods stays
 in Analyze. The period is visible, defaults to Last 7 days, and offers 14/30/custom
 choices. Custom dates opens its calendar directly. A fresh report ignores old
-Analyze restrictions; Selected and Current remain deliberate secondary entries.
+Analyze restrictions. Selected and Current remain available through inclusion
+controls and their original context-qualified entries.
+
+Saved rows align Report, Period and Files. The name opens the saved file; one
+Files control offers registered formats. A privacy mark beside the name has
+hover/focus/touch help without claiming complete anonymization. Missing metadata
+is not inferred. A secondary Options menu preserves inspection and deletion;
+the header menu preserves bulk deletion with its existing confirmation.
+Inspection alone does not read, download or delete a file.
+
+Back restores saved search, order, paging, scroll and activating control.
+It preserves the authorized unfinished copy without another visible resume
+entry: choosing the same type with unchanged dates resumes that copy.
+An unresolved Save remains visible and uses its original recovery owner.
 
 Choosing a tile opens the actual report immediately. A compact toolbar owns its
 name, period, personal-detail choice and formats, with Save beside the name.

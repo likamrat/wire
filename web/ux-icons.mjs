@@ -36,6 +36,8 @@ export const uxIconSources = Object.freeze({
     "search-report": "file-text", "search-comparison": "columns-2", "search-view": "panels-top-left", "search-setting": "settings",
     "compare-periods": "scale",
     "report-all": "layers", "report-agent": "bot",
+    "report-files": "files", "report-options": "ellipsis", "report-masked": "shield-check",
+    "report-original": "shield-alert", "report-no-text": "message-square-off",
     "settings-connection": "plug", "settings-privacy": "shield", "settings-ai": "clipboard-check",
     "settings-display": "monitor", "settings-troubleshooting": "wrench",
     close: "x", back: "arrow-left", refresh: "refresh-cw", reset: "rotate-ccw", download: "download", code: "file-code",

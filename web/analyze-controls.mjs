@@ -40,9 +40,10 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
     }
     for (const [id, glyph] of [
         ["comparePeriods", "navigation-compare"],
-        ["pageAction", "navigation-create-report"], ["createSessionReport", "navigation-create-report"],
+        ["createSessionReport", "navigation-create-report"],
     ]) action(id, glyph);
-    for (const id of ["comparePeriods", "pageAction", "createSessionReport"]) place(actionHosts.get(id), $(id));
+    for (const id of ["comparePeriods", "createSessionReport"]) place(actionHosts.get(id), $(id));
+    $("pageAction").hidden = true;
     place($("analyzeFilterHeading"), $("filterHeading"));
     place($("analyzeSourceContext"), $("pageProject"));
     place($("analyzeSourceContext"), $("periodCoverage"));

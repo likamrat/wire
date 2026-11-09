@@ -212,6 +212,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let reportExperience, reportDates = { range: "7", ...time.preset("7", viewerTime.timeZone) };
     let reportBaseExplicit = false, reportDatesReplaced = false, reportRebuildFrom = null, reportUpdateTimer;
     let reportPreparing = false, reportPreparationOwner = null, reportUpdateAgain = false, saveAfterMask = false;
+    let reportPreset = null, reportLandingOrigin = null;
     const reportSaveWarning = assessmentFactories.createReportSaveWarning({
         icon: name => ux.icon(name), current: () => !clearingAccess && Boolean(api.publicationToken()),
     });
@@ -668,7 +669,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     for (const type of ["pointerdown", "wheel", "touchmove", "keydown"]) {
         document.addEventListener(type, event => {
             if (!event.isTrusted) return;
-            retainSidebarColumnAnchor();
+            // Pointer targeting is already fixed; scrolling here can move its control before release.
+            if (type !== "pointerdown") retainSidebarColumnAnchor();
             readingIntent++;
             if (contextBody.contains(event.target)) cancelSidebarReading?.();
         }, { capture: true, passive: true });
@@ -3435,6 +3437,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (["range", "from", "to"].some(key => route[key] !== next[key])) dateDraft = null;
         route = canonicalRoute(next);
         rememberRoute(route, true);
+        if (route.view === "reports" && !route.bundle && !route.inspect && route.task !== "compare") {
+            const journey = reportJourney?.snapshot();
+            if (route.task !== "create" && journey?.step !== 1 && !journey?.saveUnconfirmed) reportJourney?.go(1);
+            else if (route.task === "create" && journey?.hasPreview && journey.step !== 3) reportJourney.go(3);
+        }
         if (!state) showConnectionSettings(api.accessState());
         search = route.search || "";
         activityPage = Math.max(0, Number.parseInt(route.page || "0", 10) || 0);
@@ -4051,38 +4058,54 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderReportTask() {
         if (!$("reportCreatePanel")) return;
-        const reading = Boolean(route.bundle), creating = !reading && route.task === "create", comparing = !reading && route.task === "compare";
-        $("reportCreatePanel").hidden = !creating;
-        $("savedReportsPanel").hidden = creating || comparing || reading;
+        const current = reportJourney?.snapshot();
+        const view = assessmentFactories.reportWorkspacePresentation(route, current);
+        const reading = view.saved, creating = view.prepared, comparing = view.comparing;
+        $("reportsView").classList.toggle("report-workspace-landing", view.landing);
+        $("reportCreatePanel").hidden = reading || comparing;
+        $("savedReportsPanel").hidden = !view.landing;
         $("comparisonWorkspace").hidden = !comparing;
         $("savedReportReader").hidden = !reading;
         const filePanel = creating && !$("reportStage3")?.hidden ? $("reportFileInspection")
             : comparing ? $("comparisonInspectionPanel1") : null;
         $("reportsView").classList.toggle("report-file-stage", route.view === "reports" && Boolean(filePanel && !filePanel.hidden));
         if ($("reportTaskNav").parentElement !== $("pagePrimaryActions")) $("pagePrimaryActions").append($("reportTaskNav"));
-        $("reportTaskNav").hidden = route.view !== "reports" || reading;
+        $("reportTaskNav").hidden = route.view !== "reports" || reading || view.landing;
         if (route.view === "reports") $("coverage").hidden = true;
-        const current = reportJourney?.snapshot();
         if (route.view === "reports" && creating) setText($("pageTitle"), current?.step === 3
             ? current.phase === "saved" ? "Report saved" : current.phase === "unavailable" ? "Report unavailable"
-                : current.saveUnconfirmed ? "Report save status" : "Your report" : "Create a report");
+                : current.saveUnconfirmed ? "Report save status" : "Your report" : "Reports");
+        else if (route.view === "reports" && view.landing) setText($("pageTitle"), "Reports");
         if (route.view === "reports" && comparing) setText($("pageTitle"), reportComparisonUI?.title() || "Compare saved reports");
-        const unfinished = current && !["saved", "unavailable"].includes(current.phase)
-            && (current.requestCount > 0 || current.step > 1 || current.promptMode !== "masked"
-                || current.formats.join(",") !== "html" || $("manualTerms").value.trim());
-        setText($("reportCreateLink"), current?.saveUnconfirmed ? "Save status" : unfinished ? "Continue draft" : "Create a report");
-        $("reportCreateLink").hidden = creating || comparing;
+        $("reportCreateLink").hidden = true;
         $("reportLibraryLink").hidden = !creating && !comparing;
-        $("reportCompareLink").hidden = comparing || creating;
-        setText($("reportLibraryLink"), creating || comparing ? "Back to Reports" : "Saved reports");
-        $("reportCreateLink").classList.toggle("primary", Boolean(!creating && !comparing && state && !state.exports?.length && !isLoading && !isStale));
+        $("reportCompareLink").hidden = !view.landing;
+        setText($("reportLibraryLink"), creating && (periodReport?.returnTo || reportEntry?.returnTo) ? "Back to Analyze" : "Back to Reports");
+        $("reportLibraryLink").setAttribute("aria-disabled", String(Boolean(exportWriting || current?.saveUnconfirmed)));
         for (const [id, active, task] of [["reportLibraryLink", !creating && !comparing, undefined], ["reportCreateLink", creating, "create"], ["reportCompareLink", comparing, "compare"]]) {
             const control = $(id);
             control.href = routeUrl(routeFor("reports", { task, request: task ? route.request : undefined }));
             if (active) control.setAttribute("aria-current", "page");
             else control.removeAttribute("aria-current");
         }
+        if (creating && (periodReport?.returnTo || reportEntry?.returnTo)) $("reportLibraryLink").href = routeUrl(periodReport?.returnTo ?? reportEntry.returnTo);
         reportExperience?.sync();
+    }
+    function backToReports() {
+        const current = reportJourney?.snapshot();
+        if (exportWriting || current?.saveUnconfirmed) { announce("Check or finish the current save before leaving this report.", "stale"); return false; }
+        reportExperience?.closeOptions();
+        const origin = periodReport?.returnTo ?? reportEntry?.returnTo ?? reportLandingOrigin?.route
+            ?? routeFor("reports", { task: undefined, bundle: undefined, inspect: undefined });
+        const reading = reportLandingOrigin?.reading;
+        if (!reportJourney.go(1)) return false;
+        const publication = api.publicationToken(), intent = readingIntent;
+        const result = navigate(origin, false, { restorePosition: true });
+        const restore = loaded => {
+            if (loaded && api.isCurrent(publication) && intent === readingIntent && route.view === "reports" && !route.task) restoreReading(reading);
+        };
+        if (result instanceof Promise) result.then(restore); else restore(result);
+        return result;
     }
     function renderViewingContext() {
         const host = $("viewingContext");
@@ -6246,6 +6269,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function clearReportSelection() {
         if (exportWriting || reportJourney?.snapshot().saveUnconfirmed) return;
+        reportPreset = null;
+        forgetReading(reportLandingOrigin?.reading); reportLandingOrigin = null;
         reportScope = "selected";
         reportEntry = null;
         periodReport = null; periodReportInvalid = false;
@@ -6341,7 +6366,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const savedCount = state.exports?.length || 0;
         const verifiedEmptyLibrary = !savedCount && !isLoading && !isStale;
         for (const node of $("bundles").querySelectorAll(".saved-library-tools,:scope > #savedLibraryManagement")) {
-            if (verifiedEmptyLibrary && node.contains(document.activeElement)) $("reportCreateLink").focus({ preventScroll: true });
+            if (verifiedEmptyLibrary && node.contains(document.activeElement)) $("reportPreset-all")?.focus({ preventScroll: true });
             node.hidden = verifiedEmptyLibrary;
         }
         if (!savedCount) {
@@ -6772,32 +6797,51 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         ]));
         setText($("savedReportSearchCount"), query ? `${count(matching.length)} of ${count(savedCount)} saved ${comparisonCount ? "items" : "reports"} match.` : "");
         if (!matching.length) { $("bundleList").append(empty("No saved reports match", "Try a title, date or file format, or clear this search.")); return; }
-        pagedList(history, matching, { key: savedLibraryPageKey(), noun: comparisonCount ? "saved items" : "saved reports", jump: true, onPage: () => leaveSavedInspectorContext(), renderItem: ({ bundle, title }) => {
+        pagedList(history, matching, { key: savedLibraryPageKey(), noun: comparisonCount ? "saved items" : "saved reports", jump: true,
+            onPage: () => leaveSavedInspectorContext(), wrapList: list => {
+                const host = el("div", "saved-report-table"), columns = el("div", "saved-library-columns");
+                columns.setAttribute("aria-hidden", "true");
+                columns.append(el("span", "", "Report"), el("span", "", "Period"), el("span", "", "Files"), el("span"));
+                host.append(columns, list); return host;
+            }, renderItem: ({ bundle, title }) => {
             detailOwner = "bundle:" + bundle.bundleId;
             const outer = viewKey(el("article", "saved-library-row"), detailOwner);
             outer.dataset.bundleId = bundle.bundleId;
             outer.toggleAttribute("data-detail-active", route.inspect === bundle.bundleId);
-            const summary = viewKey(button("", event => inspectSavedReport(bundle, event.currentTarget), "saved-report saved-report-summary"), "inspect-bundle:" + bundle.bundleId);
-            summary.setAttribute("aria-controls", "contextSidebar");
-            summary.setAttribute("aria-expanded", String(route.inspect === bundle.bundleId));
+            const publication = api.publicationToken(), current = () => api.isCurrent(publication) && indexedSaved(bundle);
+            const readable = savedReadableFormat(bundle);
+            const summary = viewKey(button(title, event => {
+                if (current()) openSavedReport(bundle, event.currentTarget);
+            }, "saved-report-title"), "open-bundle:" + bundle.bundleId);
+            summary.disabled = !readable;
+            summary.setAttribute("aria-label", "Open " + title);
             const identity = el("span", "saved-report-identity");
-            identity.append(el("span", "saved-report-name", title));
-            if (bundle.reportPurpose !== undefined) {
-                const purpose = ({ all: "All activity", errors: "Errors & failures", completed: "Completed calls",
-                    mine: "My prompts", agent: "Agent prompts", custom: "Activity report" })[bundle.reportPurpose];
-                const period = bundle.reportPeriod;
-                const dates = period?.range === "capture" ? "All retained dates" : period?.from && period?.to
-                    ? `${time.formatDate(period.from, bundle.timeContext, true)} to ${time.formatDate(period.to, bundle.timeContext, true)}` : "";
-                const privacy = ({ masked: "Personal details hidden where detected", original: "Chat details kept", none: "Prompts and replies left out" })[bundle.promptMode];
-                identity.append(el("span", "saved-report-purpose", [purpose, dates, privacy].filter(Boolean).join(" · ")));
-            }
-            summary.append(identity, savedFormatLabels(bundle));
-            outer.append(summary);
-            if (savedReadableFormat(bundle)) {
-                const open = viewKey(button("Open", event => openSavedReport(bundle, event.currentTarget), "quiet"), "open-bundle:" + bundle.bundleId);
-                open.setAttribute("aria-label", bundle.kind === "comparison" ? "Open saved comparison" : "Open saved report");
-                outer.append(open);
-            } else outer.append(el("span", "saved-report-no-html", "No supported file"));
+            const privacyLabel = ({ masked: "Personal details hidden where detected", original: "Chat details kept",
+                none: "Prompts and replies left out" })[bundle.promptMode] ?? "Text treatment not recorded";
+            const privacy = button("", () => {}, "ux-help saved-report-privacy");
+            privacy.setAttribute("aria-label", privacyLabel);
+            const privacyIcon = ux.icon(({ masked: "report-masked", original: "report-original", none: "report-no-text" })[bundle.promptMode] ?? "unobserved");
+            privacy.append(privacyIcon); ux.tooltip(privacy, privacyLabel, { anchor: privacyIcon, helpOnActivate: true });
+            identity.append(summary, privacy);
+            const period = el("span", "saved-report-period", savedPeriodLabel(bundle));
+            const files = viewKey(button("", () => {}, "quiet saved-report-files"), "files-bundle:" + bundle.bundleId);
+            ux.utility(files, "report-files", "Files for " + title, "Choose a saved file");
+            const fileEntries = ["html", "pdf", "json", "markdown", "manifest"].filter(format =>
+                Object.hasOwn(bundle.files ?? {}, savedFileName(bundle, format)));
+            files.disabled = !fileEntries.length;
+            savedReportMenu(files, fileEntries.map(format => ({
+                label: ({ html: "HTML", pdf: "PDF", json: "JSON", markdown: "Markdown", manifest: "Manifest" })[format],
+                action: () => openSavedReport(bundle, files, format),
+            })), outer, current);
+            const actions = viewKey(button("", () => {}, "quiet saved-report-row-options"), "options-bundle:" + bundle.bundleId);
+            ux.utility(actions, "report-options", "Options for " + title, "Report options");
+            savedReportMenu(actions, [
+                { label: "Inspect details", action: () => inspectSavedReport(bundle, actions) },
+                { label: bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", danger: true,
+                    disabled: isStale && !isLoading || bundle.canDelete === false,
+                    action: () => savedArtifactUI.open({ artifactKind: bundle.kind ?? "report", artifactId: bundle.bundleId, label: title }, actions) },
+            ], outer, current);
+            outer.prepend(identity, period, files, actions);
             return outer;
         } });
         $("bundleList").append(history);
@@ -6806,16 +6850,46 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         updateSelection();
     }
     function savedLibraryPageKey() { return "saved-reports:" + localQuery("savedReportSearch") + (route.order === "oldest" ? ":oldest" : ""); }
-    function savedFormatLabels(bundle) {
-        const labels = el("span", "saved-report-formats");
-        labels.setAttribute("role", "group");
-        labels.setAttribute("aria-label", "Recorded files");
-        const prefix = bundle.kind === "comparison" ? "comparison-report" : "product-report";
-        for (const [extension, label] of [["html", "HTML"], ["pdf", "PDF"], ["json", "JSON"], ["md", "Markdown"]]) {
-            if (Object.hasOwn(bundle.files ?? {}, `${prefix}.${extension}`)) labels.append(el("span", "report-format", label));
+    function savedPeriodLabel(bundle) {
+        const period = bundle.reportPeriod;
+        return period?.range === "capture" ? "All retained dates" : period?.from && period?.to
+            ? `${time.formatDate(period.from, bundle.timeContext, true)} to ${time.formatDate(period.to, bundle.timeContext, true)}`
+            : bundle.reportType === "period-comparison" ? "Two saved periods" : "Not recorded";
+    }
+    function positionSavedMenu(menu, trigger) {
+        const box = trigger.getBoundingClientRect(), bounds = menu.getBoundingClientRect();
+        menu.style.left = Math.max(12, Math.min(innerWidth - bounds.width - 12, box.right - bounds.width)) + "px";
+        menu.style.top = (box.bottom + bounds.height + 8 <= innerHeight ? box.bottom + 8 : Math.max(12, box.top - bounds.height - 8)) + "px";
+    }
+    function savedReportMenu(trigger, entries, host, current) {
+        const menu = el("div", "saved-report-menu");
+        menu.setAttribute("popover", "auto"); menu.setAttribute("role", "dialog");
+        menu.setAttribute("aria-label", trigger.getAttribute("aria-label"));
+        for (const entry of entries) {
+            const control = button(entry.label, () => {
+                if (!current() || !control.isConnected) return;
+                menu.hidePopover(); ux.hideTooltip(); entry.action();
+            }, entry.danger ? "quiet danger" : "quiet");
+            control.disabled = entry.disabled === true;
+            menu.append(control);
         }
-        if (!labels.childElementCount) labels.append(el("span", "saved-file-gap", "Files not listed"));
-        return labels;
+        bindSavedMenu(menu, trigger, current);
+        host.append(menu);
+    }
+    function bindSavedMenu(menu, trigger, current) {
+        menu.setAttribute("role", "dialog"); menu.setAttribute("aria-label", trigger.getAttribute("aria-label"));
+        trigger.setAttribute("aria-haspopup", "dialog"); trigger.setAttribute("aria-expanded", "false");
+        menu.addEventListener("beforetoggle", event => {
+            if (event.newState === "closed" && menu.contains(document.activeElement) && current() && trigger.isConnected) ux.restoreFocus(trigger);
+        });
+        trigger.addEventListener("click", () => {
+            if (!current() || !trigger.isConnected) return;
+            ux.hideTooltip();
+            if (menu.matches(":popover-open")) { menu.hidePopover(); return; }
+            menu.showPopover(); positionSavedMenu(menu, trigger);
+            menu.querySelector("button:not(:disabled)")?.focus();
+        });
+        menu.addEventListener("toggle", () => trigger.setAttribute("aria-expanded", String(menu.matches(":popover-open"))));
     }
     function savedReadableFormat(bundle) {
         const prefix = bundle.kind === "comparison" ? "comparison-report" : "product-report";
@@ -6964,6 +7038,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (Number.isSafeInteger(bundle.selectionScope?.requestGroups) && bundle.selectionScope.requestGroups >= 0) add(hasNative ? "GitHub interactions" : "Interactions", count(bundle.selectionScope.requestGroups));
             if (hasNative) add("Microsoft conversations", count(nativeConversations));
             add("Prompts", ({ none: "None", masked: "Masked", original: "Original" })[bundle.promptMode]);
+            add("Period", savedPeriodLabel(bundle));
+            add("Purpose", ({ all: "All activity", errors: "Errors & failures", completed: "Completed calls",
+                mine: "My prompts", agent: "Agent prompts", custom: "Activity report" })[bundle.reportPurpose]);
             if (bundle.timeContext) add("Timezone", time.label(bundle.timeContext));
             body.append(facts);
             if (bundle.reportType === "period-comparison") body.append(el("p", "", "Period A and Period B are fixed saved cohorts."));
@@ -7036,7 +7113,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!original && assessmentFactories.reportIdentity.legacyCandidate(bundle))
             return inspectSavedReport(bundle, trigger);
         const key = savedEntry("reader", bundle, trigger, { format, original });
-        if (route.view === "reports" && route.task === "create") Object.assign(savedEntries.get(key), {
+        if (route.view === "reports" && route.task === "create" && reportJourney.snapshot().step === 3) Object.assign(savedEntries.get(key), {
             origin: sessionJourney.returnRoute({ ...route, task: undefined }), originEntry: undefined,
             navigationKey: null, reading: null, focusKey: "open-bundle:" + bundle.bundleId,
         });
@@ -7053,7 +7130,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             inspectSavedReport(bundle, keyed("open-bundle:" + bundle.bundleId)); return;
         }
         const host = $("savedReportReader"), header = el("header", "saved-reader-heading"), body = el("div", "saved-reader-body"), actions = el("div", "saved-reader-actions");
-        const backLabel = entry?.searchReturn ? "Back to search" : entry?.origin?.task === "compare" ? "Back to comparison" : "Back to report library";
+        const backLabel = entry?.searchReturn ? "Back to search" : entry?.origin?.task === "compare" ? "Back to comparison" : "Back to Reports";
         const back = button(backLabel, backSaved, "quiet document-back");
         back.setAttribute("aria-label", backLabel);
         back.prepend(ux.icon("back"));
@@ -8416,8 +8493,25 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         return "";
     }
-    async function chooseReportPreset(preset) {
+    async function chooseReportPreset(preset, trigger) {
+        if (periodReport && !exportWriting && !reportJourney.snapshot().saveUnconfirmed) clearReportSelection();
         if (reportSelectionBlock() || reportPreparing) return;
+        const publication = api.publicationToken();
+        if (route.view === "reports" && assessmentFactories.reportWorkspacePresentation(route, reportJourney.snapshot()).landing) {
+            forgetReading(reportLandingOrigin?.reading);
+            reportLandingOrigin = { route: sessionJourney.returnRoute({ ...route, task: undefined }), reading: captureReading() };
+            if (route.task === "create") {
+                const normalized = await navigate({ ...route, task: undefined }, true, { keepFocus: true });
+                if (!normalized || !api.isCurrent(publication)) return;
+            }
+            const moved = await navigate(routeFor("reports", { task: "create", inspect: undefined }), false, { keepFocus: true });
+            if (!moved || !api.isCurrent(publication)) return;
+        }
+        if (reportPreset === preset && activePreview && reportJourney.snapshot().hasPreview) {
+            reportJourney.go(3);
+            return;
+        }
+        reportPreset = preset;
         const dates = time.preset(reportDates.range, viewerTime.timeZone);
         if (dates) reportDates = { range: reportDates.range, ...dates };
         if (!reportBaseExplicit) reportScope = "all";
@@ -8473,6 +8567,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const nativeRequest = usesBoundedReportView() ? draft.nativeView(reportNativeView(), state.revision, reportNativeIntent()).request : null;
         if (usesBoundedReportView() && !nativeRequest) { updateSelection(); return; }
         const rebuilding = contentOnly && reportRebuildFrom;
+        if (route.view === "reports" && route.task !== "create") {
+            const moved = await navigate(routeFor("reports", { task: "create", inspect: undefined }), false, { keepFocus: true });
+            if (!moved || !api.isCurrent(publication)) return;
+        }
         if (!rebuilding) {
             const pendingMaskSave = contentOnly && saveAfterMask;
             invalidatePreview();
@@ -9025,7 +9123,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     for (const id of ["pageAction", "reportContextAction", "exploreLink", "reportLibraryLink", "reportCreateLink", "reportCompareLink"]) $(id).addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        const reportTask = event.currentTarget.closest("#reportTaskNav");
+        if (id === "reportLibraryLink" && route.task !== "compare") { backToReports(); return; }
+        const reportTask = ["reportLibraryLink", "reportCreateLink", "reportCompareLink"].includes(id);
         if (!reportTask && (isLoading || isStale)) return;
         if (["pageAction", "reportCreateLink"].includes(id) && ["saved", "unavailable"].includes(reportJourney.snapshot().phase)) clearReportSelection();
         navigate({ ...readRoute(new URL(event.currentTarget.href).hash, null), search: route.search, returnToSessions: route.returnToSessions,
@@ -9165,7 +9264,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     $("refreshBtn").addEventListener("click", refreshStoredData);
     $("freshStoredRead").addEventListener("click", refreshStoredData);
     $("analyzeRefresh").addEventListener("click", checkActivity);
-    $("deleteAllReports").addEventListener("click", event => savedArtifactUI.open({ scope: "all-reports" }, event.currentTarget));
+    $("deleteAllReports").addEventListener("click", () => {
+        $("savedLibraryManagement").hidePopover();
+        ux.hideTooltip();
+        savedArtifactUI.open({ scope: "all-reports" }, $("savedLibraryOptions"));
+    });
     $("collectionRetry").addEventListener("click", refreshStoredData);
     $("collectionRetry").setAttribute("aria-describedby", "storedRefreshHelp");
     $("clearDates").addEventListener("click", () => {
@@ -9342,7 +9445,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         current: () => !clearingAccess && Boolean(api.publicationToken()),
         read: () => ({
             dates: reportDates, timeContext: viewerTime, options: draft.options(),
-            prepared: reportJourney.snapshot().step === 3, saved: ["saved", "unavailable"].includes(reportJourney.snapshot().phase),
+            prepared: assessmentFactories.reportWorkspacePresentation(route, reportJourney.snapshot()).prepared,
+            saved: ["saved", "unavailable"].includes(reportJourney.snapshot().phase),
             paired: Boolean(periodReport), locked: exportWriting || reportJourney.snapshot().saveUnconfirmed,
             loading: isLoading || isStale || reportPreparing,
             scopeLabel: !reportBaseExplicit ? "All retained activity in this period"
@@ -9357,11 +9461,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             draft.change({ reportFocus: { ...draft.options().reportFocus, preset: "custom", ...patch }, reportNotes: [], overrides: [] });
             updateSelection(); void previewExport();
         },
-        edit: action => {
-            if (action === "comparison") $("periodReportScope")?.querySelector("button")?.click();
-            else reportJourney.go(1);
-        },
     });
+    const savedTools = $("bundles").querySelector(".saved-library-tools");
+    savedTools.append($("reportCompareLink"));
+    const libraryOptions = button("", () => {}, "quiet");
+    libraryOptions.id = "savedLibraryOptions";
+    ux.utility(libraryOptions, "report-options", "Saved-report options");
+    bindSavedMenu($("savedLibraryManagement"), libraryOptions, () => !clearingAccess && Boolean(api.publicationToken()));
+    savedTools.append(libraryOptions);
     ux.tooltip($("exportBtn"), () => $("exportBtn").textContent);
     reportComparisonUI = assessmentFactories.mountComparison($("comparisonWorkspace"), {
         api, createSaveIdentity: assessmentFactories.createReportSaveIdentity, renderer: assessmentFactories.createReportComparison(), timeContext: () => viewerTime,
@@ -9494,6 +9601,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function withdrawPrivateContent() {
         const privateNarrowing = Boolean(search.trim() || semanticQuery !== null || incomingNavigation);
         clearingAccess = true;
+        forgetReading(reportLandingOrigin?.reading); reportLandingOrigin = null; reportPreset = null;
         clearTimeout(reportUpdateTimer); reportRebuildFrom = null; reportUpdateAgain = saveAfterMask = false;
         reportPreparing = false; reportPreparationOwner = null;
         reportBaseExplicit = reportDatesReplaced = false;

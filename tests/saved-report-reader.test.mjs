@@ -26,6 +26,42 @@ async function save(exports, context, formats = ["html", "json"], promptMode = "
     return (await exports.confirm("saved-reader", preview.previewId, true)).bundle;
 }
 
+test("saved report names remain actionable while details close and altered HTML is refused", { timeout: 15000 }, async t => {
+    const { context } = await privateFixture(t);
+    const controller = createExportController(context);
+    for (let index = 0; index < 3; index++) await save(controller, context);
+    const bundle = await save(controller, context, ["html", "json"], "none",
+        "Planning activity and release readiness: weekly evidence review for the next handoff");
+    await save(controller, context);
+    const runtime = await startServer(context, controller, { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch({ headless: true });
+    t.after(async () => { await browser.close(); await runtime.close(); });
+    const page = await browser.newPage(), calls = [];
+    page.on("request", request => {
+        if (request.method() === "POST") calls.push(new URL(request.url()).pathname);
+    });
+    await page.goto(runtime.url + "#reports");
+    await page.locator('#workspace[aria-busy="false"]').waitFor();
+    const row = page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"]`);
+    await row.locator(".saved-report-row-options").click();
+    await row.getByRole("button", { name: "Inspect details", exact: true }).click();
+    await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
+    await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.locator("#savedReportReader .saved-json-tree").waitFor();
+    await writeFile(bundle.files["product-report.html"], "changed saved HTML");
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
+    const start = calls.length;
+    await row.locator(".saved-report-title").click();
+    await page.locator("#savedReportReader .error").waitFor({ timeout: 3000 });
+    assert.equal(await page.locator("#reportCreatePanel").isVisible(), false);
+    assert.equal(await page.locator("#savedReportsPanel").isVisible(), false);
+    assert.equal(await page.locator("#savedReportReader pre, #savedReportReader iframe").count(), 0);
+    assert.equal(calls.slice(start).some(route => route === "/api/report-original" || route === "/api/artifact-file"), false);
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"] .saved-report-title`).waitFor();
+});
+
 test("saved files preview every format and switch without changing bytes or downgrading broken HTML", { timeout: 60000 }, async t => {
     const records = reportMatrixCases().find(item => item.name === "mixed-parallel-batches").records;
     const prompts = ["Find the planning discussion and identify unresolved decisions.",
@@ -55,8 +91,8 @@ test("saved files preview every format and switch without changing bytes or down
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     for (const [index, bundle] of bundles.slice(0, 3).entries()) {
-        if (index) await page.getByRole("button", { name: "Back to report library", exact: true }).click();
-        await page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();
+        if (index) await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+        await page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"] .saved-report-title`).click();
         const reader = page.locator("#savedReportReader");
         assert.equal(downloads.length, 0, "Open must not download or run a PDF");
         await reader.getByRole("button", { name: "Download", exact: true }).waitFor();
@@ -103,15 +139,16 @@ test("saved files preview every format and switch without changing bytes or down
     }
     assert.equal(downloads.length, 1);
     for (const [file, bytes] of savedBytes) assert.deepEqual(await readFile(file), bytes);
-    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
-    await page.locator(`#bundleList [data-bundle-id="${bundles[4].bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.locator(`#bundleList [data-bundle-id="${bundles[4].bundleId}"] .saved-report-title`).click();
     await page.frameLocator("#savedReportReader iframe").getByRole("heading", { name: bundles[4].title, level: 1, exact: true }).waitFor();
     assert.equal(calls.some(call => call.path === "/api/report-original"), false, "Missing optional formats does not downgrade a verified HTML read");
     assert.equal(await page.locator("#savedReportReader").getByRole("button", { name: "Download", exact: true }).count(), 0,
         "Do not offer a download that the stricter format-inventory endpoint cannot validate");
     const broken = bundles[3];
-    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
-    await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"] .saved-report-summary`).click();
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"] .saved-report-row-options`).click();
+    await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"]`).getByRole("button", { name: "Inspect details", exact: true }).click();
     await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
     await page.locator("#savedReportReader .saved-json-tree").waitFor();
@@ -208,10 +245,10 @@ test("saved files preview every format and switch without changing bytes or down
     assert.equal(await page.locator(".saved-markdown h1").textContent(), broken.title);
     assert.deepEqual(foreign, []);
     await writeFile(broken.files["product-report.html"], "changed saved HTML");
-    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
     const start = calls.length;
-    await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"]`).getByRole("button", { name: "Open saved report", exact: true }).click();
+    await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"] .saved-report-title`).click();
     await page.locator("#savedReportReader .error").waitFor();
     assert.equal(await page.getByRole("button", { name: "Open original file", exact: true }).count(), 0);
     assert.equal(await page.locator("#savedReportReader pre, #savedReportReader iframe").count(), 0);
@@ -524,8 +561,8 @@ test("a legacy report opens or downloads directly from its warned sidebar withou
     page.on("request", request => { if (request.method() === "POST") reads.push(new URL(request.url()).pathname); });
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
-    assert.equal(await page.locator(".saved-report-name").textContent(), title);
-    await page.locator(".saved-report-summary").click();
+    assert.equal(await page.locator(".saved-report-title").textContent(), title);
+    await page.locator(".saved-report-title").click();
     assert.equal(await page.locator("#contextSidebarTitle").textContent(), title);
     await page.locator("#savedOriginalNotice").waitFor();
     assert.equal(await page.locator("#savedReportReader").isVisible(), false, "File choice stays in the sidebar, not an intermediate page");
@@ -604,7 +641,7 @@ test("a legacy report opens or downloads directly from its warned sidebar withou
         const item = await download;
         assert.deepEqual(await readFile(await item.path()), Buffer.from(content[item.suggestedFilename()]));
     }
-    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await selectActivityOption(page, "savedOriginalFormat", "pdf");
     const downloading = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download original PDF", exact: true }).click();
@@ -668,7 +705,7 @@ test("legacy original HTML is inert and late original reads cannot survive Back 
         return route.continue();
     });
     await page.goto(runtime.url + "#reports"); await page.locator('#workspace[aria-busy="false"]').waitFor();
-    const open = page.getByRole("button", { name: "Open saved report", exact: true });
+    const open = page.locator(".saved-report-title");
     await open.click();
     const view = page.getByRole("button", { name: "Open original file", exact: true });
     await view.click();
@@ -704,7 +741,7 @@ test("legacy original HTML is inert and late original reads cannot survive Back 
     assert.deepEqual(external, []);
     async function holdRead() {
         if (await page.locator("#savedReportReader").isVisible())
-            await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+            await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
         const pending = Promise.withResolvers(), release = Promise.withResolvers(), delivered = Promise.withResolvers();
         t.after(() => release.resolve());
         await page.route("**/api/report-original", async route => {
@@ -715,7 +752,7 @@ test("legacy original HTML is inert and late original reads cannot survive Back 
         return { release: () => release.resolve(), delivered: delivered.promise };
     }
     const backRead = await holdRead();
-    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     backRead.release(); await backRead.delivered;
     assert.equal(await page.locator("#savedReportReader iframe").count(), 0);
     assert.equal(await page.locator("#contextSidebar").isVisible(), true);
@@ -728,7 +765,7 @@ test("legacy original HTML is inert and late original reads cannot survive Back 
     changedRead.release(); await changedRead.delivered;
     assert.equal(await page.locator("#savedReportReader iframe").count(), 0);
     assert.match(await page.locator("#savedReportReader").textContent(), /changed|no longer available/);
-    await page.getByRole("button", { name: "Back to report library", exact: true }).click();
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await view.waitFor();
     const metadataRead = await holdRead();
     await updateBoardState(context, state => { state.exports[0].preparedAtDisplay = "Changed preparation label"; });
