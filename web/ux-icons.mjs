@@ -29,7 +29,7 @@ export const uxIconSources = Object.freeze({
     export: "file-output", menu: "menu", "navigation-home": "house", "navigation-analyze": "chart-column",
     "navigation-reports": "clipboard-list", "navigation-settings": "settings",
     "navigation-records": "rotate-ccw-clock", "navigation-compare": "scale", "navigation-create-report": "file-text",
-    "navigation-collapse": "panel-left-close", "navigation-expand": "panel-left-open",
+    "navigation-collapse": "panel-left", "navigation-expand": "panel-left",
     "search-analysis": "chart-no-axes-combined",
     "search-interaction": "message-square", "search-context": "messages-square", "search-reply": "message-square-reply",
     "search-action": "workflow", "search-tool": "wrench",

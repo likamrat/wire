@@ -162,6 +162,9 @@ Playwright interactions and the unmodified normal renderer. Capture only
 useful states, inspect every image for readability and private data, and close
 the owned runtime/browser and remove its temporary store. Keep fixture provenance
 with capture evidence, and add a visible caption only when it helps explain the task.
+The shared-control illustrations use `tests/appwide-controls.browser.test.mjs`
+with `WIRE_VISUAL_PROOFS` set to an owned capture directory. Its invented activity
+and saved reports also exercise keyboard paging and frozen-file preservation.
 
 ## Troubleshoot a local run
 

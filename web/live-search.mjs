@@ -117,7 +117,10 @@ html:has(.wire-search-entry:focus-within) {scroll-padding-top:0}
 .wire-search-results {padding:0;margin:0;list-style:none}
 .wire-search-results>li+li {margin-top:2px}
 .wire-search-group-label {margin:10px 6px 2px 34px;font:inherit;color:var(--search-category)}
-#wireSearchPanel .wire-search-hit {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:8px;width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font:inherit;padding:10px 6px}
+#wireSearchPanel .wire-search-hit {display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:8px;width:100%;min-height:44px;text-align:start;border:0;border-radius:var(--radius-small);background:transparent;color:var(--ink);font:inherit;padding:10px 6px;transition:var(--control-paint-transition)}
+#wireSearchPanel .wire-search-hit:hover:not(:disabled) {background:var(--hover)}
+#wireSearchPanel .wire-search-hit:active:not(:disabled) {background:var(--pill-pressed)}
+@media(prefers-reduced-motion:reduce) {#wireSearchPanel .wire-search-hit {transition:none}}
 #wireSearchPanel .wire-search-hit::before {content:none;background:transparent;border:0;box-shadow:none}
 #wireSearchPanel .wire-search-hit:is(:hover,:focus-visible):not(:disabled) .wire-search-title {color:var(--accent)}
 #wireSearchPanel .wire-search-hit:active:not(:disabled) .wire-search-title {color:var(--ink)}

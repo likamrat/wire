@@ -71,7 +71,7 @@ export const recollectionStyles = `
 #recollectDialog input[type=date] {min-width:0;border-radius:10px}
 #recollectDialog .recollect-dates {display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
 #recollectDialog .recollect-dates label {display:grid;gap:6px;flex:1 1 12rem;min-width:0}
-#recollectDialog input[type=checkbox] {appearance:auto;width:20px;height:20px;flex:none;accent-color:var(--accent)}
+#recollectDialog input[type=checkbox] {appearance:auto;width:20px;height:20px;flex:none;accent-color:var(--toggle-on)}
 #recollectSummary {font-weight:600}
 #recollectChanges {margin:16px 0;padding:4px 0 4px 16px;border-left:3px solid var(--accent)}
 #recollectChanges h3 {margin:0}

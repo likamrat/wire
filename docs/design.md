@@ -76,10 +76,30 @@ another face. Keep the compact W and the report-only `wire-wordmark` assets
 unchanged; report readers clone those from their own template, not the header.
 
 Decorative glyphs fit their text line without acquiring control-sized
-whitespace. Utility, navigation and compact roles use their 20/24/16px geometry.
+whitespace. Keep official Lucide's 24-unit viewBox; painted navigation glyphs
+use 18px at the default text size, reader utilities and chart labels use 18px,
+and compact cues retain their 16px role. Other established utility roles remain
+20px. The simple panel-left glyph keeps its changing accessible expand/collapse
+name and state.
 Interactive targets stay usable independently of their smaller painted face;
 preserve the established
 44px targets, focus indications and wrapping labels.
+
+Use one restrained screen hierarchy throughout the application. Routine Analyze
+charts sit on the workspace without filled card frames; individual interactions
+remain distinct, and contextual readers and open menus carry the stronger surface.
+Resting panels have no drop shadow. Navigation uses neutral selection without
+an outlined card or redundant Workspace caption. Settings follows the shared
+page and section type scale.
+
+Toolbar buttons, selects and numeric fields use a compact painted face inside
+their full target. Keep text/icon baselines aligned and let targets grow with
+enlarged text. Number fields size to their page digits rather than taking a
+wide fixed slot. A direct page jump keeps its native validation, Enter behavior
+and visible Go to page action. PDF paging keeps its existing commit behavior.
+Checkboxes and switches use the setting-state color, not outcome green.
+Keep hover, pressed, selected and keyboard focus distinct; a smaller painted
+control is not permission to remove its focus ring or hit area.
 
 Outcome words/icons accompany color. Completed calls use the current success
 role; failures use red, partial states retain their separate warning role and
@@ -331,6 +351,12 @@ share a reversible 320ms glide. This navigation policy runs
 under either browser motion preference and has no separate user setting.
 Other controls and reader folding retain their own reduced-motion behavior;
 do not change operating-system preferences.
+
+Menus enter with a short opacity fade and controls use restrained paint
+transitions. Selected navigation and open selects may have a faint top sheen;
+do not apply it to data marks, resting panels or frozen reports. Added decorative
+motion is removed under reduced motion. Do not animate an exit at the expense
+of immediate private-content clearance.
 
 Docked motion changes actual main-column geometry on the same clock, including
 reversal. Anchor compensation yields to new input. Replacement keeps the current

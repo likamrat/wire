@@ -50,7 +50,8 @@ a:is(:hover,:active) {color:var(--ink)}
 @media(forced-colors:active) {
  :is(h1,h2,h3,h4,h5,h6)[tabindex="-1"]:focus-visible::before {background:Highlight;forced-color-adjust:none}
 }
-input[type=checkbox] {width:18px;height:18px;accent-color:var(--accent);flex:0 0 auto}
+input[type=checkbox] {width:18px;height:18px;flex:0 0 auto}
+input:is([type=checkbox],[type=radio]) {accent-color:var(--toggle-on)}
 h1,h2,h3,p {margin:0;min-width:0;overflow-wrap:anywhere}
 h1 {font-size:var(--type-title);font-weight:var(--weight-strong);line-height:var(--leading-heading);letter-spacing:var(--tracking-heading);text-wrap:balance}
 h2 {font-size:var(--type-section);font-weight:var(--weight-strong);line-height:var(--leading-section)}
@@ -357,7 +358,7 @@ dialog::backdrop {background:var(--scrim)}
 .report-options legend {font-size:16px;font-weight:600;padding:0 8px}
 .prompt-choice {display:flex;align-items:start;gap:12px;padding:14px 12px;margin:8px 0;border:1px solid var(--control);border-radius:var(--radius-small);cursor:pointer}
 .prompt-choice:has(input:checked) {background:var(--accent-soft);border-color:var(--accent)}
-.prompt-choice input {flex:0 0 auto;width:18px;height:18px;margin:4px 0;accent-color:var(--accent)}
+.prompt-choice input {flex:0 0 auto;width:18px;height:18px;margin:4px 0;accent-color:var(--toggle-on)}
 .prompt-choice>span {min-width:0}
 .prompt-choice strong {display:block;font-weight:600}
 .prompt-choice span span {display:block;color:var(--muted);font-size:14px;margin-top:4px}
@@ -580,15 +581,29 @@ ${textAction},${textAction}:is(:hover,:active,:disabled,[aria-pressed]) {
  padding:12px calc(var(--pill-inset) + var(--action-progress-inset,0px));border:0;background:transparent;box-shadow:none;
 }
 ${textAction}::before {
- content:"";position:absolute;inset:4px 0;z-index:-1;pointer-events:none;
+ content:"";position:absolute;inset:var(--control-face-inset) 0;z-index:-1;pointer-events:none;
  border:1px solid var(--pill-border);border-radius:inherit;background:var(--pill-fill);box-shadow:var(--action-shadow,var(--control-shadow));
 }
 ${textAction}:hover:not(:disabled)::before {background:var(--pill-hover);border-color:var(--pill-hover-border,var(--control))}
 ${textAction}:active:not(:disabled)::before {background:var(--pill-pressed)}
 ${textAction}[aria-pressed=true]::before {background:var(--accent-soft);border-color:var(--control)}
-${textAction}:not(.primary,.danger,[data-decision-action]):hover:not(:disabled)::before {border:2px solid var(--ink)}
+${textAction}:not(.primary,.danger,[data-decision-action]):hover:not(:disabled)::before {border:1px solid var(--ink)}
 ${textAction}:disabled::before {background:transparent;border-color:var(--rule);box-shadow:none}
 ${textAction}.quiet:disabled::before {border-color:transparent}
+.number-field {position:relative;display:inline-grid;isolation:isolate;align-items:center;inline-size:max(3.75rem,calc(var(--number-digits,2)*1ch + 2.25rem));min-height:44px;flex:none}
+.number-field::before {content:"";position:absolute;inset:var(--control-face-inset) 0;z-index:-1;pointer-events:none;border:1px solid var(--control);border-radius:var(--radius-control);background:var(--paper);transition:var(--control-paint-transition)}
+.number-field input[type=number] {position:relative;inline-size:100%;min-width:0;min-height:44px;margin:0;padding:12px 8px;border:0;background:transparent;box-shadow:none;font:var(--type-control)/var(--leading-control) var(--font);font-variant-numeric:tabular-nums}
+.number-field input:focus-visible {outline:none}
+.number-field:has(input:focus-visible)::before {outline:2px solid var(--focus);outline-offset:2px}
+.number-field:has(input:enabled):hover::before {border-color:var(--ink)}
+.number-field:has(input:disabled)::before {background:transparent;border-color:var(--rule)}
+.number-field input:disabled {color:var(--muted)}
+@media(prefers-reduced-motion:reduce) {.number-field::before {transition:none}}
+@media(forced-colors:active) {
+ .number-field::before {border-color:ButtonText;background:Canvas}
+ .number-field:has(input:disabled)::before {border-color:GrayText}
+ .number-field:has(input:focus-visible)::before {outline-color:Highlight}
+}
 @media(max-width:500px) {
  .recorded-results {gap:6px 14px}
  .recorded-results .result-unit {flex-basis:100%}

@@ -148,6 +148,8 @@ Later collection, browsing filters or screen-theme changes do not rewrite them.
 The saved list's search finds metadata; global Search can also find supported
 saved-file content. **Back to Reports** restores the list's search, order, page
 and reading position. Page controls are below the saved rows.
+Use Previous/Next, or enter a page and choose **Go to page**. Enter submits the
+same page choice; an out-of-range number does not change the page.
 
 If Save is unconfirmed, use **Check save status** rather than Save again.
 A missing receipt is not proof that nothing was written. Review files before

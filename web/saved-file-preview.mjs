@@ -188,11 +188,13 @@ export function createSavedFilePreview(host, value, { frozenFrame, isCurrent, on
         const pageLabel = el("label"), input = el("input");
         pageLabel.append(el("span", "Page", "saved-pdf-page-label"));
         input.type = "number"; input.min = "1"; input.max = String(pdf.numPages); input.value = "1";
-        input.style.width = Math.max(3.2, String(pdf.numPages).length + 1.2) + "ch";
         input.setAttribute("aria-label", "PDF page");
+        const numberField = el("span", undefined, "number-field");
+        numberField.style.setProperty("--number-digits", String(Math.max(2, String(pdf.numPages).length)));
+        numberField.append(input);
         const total = el("span", undefined, "saved-pdf-page-total");
         total.append(el("span", `of ${pdf.numPages}`, "saved-pdf-total-full"), el("span", `/${pdf.numPages}`, "saved-pdf-total-short"));
-        pageLabel.append(input, total);
+        pageLabel.append(numberField, total);
         const zoom = el("select");
         zoom.id = "savedPdfZoom"; zoom.setAttribute("aria-label", "PDF zoom");
         const scales = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];

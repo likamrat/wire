@@ -1,7 +1,7 @@
 export const settingsStyles = `
 .assessment-inline-recovery>.assessment-recovery {margin:12px 0 0}
 :is(.settings-view,#workspace:has(>#settingsView:not([hidden]))) {
- --settings-title-size:2rem;--settings-title-leading:1.25;--settings-title-tracking:-.025em;
+ --settings-title-size:1.5rem;--settings-title-leading:1.25;--settings-title-tracking:-.025em;
  --settings-field-radius:10px;--settings-nav-radius:8px;--settings-action-radius:8px;
 }
 #workspace:has(>#settingsView:not([hidden]))>.page-heading #pageTitle {font-size:var(--settings-title-size);line-height:var(--settings-title-leading);letter-spacing:var(--settings-title-tracking)}
@@ -52,11 +52,11 @@ export const settingsStyles = `
 .settings-categories>summary {display:none}
 .settings-categories nav {display:flex;flex-direction:column;gap:4px}
 .settings-categories a {position:relative;display:flex;align-items:center;gap:var(--space-sm);min-height:44px;padding:12px;border:0;border-radius:var(--settings-nav-radius);background:transparent;color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-medium);text-decoration:none;overflow-wrap:anywhere}
-.settings-categories a>.wire-icon {margin-top:calc((1lh - 24px)/2)}
+.settings-categories a>.wire-icon {width:20px;height:20px;margin-top:0;flex:none}
 .settings-category-label {min-width:0;overflow-wrap:anywhere}
 .settings-categories a:hover {background:var(--hover);color:var(--ink);text-decoration:none}
 .settings-categories a:active {background:var(--pill-pressed);color:var(--ink)}
-.settings-categories a[aria-current=page] {background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-strong);box-shadow:inset 0 0 0 1px var(--rule)}
+.settings-categories a[aria-current=page] {background:var(--accent-soft);color:var(--ink);font-weight:var(--weight-medium);box-shadow:none}
 .settings-categories a[aria-current=page]:hover {background:var(--hover)}
 .settings-categories a[aria-current=page]:active {background:var(--pill-pressed)}
 .settings-categories>summary {padding:10px 12px;background:var(--canvas);color:var(--ink);border:0;border-radius:var(--settings-nav-radius);cursor:pointer;min-height:44px;overflow-wrap:anywhere}
@@ -107,7 +107,7 @@ export const settingsStyles = `
 .settings-view .settings-section {padding:0;background:transparent;border:0;border-radius:0;margin:0}
 .settings-view .settings-section>h2 {margin:0}
 .settings-view .settings-section>h2:has(+.settings-reply-row),.settings-view .settings-section>h2:has(+.settings-group),.settings-view .settings-section>h2:has(+.settings-theme-row) {margin-bottom:20px}
-.settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.5rem;line-height:var(--leading-heading);letter-spacing:-.015em}
+.settings-view .settings-section>h2,.settings-view .settings-section-heading h2 {font-size:1.25rem;font-weight:var(--weight-medium);line-height:var(--leading-heading);letter-spacing:-.015em}
 .settings-view .settings-section>.settings-intro {margin:8px 0 24px;color:var(--muted);max-width:62ch}
 .settings-section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:24px}
 .settings-section-heading p,.settings-help {color:var(--muted)}

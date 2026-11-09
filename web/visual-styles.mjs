@@ -2,7 +2,7 @@ export const visualStyles = `
 .theme-control {display:block;margin-left:auto;color:var(--ink)}
 .theme-trigger {display:flex;align-items:center;justify-content:center;width:80px;height:44px;min-height:44px;padding:2px;border:0;border-radius:var(--radius-pill);background:transparent;transition:none}
 .theme-trigger:hover:not(:disabled),.theme-trigger:active:not(:disabled) {background:transparent}
-.theme-track {position:relative;display:grid;grid-template-columns:repeat(2,36px);align-items:center;justify-items:center;width:76px;height:36px;padding:2px;border-radius:var(--radius-pill);background:var(--toggle-off);box-shadow:inset 0 0 0 1px var(--control),var(--control-shadow);pointer-events:none}
+.theme-track {position:relative;display:grid;grid-template-columns:repeat(2,36px);align-items:center;justify-items:center;width:76px;height:36px;padding:2px;border-radius:var(--radius-pill);background:var(--toggle-off);box-shadow:inset 0 0 0 1px var(--surface-divider);pointer-events:none}
 .theme-trigger:hover:not(:disabled) .theme-track {background:var(--hover)}
 .theme-thumb {position:absolute;top:2px;left:4px;width:32px;height:32px;border-radius:50%;background:var(--toggle-on);box-shadow:var(--control-shadow);transform:translateX(0);transition:transform 160ms ease-out,background-color 140ms ease}
 .theme-trigger[aria-checked=true] .theme-thumb {transform:translateX(36px)}
@@ -47,7 +47,7 @@ export const visualStyles = `
 .format-choices {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0 16px}
 .format-choices label {justify-content:center;width:100%;min-height:44px;padding:10px 8px;border:0;background:var(--canvas);font-size:var(--type-small)}
 .format-choices label:hover {background:var(--pill-hover)}
-.format-choices label:has(input:checked) {background:var(--accent-soft);color:var(--accent);font-weight:var(--weight-strong)}
+.format-choices label:has(input:checked) {background:var(--accent-soft);color:var(--accent);font-weight:var(--weight-regular)}
 .report-options .muted {font-size:var(--type-small);line-height:1.6}
 .report-options .detail-disclosure {border:0;margin-top:8px}
 .report-options .detail-disclosure>summary {font-size:var(--type-small);font-weight:var(--weight-medium);min-height:44px}

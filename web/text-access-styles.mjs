@@ -218,6 +218,7 @@ body[data-reader-expanded]>main {visibility:hidden}
 #contextSidebar::backdrop {background:var(--scrim)}
 .context-sidebar-header {grid-row:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 20px;border-bottom:1px solid transparent;min-width:0}
 .context-sidebar-header>h2 {font-size:var(--type-body);font-weight:var(--weight-regular)}
+.context-sidebar-header .icon-only>.wire-icon {width:var(--icon-utility-size);height:var(--icon-utility-size)}
 .context-sidebar-controls,#readerWidthControls {display:flex;align-items:center;flex:none}
 .context-sidebar-controls button {display:grid;place-items:center;flex:none;width:44px;height:44px;min-height:44px;padding:10px}
 .context-sidebar-controls button[aria-disabled=true] {color:var(--muted);cursor:default}

@@ -272,9 +272,8 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
             hint.setAttribute("role", "status");
             apply.setAttribute("aria-describedby", hint.id);
             footer.append(apply, cancel);
-            if (entry.select.dataset.selectCommit === "immediate") {
-                apply.hidden = cancel.hidden = true;
-            }
+            const immediate = entry.select.dataset.selectCommit === "immediate";
+            apply.hidden = cancel.hidden = footer.hidden = immediate;
             popup.prepend(all);
             popup.append(hint, footer);
             entry.updateDraft = () => {
@@ -286,9 +285,9 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
                     : `${count === eligible.length ? "Deselect" : "Select"} ${entry.select.dataset.allLabel?.toLowerCase() || "all results"}`;
                 if (entry.select.hasAttribute("data-empty-value")) allCaption.textContent = "Clear selection";
                 apply.disabled = entry.draft.size === 0;
-                hint.hidden = entry.filter && entry.draft.size > 0;
+                hint.hidden = (entry.filter || immediate) && entry.draft.size > 0;
                 attribute(apply, "aria-describedby", hint.hidden ? null : hint.id);
-                hint.textContent = entry.draft.size ? entry.filter ? "" : entry.select.dataset.draftHint || "Choose statuses, then Apply."
+                hint.textContent = entry.draft.size ? entry.filter || immediate ? "" : entry.select.dataset.draftHint || "Choose options, then Apply."
                     : entry.select.dataset.emptyHint || "Select at least one result.";
                 for (const row of list.querySelectorAll(".select-option")) row.setAttribute("aria-selected", String(entry.draft.has(row.dataset.value)));
                 if (!popup.hidden) position(false);

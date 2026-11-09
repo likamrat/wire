@@ -8,7 +8,7 @@ export const deletionStyles = `
 :is(#deleteDialog,.deletion-dialog) fieldset {border:0;padding:0;margin:20px 0;min-width:0}
 :is(#deleteDialog,.deletion-dialog) legend {font-weight:600;margin-bottom:8px}
 :is(#deleteDialog,.deletion-dialog) .delete-choice {display:flex;gap:12px;align-items:center;min-height:44px;padding:8px 0}
-:is(#deleteDialog,.deletion-dialog) input[type=radio] {appearance:auto;min-height:0;width:20px;height:20px;flex:none;accent-color:var(--accent)}
+:is(#deleteDialog,.deletion-dialog) input[type=radio] {appearance:auto;min-height:0;width:20px;height:20px;flex:none;accent-color:var(--toggle-on)}
 #deleteDateFields {display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}
 #deleteDateFields label {display:grid;gap:6px;flex:1 1 12rem;min-width:0}
 :is(#deleteDialog,.deletion-dialog) input[type=date] {width:100%;min-height:44px}

@@ -3,6 +3,7 @@ export const analyzeLayoutStyles = `
  border:1px solid var(--surface-edge);border-radius:var(--radius);
  background:var(--paper);box-shadow:var(--panel-shadow);
 }
+.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card {background:transparent;border-color:transparent;box-shadow:none}
 @media(forced-colors:active) {
  .analyze-population,.analyze-chart-main,.analyze-outcome-summary,#percentageCharts .percentage-card,.bounded-native-summary .percentage-card {border-color:CanvasText;box-shadow:none}
 }
@@ -70,7 +71,8 @@ export const analyzeLayoutStyles = `
 #homeView #chart>.empty-state {padding:8px 0 12px;background:none;border:0;border-radius:0;text-align:start}
 #homeView #chart>.empty-state>h3 {font:inherit;color:var(--muted)}
 #homeView #chart>.empty-state>p {margin:8px 0 0}
-#homeView :is(.chart-heading h2,.percentage-card h3) {text-transform:none;letter-spacing:0;font-size:var(--type-section)}
+#homeView :is(.chart-heading h2,.percentage-card h3) {text-transform:none;letter-spacing:0;font-size:var(--type-reading);font-weight:var(--weight-medium)}
+.percentage-legend .wire-icon {width:var(--icon-utility-size);height:var(--icon-utility-size)}
 .analyze-chart-main #chartFooter {margin-top:8px;line-height:1.5}
 .analyze-chart-main #chartFooter:empty {display:none}
 .analyze-chart-main #chartFooter .chart-size-note {font-size:var(--type-caption)}

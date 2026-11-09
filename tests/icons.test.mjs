@@ -56,8 +56,8 @@ test("every authored icon preserves local official Lucide geometry and qualified
         "navigation-records": "rotate-ccw-clock",
         "navigation-compare": "scale",
         "navigation-create-report": "file-text",
-        "navigation-collapse": "panel-left-close",
-        "navigation-expand": "panel-left-open",
+        "navigation-collapse": "panel-left",
+        "navigation-expand": "panel-left",
     });
     assert.equal(uxIcons["navigation-analyze"], lucideIcon("chart-column", 24));
     assert.equal(uxIcons["navigation-reports"], lucideIcon("clipboard-list", 24));

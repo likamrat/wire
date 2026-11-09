@@ -68,10 +68,10 @@ const screenLight = `
  --report-sheet:#ffffff;--report-note:#f1f5fb;
  --page:#f1f3f7;--paper:#ffffff;--canvas:#f4f5f8;--hover:#f7f7f7;
  --surface-edge:#20202012;--surface-divider:#20202024;
- --panel-shadow:0 1px 2px #26344d0a,0 6px 18px #26344d0d;
+ --panel-shadow:none;
  --surface-shadow:0 3px 8px #26344d14,0 16px 36px #26344d1c;
- --control-shadow:inset 0 1px 0 #ffffff80,0 1px 3px #26344d14;
- --navigation-sidebar-shadow:inset -1px 0 #20202008,3px 0 10px #0000000d,14px 0 32px #0000001a;
+ --control-shadow:none;
+ --navigation-sidebar-shadow:inset -1px 0 var(--surface-edge);
  --context-sidebar-shadow:inset 1px 0 #20202008,-3px 0 10px #0000000d,-14px 0 32px #0000001a;
  --toggle-on:#486cbb;--toggle-thumb:#ffffff;--toggle-off:#f0f2f7;
  --ink:#202020;--muted:#565656;--rule:#c9c9c9;--control:#747474;
@@ -94,10 +94,10 @@ const screenLight = `
 const screenDark = `
  --page:#111111;--paper:#202020;--canvas:#292929;--hover:#282828;
  --surface-edge:#ffffff0e;--surface-divider:#ffffff1c;
- --panel-shadow:inset 0 1px 0 #ffffff05,0 2px 4px #00000033,0 10px 24px #00000033;
+ --panel-shadow:none;
  --surface-shadow:inset 0 1px 0 #ffffff0a,0 4px 12px #00000066,0 20px 44px #00000066;
- --control-shadow:inset 0 1px 0 #ffffff0d,0 1px 3px #0000004d;
- --navigation-sidebar-shadow:inset -1px 0 #ffffff08,3px 0 10px #00000055,16px 0 36px #00000066;
+ --control-shadow:none;
+ --navigation-sidebar-shadow:inset -1px 0 var(--surface-edge);
  --context-sidebar-shadow:inset 1px 0 #ffffff08,-3px 0 10px #00000055,-16px 0 36px #00000066;
  --toggle-on:#8fa8eb;--toggle-thumb:#17213b;--toggle-off:#292c35;
  --ink:#f2f2f2;--muted:#b8b8b8;--rule:#444444;--control:#888888;
@@ -126,10 +126,10 @@ const darkScreenSurfaces = `
  --context-paper:#1c2939;--floating-paper:#202c3b;--canvas:#14212f;--hover:#1e2b3b;
  --ink:#f2f4f8;--muted:#bbc5d4;--rule:#3d4e64;--control:#8b9cb2;
  --surface-edge:#bfd2ee1a;--surface-divider:#bfd2ee24;
- --panel-shadow:inset 0 1px 0 #c0d6f008,0 1px 2px #050b1414;
- --control-shadow:inset 0 1px 0 #d3e3fa0a;
+ --panel-shadow:none;
+ --control-shadow:none;
  --surface-shadow:0 8px 24px #03081133;
- --navigation-sidebar-shadow:inset -1px 0 #b5cbe514;
+ --navigation-sidebar-shadow:inset -1px 0 var(--surface-edge);
  --context-sidebar-shadow:inset 1px 0 #b5cbe50d,-8px 0 24px #03081126;
  --accent:#dbe7f7;--accent-soft:#202c3b;--accent-fill:#dbe7f7;--on-accent:#142130;
  --accent-hover:#1e2b3b;--accent-pressed:#142332;--pill-pressed:#142332;
@@ -143,7 +143,12 @@ export const screenTokens = `${tokens}
 :root {
  --font:${screenFontStack};
  --weight-regular:400;--weight-medium:500;--weight-strong:600;--tracking-heading:0;
- --radius:12px;--radius-small:10px;--radius-dialog:12px;--radius-field:8px;
+ --radius:12px;--radius-small:8px;--radius-dialog:12px;--radius-field:8px;
+ --pill-weight:var(--weight-regular);
+ --icon-navigation-size:1.125rem;--icon-utility-size:18px;
+ --control-face-inset:6px;--control-hover-duration:160ms;--control-reveal-duration:140ms;
+ --control-paint-transition:background-color var(--control-hover-duration) ease-out,border-color var(--control-hover-duration) ease-out,color var(--control-hover-duration) ease-out;
+ --control-sheen:linear-gradient(180deg,#ffffff06,transparent);--control-sheen-edge:inset 0 1px 0 #ffffff0d;
  --pill-fill:var(--paper);--pill-border:var(--control);--shadow:var(--surface-shadow);
  --navigation-paper:var(--paper);--context-paper:var(--paper);--floating-paper:var(--paper);
  --state-transition:background-color 140ms ease,border-color 140ms ease,color 140ms ease,box-shadow 140ms ease;

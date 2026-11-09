@@ -1429,8 +1429,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     input.type = "number"; input.min = "1"; input.max = String(pages); input.step = "1";
                     input.required = true; input.value = String(page + 1);
                     input.setAttribute("aria-label", pageLabel);
-                    fieldLabel.append(input, el("span", "", `of ${count(pages)}`));
-                    const go = el("button", "quiet", "Go"); go.type = "submit"; go.setAttribute("aria-label", "Go to page");
+                    const numberField = el("span", "number-field");
+                    numberField.style.setProperty("--number-digits", String(Math.max(2, String(pages).length)));
+                    numberField.append(input);
+                    fieldLabel.append(numberField, el("span", "", `of ${count(pages)}`));
+                    const go = el("button", "", "Go to page"); go.type = "submit";
                     form.append(fieldLabel, go);
                     form.addEventListener("submit", event => {
                         event.preventDefault();

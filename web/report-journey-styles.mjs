@@ -205,9 +205,8 @@ body:has(#workspace:not([hidden])>#reportsView:not([hidden])>#savedReportReader:
 #savedReportSearchCount:empty{display:none}
 #bundleList .list-pager{margin:8px 0;gap:8px;align-items:center}
 #bundleList .list-pager:not(:has(button)){display:none}
-.library-page-jump{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 0 auto}
+.library-page-jump{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 0 auto;font-size:var(--type-control);line-height:var(--leading-control)}
 .library-page-jump label{display:flex;align-items:center;gap:8px;margin:0;font-weight:var(--weight-regular)}
-.library-page-jump input{width:5.5rem;min-height:44px;min-width:0;padding:8px}
 .saved-library-row{display:grid;grid-template-columns:minmax(0,1fr) 15rem 5rem;column-gap:20px;min-width:0;align-items:start;border-bottom:1px solid var(--surface-divider);padding:4px 0}
 #bundleList .saved-library-row>.saved-report{min-width:0;margin:0}
 #bundleList .saved-report-summary{grid-column:1 / 3;display:grid;grid-template-columns:subgrid;align-items:start;padding:12px 0;margin-inline-start:-3px;border:0;border-inline-start:3px solid transparent;text-align:left;white-space:normal;min-height:44px;height:auto;font-weight:400;border-radius:0;background:transparent;-webkit-tap-highlight-color:transparent}
@@ -454,6 +453,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 .report-options-popover .prompt-choice strong{font-weight:500}
 .report-options-popover :is(.report-field,.report-author-choice){display:grid;gap:12px;margin:18px 0}
 .report-options-popover :is(input:not([type=checkbox]):not([type=radio]),select,textarea){width:100%;min-width:0;min-height:44px}
+.report-options-popover .prompt-choice:has(input:checked){box-shadow:none;background:var(--accent-soft)}
 .report-options-popover .format-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .report-options-popover .format-choices label{padding:10px 0;border:0;background:transparent;justify-content:start;font-weight:400}
 .report-options-popover .format-choices label::before{content:none}
