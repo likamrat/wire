@@ -1,5 +1,5 @@
 // Serialized into the nonce-authorized shell; keep this factory self-contained.
-export function createSelectControls(ux, { decorateOption = () => {}, pagingFor = () => null, onClose = () => {} } = {}) {
+export function createSelectControls(ux, { decorateOption = () => {}, pagingFor = () => null, onClose = () => {}, matchesOption } = {}) {
     const controls = new Map();
     const events = new AbortController();
     let sequence = 0, active = null, typeBuffer = "", typeTime = 0, frame = 0;
@@ -35,6 +35,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         for (let text = walker.nextNode(); text; text = walker.nextNode()) text.data = "";
         for (const child of node.querySelectorAll("*")) {
             if (child === retained) continue;
+            if (child.matches("input,textarea")) { child.value = ""; child.defaultValue = ""; }
             for (const attribute of [...child.attributes]) clearAttribute(child, attribute.name);
         }
     }
@@ -129,7 +130,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         }
     }
     function highlight(index, scroll = true) {
-        if (!active || index < 0 || active.options[index]?.disabled) return;
+        if (!active || index < 0 || active.options[index]?.disabled || list.querySelector(`[data-option-index="${index}"]`)?.hidden) return;
         active.index = index;
         [...popup.querySelectorAll(".select-option")].forEach((row, i) => {
             attribute(row, "data-active", i === index ? "true" : null);
@@ -203,6 +204,27 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
             }
             list.append(row);
         });
+        if (entry.select.dataset.optionSearch === "true" && typeof matchesOption === "function") {
+            const finder = document.createElement("input");
+            const found = document.createElement("p"); found.className = "select-draft-hint"; found.setAttribute("role", "status"); found.hidden = true;
+            finder.type = "search"; finder.placeholder = "Find an option"; finder.setAttribute("aria-label", "Find an option");
+            finder.className = "select-option-search"; finder.autocomplete = "off";
+            finder.addEventListener("input", () => {
+                if (!current()) return;
+                for (const row of list.querySelectorAll(".select-option")) row.hidden = !matchesOption(finder.value, entry.options[Number(row.dataset.optionIndex)].displayLabel);
+                const next = [...list.querySelectorAll(".select-option")].find(row => !row.hidden && row.getAttribute("aria-disabled") !== "true");
+                found.textContent = next ? "" : "No matching options."; found.hidden = Boolean(next);
+                entry.index = -1;
+                if (next) highlight(Number(next.dataset.optionIndex), false);
+                position(false);
+            });
+            finder.addEventListener("keydown", event => {
+                if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); }
+                else if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); entry.trigger.focus(); }
+                else if (event.key === "Enter") { event.preventDefault(); commit(entry.index); }
+            });
+            popup.prepend(finder); popup.append(found);
+        }
         const paging = pagingFor(entry.select);
         if (paging) {
             const footer = document.createElement("div"), note = document.createElement("p");
@@ -250,6 +272,9 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
             hint.setAttribute("role", "status");
             apply.setAttribute("aria-describedby", hint.id);
             footer.append(apply, cancel);
+            if (entry.select.dataset.selectCommit === "immediate") {
+                apply.hidden = cancel.hidden = true;
+            }
             popup.prepend(all);
             popup.append(hint, footer);
             entry.updateDraft = () => {
@@ -259,6 +284,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
                 all.setAttribute("aria-checked", count === eligible.length ? "true" : count ? "mixed" : "false");
                 allCaption.textContent = entry.filter ? entry.select.dataset.allLabel || "All results"
                     : `${count === eligible.length ? "Deselect" : "Select"} ${entry.select.dataset.allLabel?.toLowerCase() || "all results"}`;
+                if (entry.select.hasAttribute("data-empty-value")) allCaption.textContent = "Clear selection";
                 apply.disabled = entry.draft.size === 0;
                 hint.hidden = entry.filter && entry.draft.size > 0;
                 attribute(apply, "aria-describedby", hint.hidden ? null : hint.id);
@@ -270,9 +296,11 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
             all.addEventListener("click", () => {
                 if (!current()) return;
                 const eligible = entry.options.filter(option => !option.disabled);
-                if (eligible.every(option => entry.draft.has(option.value))) entry.draft.clear();
+                if (entry.select.hasAttribute("data-empty-value")) entry.draft = new Set([entry.select.dataset.emptyValue]);
+                else if (eligible.every(option => entry.draft.has(option.value))) entry.draft.clear();
                 else eligible.forEach(option => entry.draft.add(option.value));
                 entry.updateDraft();
+                if (entry.select.dataset.selectCommit === "immediate" && entry.draft.size) applyDraft(entry);
             });
             apply.addEventListener("click", () => { if (current()) applyDraft(entry); });
             cancel.addEventListener("click", () => { if (current()) close(true); });
@@ -320,8 +348,14 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         if (entry.multiple) {
             if (entry.draft.has(option.value)) entry.draft.delete(option.value);
             else entry.draft.add(option.value);
+            if (entry.select.hasAttribute("data-empty-value")) {
+                const empty = entry.select.dataset.emptyValue;
+                if (option.value === empty || !entry.draft.size) entry.draft = new Set([empty]);
+                else entry.draft.delete(empty);
+            }
             highlight(index, false);
             entry.updateDraft();
+            if (entry.select.dataset.selectCommit === "immediate" && entry.draft.size) applyDraft(entry);
             return;
         }
         const changed = entry.select.selectedIndex !== option.node.index
@@ -364,7 +398,9 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         if (event.ctrlKey || event.metaKey || event.isComposing) return;
         const opened = active === entry;
         if (event.key === "Tab") {
-            if (opened && entry.multiple && !event.shiftKey) {
+            const finder = opened && popup.querySelector(".select-option-search");
+            if (finder && !event.shiftKey) { event.preventDefault(); finder.focus(); }
+            else if (opened && entry.multiple && entry.select.dataset.selectCommit !== "immediate" && !event.shiftKey) {
                 event.preventDefault();
                 popup.querySelector(".select-apply:not(:disabled), .select-footer button:last-child").focus();
             } else if (opened) close();
@@ -383,7 +419,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
             event.preventDefault();
             if (!opened) { open(entry, event.key === "Home" ? "first" : event.key === "End" ? "last" : undefined); return; }
             if (event.altKey && event.key === "ArrowUp") { close(true); return; }
-            const enabled = entry.options.map((option, index) => option.disabled ? -1 : index).filter((index) => index >= 0);
+            const enabled = entry.options.map((option, index) => option.disabled || list.querySelector(`[data-option-index="${index}"]`)?.hidden ? -1 : index).filter((index) => index >= 0);
             const current = enabled.indexOf(entry.index);
             highlight(event.key === "Home" ? enabled[0] : event.key === "End" ? enabled.at(-1) :
                 enabled[Math.max(0, Math.min(enabled.length - 1, current + (event.key === "ArrowDown" ? 1 : -1)))]);
@@ -400,7 +436,8 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         const start = query.length === 1 ? entry.index + 1 : entry.index;
         for (let offset = 0; offset < entry.options.length; offset++) {
             const index = (Math.max(0, start) + offset) % entry.options.length, option = entry.options[index];
-            if (!option.disabled && option.label.trim().toLocaleLowerCase().startsWith(query.toLocaleLowerCase())) {
+            if (!option.disabled && !list.querySelector(`[data-option-index="${index}"]`)?.hidden
+                && option.label.trim().toLocaleLowerCase().startsWith(query.toLocaleLowerCase())) {
                 highlight(index);
                 break;
             }

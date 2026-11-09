@@ -22,7 +22,7 @@ the avatar. Failed reads, expired identity and access withdrawal still clear it.
 
 | Surface | Reading and navigation role |
 | --- | --- |
-| Sliding left sidebar | Analyze/Reports under Workspace; Analyze tools in their own group; Account/Settings at the bottom |
+| Sliding left sidebar | Analyze, Reports and Compare periods as peer destinations; Account/Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
 | Right contextual surface | Interaction reading and saved-item inspection; one header, scroll area and fixed action region |
@@ -38,6 +38,9 @@ Later user input wins over delayed navigation, reads and motion callbacks.
 Pointer presses must not trigger older scroll restoration that moves the
 targeted control before release.
 Private Search state never becomes a copied public URL or a broader fallback.
+Peer destinations have no fabricated Analyze / Reports breadcrumb. Subordinate
+reading keeps one return to its actual origin. Entering Compare opens it rather
+than toggling it off; Analyze and Compare retain independent accepted scopes.
 
 ## Reading hierarchy
 
@@ -210,8 +213,8 @@ name replaces the landing with full-area reading. Reports-origin reading has one
 Back to Reports action; context-qualified entries retain their own origin.
 
 The landing has five compact, equal-sized full-width tile rows: All activity, Errors &
-failures, Completed calls, My prompts and Agent prompts. Compare periods stays
-in Analyze. The period is visible, defaults to Last 7 days, and offers 14/30/custom
+failures, Completed calls, My prompts and Agent prompts. Compare periods has
+its own primary destination. The report period is visible, defaults to Last 7 days, and offers 14/30/custom
 choices. Custom dates opens its calendar directly. A fresh report ignores old
 Analyze restrictions. Selected and Current remain available through inclusion
 controls and their original context-qualified entries.
@@ -256,6 +259,26 @@ Prepared measurement privileges do not transfer to saved HTML.
 For report meaning and actions, link to the [user guide](reporting.md); for
 membership, frozen facts and privacy, use the [report contract](report-contract.md).
 Screen paint changes do not restyle saved documents.
+
+## Compare periods
+
+Fresh entry opens Outcomes for all eligible saved activity, without importing
+Analyze filters. Seven complete civil days ending yesterday are compared with
+the preceding seven; 14/30-day choices follow the same rule. Custom dates uses
+the shared calendar, with independent inclusive ranges and cancellation that
+keeps the accepted pair.
+
+Use the compact, report-colored five-choice menu. Keep Outcomes, Timeline,
+By tool and Timing visible inside the chart and More options in its corner.
+Optional refinement retains every supported selector and combination, with
+local option finding and immediate selection. Additional restrictions appear
+once beside the accepted dates; pending reads must not relabel old facts.
+
+One mounted footer owns View calls, View numbers and Create report. Chart
+switching and mark inspection do not change the pair. Exact values qualify
+their unit, period, denominator and missing evidence. Timings keep call latency
+and full-interaction clocks separate. The comparison-origin report return is
+Back to comparison, including the accepted scope and reading position.
 
 ## Settings, collection and consequential actions
 

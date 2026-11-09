@@ -202,6 +202,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     let recollectionNoticeVisible = true, recollectionNoticeKey = "";
     let semanticMembership, semanticQuery = incomingNavigationKey === undefined ? null : incomingNavigation?.analysisQuery ?? "",
         semanticComplete = false, semanticBound = false, semanticStatus = "stale";
+    const browseStates = new Map();
+    const analysisNavigations = new Map();
+    let switchingAnalysis = false;
     let searchOpenedRequest = null, searchTargetInvalid = false;
     const chatCopy = createChatCopy();
     const periodFlow = createPeriodFlow(time, chatCopy);
@@ -2050,14 +2053,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 }
                 if (semanticQuery === null) return;
                 semanticQuery = null; semanticMembership = undefined; semanticComplete = false; semanticBound = false;
+                route = { ...route, analysisQuery: null };
+                rememberRoute(route, true);
                 if (history.state?.wirePrivateNavigation) {
                     const { wirePrivateNavigation, ...navigationState } = history.state;
                     history.replaceState(navigationState, "");
                 }
                 $("wireAnalysisSearchNotice").hidden = true;
-                render(); finishChartReferenceReading(); return;
+                if (!switchingAnalysis) { render(); finishChartReferenceReading(); }
+                return;
             }
+            const changed = semanticQuery !== update.query;
             semanticQuery = update.query;
+            route = { ...route, analysisQuery: semanticQuery };
+            if (changed) rememberRoute(route, true);
             semanticComplete = false;
             semanticBound = false;
             semanticStatus = update.state === "pending" ? "pending" : "stale";
@@ -2076,8 +2085,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             $("wireAnalysisSearchNotice").textContent = update.state === "ready" && current
                 ? semanticComplete ? "" : "Some saved text could not be searched. Counts and Current reports are unavailable."
                 : update.state === "pending" ? "Searching saved activity..." : "Search is unavailable. Try again before preparing a Current report.";
-            render();
-            finishChartReferenceReading();
+            if (!switchingAnalysis) { render(); finishChartReferenceReading(); }
         },
     });
     deletionUI = mountDeletion({ api, flow: createDeletionFlow(), timeContext: () => viewerTime, ux,
@@ -2219,7 +2227,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (periodComparisonUI.consumer()) { restoreReading(saved.position); periodReturnReading = null; }
     }
     const periodComparisonUI = assessmentFactories.periodComparison.mount({
-        root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, search: localSearch, categories, results,
+        root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, ux, search: localSearch, categories, results,
         projection: createActivityProjection(time, recordedCategories, resultKeys),
         createState: assessmentFactories.periodComparison.createState, assessmentFactories, bindDetails,
         getContext: () => {
@@ -2233,10 +2241,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ...(search.trim() ? { withinScenarioIds: analysisSlice.legacyScenarioIds(state, search) } : {}),
             } };
         },
-        navigate: changes => navigate(Object.hasOwn(changes, "compare") && changes.compare === undefined
-            ? comparisonExitRoute() : routeFor("analyze", changes), false, { keepFocus: true }),
+        navigate: changes => Object.hasOwn(changes, "compare") && changes.compare === undefined
+            ? navigateBrowse("analyze") : navigate(routeFor("analyze", changes), false, { keepFocus: true }),
+        open: () => navigateBrowse("compare"),
+        useAnalyze: () => navigateBrowse("compare", { useAnalyze: true }),
         onPairChange: pair => {
-            const description = analyzeScope.describePair(pair);
+            let description = analyzeScope.describePair(pair);
+            const filters = pair?.comparison.options.filters;
+            if (description && !route.comparisonFocus && !filters.outcomes?.length
+                && filters.promptAuthors?.length === 1 && ["user", "agent"].includes(filters.promptAuthors[0])) {
+                const parts = description.parts.filter(part => !part.startsWith("Author: "));
+                description = { ...description, parts, text: parts.join("; "), activeCount: description.activeCount - 1 };
+            }
             analyzeControls.pairedCaption(description === null ? null : {
                 ...description, key: pair.key, revision: pair.revision,
                 replacesCollectionCaption: pair.comparison.options.filters.scope !== "history",
@@ -2306,7 +2322,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const current = api.publicationToken();
         if (!current || api.accessState().mode !== "unbound" && (navigationState?.wireAccess?.owner !== historyOwner
             || navigationState.wireAccess.epoch !== current.epoch || navigationState.wireAccess.runtimeId !== current.runtimeId)) {
-            if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.search?.trim()) {
+            if (navigationState?.evidenceView?.url === hash && (navigationState.evidenceView.search?.trim() || navigationState.evidenceView.analysisKey)) {
                 incomingNavigationError = "The earlier private selection is no longer authorized. Search again or explicitly open this view without that selection.";
             }
             navigationState = null;
@@ -2315,7 +2331,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const view = rawView === "report" ? "reports" : rawView || "analyze";
         const params = new URLSearchParams(rawQuery);
         const keys = ["layer", "chart", "bucket", "range", "from", "to", "source", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision", "compare", "aFrom", "aTo", "bFrom", "bTo", "bundle", "inspect", "order",
-            "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal", "nativeGroup"];
+            "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal", "nativeGroup", "comparisonView", "comparisonFocus"];
         const values = { view: ["analyze", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
         if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
@@ -2324,6 +2340,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToSessions) values.returnToSessions = sessionJourney.returnRoute(navigationState.evidenceView.returnToSessions);
         if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToResults) values.returnToResults = sessionJourney.returnRoute(navigationState.evidenceView.returnToResults, true);
         if (navigationState?.evidenceView?.url === hash) {
+            const key = navigationState.evidenceView.analysisKey;
+            const remembered = key ? analysisNavigations.get(key) : null;
+            if (key && (!remembered || !api.isCurrent(remembered.publication))) {
+                incomingNavigationError = "The earlier private Search selection is unavailable. Search again or explicitly open this view without it.";
+            }
+            values.analysisQuery = remembered && api.isCurrent(remembered.publication) ? remembered.query : null;
             if (/^[a-f0-9-]{36}$/.test(navigationState.evidenceView.savedEntry)) values.savedEntry = navigationState.evidenceView.savedEntry;
             if (navigationState.evidenceView.savedAuthority === "search") values.savedAuthority = "search";
             values.localSearch = Object.fromEntries(["settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch"]
@@ -2365,7 +2387,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     function routeUrl(next) {
         next = canonicalRoute(next);
         const params = new URLSearchParams();
-        for (const [key, value] of Object.entries(next)) if (!["view", "search", "returnToSessions", "returnToResults", "localSearch", "settingsWarning", "sidebarEntry", "savedEntry", "savedAuthority"].includes(key) && value !== null && value !== undefined && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key))) params.set(key, value);
+        for (const [key, value] of Object.entries(next)) if (!["view", "search", "analysisQuery", "returnToSessions", "returnToResults", "localSearch", "settingsWarning", "sidebarEntry", "savedEntry", "savedAuthority"].includes(key) && value !== null && value !== undefined && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key))) params.set(key, value);
         return "#" + next.view + (params.size ? "?" + params.toString() : "");
     }
     function linkUrl(next) {
@@ -2466,7 +2488,38 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         };
     }
     function comparisonExitRoute(origin = underlyingRoute()) {
-        return routeFor("analyze", { ...origin, view: "analyze", compare: undefined, request: undefined, task: undefined });
+        return browseStates.get("analyze")?.route ?? { view: "analyze", search: "", analysisQuery: null };
+    }
+    function browseName(value) {
+        const origin = sessionJourney.underlying(value);
+        return origin?.view === "analyze" ? origin.compare === "periods" ? "compare" : "analyze" : null;
+    }
+    function rememberBrowse() {
+        const name = browseName(route);
+        if (!name || isLoading || isStale || !api.publicationToken()) return;
+        const origin = sessionJourney.underlying(route);
+        browseStates.set(name, { publication: api.publicationToken(), route: { ...origin, search, analysisQuery: semanticQuery } });
+    }
+    function browseRoute(name, { useAnalyze = false } = {}) {
+        const saved = browseStates.get(useAnalyze ? "analyze" : name);
+        if (useAnalyze && !saved) throw new Error("Open an available Analyze view before using it in this comparison.");
+        if (saved && !api.isCurrent(saved.publication)) {
+            throw new Error("The earlier view is no longer authorized. Open a current view before using it.");
+        }
+        const value = saved?.route ?? { view: "analyze", search: "", analysisQuery: null };
+        if (name === "analyze") return { ...value, compare: undefined };
+        const pair = underlyingRoute().compare === "periods" ? underlyingRoute() : saved?.route;
+        return { ...value, view: "analyze", compare: "periods", request: undefined, task: undefined,
+            range: undefined, from: undefined, to: undefined, page: undefined,
+            ...(pair?.aFrom && pair?.aTo && pair?.bFrom && pair?.bTo
+                ? { aFrom: pair.aFrom, aTo: pair.aTo, bFrom: pair.bFrom, bTo: pair.bTo }
+                : assessmentFactories.periodComparison.createPresentation(time).completeDays(7, viewerTime)),
+            bucket: value.bucket ?? "day" };
+    }
+    function navigateBrowse(name, options) {
+        rememberBrowse();
+        try { return navigate(browseRoute(name, options), false, { restorePosition: true }); }
+        catch (error) { announce(error.message, "error"); return false; }
     }
     function isComparisonAnalyzeLink(node, origin = underlyingRoute()) {
         return node.matches('.primary-navigation [data-nav="analyze"]') && origin.compare === "periods";
@@ -2485,10 +2538,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         const url = routeUrl(next);
+        const analysisQuery = Object.hasOwn(next, "analysisQuery") ? next.analysisQuery : semanticQuery;
+        let analysisKey;
+        if (typeof analysisQuery === "string" && analysisQuery.trim()) {
+            const existing = history.state?.evidenceView?.analysisKey, remembered = analysisNavigations.get(existing);
+            analysisKey = remembered?.query === analysisQuery && api.isCurrent(remembered.publication) ? existing : crypto.randomUUID();
+            analysisNavigations.set(analysisKey, { query: analysisQuery, publication });
+        }
         historyPosition = replace ? historyPosition : historyPosition + 1;
         // Private-text search belongs to this browser history entry, never a copied URL.
         const navigationState = { ...history.state, wireAccess: { owner: historyOwner, epoch: publication.epoch, runtimeId: publication.runtimeId },
-            evidenceView: { url, search: next.search || "", position: historyPosition,
+            evidenceView: { url, search: next.search || "", analysisKey, position: historyPosition,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
             returnToSessions: sessionJourney.returnRoute(next.returnToSessions),
@@ -3308,6 +3368,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else finishSidebarMotion();
         }
         const previousRoute = route, clearingFilter = $("filterChips").contains(document.activeElement);
+        rememberBrowse();
         const leavingSaved = savedEntries.get(route.savedEntry);
         if (state && !isLoading && !isStale && route.view === "reports" && next.view === "reports"
             && !route.bundle && !next.bundle && !route.task && !next.task && (route.inspect || next.inspect)
@@ -3444,11 +3505,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (!state) showConnectionSettings(api.accessState());
         search = route.search || "";
+        const analysisChanged = Object.hasOwn(route, "analysisQuery") && route.analysisQuery !== semanticQuery;
+        if (analysisChanged) {
+            switchingAnalysis = true;
+            try { liveSearchUI.activateAnalysis(route.analysisQuery); }
+            finally { switchingAnalysis = false; }
+        }
         activityPage = Math.max(0, Number.parseInt(route.page || "0", 10) || 0);
         syncControls();
         $("resetView").hidden = route.view !== "analyze";
         $("resetView").disabled = !viewChanged();
-        const queryChanged = before !== JSON.stringify(query()) || route.nativeGroup !== previousRoute.nativeGroup;
+        const queryChanged = analysisChanged || before !== JSON.stringify(query()) || route.nativeGroup !== previousRoute.nativeGroup;
         // Navigation is not report consent. Reconcile the exact report basis after a verified read.
         if (reportJourney?.snapshot().phase === "scanning" || $("reportReviewBody")?.querySelector('[data-review-control][data-pending=true]')) invalidatePreview();
         const refinement = !reset && !restorePosition && Boolean(analytics)
@@ -3590,12 +3657,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function viewChanged() {
         const defaults = { view: "analyze", chart: "time", range: "capture", layer: "tool", scope: "history", page: "0" };
-        return Object.entries(route).some(([key, value]) => !["localSearch", "settingsWarning", "bucket"].includes(key) && value !== undefined && value !== null && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key)) && String(value) !== defaults[key]);
+        const presentation = ["localSearch", "settingsWarning", "bucket",
+            ...(route.compare === "periods" ? ["compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "chart"] : [])];
+        return Object.entries(route).some(([key, value]) => !presentation.includes(key) && value !== undefined && value !== null && value !== "" && !(value === "all" && ["project", "service", "result"].includes(key)) && String(value) !== defaults[key]);
     }
     async function resetView() {
         const keepFocus = route.compare === "periods" && $("analyzeFilterDialog").open;
         if (keepFocus) analyzeControls.close();
-        const next = { view: "analyze", ...(route.bucket ? { bucket: route.bucket } : {}) };
+        const next = { view: "analyze", search: "", analysisQuery: null, ...(route.bucket ? { bucket: route.bucket } : {}),
+            ...(route.compare === "periods" ? Object.fromEntries(["compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "chart"]
+                .map(key => [key, route[key]])) : {}) };
         await navigate(next, false, { reset: true, keepFocus });
     }
     let refreshReadFailure = null;
@@ -3909,7 +3980,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         chartReferenceUI.leave();
         requestAnimationFrame(() => {
             if (!api.isCurrent(publication) || navigation !== navigationGeneration || intent !== readingIntent) return;
-            const current = periodComparisonUI.recordsTarget(identity);
+            const current = periodComparisonUI.showRecords(identity);
             if (!current) { announce("The comparison records are no longer current.", "stale"); return; }
             const savedFocus = origin?.focus?.id ? $(origin.focus.id) : origin?.focus?.key ? keyed(origin.focus.key) : null;
             if (savedFocus && (current.region.contains(savedFocus) || savedFocus === current.tab)) restoreReading(origin);
@@ -3931,10 +4002,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ordinary: route.view === "analyze" && route.compare !== "periods" && (semanticQuery === null || semanticBound) });
         const finishRecoveryPresentation = assessmentUI?.prepareRecoveryPresentation();
         $("wireAnalysisSearchNotice").hidden = semanticQuery === null || route.view !== "analyze" || !$("wireAnalysisSearchNotice").textContent;
-        const active = route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
+        const active = browseName(route) === "compare" ? "compare" : route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
-            node.href = routeUrl(isComparisonAnalyzeLink(node, navigationOrigin) ? comparisonExitRoute(navigationOrigin) : routeFor(view, { request: undefined, task: undefined }));
+            const target = view === "compare" ? browseRoute("compare") : view === "analyze" ? comparisonExitRoute(navigationOrigin) : routeFor(view, { request: undefined, task: undefined });
+            node.href = routeUrl(target);
+            if (["analyze", "compare"].includes(view) && (target.search?.trim() || target.analysisQuery !== null && target.analysisQuery !== undefined)) {
+                node.href += (node.href.includes("?") ? "&" : "?") + "privateView=required";
+            }
             if (view === active && node.closest("nav")) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
         });
@@ -4033,6 +4108,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const returnHost = route.view === "analyze" ? $("analyzeReturnActions") : $("pagePrimaryActions");
         if ($("contextReturn").parentElement !== returnHost) returnHost.prepend($("contextReturn"));
         $("contextReturn").hidden = !returnRoute;
+        $("analyzeTools").hidden = sessionReportButton.hidden
+            && ($("contextReturn").hidden || $("contextReturn").parentElement !== $("analyzeReturnActions"));
         const reports = route.view === "reports";
         const inactiveClear = reports ? $("activityClearSelection") : $("reportClearSelection");
         const inactiveHost = reports ? $("reportSelectionBar") : $("reportSelectionActions");
@@ -4048,10 +4125,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         const crumbs = $("breadcrumbs");
         crumbs.replaceChildren();
-        if (route.view !== "analyze") {
-            crumbs.append(link("Analyze", "analyze", { request: undefined }));
-            crumbs.append(el("span", "", "/"), el("span", "", settings ? "Settings" : operational ? "Collection status" : route.view === "request" ? "Interaction" : "Reports"));
-        }
         crumbs.hidden = !crumbs.childElementCount;
         $("exploreLink").href = routeUrl(routeFor("activity"));
         renderReportTask();
@@ -4080,7 +4153,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("reportCreateLink").hidden = true;
         $("reportLibraryLink").hidden = !creating && !comparing;
         $("reportCompareLink").hidden = !view.landing;
-        setText($("reportLibraryLink"), creating && (periodReport?.returnTo || reportEntry?.returnTo) ? "Back to Analyze" : "Back to Reports");
+        setText($("reportLibraryLink"), creating && periodReport?.returnTo ? "Back to comparison"
+            : creating && reportEntry?.returnTo ? "Back to Analyze" : "Back to Reports");
         $("reportLibraryLink").setAttribute("aria-disabled", String(Boolean(exportWriting || current?.saveUnconfirmed)));
         for (const [id, active, task] of [["reportLibraryLink", !creating && !comparing, undefined], ["reportCreateLink", creating, "create"], ["reportCompareLink", comparing, "compare"]]) {
             const control = $(id);
@@ -6039,7 +6113,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         setText(next, reportOrigin ? reportSetupReturn?.peek ? "Back to report setup" : "Back to activity" : "Continue to report");
         next.disabled = reportOrigin ? exportWriting : Boolean(readingBlock) || membership.disabled || fixedScope || !membership.selected;
         next.hidden = !reportOrigin && !membership.selected;
-        setText(title, readingBlock || (periodReport ? "This report uses fixed paired periods. Change the comparison in Analyze to change its activity."
+        setText(title, readingBlock || (periodReport ? "This report uses fixed paired periods. Return to Compare periods to change its activity."
             : fixedScope ? membership.included ? "Included by this report's activity scope. Change the scope in Activity."
                 : "Not included with this report's scope and author choices. Change them in Activity."
             : membership.selected && !membership.included ? "Selected; not included with current report choices."
@@ -6396,7 +6470,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const expected = [...new Set(Object.values(periodReport.value.periods).flatMap(side => side.scenarioIds))].sort();
             if (JSON.stringify([...selected].sort()) !== JSON.stringify(expected)) {
                 periodReportInvalid = true;
-                invalidatePreview("The comparison selection changed. Return to Analyze and create a new comparison report.");
+                invalidatePreview("The comparison selection changed. Return to Compare periods and create a new report.");
             }
         }
         const unknownSelected = reportScope === "selected" && [...selected].some((id) => !state.scenarios.some((s) => s.scenarioId === id));
@@ -6562,12 +6636,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ranges.append(group);
             }
             pairedSummary.append(ranges, el("p", "report-period-authors"),
-                el("p", "context-help-note", "Authors and matching records are fixed to the comparison accepted in Analyze."),
-                button("Change comparison in Analyze", function changeComparison() {
+                el("p", "context-help-note", "Authors and matching records are fixed to the accepted comparison."),
+                button("Back to comparison", function changeComparison() {
                     if (exportWriting || reportJourney.snapshot().saveUnconfirmed) return;
                     const returnTo = periodReport.returnTo;
                     clearReportSelection();
-                    navigate(returnTo);
+                    navigate(returnTo, false, { restorePosition: true });
                 }));
             $("reportsView").querySelector(".report-scope-layout").prepend(pairedSummary);
         }
@@ -6606,7 +6680,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             resolveReportView: reportDatesReplaced && reportScope === "current",
             authorLabel: authorship.selectionLabel(activeAuthors), authorFiltered: activeAuthors.length !== authorship.actors.length,
             scopeReady: !nativeBlock && !isLoading && !isStale && !periodReportInvalid && Boolean(state.exportCatalog) && value.available !== false && !unknownSelected,
-            scopeIssue: nativeBlock || (periodReportInvalid ? "The accepted comparison changed. Return to Analyze and create a new comparison report." : isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : ""),
+            scopeIssue: nativeBlock || (periodReportInvalid ? "The accepted comparison changed. Return to Compare periods and create a new report." : isLoading || isStale ? "Wait for a current activity snapshot." : !value.available || unknownSelected ? $("scopeSummary").textContent : ""),
             promptMode: draft.options().promptMode, formats: draft.options().formats,
             prepareIssue,
             timeLabel: time.label(applied?.timeContext || viewerTime), entry: reportEntry,
@@ -7113,10 +7187,14 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!original && assessmentFactories.reportIdentity.legacyCandidate(bundle))
             return inspectSavedReport(bundle, trigger);
         const key = savedEntry("reader", bundle, trigger, { format, original });
-        if (route.view === "reports" && route.task === "create" && reportJourney.snapshot().step === 3) Object.assign(savedEntries.get(key), {
-            origin: sessionJourney.returnRoute({ ...route, task: undefined }), originEntry: undefined,
-            navigationKey: null, reading: null, focusKey: "open-bundle:" + bundle.bundleId,
-        });
+        if (route.view === "reports" && route.task === "create" && reportJourney.snapshot().step === 3) {
+            const origin = periodReport?.returnTo ?? sessionJourney.returnRoute({ ...route, task: undefined });
+            Object.assign(savedEntries.get(key), {
+                origin, originEntry: undefined, navigationKey: null,
+                reading: periodReport ? readingPositions.get(readingKey(origin)) : null,
+                focusKey: periodReport ? undefined : "open-bundle:" + bundle.bundleId,
+            });
+        }
         return navigate({ ...routeFor("reports"), bundle: bundle.bundleId, savedEntry: key });
     }
     async function renderSavedReader() {
@@ -7130,7 +7208,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             inspectSavedReport(bundle, keyed("open-bundle:" + bundle.bundleId)); return;
         }
         const host = $("savedReportReader"), header = el("header", "saved-reader-heading"), body = el("div", "saved-reader-body"), actions = el("div", "saved-reader-actions");
-        const backLabel = entry?.searchReturn ? "Back to search" : entry?.origin?.task === "compare" ? "Back to comparison" : "Back to Reports";
+        const backLabel = entry?.searchReturn ? "Back to search" : entry?.origin?.task === "compare"
+            || entry?.origin?.compare === "periods" ? "Back to comparison" : "Back to Reports";
         const back = button(backLabel, backSaved, "quiet document-back");
         back.setAttribute("aria-label", backLabel);
         back.prepend(ux.icon("back"));
@@ -9114,10 +9193,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!document.hidden) load({ background: Boolean(analytics) });
     }
     document.querySelectorAll("[data-nav]").forEach((node) => node.addEventListener("click", (event) => {
+        if (node.id === "comparePeriods" && api.publicationToken()) return;
         if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         if (!api.publicationToken()) { navigateAccessShell(node.dataset.nav); return; }
-        if (isComparisonAnalyzeLink(node)) periodComparisonUI.stop();
+        if (node.dataset.nav === "analyze") navigateBrowse("analyze");
         else go(node.dataset.nav, { request: undefined, task: undefined });
     }));
     for (const id of ["pageAction", "reportContextAction", "exploreLink", "reportLibraryLink", "reportCreateLink", "reportCompareLink"]) $(id).addEventListener("click", (event) => {
@@ -9508,12 +9588,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     });
     displayTimeSettings = mountDisplayTimeSettings({ time, onChange: () => { if (!exportWriting) load(); } });
     selectControls = createSelectControls(ux, {
+        matchesOption: (query, label) => !query.trim() || localSearch.phrase(query, [label]),
         pagingFor: nativeInventoryPaging,
         onClose: select => {
             boundedNative.cancelInventory(nativeFilterDimensions[select.id]);
             queueMicrotask(refreshInventoryControls);
         },
         decorateOption: (node, { id, value, label }) => {
+            if (id === "comparisonQuickChoice") {
+                node.classList.add("comparison-preset-option");
+                node.dataset.preset = value;
+                const glyph = { all: "report-all", errors: "warning", completed: "check", mine: "account", agent: "report-agent" }[value];
+                if (glyph) node.prepend(ux.icon(glyph));
+                return;
+            }
             if (id === "toolFilter" && label.includes("__")) {
                 const text = document.createDocumentFragment();
                 label.split("__").forEach((part, index) => {
@@ -9687,6 +9775,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         chartReferenceSourceCoverage = ""; coverageDetailsKey = undefined;
         renderedContextBundles.clear();
         semanticMembership = undefined; semanticQuery = null; semanticComplete = semanticBound = false; semanticStatus = "stale";
+        browseStates.clear();
+        analysisNavigations.clear();
         searchOpenedRequest = searchReturnMarker = null; searchTargetInvalid = true;
         incomingNavigation = null;
         if (privateNarrowing) incomingNavigationError = "The earlier private selection was cleared when WIRE access changed. Search again or explicitly open this view without that selection.";
@@ -9706,7 +9796,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const id of ["homeView", "activityView", "resultSummary", "promptAuthorSummary", "freshActivity", "freshCoverageDetails"]) {
             for (const name of ["data-revision", "data-check-id", "data-check-key"]) $(id)?.removeAttribute(name);
         }
-        for (const link of document.querySelectorAll("[data-nav]")) link.href = "#" + link.dataset.nav;
+        for (const link of document.querySelectorAll("[data-nav]")) link.href = link.dataset.nav === "compare" ? "#analyze?compare=periods" : "#" + link.dataset.nav;
         $("pageAction").href = "#reports?task=create";
         $("reportContextAction").href = "#analyze";
         for (const id of ["activitySearch", "settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch",
@@ -9759,13 +9849,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         document.body.classList.remove("analyze-reading");
         $("loading").hidden = true;
         $("accessShell").hidden = false;
-        const active = route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
-        setText($("accessPageTitle"), { analyze: "Analyze", settings: "Settings", reports: "Reports" }[active] || "Analyze");
+        const active = browseName(route) === "compare" ? "compare" : route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
+        setText($("accessPageTitle"), { analyze: "Analyze", compare: "Compare periods", settings: "Settings", reports: "Reports" }[active] || "Analyze");
         $("accessSettings").hidden = active === "settings";
         $("accessAccount").disabled = value.mode !== "enforced";
         $("accessRetry").hidden = !["freshness-expired", "watch-timeout", "watch-unavailable", "connection-unavailable", "invalid-bootstrap"].includes(value.reason);
         for (const node of document.querySelectorAll("[data-nav]")) {
-            node.href = "#" + node.dataset.nav;
+            node.href = node.dataset.nav === "compare" ? "#analyze?compare=periods" : "#" + node.dataset.nav;
             if (node.dataset.nav === active) node.setAttribute("aria-current", "page");
             else node.removeAttribute("aria-current");
         }
@@ -9781,8 +9871,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         history.replaceState(safe, "");
     }
     function navigateAccessShell(view) {
-        if (!["analyze", "reports", "settings"].includes(view) || clearingAccess) return;
-        const hash = "#" + view + (view === "settings" ? "?section=connection" : "");
+        if (!["analyze", "compare", "reports", "settings"].includes(view) || clearingAccess) return;
+        const hash = view === "compare" ? "#analyze?compare=periods" : "#" + view + (view === "settings" ? "?section=connection" : "");
         if (api.publicationToken()) return navigate(readRoute(hash, null));
         history.pushState({}, "", hash);
         route = readRoute(hash, null);

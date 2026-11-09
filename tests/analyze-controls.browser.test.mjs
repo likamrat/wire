@@ -106,7 +106,7 @@ test("Filters and view discloses the same controls without querying, resetting o
     await expect(page.locator("#filters")).not.toBeVisible();
     await expect(page.locator("#analyzeScopeCaption")).toBeEmpty();
     await expect(page.locator("#analyzeScopeSummary")).not.toBeVisible();
-    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/All dates; Current collection/);
+    await expect(page.locator("#openAnalyzeFilters")).toHaveAccessibleDescription(/All dates; Saved collection/);
     await expect(page.locator("#outcomeChart .percentage-total-value")).toHaveText("15");
     await page.evaluate(() => {
         window.originalAnalyzeFields = [...document.querySelectorAll("#filters select")];
@@ -126,7 +126,7 @@ test("Filters and view discloses the same controls without querying, resetting o
     assert.ok(await page.locator("#outcomeChart .percentage-legend a[href]").count(), "Native outcome drilldowns remain");
     assert.ok(await page.locator("#chart .time-column[href]").count(), "Native plotted time drilldowns remain");
     for (const id of ["comparePeriods"]) {
-        assert.equal(await page.locator("#" + id).evaluate(node => Boolean(node.closest("#analyzeTools"))), true);
+        assert.equal(await page.locator("#" + id).evaluate(node => Boolean(node.closest(".primary-navigation"))), true);
     }
 });
 
@@ -497,31 +497,32 @@ test("relocated launchers use native records, reference, comparison and update d
 
     await page.locator("#comparePeriods").click();
     await expect(page.locator("#periodComparisonSetup")).toBeVisible();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#resultsLink")).not.toBeVisible();
-    await expect(page.locator("#openChartReference")).toBeVisible();
+    await expect(page.locator("#openChartReference")).toBeHidden();
     await expect(page.locator("#openAnalyzeFilters")).toBeVisible();
-    await expect(page.locator("#analyzeToolbar")).toBeVisible();
-    await page.locator("#openChartReference").click();
-    await expect(page.locator("#chartReferenceShowData")).toBeDisabled();
-    await page.locator("#closeChartReference").click();
+    await expect(page.locator("#analyzeToolbar")).toBeHidden();
+    await expect(page.locator("#comparePeriods")).toHaveAttribute("aria-current", "page");
     assert.equal(await page.locator("#filters").evaluate(node => node.closest("dialog")?.id), "analyzeFilterDialog");
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     for (const side of ["A", "B"]) for (const bound of ["From", "To"]) {
         await page.locator(`#comparison${side}${bound}`).fill(side === "A" ? olderDay : newerDay);
     }
     await page.locator("#applyPeriodComparison").click();
     await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
     await expect(page.locator("#periodComparisonResults")).toBeVisible();
+    await page.getByRole("button", { name: "View calls", exact: true }).click();
     await page.locator("#comparisonRecordsB").click();
     let pairedReads = 0;
     page.on("request", request => { if (request.url().endsWith("/api/period-comparison")) pairedReads++; });
-    await page.locator("#openChartReference").click();
-    await expect(page.locator("#chartReferenceShowData")).toHaveText("View period records");
-    await expect(page.locator("#chartReferenceShowData")).toBeEnabled();
-    await page.locator("#chartReferenceShowData").click();
-    await expect(page.locator("#meaning")).not.toBeVisible();
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await page.getByRole("button", { name: "View numbers", exact: true }).click();
+    await expect(page.locator(".compare-inspection table").first()).toBeVisible();
+    await page.getByRole("button", { name: "Back to comparison", exact: true }).click();
+    await page.getByRole("button", { name: "View calls", exact: true }).click();
     await expect(page.locator("#comparisonRecordsB")).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("#comparisonRecordsB")).toBeFocused();
-    assert.equal(pairedReads, 0, "The guide reveals the accepted selected roster without another paired read");
+    await expect(page.locator(".compare-inspection h2")).toBeFocused();
+    assert.equal(pairedReads, 0, "The footer reveals the accepted selected roster without another paired read");
     await page.locator('.primary-navigation [data-nav="analyze"]').click(); await ready(page);
     assert.deepEqual(snapshot().analytics.rows.map(row => row.id).sort(), before);
     assert.deepEqual(snapshots.at(-1).filters, filters);

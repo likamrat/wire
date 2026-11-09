@@ -52,6 +52,22 @@ Author and Outcome choices remain a draft until **Apply**. **Reset filters**
 clears browsing restrictions, not collected activity or report selections.
 **Chart guide** explains the displayed measures and provides exact numbers.
 
+## Compare periods
+
+Choose **Compare periods** in the sliding left sidebar. A fresh comparison
+shows all eligible saved activity for the last seven complete days versus the
+preceding seven. Analyze keeps its own filters and reading state.
+
+Choose 14 or 30 days, or open **Custom dates** for independent inclusive ranges.
+Use the compact activity choice for a starting point and **More options** for
+additional restrictions. **Use Analyze view** explicitly brings its current
+non-date filters and authorized Search into the comparison.
+
+**Outcomes**, **Timeline**, **By tool** and **Timing** show the same pair.
+**View calls** opens the records; **View numbers** explains the exact values.
+**Create report** preserves the pair for local saving. See
+[comparisons](reporting.md#compare) for scope and return behavior.
+
 ## Inspect an interaction
 
 Open a card to read its prompt and recorded activity in the right-hand reader.

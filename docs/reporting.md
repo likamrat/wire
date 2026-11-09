@@ -154,15 +154,36 @@ generated explanations of intent or task success.
 
 ## Compare
 
-Use **Analyze > Compare periods** for two retained date ranges without making
-reports first. Choose each range, keep the relevant shared filters, then
-explicitly compare. Dates include both selected days in the display time zone.
-**Create comparison report** opens a report of the accepted pair, ready for
-the same local Save action.
+Open **Compare periods** in the left sidebar. It starts with all eligible
+activity from the saved collection, independently of Analyze filters. The
+first result compares the last seven complete days, ending yesterday, with
+the preceding seven days in the display time zone.
 
-![Two retained periods showing a higher failed-call share alongside faster recorded tool latencies, with unequal-length and unavailable-result qualifications.](images/compare-periods.png)
+![Compare periods with the accepted dates, outcome counts and shared reading actions.](images/compare-periods.png)
 
-Different period lengths or incomplete evidence can limit what a change means.
+**Last 14 days** and **Last 30 days** use the same complete-day rule.
+**Custom dates** opens both calendars; each range includes its start and end
+days. **Cancel** leaves the accepted comparison unchanged. Unequal or overlapping
+ranges are allowed and remain labeled.
+
+The compact activity choice offers All activity, Errors & failures, Completed
+calls, My prompts and Agent prompts. **More options** retains source, tool,
+service, category, author, outcome, project, chat, evidence-layer and collection
+choices, plus path, service-intersection and timing-interval controls. Choices
+apply directly. **Use Analyze view** deliberately imports Analyze's non-date
+filters and authorized Search selection; it replaces only the dates.
+
+Switch **Outcomes**, **Timeline**, **By tool** or **Timing** inside the chart.
+These views keep the same accepted pair. Hover or focus a mark for its exact
+values; select it to inspect supporting records. **View calls** opens the
+paired activity, while **View numbers** shows the values for the current chart.
+Missing results and timing remain unavailable. Different period lengths,
+overlap and incomplete evidence can limit what a change means.
+
+**Create report** freezes the accepted pair and opens the existing report
+experience with the same formats, masking, optional notes and local Save.
+**Back to comparison** restores its dates, choices and reading position while
+access remains valid.
 
 For existing reports, open **Reports > Compare saved reports**, choose
 **Earlier report** and **Later report**, then **Compare reports**. This uses

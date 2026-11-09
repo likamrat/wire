@@ -855,6 +855,13 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
         analysisPreparation() {
             return publication() && scope.value === "analysis" && input.value.trim() ? input.value : null;
         },
+        activateAnalysis(query) {
+            if (!publication()) throw new Error("Search access is unavailable. Open a current view.");
+            if (query !== null && (typeof query !== "string" || !query.trim())) throw new TypeError("The saved Search query is unavailable.");
+            if (query === null && scope.value !== "analysis") { onAnalysis({ state: "pending", query: null }); return; }
+            input.value = query ?? ""; scope.value = "analysis";
+            syncScope(); field.sync(); hide(); schedule();
+        },
         canPrepareAnalysis,
         prepareAnalysis(query) {
             const authority = publication();

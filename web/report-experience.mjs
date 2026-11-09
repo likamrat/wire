@@ -6,7 +6,7 @@ export function reportWorkspacePresentation(route, journey = {}) {
 }
 
 // Presentation only. The existing report draft, preparation and Save owners retain authority.
-export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, current }) {
+export function createReportExperience({ root, time, ux, read, choose, changeDates, changeFocus, current, createCalendar }) {
     const doc = root.ownerDocument, byId = id => doc.getElementById(id);
     const presets = [
         ["all", "All activity", "Your prompts and agent prompts, with Work IQ calls and results.", "report-all"],
@@ -126,76 +126,20 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     toolbar.append(nameRow, choices, scopeCaption);
     byId("reportStage3").prepend(toolbar);
 
-    const calendar = popover("reportCustomDates", "Custom dates"), dateFields = el("div", "report-date-fields");
-    let calendarMonth, fromDraft = "", toDraft = "", selectingEnd = false;
-    const fields = {};
-    for (const [id, label] of [["from", "From"], ["to", "Through"]]) {
-        const field = el("div", "report-field"), caption = el("label", "", label), input = el("input");
-        input.type = "date"; input.id = "reportDate" + id; caption.htmlFor = input.id; fields[id] = input;
-        input.addEventListener("change", () => {
-            if (!current()) return;
-            fromDraft = fields.from.value; toDraft = fields.to.value; renderCalendar();
-        });
-        field.append(caption, input); dateFields.append(field);
-    }
-    const calendarBody = el("div", "report-calendar"), calendarStatus = el("p", "report-period-caption");
-    calendarStatus.setAttribute("role", "status");
+    const calendar = popover("reportCustomDates", "Custom dates");
+    const calendarEditor = createCalendar({ root: calendar, id: "reportDate", inputIds: { from: "reportDatefrom", to: "reportDateto" }, time, ux,
+        context: () => read().timeContext, current, onChange: () => { applyDates.disabled = !calendarEditor.valid(); } });
     const calendarActions = el("div", "report-popover-actions");
     const applyDates = button("Use dates", () => {
-        if (!validDates()) return;
-        calendar.hidePopover(); changeDates({ range: "custom", from: fromDraft, to: toDraft });
+        if (!calendarEditor.valid()) return;
+        calendar.hidePopover(); changeDates({ range: "custom", ...calendarEditor.value() });
     }, "primary");
     calendarActions.append(button("Cancel", () => calendar.hidePopover()), applyDates);
-    calendar.append(dateFields, calendarBody, calendarStatus, calendarActions);
-    function validDates() {
-        try { time.calendar(fromDraft); time.calendar(toDraft); time.range({ from: fromDraft, to: toDraft }, read().timeContext.timeZone); return fromDraft <= toDraft; }
-        catch (error) { if (!(error instanceof RangeError)) throw error; return false; }
-    }
-    function renderCalendar(focusDay) {
-        const month = new Date(calendarMonth + "-01T12:00:00Z");
-        const header = el("div", "report-calendar-header");
-        function shift(amount) { month.setUTCMonth(month.getUTCMonth() + amount); calendarMonth = month.toISOString().slice(0, 7); renderCalendar(); }
-        const previous = button("", () => shift(-1)), next = button("", () => shift(1));
-        previous.setAttribute("aria-label", "Previous month"); previous.append(ux.icon("previous"));
-        next.setAttribute("aria-label", "Next month"); next.append(ux.icon("next"));
-        header.append(previous, el("h3", "", new Intl.DateTimeFormat(read().timeContext.locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(month)), next);
-        const grid = el("div", "report-calendar-grid"); grid.setAttribute("role", "group"); grid.setAttribute("aria-label", "Choose start and end dates");
-        for (const day of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) grid.append(el("span", "", day));
-        for (let i = 0; i < month.getUTCDay(); i++) grid.append(el("span"));
-        const count = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
-        const focused = focusDay || (fromDraft.startsWith(calendarMonth) ? fromDraft : calendarMonth + "-01");
-        for (let i = 1; i <= count; i++) {
-            const day = `${calendarMonth}-${String(i).padStart(2, "0")}`;
-            const cell = button(String(i), () => {
-                if (!selectingEnd) { fromDraft = day; toDraft = ""; selectingEnd = true; }
-                else { [fromDraft, toDraft] = [fromDraft, day].sort(); selectingEnd = false; }
-                renderCalendar(day);
-            }, "report-calendar-day");
-            cell.dataset.day = day; cell.tabIndex = day === focused ? 0 : -1;
-            cell.setAttribute("aria-label", time.formatDate(day, read().timeContext, true));
-            cell.setAttribute("aria-pressed", String(day === fromDraft || day === toDraft));
-            cell.classList.toggle("in-range", day >= fromDraft && day <= toDraft);
-            cell.addEventListener("keydown", event => {
-                const date = new Date(day + "T12:00:00Z");
-                const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, Home: -date.getUTCDay(), End: 6 - date.getUTCDay() }[event.key];
-                if (delta === undefined) return;
-                event.preventDefault(); date.setUTCDate(date.getUTCDate() + delta);
-                const nextDay = date.toISOString().slice(0, 10); calendarMonth = nextDay.slice(0, 7); renderCalendar(nextDay);
-            });
-            grid.append(cell);
-        }
-        calendarBody.replaceChildren(header, grid);
-        fields.from.value = fromDraft; fields.to.value = toDraft;
-        applyDates.disabled = !validDates();
-        calendarStatus.textContent = !toDraft ? "Choose an end date." : validDates()
-            ? `${read().timeContext.timeZone}. Both days included.` : "The end date must be on or after the start date.";
-        if (focusDay) grid.querySelector(`[data-day="${focusDay}"]`)?.focus();
-    }
+    calendar.append(calendarActions);
     function openCalendar() {
         const value = read(), dates = value.dates.range === "capture" ? time.preset("7", value.timeContext.timeZone) : value.dates;
-        fromDraft = dates.from; toDraft = dates.to; calendarMonth = dates.from.slice(0, 7); selectingEnd = false;
-        periodPanel.hidePopover(); renderCalendar(); calendar.showPopover();
-        calendarBody.querySelector('[tabindex="0"]')?.focus();
+        calendarEditor.reset(dates);
+        periodPanel.hidePopover(); calendar.showPopover(); calendarEditor.focus();
     }
     function showSelection() {
         if (read().locked) return;
@@ -242,8 +186,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         },
         withdrawAccess() {
             for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) if (panel.matches(":popover-open")) panel.hidePopover();
-            fromDraft = toDraft = ""; calendarMonth = null;
-            fields.from.value = fields.to.value = ""; calendarBody.replaceChildren(); calendarStatus.textContent = "";
+            calendarEditor.clear();
             periodCaption.textContent = scopeCaption.textContent = "";
         },
         resumeAccess: sync,

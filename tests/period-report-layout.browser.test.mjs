@@ -97,7 +97,7 @@ for (const [name, callCount] of [["normal", null], ["long", 48], ["multi-page", 
             const pdfPage = await document.getPage(index);
             const items = (await pdfPage.getTextContent()).items;
             pages.push(items.map(item => item.str ?? "").join(" "));
-            const periodHeadings = items.filter(item => /^Period [AB] ·/.test(item.str))
+            const periodHeadings = items.filter(item => /^Period [AB]$/.test(item.str))
                 .sort((a, b) => b.transform[5] - a.transform[5]);
             // Each period starts its own column flow, including below another period on the same page.
             const bands = [{ period: activePeriod, top: Infinity }, ...periodHeadings.map(item => ({
@@ -106,7 +106,12 @@ for (const [name, callCount] of [["normal", null], ["long", 48], ["multi-page", 
             for (const [bandIndex, band] of bands.entries()) {
                 const bottom = bands[bandIndex + 1]?.top ?? -Infinity;
                 const labels = items.flatMap(item => {
-                    const match = /^(Interaction|Record) (\d+)$/.exec(item.str);
+                    const ordinal = item.str === "Record" ? items.filter(value => /^\d+$/.test(value.str)
+                        && Math.abs(value.transform[5] - item.transform[5]) < 0.1
+                        && value.transform[4] >= item.transform[4] + item.width
+                        && value.transform[4] - item.transform[4] - item.width <= 16)
+                        .sort((a, b) => a.transform[4] - b.transform[4])[0] : null;
+                    const match = /^(Interaction|Record) (\d+)$/.exec(ordinal ? `Record ${ordinal.str}` : item.str);
                     if (!match || item.transform[5] >= band.top || item.transform[5] <= bottom) return [];
                     return [{ period: band.period, kind: match[1], ordinal: Number(match[2]), page: index,
                         column: item.transform[4] < pdfPage.view[2] / 2 ? 0 : 1, y: item.transform[5] }];

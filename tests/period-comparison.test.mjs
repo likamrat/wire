@@ -29,7 +29,7 @@ test("two unequal periods retain exact canonical cohorts from one revision", () 
     assert.equal(value.periods.later.assessment.interactionRefs.length, 2);
 });
 
-test("DST local boundaries, overlapping services and full-interaction quality have separate exact populations", () => {
+test("DST local boundaries, overlapping services and full-interaction timing have separate exact populations", () => {
     const { state, input } = periodFixture(), before = structuredClone(state);
     const value = buildPeriodComparison(state, input), a = value.periods.baseline, b = value.periods.later;
     assert.deepEqual(a.rowIds, ['call:["period-chat-0","period-call-0"]', 'call:["period-chat-0","period-missing"]', 'call:["period-chat-1","period-call-1"]']);
@@ -44,12 +44,8 @@ test("DST local boundaries, overlapping services and full-interaction quality ha
     assert.equal(toolMetric.coverage.eligible, 4); // Calendar sibling remains full-interaction context.
     assert.equal(toolMetric.coverage.covered, 3);
     assert.equal(toolMetric.value, 100);
-    const quality = side => side.assessment.metrics.find(metric => metric.origin === "model-assessed" && metric.dimension === "accuracy");
-    assert.deepEqual(quality(a).counts, { pass: 1, fail: 1, unassessed: 0, evaluatorError: 0 });
-    assert.deepEqual(quality(b).counts, { pass: 1, fail: 0, unassessed: 3, evaluatorError: 0 });
-    assert.equal(quality(b).coverage.eligible, 4);
-    assert.equal(b.assessment.assessmentAttempts.find(item => item.latestAttempt === "failed") !== undefined, true);
-    assert.equal(value.comparison.metrics.find(item => item.baseline?.basis === "model-assessment" && item.baseline.metric === "accuracy").result.delta.value, 50);
+    assert.ok(value.comparison.metrics.length > 0);
+    assert.ok(value.comparison.metrics.every(item => (item.baseline ?? item.later).basis === "observed"));
     assert.equal(value.comparison.matchingCallTiming.median.delta.value, 3000);
     assert.equal(a.assessment.metrics.find(metric => metric.definitionId === "recorded-response-duration").samples[0].value, 8000);
     assert.deepEqual(state, before);
@@ -109,18 +105,17 @@ test("returned-result refinements preserve exact all-page rows and broader pre-o
     assert.equal(value.definitions.layer, "reported-api");
 });
 
-test("different evaluator/rubric lanes stay one-sided instead of producing an incompatible quality delta", () => {
-    const { state, input } = periodFixture(), model = buildAssessmentModel(state);
-    for (const id of ["period-request-0", "period-request-1"]) {
-        const ref = model.catalog.find(item => item.scenarioId === id).interactionRef;
-        for (const metric of model.details.get(ref).metrics) if (metric.origin === "model-assessed") metric.evaluator.model = "invented-earlier-model";
-    }
+test("historical evaluator and rubric lanes cannot become current comparison facts", () => {
+    const { state, input } = periodFixture();
+    assert.ok(state.personalEvaluation.modelEvaluation.records.length > 0);
+    for (const assessment of state.personalEvaluation.modelEvaluation.records[0].assessments) assessment.evaluator.model = "invented-earlier-model";
+    const model = buildAssessmentModel(state);
     const value = buildPeriodComparison(state, input, { model });
     const quality = value.comparison.metrics.filter(item => (item.baseline ?? item.later).basis === "model-assessment");
-    assert.equal(quality.length, 6);
-    assert.equal(quality.every(item => item.status === "one-sided" && item.result === null), true);
-    assert.equal(value.periods.baseline.assessment.metrics.filter(metric => metric.origin === "model-assessed").length, 3);
-    assert.equal(value.periods.later.assessment.metrics.filter(metric => metric.origin === "model-assessed").length, 3);
+    assert.equal(quality.length, 0);
+    assert.ok(value.comparison.metrics.every(item => (item.baseline ?? item.later).basis === "observed"));
+    assert.equal(value.periods.baseline.assessment.metrics.filter(metric => metric.origin === "model-assessed").length, 0);
+    assert.equal(value.periods.later.assessment.metrics.filter(metric => metric.origin === "model-assessed").length, 0);
 });
 
 test("all retained matching calls survive presentation limits and unequal scopes", () => {

@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { privateFixture } from "./helpers.mjs";
 import { periodFixture } from "./period-comparison-fixture.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
-import { acceptPeriodReport, freezePeriodReport, validatePeriodReport, periodReportComparison, PERIOD_POPULATION } from "../lib/period-report.mjs";
+import { acceptPeriodReport, freezePeriodReport, validatePeriodReport, periodReportComparison, PERIOD_POPULATION, PERIOD_AUTHOR_POLICY } from "../lib/period-report.mjs";
 import { renderPeriodReportHtml, renderPeriodReportMarkdown, periodReportDisplay } from "../lib/period-report-output.mjs";
 import { buildSanitizedBundle, createExportController } from "../lib/export.mjs";
 import { loadBoardState, updateBoardState, replaceEvidence } from "../lib/store.mjs";
@@ -131,6 +131,12 @@ test("legacy period definitions remain readable but cannot generate a new bundle
     const { state, value } = await setup(t);
     const accepted = acceptPeriodReport(state, value);
     const current = freezePeriodReport(state, accepted, "2026-10-11T10:00:00.000Z").frozen;
+    assert.match(current.scope.authorPolicy, /Return to Compare periods/);
+    const priorNavigation = structuredClone(current);
+    priorNavigation.scope.authorPolicy = PERIOD_AUTHOR_POLICY;
+    const priorBytes = JSON.stringify(priorNavigation);
+    validatePeriodReport(priorNavigation);
+    assert.equal(JSON.stringify(priorNavigation), priorBytes);
     const selected = [...new Set(Object.values(value.periods).flatMap(side => side.interactionRefs))]
         .map(ref => accepted.model.internals.get(ref).record);
     for (const version of [2, 3]) {
@@ -149,6 +155,7 @@ test("legacy period definitions remain readable but cannot generate a new bundle
                 eligibleUnitRefs: [interactionRef], coveredUnitRefs: [interactionRef] });
         }
         legacy.scope.population = PERIOD_POPULATION;
+        legacy.scope.authorPolicy = PERIOD_AUTHOR_POLICY;
         legacy.scope.findings = "Full retained interactions selected by matching records; calls outside the period or filters can remain in these interaction findings and metrics.";
         legacy.scope.interpretation = "Observed differences only. Unequal periods, shared records, different activity and assessment coverage do not establish causal improvement.";
         legacy.comparison = periodReportComparison(legacy);

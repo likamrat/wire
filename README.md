@@ -85,11 +85,12 @@ Follow the [first-run guide](docs/user-guide.md#connect-local-history) for detai
 
 ## Comparisons
 
-Compare periods to see where failure rates or call timings changed, then inspect
-the calls behind those changes. Use those differences to decide which agent
-behaviors need closer investigation.
+Open **Compare periods** in the sidebar to see where failure rates or call
+timings changed. It starts with the last seven complete days versus the
+preceding seven. Inspect the calls behind those changes to decide what needs
+closer investigation.
 
-[![A comparison of two periods showing call outcomes and tool latency side by side.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
+[![Compare periods with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 
 ## Reports
 

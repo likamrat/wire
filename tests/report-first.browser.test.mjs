@@ -144,13 +144,21 @@ test("fresh reports ignore Analyze restrictions and custom dates replace only an
     assert.deepEqual(errors, []);
 });
 
-test("a lost direct-Save response recovers the original exact-content receipt without a second write", { timeout: 60000 }, async t => {
-    const { page, context, requests, errors } = await setup(t);
-    const preview = await prepare(page);
+for (const paired of [false, true]) test(`a lost ${paired ? "paired " : ""}direct-Save response recovers the original exact-content receipt without a second write`, { timeout: 60000 }, async t => {
+    const { page, context, requests, errors } = await setup(t, paired ? { source: periodFixture().records,
+        route: "#analyze?compare=periods&aFrom=2026-03-07&aTo=2026-03-07&bFrom=2026-03-08&bTo=2026-03-09" } : {});
+    let preview;
+    if (paired) {
+        await expect(page.locator("#createPeriodReport")).toBeEnabled();
+        const prepared = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator("#createPeriodReport").click();
+        preview = await (await prepared).json();
+        assert.ok(preview.snapshot.periodComparison);
+    } else preview = await prepare(page);
     await page.route("**/api/export", async route => { await route.fetch(); await route.abort("connectionreset"); }, { times: 1 });
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.getByRole("button", { name: "Check save status", exact: true })).toBeVisible();
-    const back = page.getByRole("link", { name: "Back to Reports", exact: true });
+    const back = page.getByRole("link", { name: paired ? "Back to comparison" : "Back to Reports", exact: true });
     await expect(back).toBeDisabled();
     await back.press("Enter");
     await expect(page.locator("#reportGallery")).toBeHidden();
@@ -200,12 +208,15 @@ test("new library metadata and saved comparisons use frozen files and direct loc
 test("retained-period comparison opens its report directly and saves the accepted pair", { timeout: 60000 }, async t => {
     const { page, context, errors } = await setup(t, { source: periodFixture().records, route: "#analyze" });
     await page.locator("#comparePeriods").click();
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
     for (const [label, value] of [["Period A from", "2026-03-07"], ["Period A to", "2026-03-07"],
         ["Period B from", "2026-03-08"], ["Period B to", "2026-03-09"]]) {
         await page.getByLabel(label, { exact: true }).fill(value);
     }
     await page.locator("#applyPeriodComparison").click();
     await expect(page.locator("#createPeriodReport")).toBeEnabled();
+    await page.getByRole("button", { name: "Timing", exact: true }).click();
+    const origin = new URL(page.url()).hash;
     const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#createPeriodReport").click();
     const response = await pending, prepared = await response.json();
@@ -213,9 +224,46 @@ test("retained-period comparison opens its report directly and saves the accepte
     assert.ok(prepared.snapshot.periodComparison);
     assert.equal(prepared.localSaveRequest.version, 1);
     await expect(page.locator("#reportStage3")).toBeVisible();
+    await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
+    let preparedFiles = prepared.files;
+    await page.getByRole("button", { name: "HTML", exact: true }).click();
+    for (const format of ["pdf", "json", "markdown"]) {
+        const next = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+        await page.locator(`#formatOptions input[value="${format}"]`).check();
+        const rebuilt = await (await next).json();
+        const stablePair = value => {
+            const copy = structuredClone(value);
+            for (const side of Object.values(copy.periods)) {
+                assert.ok(Number.isFinite(Date.parse(side.facts.preparedAt)));
+                assert.match(side.facts.snapshotRef, /^snapshot-[a-f0-9]+$/);
+                delete side.facts.preparedAt; delete side.facts.snapshotRef;
+            }
+            return copy;
+        };
+        assert.deepEqual(stablePair(rebuilt.snapshot.periodComparison), stablePair(prepared.snapshot.periodComparison));
+        preparedFiles = rebuilt.files;
+    }
+    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: "Save report", exact: true }).click();
     await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
     assert.equal((await loadBoardState(context)).exports[0].reportType, "period-comparison");
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await expect(page.locator(".saved-reader-heading .document-back")).toHaveText("Back to comparison");
+    for (const [format, name] of [["html", "product-report.html"], ["pdf", "product-report.pdf"], ["json", "product-report.json"], ["markdown", "product-report.md"]]) {
+        if (format !== "html") {
+            await page.getByRole("combobox", { name: "Report format", exact: true }).click();
+            await page.locator(`.select-popup [data-value="${format}"]`).click();
+        }
+        const downloaded = page.waitForEvent("download");
+        await page.getByRole("button", { name: "Download", exact: true }).click();
+        const bytes = await readFile(await (await downloaded).path());
+        const expected = typeof preparedFiles[name] === "string" ? Buffer.from(preparedFiles[name]) : Buffer.from(preparedFiles[name].data, "base64");
+        assert.deepEqual(bytes, expected);
+    }
+    await page.locator(".saved-reader-heading .document-back").click();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    assert.equal(new URL(page.url()).hash, origin);
+    await expect(page.getByRole("button", { name: "Timing", exact: true })).toHaveAttribute("aria-pressed", "true");
     assert.deepEqual(errors, []);
 });
 

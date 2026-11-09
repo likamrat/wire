@@ -39,10 +39,9 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         return row;
     }
     for (const [id, glyph] of [
-        ["comparePeriods", "navigation-compare"],
         ["createSessionReport", "navigation-create-report"],
     ]) action(id, glyph);
-    for (const id of ["comparePeriods", "createSessionReport"]) place(actionHosts.get(id), $(id));
+    for (const id of ["createSessionReport"]) place(actionHosts.get(id), $(id));
     $("pageAction").hidden = true;
     place($("analyzeFilterHeading"), $("filterHeading"));
     place($("analyzeSourceContext"), $("pageProject"));
@@ -156,6 +155,10 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         const entryFocus = toolbar.contains(document.activeElement) ? document.activeElement : null;
         if (comparing) place($("pagePrimaryActions"), toolbar);
         else if (toolbar.parentElement !== $("workspace")) $("analyzePopulation").before(toolbar);
+        place(comparing ? $("comparisonOptionsSlot") : toolbar, trigger);
+        trigger.querySelector(".analyze-entry-label").textContent = comparing ? "More options" : "Filters";
+        for (const id of ["outcomeFilter", "promptAuthorFilter"]) $(id).dataset.selectCommit = comparing ? "immediate" : "draft";
+        for (const control of dialog.querySelectorAll("select")) control.dataset.optionSearch = String(comparing);
         // Reparenting the existing entry must not discard Reset's real focus handoff.
         if (entryFocus && active && canPublish() && document.activeElement !== entryFocus) entryFocus.focus({ preventScroll: true });
         if (reference.tagName === "DETAILS") $("analyzeReference").hidden = !referenceAvailable || !reference.open;
@@ -170,6 +173,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         $("closeAnalyzeFilters").setAttribute("aria-label", comparing ? "Close filters" : "Close filters and view");
         $("filterScrollHelp").textContent = comparing ? "Filters apply to both periods." : "";
         $("analyzeViewControls").hidden = comparing;
+        if (comparing) $("moreFilters").open = true;
     }
     function entryScope(activeCount = 0, describedBy = "", text = "") {
         scopeDescription.textContent = text;
@@ -178,7 +182,7 @@ export function mountAnalyzeControls(ux, { closeSelect, closeNavigation, api, mo
         const countText = activeCount === null ? "" : String(activeCount);
         if ($("analyzeFilterCount").textContent !== countText) $("analyzeFilterCount").textContent = countText;
         $("analyzeFilterCount").hidden = !activeCount;
-        const label = comparing ? "Filters" : "Filters and view";
+        const label = comparing ? "More comparison options" : "Filters and view";
         trigger.setAttribute("aria-label", `${label}${activeCount ? `, ${activeCount} active ${activeCount === 1 ? "filter" : "filters"}` : ""}`);
     }
     function clearPairCaption() {

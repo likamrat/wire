@@ -267,9 +267,21 @@ their source checks and original-identity recovery.
 
 ### Report a retained-period comparison
 
+Fresh Compare entry uses all eligible activity in the saved collection,
+independently of Analyze. Its 7/14/30-day presets end yesterday in the selected
+IANA zone and compare the immediately preceding equal number of civil days.
+Custom ranges can differ in length or overlap. Use Analyze view is an explicit
+transfer of its authorized non-date scope; unavailable private membership
+cannot fall back to all activity.
+
+Chart views and inspection are presentations of one accepted pair. Outcome
+shares retain the before-outcome reference population. Error-focused reading
+keeps failed execution distinct from explicit application/API errors; report
+presets still use their documented whole-interaction membership rules.
+
 1. Freeze accepted A/B ranges, shared non-date filters, source/revision and
-   exact matching rows. Replace the ordinary Analyze dates while retaining
-   Search, source/group and other selectors.
+   exact matching rows. For an explicit Analyze entry, replace its dates while
+   retaining Search, source/group and other selectors.
 2. Keep each period's measured cohort and compatible raw timing samples.
    One empty side is valid; two empty sides cannot create a report.
 3. Bind facts in schema-3 `periodComparison` and its matching manifest hash.
@@ -286,6 +298,9 @@ A saved period report is one artifact with two cohorts, not an ordinary
 single-source input to saved-report comparison. New preparation never
 manufactures two source reports. Changed selected facts/authority invalidate
 preparation; unrelated accepted activity need not.
+Comparison-origin preparation and saved reading return to the accepted
+comparison while its authority remains current. Reports-origin returns keep
+their separate library state.
 
 ## Saved-artifact deletion
 
