@@ -302,6 +302,12 @@ Comparison-origin preparation and saved reading return to the accepted
 comparison while its authority remains current. Reports-origin returns keep
 their separate library state.
 
+Current readers accept both the older Analyze author-policy wording and the
+new Compare periods wording. Older readers that recognize only the Analyze
+wording reject new paired reports. After saving a new paired report, downgrading
+to such a reader is not a compatible recovery path; retain the matching reader
+and original saved files.
+
 ## Saved-artifact deletion
 
 | Deletion | Included / preserved |

@@ -284,7 +284,7 @@ test("overlap, one empty side and two empty sides retain exact membership and re
     await expect(page.locator("#createPeriodReport")).toBeDisabled();
     await expect(page.locator("#periodComparison")).toContainText("No activity was found in either period");
 });
-test("analytical Search restores exact membership and keeps query text out of browser history", { timeout: 60000 }, async t => {
+for (const reloadAt of ["analyze", "call"]) test(`analytical Search restores exact membership and keeps query text out of browser history (${reloadAt} reload)`, { timeout: 60000 }, async t => {
     const cleanup = [], app = await searchFixture({ after: action => cleanup.push(action) });
     const browser = await chromium.launch(), page = await browser.newPage({ timezoneId: "America/New_York" }), comparisons = [], errors = [];
     t.after(async () => { await browser.close(); for (const action of cleanup) await action(); assert.deepEqual(errors, []); });
@@ -315,9 +315,40 @@ test("analytical Search restores exact membership and keeps query text out of br
     await expect(page.locator("#wireSearchType")).toBeDisabled();
     assert.equal(await page.evaluate(() => JSON.stringify(history.state).includes("physician")), false);
     assert.equal(page.url().includes("physician"), false);
-    await page.locator("nav [data-nav=analyze]").click();
-    await expect(page.locator("#wireSearch")).toHaveValue("physician");
-    await expect(page.locator("#wireSearchType")).toHaveValue("");
+    const locationKey = () => {
+        const [view, query] = new URL(page.url()).hash.split("?"), parameters = new URLSearchParams(query);
+        parameters.sort(); return view + "?" + parameters;
+    };
+    const pair = comparisons.at(-1), origin = locationKey();
+    await page.getByRole("button", { name: "View calls", exact: true }).click();
+    await page.locator("#comparisonRecordsB").click();
+    const call = page.locator("#comparisonExactRecordsB a").first(), id = await call.getAttribute("id");
+    for (const back of ["close", "history"]) {
+        await call.click();
+        await expect(page.locator("#contextSidebar")).toBeVisible();
+        assert.equal(await page.evaluate(() => JSON.stringify(history.state).includes("physician")), false);
+        assert.match(await page.evaluate(() => history.state.evidenceView.returnToResults.analysisKey), /^[a-f0-9-]{36}$/);
+        if (back === "close") await page.locator("#closeContextSidebar").click();
+        else await page.goBack();
+        await ready(page);
+        assert.equal(locationKey(), origin);
+        assert.deepEqual(comparisons.at(-1).selection.semanticMembership, pair.selection.semanticMembership);
+        assert.deepEqual(comparisons.at(-1).periods.later.rowIds, pair.periods.later.rowIds);
+        await expect(page.locator(`[id=${JSON.stringify(id)}]`)).toBeFocused();
+    }
+    if (reloadAt === "analyze") {
+        await page.locator("nav [data-nav=analyze]").click();
+        await expect(page.locator("#wireSearch")).toHaveValue("physician");
+        await expect(page.locator("#wireSearchType")).toHaveValue("");
+    } else {
+        await call.click();
+        await expect(page.locator("#contextSidebar")).toBeVisible();
+        await page.evaluate(() => {
+            const { analysisKey, ...entry } = history.state.evidenceView;
+            history.replaceState({ ...history.state, evidenceView: entry }, "");
+        });
+        assert.equal(await page.evaluate(() => JSON.stringify(history.state).includes("physician")), false);
+    }
     await page.reload();
     await expect(page.locator("#message")).toContainText("private Search selection is unavailable");
     await expect(page.locator("#workspace")).toBeHidden();
@@ -332,4 +363,48 @@ test("incomplete public comparison dates require an explicit choice without disp
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     assert.equal(page.url(), url);
     assert.deepEqual(comparisons, []);
+});
+test("withdrawal during a held comparison read retires every endpoint option and retained handle", { timeout: 60000 }, async t => {
+    const { page, server } = await setup(t, "#analyze", { enforced: true });
+    await page.locator("#comparePeriods").click();
+    await dates(page, ["2026-03-07", "2026-03-07"], ["2026-03-08", "2026-03-09"]);
+    await expect.poll(() => page.locator("#comparisonEndpoint option").evaluateAll(options => options.filter(option => option.value).length)).toBeGreaterThan(1);
+    await page.evaluate(() => {
+        const control = document.getElementById("comparisonEndpoint");
+        window.heldEndpointSignature = control.getAttributeNode("data-options-signature");
+        window.heldEndpointOptions = [...control.options].filter(option => option.value).map(option => ({
+            option, text: option.firstChild, attributes: [...option.attributes],
+        }));
+    });
+    let release, entered, finished;
+    const waiting = new Promise(resolve => { release = resolve; }), held = new Promise(resolve => { entered = resolve; });
+    const delivered = new Promise(resolve => { finished = resolve; });
+    await page.route("**/api/period-comparison", async route => {
+        const response = await route.fetch(); entered(); await waiting;
+        try { await route.fulfill({ response }); } finally { finished(); }
+    }, { times: 1 });
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click(); await held;
+    await expect(page.locator("#periodComparisonResults .comparison-chart")).toHaveCount(0);
+    await expect(page.locator(".compare-inspection table")).toHaveCount(0);
+    const controller = await page.context().newPage();
+    await controller.goto(server.url);
+    await expect(controller.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await controller.locator("#wireAccountTrigger").click();
+    await controller.locator("#wireAccountGate").click();
+    await expect(page.locator("#workspace")).toBeHidden();
+    try {
+        assert.deepEqual(await page.evaluate(() => ({
+            options: [...document.getElementById("comparisonEndpoint").options].map(option => option.value),
+            signature: document.getElementById("comparisonEndpoint").getAttribute("data-options-signature"),
+            heldSignature: window.heldEndpointSignature.value,
+            held: window.heldEndpointOptions.map(({ option, text, attributes }) =>
+                [option.textContent, text.data, option.value, ...attributes.map(attribute => attribute.value)]),
+        })), {
+            options: [""], signature: null, heldSignature: "",
+            held: await page.evaluate(() => window.heldEndpointOptions.map(({ attributes }) => Array(3 + attributes.length).fill(""))),
+        });
+    } finally { release(); await delivered; }
+    await expect(page.locator("#comparisonEndpoint option")).toHaveCount(1);
+    await expect(page.locator("#comparisonEndpoint")).toHaveValue("");
+    await expect(page.locator("#workspace")).toBeHidden();
 });

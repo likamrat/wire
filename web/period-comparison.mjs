@@ -690,7 +690,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (!value) return;
         const sides = [["baseline", value.periods.baseline, "A"], ["later", value.periods.later, "B"]];
         const names = presentation.names(sides.map(([, side]) => side.range), value.timeContext, new Date().toISOString());
-        inspectionTrigger = trigger; inspected = { kind, narrowing };
+        inspectionTrigger = trigger; inspected = { kind, narrowing, key: inspectionKey(value) };
         inspectTitle.textContent = kind === "numbers" ? "Exact numbers" : narrowing ? narrowing.label : value.definitions.layer === "tool" ? "Calls in both periods" : "Records in both periods";
         if (kind === "numbers") inspectBody.replaceChildren(numbersPanel(value, sides, names));
         else {
@@ -1094,7 +1094,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         toggle.setAttribute("aria-expanded", String(active));
         doc.body.classList.toggle("period-comparing", active);
         if (!active) {
-            if (inspected && requestKey) inspectionReturn = { ...inspected, key: requestKey, selectedPeriod, trigger: inspectionTrigger };
+            if (inspected && requestKey) inspectionReturn = { ...inspected, selectedPeriod, trigger: inspectionTrigger };
             completionIntent = null; entryIntent = null;
             generation++; machine?.leave(); requestKey = ""; contextKey = ""; lastRoute = "";
             onPairChange?.(null);
@@ -1182,7 +1182,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             acceptedPublication = publication;
             paint(value, submitted?.labelTime || new Date().toISOString(), started, publication);
             if (!readCurrent(started, publication)) return;
-            if (inspectionReturn?.key === requestKey) {
+            if (inspectionReturn?.key === inspectionKey(value)) {
                 selectedPeriod = inspectionReturn.selectedPeriod;
                 openInspection(inspectionReturn.kind, inspectionReturn.trigger, inspectionReturn.narrowing, { focus: false });
             }
@@ -1223,6 +1223,13 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
             && signature(context) === requestKey ? machine?.consumer() ?? null : null;
         return publicationCurrent(acceptedPublication) ? value : null;
     }
+    function inspectionKey(value) {
+        const context = getContext();
+        // A fresh Search receipt may change without changing this authorized scope or its records.
+        return JSON.stringify([value.revision, value.assessmentBasis, value.source, value.timeContext, value.options, value.selection,
+            Object.values(value.periods).map(side => [side.range, side.rowIds]), value.nativeViewId, value.nativeViewKind,
+            context.search, context.route.analysisQuery ?? null]);
+    }
     function acceptedPair() {
         const comparison = consumer();
         if (!comparison) return null;
@@ -1250,7 +1257,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
         if (!value?.basis || JSON.stringify(value.basis) === JSON.stringify(context.snapshot?.assessment?.basis)
             && !(value.pendingCleanup && value.kind !== "artifact-deletion")) return;
         machine?.observe(value); machine?.leave(); generation++; requestKey = ""; blockedSnapshot = snapshotKey(context);
-        completionIntent = null;
+        completionIntent = null; inspectionReturn = null;
         syncReport();
         clearResults();
         setStatus("Retained evidence or its permission changed. Read the current stored Analyze view before comparing again.", "notice");
@@ -1306,14 +1313,22 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                     && !(node.localName === "stop" && attribute.name === "offset")) attribute.value = "";
                 node.removeAttributeNode(attribute); attribute.value = "";
             }
-            for (const option of endpointControl.options) {
-                if (option.value === "") continue;
-                clearText(option);
-                for (const attribute of [...option.attributes]) attribute.value = "";
-                option.remove();
-            }
-            delete endpointControl.dataset.optionsSignature;
         }
+        for (const option of [...endpointControl.options]) {
+            if (option.value === "") continue;
+            clearText(option);
+            for (const attribute of [...option.attributes]) {
+                attribute.value = "";
+                option.removeAttributeNode(attribute);
+            }
+            option.remove();
+        }
+        const endpointSignature = endpointControl.getAttributeNode("data-options-signature");
+        if (endpointSignature) {
+            endpointSignature.value = "";
+            endpointControl.removeAttributeNode(endpointSignature);
+        }
+        endpointControl.value = "";
         shown = false; root.hidden = true; setup.hidden = true;
         toggle.setAttribute("aria-expanded", "false");
         clearResults();

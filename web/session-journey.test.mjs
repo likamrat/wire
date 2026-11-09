@@ -84,3 +84,50 @@ test("saved document origins preserve one sanitized interaction and exact-call r
     assert.equal(journey.savedOrigin({ view: "request", request: "" }), null);
     assert.equal(journey.savedOrigin(null), null);
 });
+
+test("history origins encode private analysis at both supported return levels and restore exact in-memory scope", () => {
+    const journey = createSessionJourney(), queries = new Map();
+    const keys = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"];
+    const origin = { view: "analyze", compare: "periods", aFrom: "2026-09-29", aTo: "2026-09-29",
+        bFrom: "2026-09-30", bTo: "2026-09-30", session: "invented-chat", analysisQuery: "private comparison query",
+        returnToSessions: { view: "analyze", authors: "user", analysisQuery: "private source query",
+            returnToSessions: { view: "analyze", analysisQuery: "unsupported deeper query" } } };
+    const encoded = journey.encodeHistoryRoute(origin, query => {
+        const key = keys[queries.size]; queries.set(key, query); return key;
+    }, true);
+    assert.equal(JSON.stringify(encoded).includes("query"), false);
+    assert.equal(encoded.analysisKey, keys[0]);
+    assert.equal(encoded.returnToSessions.analysisKey, keys[1]);
+    assert.equal(encoded.returnToSessions.returnToSessions, undefined);
+    assert.deepEqual(journey.decodeHistoryRoute(encoded, key => queries.get(key), true), journey.returnRoute(origin, true));
+    assert.equal(origin.analysisQuery, "private comparison query", "Serialization cannot mutate the live authorized origin.");
+    assert.throws(() => journey.encodeHistoryRoute(origin, query => query, true), /opaque reference/);
+    assert.throws(() => journey.encodeHistoryRoute({ view: "analyze", analysisQuery: "" }, () => keys[0]), /nonempty query/);
+});
+
+test("history decoding resolves every private origin and never trusts persisted plaintext", () => {
+    const journey = createSessionJourney();
+    const missing = () => { throw new Error("Private Search reference is unavailable."); };
+    for (const origin of [
+        { view: "analyze", analysisKey: "11111111-1111-4111-8111-111111111111" },
+        { view: "analyze", returnToSessions: { view: "analyze", analysisKey: "22222222-2222-4222-8222-222222222222" } },
+        { view: "analyze", analysisQuery: "untrusted plaintext" },
+        { view: "analyze", returnToSessions: { view: "analyze", analysisQuery: "untrusted nested plaintext" } },
+    ]) assert.throws(() => journey.decodeHistoryRoute(origin, missing, true), /reference is unavailable/);
+    const seen = [];
+    journey.decodeHistoryRoute({ view: "analyze", analysisKey: "11111111-1111-4111-8111-111111111111",
+        analysisQuery: "conflicting plaintext" }, key => { seen.push(key); return null; });
+    assert.deepEqual(seen, [undefined]);
+    assert.deepEqual(journey.decodeHistoryRoute({ view: "analyze", service: "Files" }, missing), { view: "analyze", service: "Files" });
+});
+
+test("private-history detection covers nested reader and source returns without marking public history private", () => {
+    const journey = createSessionJourney(), analysis = { analysisKey: "11111111-1111-4111-8111-111111111111" };
+    for (const value of [analysis, { returnToSessions: analysis }, { returnToResults: analysis },
+        { returnToResults: { returnToSessions: analysis } }, { returnToResults: { analysisQuery: "old plaintext" } }]) {
+        assert.equal(journey.hasHistoryAnalysis(value), true);
+    }
+    for (const value of [null, {}, { analysisKey: undefined }, { returnToResults: { view: "analyze", services: "Files" } }]) {
+        assert.equal(journey.hasHistoryAnalysis(value), false);
+    }
+});

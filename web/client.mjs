@@ -2318,11 +2318,20 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (api.isCurrent(publication)) announce("The previous preview could not be cancelled on the runtime. Do not reuse it; prepare a new preview before reviewing.", "error");
         });
     }
+    function readHistoryAnalysis(key) {
+        const remembered = typeof key === "string" ? analysisNavigations.get(key) : null;
+        if (!remembered || !api.isCurrent(remembered.publication)) {
+            incomingNavigationError = "The earlier private Search selection is unavailable. Search again or explicitly open this view without it.";
+            return null;
+        }
+        return remembered.query;
+    }
     function readRoute(hash = location.hash, navigationState = history.state) {
         const current = api.publicationToken();
         if (!current || api.accessState().mode !== "unbound" && (navigationState?.wireAccess?.owner !== historyOwner
             || navigationState.wireAccess.epoch !== current.epoch || navigationState.wireAccess.runtimeId !== current.runtimeId)) {
-            if (navigationState?.evidenceView?.url === hash && (navigationState.evidenceView.search?.trim() || navigationState.evidenceView.analysisKey)) {
+            if (navigationState?.evidenceView?.url === hash && (navigationState.evidenceView.search?.trim()
+                || sessionJourney.hasHistoryAnalysis(navigationState.evidenceView))) {
                 incomingNavigationError = "The earlier private selection is no longer authorized. Search again or explicitly open this view without that selection.";
             }
             navigationState = null;
@@ -2337,15 +2346,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
         if (view === "reports" && !params.has("task") && (rawView === "report" || values.request)) values.task = "create";
         if (navigationState?.evidenceView?.url === hash && typeof navigationState.evidenceView.search === "string") values.search = navigationState.evidenceView.search;
-        if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToSessions) values.returnToSessions = sessionJourney.returnRoute(navigationState.evidenceView.returnToSessions);
-        if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToResults) values.returnToResults = sessionJourney.returnRoute(navigationState.evidenceView.returnToResults, true);
+        if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToSessions) {
+            values.returnToSessions = sessionJourney.decodeHistoryRoute(navigationState.evidenceView.returnToSessions, readHistoryAnalysis);
+        }
+        if (navigationState?.evidenceView?.url === hash && navigationState.evidenceView.returnToResults) {
+            values.returnToResults = sessionJourney.decodeHistoryRoute(navigationState.evidenceView.returnToResults, readHistoryAnalysis, true);
+        }
         if (navigationState?.evidenceView?.url === hash) {
             const key = navigationState.evidenceView.analysisKey;
-            const remembered = key ? analysisNavigations.get(key) : null;
-            if (key && (!remembered || !api.isCurrent(remembered.publication))) {
-                incomingNavigationError = "The earlier private Search selection is unavailable. Search again or explicitly open this view without it.";
-            }
-            values.analysisQuery = remembered && api.isCurrent(remembered.publication) ? remembered.query : null;
+            values.analysisQuery = key !== undefined || Object.hasOwn(navigationState.evidenceView, "analysisQuery")
+                ? readHistoryAnalysis(Object.hasOwn(navigationState.evidenceView, "analysisQuery") ? undefined : key) : null;
             if (/^[a-f0-9-]{36}$/.test(navigationState.evidenceView.savedEntry)) values.savedEntry = navigationState.evidenceView.savedEntry;
             if (navigationState.evidenceView.savedAuthority === "search") values.savedAuthority = "search";
             values.localSearch = Object.fromEntries(["settingsSearch", "savedReportSearch", "reportRequestSearch", "issueSearch"]
@@ -2534,6 +2544,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (view === "activity" && changes.session) presentation.setOpen("session:" + changes.session, true);
         return navigate(routeFor(view, changes), replace);
     }
+    function rememberHistoryAnalysis(query, publication, existingKey) {
+        const remembered = analysisNavigations.get(existingKey);
+        const key = remembered?.query === query && api.isCurrent(remembered.publication) ? existingKey : crypto.randomUUID();
+        analysisNavigations.set(key, { query, publication });
+        return key;
+    }
     function rememberRoute(next, replace = false) {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
@@ -2541,18 +2557,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const analysisQuery = Object.hasOwn(next, "analysisQuery") ? next.analysisQuery : semanticQuery;
         let analysisKey;
         if (typeof analysisQuery === "string" && analysisQuery.trim()) {
-            const existing = history.state?.evidenceView?.analysisKey, remembered = analysisNavigations.get(existing);
-            analysisKey = remembered?.query === analysisQuery && api.isCurrent(remembered.publication) ? existing : crypto.randomUUID();
-            analysisNavigations.set(analysisKey, { query: analysisQuery, publication });
+            analysisKey = rememberHistoryAnalysis(analysisQuery, publication, history.state?.evidenceView?.analysisKey);
         }
+        const storeAnalysis = query => rememberHistoryAnalysis(query, publication, analysisKey);
         historyPosition = replace ? historyPosition : historyPosition + 1;
         // Private-text search belongs to this browser history entry, never a copied URL.
         const navigationState = { ...history.state, wireAccess: { owner: historyOwner, epoch: publication.epoch, runtimeId: publication.runtimeId },
             evidenceView: { url, search: next.search || "", analysisKey, position: historyPosition,
             sidebarEntry: next.view === "request" ? (next.sidebarEntry ?? history.state?.evidenceView?.sidebarEntry) : undefined,
             sidebarRestoration: next.view === "request" || next.inspect ? sidebarHistoryMode ?? history.state?.evidenceView?.sidebarRestoration : undefined,
-            returnToSessions: sessionJourney.returnRoute(next.returnToSessions),
-            returnToResults: next.view === "request" ? sessionJourney.returnRoute(next.returnToResults, true) : undefined,
+            returnToSessions: sessionJourney.encodeHistoryRoute(next.returnToSessions, storeAnalysis),
+            returnToResults: next.view === "request" ? sessionJourney.encodeHistoryRoute(next.returnToResults, storeAnalysis, true) : undefined,
             savedEntry: next.savedEntry, savedAuthority: next.savedAuthority,
             localSearch: next.localSearch } };
         if (replace) history.replaceState(navigationState, "", url);

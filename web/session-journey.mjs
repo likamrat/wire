@@ -21,6 +21,34 @@ export function createSessionJourney() {
         if (includeSourceReturn && value.returnToSessions) saved.returnToSessions = returnRoute(value.returnToSessions);
         return savedRoute(canonical(saved));
     }
+    // In-memory return routes retain Search; persisted origins carry only page-owned references.
+    function encodeHistoryRoute(value, storeAnalysis, includeSourceReturn = false) {
+        const route = returnRoute(value, includeSourceReturn);
+        if (!route) return null;
+        if (Object.hasOwn(route, "analysisQuery")) {
+            const query = route.analysisQuery;
+            if (typeof query !== "string" || !query.trim()) throw new TypeError("Private Search history requires a nonempty query.");
+            delete route.analysisQuery;
+            route.analysisKey = storeAnalysis(query);
+            if (!/^[a-f0-9-]{36}$/.test(route.analysisKey)) throw new TypeError("Private Search history requires an opaque reference.");
+        }
+        if (route.returnToSessions) route.returnToSessions = encodeHistoryRoute(route.returnToSessions, storeAnalysis);
+        return route;
+    }
+    function decodeHistoryRoute(value, readAnalysis, includeSourceReturn = false) {
+        const route = returnRoute(value, includeSourceReturn);
+        if (!route) return null;
+        delete route.analysisQuery;
+        if (value.analysisKey !== undefined || Object.hasOwn(value, "analysisQuery")) {
+            route.analysisQuery = readAnalysis(Object.hasOwn(value, "analysisQuery") ? undefined : value.analysisKey);
+        }
+        if (includeSourceReturn && value.returnToSessions) route.returnToSessions = decodeHistoryRoute(value.returnToSessions, readAnalysis);
+        return route;
+    }
+    function hasHistoryAnalysis(value) {
+        return [value, value?.returnToSessions, value?.returnToResults, value?.returnToResults?.returnToSessions]
+            .some(route => route && (route.analysisKey !== undefined || typeof route.analysisQuery === "string"));
+    }
     function canonical(route) {
         const overview = ["analyze", "home", "overview", "activity", "calls"].includes(route.view);
         if (!overview && route.view !== "request") return route;
@@ -54,5 +82,6 @@ export function createSessionJourney() {
         }
         return origin;
     }
-    return { canonical, open, reportIds, returnRoute, underlying, savedRoute, savedOrigin };
+    return { canonical, open, reportIds, returnRoute, underlying, savedRoute, savedOrigin,
+        encodeHistoryRoute, decodeHistoryRoute, hasHistoryAnalysis };
 }
