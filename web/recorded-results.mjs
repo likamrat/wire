@@ -61,6 +61,7 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         // These signals were qualified at retention. Never re-read error prose or infer from HTTP status.
         if (evidence.messageStatus === "text-excluded") {
             if (evidence.messageSignal === "mcp-server-path-not-found" && evidence.messageSource === "workiq-error-json") return "Work IQ could not find the requested MCP server";
+            if (evidence.messageSignal === "retrieval-stopped-error" && evidence.messageSource === "workiq-error-json") return "Retrieval stopped with an error. The source did not supply a reason.";
             if (evidence.messageSignal === "response-processing-error" && evidence.messageSource === "workiq-error-json"
                 && evidence.code === "InternalServerError") return "Work IQ could not process the response (InternalServerError)";
             if (evidence.messageSignal === "workiq-sign-in-required") return "Sign-in was required";
@@ -148,7 +149,7 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         if (value.code != null && value.code !== "failure" && !message?.includes(String(value.code))) qualifiers.push(String(value.code));
         const status = value.statusCode;
         if (Number.isInteger(status) && status >= 100 && status <= 599) qualifiers.push("status " + status);
-        return message ? sourceExcerpt(message) + (qualifiers.length ? ` (${qualifiers.join("; ")})` : "")
+        return message ? (screen ? message : sourceExcerpt(message)) + (qualifiers.length ? ` (${qualifiers.join("; ")})` : "")
             : qualifiers.join("; ");
     }
     function returnedErrorSummary(call) {
@@ -175,7 +176,10 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             const code = diagnostic.code ?? result.errorCode;
             let text = diagnosticSummary({ ...diagnostic, code }, result.statusCode);
             if (!text || !(diagnostic.message || diagnostic.details?.length || code || result.statusCode >= 400)) return;
-            if (!diagnostic.message && !diagnostic.details?.length && !code) text += "; error details not recorded";
+            const gap = diagnosticGap(diagnostic);
+            if (gap) text += "; " + gap;
+            else if (!diagnostic.message && !diagnostic.details?.length && !code) text += diagnostic.status === "not-supplied"
+                ? "; the source did not supply error details" : "; error details not recorded";
             if (diagnostic.statusCode != null && result.statusCode != null && diagnostic.statusCode !== result.statusCode) {
                 text += `; returned status ${result.statusCode}`;
             }
@@ -204,12 +208,37 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             return { ...group, label: numbers.length ? (numbers.length === 1 ? "Returned entry " : "Returned entries ") + ranges.join(", ") : "Returned error" };
         });
     }
+    function diagnosticGap(diagnostic) {
+        return diagnostic?.version === 1 && ({
+            "sensitive-excluded": "Error details excluded for privacy",
+            "size-excluded": "Some error details exceeded the saving limit",
+            "unsupported-format": "WIRE could not read all details in this error format",
+        })[diagnostic.status];
+    }
     function callReasonItems(call, outcome, { includeReturned = true } = {}) {
         const reason = outcome === "failure" ? failureReason(call, { contextual: true, includeReturned: false })
             : completionReason(call, outcome, true, false);
         const items = reason ? reason.split("\n").map(text => ({ label: null, text })) : [];
+        const status = call?.resultEvidence?.version === 1 && !call.resultEvidence.statusConflict ? call.resultEvidence.statusCode : null;
+        if (Number.isInteger(status) && status >= 100 && status <= 599
+            && !new RegExp(`(?:status\\s*:?\\s*|HTTP\\s+)${status}\\b`, "i").test(reason ?? "")) {
+            items.push({ label: "Tool-reported status", text: String(status) });
+        }
+        for (const diagnostic of [call?.failureEvidence?.diagnostic, call?.resultEvidence?.diagnostic]) {
+            const gap = diagnosticGap(diagnostic);
+            if (gap && !items.some(item => item.text === gap)
+                && !(reason && /excluded for privacy|exceeded the saving limit|could not extract a readable reason/.test(reason))) {
+                items.push({ label: null, text: gap });
+            }
+        }
         if (includeReturned) items.push(...returnedErrorGroups(call));
         return items;
+    }
+    function callOperation(row) {
+        const targets = row?.targets?.length ? row.targets : [row?.endpoint];
+        const paths = [...new Set(targets.filter(target => typeof target?.path === "string")
+            .map(target => [target.method, target.apiVersion, target.path].filter(Boolean).join(" ")))];
+        return [row?.tool || "Tool not recorded", paths.length ? "Requested: " + paths.join("; ") : null].filter(Boolean).join(" \u00b7 ");
     }
     function returnedCoverage(call) {
         const result = call?.resultEvidence, retained = call?.apiResults?.length ?? 0;
@@ -461,5 +490,5 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             && callService.services[0] === resultService.services[0]
             && typeof parent.endpoint?.path === "string" && row.endpoint?.id === parent.endpoint.id;
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, returnedErrorGroups, returnedCoverage, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, callOperation, returnedErrorGroups, returnedCoverage, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
 }

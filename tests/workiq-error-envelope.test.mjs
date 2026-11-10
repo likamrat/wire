@@ -30,6 +30,167 @@ function events(message) {
 }
 const extract = rows => extractScenarios(rows, { sessionId: "invented-session" }, rows[0].timestamp, rows.at(-1).timestamp).scenarios;
 
+test("Work IQ ask error envelope retains its supplied reason and code instead of an unreadable-error fallback", () => {
+    const message = "The invented source policy is unavailable.";
+    const source = events("MCP server 'workiq': " + JSON.stringify({
+        response: null, error: message, errorCode: "SourcePolicyUnavailable",
+        conversationId: "PRIVATE_CONVERSATION", recoveryAction: "None", requestId: "PRIVATE_REQUEST",
+    }));
+    source[1].data.toolName = "workiq-ask";
+    source[1].data.arguments = { question: "Read the invented planning conversation." };
+    const retained = source.map(event => retainEvent(event, { credentialExclusions: 0 }));
+    const call = extract(retained)[0].toolCalls[0];
+    assert.equal(createRecordedResults().failureReason(call),
+        "Recorded error: The invented source policy is unavailable. (SourcePolicyUnavailable)");
+    assert.equal(call.failureEvidence.code, "SourcePolicyUnavailable");
+    assert.equal(call.failureEvidence.diagnostic.message, message);
+    assert.equal(call.failureEvidence.diagnostic.source, "workiq-error-json");
+    assert.equal(call.resultEvidence.contentStatus, "explicit-null");
+    assert.equal(call.resultEvidence.statusCode, null);
+    assert.deepEqual(call.apiResults, []);
+    assert.equal(call.toolSucceeded, false);
+    assert.equal(call.observedGraphHttp, false);
+    const direct = extract(source)[0].toolCalls[0];
+    assert.deepEqual(direct.failureEvidence, call.failureEvidence);
+    assert.deepEqual(direct.resultEvidence, call.resultEvidence);
+    assert.doesNotMatch(JSON.stringify(retained), /PRIVATE_|recoveryAction/);
+});
+
+test("ask errors use the same diagnostic projection in structured and text results without changing tool outcomes", () => {
+    const value = { response: null, error: "The invented source policy is unavailable.", errorCode: "SourcePolicyUnavailable" };
+    for (const result of [{ structuredContent: value }, { content: [{ type: "text", text: JSON.stringify(value) }] }]) {
+        for (const success of [false, true]) {
+            const source = events();
+            source[2].data = { toolCallId: "invented-call", success, result: { ...result, isError: true } };
+            const retained = source.map(event => retainEvent(event, { credentialExclusions: 0 }));
+            const call = extract(retained)[0].toolCalls[0], direct = extract(source)[0].toolCalls[0];
+            const diagnostic = success ? call.resultEvidence.diagnostic : call.failureEvidence.diagnostic;
+            assert.equal(diagnostic.message, value.error);
+            assert.equal(diagnostic.code, value.errorCode);
+            assert.equal(diagnostic.source, "result-error");
+            assert.equal(call.toolSucceeded, success);
+            assert.equal(call.resultEvidence.applicationError, true);
+            assert.equal(call.resultEvidence.contentStatus, "explicit-null");
+            assert.equal(call.resultEvidence.statusCode, null);
+            assert.deepEqual(call.apiResults, []);
+            assert.deepEqual(direct.failureEvidence, call.failureEvidence);
+            assert.deepEqual(direct.resultEvidence, call.resultEvidence);
+            if (success) assert.equal(call.failureEvidence, undefined);
+        }
+    }
+});
+
+test("blob error envelopes retain their nested diagnostic and status without base64 payloads", () => {
+    const source = events("MCP server 'workiq': " + JSON.stringify({
+        statusCode: 403, sizeBytes: 0, base64Content: "", error: { error: { code: "accessDenied", message: "Access denied" } },
+        requestId: "PRIVATE_REQUEST",
+    }));
+    source[1].data.toolName = "workiq-fetch_blob";
+    source[1].data.arguments = { path: "/me/drive/items/invented/content" };
+    const retained = source.map(event => retainEvent(event, { credentialExclusions: 0 }));
+    const call = extract(retained)[0].toolCalls[0];
+    assert.equal(call.failureEvidence.diagnostic.message, "Access denied");
+    assert.equal(call.failureEvidence.diagnostic.code, "accessDenied");
+    assert.equal(call.failureEvidence.diagnostic.statusCode, 403);
+    assert.equal(call.resultEvidence.statusCode, 403);
+    assert.deepEqual(call.apiResults, []);
+    assert.doesNotMatch(JSON.stringify(retained), /base64Content|sizeBytes|PRIVATE_/);
+});
+
+test("singleton structured and text Graph errors keep nested reasons and independent root statuses", () => {
+    const value = { statusCode: 412, data: null, error: { error: { code: "PreconditionFailed", message: "The supplied version is stale." } } };
+    for (const result of [{ structuredContent: value }, { content: [{ type: "text", text: JSON.stringify(value) }] }]) {
+        const source = events();
+        source[2].data = { toolCallId: "invented-call", success: false, result };
+        const call = extract(source.map(event => retainEvent(event, { credentialExclusions: 0 })))[0].toolCalls[0];
+        assert.equal(call.failureEvidence.diagnostic.message, "The supplied version is stale.");
+        assert.equal(call.failureEvidence.diagnostic.code, "PreconditionFailed");
+        assert.equal(call.resultEvidence.statusCode, 412);
+        const reading = createRecordedResults({ screen: true }).callReasonItems(call, "failure").map(item => item.text).join("\n");
+        assert.match(reading, /supplied version is stale/);
+        assert.match(reading, /412/);
+        assert.deepEqual(call.apiResults, []);
+    }
+});
+
+test("a failed invocation does not hide a separate singleton result diagnostic", () => {
+    const source = events("The invocation ended with a transport error.");
+    source[2].data.result = { structuredContent: { statusCode: 409,
+        error: { code: "Conflict", message: "The result reports a version conflict." } } };
+    const call = extract(source.map(event => retainEvent(event, { credentialExclusions: 0 })))[0].toolCalls[0];
+    assert.equal(call.failureEvidence.diagnostic.message, "The invocation ended with a transport error.");
+    assert.equal(call.resultEvidence.diagnostic?.message, "The result reports a version conflict.");
+    const reading = createRecordedResults({ screen: true }).callReasonItems(call, "failure").map(item => item.text).join("\n");
+    assert.match(reading, /invocation ended/);
+    assert.match(reading, /result reports a version conflict/);
+    assert.match(reading, /409/);
+});
+
+test("empty retrieval error envelopes distinguish an explicit stop from an absent cause", () => {
+    const source = events("MCP server 'workiq': " + JSON.stringify({
+        "application/vnd.ms-workiq.retrieval": { markdown: "", retrievalHits: [], resultCount: 0, stoppedReason: "error" },
+        requestId: "PRIVATE_REQUEST",
+    }));
+    source[1].data.toolName = "workiq-retrieve";
+    const retained = source.map(event => retainEvent(event, { credentialExclusions: 0 }));
+    const call = extract(retained)[0].toolCalls[0];
+    assert.equal(createRecordedResults().failureReason(call),
+        "Retrieval stopped with an error. The source did not supply a reason.");
+    assert.equal(call.failureEvidence.diagnostic.status, "not-supplied");
+    assert.equal(call.resultEvidence.contentStatus, "recorded-empty");
+    assert.equal(call.resultEvidence.resultCount, null, "A retrieval-hit count is not an API-entry count.");
+    assert.deepEqual(call.apiResults, []);
+    assert.doesNotMatch(JSON.stringify(retained), /retrievalHits|PRIVATE_|markdown/);
+});
+
+test("ask envelope qualification never mines response bodies or relaxes diagnostic privacy and bounds", () => {
+    const value = { response: null, error: "Invented policy unavailable.", errorCode: "SourcePolicyUnavailable" };
+    const retainedCall = value => {
+        const source = events("MCP server 'workiq': " + JSON.stringify(value));
+        const retained = source.map(event => retainEvent(event, { credentialExclusions: 0 }));
+        return { retained, call: extract(retained)[0].toolCalls[0] };
+    };
+    for (const invalid of [
+        { ...value, response: "PRIVATE_BODY" }, { ...value, unexpected: true },
+        { ...value, conversationId: {} }, { ...value, recoveryAction: [] },
+        { ...value, requestId: 123 }, { ...value, errorCode: {} },
+    ]) {
+        const { retained, call } = retainedCall(invalid);
+        assert.equal(call.failureEvidence.diagnostic.status, "unsupported-format");
+        assert.equal(call.failureEvidence.diagnostic.message, undefined);
+        assert.deepEqual(call.apiResults, []);
+        assert.doesNotMatch(JSON.stringify(retained), /PRIVATE_BODY/);
+    }
+    for (const [error, status] of [
+        ["x".repeat(8192), "recorded"],
+        ["x".repeat(8193), "size-excluded"],
+        ["\u65e5".repeat(2731), "size-excluded"],
+        ["Bearer " + "a".repeat(40), "sensitive-excluded"],
+        ["Confidential invented error", "sensitive-excluded"],
+        ['Returned payload: {"body":"PRIVATE_BODY"}', "unsupported-format"],
+    ]) {
+        const { retained, call } = retainedCall({ ...value, error });
+        assert.equal(call.failureEvidence.diagnostic.status, status);
+        if (status !== "recorded") assert.equal(call.failureEvidence.diagnostic.message, undefined);
+        assert.doesNotMatch(JSON.stringify(retained), /PRIVATE_BODY|Bearer|Confidential/);
+    }
+    const redacted = retainedCall({ ...value, error: "Contact person@example.invalid about the invented policy." }).call;
+    assert.equal(redacted.failureEvidence.diagnostic.message, "Contact [redacted] about the invented policy.");
+    assert.equal(redacted.failureEvidence.diagnostic.status, "redacted");
+    const unsafeCode = retainedCall({ ...value, errorCode: "call_PRIVATEIDENTIFIER1234" });
+    assert.equal(unsafeCode.call.failureEvidence.diagnostic.code, undefined);
+    assert.doesNotMatch(JSON.stringify(unsafeCode.retained), /PRIVATEIDENTIFIER/);
+    const legacy = events();
+    delete legacy[2].data.error;
+    legacy[2].data.wireFailureEvidence = {
+        version: 1, reason: "error-code-recorded", code: "failure", messageStatus: "text-excluded", messageSignal: null,
+        diagnostic: { version: 1, source: "completion-error", status: "unsupported-format", code: "failure" },
+    };
+    const before = JSON.stringify(legacy), call = extract(legacy)[0].toolCalls[0];
+    assert.equal(createRecordedResults().failureReason(call), "WIRE could not extract a readable reason from the recorded error");
+    assert.equal(JSON.stringify(legacy), before, "Reading old saved evidence does not recover discarded source text.");
+});
+
 test("error envelopes require bounded, qualified Work IQ JSON and never mine prose or successful payloads", () => {
     const supported = envelope([failedResult()]);
     for (const message of [

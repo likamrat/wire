@@ -5,6 +5,7 @@ import { projectReportResultObservation, freezeReportResultFacts, validateReport
 import { projectReportResults } from "../lib/report-result-projection.mjs";
 import { buildReportFacts } from "../lib/assessment-read-model.mjs";
 import { fixture } from "./helpers.mjs";
+import { reportResultContent, reportResultHtml, reportResultMarkdown } from "../lib/report-result-output.mjs";
 
 const namespace = "namespace-" + "a".repeat(32);
 const recordRef = "record-" + "b".repeat(32);
@@ -16,6 +17,25 @@ function facts(flag, overrides = {}) {
             contentStatus: "body-excluded", resultCount: null, ...overrides,
         }, retainedResultCount: 0 })] }], namespace);
 }
+
+test("human report output includes every call and the precise missing-error gap beyond twelve calls", () => {
+    const value = freezeReportResultFacts(Array.from({ length: 15 }, (_, index) => ({
+        ref: "record-" + (index + 1).toString(16).padStart(32, "0"), source: "github-copilot",
+        tool: "workiq-fetch", completion: index === 14 ? "succeeded" : "failed",
+        observations: [projectReportResultObservation("result-observation-" + (index + 1).toString(16).padStart(32, "0"),
+            index === 13 ? { diagnostic: { version: 1, source: "completion-error", status: "sensitive-excluded", code: "AccessDenied" } } : {})],
+    })), namespace);
+    const content = reportResultContent(value);
+    assert.equal(content.calls.length, 15);
+    assert.equal(content.omittedCalls, 0);
+    for (const text of [reportResultHtml(value), reportResultMarkdown(value).join("\n")]) {
+        assert.match(text, /Report call 15/);
+        assert.match(text, /Failure reason was not saved/);
+        assert.match(text, /excluded for privacy/);
+        assert.match(text, /does not establish answer correctness or overall task success/);
+        assert.doesNotMatch(text, /manifest lists .*more calls/);
+    }
+});
 
 test("result-level change is independent of unchanged completion and never inferred from it", () => {
     const before = facts(false), after = facts(true), comparison = compareReportResultFacts(before, after);
@@ -35,6 +55,10 @@ test("SDK projection binds the existing frozen canonical membership and resolves
     assert.deepEqual(projected.facts.calls.map(call => call.ref),
         githubFacts.memberships.flatMap(group => group.members.filter(member => member.kind === "tool-call").map(member => member.ref)));
     assert.equal(projected.sources[0].memberRef, projected.facts.calls[0].ref);
+    const reading = reportResultContent(projected.facts, githubFacts);
+    assert.ok(reading.calls[0].lines.some(line => line.startsWith("Requested: ")));
+    assert.throws(() => reportResultContent({ ...projected.facts, namespace: "namespace-" + "e".repeat(32) }, githubFacts),
+        /different report namespace/);
 });
 
 test("old missing result facts and partial flag coverage remain unavailable, not zero", () => {

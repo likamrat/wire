@@ -239,6 +239,18 @@ or corrupted payloads block preparation.
 Human summaries may omit redundant prose, not selected evidence or
 qualifications. Screen tokens, icons and typography cannot restyle frozen files.
 
+Recorded tool results include every selected call, including calls with no
+saved diagnostic; there is no first-twelve-call display cap. Each result names
+its tool and the requested operation from the same frozen technical facts,
+when available. Returned-entry positions remain separate from requested batch
+targets. Error details distinguish source absence, retention loss, privacy
+exclusion and unsupported formats. Completed means the source recorded tool
+completion, not that WIRE established task success.
+When an invocation error and a separate result error are both retained, selected
+copies keep both with distinct labels and copy identities under the same call.
+Readers must understand those labels; an older reader may refuse a newer report
+rather than drop one of its errors. Existing saved copies and hashes stay unchanged.
+
 Verified Open follows the saved artifact:
 
 1. Check ownership, managed paths, manifest, inventory, file hash/length and

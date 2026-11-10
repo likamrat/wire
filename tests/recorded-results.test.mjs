@@ -54,6 +54,26 @@ test("result widget titles name the evidence unit without conflating source popu
     }
 });
 
+test("operation labels use recorded tool and canonical requested targets without inventing methods", () => {
+    const results = createRecordedResults({ screen: true });
+    assert.equal(results.callOperation({ tool: "workiq-ask", endpoint: { path: null } }), "workiq-ask");
+    assert.equal(results.callOperation({ tool: "workiq-fetch", targets: [{ path: "/me/messages", method: null },
+        { path: "/me/calendarView", method: null }] }),
+    "workiq-fetch \u00b7 Requested: /me/messages; /me/calendarView");
+    assert.equal(results.callOperation({ tool: "workiq-delete_entity", endpoint: { method: "DELETE", path: "/planner/plans/{id}" } }),
+        "workiq-delete_entity \u00b7 Requested: DELETE /planner/plans/{id}");
+});
+
+test("a retained code cannot hide a privacy, size or format gap in the rest of the diagnostic", () => {
+    const results = createRecordedResults({ screen: true });
+    for (const [status, expected] of [["sensitive-excluded", "privacy"], ["size-excluded", "saving limit"], ["unsupported-format", "error format"]]) {
+        const items = results.callReasonItems({ failureEvidence: { version: 1,
+            diagnostic: { version: 1, source: "completion-error", code: "AccessDenied", status } } }, "failure");
+        assert.ok(items.some(item => item.text.includes("AccessDenied")));
+        assert.ok(items.some(item => item.text.includes(expected)));
+    }
+});
+
 test("result selections canonicalize OR unions without silently broadening invalid input", () => {
     const results = createRecordedResults();
     assert.deepEqual(results.selection("unknown,success,unknown"), ["success", "unknown"]);
@@ -298,8 +318,10 @@ test("call groups combine only complete equivalent returned facts and preserve e
         ...entry, errorDiagnostic: { ...entry.errorDiagnostic, message: prefix + `different middle ${index}` + suffix },
     }));
     const excerpts = results.returnedErrorGroups({ apiResults: unequal });
-    assert.equal(excerpts.length, 2, "Compare complete diagnostics before making excerpts.");
-    assert.equal(excerpts[0].text, excerpts[1].text);
+    assert.equal(excerpts.length, 2, "Compare complete diagnostics before presenting them.");
+    assert.notEqual(excerpts[0].text, excerpts[1].text, "The distinguishing middle of a recorded reason stays visible.");
+    assert.match(excerpts[0].text, /different middle 0/);
+    assert.match(excerpts[1].text, /different middle 1/);
     const missing = results.returnedErrorGroups({ apiResults: [{ index: 0, statusCode: 403 }, { index: 1, statusCode: 403 }] });
     assert.equal(missing.length, 2);
     assert.match(missing[0].text, /403/);

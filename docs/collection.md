@@ -181,6 +181,21 @@ or inventing a cause. An older record's saved status remains readable without
 rewriting its evidence. A reported 503 means Service unavailable; it does not
 establish which downstream service failed or whether an operation took effect.
 
+The decoder also recognizes the `ask` failure envelope with a null response
+and separate `error`/`errorCode`, and an empty `fetch_blob` response carrying
+a nested error and status. It keeps the screened diagnostic, not conversation
+IDs, request IDs, recovery instructions or encoded file contents.
+An empty retrieval envelope with `stoppedReason: "error"` establishes that
+retrieval stopped, but supplies no cause. WIRE says so instead of treating
+that supported envelope as unreadable. Unknown shapes stay unsupported;
+the decoder does not search arbitrary response bodies for error-like prose.
+
+These rules apply when original events are collected. Reading an older cache
+cannot recover text already discarded by an earlier collector. A separately
+approved, source-bound repair must update the canonical record and any retained
+checkpoint together; installing new code is not that approval. Saved reports
+keep their original facts and files.
+
 Prompt authorship comes from supported host provenance, not the `user.message`
 role or the wording. Host-added image references must match the event's attachment
 metadata; they do not supply an author themselves. Reading saved activity never

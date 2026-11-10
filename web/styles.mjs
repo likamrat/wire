@@ -645,6 +645,7 @@ ${textAction}.quiet:disabled::before {border-color:transparent}
 .request-card-reasons {display:grid;gap:12px;list-style:none;padding:0;margin:0;min-width:0;color:var(--ink)}
 .request-card-reason {display:grid;justify-items:start;gap:6px;min-width:0}
 .request-card-reason-text {min-width:0;color:var(--ink);font:var(--weight-regular) var(--type-reading)/1.5 var(--font)}
+.request-card-operation {color:var(--muted);font:var(--weight-regular) var(--type-small)/1.5 var(--font);overflow-wrap:anywhere}
 .returned-coverage {display:block;margin:6px 0 0;max-width:none;color:var(--muted);font:var(--weight-regular) var(--type-reading)/1.5 var(--font)}
 .request-card-failure-text {color:var(--chart-failure)}
 .request-card-summary {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-top:12px;font-size:var(--type-caption);line-height:var(--leading-ui);color:var(--muted)}

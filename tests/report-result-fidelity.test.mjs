@@ -42,7 +42,10 @@ test("result reading uses grammatical coverage and human descriptions without ch
     assert.equal(JSON.stringify(compared), frozen);
     const older = fixture("older-result-reading");
     older.toolCalls[0].apiResults = [];
-    assert.match(reportResultHtml(projectReportResults([older], "a".repeat(64)).facts), /manifest lists 1 more call/);
+    const oldOutput = reportResultHtml(projectReportResults([older], "a".repeat(64)).facts);
+    assert.match(oldOutput, /Report call 1/);
+    assert.match(oldOutput, /result-body details were not saved/);
+    assert.doesNotMatch(oldOutput, /manifest lists 1 more call/);
 });
 
 test("result-text reading distinguishes not selected, selected empty and source text not included", () => {

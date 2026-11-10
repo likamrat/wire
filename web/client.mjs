@@ -2711,9 +2711,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     // Screen copy only; shared labels and failure-group identities stay unchanged.
     const failureReasonCopy = {
-        "Work IQ could not find the requested MCP server": "Work IQ could not find the requested address",
+        "Work IQ could not find the requested MCP server": "Work IQ could not find the requested tool server",
         "Sign-in was required": "Work IQ required sign-in at the time",
-        "Request timed out (MCP -32001)": "The tool did not respond in time",
+        "Request timed out (MCP -32001)": "The tool did not respond in time (MCP -32001)",
         "Error text excluded for privacy": "Error details omitted for privacy",
         "Error text exceeded the saving limit": "Error details were too long to save",
         "Error format was not supported": "WIRE could not read the error details",
@@ -5251,6 +5251,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 const explanations = callReasonList(entry.items);
                 explanations.classList.add("request-card-reason-text");
                 item.append(status, explanations);
+                if (entry.rowId) {
+                    const row = rows.find(row => row.id === entry.rowId);
+                    status.after(el("span", "request-card-operation", results.callOperation(row)));
+                }
                 if (entry.coverage) item.append(el("p", "returned-coverage", entry.coverage.text));
                 reasons.append(item);
             }
@@ -5982,6 +5986,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const consistentCompletion = row?.outcome === "success" && tool.reportedOutcome === "succeeded" && tool.toolSucceeded === true
                 || row?.outcome === "failure" && tool.reportedOutcome === "failed" && tool.toolSucceeded === false;
             const completion = fields([
+                ...(row?.outcome === "success" ? [["Completion evidence", "The source recorded a successful tool completion. This does not establish answer correctness or overall task success."]] : []),
                 ...consistentCompletion ? [] : [["Reported outcome", tool.reportedOutcome], ["Execution success", tool.toolSucceeded]],
             ]);
             if (completion.childElementCount) expert.append(completion);

@@ -95,12 +95,20 @@ text selection keep their established behavior.
 Failure presentation keeps three boundaries:
 
 - Each call owns its reasons and stable full-interaction ordinal. Matching prose
-  does not merge different calls.
+  does not merge different calls. Card explanations name the recorded tool and
+  normalized requested paths when available; these are not proof of downstream
+  API execution or a mapping between batch targets and returned entries.
 - Equivalent complete returned diagnostics within one call may share a reason
   only if all original entry identities remain. Missing/redacted/ambiguous facts
   cannot qualify that grouping.
 - Cards and readers show all supported reasons under their call, without a
-  first-N cap, "one more reason" disclosure or extra failure page.
+  first-N cap, "one more reason" disclosure or extra failure page. Keep the
+  distinguishing middle of a retained diagnostic, not just its beginning and end.
+
+A retained code does not hide a privacy, size or format gap in the rest of the
+diagnostic. Source-absent details and details WIRE did not retain stay distinct.
+The reader explains completed calls through their recorded completion evidence,
+without claiming the answer was correct or the overall task succeeded.
 
 Exact input/provenance disclosure is a separate action. Partial-response
 coverage is separate from failure reasons and matching-call counts.
