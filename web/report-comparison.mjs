@@ -14,6 +14,13 @@ export function createReportComparison(wording = createAssessmentWording(), dura
     const comparisonNote = "The reports may cover different requests or time periods. A change between them does not tell you what caused it. Returned API entries, recorded Graph sites and HTTP recorder records are counted separately.";
     const sourceNames = { "github-copilot": "GitHub Copilot", "microsoft-365-chat": "Microsoft 365 Chat", "microsoft-365-cowork": "Microsoft 365 Cowork" };
     const resultBoundary = "Tool completion is separate from application results and returned API entries. None proves task completion; entry counts are not item or page totals.";
+    function timingFailureText(value) {
+        if (value === undefined) return null;
+        if (value?.version !== 1 || value.kind !== "request-timeout" || value.basis !== "retained-failure-signal") {
+            throw new TypeError("Unsupported recorded timing failure.");
+        }
+        return "Request timed out (MCP -32001)";
+    }
     function resultComparisonContent(value) {
         if (!value) return null;
         if (value.version !== 1) throw new TypeError("Unsupported result-comparison presentation.");
@@ -38,6 +45,7 @@ export function createReportComparison(wording = createAssessmentWording(), dura
             ...(value.statusCode !== null ? [`tool-reported status ${value.statusCode}`] : []),
             ...(value.statusConflict ? [`conflicting statuses ${value.statusConflict.structured} / ${value.statusConflict.text}`] : []),
             ...(value.errorCode !== null ? [`recorded error code ${value.errorCode}`] : []),
+            ...(value.timingFailure ? [timingFailureText(value.timingFailure)] : []),
             ...(value.errorStatusCode !== null ? [`recorded error status ${value.errorStatusCode}`] : []),
             ...(value.resultCount !== null ? [`${value.resultCount} supplied response entries; ${value.retainedResultCount ?? "unknown"} retained`] : []),
             ...(value.paginationPresent === true ? ["next-page indication: recorded"] : []),
@@ -623,7 +631,7 @@ export function createReportComparison(wording = createAssessmentWording(), dura
         presentation,
         readingNotes, readingNotesFor,
         comparisonNote,
-        resultBoundary, resultComparisonContent, renderResultComparison, resultTextNotice, resultTextSourcesContent, renderResultTextSources,
+        resultBoundary, timingFailureText, resultComparisonContent, renderResultComparison, resultTextNotice, resultTextSourcesContent, renderResultTextSources,
         scopeNotes,
         outcomeTone,
         formatValue,

@@ -83,6 +83,15 @@ different definitions and must not be substituted for one another.
 
 Missing timing remains unavailable, not zero.
 
+New result observations can include `timingFailure` v1: the saved, qualified
+`request-timeout` signal with `basis: "retained-failure-signal"`. Reports preserve
+it separately from the outer error code and unavailable original error text.
+It means the source recorded MCP -32001, not that WIRE inferred a timeout from
+elapsed time. A timeout does not establish whether the requested work finished.
+Existing frozen observations without this extension stay unchanged; Compare
+can identify newly included evidence without calling it a new execution.
+Readers predating this extension cannot read new reports containing it.
+
 ### Report presets and notes
 
 `reportPopulation` v1 freezes metadata-only reference membership and the included
