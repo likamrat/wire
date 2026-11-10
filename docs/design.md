@@ -44,6 +44,10 @@ than toggling it off; Analyze and Compare retain independent accepted scopes.
 When a destination needs a new stored read, select it and show its loading
 state immediately. Do not present the old charts as its accepted population.
 Failed reads restore the accepted origin; later navigation wins over held reads.
+Prepare chat-name/reference lookups once for the current render, including the
+full source roster. Keep every option, exact name and shortest distinguishing
+ID suffix. Reuse that lookup only within the render; do not retain private
+catalogs across source updates or access withdrawal.
 
 The account avatar keeps the same internal horizontal alignment throughout
 sidebar motion. Its image, name and chevron stay mounted; fade and clip the

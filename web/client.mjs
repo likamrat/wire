@@ -2648,16 +2648,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         return sessionId ? { sessionId, name: scenario?.sourceSessionName || chatCopy.unnamed, projectId: scenario?.projectId, project: scenario?.project,
             missing: !scenario } : null;
     }
-    function sourceReference(source) {
+    function sourceReference(source, references) {
         if (!source) return null;
-        const sources = new Map((state?.sessions || []).map(item => [item.sessionId, item.name]));
-        for (const item of state?.scenarios || []) if (item.sourceSessionId && !sources.has(item.sourceSessionId)) {
-            sources.set(item.sourceSessionId, item.sourceSessionName || chatCopy.unnamed);
-        }
-        if (source.name !== chatCopy.unnamed && ![...sources].some(([id, name]) => id !== source.sessionId && name === source.name)) return null;
-        let length = Math.min(8, source.sessionId.length);
-        while (length < source.sessionId.length && [...sources.keys()].some(id => id !== source.sessionId && id.endsWith(source.sessionId.slice(-length)))) length++;
-        return `${applied.layer === "http" ? "Source" : "Chat"} ${length < source.sessionId.length ? "..." : ""}${source.sessionId.slice(-length)}`;
+        return (references || chatCopy.references(state?.sessions, state?.scenarios))(source, applied.layer === "http");
     }
     function createSessionReport() {
         if (reportJourney?.snapshot().saveUnconfirmed) { announce(reportJourney.reason(1), "stale"); return; }
@@ -4030,7 +4023,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (route.view !== "analyze") chartReferenceUI.leave();
         else chartReferenceUI.refresh();
     }
-    function renderNavigation(navigationOrigin = underlyingRoute()) {
+    function renderNavigation(navigationOrigin = underlyingRoute(), references) {
         analyzeReferenceEntry.show(route.view === "analyze" && (semanticQuery === null || semanticBound));
         analyzeControls.context({ analyze: route.view === "analyze", compare: route.view === "analyze" && route.compare === "periods",
             ordinary: route.view === "analyze" && route.compare !== "periods" && (semanticQuery === null || semanticBound) });
@@ -4087,7 +4080,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 ? "This source is not in the retained collection. Clear its filter to see other records."
                 : (applied.layer === "http" ? "Filtered to recorder source: " : "Filtered to chat: ") + source.name));
             if (source.projectId) $("pageProject").append(projectContext(source));
-            const reference = sourceReference(source);
+            const reference = sourceReference(source, references);
             if (reference) $("pageProject").append(el("span", "source-reference", reference));
             const hosts = [...new Set(state.scenarios.filter(item => item.sourceSessionId === source.sessionId).map(item => item.sourceHost).filter(Boolean))];
             $("pageProject").append(disclosure("Technical source record", facts([
@@ -4441,7 +4434,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (description) host.dataset.revision = String(state.revision);
         else delete host.dataset.revision;
     }
-    function renderControls() {
+    function renderControls(references) {
         resultLabels = results.labels(applied.layer);
         sourceOptions();
         const projects = new Map(state.scenarios.map((scenario) => [scenario.projectId || "unscoped", scenario.projectId ? scenario.project || scenario.projectId : "Project not recorded"]));
@@ -4455,7 +4448,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         for (const scenario of state.scenarios) if (scenario.sourceSessionId && !chats.has(scenario.sourceSessionId)) chats.set(scenario.sourceSessionId, scenario.sourceSessionName || chatCopy.unnamed);
         setText($("chatFilter").closest(".filter-field").querySelector("label"), applied.layer === "http" ? "Recorder source" : "Copilot chat");
         replacePrivateChoices($("chatFilter"), option("all", applied.layer === "http" ? "All recorder sources" : "All Copilot chats"), ...[...chats].map(([id, name]) => {
-            const reference = sourceReference({ sessionId: id, name });
+            const reference = sourceReference({ sessionId: id, name }, references);
             return option(id, reference ? `${name} (${reference})` : name);
         }));
         document.querySelector('[data-chart="workload"]').textContent = applied.layer === "tool" ? "By category" : "By service";
@@ -5206,7 +5199,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const action = routeLink(source.name, sessionRoute(source.sessionId), "text-link");
             action.setAttribute("aria-label", (applied.layer === "http" ? "Filter to recorder source: " : "Filter to chat: ") + source.name);
             chat.append(action);
-            const reference = sourceReference(source);
+            const reference = sourceReference(source, options.references);
             if (reference) chat.append(el("span", "source-reference", reference));
         } else chat.textContent = "Not recorded";
         list.append(cardFact(applied.layer === "http" ? "Recorder source" : "Copilot Chat", chat));
@@ -5432,7 +5425,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? "Return to report Activity to change this scope." : "Add this interaction before continuing."), { compact: true });
         return actions;
     }
-    function renderRequest() {
+    function renderRequest(references) {
         const publication = api.publicationToken();
         if (!publication || clearingAccess) return;
         if (route.view !== "request") return;
@@ -5789,6 +5782,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else rendered.splice(index, 0, { ...entry, node: item });
             detailOwner = "request:" + route.request;
         }
+        references ??= chatCopy.references(state.sessions, state.scenarios);
         for (const group of context.groups) {
         const scenario = group.scenario, isSelected = group.relation === "selected";
         const groupVisibility = isSelected ? activitySection.visibility : linkedVisibility;
@@ -5822,7 +5816,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             sourceFacts.append(cardFact("Source", identity?.label ?? "Source unavailable"));
             if (identity) sourceFacts.dataset.sourceId = identity.id;
         }
-        appendCardSource(sourceFacts, scenario, { compact: true, includeModel: false, includeTime: false, includeProject: false });
+        appendCardSource(sourceFacts, scenario, { compact: true, includeModel: false, includeTime: false, includeProject: false, references });
         for (const term of sourceFacts.querySelectorAll("dt")) term.textContent = term.textContent.replace(/:$/, "");
         if (isSelected) readerFacts.append(sourceFacts);
         readerFacts.append(modelFact);
@@ -7697,8 +7691,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         analytics = slice.analytics;
         if (sourceCollection.active) boundedNative.syncInventories(acceptedNativeView(), applied,
             isStale || Boolean(search.trim()) || Boolean(route.withinServices));
+        const references = chatCopy.references(state.sessions, state.scenarios);
         renderTimeContext();
-        renderControls(); renderNavigation(requestRoute ? sessionJourney.underlying(requestRoute) : undefined); renderFilterChips(); renderViewingContext();
+        renderControls(references); renderNavigation(requestRoute ? sessionJourney.underlying(requestRoute) : undefined, references); renderFilterChips(); renderViewingContext();
         const sourceCoverage = renderSessionAnalysis();
         analyzeControls.sourceCoverage(sourceCoverage);
         chartReferenceSourceCoverage = sourceCoverage?.textContent || "";
@@ -7719,7 +7714,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             route = requestRoute;
             const entering = !sidebarIdentity;
             showInteractionSidebar();
-            renderRequest();
+            renderRequest(references);
             if (entering) focusSidebar();
         }
         const comparisonUpdate = periodComparisonUI.update();

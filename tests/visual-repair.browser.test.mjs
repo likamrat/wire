@@ -4,11 +4,11 @@ import { chromium, expect } from "@playwright/test";
 import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
-import { loadBoardState } from "../lib/store.mjs";
+import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
 import { createProfileSource, profilePNG } from "./source-profile-fixture.mjs";
-import { fixture, privateFixture, chooseTheme, navigateSettings } from "./helpers.mjs";
+import { fixture, privateFixture, chooseTheme, navigateSettings, navigateMain, selectActivityOption, revealSavedDataRead } from "./helpers.mjs";
 
-async function setup(t, { reports = false } = {}) {
+async function setup(t, { reports = false, rosterCount = 0 } = {}) {
     const cleanup = [], { root, context } = await privateFixture({ after: work => cleanup.push(work) },
         Array.from({ length: 60 }, (_, index) => {
             const record = fixture("visual-repair-" + index);
@@ -17,6 +17,17 @@ async function setup(t, { reports = false } = {}) {
             record.followUpPrompts = [];
             return record;
         }));
+    const records = (await loadBoardState(context)).evidence;
+    const roster = Array.from({ length: rosterCount }, (_, index) => ({
+        sessionId: ["prefix-a12345678", "prefix-b12345678", "test-session"][index] || `invented-roster-${index}`,
+        name: index < 2 ? "Repeated" : `Invented roster conversation ${index}`,
+        eligible: true, scanned: true, disposition: "included",
+    }));
+    if (rosterCount) {
+        records[0].sourceSessionId = roster[0].sessionId;
+        records[1].sourceSessionId = roster[1].sessionId;
+        await replaceEvidence(context, () => ({ records, importCoverage: { counts: {}, roster } }));
+    }
     const source = await createProfileSource(root);
     const access = await createCopilotRuntimeAccess(context), exports = createExportController(context);
     let runtime, browser;
@@ -49,7 +60,7 @@ async function setup(t, { reports = false } = {}) {
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await expect(page.locator("#wireAccountTrigger img")).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    return { page };
+    return { page, context, records, roster };
 }
 
 test("the loaded avatar keeps its horizontal position at collapse, reversal and settle", async t => {
@@ -169,4 +180,42 @@ for (const outcome of ["failure", "superseded"]) test(`pending destination ${out
         await expect(page.locator("#reportsView")).toBeVisible();
     }
     await expect(page.locator("#navigationPending")).toBeHidden();
+});
+
+test("large roster labels preserve every option, selected identity, source updates and withdrawal", { timeout: 60000 }, async t => {
+    const { page, context, records, roster } = await setup(t, { rosterCount: 4000 });
+    const selectedId = roster[0].sessionId;
+    const catalog = () => page.locator("#chatFilter option").evaluateAll(nodes => nodes.map(n => ({ value: n.value, label: n.textContent })));
+    const before = await catalog();
+    assert.equal(before.length, 4001);
+    assert.equal(before.find(n => n.value === selectedId).label, "Repeated (Chat ...a12345678)");
+    assert.equal(before.find(n => n.value === roster[1].sessionId).label, "Repeated (Chat ...b12345678)");
+    await selectActivityOption(page, "chatFilter", selectedId);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await navigateMain(page, "settings");
+    for (const section of ["privacy", "display", "connection"]) {
+        await navigateSettings(page, section);
+        assert.deepEqual(await catalog(), before);
+        await expect(page.locator("#chatFilter")).toHaveValue(selectedId);
+    }
+    await navigateMain(page, "analyze");
+    await expect(page.locator("#pageProject .source-reference")).toHaveText("Chat ...a12345678");
+    await page.locator("#activityList .request-card-open").first().click();
+    assert.ok((await page.locator("#requestContent .source-reference").allTextContents()).includes("Chat ...a12345678"));
+    await page.locator("#closeContextSidebar").click();
+    await expect(page.locator("#contextSidebar")).toBeHidden();
+    const old = await page.locator(`#chatFilter option[value="${selectedId}"]`).elementHandle();
+    roster[0].name = "Renamed source";
+    await replaceEvidence(context, () => ({ records, importCoverage: { counts: {}, roster } }));
+    const read = await revealSavedDataRead(page);
+    await read.click();
+    await expect(page.locator(`#chatFilter option[value="${selectedId}"]`)).toHaveText("Renamed source");
+    await expect(page.locator("#chatFilter")).toHaveValue(selectedId);
+    assert.equal(await old.evaluate(n => n.textContent), "");
+    const held = await page.locator(`#chatFilter option[value="${selectedId}"]`).elementHandle();
+    await page.locator("#wireAccountTrigger").click();
+    await page.locator("#wireAccountGate").click();
+    await expect(page.locator("#workspace")).toBeHidden();
+    assert.equal(await held.evaluate(n => n.textContent), "");
+    assert.equal((await catalog()).some(n => n.label.includes("Renamed source") || n.label.includes("Invented roster")), false);
 });
