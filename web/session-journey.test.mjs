@@ -131,3 +131,23 @@ test("private-history detection covers nested reader and source returns without 
         assert.equal(journey.hasHistoryAnalysis(value), false);
     }
 });
+
+test("peer destinations discard comparison browsing markers without changing explicit return scope", () => {
+    const journey = createSessionJourney();
+    const comparison = { view: "analyze", compare: "periods", aFrom: "2026-09-29", aTo: "2026-09-29",
+        bFrom: "2026-09-30", bTo: "2026-09-30", comparisonView: "tools", comparisonFocus: "errors",
+        source: "github-copilot", services: "Files", analysisQuery: "private analytical query", search: "local refinement" };
+    const shared = { source: comparison.source, services: comparison.services, analysisQuery: comparison.analysisQuery, search: comparison.search };
+    for (const view of ["reports", "settings", "collection-status"]) {
+        const peer = { ...comparison, view, returnToSessions: comparison };
+        const expected = { ...shared, view, returnToSessions: comparison };
+        assert.deepEqual(journey.canonical(peer), expected);
+        assert.deepEqual(journey.returnRoute(peer, true), expected);
+        assert.deepEqual(journey.savedOrigin(peer), expected);
+    }
+    const reader = { ...comparison, view: "request", request: "interaction", returnToResults: comparison };
+    assert.deepEqual(journey.canonical(reader), reader);
+    assert.deepEqual(journey.underlying(reader), comparison);
+    assert.deepEqual(journey.returnRoute({ ...comparison, view: "reports", task: "compare" }),
+        { ...shared, view: "reports", task: "compare" }, "Saved-report comparison remains a distinct Reports task.");
+});

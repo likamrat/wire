@@ -51,7 +51,10 @@ export function createSessionJourney() {
     }
     function canonical(route) {
         const overview = ["analyze", "home", "overview", "activity", "calls"].includes(route.view);
-        if (!overview && route.view !== "request") return route;
+        if (!overview && route.view !== "request") {
+            const { compare, aFrom, aTo, bFrom, bTo, comparisonView, comparisonFocus, ...peer } = route;
+            return peer;
+        }
         const { mode, callSort, ...next } = route;
         // A legacy call-page offset is not an interaction-page offset.
         if (route.view === "calls" || mode === "calls" || callSort !== undefined) delete next.page;

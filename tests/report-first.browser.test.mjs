@@ -281,6 +281,49 @@ test("new library metadata and saved comparisons use frozen files and direct loc
     assert.deepEqual(errors, []);
 });
 
+for (const resumePrepared of [false, true]) test(`fresh Reports entry after comparison returns to Reports (${resumePrepared ? "prepared return" : "direct Save"})`, { timeout: 30000 }, async t => {
+    const { page, context, errors } = await setup(t, { route: "#analyze" });
+    await page.locator("#comparePeriods").click();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    await page.getByRole("button", { name: "Timeline", exact: true }).click();
+    await page.getByRole("button", { name: "By tool", exact: true }).click();
+    const comparison = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+    await page.locator('nav [data-nav="reports"]').click();
+    await expect(page.locator("#reportGallery")).toBeVisible();
+    const period = await page.locator("#reportGallery .report-period-caption").textContent();
+    const prepared = await prepare(page);
+    assert.equal(prepared.snapshot.periodComparison, undefined);
+    await expect(page.locator("#reportLibraryLink")).toHaveText("Back to Reports");
+    if (resumePrepared) {
+        await page.locator("#reportLibraryLink").click();
+        await expect(page.locator("#reportGallery")).toBeVisible();
+        await expect(page.locator("#reportGallery .report-period-caption")).toHaveText(period);
+        await page.locator('[data-report-preset="errors"]').click();
+        await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeVisible();
+    }
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    assert.equal((await loadBoardState(context)).exports[0].bundleId, prepared.bundleId);
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await expect(page.locator(".saved-reader-heading .document-back")).toHaveText("Back to Reports");
+    await page.locator(".saved-reader-heading .document-back").click();
+    await expect(page.locator("#reportGallery")).toBeVisible();
+    await expect(page.locator("#savedReportsPanel")).toBeVisible();
+    await expect(page.locator("#reportGallery .report-period-caption")).toHaveText(period);
+    await expect(page.locator('nav [data-nav="reports"]')).toHaveAttribute("aria-current", "page");
+    const [view, query] = new URL(page.url()).hash.split("?");
+    assert.equal(view, "#reports");
+    for (const key of ["compare", "comparisonView", "comparisonFocus", "aFrom", "aTo", "bFrom", "bTo", "task", "bundle"]) {
+        assert.equal(new URLSearchParams(query).has(key), false, key);
+    }
+    await page.locator("#comparePeriods").click();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    await expect(page.getByRole("button", { name: "By tool", exact: true })).toHaveAttribute("aria-pressed", "true");
+    const restored = new URLSearchParams(new URL(page.url()).hash.split("?")[1]);
+    for (const key of ["aFrom", "aTo", "bFrom", "bTo", "comparisonView"]) assert.equal(restored.get(key), comparison.get(key), key);
+    assert.deepEqual(errors, []);
+});
+
 test("retained-period comparison opens its report directly and saves the accepted pair", { timeout: 60000 }, async t => {
     const { page, context, errors } = await setup(t, { source: periodFixture().records, route: "#analyze" });
     await page.locator("#comparePeriods").click();
@@ -295,11 +338,24 @@ test("retained-period comparison opens its report directly and saves the accepte
     const origin = new URL(page.url()).hash;
     const pending = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.locator("#createPeriodReport").click();
-    const response = await pending, prepared = await response.json();
+    const response = await pending;
+    let prepared = await response.json();
     assert.equal(response.status(), 200, prepared.error);
     assert.ok(prepared.snapshot.periodComparison);
     assert.equal(prepared.localSaveRequest.version, 1);
     await expect(page.locator("#reportStage3")).toBeVisible();
+    await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
+    const acceptedComparison = prepared.snapshot.periodComparison.comparison;
+    await page.locator("#reportLibraryLink").click();
+    await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+    assert.equal(new URL(page.url()).hash, origin);
+    await expect(page.getByRole("button", { name: "Timing", exact: true })).toHaveAttribute("aria-pressed", "true");
+    const repeated = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator("#createPeriodReport").click();
+    const repeatedResponse = await repeated;
+    prepared = await repeatedResponse.json();
+    assert.equal(repeatedResponse.status(), 200, prepared.error);
+    assert.deepEqual(prepared.snapshot.periodComparison.comparison, acceptedComparison);
     await expect(page.locator("#reportLibraryLink")).toHaveText("Back to comparison");
     let preparedFiles = prepared.files;
     await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();

@@ -313,6 +313,8 @@ preparation; unrelated accepted activity need not.
 Comparison-origin preparation and saved reading return to the accepted
 comparison while its authority remains current. Reports-origin returns keep
 their separate library state.
+Opening Reports from the sidebar starts a Reports-origin task. Creating a
+report from the accepted comparison preserves its explicit comparison origin.
 
 Current readers accept both the older Analyze author-policy wording and the
 new Compare periods wording. Older readers that recognize only the Analyze
