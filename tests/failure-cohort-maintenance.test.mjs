@@ -251,31 +251,26 @@ test("cohort refuses entry correspondence conflicts, partial context and stale o
 
 });
 
-test("long transport diagnostic keeps the original terminal failure on the compact card",()=>{
+test("long transport diagnostic keeps the complete original reason on the card",()=>{
     const text=shapeExamples[4][1], failure={...oldFailure,diagnostic:{version:1,source:"completion-error",status:"recorded",code:"failure",message:text}};
     const call={failureEvidence:failure,toolSucceeded:false,reportedOutcome:"failed",apiResults:[]};
     const summary=createRecordedResults({screen:true}).failureReason(call);
-    assert.equal(summary,"Recorded error: MCP server 'workiq': MCP request failed: Transport ... error: HTTP 503 Service Unavailable: upstream connection timeout");
+    assert.equal(summary,"Recorded error: "+text);
     assert.match(summary,/HTTP 503 Service Unavailable: upstream connection timeout/);
-    assert.ok(summary.length<=260);
-    assert.equal(call.failureEvidence.diagnostic.message,text,"Compact excerpts never rewrite retained source wording.");
+    assert.equal(call.failureEvidence.diagnostic.message,text,"Reading never rewrites retained source wording.");
 });
 
-test("literal diagnostic excerpts keep whole boundary tokens and bound unbroken text", () => {
+test("screen diagnostics preserve whole messages including their distinguishing middle", () => {
     const presenter = createRecordedResults({ screen: true });
     const excerpt = text => presenter.failureReason({ failureEvidence: { ...oldFailure,
         diagnostic: { version: 1, source: "completion-error", status: "recorded", code: "failure", message: text } } }).slice("Recorded error: ".length);
     assert.equal(excerpt("An ordinary short error."), "An ordinary short error.");
-    const head = "h".repeat(72), tail = "t".repeat(160);
-    assert.equal(excerpt(head + " " + "middle ".repeat(50) + tail), head + " ... " + tail);
-    assert.equal(excerpt(" \tBeginning\n" + "LongType<".repeat(50) + "\r\nEnding remains exact. "), "Beginning ... Ending remains exact.");
-    assert.equal(excerpt("x".repeat(300) + " Final words."), "x".repeat(72) + " ... Final words.");
-    assert.equal(excerpt("First words. " + "x".repeat(300)), "First words. ... " + "x".repeat(160));
-    assert.equal(excerpt("Service response: " + "接続失敗".repeat(100)), "Service response: ... " + "接続失敗".repeat(40));
-    assert.equal(excerpt("接続失敗".repeat(100) + " Request timed out."), "接続失敗".repeat(18) + " ... Request timed out.");
-    const code = "E_CONNECTION_RESET_".repeat(20);
-    assert.equal(excerpt("Recorded code: " + code), "Recorded code: ... " + Array.from(code).slice(-160).join(""));
-    const unbroken = "界".repeat(500);
-    assert.equal(excerpt(unbroken), "界".repeat(72) + " ... " + "界".repeat(160));
-    assert.ok(Array.from(excerpt(unbroken)).length <= 240);
+    for (const text of [
+        "h".repeat(72) + " " + "middle ".repeat(50) + "t".repeat(160),
+        " \tBeginning\n" + "LongType<".repeat(50) + "\r\nEnding remains exact. ",
+        "x".repeat(300) + " Final words.", "First words. " + "x".repeat(300),
+        "Service response: " + "接続失敗".repeat(100),
+        "接続失敗".repeat(100) + " Request timed out.",
+        "Recorded code: " + "E_CONNECTION_RESET_".repeat(20), "界".repeat(500),
+    ]) assert.equal(excerpt(text), text);
 });
