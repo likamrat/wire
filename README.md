@@ -83,6 +83,15 @@ Follow the [first-run guide](docs/user-guide.md#connect-local-history) for detai
 - Saving Copilot replies needs separate approval. Review report copies before
   sharing; local masking can miss confidential information.
 
+## Reports
+
+Open **Reports** to choose a ready-made report or revisit a saved one.
+**Errors & failures** shows which interactions hit problems and how often.
+Add context or adjust copies if needed, then save. Review the files before
+sharing them with people building eval cases.
+
+[![An error report showing recorded failures, their frequency and prompt authors, with optional privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
+
 ## Comparisons
 
 Open **Compare periods** in the sidebar to see where failure rates or call
@@ -94,15 +103,6 @@ closer investigation.
 
 To compare two saved reports instead, use **Reports > Compare saved reports**.
 That comparison uses their frozen facts, not current activity.
-
-## Reports
-
-Open **Reports** to choose a ready-made report or revisit a saved one.
-**Errors & failures** shows which interactions hit problems and how often.
-Add context or adjust copies if needed, then save. Review the files before
-sharing them with people building eval cases.
-
-[![An error report showing recorded failures, their frequency and prompt authors, with optional privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
 ## Guides
 
