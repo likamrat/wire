@@ -1530,37 +1530,47 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function renderSettingsSearch() {
         const query = localQuery("settingsSearch"), entries = settingsNavigation.find(query).filter(entry => !nativeSettingUnavailable(entry.id));
-        const contexts = entries.map(entry => {
+        const searching = Boolean(query.trim());
+        $("settingsCategories").hidden = searching;
+        $("settingsStatusLink").hidden = searching || route.section === "troubleshooting";
+        const availability = entries.map(entry => {
             const id = settingsTarget(entry), control = $(id);
-            if (collectionSettings?.hasNativeConfiguration?.()
-                && ["microsoft-collection", "history-window", "save-preferences"].includes(entry.id)) {
-                return collectionSettings.explain(id);
-            }
-            if (entry.id === "collect-now" && historyStatus.persistence(collection)) return collectionSettings?.explain("collectNow") || "Read current Microsoft collection status.";
-            if (entry.id === "collection-state" && historyStatus.native(collection)) return collectionSettings?.explain(id) || "Pause or resume registered Microsoft reads. Saved activity stays available.";
-            if (entry.id === "microsoft-connection") return $("wireMicrosoftConnection") && !$("microsoftConnectionHost").hidden
-                ? `${$("wireMicrosoftStatus").textContent}. ${entry.context}` : "Microsoft 365 connection is not available in this runtime. GitHub Copilot app and retained activity are unchanged.";
-            if (!collection?.config?.approved && entry.id === "collect-now") return "Refresh reads stored activity only. Approve a source separately to check history; opening this result does neither.";
-            if (!collection?.config?.approved && ["source-paths", "collection-state"].includes(entry.id)) return "Requires an approved source. Open Connection to review permission; nothing is started.";
-            if (entry.id === "source") return collectionSettings?.explain(id) || "Read the current connection before reviewing a source.";
-            if (control?.disabled) return collectionSettings?.explain(id) || "Unavailable while the current update finishes.";
-            if (entry.id === "save-preferences" && $("preferenceActions").hidden && id === "settingsDraftStatus") return $("settingsDraftStatus").textContent;
-            return entry.context;
+            if (entry.id === "microsoft-connection") return !$("wireMicrosoftConnection") || $("microsoftConnectionHost").hidden
+                ? "Unavailable in this runtime" : $("wireMicrosoftStatus").textContent;
+            if (!collection?.config?.approved && !historyStatus.native(collection)
+                && ["source-paths", "collection-state"].includes(entry.id)) return "Source approval needed";
+            if (control?.disabled) return "Action unavailable";
+            return "";
         });
-        const signature = JSON.stringify([query, contexts]);
+        const signature = JSON.stringify([query, entries.map(entry => entry.id), availability, route.view, route.setting]);
         if (signature === settingsSearchSignature) return;
         settingsSearchSignature = signature;
         const list = $("settingsSearchResults"), status = $("settingsSearchCount");
         const focusedSetting = list.contains(document.activeElement) ? document.activeElement.dataset.setting : null;
         list.replaceChildren();
-        list.hidden = !query.trim();
-        status.hidden = !query.trim();
-        setText(status, entries.length ? `${entries.length} setting${entries.length === 1 ? "" : "s"} found.` : "No settings match. Try time zone or history.");
+        list.hidden = !searching || !entries.length;
+        status.hidden = !searching;
+        status.classList.toggle("visually-hidden", entries.length > 0);
+        setText(status, entries.length ? `${entries.length} setting${entries.length === 1 ? "" : "s"} found.` : "No settings match.");
+        const groups = new Map();
         entries.forEach((entry, index) => {
-            const item = el("li"), anchor = link("", entry.view || "settings", { section: entry.section, setting: entry.id });
+            const groupKey = entry.section || entry.view;
+            let group = groups.get(groupKey);
+            if (!group) {
+                const item = el("li", "settings-search-group"), heading = el("h3", "settings-search-heading");
+                heading.id = "settings-search-group-" + groupKey;
+                heading.append(ux.icon(entry.view || "settings-" + entry.section), highlighted(el("span"), entry.category, query));
+                group = el("ul");
+                group.setAttribute("aria-labelledby", heading.id);
+                item.append(heading, group); list.append(item);
+                groups.set(groupKey, group);
+            }
+            const item = el("li"), anchor = viewKey(link("", entry.view || "settings", { section: entry.section, setting: entry.id }), "settings-search:" + entry.id);
             anchor.dataset.setting = entry.id;
-            anchor.append(highlighted(el("strong"), entry.title, query), highlighted(el("span", "search-category"), entry.category, query), highlighted(el("span", "search-context"), contexts[index], query));
-            item.append(anchor); list.append(item);
+            if (route.setting === entry.id && route.view === (entry.view || "settings")) anchor.setAttribute("aria-current", "location");
+            anchor.append(highlighted(el("span"), entry.title, query));
+            if (availability[index]) anchor.append(el("span", "settings-search-availability", availability[index]));
+            item.append(anchor); group.append(item);
         });
         if (focusedSetting) [...list.querySelectorAll("a")].find(anchor => anchor.dataset.setting === focusedSetting)?.focus({ preventScroll: true });
     }
@@ -3612,7 +3622,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (paging) { restorePager(paging); return; }
             if (route.view === "settings") {
                 revealSetting();
-                if (restorePosition && position && !route.setting) restoreReading(position);
+                if (restorePosition && position && (!route.setting || position.focus?.key?.startsWith("settings-search:"))) restoreReading(position);
             }
             else if (route.view === "collection-status") {
                 revealCollectionStatus();

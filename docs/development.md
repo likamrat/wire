@@ -165,6 +165,11 @@ with capture evidence, and add a visible caption only when it helps explain the 
 The shared-control illustrations use `tests/appwide-controls.browser.test.mjs`
 with `WIRE_VISUAL_PROOFS` set to an owned capture directory. Its invented activity
 and saved reports also exercise keyboard paging and frozen-file preservation.
+Settings-search images use `tests/settings-search.browser.test.mjs` with
+`WIRE_SETTINGS_SEARCH_PROOFS` set to an owned capture directory. It starts
+the normal runtime on an ephemeral port with invented Cedar activity and source
+paths, disables collection timers, rejects action requests and checks that
+retained data and collection configuration stay unchanged.
 
 ## Troubleshoot a local run
 

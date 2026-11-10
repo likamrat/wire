@@ -60,6 +60,14 @@ export const settingsStyles = `
 .settings-categories a[aria-current=page]::before {content:"";position:absolute;inset-inline-start:0;width:2px;height:1.25em;border-radius:2px;background:currentColor}
 .settings-categories>summary {padding:10px 12px;background:var(--canvas);color:var(--ink);border:0;border-radius:var(--settings-nav-radius);cursor:pointer;min-height:44px;overflow-wrap:anywhere}
 .settings-view .settings-search {width:100%;margin:0 0 var(--space-md)}
+.settings-search .search-capsule {--settings-search-clear-size:max(44px,calc(1rem + 22px));isolation:isolate;max-width:32rem}
+.settings-search .search-capsule::before {content:"";position:absolute;inset:6px 0;z-index:-1;pointer-events:none;border:1px solid var(--control);border-radius:var(--settings-field-radius);background:var(--paper)}
+:root .settings-search .search-capsule input.search-capsule-input {min-height:44px;padding:12px var(--settings-search-clear-size) 12px calc(1rem + 18px);border:0;border-radius:var(--settings-field-radius);background:transparent;box-shadow:none;outline:none;transition:none}
+.settings-search .search-capsule:has(input:hover)::before {border-color:var(--ink)}
+.settings-search .search-capsule:has(input:focus-visible)::before {outline:2px solid var(--focus);outline-offset:0}
+.settings-search .wire-search-icon {inset-inline-start:10px}
+.settings-search .wire-search-icon .wire-icon,.settings-search .search-capsule-clear .wire-icon {width:1rem;height:1rem}
+:root .settings-search .search-capsule-clear {inline-size:var(--settings-search-clear-size);margin-inline-end:0;border-radius:var(--settings-field-radius)}
 .settings-rail .settings-status-link {display:flex;flex-direction:column;align-items:flex-start;padding:12px;font-size:var(--type-small);line-height:var(--leading-ui)}
 .scoped-search {margin-block:16px;min-width:0}
 .scoped-search>label {display:block;font-weight:600;margin-bottom:6px}
@@ -68,12 +76,24 @@ export const settingsStyles = `
 .search-input-row button {flex:none;min-height:44px}
 .scoped-search p {margin-top:6px;color:var(--muted)}
 .search-count {font-size:var(--type-body)}
-.settings-search-results {list-style:none;padding:0;margin:12px 0 0;display:grid;gap:4px}
-.settings-search-results a {display:grid;gap:6px;padding:12px;background:var(--paper);border-radius:var(--settings-nav-radius);text-decoration:none!important;min-height:44px;overflow-wrap:anywhere}
-.settings-search-results a:hover {background:var(--hover)}
-.settings-search-results .search-category,.settings-search-results .search-context {color:var(--muted);font-weight:400}
-.settings-search-results .search-category {font-size:.875rem}
-.settings-search-results mark {color:inherit;background:var(--accent-soft);font-weight:700}
+.settings-search-results,.settings-search-results ul {list-style:none;padding:0}
+.settings-search-results {margin:16px 0 0;display:grid;gap:20px}
+.settings-search-heading {display:flex;align-items:baseline;gap:8px;font-size:var(--type-control);font-weight:var(--weight-medium);line-height:var(--leading-control);color:var(--ink)}
+.settings-search-heading>.wire-icon {width:1.125rem;height:1.125rem;flex:none;align-self:center;color:var(--muted)}
+.settings-search-heading>span {min-width:0;overflow-wrap:anywhere}
+.settings-search-results ul {margin:4px 0 0 1.125rem}
+.settings-search-results a {position:relative;display:grid;align-content:center;gap:2px;min-height:44px;padding:8px 8px 8px 10px;border-radius:var(--settings-nav-radius);color:var(--muted);font-size:var(--type-control);line-height:var(--leading-control);font-weight:var(--weight-regular);overflow-wrap:anywhere}
+.settings-search-results a:hover {color:var(--ink);text-decoration:underline;text-underline-offset:.25em}
+.settings-search-results a:active {color:var(--ink);text-decoration-thickness:2px}
+.settings-search-results a[aria-current=location] {color:var(--ink)}
+.settings-search-results a[aria-current=location]::before {content:"";position:absolute;inset-inline-start:0;top:50%;transform:translateY(-50%);width:2px;height:1.25em;border-radius:2px;background:currentColor}
+.settings-search-availability {font-size:var(--type-caption);color:var(--muted)}
+.settings-search-results mark {color:inherit;background:var(--accent-soft);font-weight:var(--weight-medium)}
+@media(forced-colors:active) {
+ .settings-search .search-capsule::before {background:Canvas;border-color:CanvasText}
+ .settings-search .search-capsule:has(input:focus-visible)::before {outline-color:Highlight}
+ .settings-search-results a[aria-current=location]::before {background:Highlight;forced-color-adjust:none}
+}
 .settings-target {scroll-margin-block:20px}
 .settings-target:where(:focus) {outline:2px solid var(--focus);outline-offset:4px}
 @container settings (max-width:52rem) {

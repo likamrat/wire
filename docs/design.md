@@ -342,6 +342,19 @@ and Troubleshooting. Keep one task-oriented pane and the same narrow category
 disclosure, not another application sidebar. Search finds fixed setting
 metadata and navigates; it never clicks an action or reads private path values.
 
+While a Settings query is present, replace the category list with grouped
+destinations. Show each category once, followed by indented setting names.
+Keep description and keyword matches even when the name has no matching word;
+full help and consequences stay at the destination. An unavailable action
+gets a short status, but its result remains a link to the setting and explanation.
+Use a flat, compact field face inside a full input target, scoped to Settings.
+Keep the global retained-content Search field unchanged.
+Results use regular Asta Sans, plain Lucide category icons and no filled cards.
+Distinguish hover underline, selected-location mark and keyboard outline.
+Tab and Enter reach the existing control; Clear or Escape restores the category
+list. Back restores the query and activating link, including after visiting
+Collection status.
+
 | Settings change | Commit boundary |
 | --- | --- |
 | Same-source paths/preferences draft | Save preferences |

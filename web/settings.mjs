@@ -10,7 +10,7 @@ export const settingsMarkup = `
     <label for="settingsSearch" class="visually-hidden">Search settings</label>
     ${searchFieldMarkup({ id: "settingsSearch", clearId: "clearSettingsSearch", placeholder: "Search settings" })}
     <p id="settingsSearchCount" class="search-count" role="status" hidden></p>
-    <ul id="settingsSearchResults" class="settings-search-results" hidden></ul>
+    <ul id="settingsSearchResults" class="settings-search-results" aria-label="Matching settings" hidden></ul>
   </div>
   <details id="settingsCategories" class="settings-categories" open><summary id="settingsCategorySummary">Category: Connection &amp; updates</summary><nav id="settingsCategoryNav" aria-label="Settings categories"></nav></details>
   <p id="settingsStatusLink" class="settings-status-link"><a href="#collection-status" data-settings-link>Collection status</a></p>

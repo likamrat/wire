@@ -134,7 +134,7 @@ async function geometry(input) {
     });
 }
 
-test("current search entries share field presentation in context while each keeps its own corpus and Escape", { timeout: 120000 }, async t => {
+test("search entries keep their corpus and Escape while Settings uses compact field paint", { timeout: 120000 }, async t => {
     const { page, requests, bundles } = await setup(t), evidence = [];
     const global = page.locator("#wireSearch");
     await global.fill("physician");
@@ -182,16 +182,26 @@ test("current search entries share field presentation in context while each keep
                 await capture(page, `${id}-${theme}-${width}-${scale}-hover`);
                 await input.fill(query); await matched();
                 const measured = await geometry(input), reference = await geometry(global);
-                assert.deepEqual(measured.paint, reference.paint, id + " shares global paint and text metrics");
-                assert.deepEqual(measured.glyph, reference.glyph, id + " shares magnifier paint, baseline and text gap");
-                assert.equal(measured.height, reference.height);
+                if (id === "settingsSearch") {
+                    for (const key of ["fontFamily", "fontSize", "lineHeight", "color"]) assert.equal(measured.paint[key], reference.paint[key], key);
+                    assert.equal(measured.paint.backgroundImage, "none");
+                    assert.equal(measured.paint.borderRadius, "10px");
+                    assert.equal(measured.glyph.width, 16 * scale / 100);
+                    assert.equal(measured.glyph.centerOffset, 0);
+                    assert.ok(measured.glyph.textGap >= 8 && measured.height >= 44);
+                } else {
+                    assert.deepEqual(measured.paint, reference.paint, id + " shares global paint and text metrics");
+                    assert.deepEqual(measured.glyph, reference.glyph, id + " shares magnifier paint, baseline and text gap");
+                    assert.equal(measured.height, reference.height);
+                }
                 assert.equal(measured.width, before.width);
                 assert.equal(measured.height, before.height);
                 assert.ok(measured.clear.width >= 44 && measured.clear.height >= 44 && measured.clear.inside && measured.clear.textGap >= 0 && measured.clear.reachable, JSON.stringify(measured));
                 assert.equal(measured.overflow, false);
                 if (id === "savedReportSearch" && width === 1280) assert.ok(measured.width <= 288, "Library stays compact");
                 assert.equal(await input.evaluate((node, original) => node === original, identity), true);
-                await expect(input).toHaveCSS("outline-style", "solid");
+                if (id === "settingsSearch") assert.equal(await input.evaluate(node => getComputedStyle(node.parentElement, "::before").outlineStyle), "solid");
+                else await expect(input).toHaveCSS("outline-style", "solid");
                 await capture(page, `${id}-${theme}-${width}-${scale}-typed`);
                 await clear.click();
                 await expect(input).toHaveValue(""); await expect(input).toBeFocused();
@@ -209,7 +219,8 @@ test("current search entries share field presentation in context while each keep
             assert.equal(requests.filter(request => request.path.startsWith("/api/search/")).length, searchRequests, "Local fields never send a global query");
             await page.emulateMedia({ forcedColors: "active" });
             await input.focus(); await expect(input).toHaveCSS("background-image", "none");
-            await expect(input).toHaveCSS("outline-style", "solid");
+            if (id === "settingsSearch") assert.equal(await input.evaluate(node => getComputedStyle(node.parentElement, "::before").outlineStyle), "solid");
+            else await expect(input).toHaveCSS("outline-style", "solid");
             await capture(page, `${id}-${theme}-forced-colors`);
             await page.emulateMedia({ forcedColors: "none" });
             if (id === "recollectSearch") {

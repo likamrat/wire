@@ -145,6 +145,25 @@ content is not silently replaced with a nearby result. Search runs locally,
 without AI, providers, new collection or credit spending. Its query is not
 placed in URLs or saved as a persistent Search index.
 
+## Find a setting
+
+Open **Settings** and type in **Search settings**. Matching destinations appear
+under their categories. Search includes setting descriptions and keywords:
+`record` finds reply saving, deletion, rereading history and the network
+diagnostic; `city` finds Time zone.
+
+![Settings search groups record-related destinations under Privacy & saved data and Collection status.](images/settings-search.png)
+
+Select a result, or use Tab and Enter, to reveal and focus the existing setting.
+Its help and consequences stay beside that control. Selecting a result never
+changes a setting, deletes activity or starts collection or a diagnostic.
+Unavailable actions remain findable, with their explanation at the destination.
+Clear the field or press Escape to return to the categories. Browser Back
+returns to the query and link you came from.
+
+This search runs on-device over fixed setting information. It is separate from
+the main Search field for saved activity and reports.
+
 ## Keep collection and saved data separate
 
 **Settings > Connection & updates** owns source approval, history window,
