@@ -85,28 +85,23 @@ Follow the [first-run guide](docs/user-guide.md#connect-local-history) for detai
 
 ## Reports
 
-Open **Reports** to choose a ready-made report template or revisit a saved
-report.
+Reports give you a shareable view of working patterns, backed by recorded
+prompts, Work IQ calls and results. Ready-made templates preserve those
+findings for review and for building eval cases.
+[Reporting guide](docs/reporting.md).
 
 [![Reports homepage with ready-made templates, period controls and saved reports.](docs/images/report-choices.png)](docs/reporting.md)
-
-Choose a period, read the report, and add context or adjust copies if needed.
-Save the report locally, then review its files before sharing them with people
-building eval cases.
 
 [![An example report with section navigation, privacy controls and Save report.](docs/images/report-preview.png)](docs/reporting.md)
 
 ## Comparisons
 
-Open **Compare periods** in the sidebar to see where failure rates or call
-timings changed. It starts with the last seven complete days versus the
-preceding seven. Inspect the calls behind those changes to decide what needs
-closer investigation.
+Comparisons show how Work IQ activity, call outcomes and timing differ
+between periods or saved reports. That evidence helps you assess changes
+to your agents and investigate possible regressions.
+[Comparison guide](docs/reporting.md#compare).
 
 [![Compare periods with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
-
-To compare two saved reports instead, use **Reports > Compare saved reports**.
-That comparison uses their frozen facts, not current activity.
 
 ## Guides
 
