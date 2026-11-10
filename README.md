@@ -11,7 +11,7 @@ and take different paths through multi-turn conversations. Those choices shape
 both their own prompts and the prompts their agents generate, influencing the
 tool calls and results that follow.
 
-I built WIRE (Work IQ Request Explorer) to help you understand that blind spot
+WIRE (Work IQ Request Explorer) was built to help you understand that blind spot
 in your own work. It puts recorded human and agent-generated prompts beside their
 Work IQ calls and results, so you can inspect personal patterns, unexpected
 behavior and failures.
