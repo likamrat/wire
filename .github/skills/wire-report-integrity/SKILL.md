@@ -1,6 +1,6 @@
 ---
 name: wire-report-integrity
-description: Preserve reviewed and frozen WIRE report facts through creation, comparison, exports and saved reading. Use for membership, disclosure/Save, report schemas, source/account binding, output formats, legacy compatibility or report-theme isolation. Inspect actual artifacts rather than only previews.
+description: Preserve prepared and frozen WIRE report facts through creation, comparison, exports and saved reading. Use for membership, disclosure/Save, report schemas, source/account binding, output formats, legacy compatibility or report-theme isolation. Inspect actual artifacts rather than only previews.
 license: MIT
 ---
 

@@ -16,7 +16,7 @@ before starting implementation.
 ## Make a change
 
 If you use Copilot, the repository includes eight optional
-[WIRE development skills](docs/development.md#wire-development-skills).
+[WIRE development skills](.github/skills/README.md).
 Contributions do not require an AI tool.
 
 1. Follow [Development](docs/development.md) to run WIRE and find the relevant code.

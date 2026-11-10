@@ -88,7 +88,8 @@ Follow the [first-run guide](docs/user-guide.md#connect-local-history) for detai
 Reports give you a shareable view of working patterns, backed by recorded
 prompts, Work IQ calls and results. Ready-made templates preserve those
 findings for review and for building eval cases.
-[Reporting guide](docs/reporting.md).
+The [reporting guide](docs/reporting.md) explains which template fits your
+purpose and what the saved copy includes.
 
 [![Reports homepage with ready-made templates, period controls and saved reports.](docs/images/report-choices.png)](docs/reporting.md)
 
@@ -97,9 +98,9 @@ findings for review and for building eval cases.
 ## Comparisons
 
 Comparisons show how Work IQ activity, call outcomes and timing differ
-between periods or saved reports. That evidence helps you assess changes
+[between periods or saved reports](docs/reporting.md#compare).
+That evidence helps you assess changes
 to your agents and investigate possible regressions.
-[Comparison guide](docs/reporting.md#compare).
 
 [![Compare periods with call outcomes, chart choices and shared reading actions.](docs/images/compare-periods.png)](docs/images/compare-periods.png)
 

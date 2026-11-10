@@ -89,27 +89,15 @@ Back/return ownership.
 
 ## Screen behavior
 
-The stationary capsule shows actual matches as the user types, with scope and
-type choices directly below. There is no Submit or expanded Search mode.
-Clear resets query/result work and paging while preserving scope/type.
+The [Search interaction reference](interaction-design.md#search) defines the
+typed-results capsule, grouping, excerpts and Open behavior.
+Clear resets query/result work and paging while preserving scope/type;
 Escape/outside dismissal hides the popup without clearing text.
-
-Group the complete hit population by type before selecting a 20-item page.
-Categories follow their first ranked match and keep server order within each
-category. This changes presentation order only, not receipts or membership.
-Original titles, relevant excerpts and distinguishing source labels identify
-hits. Omit equivalent unmatched captions, never a matched field or distinct
-record. Formats are supporting disambiguation, not invented metadata.
 
 Use the shared `web/search-field.mjs` for field paint and Clear behavior.
 Callers own their query, scope, results, debounce and lifetime. Settings,
 saved-report metadata, issue and report-picker searches keep their separate
 normalization/scope; they are not aliases for global evidence Search.
-
-Title, excerpt and source wrap independently; no clamp hides the actual match.
-Use original ranges and a single boundary ellipsis where text is omitted.
-Category/service/outcome cues retain their distinct meanings and shared icon
-roles. See [design](design.md#search), not a duplicate palette specification.
 
 ## Withdrawal and return
 

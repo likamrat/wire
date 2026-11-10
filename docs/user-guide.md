@@ -105,25 +105,17 @@ Open **Reports** and choose a ready-made report. WIRE prepares it
 with detected personal details hidden. The visible period starts
 at Last 7 days, independently of your Analyze filters.
 
-Use **Errors & failures** to find recorded problems and inspect their examples.
-You can add a note about what you expected, edit a report copy, or change its
-period and formats. **Save report** keeps the files on this device. If you keep
-chat details, the warning lets you hide details and save, save with those
-details, or go back without writing anything.
+Read its patterns and supporting interactions, then optionally add a note or
+edit a report copy. **Save as** chooses HTML, PDF, JSON or Markdown files;
+**View** previews them. **Save report** keeps those files on this device.
+If you keep chat details, the warning lets you hide details and save, save
+with those details, or go back without writing anything.
 
-Use section links and expandable interactions to read long reports. **Save as**
-chooses files to write; **View** switches between the readable report and an
-actual HTML, PDF, JSON or Markdown preview.
-
-Changing text or formats keeps the prepared cohort; changing dates or filters
-prepares a new selection. Saved reports preserve their original files.
-They appear below the report choices; select a saved name to read it, or use
+Saved reports appear below the report choices. Select a name to read it, or use
 **Files** to choose a format. **Back to Reports** returns to that workspace.
-JSON-only saves also open as readable report pages without downloading.
-Choosing the same tile again resumes an unchanged unfinished copy.
-A completed call does not prove that your task succeeded. See the
-[report guide](reporting.md) for scopes, privacy choices, comparisons and
-uncertain-save recovery.
+Saved files preserve their original facts and text. The
+[report guide](reporting.md) explains each template's membership, how edits
+affect an unfinished copy, and how to save, reopen or compare reports.
 
 ## Find saved text
 
@@ -197,6 +189,5 @@ ordinary Refresh performs these actions. Saved reports and external downloads
 can retain copies after activity deletion.
 
 If a change's result is uncertain, use its offered status/result check rather
-than repeating the action. See [collection and recovery](collection.md) for
-the exact effects and limits, and [reports](reporting.md#compare) to compare
-retained periods or saved reports.
+than repeating the action. The [collection and recovery reference](collection.md)
+explains each operation's effects and limits.

@@ -5,8 +5,10 @@ Use it to explain repeated errors, operations and working patterns, then give
 product teams examples from which they can create eval cases. WIRE does not
 generate evals or rate answer quality.
 
-For report schemas, membership and privacy, see the
-[report contract](report-contract.md).
+Go to [report choices](#open-a-report), [text and privacy options](#read-and-adjust),
+[saving and reopening](#save-and-reopen) or [comparisons](#compare).
+Contributors changing report behavior should also read the
+[membership and frozen-output contract](report-contract.md).
 
 ## Open a report
 
@@ -54,6 +56,20 @@ Changing report dates does not remove those picks. If you start from
 **Current Analyze view**, changing the report dates replaces only the date
 restriction. Other applicable filters and authorized Search membership stay
 in place; Analyze itself does not change.
+
+## Read the findings
+
+Start with which activity the report includes and which facts were available.
+Read interaction, tool-call and returned-API counts separately.
+Then read the tool and service patterns, failures and timings. A completed
+tool call does not establish a correct answer, and a returned API error does
+not automatically explain its parent call's outcome. Service associations
+can overlap.
+
+Timing keeps its recorded boundary and measured population. Missing model
+names, timing or recorded application results remain unavailable, not zero.
+Examples connect permitted prompt copies with recorded calls; they are not
+generated explanations of intent or task success.
 
 ## Read and adjust
 
@@ -161,20 +177,6 @@ If Save is unconfirmed, use **Check save status** rather than Save again.
 A missing receipt is not proof that nothing was written. Review files before
 sharing outside WIRE: local saving is not permission to publish, and pattern
 masking cannot recognize every confidential detail.
-
-## Read the findings
-
-Start with which activity the report includes and which facts were available.
-Read interaction, tool-call and returned-API counts separately.
-Then read the tool and service patterns, failures and timings. A completed
-tool call does not establish a correct answer, and a returned API error does
-not automatically explain its parent call's outcome. Service associations
-can overlap.
-
-Timing keeps its recorded boundary and measured population. Missing model
-names, timing or recorded application results remain unavailable, not zero.
-Examples connect permitted prompt copies with recorded calls; they are not
-generated explanations of intent or task success.
 
 ## Compare
 

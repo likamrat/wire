@@ -4,6 +4,11 @@ For the user workflow, see [Create and compare reports](reporting.md). This
 reference defines evidence membership, disclosure and frozen output for the
 supported GitHub Copilot experience.
 
+For selection changes, start with [evidence and membership](#evidence-and-membership).
+For report edits or writing files, use [preparation and Save](#preparation-disclosure-and-save).
+Saved readers and comparisons have their own [file](#frozen-files-and-saved-reading)
+and [comparison](#comparisons) requirements.
+
 ## Report facts
 
 Reports contain recorded outcomes, source/service facts, canonical membership
@@ -100,6 +105,8 @@ and snapshot; malformed or expanded fields are rejected.
 
 ## Preparation, disclosure and Save
 
+### Frozen preparation
+
 The report controller owns the sequence:
 
 1. Select the activity. Browsing, selecting and cancelling before confirmation
@@ -132,6 +139,8 @@ Original evidence-file identity also keys the report read model, so reading
 a saved report cannot replace current Analyze facts. Saving appends to current
 state; it never restores the preview's evidence snapshot over newer collection.
 
+### Report text choices
+
 | Text choice | Required treatment |
 | --- | --- |
 | None | Omit prompt prose without changing membership |
@@ -147,6 +156,8 @@ associations and edited/omitted/disclosure status.
 
 Snapshot, manifest and index must agree on a declared title. `canonicalTitle`
 comes only from the verified declared manifest binding.
+
+### Save authorization
 
 New reports use `savePolicy: "local-save-v1"`. A preparation supplies a one-save
 challenge binding its bundle, snapshot, prompt mode, formats and exact file

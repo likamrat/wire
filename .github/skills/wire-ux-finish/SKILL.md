@@ -14,6 +14,8 @@ correctness and a polished isolated component do not establish that result.
 Read the original feedback and relevant current sections of
 [design](../../../docs/design.md) and the
 [user guide](../../../docs/user-guide.md). Reuse already recovered decisions.
+For controls, reading order or return behavior, read the affected surface in
+[interaction design](../../../docs/interaction-design.md).
 Inspect supplied reference images when needed; say when they are unavailable.
 Later rejection supersedes an earlier approved mock. Keep private feedback and
 real-data screenshots out of published source.

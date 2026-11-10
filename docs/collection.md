@@ -59,12 +59,16 @@ fail explicitly, not be stripped, reset or bypassed with empty data.
 
 ## Source mapping and bounded reads
 
+### Approved paths
+
 The suggested source comes from `COPILOT_HOME`, otherwise `.copilot` in the
 home directory of the user running WIRE: `data.db` and `session-state`.
 In WSL, these defaults do not automatically locate a Windows user's source.
 Choose the actual paths in source review; WSL can qualify Windows drive paths
 or their mounted equivalents. WIRE checks those named paths, not arbitrary
 home-directory contents. Approval and schema validation precede history reads.
+
+### Account profile
 
 Account presentation uses a separate, bounded profile-only read of that approved
 database. For the supported account mapping (schema 207 or later), it follows
@@ -82,6 +86,8 @@ read-only check of the selected profile. It accepts matching profile facts from
 the same database, not an old cached identity; changed or unreadable results
 remain unavailable. History collection keeps its whole-metadata change checks.
 The display association neither grants access nor assigns ownership of history.
+
+### Native metadata reads
 
 Native metadata access uses the local read-only SQLite projection. For
 Windows-owned live metadata, WSL runs that same projection through an existing
@@ -102,6 +108,8 @@ The source reader preserves these checks:
 - Final pre-write validation allows one fresh membership check before the
   same rename. A second freshness change refuses; no write is repeated or
   interrupted write relabeled as success.
+
+### Schema and read bounds
 
 The current adapter checks the consumed ordinary `sessions`, `workspaces` and
 `projects` mapping, required text/null values and sole `id` primary keys.
@@ -127,6 +135,8 @@ Live tails take priority over bounded earlier-prefix continuation.
 A complete tool-result line up to 4 MiB can supply a supported successful
 completion only with its exact original start in the same read. Omitted
 bodies cannot supply inferred failures or API outcomes.
+
+### Event reading and committed progress
 
 The reader follows this order:
 

@@ -8,6 +8,10 @@ A new store starts locally signed in; an explicit sign-out remains saved.
 This gate does not approve a source. Incompatible stored state is refused
 without resetting it. See [collection](collection.md) for storage and source permission.
 
+Client changes need the [bootstrap protocol](#bootstrap-and-capabilities),
+[access watch](#one-latest-state-watch) and [withdrawal rules](#client-publication-and-withdrawal).
+Collector changes also need the [writer-admission contract](#collector-and-writer-admission).
+
 ## Authority and operation effects
 
 | State/change | Retained reading | Acquisition |
@@ -92,6 +96,14 @@ cannot guarantee uninterrupted reading across server unavailability or expired
 authority.
 
 Withdrawal cannot erase copies already made outside WIRE.
+
+### Check a background return
+
+For a recurring interruption, distinguish the loaded client from the serving
+version. Capture the first visible frame together with visibility/watch timing;
+eventual restoration alone does not establish a fix. Check whether fresh
+authority was available at return before treating either retained content or
+clearance as a defect.
 
 ## Client publication and withdrawal
 

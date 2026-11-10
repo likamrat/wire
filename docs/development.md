@@ -4,32 +4,6 @@ WIRE runs as a local Node server with a browser interface. Start with the
 [README](../README.md#start) to clone and install it. This guide covers working
 on the source, checking a change and troubleshooting a local installation.
 
-## WIRE development skills
-
-For contributors using Copilot, the repository includes eight WIRE-specific
-[project skills](https://docs.github.com/en/copilot/concepts/customizations/agent-skills)
-in [`.github/skills`](../.github/skills). Open a Copilot session in this checkout
-and ask it to use a skill by name, for example, "Use wire-local-search to fix
-Search highlighting." Copilot can also select a relevant skill from its description.
-Human contributions do not require Copilot or skills.
-
-| Work | Skill |
-| --- | --- |
-| Coordinate outcomes and ownership | [wire-coordination](../.github/skills/wire-coordination/SKILL.md) |
-| Implement and deliver a complete change | [wire-end-to-end-delivery](../.github/skills/wire-end-to-end-delivery/SKILL.md) |
-| Preserve evidence meaning and unknowns | [wire-evidence-semantics](../.github/skills/wire-evidence-semantics/SKILL.md) |
-| Change literal on-device Search | [wire-local-search](../.github/skills/wire-local-search/SKILL.md) |
-| Change reports without altering frozen facts | [wire-report-integrity](../.github/skills/wire-report-integrity/SKILL.md) |
-| Handle Refresh, repair or uncertain operations | [wire-safe-recovery](../.github/skills/wire-safe-recovery/SKILL.md) |
-| Change collection or source access | [wire-source-integration](../.github/skills/wire-source-integration/SKILL.md) |
-| Finish reading and interaction journeys | [wire-ux-finish](../.github/skills/wire-ux-finish/SKILL.md) |
-
-These workflows and their required references are part of WIRE under its
-[MIT license](../LICENSE). They grant no permission to access private data,
-collect sources, change accounts, replace a runtime or publish work.
-No global installation or extra app configuration is needed. If an existing
-session still shows an older skill catalog, use a new session in this checkout.
-
 ## Run locally
 
 Use Node.js 24 or newer in the environment that will run WIRE. On WSL or Linux,
@@ -196,10 +170,23 @@ retained data and collection configuration stay unchanged.
 | --- | --- |
 | WIRE cannot start because the port is owned | Use the existing WIRE window, or stop the WIRE process you started before restarting. |
 | The page opens but no activity appears | Review the source paths and history window in Settings. Open Collection status for missing or unsupported history. See [Connect local history](user-guide.md#connect-local-history). |
-| Returning to a tab briefly shows "Checking WIRE access" | Ordinary background return should keep the accepted view while its access watch stays current. A suspended or unavailable watch must requalify access. For a recurring interruption, distinguish the loaded client from the serving version and capture the first visible frame plus visibility/watch timing; eventual restoration alone does not establish a fix. See [runtime access](runtime-access.md#one-latest-state-watch). |
+| Returning to a tab briefly shows "Checking WIRE access" | A current access watch should keep the accepted view. If the watch can no longer establish fresh authority, WIRE must confirm access again. For recurring interruptions, use the [access-watch diagnostic guidance](runtime-access.md#check-a-background-return). |
 | WSL reports that the Windows source reader is unavailable | Make an existing Windows Node 24+ executable available as `node.exe` through WSL interop, and check access to the selected Windows paths. Do not copy the live database or share WIRE stores as a workaround. |
 | PDF preparation cannot find a browser | Install Chromium with the command above, or deselect PDF and prepare the report again. Other formats do not need that browser. |
 | A save or deletion has an uncertain result | Use its status/result check. Do not repeat the action to see whether it worked. See [collection and recovery](collection.md#refresh-and-uncertain-outcomes) or [report saving](reporting.md#save-and-reopen). |
+
+## WIRE development skills
+
+The [skills landing page](../.github/skills/README.md) explains the eight optional
+WIRE skills and when to use each. In a Copilot session opened in this checkout,
+ask for one by name, for example, "Use wire-local-search to fix Search highlighting."
+Copilot can also select a relevant skill from its description; GitHub's
+[agent-skills guide](https://docs.github.com/en/copilot/concepts/customizations/agent-skills)
+explains that mechanism.
+
+No global installation or extra app configuration is needed. If an existing
+session still shows an older skill catalog, use a new session in this checkout.
+Human contributions do not require Copilot or skills.
 
 ## Find the owning code
 
@@ -210,7 +197,7 @@ retained data and collection configuration stay unchanged.
 | Canonical evidence and filters | `lib/analytics.mjs`, `activity-analytics.mjs`, `activity-projection.mjs`, `service-categories.mjs`; [report meanings](report-contract.md#evidence-and-membership) |
 | Search | `lib/search-text.mjs`, `search-retrieval.mjs`, `search-corpus.mjs`, `live-search.mjs`; [Search](live-search.md) and [corpus](search-corpus.md) |
 | Reports | `lib/export.mjs`, `report-facts.mjs`, `report-artifacts.mjs`, `product-report.mjs`, `pdf.mjs`; [report contract](report-contract.md) |
-| Screens | `lib/render.mjs`, `web/client.mjs` and existing surface owners; [design](design.md) |
+| Screens | `lib/render.mjs`, `web/client.mjs` and existing surface owners; [shared design](design.md) and [interaction behavior](interaction-design.md) |
 
 Read the contract for the boundary you change. Use source and tests for exact
 schemas rather than copying them into another guide.
