@@ -70,6 +70,8 @@ opens everything; collapsing changes only the view, not the report's contents.
 The reader keeps its navigation visible while you scroll. **Report details**
 under Coverage holds the preparation and time-zone metadata.
 
+![An expanded report interaction with its prompt and recorded calls below the section navigation.](images/report-expanded.png)
+
 Every included interaction remains accessible. Open it, then **Add a note or edit this
 example** lets you explain what you expected, change a prompt copy or omit it.
 Notes are the report author's context; they do not change recorded outcomes or
@@ -97,7 +99,11 @@ control, expand **Additional masking**, and enter one exact term per line.
 one. **View** changes what you are reading: **Report** is the readable page,
 while a file choice shows that actual format. PDF has page controls, JSON has
 a field tree, and HTML and Markdown offer Preview/Source. Switching views does
-not prepare new activity or download anything. PDF generation needs the
+not prepare new activity or download anything. **Manifest file** shows the
+report's coverage, disclosure choices and file hashes; it accompanies the
+selected output files.
+
+PDF generation needs the
 [optional local browser setup](development.md#pdf-and-browser-tools); the other
 formats do not. Detected personal details in report names are hidden in every
 text mode. Changing the name, text, notes or formats regenerates prepared
@@ -130,14 +136,14 @@ reviewed every copy. Older reports keep the review confirmation recorded
 when they were saved.
 
 Choose **Open saved report** to read it inside WIRE. To find it later, open
-**Reports** and select its name beside the view icon. JSON-only reports also
-open as readable pages, using their verified saved facts. No download is needed.
+**Reports** and select its name beside the document icon. Supported JSON-only
+reports also open as readable pages, using their verified saved facts. No download is needed.
 **Files** opens a specific saved format. The mark beside the name explains how its text was treated; missing
 older metadata stays unrecorded. **Options > Inspect details** shows its other
 metadata. In the reader, choose **Report** to return from a file preview, or
 **Download** to retrieve that file's original bytes.
 
-![A saved report open inside WIRE with section navigation and expandable evidence.](images/saved-report.png)
+![A saved report opened at an interaction, with its prompt and recorded calls beneath the section navigation.](images/saved-report.png)
 
 Older unverified reports keep their warning before **View report**. Missing,
 altered or unsupported saved content remains unavailable; WIRE does not rebuild
@@ -173,7 +179,7 @@ generated explanations of intent or task success.
 ## Compare
 
 Open **Compare periods** in the left sidebar. It starts with all eligible
-activity from the saved collection, independently of Analyze filters. The
+retained activity, independently of Analyze filters. The
 first result compares the last seven complete days, ending yesterday, with
 the preceding seven days in the display time zone.
 
@@ -206,7 +212,9 @@ access remains valid.
 For existing reports, open **Reports > Compare saved reports**, choose
 **Earlier report** and **Later report**, then **Compare reports**. This uses
 their frozen facts, not current history. Different definitions, missing facts
-or incompatible identities can prevent a comparison.
+or incompatible identities can prevent a comparison. A saved two-period report
+already contains a comparison; it cannot serve as one of these ordinary report
+inputs.
 
 The comparison opens with HTML prepared. Change its name or formats if needed,
 then select **Save comparison**. Its frozen copy can remain readable after an

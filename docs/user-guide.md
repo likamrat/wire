@@ -33,7 +33,7 @@ available response-model names. The interaction list below follows the same
 filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
 
-![Analyze showing 10 calls in 8 interactions, tool outcomes and separate service associations.](images/analyze.png)
+![Analyze with call outcomes, activity over time, recorded models, tools and service associations in separate panels.](images/analyze.png)
 
 An interaction groups a prompt with its recorded calls. One interaction can
 contain several calls, and one call can involve several services. Service
@@ -55,7 +55,7 @@ clears browsing restrictions, not collected activity or report selections.
 ## Compare periods
 
 Choose **Compare periods** in the sliding left sidebar. A fresh comparison
-shows all eligible saved activity for the last seven complete days versus the
+shows all eligible retained activity for the last seven complete days versus the
 preceding seven. Analyze keeps its own filters and reading state.
 
 Choose 14 or 30 days, or open **Custom dates** for independent inclusive ranges.
@@ -101,8 +101,8 @@ of those selections. Use **Save report** to keep its files.
 
 ## Make a report
 
-Open **Reports** and choose a ready-made report. It opens
-immediately with detected personal details hidden. The visible period starts
+Open **Reports** and choose a ready-made report. WIRE prepares it
+with detected personal details hidden. The visible period starts
 at Last 7 days, independently of your Analyze filters.
 
 Use **Errors & failures** to find recorded problems and inspect their examples.
@@ -147,8 +147,9 @@ placed in URLs or saved as a persistent Search index.
 
 ## Find a setting
 
-Open **Settings** and type in **Search settings**. Matching destinations appear
-under their categories. Search includes setting descriptions and keywords:
+Open **Settings** at the bottom of the left sidebar and type in **Search
+settings**. Matching destinations appear under their categories.
+Search includes setting descriptions and keywords:
 `record` finds reply saving, deletion, rereading history and the network
 diagnostic; `city` finds Time zone.
 
@@ -162,7 +163,14 @@ Clear the field or press Escape to return to the categories. Browser Back
 returns to the query and link you came from.
 
 This search runs on-device over fixed setting information. It is separate from
-the main Search field for saved activity and reports.
+the main Search field for saved activity and reports, and does not read private
+path values.
+
+In **Display**, choose Light or Dark and a time zone for this browser.
+The theme switch in the top toolbar changes the same preference.
+Changing the display does not rewrite saved reports or their original time zone.
+
+![Display settings with Light selected and a separate time-zone choice.](images/settings-display.png)
 
 ## Keep collection and saved data separate
 

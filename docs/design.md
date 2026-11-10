@@ -259,14 +259,14 @@ choices. Custom dates opens its calendar directly. A fresh report ignores old
 Analyze restrictions. Selected and Current remain available through inclusion
 controls and their original context-qualified entries.
 
-Saved rows align Report, Period and Files. The name opens the saved file; one
+Saved rows align Report, Period and Files. The name opens in-app reading; one
 Files control offers registered formats. A privacy mark beside the name has
 hover/focus/touch help without claiming complete anonymization. Missing metadata
 is not inferred. A secondary Options menu preserves inspection and deletion;
 the header menu preserves bulk deletion with its existing confirmation.
 Inspection alone does not read, download or delete a file.
 Every report choice has accessible help. Saved-report paging follows the rows
-in visual and keyboard order. The view icon and report name open in-app reading;
+in visual and keyboard order. The document icon and report name open in-app reading;
 Files remains a separate action.
 
 Back restores saved search, order, paging, scroll and activating control.
@@ -274,7 +274,8 @@ It preserves the authorized unfinished copy without another visible resume
 entry: choosing the same type with unchanged dates resumes that copy.
 An unresolved Save remains visible and uses its original recovery owner.
 
-Choosing a tile opens the actual report immediately. A compact toolbar owns its
+Choosing a tile prepares the report and shows pending feedback until it is ready.
+A compact toolbar owns its
 name, period, personal-detail choice and formats, with Save beside the name.
 The name updates the document heading without remounting its input. Optional
 changes regenerate files; Save stays unavailable while the preview is stale.
@@ -317,7 +318,7 @@ Screen paint changes do not restyle saved documents.
 
 ## Compare periods
 
-Fresh entry opens Outcomes for all eligible saved activity, without importing
+Fresh entry opens Outcomes for all eligible retained activity, without importing
 Analyze filters. Seven complete civil days ending yesterday are compared with
 the preceding seven; 14/30-day choices follow the same rule. Custom dates uses
 the shared calendar, with independent inclusive ranges and cancellation that

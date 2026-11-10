@@ -162,10 +162,29 @@ Playwright interactions and the unmodified normal renderer. Capture only
 useful states, inspect every image for readability and private data, and close
 the owned runtime/browser and remove its temporary store. Keep fixture provenance
 with capture evidence, and add a visible caption only when it helps explain the task.
-The shared-control illustrations use `tests/appwide-controls.browser.test.mjs`
-with `WIRE_VISUAL_PROOFS` set to an owned capture directory. Its invented activity
+Application screenshots in Markdown use Light theme and the browser's light
+color scheme. Theme-aware diagrams and brand assets keep their light/dark variants.
+
+[`tests/documentation-screenshots.mjs`](../tests/documentation-screenshots.mjs)
+captures Analyze, Search, reporting, comparisons and Settings with invented
+activity and disposable saved reports. Set `WIRE_DOC_OUTPUT` to an owned image
+directory and `WIRE_DOC_PROOF` to a separate private evidence directory, then run:
+
+```text
+node --test tests/documentation-screenshots.mjs
+```
+
+The capture requires committed product source, uses an available loopback port
+with collection timers disabled, and closes its browser/runtime and temporary
+store. It records source and fixture hashes, image hashes and inspected file
+formats in the private evidence directory. Inspect the captures before copying
+the applicable PNGs into `docs/images`; keep receipts and extra proof images out
+of source.
+
+Shared-control proofs use `tests/appwide-controls.browser.test.mjs` with
+`WIRE_VISUAL_PROOFS` set to an owned capture directory. Its invented activity
 and saved reports also exercise keyboard paging and frozen-file preservation.
-Settings-search images use `tests/settings-search.browser.test.mjs` with
+Focused Settings-search proofs use `tests/settings-search.browser.test.mjs` with
 `WIRE_SETTINGS_SEARCH_PROOFS` set to an owned capture directory. It starts
 the normal runtime on an ephemeral port with invented Cedar activity and source
 paths, disables collection timers, rejects action requests and checks that
