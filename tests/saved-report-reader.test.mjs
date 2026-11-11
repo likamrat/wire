@@ -43,7 +43,6 @@ test("saved report names remain actionable while details close and altered HTML 
     await page.goto(runtime.url + "#reports");
     await page.locator('#workspace[aria-busy="false"]').waitFor();
     const row = page.locator(`#bundleList [data-bundle-id="${bundle.bundleId}"]`);
-    await row.locator(".saved-report-row-options").click();
     await row.getByRole("button", { name: "Inspect details", exact: true }).click();
     await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();
@@ -148,7 +147,6 @@ test("saved files preview every format and switch without changing bytes or down
         "Do not offer a download that the stricter format-inventory endpoint cannot validate");
     const broken = bundles[3];
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
-    await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"] .saved-report-row-options`).click();
     await page.locator(`#bundleList [data-bundle-id="${broken.bundleId}"]`).getByRole("button", { name: "Inspect details", exact: true }).click();
     await selectActivityOption(page, "savedInspectorFormat", "product-report.json");
     await page.locator("#contextSidebarFooter").getByRole("button", { name: "Open saved report", exact: true }).click();

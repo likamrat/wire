@@ -338,7 +338,7 @@ export function createSavedFilePreview(host, value, { frozenFrame, isCurrent, on
     return { ready, dispose };
 }
 
-export function createPreparedFileInspection(host, files, { id, createPreview, isCurrent, selection, toolbar: externalToolbar, icon, onInfo, title, brand, hideRail = false } = {}) {
+export function createPreparedFileInspection(host, files, { id, createPreview, isCurrent, selection, toolbar: externalToolbar, icon, utility, onInfo, title, brand, hideRail = false } = {}) {
     const doc = host.ownerDocument, win = doc.defaultView, sources = new Map();
     let disposed = false, mounted = null, sourceMode = selection?.source === true, shownName, shownValue;
     const el = (tag, text, cls) => {
@@ -353,6 +353,7 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
     const rendered = el("button", "Preview", "quiet document-view-mode"), source = el("button", "Source", "quiet document-view-mode");
     rendered.type = source.type = "button";
     modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "File view");
+    if (utility) utility(source, "code", "Source");
     modes.append(rendered, source);
     const filename = el("span", undefined, "document-file-name"), fileControls = el("div", undefined, "document-format-controls");
     if (externalToolbar) controls.append(modes, filename, fileControls);
@@ -401,7 +402,9 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
         hidden(modes, !raw);
         hidden(filename, format(name) === "pdf");
         const label = ["json", "manifest"].includes(format(name)) ? "Tree" : "Preview";
-        if (rendered.textContent !== label) rendered.textContent = label;
+        if (utility) {
+            if (rendered.getAttribute("aria-label") !== label) utility(rendered, label === "Tree" ? "tree" : "read", label);
+        } else if (rendered.textContent !== label) rendered.textContent = label;
         if (filename.textContent !== name) filename.textContent = name;
         for (const [key, choice] of choices) choice.setAttribute("aria-current", String(key === name));
         rendered.setAttribute("aria-pressed", String(!sourceMode));
@@ -465,9 +468,14 @@ export const savedFilePreviewStyles = `
 .document-file-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;min-height:60px;padding:8px 16px;border-bottom:1px solid var(--surface-divider);background:var(--paper);flex:none}
 .document-file-toolbar>select{max-width:12rem}
 .document-file-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;flex:1;min-width:min-content}
-.document-file-modes{display:flex;align-items:center;gap:2px;background:var(--canvas);border-radius:var(--radius-small);flex:none}
-.document-file-modes button{min-height:44px;padding:4px 10px;border:0;background:transparent;color:var(--muted);font-size:var(--type-control);border-radius:var(--radius-small)}
-.document-file-modes button[aria-pressed=true]{background:var(--hover);color:var(--ink)}
+.document-file-modes{display:flex;align-items:center;gap:0;background:color-mix(in srgb,var(--control) 32%,var(--paper));border-radius:var(--radius-small);flex:none}
+.document-file-modes button{min-width:44px;min-height:44px;padding:8px;border:2px solid transparent;background:transparent;color:var(--ink);font-size:var(--type-control);border-radius:var(--radius-small)}
+.document-file-modes button.icon-only{width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center}
+.document-file-modes button>.wire-icon{width:18px;height:18px;flex:none}
+.document-file-modes button[aria-pressed=true]{background:var(--paper);background-clip:padding-box;color:var(--ink)}
+.document-file-modes button:not([aria-pressed=true]):hover:not(:disabled){background:color-mix(in srgb,var(--paper) 35%,transparent);background-clip:padding-box;border-color:transparent}
+.document-file-modes button:active:not(:disabled){background:var(--pill-pressed);background-clip:padding-box}
+.document-file-modes button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .document-file-name{flex:1;min-width:0;text-align:center;overflow-wrap:anywhere;font-size:var(--type-control);color:var(--muted)}
 .document-file-info{display:inline-flex;align-items:center;justify-content:center;flex:none;width:36px;height:36px;padding:0}
 .document-format-controls{margin-inline:auto;min-width:0}.document-format-controls:empty{display:none}

@@ -137,6 +137,7 @@ a field tree, and HTML and Markdown offer Preview/Source. Switching views does
 not prepare new activity or download anything. **Manifest file** shows the
 report's coverage, disclosure choices and file hashes; it accompanies the
 selected output files.
+Hover or focus a viewer icon to see **Preview**, **Tree** or **Source**.
 PDF pages keep their fixed layout; use zoom when **Fit width** makes text too small.
 
 PDF generation needs the
@@ -176,8 +177,9 @@ when they were saved.
 Choose **Open saved report** to read it inside WIRE. To find it later, open
 **Reports** and select its name beside the document icon. Supported JSON-only
 reports also open as readable pages, using their verified saved facts. No download is needed.
-**Files** opens a specific saved format. The mark beside the name explains how its text was treated; missing
-older metadata stays unrecorded. **Options > Inspect details** shows its other
+**Files** opens a specific saved format. **Report text** shows the saved text
+treatment beside its icon; missing older metadata stays unrecorded.
+**Inspect details** on the row shows its other
 metadata. In the reader, choose **Report** to return from a file preview, or
 **Download** to retrieve that file's original bytes.
 
@@ -189,6 +191,8 @@ it from current activity or silently open another format.
 
 Saved reports retain their frozen facts, text choices and time context.
 Later collection, browsing filters or screen-theme changes do not rewrite them.
+**Report** selects a readable WIRE logo for the report's background. Original
+file views and downloads keep their saved artwork, even if an older logo has poor contrast.
 Reopening an older report does not add newer interpretations. New reports need a
 compatible WIRE reader; an older version may refuse to open them.
 The saved list's search finds metadata; global Search can also find supported
@@ -248,8 +252,8 @@ input report is deleted. Notes remain authored context, not comparable metrics.
 
 ## Remove a saved copy
 
-Open a saved row's **Options** and choose **Delete report** or **Delete saved
-comparison**. Its confirmation removes that managed bundle, not original source
+Choose **Delete report** or **Delete saved comparison** on its row.
+Its confirmation removes that managed bundle, not original source
 activity or external downloads. **Saved-report options > Delete all saved
 reports** previews all report bundles across pages and search, not just visible
 rows; saved comparisons remain.

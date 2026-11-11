@@ -1,7 +1,13 @@
 // Screen-only reading structure. Original files and their print layout are unchanged.
-export function enhanceReportReading(source, { expanded } = {}) {
+export function enhanceReportReading(source, { expanded, brand } = {}) {
     if (source.body.hasAttribute("data-wire-reader")) return;
     source.body.setAttribute("data-wire-reader", "");
+    for (const mark of source.querySelectorAll('header.report-brand[aria-label="WIRE"]>.report-mark')) {
+        if (brand && mark.querySelector("svg.brand-logo") && !mark.querySelector('svg[data-brand-theme="dark"]')) {
+            mark.replaceChildren(...brand().childNodes);
+        }
+        if (mark.querySelector('svg.brand-logo[data-brand-theme="dark"]')) mark.setAttribute("data-wire-reading-brand", "");
+    }
     let main = source.querySelector("main");
     if (!main) {
         main = source.createElement("main");
@@ -35,6 +41,14 @@ export function enhanceReportReading(source, { expanded } = {}) {
 html:has(body[data-wire-reader]),body[data-wire-reader]{background:var(--report-sheet,var(--paper));color:var(--ink)}
 body[data-wire-reader]{max-width:none;margin:0;padding:24px 32px}
 body[data-wire-reader] main{max-width:72rem;margin:0 auto;background:transparent}
+body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=light]{display:block}
+body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=dark]{display:none}
+:root[data-evidence-theme=dark] body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=light]{display:none}
+:root[data-evidence-theme=dark] body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=dark]{display:block}
+@media(prefers-color-scheme:dark){
+ :root:not([data-evidence-theme]) body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=light]{display:none}
+ :root:not([data-evidence-theme]) body[data-wire-reader] [data-wire-reading-brand] .brand-logo[data-brand-theme=dark]{display:block}
+}
 .wire-reading-section,.wire-reading-interaction{background:transparent!important;border:0;border-top:1px solid var(--rule);border-radius:0;padding:8px 0;margin:0}
 .wire-reading-section{margin-top:16px}
 .wire-reading-section>summary{min-height:44px;align-content:center;font-size:1.15rem;font-weight:500;cursor:pointer}

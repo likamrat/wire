@@ -114,7 +114,7 @@ test("chart grouping, category states and report identity remain readable at enl
     await page.locator('nav [data-nav=reports]').click();
     const title = page.getByRole("button", { name: "View report: Calendar activity", exact: true });
     await expect(title.locator("[data-lucide-icon=file-text]")).toHaveCount(1);
-    await expect(page.locator(".saved-report-privacy")).toHaveAccessibleName("Personal details hidden where detected");
+    await expect(page.locator(".saved-report-privacy")).toContainText("Personal details hidden where detected");
     await page.setViewportSize({ width: 900, height: 1000 });
     await page.evaluate(() => document.documentElement.style.fontSize = "150%");
     const layout = await page.locator(".saved-library-row").evaluate(row => {

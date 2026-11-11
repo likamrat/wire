@@ -161,10 +161,7 @@ test("edited reports give actual HTML a reading pane without opening text inspec
         assert.deepEqual(await title.boundingBox(), beforeHover, "Hover must not move the title or status action.");
         await title.focus();
         await expect(title).toBeFocused();
-        await row.locator(".saved-report-privacy").focus();
-        await page.keyboard.press("Enter");
-        await expect(page.getByRole("tooltip")).toContainText("Personal details hidden where detected");
-        await page.keyboard.press("Escape");
+        await expect(row.locator(".saved-report-privacy")).toContainText("Personal details hidden where detected");
     }
     await page.setViewportSize({ width: 560, height: 950 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
@@ -175,7 +172,8 @@ test("edited reports give actual HTML a reading pane without opening text inspec
         const name = node.querySelector(".saved-report-name").getBoundingClientRect(),
             title = node.querySelector(".saved-report-title").getBoundingClientRect(),
             privacy = node.querySelector(".saved-report-privacy").getBoundingClientRect();
-        return { contained: name.right <= title.right && name.bottom <= title.bottom, separate: title.right <= privacy.left };
+        return { contained: name.right <= title.right && name.bottom <= title.bottom,
+            separate: title.right <= privacy.left || title.bottom <= privacy.top };
     });
     assert.deepEqual(bounds, { contained: true, separate: true });
     if (process.env.WIRE_REPORT_READING_PROOFS) await page.screenshot({

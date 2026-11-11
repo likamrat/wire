@@ -258,7 +258,7 @@ test("new library metadata and saved comparisons use frozen files and direct loc
         await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     }
     await expect(page.locator(".saved-report-title")).toHaveCount(2);
-    await expect(page.locator(".saved-report-privacy").first()).toHaveAttribute("aria-label", "Personal details hidden where detected");
+    await expect(page.locator(".saved-report-privacy").first()).toContainText("Personal details hidden where detected");
     await expect(page.locator(".saved-report-period").first()).not.toHaveText("Not recorded");
     await expect(page.locator("[data-report-preset]")).toHaveCount(5);
     await page.locator("#reportCompareLink").click();
@@ -520,7 +520,7 @@ test("one Reports entry retains an edited frozen draft across Back, same-tile re
     assert.deepEqual(errors, []);
 });
 
-test("saved names, Files and options preserve exact files, paging, search, focus and deletion confirmation", { timeout: 60000 }, async t => {
+test("saved names, Files and row actions preserve exact files, paging, search, focus and deletion confirmation", { timeout: 60000 }, async t => {
     const { page, context, errors } = await setup(t);
     let expectedFile;
     for (let index = 1; index <= 8; index++) {
@@ -565,12 +565,10 @@ test("saved names, Files and options preserve exact files, paging, search, focus
     assert.deepEqual(bytes, expectedFile);
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await expect(row.locator(".saved-report-files")).toBeFocused();
-    await row.locator(".saved-report-row-options").click();
     await row.getByRole("button", { name: "Inspect details", exact: true }).click();
     await expect(page.locator("#contextSidebar")).toBeVisible();
     await page.locator("#closeContextSidebar").click();
     await expect(page.locator("#contextSidebar")).toBeHidden();
-    await row.locator(".saved-report-row-options").click();
     await row.getByRole("button", { name: "Delete report", exact: true }).click();
     const deletion = page.locator('[aria-labelledby="savedArtifactDeleteTitle"]');
     await expect(deletion).toBeVisible();
@@ -591,7 +589,7 @@ test("saved names, Files and options preserve exact files, paging, search, focus
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     await page.locator("#savedReportSearch").fill(legacyId);
     await expect(page.locator(".saved-report-privacy")).toHaveCount(1);
-    await expect(page.locator(".saved-report-privacy")).toHaveAttribute("aria-label", "Text treatment not recorded");
+    await expect(page.locator(".saved-report-privacy")).toContainText("Text treatment not recorded");
     await expect(page.locator(".saved-report-period")).toHaveText("Not recorded");
     assert.deepEqual(errors, []);
 });

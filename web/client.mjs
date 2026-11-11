@@ -2195,7 +2195,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function mountFileInspection(host, files, options) {
         return assessmentFactories.preparedFileInspection(host, files, {
-            ...options, icon: ux.icon, brand: cloneReportBrand,
+            ...options, icon: ux.icon, utility: ux.utility, brand: cloneReportBrand,
             createPreview: (target, value, settings) => {
                 const mounted = assessmentFactories.savedFilePreview(target, value, {
                     ...settings, frozenFrame: assessmentFactories.liveSearch.frozenFrame,
@@ -6918,7 +6918,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             onPage: () => leaveSavedInspectorContext(), wrapList: list => {
                 const host = el("div", "saved-report-table"), columns = el("div", "saved-library-columns");
                 columns.setAttribute("aria-hidden", "true");
-                columns.append(el("span", "", "Report"), el("span", "", "Period"), el("span", "", "Files"), el("span"));
+                columns.append(el("span", "", "Report"), el("span", "", "Report text"), el("span", "", "Period"),
+                    el("span", "", "Files"), el("span", "", "Actions"));
                 host.append(columns, list); return host;
             }, renderItem: ({ bundle, title }) => {
             detailOwner = "bundle:" + bundle.bundleId;
@@ -6937,11 +6938,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const identity = el("span", "saved-report-identity");
             const privacyLabel = ({ masked: "Personal details hidden where detected", original: "Chat details kept",
                 none: "Prompts and replies left out" })[bundle.promptMode] ?? "Text treatment not recorded";
-            const privacy = button("", () => {}, "ux-help saved-report-privacy");
-            privacy.setAttribute("aria-label", privacyLabel);
+            const privacy = el("span", "saved-report-privacy");
             const privacyIcon = ux.icon(({ masked: "report-masked", original: "report-original", none: "report-no-text" })[bundle.promptMode] ?? "unobserved");
-            privacy.append(privacyIcon); ux.tooltip(privacy, privacyLabel, { anchor: privacyIcon, helpOnActivate: true });
-            identity.append(summary, privacy);
+            privacy.append(privacyIcon, el("span", "", privacyLabel));
+            identity.append(summary);
             const period = el("span", "saved-report-period", savedPeriodLabel(bundle));
             const files = viewKey(button("", () => {}, "quiet saved-report-files"), "files-bundle:" + bundle.bundleId);
             ux.utility(files, "report-files", "Files for " + title, "Choose a saved file");
@@ -6952,15 +6952,16 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 label: ({ html: "HTML", pdf: "PDF", json: "JSON", markdown: "Markdown", manifest: "Manifest" })[format],
                 action: () => openSavedReport(bundle, files, format),
             })), outer, current);
-            const actions = viewKey(button("", () => {}, "quiet saved-report-row-options"), "options-bundle:" + bundle.bundleId);
-            ux.utility(actions, "report-options", "Options for " + title, "Report options");
-            savedReportMenu(actions, [
-                { label: "Inspect details", action: () => inspectSavedReport(bundle, actions) },
-                { label: bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", danger: true,
-                    disabled: isStale && !isLoading || bundle.canDelete === false,
-                    action: () => savedArtifactUI.open({ artifactKind: bundle.kind ?? "report", artifactId: bundle.bundleId, label: title }, actions) },
-            ], outer, current);
-            outer.prepend(identity, period, files, actions);
+            const actions = el("div", "saved-report-actions");
+            const inspect = viewKey(button("Inspect details", () => {
+                if (current()) inspectSavedReport(bundle, inspect);
+            }, "quiet"), "inspect-bundle:" + bundle.bundleId);
+            const remove = viewKey(button(bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", () => {
+                if (current()) savedArtifactUI.open({ artifactKind: bundle.kind ?? "report", artifactId: bundle.bundleId, label: title }, remove);
+            }, "quiet danger"), "delete-bundle:" + bundle.bundleId);
+            remove.disabled = isStale && !isLoading || bundle.canDelete === false;
+            actions.append(inspect, remove);
+            outer.prepend(identity, privacy, period, files, actions);
             return outer;
         } });
         $("bundleList").append(history);
@@ -7511,7 +7512,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 frozenFrame: assessmentFactories.liveSearch.frozenFrame, isCurrent: currentReport, toolbar: current.toolbar,
                 icon: ux.icon, title: current.title, brand: cloneReportBrand,
                 readingDocument: source => {
-                    assessmentFactories.enhanceReportReading(source, { expanded: current.expanded });
+                    assessmentFactories.enhanceReportReading(source, { expanded: current.expanded, brand: cloneReportBrand });
                     held.expandable = Boolean(source.querySelector(".wire-reading-section,.wire-reading-interaction"));
                     current.expand.hidden = !held.expandable;
                 },

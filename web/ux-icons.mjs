@@ -44,7 +44,7 @@ export const uxIconSources = Object.freeze({
     "zoom-in": "plus", "zoom-out": "minus",
     "reader-maximize": "maximize-2", "reader-restore": "minimize-2",
     search: "search", filter: "funnel", clock: "clock", "time-zone": "globe", connection: "plug", database: "database",
-    read: "eye", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
+    read: "eye", tree: "list-tree", hide: "eye-off", previous: "chevron-left", next: "chevron-right", forward: "arrow-right",
     "collapse-sections": "fold-vertical", "expand-sections": "unfold-vertical",
 });
 

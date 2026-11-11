@@ -217,13 +217,13 @@ directly. A fresh report ignores old Analyze restrictions.
 Selected and Current remain available through inclusion
 controls and their original context-qualified entries.
 
-Saved rows align Report, Period and Files. The name and its leading document
+Saved rows align Report, Report text, Period, Files and Actions. The name and its leading document
 icon open in-app reading; one separate Files control offers registered formats.
 A padded title target owns its hover and keyboard-focus background. Keep the
-privacy action outside that target, with space after a long or wrapped title.
-A privacy mark beside the name has hover/focus/touch help without claiming
-complete anonymization. Missing metadata
-is not inferred. A secondary Options menu preserves inspection and deletion;
+text-treatment icon and its explanation in their own column. This secondary,
+regular-weight text stays visible and readable without hovering; it makes no
+anonymization guarantee, and missing metadata is not inferred.
+Inspect details and Delete report/comparison are visible, labeled row actions;
 the header menu preserves bulk deletion with its existing confirmation.
 Inspection alone does not read, download or delete a file.
 Every report choice has accessible help. Saved-report paging follows the rows
@@ -266,6 +266,8 @@ Save as chooses output files. View chooses Report or an actual format preview,
 with PDF pages, a JSON tree or HTML/Markdown Preview/Source. Returning from a file
 to the same authorized HTML report keeps its open sections and reading position.
 JSON-only saves can render a readable page from their verified frozen snapshot.
+File modes use one compact segmented icon control, with a distinct selected
+surface and named Preview/Tree/Source actions on hover and keyboard focus.
 Report, file and optional Report text views share the reading space. Text
 inspection shows the included copy first; Local original switches to its retained
 source without adding that source to exports. Editing replaces the displayed copy
@@ -294,6 +296,10 @@ action. The [frozen-file contract](report-contract.md#frozen-files-and-saved-rea
 defines verification and safe format viewers.
 Departure/withdrawal retires text, pixels, workers and pending reads.
 Prepared measurement privileges do not transfer to saved HTML.
+Report reading selects the approved WIRE wordmark variant for its own theme,
+including older implicit themes and single-variant headers. This presentation
+change is limited to the known WIRE header; original file views and downloads
+retain their saved artwork.
 
 The [reporting guide](reporting.md) explains the user workflow; for
 membership, frozen facts and privacy, use the [report contract](report-contract.md).
