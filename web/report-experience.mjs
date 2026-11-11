@@ -57,6 +57,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
         const row = el("div", "report-popover-actions");
         row.append(button("Done", () => panel.hidePopover())); panel.append(row);
     }
+    function closeOptions() {
+        for (const panel of root.querySelectorAll(".report-options-popover:popover-open")) panel.hidePopover();
+    }
     const gallery = el("section", "report-gallery"); gallery.id = "reportGallery";
     const period = el("div", "report-period-choices"); period.setAttribute("role", "group"); period.setAttribute("aria-label", "Report period");
     const periodCaption = el("p", "report-period-caption");
@@ -64,7 +67,7 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     for (const range of ["7", "14", "30", "custom"]) {
         const control = button(range === "custom" ? "Custom dates" : `Last ${range} days`, () => {
             if (range === "custom") openCalendar();
-            else changeDates({ range, ...time.preset(range, read().timeContext.timeZone) });
+            else { closeOptions(); changeDates({ range, ...time.preset(range, read().timeContext.timeZone) }); }
         });
         control.dataset.reportRange = range; period.append(control);
     }
@@ -185,11 +188,9 @@ export function createReportExperience({ root, time, ux, read, choose, changeDat
     }
     return {
         sync, openCalendar, showSelection,
-        closeOptions() {
-            for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) if (panel.matches(":popover-open")) panel.hidePopover();
-        },
+        closeOptions,
         withdrawAccess() {
-            for (const panel of [privacy, formats, refine, periodPanel, calendar, selection]) if (panel.matches(":popover-open")) panel.hidePopover();
+            closeOptions();
             calendarEditor.clear();
             periodCaption.textContent = scopeCaption.textContent = "";
         },

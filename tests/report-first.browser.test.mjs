@@ -272,6 +272,14 @@ test("new library metadata and saved comparisons use frozen files and direct loc
     const prepared = await preparation, body = await prepared.json();
     assert.equal(prepared.status(), 200, body.error);
     await expect(page.getByRole("button", { name: "Approve for local saving", exact: true })).toBeHidden();
+    await page.getByRole("tab", { name: /^Files \(/ }).click();
+    const file = page.locator("#comparisonInspectionPanel1");
+    await expect(file.frameLocator("iframe").locator("h1")).toBeVisible();
+    const frameSize = await file.locator("iframe").boundingBox();
+    assert.ok(frameSize.height >= page.viewportSize().height * .4, JSON.stringify(frameSize));
+    await file.getByRole("button", { name: "Source", exact: true }).click();
+    assert.equal(await file.locator("pre:visible").textContent(), body.files["comparison-report.html"]);
+    await page.getByRole("tab", { name: "Report", exact: true }).click();
     await page.getByRole("button", { name: "Save comparison", exact: true }).click();
     await expect(page.getByRole("button", { name: "Open saved comparison", exact: true })).toBeVisible();
     const comparison = (await loadBoardState(context)).exports.find(entry => entry.kind === "comparison");

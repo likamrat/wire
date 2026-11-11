@@ -165,6 +165,22 @@ export function createEvidenceUX(icons) {
         if (focused === trigger(node)) focusSource = "restored";
         node.focus({ preventScroll: true });
     }
+    function dismissOnFrameFocus(requestClose, { signal = events.signal } = {}) {
+        const enteredFrame = () => queueMicrotask(() => {
+            if (!signal.aborted && !events.signal.aborted && document.hasFocus()
+                && document.activeElement instanceof HTMLIFrameElement) requestClose(document.activeElement);
+        });
+        window.addEventListener("blur", enteredFrame, { signal });
+        return () => window.removeEventListener("blur", enteredFrame);
+    }
+    // Embedded documents do not bubble pointer/focus events into the shell.
+    // Keep native auto-popover dismissal without inspecting or modifying the frame.
+    dismissOnFrameFocus(frame => {
+        hideTooltip();
+        for (const panel of document.querySelectorAll('[popover="auto"]:popover-open')) {
+            if (!panel.contains(frame)) panel.hidePopover();
+        }
+    });
     function dismissOnOutside(dialog, requestClose) {
         if (!(dialog instanceof HTMLDialogElement) || typeof requestClose !== "function") {
             throw new TypeError("Outside dismissal requires a native dialog and its owner's close handler.");
@@ -673,7 +689,7 @@ export function createEvidenceUX(icons) {
         }
         return value;
     }
-    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, pending, withdrawAccess, countShare,
+    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, dismissOnFrameFocus, pending, withdrawAccess, countShare,
         destroy() {
             clearTooltip();
             observer.disconnect();

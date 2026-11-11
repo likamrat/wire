@@ -5,7 +5,7 @@ export function createPreparedReportFrame(html, frozenFrame, { onError, onReady,
     html = null;
     frame.title = "Prepared report";
     frame.setAttribute("sandbox", "allow-same-origin");
-    if (contained) frame.classList.add("report-contained-frame");
+    if (contained) frame.classList.add("report-contained-frame", "document-reading-pane");
     else frame.style.height = "1px";
     let active = true, source, cleanup, scheduled = 0, lastWidth = -1, selfResizes = 0;
     const bodySize = new view.ResizeObserver(schedule);

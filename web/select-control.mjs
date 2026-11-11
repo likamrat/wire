@@ -624,6 +624,7 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
     }, { capture: true });
     listen(document, "pointercancel", () => { dismissedPointer = null; }, { capture: true });
     listen(document, "focusin", (event) => { if (active && event.target !== active.trigger && !popup.contains(event.target)) close(); });
+    ux.dismissOnFrameFocus(() => { if (active) close(); }, { signal: events.signal });
     listen(document, "scroll", schedulePosition, { capture: true });
     listen(window, "resize", schedulePosition);
     listen(document.fonts, "loadingdone", schedulePosition);

@@ -478,6 +478,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     const sessionJourney = createSessionJourney();
     let reportEntry = null, reportJourney, reportComparisonUI, savedArtifactUI, artifactRefreshRequired = false, contextReturnKey, savedReportView, preparedReportReader, preparedFileInspection;
+    let pendingReportReading = null;
     let periodReport = null, periodReportInvalid = false;
     let reportPickerEvents = null;
     const sessionReportButton = button("Create report for this Copilot chat", createSessionReport, "primary");
@@ -2321,6 +2322,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             scrubContextPreview();
         }
         if (exportWriting) return;
+        pendingReportReading = null;
         clearTimeout(reportUpdateTimer); reportUpdateAgain = false; saveAfterMask = false;
         nativePublication.invalidate(); clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
         clearPreparedReaders();
@@ -3358,6 +3360,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             announce("Wait for the current local save to finish before leaving this view.", "pending-save");
             return false;
         }
+        if (route.view === "reports" && (next.view !== "reports" || next.task !== route.task || next.bundle !== route.bundle)) reportExperience?.closeOptions();
         // A new navigation can precede ResizeObserver delivery for the current motion frame.
         retainSidebarColumnAnchor();
         const navigation = ++navigationGeneration;
@@ -4161,7 +4164,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         $("savedReportReader").hidden = !reading;
         const filePanel = creating && !$("reportStage3")?.hidden ? $("reportFileInspection")
             : comparing ? $("comparisonInspectionPanel1") : null;
-        $("reportsView").classList.toggle("report-file-stage", route.view === "reports" && Boolean(filePanel && !filePanel.hidden));
+        $("reportsView").classList.toggle("report-file-stage", route.view === "reports" && Boolean(filePanel && !filePanel.hidden)
+            && (comparing || filePanel.parentElement === $("reportReviewBody")));
         if ($("reportTaskNav").parentElement !== $("pagePrimaryActions")) $("pagePrimaryActions").append($("reportTaskNav"));
         $("reportTaskNav").hidden = route.view !== "reports" || reading || view.landing;
         if (route.view === "reports") $("coverage").hidden = true;
@@ -8727,6 +8731,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function updateReportContent({ hide = false, delay = 350 } = {}) {
         if (exportWriting || reportJourney.snapshot().saveUnconfirmed) return;
+        const selectedView = $("preparedReportView");
+        if (selectedView) pendingReportReading = { view: selectedView.value, file: preparedFileInspection?.selection(),
+            copyKey: $("reportReviewBody").querySelector(".prompt-comparison")?.dataset.copyKey,
+            focusCopy: Boolean(document.activeElement?.closest(".report-copy-controls")) };
         saveAfterMask = false;
         clearTimeout(reportUpdateTimer);
         if (activePreview?.snapshot?.reportPopulation) reportRebuildFrom ??= activePreview.previewId;
@@ -8742,7 +8750,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function changeReportDates(dates) {
         if (exportWriting || reportJourney.snapshot().saveUnconfirmed || periodReport) return;
         const prepared = reportJourney.snapshot().step === 3;
-        invalidatePreview(); reportDates = dates; reportDatesReplaced = reportBaseExplicit && reportScope === "current";
+        const view = $("preparedReportView")?.value, file = preparedFileInspection?.selection();
+        invalidatePreview();
+        if (view) pendingReportReading = { view, file };
+        reportDates = dates; reportDatesReplaced = reportBaseExplicit && reportScope === "current";
         draft.change({ reportNotes: [], overrides: [] });
         draft.synchronizeTime(viewerTime, reportDates);
         updateSelection();
@@ -8839,6 +8850,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function renderPreview(body, preview, operation, { focus = true } = {}) {
+        const readingSelection = pendingReportReading;
+        pendingReportReading = null;
         clearPreviewPayload?.();
         const publication = api.publicationToken();
         if (document.activeElement !== $("reportTitle") && !draft.options().title?.trim()) $("reportTitle").value = preview.title ?? "";
@@ -8861,7 +8874,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ? preview.snapshot?.resultText ? "Prompt text is omitted. Chosen result text is included only as masked, reviewed copies."
                 : preview.snapshot?.nativeEvidence ? "Microsoft message and context text is omitted."
                 : "Local originals are excluded from saved files."
-            : "Detected personal values are masked. Check confidential meaning."));
+            : "Detected personal details are hidden. Check names and sensitive wording."));
         if (preview.snapshot?.recordedContext) {
             const context = preview.snapshot.recordedContext;
             const note = el("section", "report-context-review");
@@ -8905,14 +8918,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 "Saved Microsoft text may be incomplete. Replies are not verified as final."));
             const incomplete = reviewCopies.filter(prompt => (prompt.availability
                 ? !["recorded", "recorded-empty"].includes(prompt.availability) : prompt.status !== "full") || prompt.original === null).length;
-            const removals = reviewCopies.reduce((sum, prompt) => sum + prompt.changes.length, 0);
-            if (removals || incomplete) {
+            if (incomplete) {
                 const summary = el("p", "prompt-review-summary");
-                setReportMetadata(summary, [removals ? `${count(removals)} removals` : "", incomplete ? `${count(incomplete)} incomplete, excluded or unavailable sources` : ""].filter(Boolean));
+                setReportMetadata(summary, [`${count(incomplete)} incomplete, excluded or unavailable sources`]);
                 comparisons.append(summary);
             }
             const copies = el("div");
-            pagedList(copies, reviewCopies, { key: "copies:" + preview.previewId, size: 1, noun: "report copies", renderItem: prompt => {
+            const copiesKey = "copies:" + preview.previewId;
+            if (readingSelection?.copyKey) presentation.setPage(copiesKey, Math.max(0, reviewCopies.findIndex(copy => copy.key === readingSelection.copyKey)));
+            pagedList(copies, reviewCopies, { key: copiesKey, size: 1, noun: "report copies", renderItem: prompt => {
                 detailOwner = "preview:" + preview.previewId + ":" + prompt.key;
                 const nativeCopy = typeof prompt.key === "string" && prompt.key.startsWith("native-copy-");
                 const resultCopy = typeof prompt.key === "string" && prompt.key.startsWith("result-copy-");
@@ -8921,13 +8935,26 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     : prompt.kind === "response" ? "Recorded reply (context; finality unverified)"
                     : prompt.kind === "origin" ? textAccess.caption(prompt) : prompt.kind === "tool" ? `Recorded tool argument (${prompt.label})` : `${prompt.label} / ${textAccess.caption(prompt)}`;
                 const item = el("article", "prompt-comparison");
-                item.append(el("h4", "", `${displayLabel}${prompt.omitted ? " (omitted)" : ""}`));
+                item.dataset.copyKey = prompt.key;
+                const interaction = preview.records.findIndex(record => record.prompts?.some(copy => copy.key === prompt.key)
+                    || record.scenarioId === prompt.scenarioRef);
+                item.append(el("h4", "", `${interaction >= 0 ? `Interaction ${interaction + 1} · ` : ""}${displayLabel}${prompt.omitted ? " (omitted)" : ""}`));
                 const pair = el("div", "prompt-pair");
                 const original = el("div", "prompt-original"), copy = el("div", "prompt-report");
+                original.hidden = true;
+                const versions = el("div", "report-copy-versions");
+                versions.setAttribute("role", "group"); versions.setAttribute("aria-label", "Text version");
+                const showCopy = button("Report copy", () => showVersion(false), "quiet");
+                const showOriginal = button("Local original", () => showVersion(true), "quiet");
+                function showVersion(local) {
+                    original.hidden = !local; copy.hidden = local;
+                    showCopy.setAttribute("aria-pressed", String(!local)); showOriginal.setAttribute("aria-pressed", String(local));
+                }
+                showVersion(false);
+                versions.append(showCopy, showOriginal); item.append(versions);
                 if (prompt.original === null) original.append(el("p", "", "Original text is unavailable."));
                 else {
-                    const originalBlock = readableCopy(resultCopy ? "Retained result text" : "Local original", el("pre", "", prompt.original));
-                    original.append(mode === "none" && !resultCopy ? disclosure("Read local original; not included in report", originalBlock) : originalBlock);
+                    original.append(readableCopy("Retained on this device; report edits do not change it.", el("pre", "", prompt.original)));
                     if (!nativeCopy && prompt.status !== "full") original.append(el("p", "muted", "Only part of the original was recorded. Missing text is not reconstructed."));
                 }
                 const rendered = el("pre");
@@ -8940,7 +8967,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                             rendered.append(ux.tooltip(mark, segment.mandatory ? "Credentials are always removed from saved files." : `${segment.category.replaceAll("_", " ")} masked; original unchanged.`));
                         } else rendered.append(document.createTextNode(segment.text));
                     }
-                    copy.append(readableCopy("Report copy", rendered));
+                    copy.append(readableCopy("Included in the report", rendered));
                 }
                 for (const category of [...new Set(prompt.changes.map((c) => c.category))]) copy.append(el("p", "muted", `${category.replaceAll("_", " ")}: ${prompt.changes.filter((c) => c.category === category).length} removal(s).`));
                 if (prompt.edited) copy.append(el("p", "muted", "Edited report copy."));
@@ -8949,6 +8976,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if ((mode !== "none" || resultCopy) && prompt.original !== null) {
                     const edit = el("details", "detail-disclosure");
                     edit.append(el("summary", "", "Edit or omit this report copy"));
+                    edit.addEventListener("toggle", () => {
+                        const reading = copy.querySelector(".report-read-copy");
+                        if (reading) reading.hidden = edit.open;
+                    });
                     const fields = el("fieldset", "report-copy-controls");
                     fields.disabled = exportWriting || reportJourney.snapshot().saveUnconfirmed;
                     const omit = el("input"), omitLabel = el("label", "attestation");
@@ -8974,10 +9005,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         if (!localSave) saveEdit();
                     });
                     if (!localSave) textarea.addEventListener("input", saveEdit);
-                    fields.append(omitLabel, el("p", "", mode === "masked" || resultCopy ? "Detected credentials and personal values will be masked again." : "Detected credentials will be removed again."), textarea);
+                    fields.append(el("p", "", "Changes affect this report copy only."),
+                        omitLabel, textarea, el("p", "muted", mode === "masked" || resultCopy ? "Personal details and credentials are masked again." : "Credentials are removed again."));
                     if (localSave) fields.append(button("Update report copy", saveEdit));
                     edit.append(fields);
-                    copy.append(edit);
+                    copy.prepend(edit);
                 }
                 return viewKey(item, detailOwner);
             } });
@@ -8989,7 +9021,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (!api.isCurrent(publication)) return;
             if ((value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) && !draft.contextCurrent(contextToken)) return;
             if (value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) renderedContextBundles.add(value);
-            const selection = preparedFileInspection?.selection();
+            const selection = preparedFileInspection?.selection() ?? readingSelection?.file;
             preparedFileInspection?.dispose();
             preparedFileInspection = mountFileInspection(exactFiles, value.files, {
                 id: "preparedReportFile", selection, hideRail: localSave,
@@ -9218,6 +9250,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const viewBar = el("div", "report-reading-toolbar"), label = el("label", "", "View"), view = el("select");
             view.id = "preparedReportView"; view.setAttribute("aria-label", "Prepared report view");
             view.append(option("report", "Report"));
+            view.append(option("text", "Report text"));
             const names = { html: "HTML", pdf: "PDF", json: "JSON", md: "Markdown" };
             for (const name of Object.keys(preview.files)) {
                 const format = name === "coverage-and-redaction-manifest.json" ? "Manifest" : names[name.split(".").at(-1)];
@@ -9232,20 +9265,31 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             viewBar.append(label, expand); report.prepend(viewBar);
             exactFiles.id = "reportFileInspection"; exactFiles.hidden = true;
             const reportFrame = preparedReportReader?.frame;
-            view.addEventListener("change", () => {
-                if (!api.isCurrent(publication) || !view.isConnected) return;
-                const reading = view.value === "report";
-                if (reportFrame) reportFrame.hidden = !reading;
-                exactFiles.hidden = reading; expand.hidden = !reading;
-                if (!reading) preparedFileInspection.select(view.value);
-                renderReportTask();
-            });
-            const optionalText = el("details", "report-optional-copies");
-            optionalText.append(el("summary", "", "Inspect or edit report text"));
+            const optionalText = el("section", "report-copy-inspection document-reading-pane");
+            optionalText.id = "reportTextInspection"; optionalText.hidden = true;
+            if (!reviewCopies.length) optionalText.append(el("p", "", "No text copies in this report."));
             for (const node of body.querySelectorAll(":scope > .report-privacy-note,:scope > .report-context-review,:scope > .prompt-comparisons,:scope > .report-privacy-findings")) optionalText.append(node);
-            body.append(optionalText);
+            report.append(optionalText);
+            function showView() {
+                if (!api.isCurrent(publication) || !view.isConnected) return;
+                const reading = view.value === "report", text = view.value === "text";
+                if (reportFrame) reportFrame.hidden = !reading;
+                exactFiles.hidden = reading || text; optionalText.hidden = !text; expand.hidden = !reading;
+                if (!reading && !text) {
+                    if (preparedFileInspection.selection().name !== view.value) preparedFileInspection.select(view.value);
+                    else preparedFileInspection.refresh();
+                }
+                renderReportTask();
+            }
+            view.addEventListener("change", showView);
+            if ([...view.options].some(option => option.value === readingSelection?.view)) view.value = readingSelection.view;
+            showView();
             reportJourney.previewReady({ ...preview, promptReview: reviewCopies }, { confirm, feedback, focus });
             reportExperience?.sync(); selectControls?.sync();
+            if (view.value === "text" && readingSelection?.focusCopy) {
+                const heading = optionalText.querySelector(".prompt-comparison h4");
+                if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+            }
             return;
         }
         const textPanel = el("section", "report-inspection-panel report-copy-inspection");
@@ -9839,6 +9883,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         forgetReading(reportLandingOrigin?.reading); reportLandingOrigin = null; reportPreset = null;
         clearTimeout(reportUpdateTimer); reportRebuildFrom = null; reportUpdateAgain = saveAfterMask = false;
         reportPreparing = false; reportPreparationOwner = null;
+        pendingReportReading = null;
         reportBaseExplicit = reportDatesReplaced = false;
         reportDates = { range: "7", ...time.preset("7", viewerTime.timeZone) };
         reportPickerEvents?.abort(); reportPickerEvents = null;

@@ -384,7 +384,7 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
     }
     let selectedName = selection?.name && Object.hasOwn(files, selection.name) ? selection.name : choices.keys().next().value;
     viewer.append(...(externalToolbar ? [] : [toolbar]), preview, originals);
-    host.classList.add(externalToolbar ? "saved-file-inspection" : "prepared-file-reader");
+    host.classList.add(...(externalToolbar ? ["saved-file-inspection"] : ["prepared-file-reader", "document-reading-pane"]));
     if (hideRail) { rail.hidden = true; host.classList.add("prepared-file-reader-single"); }
     host.replaceChildren(...(externalToolbar ? [] : [rail]), viewer);
     const live = () => !disposed && host.isConnected && isCurrent() && !disposed && host.isConnected;
@@ -474,7 +474,9 @@ export const savedFilePreviewStyles = `
 .document-file-toolbar:has(.saved-pdf-toolbar) .document-file-controls{display:contents}
 .document-file-view{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden}
 .saved-file-inspection,.saved-reader-file{display:flex;flex:1;min-width:0;min-height:0}
-.prepared-file-reader{display:flex;height:70dvh;min-height:240px;min-width:0;border:1px solid var(--surface-divider);border-radius:var(--radius-small);overflow:hidden}
+.document-reading-pane{height:70dvh;min-height:24rem;max-height:56rem}
+.prepared-file-reader{display:flex;min-width:0;border:1px solid var(--surface-divider);border-radius:var(--radius-small);overflow:hidden}
+.report-document>.prepared-file-reader{border:0;border-radius:0}
 .prepared-file-rail{flex:none;width:14.375rem;overflow:auto;overscroll-behavior:contain;padding:16px 12px;border-right:1px solid var(--surface-divider);background:var(--paper)}
 .prepared-file-rail h3{margin:4px 10px 16px;font-size:var(--type-body);font-weight:var(--weight-medium)}
 .prepared-file-choice{display:flex;align-items:start;justify-content:start;gap:12px;width:100%;padding:12px 10px;text-align:left;white-space:normal;border-radius:var(--radius-small)}

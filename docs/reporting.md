@@ -106,9 +106,14 @@ metrics. Select **Update note** or **Update prompt copy** to apply an edit.
 
 The toolbar changes the report name, personal-detail treatment and files to save.
 **Change what's included** holds author/service/outcome choices and optional
-linked context. **Inspect or edit report text** provides original/copy
-inspection and edits for the other included text. Choose **Update report copy** after editing text in the
-inspection area. These controls are optional.
+linked context. **View > Report text** opens optional text inspection.
+It shows one **Report copy** at a time, with its interaction and recorded author.
+**Local original** switches to the retained source; it is not an extra copy
+included in the report. **Edit or omit this report copy**, then **Update report
+copy**, changes only that report copy. The original stays unchanged.
+Return to **Report** or a file through **View**.
+
+![Report text showing one included copy, its author and a separate Local original choice.](images/report-text.png)
 To hide a specific name or phrase throughout the copies, open the personal-detail
 control, expand **Additional masking**, and enter one exact term per line.
 
@@ -126,7 +131,8 @@ restore the omitted wording or read prompts, replies or arguments.
 
 **Save as** chooses HTML, PDF, JSON or Markdown files; you can select more than
 one. **View** changes what you are reading: **Report** is the readable page,
-while a file choice shows that actual format. PDF has page controls, JSON has
+while a file choice shows that actual format in its own reading pane. Text
+inspection stays out of the file view. PDF has page controls, JSON has
 a field tree, and HTML and Markdown offer Preview/Source. Switching views does
 not prepare new activity or download anything. **Manifest file** shows the
 report's coverage, disclosure choices and file hashes; it accompanies the
@@ -136,10 +142,11 @@ PDF generation needs the
 [optional local browser setup](development.md#pdf-and-browser-tools); the other
 formats do not. Detected personal details in report names are hidden in every
 text mode. Changing the name, text, notes or formats regenerates prepared
-files while keeping the original interaction cohort. Save is unavailable
-until the update finishes.
+files while keeping the original interaction cohort. Your selected file and
+Preview/Source mode stay selected during these updates. Removing that file
+from **Save as** returns to **Report**. Save is unavailable until the update finishes.
 
-![PDF selected under View, with page navigation and a separate Save as control.](images/report-file-preview.png)
+![The actual HTML file in a full reading pane, with Preview and Source controls.](images/report-file-preview.png)
 
 Additional masking terms, edits and omissions affect report copies only.
 Missing or partial text stays qualified; editing does not recover source text.

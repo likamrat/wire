@@ -7,6 +7,318 @@ import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./he
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
+import { createCopilotRuntimeAccess } from "../lib/runtime-access.mjs";
+
+test("edited reports give actual HTML a reading pane without opening text inspection", { timeout: 60000 }, async t => {
+    const records = Array.from({ length: 127 }, (_, index) => {
+        const record = fixture(`reading-copies-${index}`);
+        record.capturedAt = new Date().toISOString();
+        record.followUpPrompts = [];
+        record.userPrompt = { ...record.userPrompt, text: `Invented release review ${index + 1}. `
+            + "Check the Cedar release checklist against the mailbox discussion. Keep recorded decisions separate from open questions. ".repeat(24),
+            authorship: { actor: "agent", basis: "source-agent" } };
+        record.toolCalls[0].startedAt = record.capturedAt;
+        record.toolCalls[0].toolSucceeded = false;
+        record.toolCalls[0].reportedOutcome = "failed";
+        return record;
+    });
+    const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) }, records);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); for (const work of cleanup) await work(); });
+    const page = await browser.newPage({ viewport: { width: 1800, height: 1100 } });
+    await page.goto(runtime.url + "#reports");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await chooseTheme(page, "light");
+    let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator('[data-report-preset="errors"]').click();
+    const initial = await (await response).json();
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.getByLabel("Report name", { exact: true }).fill("Cedar release call failures");
+    const edited = await (await response).json();
+    assert.deepEqual(edited.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+    await selectActivityOption(page, "preparedReportView", "text");
+    await expect(page.locator(".prompt-report")).toBeVisible();
+    await expect(page.locator(".prompt-original")).toBeHidden();
+    await selectActivityOption(page, "preparedReportView", "product-report.html");
+    const file = page.locator("#reportFileInspection .saved-file-preview:visible");
+    await expect(file.frameLocator("iframe").locator("h1")).toHaveText("Cedar release call failures");
+    const geometry = await file.locator("iframe").evaluate(node => ({
+        height: node.getBoundingClientRect().height, viewport: innerHeight,
+        inspectionOpen: document.querySelector("#reportTextInspection").checkVisibility(),
+    }));
+    if (process.env.WIRE_REPORT_READING_PROOFS) {
+        await mkdir(process.env.WIRE_REPORT_READING_PROOFS, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.WIRE_REPORT_READING_PROOFS, "edited-html.png"), fullPage: true, animations: "disabled" });
+        await writeFile(path.join(process.env.WIRE_REPORT_READING_PROOFS, "edited-html.json"), JSON.stringify(geometry));
+    }
+    assert.ok(geometry.height >= Math.min(600, geometry.viewport * .6), JSON.stringify(geometry));
+    assert.equal(geometry.inspectionOpen, false, "File reading must not open unrelated text editing.");
+    await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.getByLabel("Report name", { exact: true }).fill("Cedar revised report");
+    let prepared = await (await response).json();
+    await expect(page.locator("#preparedReportView")).toHaveValue("product-report.html");
+    await expect(page.locator("#reportFileInspection pre:visible")).toHaveText(prepared.files["product-report.html"]);
+    await expect(page.getByLabel("Report name", { exact: true })).toBeFocused();
+
+    await selectActivityOption(page, "preparedReportView", "text");
+    const inspection = page.locator("#reportTextInspection");
+    await inspection.getByRole("button", { name: "Next report copies", exact: true }).click();
+    const second = prepared.promptReview[1];
+    await expect(inspection.locator(".prompt-comparison")).toHaveAttribute("data-copy-key", second.key);
+    await inspection.getByRole("button", { name: "Local original", exact: true }).click();
+    assert.equal(await inspection.locator(".prompt-original pre").textContent(), second.original);
+    await expect(inspection.locator(".prompt-report")).toBeHidden();
+    await inspection.getByRole("button", { name: "Report copy", exact: true }).click();
+    await inspection.getByText("Edit or omit this report copy", { exact: true }).click();
+    await expect(inspection.locator(".prompt-report .report-read-copy")).toBeHidden();
+    await inspection.getByRole("textbox").fill("A concise, invented release review for jordan@example.invalid.");
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await inspection.getByRole("button", { name: "Update report copy", exact: true }).click();
+    prepared = await (await response).json();
+    await expect(page.locator("#preparedReportView")).toHaveValue("text");
+    await expect(inspection.locator(".prompt-comparison")).toHaveAttribute("data-copy-key", second.key);
+    await expect(inspection.locator(".prompt-comparison h4")).toBeFocused();
+    assert.equal(prepared.promptReview[1].original, second.original);
+    assert.match(prepared.promptReview[1].text, /^A concise, invented release review/);
+    assert.doesNotMatch(prepared.files["product-report.html"], /jordan@example\.invalid/);
+    assert.deepEqual(prepared.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        await expect(inspection.locator(".prompt-original")).toBeHidden();
+        if (process.env.WIRE_REPORT_READING_PROOFS) await page.screenshot({
+            path: path.join(process.env.WIRE_REPORT_READING_PROOFS, `report-copy-${theme}.png`),
+            animations: "disabled",
+        });
+    }
+    await inspection.getByText("Edit or omit this report copy", { exact: true }).click();
+    await inspection.getByRole("checkbox").check();
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await inspection.getByRole("button", { name: "Update report copy", exact: true }).click();
+    prepared = await (await response).json();
+    await expect(inspection.locator(".prompt-comparison")).toContainText("(omitted)");
+    assert.doesNotMatch(prepared.files["product-report.html"], /A concise, invented release review/);
+    await inspection.getByRole("button", { name: "Local original", exact: true }).click();
+    assert.equal(await inspection.locator(".prompt-original pre").textContent(), second.original);
+    await selectActivityOption(page, "preparedReportView", "product-report.html");
+    await page.locator("#reportFileInspection").getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(file.frameLocator("iframe").locator("h1")).toHaveText("Cedar revised report");
+    assert.equal(await file.locator("iframe").getAttribute("sandbox"), "");
+    await page.setViewportSize({ width: 560, height: 950 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await file.scrollIntoViewIfNeeded();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+    assert.ok((await file.locator("iframe").boundingBox()).height >= 400);
+    if (process.env.WIRE_REPORT_READING_PROOFS) await page.screenshot({
+        path: path.join(process.env.WIRE_REPORT_READING_PROOFS, "html-narrow-200.png"),
+        animations: "disabled",
+    });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
+    await page.setViewportSize({ width: 1800, height: 1100 });
+    const longTitle = "Cedar revised report: release review decisions, mailbox call failures and recorded follow-ups for the extended planning period";
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.getByLabel("Report name", { exact: true }).fill(longTitle);
+    prepared = await (await response).json();
+    await expect(file.frameLocator("iframe").locator("h1")).toHaveText(longTitle);
+    await page.getByRole("button", { name: "Save report", exact: true }).click();
+    await expect(page.locator("#reportsView")).toHaveAttribute("data-report-phase", "saved");
+    const saved = (await loadBoardState(context)).exports[0], bytes = await readFile(saved.files["product-report.html"]);
+    assert.deepEqual(bytes, Buffer.from(prepared.files["product-report.html"]));
+    await page.getByRole("button", { name: "Open saved report", exact: true }).click();
+    await selectActivityOption(page, "savedReaderFormat", "html");
+    await expect(page.frameLocator("#savedReportReader .saved-file-preview:visible iframe").locator("h1")).toHaveText(longTitle);
+    await selectActivityOption(page, "savedReaderFormat", "report");
+    await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
+    await expect(page.locator("#savedReportsPanel")).toBeVisible();
+    assert.deepEqual(await readFile(saved.files["product-report.html"]), bytes);
+    const row = page.locator(".saved-library-row").filter({ hasText: "Cedar revised report" });
+    const title = row.locator(".saved-report-title");
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        const beforeHover = await title.boundingBox();
+        await title.hover();
+        const measured = await row.evaluate(node => {
+            const title = node.querySelector(".saved-report-title"), icon = title.querySelector("svg"),
+                name = title.querySelector(".saved-report-name"), privacy = node.querySelector(".saved-report-privacy");
+            const a = title.getBoundingClientRect(), b = icon.getBoundingClientRect(), c = name.getBoundingClientRect(),
+                d = privacy.getBoundingClientRect(), glyph = privacy.querySelector("svg").getBoundingClientRect();
+            return { leftInset: b.left - a.left, leadingGap: c.left - b.right, trailingGap: glyph.left - c.right,
+                separateTargets: d.left >= a.right, color: getComputedStyle(title).backgroundColor };
+        });
+        if (process.env.WIRE_REPORT_READING_PROOFS) await page.screenshot({
+            path: path.join(process.env.WIRE_REPORT_READING_PROOFS, `saved-title-hover-${theme}.png`),
+            animations: "disabled",
+        });
+        assert.ok(measured.leftInset >= 10 && measured.leadingGap >= 10 && measured.trailingGap >= 16, JSON.stringify(measured));
+        assert.equal(measured.separateTargets, true);
+        assert.deepEqual(await title.boundingBox(), beforeHover, "Hover must not move the title or status action.");
+        await title.focus();
+        await expect(title).toBeFocused();
+        await row.locator(".saved-report-privacy").focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("tooltip")).toContainText("Personal details hidden where detected");
+        await page.keyboard.press("Escape");
+    }
+    await page.setViewportSize({ width: 560, height: 950 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await title.scrollIntoViewIfNeeded();
+    await title.focus();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+    const bounds = await row.evaluate(node => {
+        const name = node.querySelector(".saved-report-name").getBoundingClientRect(),
+            title = node.querySelector(".saved-report-title").getBoundingClientRect(),
+            privacy = node.querySelector(".saved-report-privacy").getBoundingClientRect();
+        return { contained: name.right <= title.right && name.bottom <= title.bottom, separate: title.right <= privacy.left };
+    });
+    assert.deepEqual(bounds, { contained: true, separate: true });
+    if (process.env.WIRE_REPORT_READING_PROOFS) await page.screenshot({
+        path: path.join(process.env.WIRE_REPORT_READING_PROOFS, "saved-title-focus-narrow-200.png"),
+        animations: "disabled",
+    });
+});
+
+test("late regeneration retains the selected file mode and never publishes superseded text", { timeout: 30000 }, async t => {
+    const record = fixture("late-reading");
+    record.capturedAt = new Date().toISOString(); record.toolCalls[0].startedAt = record.capturedAt;
+    record.userPrompt.text = "Read the invented Cedar planning notes from jordan@example.invalid.";
+    const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) }, [record]);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false } });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); for (const work of cleanup) await work(); });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(5000);
+    const errors = []; page.on("pageerror", error => errors.push(error.message));
+    await page.goto(runtime.url + "#reports");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator('[data-report-preset="all"]').click();
+    const initial = await (await response).json();
+    await selectActivityOption(page, "preparedReportView", "product-report.html");
+    await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
+    const pending = Promise.withResolvers(), release = Promise.withResolvers();
+    t.after(() => release.resolve());
+    await page.route("**/api/preview", async route => {
+        const result = await route.fetch(); pending.resolve();
+        await release.promise; await route.fulfill({ response: result });
+    }, { times: 1 });
+    await page.getByLabel("Report name", { exact: true }).fill("Superseded name");
+    await pending.promise;
+    await page.getByLabel("Report name", { exact: true }).fill("Accepted name");
+    assert.equal(await page.getByRole("button", { name: "Save report", exact: true }).count(), 0);
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview")
+        && response.request().postDataJSON().options.title === "Accepted name");
+    release.resolve();
+    let prepared = await (await response).json();
+    await expect(page.locator("#preparedReportView")).toHaveValue("product-report.html");
+    assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(), prepared.files["product-report.html"]);
+    assert.doesNotMatch(prepared.files["product-report.html"], /Superseded name/);
+    assert.deepEqual(prepared.snapshot.reportPopulation, initial.snapshot.reportPopulation);
+    await page.getByRole("button", { name: "Save as: HTML", exact: true }).click();
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator("#formatOptions input[value=json]").check();
+    prepared = await (await response).json();
+    await expect(page.locator("#preparedReportView")).toHaveValue("product-report.html");
+    assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(), prepared.files["product-report.html"]);
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator("#formatOptions input[value=html]").uncheck();
+    await response;
+    await page.locator("#reportFileOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.locator("#preparedReportView")).toHaveValue("report");
+    await selectActivityOption(page, "preparedReportView", "product-report.json");
+    await page.getByRole("button", { name: "Hide personal details", exact: true }).click();
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator("[name=promptMode][value=none]").check();
+    prepared = await (await response).json();
+    await page.locator("#reportPrivacyOptions").getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.locator("#preparedReportView")).toHaveValue("product-report.json");
+    assert.doesNotMatch(prepared.files["product-report.json"], /Read the invented Cedar planning/);
+    await selectActivityOption(page, "preparedReportView", "text");
+    await expect(page.locator(".prompt-original")).toBeHidden();
+    await page.getByRole("button", { name: "Local original", exact: true }).click();
+    assert.equal(await page.locator(".prompt-original pre").textContent(), record.userPrompt.text);
+    await expect(page.locator(".report-copy-controls")).toHaveCount(0);
+    assert.deepEqual(errors, []);
+});
+
+test("report period closes when reading an embedded document and when leaving Reports", { timeout: 30000 }, async t => {
+    const record = fixture("period-dismissal");
+    record.capturedAt = new Date().toISOString();
+    record.toolCalls[0].startedAt = record.capturedAt;
+    const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) }, [record]);
+    const access = await createCopilotRuntimeAccess(context);
+    const runtime = await startServer(context, createExportController(context), { port: 0, collector: { timers: false }, access });
+    const browser = await chromium.launch();
+    t.after(async () => { await browser.close(); await runtime.close(); await access.close(); for (const work of cleanup) await work(); });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+    page.setDefaultTimeout(5000);
+    await page.goto(runtime.url + "#reports");
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await page.locator('[data-report-preset="all"]').click();
+    await expect(page.frameLocator(".report-contained-frame").locator("h1")).toHaveText("All activity");
+    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    await expect(page.locator("#reportPeriodChoices")).toBeVisible();
+    await page.frameLocator(".report-contained-frame").locator("h1").click();
+    await expect(page.locator("#reportPeriodChoices")).toBeHidden({ timeout: 1000 });
+    const period = page.locator("#reportPeriodChoices");
+    for (const target of ["chrome", "escape", "trigger"]) {
+        await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+        if (target === "chrome") await page.getByLabel("Report name", { exact: true }).click();
+        else if (target === "escape") await page.keyboard.press("Escape");
+        else await page.locator('[popovertarget="reportPeriodChoices"]').click();
+        await expect(period).toBeHidden();
+    }
+    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    let response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await period.locator("[data-report-range='14']").click();
+    const accepted = await (await response).json();
+    await expect(period).toBeHidden();
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await period.locator("[data-report-range=custom]").click();
+    const custom = page.locator("#reportCustomDates");
+    await custom.getByLabel("From", { exact: true }).fill("2026-01-01");
+    await custom.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.locator('[popovertarget="reportPeriodChoices"]')).toContainText("Last 14 days");
+    await page.getByRole("button", { name: "Last 14 days", exact: true }).click();
+    await period.locator("[data-report-range=custom]").click();
+    await custom.getByLabel("From", { exact: true }).fill("2026-01-01");
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await custom.getByRole("button", { name: "Use dates", exact: true }).click();
+    const changed = await (await response).json();
+    assert.notDeepEqual(changed.snapshot.dateSelection, accepted.snapshot.dateSelection);
+    await expect(custom).toBeHidden();
+    await selectActivityOption(page, "preparedReportView", "product-report.html");
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.frameLocator("#reportFileInspection iframe").locator("h1").click();
+    await expect(period).toBeHidden();
+    await page.getByRole("combobox", { name: "Prepared report view", exact: true }).click();
+    const fileBox = await page.locator("#reportFileInspection iframe").boundingBox();
+    await page.mouse.click(fileBox.x + fileBox.width - 20, fileBox.y + 100);
+    await expect(page.locator(".select-popup")).toBeHidden({ timeout: 1000 });
+    await page.locator("#wireAccountTrigger").click();
+    await expect(page.locator("#wireAccountMenu")).toBeVisible();
+    await page.frameLocator("#reportFileInspection iframe").locator("h1").click();
+    await expect(page.locator("#wireAccountMenu")).toBeHidden({ timeout: 1000 });
+    await page.locator("#wireSearch").fill("Reports");
+    await expect(page.locator("#wireSearchPanel")).toBeVisible();
+    await page.mouse.click(fileBox.x + fileBox.width - 20, fileBox.y + 100);
+    await expect(page.locator("#wireSearchPanel")).toBeHidden();
+    await expect(page.locator("#wireSearch")).toHaveValue("Reports");
+    await page.locator("#wireSearchClear").click();
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
+    await expect(period).toBeHidden();
+    await expect(page.locator("#reportGallery")).toBeVisible();
+    await page.locator('[data-report-preset="all"]').click();
+    await expect(page.locator("#preparedReportView")).toHaveValue("product-report.html");
+    await page.getByRole("button", { name: "Custom dates", exact: true }).click();
+    await page.locator('nav [data-nav="analyze"]').click();
+    await expect(period).toBeHidden();
+    await expect(page.locator("#reportsView")).toBeHidden();
+    await page.goBack();
+    await expect(page.locator("#reportsView")).toBeVisible();
+    await expect(page.locator(".report-options-popover:popover-open")).toHaveCount(0);
+});
 
 test("older Activity disclosure owns its following tool and service breakdowns", { timeout: 30000 }, async t => {
     const cleanup = [], { context } = await privateFixture({ after: work => cleanup.push(work) },

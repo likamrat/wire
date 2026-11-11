@@ -753,6 +753,7 @@ export function mountLiveSearch({ api, createState, navigate, presentDocument, g
     for (const type of ["pointerdown", "focusin"]) document.addEventListener(type, event => {
         if (!home.contains(event.target) && !event.target.closest(".select-popup")) hide();
     });
+    ux.dismissOnFrameFocus(hide);
     for (const type of ["pointerdown", "keydown", "wheel", "touchmove"]) {
         document.addEventListener(type, event => { if (event.isTrusted) restore = null; }, { capture: true, passive: true });
     }

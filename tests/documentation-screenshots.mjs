@@ -12,6 +12,7 @@ import { loadBoardState } from "../lib/store.mjs";
 const output = process.env.WIRE_DOC_OUTPUT;
 const proof = process.env.WIRE_DOC_PROOF;
 const widgetsOnly = process.env.WIRE_DOC_CAPTURE === "widgets";
+const reportsOnly = process.env.WIRE_DOC_CAPTURE === "reports";
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 const day = new Date().toISOString().slice(0, 10);
@@ -165,6 +166,7 @@ test("capture documentation through the normal renderer with isolated light-them
     });
     const ready = () => expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     async function capture(name, { locator = page, privateOnly = false, fullPage = false, top = false } = {}) {
+        if (reportsOnly && !["report-choices", "report-preview", "report-text", "report-file-preview"].includes(name)) return;
         await expect(page.locator("html")).toHaveAttribute("data-evidence-theme", "light");
         assert.equal(await page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches), true);
         await page.evaluate(() => document.fonts.ready);
@@ -199,36 +201,38 @@ test("capture documentation through the normal renderer with isolated light-them
         await writeFile(path.join(proof, "capture-receipt.json"), JSON.stringify(receipt, null, 2));
     }
 
-    await page.goto(app.runtime.url + "#analyze");
+    await page.goto(app.runtime.url + (reportsOnly ? "#reports" : "#analyze"));
     await ready();
     await chooseTheme(page, "light");
-    await expect(page.locator("#activityListSummary")).toContainText("16 interactions with 20 matching Work IQ tool calls");
-    await capture("analyze");
-    await page.setViewportSize({ width: 2100, height: 1250 });
-    await page.locator('#activityList .request-card-open[href*="documentation-0"]').click();
-    await expect(page.locator("#contextSidebar")).toBeVisible();
-    await expect(page.locator("#requestContent").getByRole("button", { name: "Show full prompt", exact: true })).toBeVisible();
-    await capture("wire-overview", { top: true });
-    await page.setViewportSize({ width: 1440, height: 1100 });
-    await page.locator('#activityList .request-card-open[href*="documentation-0"]').scrollIntoViewIfNeeded();
-    await capture("interaction");
-    await page.getByRole("button", { name: "Close interaction", exact: true }).click();
-    await expect(page.locator("#contextSidebar")).toBeHidden();
-    await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
-    await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
-    await page.locator("#wireSearch").fill("POWER");
-    await expect(page.locator(".wire-search-hit")).toHaveCount(3);
-    await expect(page.locator(".wire-search-hit").first()).toBeVisible();
-    await capture("literal-search");
-    await page.locator("#wireSearchClear").click();
-    if (widgetsOnly) {
-        await page.locator("#comparePeriods").click();
-        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
-        await capture("compare-periods");
-        await page.getByRole("button", { name: "By tool", exact: true }).click();
-        await capture("compare-by-tool", { privateOnly: true });
-        await finish();
-        return;
+    if (!reportsOnly) {
+        await expect(page.locator("#activityListSummary")).toContainText("16 interactions with 20 matching Work IQ tool calls");
+        await capture("analyze");
+        await page.setViewportSize({ width: 2100, height: 1250 });
+        await page.locator('#activityList .request-card-open[href*="documentation-0"]').click();
+        await expect(page.locator("#contextSidebar")).toBeVisible();
+        await expect(page.locator("#requestContent").getByRole("button", { name: "Show full prompt", exact: true })).toBeVisible();
+        await capture("wire-overview", { top: true });
+        await page.setViewportSize({ width: 1440, height: 1100 });
+        await page.locator('#activityList .request-card-open[href*="documentation-0"]').scrollIntoViewIfNeeded();
+        await capture("interaction");
+        await page.getByRole("button", { name: "Close interaction", exact: true }).click();
+        await expect(page.locator("#contextSidebar")).toBeHidden();
+        await page.waitForFunction(() => document.getAnimations().every(animation => animation.playState !== "running"));
+        await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
+        await page.locator("#wireSearch").fill("POWER");
+        await expect(page.locator(".wire-search-hit")).toHaveCount(3);
+        await expect(page.locator(".wire-search-hit").first()).toBeVisible();
+        await capture("literal-search");
+        await page.locator("#wireSearchClear").click();
+        if (widgetsOnly) {
+            await page.locator("#comparePeriods").click();
+            await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+            await capture("compare-periods");
+            await page.getByRole("button", { name: "By tool", exact: true }).click();
+            await capture("compare-by-tool", { privateOnly: true });
+            await finish();
+            return;
+        }
     }
 
     await page.locator('nav [data-nav=reports]').click();
@@ -241,6 +245,10 @@ test("capture documentation through the normal renderer with isolated light-them
     await expect(report.locator("h1")).toHaveText("Errors & failures");
     await expect(report.locator("body")).toContainText("4 of 12 interactions had recorded errors.");
     await capture("report-preview");
+    await selectActivityOption(page, "preparedReportView", "text");
+    await expect(page.locator("#reportTextInspection .prompt-report")).toBeVisible();
+    await capture("report-text");
+    await selectActivityOption(page, "preparedReportView", "report");
     await report.locator(".wire-reading-interaction>summary").first().click();
     await report.locator('.report-nav a[href$="#examples"]').click();
     await capture("report-expanded");
@@ -270,8 +278,8 @@ test("capture documentation through the normal renderer with isolated light-them
             await page.locator("#reportFileInspection")
                 .getByRole("button", { name: format === "json" ? "Tree" : "Preview", exact: true }).click();
         }
-        await capture(format === "pdf" ? "report-file-preview" : "report-file-" + format,
-            { privateOnly: format !== "pdf", top: true });
+        await capture(format === "html" ? "report-file-preview" : "report-file-" + format,
+            { privateOnly: format !== "html", top: true });
     }
     await selectActivityOption(page, "preparedReportView", "coverage-and-redaction-manifest.json");
     await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
@@ -305,6 +313,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await savedFrame.locator(".wire-reading-interaction>summary").first().click();
     await savedFrame.locator('.report-nav a[href$="#examples"]').click();
     await capture("saved-report");
+    if (reportsOnly) { await finish(); return; }
     await page.getByRole("button", { name: "Back to Reports", exact: true }).click();
     await page.locator("#savedReportSearch").fill("Launch review");
     await page.getByRole("button", { name: "View report: Launch review", exact: true }).click();

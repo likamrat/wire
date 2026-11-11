@@ -219,6 +219,8 @@ controls and their original context-qualified entries.
 
 Saved rows align Report, Period and Files. The name and its leading document
 icon open in-app reading; one separate Files control offers registered formats.
+A padded title target owns its hover and keyboard-focus background. Keep the
+privacy action outside that target, with space after a long or wrapped title.
 A privacy mark beside the name has hover/focus/touch help without claiming
 complete anonymization. Missing metadata
 is not inferred. A secondary Options menu preserves inspection and deletion;
@@ -264,6 +266,17 @@ Save as chooses output files. View chooses Report or an actual format preview,
 with PDF pages, a JSON tree or HTML/Markdown Preview/Source. Returning from a file
 to the same authorized HTML report keeps its open sections and reading position.
 JSON-only saves can render a readable page from their verified frozen snapshot.
+Report, file and optional Report text views share the reading space. Text
+inspection shows the included copy first; Local original switches to its retained
+source without adding that source to exports. Editing replaces the displayed copy
+with its editor, rather than showing the same long text twice.
+Content regeneration retains the selected file/mode and the inspected copy.
+
+Transient menus, selects and Search dismiss when focus enters an embedded
+document, including an opaque saved file. The shell observes frame focus, not
+document contents. Modal and consent dialogs retain their own close rules.
+Report date presets close their chooser when accepted; Cancel leaves custom
+dates unchanged. Leaving the workspace closes its remaining option panels.
 
 ### Privacy and Save
 
