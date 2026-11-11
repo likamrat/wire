@@ -97,7 +97,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
                     if (pixels[index + 3] > 0 && Math.abs(pixels[index] - ink[0])
                         + Math.abs(pixels[index + 1] - ink[1]) + Math.abs(pixels[index + 2] - ink[2]) < 60) painted++;
                 }
-                return painted;
+                return painted < pixels.length / 4 * .6 ? painted : 0;
             }, { png: screenshot.toString("base64"), bounds, color });
         }, { message: `${format} heading must be painted in the visible document, not just present in its DOM.` }).toBeGreaterThan(100);
         return screenshot;
