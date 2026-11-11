@@ -55,6 +55,12 @@ test("edited reports give actual HTML a reading pane without opening text inspec
     assert.ok(geometry.height >= Math.min(600, geometry.viewport * .6), JSON.stringify(geometry));
     assert.equal(geometry.inspectionOpen, false, "File reading must not open unrelated text editing.");
     await page.locator("#reportFileInspection").getByRole("button", { name: "Source", exact: true }).click();
+    await page.getByRole("button", { name: "Last 7 days", exact: true }).click();
+    response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
+    await page.locator("#reportPeriodChoices [data-report-range='14']").click();
+    const redated = await (await response).json();
+    await expect(page.locator("#preparedReportView")).toHaveValue("product-report.html");
+    assert.equal(await page.locator("#reportFileInspection pre:visible").textContent(), redated.files["product-report.html"]);
     response = page.waitForResponse(response => response.url().endsWith("/api/preview"));
     await page.getByLabel("Report name", { exact: true }).fill("Cedar revised report");
     let prepared = await (await response).json();

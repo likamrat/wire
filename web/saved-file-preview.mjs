@@ -551,10 +551,13 @@ export const savedFilePreviewStyles = `
 .saved-pdf-text :is(span,br){color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0 0;user-select:text}
 .saved-pdf-text>:not(.markedContent),.saved-pdf-text .markedContent span:not(.markedContent){font-size:calc(var(--text-scale-factor)*var(--font-height));transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));--font-height:0;--scale-x:1;--rotate:0deg}
 .saved-pdf-text .markedContent{display:contents}.saved-pdf-text ::selection{background:#3694ff66}
+@container file-stage (max-width:40rem){
+ .document-file-toolbar:has(.saved-pdf-toolbar) .document-format-controls{flex-basis:100%;order:2}
+}
 @container file-stage (max-height:20rem){
  .saved-pdf-page-label,.saved-pdf-total-full,.saved-pdf-toolbar .saved-pdf-zoom-step{display:none}
  .saved-pdf-total-short{display:inline}
- .saved-pdf-toolbar{flex-wrap:nowrap;gap:6px;overflow-x:auto;max-width:100%}
+ .saved-pdf-toolbar{gap:6px;max-width:100%}
 }
 @media(max-width:1000px){.document-file-toolbar .document-file-name{display:none}.prepared-file-reader .document-file-name{display:block}.saved-markdown{padding:30px 38px}.saved-pdf-index{display:none}}
 @media(max-width:700px){

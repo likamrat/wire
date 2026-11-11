@@ -137,13 +137,15 @@ a field tree, and HTML and Markdown offer Preview/Source. Switching views does
 not prepare new activity or download anything. **Manifest file** shows the
 report's coverage, disclosure choices and file hashes; it accompanies the
 selected output files.
+PDF pages keep their fixed layout; use zoom when **Fit width** makes text too small.
 
 PDF generation needs the
 [optional local browser setup](development.md#pdf-and-browser-tools); the other
 formats do not. Detected personal details in report names are hidden in every
 text mode. Changing the name, text, notes or formats regenerates prepared
 files while keeping the original interaction cohort. Your selected file and
-Preview/Source mode stay selected during these updates. Removing that file
+Preview/Source mode stay selected during these updates and after changing the
+report period or call filters. Removing that file
 from **Save as** returns to **Report**. Save is unavailable until the update finishes.
 
 ![The actual HTML file in a full reading pane, with Preview and Source controls.](images/report-file-preview.png)

@@ -2314,15 +2314,18 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         reportJourney?.clear();
         $("detail").replaceChildren();
     }
-    function invalidatePreview(message) {
+    function invalidatePreview(message, { preserveFileView = false } = {}) {
         if (clearingAccess || !api.publicationToken()) return;
+        const view = $("preparedReportView");
+        const reading = preserveFileView ? view
+            ? { view: view.value, file: preparedFileInspection?.selection() ?? pendingReportReading?.file } : pendingReportReading : null;
         const publication = api.publicationToken();
         if (message !== "" || !$("reportReviewBody")?.dataset.recordedContext || !draft.contextCurrent(draft.contextToken())) {
             draft.clearContext({ writing: exportWriting });
             scrubContextPreview();
         }
         if (exportWriting) return;
-        pendingReportReading = null;
+        pendingReportReading = reading;
         clearTimeout(reportUpdateTimer); reportUpdateAgain = false; saveAfterMask = false;
         nativePublication.invalidate(); clearTimeout(nativePreviewExpiryTimer); syncNativeSaveAvailability = null;
         clearPreparedReaders();
@@ -7356,7 +7359,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             current.read = read;
             if (entry) { entry.format = format; entry.reportView = showingReport; }
             download.hidden = showingReport;
-            expand.hidden = !showingReport;
+            expand.hidden = true;
             expand.textContent = current.expanded ? "Collapse sections" : "Expand sections";
             const active = () => readable() && current.read === read;
             download.disabled = true;
@@ -7405,6 +7408,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 selectControls?.sync();
             } catch (error) {
                 if (active()) {
+                    expand.hidden = true;
                     current.reportPreview?.dispose(); current.reportHost?.remove();
                     current.reportPreview = current.reportHost = current.reportValue = null;
                     const notice = el("p", "notice error", error.message); notice.setAttribute("role", "alert");
@@ -7513,6 +7517,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 },
                 onError: error => {
                     if (!currentReport()) return;
+                    current.expand.hidden = true;
                     const notice = el("p", "notice error", error.message); notice.setAttribute("role", "alert");
                     body.replaceChildren(notice);
                 },
@@ -8750,9 +8755,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     async function changeReportDates(dates) {
         if (exportWriting || reportJourney.snapshot().saveUnconfirmed || periodReport) return;
         const prepared = reportJourney.snapshot().step === 3;
-        const view = $("preparedReportView")?.value, file = preparedFileInspection?.selection();
-        invalidatePreview();
-        if (view) pendingReportReading = { view, file };
+        invalidatePreview(undefined, { preserveFileView: true });
         reportDates = dates; reportDatesReplaced = reportBaseExplicit && reportScope === "current";
         draft.change({ reportNotes: [], overrides: [] });
         draft.synchronizeTime(viewerTime, reportDates);
@@ -8783,7 +8786,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
         if (!rebuilding) {
             const pendingMaskSave = contentOnly && saveAfterMask;
-            invalidatePreview();
+            invalidatePreview(undefined, { preserveFileView: true });
             saveAfterMask = pendingMaskSave;
         }
         draft.change({ saveMode: "local", ...(!periodReport && !nativeRequest && !draft.options().reportFocus ? {
@@ -9578,7 +9581,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (exportWriting || periodReport) return;
         reportAuthors = authorship.selection([...$("reportPromptAuthorFilter").selectedOptions].map(option => option.value));
         const prepared = reportJourney.snapshot().step === 3;
-        invalidatePreview();
+        invalidatePreview(undefined, { preserveFileView: true });
         draft.change({ reportNotes: [], overrides: [] });
         renderReports();
         if (prepared) void previewExport();
@@ -9728,7 +9731,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         choose: chooseReportPreset, changeDates: changeReportDates,
         changeFocus: patch => {
             if (exportWriting || reportJourney.snapshot().saveUnconfirmed || !draft.options().reportFocus) return;
-            invalidatePreview();
+            invalidatePreview(undefined, { preserveFileView: true });
             draft.change({ reportFocus: { ...draft.options().reportFocus, preset: "custom", ...patch }, reportNotes: [], overrides: [] });
             updateSelection(); void previewExport();
         },
