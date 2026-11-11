@@ -498,8 +498,8 @@ export const savedFilePreviewStyles = `
 .prepared-file-source .report-exact-text{height:100%;max-height:none;margin:0;border:0;border-radius:0;padding:24px 32px;overflow:auto;font-size:.875rem;line-height:1.7;white-space:pre}
 .prepared-file-reader[hidden],.prepared-file-preview[hidden],.prepared-file-source[hidden]{display:none!important}
 .saved-file-preview{flex:1;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;background:var(--canvas)}
-.saved-file-preview:has(>.report-frame){overflow:hidden;background:#fff}
-.saved-file-preview>.report-frame{display:block;width:100%;height:100%;min-height:0;margin:0;border:0;border-radius:0;background:#fff}
+.saved-file-preview:has(>.report-frame){display:flex;overflow:hidden;background:#fff}
+.saved-file-preview>.report-frame{display:block;flex:1;align-self:stretch;width:100%;height:auto;min-width:0;min-height:0;margin:0;border:0;border-radius:0;background:#fff}
 .saved-markdown{box-sizing:border-box;width:calc(100% - 48px);max-width:900px;min-height:calc(100% - 48px);margin:24px auto;padding:38px 52px 44px;background:var(--paper);font:var(--type-reading)/1.65 var(--font);color:var(--ink)}
 .saved-markdown :is(h1,h2,h3,h4){line-height:1.3;font-weight:var(--weight-medium);scroll-margin-top:16px}
 .saved-markdown h1{font-size:1.4375rem;margin:0 0 14px}.saved-markdown h2{font-size:1.125rem;margin:28px 0 12px}

@@ -87,6 +87,14 @@ async function logoContrast(page, logo) {
     return { ...colors, contrast: contrast(`rgb(${colors.ink})`, `rgb(${colors.background})`), screenshot };
 }
 
+async function fullHtmlViewport(reader) {
+    const host = reader.locator(".saved-file-preview:visible"), frame = host.locator("iframe");
+    const bounds = await frame.evaluate(node => ({ frame: node.clientHeight, host: node.parentElement.clientHeight }));
+    assert.ok(bounds.frame >= 400 && Math.abs(bounds.frame - bounds.host) <= 1,
+        `The actual HTML viewport must fill its reading pane: ${JSON.stringify(bounds)}`);
+    await expect(host.frameLocator("iframe").locator(".report-nav")).toBeInViewport({ ratio: 1 });
+}
+
 test("older Report reading chooses visible WIRE artwork without changing original files", { timeout: 60000 }, async t => {
     const { page, bundles, originals, capture } = await setup(t), reader = page.locator("#savedReportReader");
     const measurements = [];
@@ -95,6 +103,7 @@ test("older Report reading chooses visible WIRE artwork without changing origina
     await expect(report.locator("h1")).toHaveText("Cedar older report");
     for (const theme of ["light", "dark"]) {
         await page.emulateMedia({ colorScheme: theme }); await chooseTheme(page, theme);
+        await fullHtmlViewport(reader);
         const mark = report.locator(".report-brand .brand-logo:visible");
         const measured = await logoContrast(page, mark);
         measurements.push({ theme, ink: measured.ink, background: measured.background, contrast: measured.contrast });
@@ -104,9 +113,16 @@ test("older Report reading chooses visible WIRE artwork without changing origina
     }
     await selectActivityOption(page, "savedReaderFormat", "html");
     await expect(reader.frameLocator("iframe:visible").locator("h1")).toHaveText("Cedar older report");
+    await fullHtmlViewport(reader);
     await expect(reader.frameLocator("iframe:visible").locator("[data-wire-reading-brand]")).toHaveCount(0);
     await capture("older-original-html-unchanged-dark");
     await reader.getByRole("button", { name: "Source", exact: true }).click();
+    const source = reader.locator("pre:visible");
+    const sourceBounds = await source.evaluate(node => ({ source: node.clientHeight, host: node.parentElement.clientHeight, scroll: node.scrollHeight }));
+    assert.ok(Math.abs(sourceBounds.source - sourceBounds.host) <= 1 && sourceBounds.scroll > sourceBounds.source,
+        `The exact Source view must have its own usable scroller: ${JSON.stringify(sourceBounds)}`);
+    await source.focus(); await page.keyboard.press("PageDown");
+    await expect.poll(() => source.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
     assert.equal(await reader.locator("pre:visible").textContent(), originals.get(bundles[0].files["product-report.html"]).toString());
     const download = page.waitForEvent("download");
     await reader.getByRole("button", { name: "Download", exact: true }).click();
@@ -117,6 +133,7 @@ test("older Report reading chooses visible WIRE artwork without changing origina
         await selectActivityOption(page, "savedReaderFormat", format);
         if (format === "pdf") await reader.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
         else {
+            if (format !== "markdown") await fullHtmlViewport(reader);
             const mark = format === "markdown" ? reader.locator(".saved-report-mark .brand-logo:visible")
                 : reader.frameLocator(".saved-file-preview:visible iframe").locator(".report-brand .brand-logo:visible");
             assert.ok((await logoContrast(page, mark)).contrast >= 3, format);

@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdir, symlink, rename, unlink, truncate } from "n
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { chromium } from "playwright";
+import { expect } from "@playwright/test";
 import { fixture, privateFixture, selectActivityOption, chooseTheme } from "./helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
@@ -222,6 +223,12 @@ test("saved files preview every format and switch without changing bytes or down
             `Complete file-view labels and hit areas fit their toolbar: ${format}/${width}/${scale} ${JSON.stringify(modes)} toolbar=${JSON.stringify(geometry.toolbar)}`);
             assert.ok(Math.abs(geometry.stage.width - geometry.main.width) < 2);
             assert.ok(Math.abs(geometry.rect.width - geometry.stage.width) <= 2);
+            if (format === "html") {
+                const frame = preview.locator("iframe");
+                assert.ok(Math.abs((await frame.boundingBox()).height - geometry.rect.height) <= 1,
+                    "Original HTML must fill the real reading viewport, not its intrinsic iframe height.");
+                await expect(preview.frameLocator("iframe").locator(".report-nav")).toBeInViewport();
+            }
             assert.ok(geometry.stage.bottom <= geometry.height && geometry.rect.height >= 160
                 && Math.abs(geometry.rect.top - geometry.toolbar.bottom) < 2
                 && Math.abs(geometry.rect.bottom - (geometry.stage.bottom - 1)) < 2,
