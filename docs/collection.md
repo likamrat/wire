@@ -196,6 +196,45 @@ approved, source-bound repair must update the canonical record and any retained
 checkpoint together; installing new code is not that approval. Saved reports
 keep their original facts and files.
 
+### Guarded retained-error restoration
+
+The retained-error maintenance policy is separate from ordinary collection and
+requires its own reviewed, sealed user decision. It binds exact original start
+and completion regions, canonical calls, every retained alias, and both record
+and checkpoint preimages. A named older-retained-target exception does not change
+the collector's history window or authorize new calls. Restored returned entries
+are disclosed separately from unchanged tool-call counts and outcomes.
+
+Where an inline diagnostic would exceed the existing 512 KiB context bound,
+checkpoint schema 2 can reference the exact completed failed call in the current
+canonical evidence snapshot. It stores no second diagnostic blob. Resolution
+checks the store, source namespace, completion identity/time, failed outcome and
+alias agreement; missing or conflicting dependencies refuse. At most 32
+references and 64 KiB of referenced error carriers can be projected from one
+checkpoint. Compact stored events remain separate from hydrated reading events,
+so hydration cannot force unrelated context out of the saved cache.
+
+Only the explicitly applied maintenance operation installs collector-index
+schema 4 and its compatible-reader fence. Ordinary startup and collection never
+upgrade a schema-3 store to this format. Keep a compatible reader afterward:
+older readers refuse schema 4 rather than discard its references. Source
+switching preserves that fence; references cannot cross store or source
+namespaces. Deletion removes the corresponding cached event and canonical
+dependency together, while saved reports remain independent.
+
+Prepare does not publish evidence or install the fence. Apply first blocks
+ordinary collection with the operation's pending fence, then writes the sealed
+checkpoint and evidence postimages. An interruption resumes the same journal;
+it does not create another operation or restore an old whole board. Once all
+sealed postimages are committed, finalization needs no new original-history
+read. The pending fence is released only after the completion journal is durable.
+If release is interrupted, the same operation must finish it before collection
+can restart. There is no generic rollback command.
+
+`scripts/maintain-retained-errors.mjs` uses this policy through the existing
+maintenance protocol. `inspectRetainedErrorRepair` is a read-only projection
+check, not Prepare, approval or permission to apply it.
+
 Prompt authorship comes from supported host provenance, not the `user.message`
 role or the wording. Host-added image references must match the event's attachment
 metadata; they do not supply an author themselves. Reading saved activity never
