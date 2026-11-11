@@ -93,7 +93,7 @@ it. **Maximize interaction** fills the workspace below the toolbar;
 **Close interaction** leaves the reader instead. When space is limited, WIRE
 uses a single-pane reader and hides the sizing controls.
 
-![An interaction reader showing a retained access-denied diagnostic, a separate WIRE interpretation and the call's recorded operation and timing.](images/interaction.png)
+![An interaction reader with a compact prompt preview, recorded calls and timing, and a returned HTTP 403 explanation.](images/interaction.png)
 
 **My prompt**, **Agent prompt** and **Author unverified** describe supported
 origin evidence, not who executed or authorized every call. Choosing My and
