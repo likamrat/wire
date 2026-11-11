@@ -144,6 +144,8 @@ test("file modes are compact distinct segments with preserved keyboard and file 
         await expect(preview).toHaveAttribute("aria-pressed", "true");
         for (const theme of ["light", "dark"]) {
             await chooseTheme(page, theme);
+            await page.waitForFunction(() => document.getAnimations().every(animation =>
+                animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity));
             await capture(`modes-${format}-${theme}`);
             const group = await modes.boundingBox(), controls = await modes.getByRole("button").evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
             assert.ok(group.width <= 104 && controls.every(box => box.width >= 44 && box.height >= 44), JSON.stringify({ group, controls }));

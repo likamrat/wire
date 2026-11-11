@@ -2,7 +2,7 @@ export const reportJourneyStyles = `
 #workspace:has(>#reportsView:not([hidden])){--report-content-width:var(--task-content-width)}
 #workspace:has(>#reportsView:not([hidden]) #reportCreatePanel:not([hidden]) #reportStage3:not([hidden]) #reportReviewBody:not([hidden])),
 #workspace:has(>#reportsView:not([hidden]) #comparisonWorkspace:not([hidden]) .comparison-prepared-files:not([hidden])){--report-content-width:86.5rem}
-body:has(#workspace:not([hidden])>#reportsView:not([hidden])>#savedReportReader:not([hidden]))>main{display:flex;flex-direction:column;height:calc(100dvh - var(--app-header-height,76px));padding-block:18px 20px;min-height:0}
+body:has(#workspace:not([hidden])>#reportsView:not([hidden])>#savedReportReader:not([hidden]))>main{display:flex;flex-direction:column;min-height:calc(100dvh - var(--app-header-height,76px));padding-block:18px 20px}
 #workspace:has(>#reportsView:not([hidden]) #savedReportReader:not([hidden])){--report-content-width:none;display:flex;flex-direction:column;flex:1;min-height:0}
 #workspace:has(>#reportsView:not([hidden]) #savedReportReader:not([hidden]))>#breadcrumbs{display:none}
 #workspace:has(>#reportsView:not([hidden]) #savedReportReader:not([hidden]))>.page-heading{display:none}

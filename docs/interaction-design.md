@@ -294,6 +294,8 @@ New saves do not claim a human text review.
 Saved reading uses actual files, a clear title/format toolbar and one Download
 action. The [frozen-file contract](report-contract.md#frozen-files-and-saved-reading)
 defines verification and safe format viewers.
+Long titles and enlarged text can extend the page; the document keeps its
+reading area while the header scrolls above it.
 Departure/withdrawal retires text, pixels, workers and pending reads.
 Prepared measurement privileges do not transfer to saved HTML.
 Report reading selects the approved WIRE wordmark variant for its own theme,

@@ -177,6 +177,15 @@ test("saved files preview every format and switch without changing bytes or down
             await page.waitForFunction(() => parseFloat(document.documentElement.style.getPropertyValue("--app-header-height"))
                 === Math.ceil(document.querySelector(".app-header").getBoundingClientRect().height));
             if (format === "pdf") await preview.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
+            const stage = page.locator("#savedReportReader .document-stage");
+            const belowFold = await stage.evaluate(node => node.getBoundingClientRect().bottom - innerHeight);
+            if (belowFold > 1) {
+                await page.locator("#savedReportReader #pageTitle").hover();
+                const before = await page.evaluate(() => scrollY);
+                await page.mouse.wheel(0, Math.ceil(belowFold) + 24);
+                await page.waitForFunction(() => document.querySelector("#savedReportReader .document-stage").getBoundingClientRect().bottom <= innerHeight);
+                assert.ok(await page.evaluate(() => scrollY) > before, "The page must scroll the long header away without squeezing the file.");
+            }
             if (format === "markdown") {
                 assert.deepEqual(await preview.locator(".saved-report-mark .brand-logo").evaluateAll(nodes =>
                     nodes.map(node => node.getAttribute("viewBox"))), ["24 62 500 158", "24 62 500 158"]);
@@ -217,6 +226,22 @@ test("saved files preview every format and switch without changing bytes or down
                 && Math.abs(geometry.rect.top - geometry.toolbar.bottom) < 2
                 && Math.abs(geometry.rect.bottom - (geometry.stage.bottom - 1)) < 2,
                 `The actual preview uses the remaining reading viewport: ${format}/${theme}/${scale} ${JSON.stringify(geometry)}`);
+            if (format === "pdf" && scale === 200) {
+                assert.ok(geometry.rect.height >= 400, "Enlarged long-title PDF reading needs a document pane, not a header strip.");
+                assert.equal(await page.locator("#savedReportReader #pageTitle").textContent(), broken.title);
+                assert.ok(geometry.toolbar.top >= await page.locator(".app-header").evaluate(node => node.getBoundingClientRect().bottom));
+                await selectActivityOption(page, "savedPdfZoom", "1.5");
+                await preview.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
+                await preview.locator(".saved-pdf-pages").focus();
+                await page.keyboard.press("PageDown");
+                await page.waitForFunction(() => document.querySelector("#savedReportReader .saved-pdf-pages").scrollTop > 0);
+                if (process.env.WIRE_FILE_READER_PROOFS) {
+                    await writeFile(path.join(process.env.WIRE_FILE_READER_PROOFS, "pdf-space.json"), JSON.stringify(geometry, null, 2));
+                    await page.screenshot({ path: path.join(process.env.WIRE_FILE_READER_PROOFS, "verified-pdf-dark-200-zoomed.png") });
+                }
+                await selectActivityOption(page, "savedPdfZoom", "fit");
+                await preview.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
+            }
         }
         await page.setViewportSize({ width: 1440, height: 1000 });
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });

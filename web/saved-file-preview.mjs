@@ -464,7 +464,7 @@ export function createPreparedFileInspection(host, files, { id, createPreview, i
 }
 
 export const savedFilePreviewStyles = `
-.document-stage{display:flex;flex-direction:column;flex:1;min-height:200px;min-width:0;overflow:hidden;background:var(--paper);border:1px solid var(--surface-divider);border-radius:var(--radius-small);container:file-stage / size}
+.document-stage{display:flex;flex-direction:column;flex:1;min-height:24rem;min-width:0;overflow:hidden;background:var(--paper);border:1px solid var(--surface-divider);border-radius:var(--radius-small);container:file-stage / size}
 .document-file-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;min-height:60px;padding:8px 16px;border-bottom:1px solid var(--surface-divider);background:var(--paper);flex:none}
 .document-file-toolbar>select{max-width:12rem}
 .document-file-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;flex:1;min-width:min-content}
