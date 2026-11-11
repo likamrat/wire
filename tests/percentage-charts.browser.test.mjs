@@ -87,6 +87,12 @@ test("result chart titles and accessible names follow accepted units and clear o
         assert.equal(await card.locator(".percentage-ring").count(), 0);
         assert.deepEqual(await card.locator("[data-count-unit]").evaluateAll(nodes => nodes.map(node => node.dataset.countUnit)),
             analytics.unitPopulations.map(population => population.unit));
+        for (const population of analytics.unitPopulations) {
+            const values = card.locator(`[data-count-unit="${population.unit}"] .percentage-value`);
+            const results = createRecordedResults(), percentages = createPercentageCharts();
+            assert.deepEqual(await values.allTextContents(), results.entries(layer, population.totals)
+                .map(entry => `${percentages.percent(entry.count, population.totals.count)} (${entry.count.toLocaleString()})`));
+        }
     }
     await page.evaluate(() => window.view.withdrawAccess());
     await expect(card).toHaveAccessibleName("Results");

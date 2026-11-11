@@ -11,6 +11,7 @@ import { loadBoardState } from "../lib/store.mjs";
 
 const output = process.env.WIRE_DOC_OUTPUT;
 const proof = process.env.WIRE_DOC_PROOF;
+const widgetsOnly = process.env.WIRE_DOC_CAPTURE === "widgets";
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 const day = new Date().toISOString().slice(0, 10);
@@ -51,6 +52,13 @@ function documentationRecords() {
             ...(index === 11 ? {} : { authorship: { actor: index % 3 === 1 ? "agent" : "user",
                 basis: index % 3 === 1 ? "source-agent" : "source-user" } }),
         };
+        if (index === 0) row.userPrompt.text += " Focus on the Northstar launch review and the support handoff. "
+            + "Separate decisions that were recorded from questions that are still open. "
+            + "For each open question, include the relevant message date and the team responsible for the next review. "
+            + "Keep release readiness, customer communication, regional rollout, and support coverage in separate sections. "
+            + "Do not treat an unanswered thread as agreement or infer a deadline from the meeting schedule. "
+            + "Include conflicting answers with their original context, and distinguish the latest update from the earlier proposal. "
+            + "End with a concise checklist of the decisions the reviewers still need to make.";
         row.toolCalls = Array.from({ length: index < 4 ? 2 : 1 }, (_, call) => {
             const failed = index < 4 && call === 0;
             const unknown = index === 11;
@@ -123,7 +131,7 @@ test("capture documentation through the normal renderer with isolated light-them
     const originals = new Map(), seeded = new Map();
     const titles = ["Launch review", "Earlier release checklist", "Design review agenda",
         "Service follow-ups", "Support plan", "Architecture notes", "Call results"];
-    for (const [index, title] of titles.entries()) {
+    for (const [index, title] of (widgetsOnly ? titles.slice(0, 1) : titles).entries()) {
         const state = await loadBoardState(app.context), owner = "documentation-saved-" + index;
         const selected = index === 0 ? [2, 5] : [[12], [4], [6], [7], [9], [10]][index - 1];
         const preview = await app.exports.preview(owner, undefined, {
@@ -180,6 +188,16 @@ test("capture documentation through the normal renderer with isolated light-them
         await expect(page.getByRole("button", { name: "Save report", exact: true })).toBeEnabled();
         return body;
     }
+    async function finish() {
+        assert.deepEqual(errors, []);
+        assert.deepEqual(outside, []);
+        assert.equal(mutations.some(route => /collection\/now|access\/command|delete|recollect/.test(route)), false);
+        for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);
+        receipt.completed = true;
+        receipt.browserVersion = browser.version();
+        receipt.nodeVersion = process.version;
+        await writeFile(path.join(proof, "capture-receipt.json"), JSON.stringify(receipt, null, 2));
+    }
 
     await page.goto(app.runtime.url + "#analyze");
     await ready();
@@ -189,6 +207,7 @@ test("capture documentation through the normal renderer with isolated light-them
     await page.setViewportSize({ width: 2100, height: 1250 });
     await page.locator('#activityList .request-card-open[href*="documentation-0"]').click();
     await expect(page.locator("#contextSidebar")).toBeVisible();
+    await expect(page.locator("#requestContent").getByRole("button", { name: "Show full prompt", exact: true })).toBeVisible();
     await capture("wire-overview", { top: true });
     await page.setViewportSize({ width: 1440, height: 1100 });
     await page.locator('#activityList .request-card-open[href*="documentation-0"]').scrollIntoViewIfNeeded();
@@ -202,6 +221,15 @@ test("capture documentation through the normal renderer with isolated light-them
     await expect(page.locator(".wire-search-hit").first()).toBeVisible();
     await capture("literal-search");
     await page.locator("#wireSearchClear").click();
+    if (widgetsOnly) {
+        await page.locator("#comparePeriods").click();
+        await expect(page.locator("#periodComparisonStatus")).toHaveText("Comparison ready.");
+        await capture("compare-periods");
+        await page.getByRole("button", { name: "By tool", exact: true }).click();
+        await capture("compare-by-tool", { privateOnly: true });
+        await finish();
+        return;
+    }
 
     await page.locator('nav [data-nav=reports]').click();
     await ready();
@@ -321,12 +349,5 @@ test("capture documentation through the normal renderer with isolated light-them
     await expect(page.locator("#settingsSearchResults")).toContainText("Privacy & saved data");
     await expect(page.locator("#settingsSearchResults")).toContainText("Collection status");
     await capture("settings-search");
-    assert.deepEqual(errors, []);
-    assert.deepEqual(outside, []);
-    assert.equal(mutations.some(route => /collection\/now|access\/command|delete|recollect/.test(route)), false);
-    for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);
-    receipt.completed = true;
-    receipt.browserVersion = browser.version();
-    receipt.nodeVersion = process.version;
-    await writeFile(path.join(proof, "capture-receipt.json"), JSON.stringify(receipt, null, 2));
+    await finish();
 });

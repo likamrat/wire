@@ -658,7 +658,22 @@ export function createEvidenceUX(icons) {
         copySources.get(node)?.revoke();
         retireTooltip(node); disabledReasons.delete(node); pendingIcons.delete(node);
     }
-    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, pending, withdrawAccess,
+    function countShare({ count, percentage }) {
+        if (!Number.isSafeInteger(count) || count < 0 || percentage !== undefined && typeof percentage !== "string") {
+            throw new TypeError("Widget values require an exact count and an optional formatted share.");
+        }
+        const value = document.createElement("span"), primary = document.createElement("strong");
+        value.className = "percentage-value";
+        primary.textContent = percentage ?? count.toLocaleString();
+        value.append(primary);
+        if (percentage !== undefined) {
+            const secondary = document.createElement("span");
+            secondary.textContent = `(${count.toLocaleString()})`;
+            value.append(document.createTextNode(" "), secondary);
+        }
+        return value;
+    }
+    return { icon, utility, tooltip, helpButton, copyButton, codeBlock, attachCopy, inlineCode, explainDisabled, hideTooltip, restoreFocus, dismissOnOutside, pending, withdrawAccess, countShare,
         destroy() {
             clearTooltip();
             observer.disconnect();

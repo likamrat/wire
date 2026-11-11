@@ -720,16 +720,18 @@ for (const theme of ["light", "dark"]) test(`native guide groups count and share
     await chooseTheme(page, theme);
     await page.locator("#openChartReference").click();
     const values = page.locator(".chart-reference-definition>.chart-reference-value");
-    await expect(values.first()).toHaveText("32 (100%)");
-    await expect(values.nth(1)).toHaveText("0 (0%)");
+    await expect(values.first()).toHaveText("100% (32)");
+    await expect(values.nth(1)).toHaveText("0% (0)");
     const measure = value => value.evaluate(node => {
-        const share = node.querySelector(".chart-reference-share"), text = document.createRange();
-        text.selectNodeContents(node.firstChild);
-        const first = text.getBoundingClientRect(), second = share.getBoundingClientRect(), css = getComputedStyle(node);
+        const share = node.querySelector(".percentage-value > span"), text = document.createRange();
+        text.selectNodeContents(node.querySelector("strong"));
+        const first = text.getBoundingClientRect(), css = getComputedStyle(node);
+        text.selectNodeContents(share);
+        const second = text.getBoundingClientRect();
         return { text: node.textContent, firstTop: first.top, shareTop: second.top, countWidth: first.width, shareWidth: second.width,
             width: node.clientWidth, overflow: node.scrollWidth > node.clientWidth + 1, whitespace: css.whiteSpace,
             countColor: css.color, shareColor: getComputedStyle(share).color, muted: css.getPropertyValue("--muted").trim(),
-            countWeight: Number(css.fontWeight), shareWeight: Number(getComputedStyle(share).fontWeight) };
+            countWeight: Number(getComputedStyle(node.querySelector("strong")).fontWeight), shareWeight: Number(getComputedStyle(share).fontWeight) };
     });
     const first = await measure(values.first());
     assert.ok(Math.abs(first.firstTop - first.shareTop) <= 1, "Count and share start on the same line when they fit");
@@ -737,7 +739,7 @@ for (const theme of ["light", "dark"]) test(`native guide groups count and share
     await captureNative(page, `${theme}-grouped-outcomes`);
     await topicChoice(page, "services");
     const services = page.locator(".chart-reference-service .chart-reference-value");
-    await expect(services.first()).toHaveText("8 (25%)");
+    await expect(services.first()).toHaveText("25% (8)");
     await expect(page.locator("#chartReferenceExplanation")).toContainText("A record can involve several services, so counts can overlap.");
     await expect(page.locator("#chartReferenceExplanation")).toContainText("2 records have missing service details");
     await captureNative(page, `${theme}-grouped-services`);
@@ -753,13 +755,13 @@ for (const theme of ["light", "dark"]) test(`native guide groups count and share
     await values.first().evaluate((node, width) => { node.style.inlineSize = `${width}px`; }, Math.max(enlarged.countWidth, enlarged.shareWidth) + 2);
     const wrapped = await measure(values.first());
     assert.ok(wrapped.shareTop > wrapped.firstTop && !wrapped.overflow, "The share wraps without making the pair unbreakable");
-    assert.equal(wrapped.text, "32 (100%)");
+    assert.equal(wrapped.text, "100% (32)");
     await captureNative(page, `${theme}-grouped-wrap-stress`);
     await values.first().evaluate(node => { node.style.removeProperty("inline-size"); });
     await page.locator("#chartReferenceShowData").click();
     await expect(page.locator("#chartReferenceData tfoot td").first()).toHaveText("32");
     await page.locator("#chartReferenceBack").click();
-    await expect(values.first()).toHaveText("32 (100%)");
+    await expect(values.first()).toHaveText("100% (32)");
     assert.equal(requests.filter(path => path === "/api/snapshot").length, 1);
     if (proof) await writeFile(path.join(proof, `${theme}-grouped-values.json`), JSON.stringify({ first, enlarged, wrapped }, null, 2));
 });

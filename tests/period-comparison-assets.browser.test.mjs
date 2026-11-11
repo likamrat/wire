@@ -21,6 +21,7 @@ test("real runtime loads only the exact pure comparison module closure with unch
     const assets = [
         "/assets/assessment-contract.mjs", "/assets/period-comparison-math.mjs", "/assets/report-outcome-comparison.mjs",
         "/assets/report-metric-comparison.mjs", "/assets/wire-report-metric-adapter.mjs", "/assets/report-result-contract.mjs",
+        "/web/recorded-results.mjs",
     ];
     for (const asset of assets) {
         const response = await fetch(new URL(asset, runtime.url));
@@ -30,7 +31,8 @@ test("real runtime loads only the exact pure comparison module closure with unch
         assert.match(response.headers.get("content-security-policy"), /default-src 'none'; script-src 'nonce-[^']+' 'self'/);
         assert.equal((await fetch(new URL(asset, runtime.url), { headers: { Origin: "https://example.invalid" } })).status, 403);
     }
-    for (const asset of ["/assets/period-comparison.mjs", "/assets/store.mjs", "/assets/period-comparison-math.mjs?file=store.mjs"]) {
+    for (const asset of ["/assets/period-comparison.mjs", "/assets/store.mjs", "/assets/period-comparison-math.mjs?file=store.mjs",
+        "/web/client.mjs", "/web/recorded-results.mjs?file=client.mjs", "/assets/recorded-results.mjs"]) {
         assert.equal((await fetch(new URL(asset, runtime.url))).status, 403);
     }
     browser = await chromium.launch();

@@ -121,6 +121,14 @@ unchanged; report readers clone those from their own template, not the header.
 The [Chart guide behavior](interaction-design.md#chart-guide) connects each
 visualization to its definitions and exact values.
 
+Count/share widget rows show the percentage first, then the count in parentheses.
+Use the complete qualifying population, never the visible rows or largest bar.
+Response models use all matching interactions, including missing model names;
+models and services can overlap. Live period outcomes keep their pre-outcome-filter
+denominator and comparison precision. Time-bucket totals, standalone totals,
+durations, unavailable or incompatible shares, exact-data columns and frozen
+report presentation keep their own meaning.
+
 ## Motion, focus and text
 
 The left rail, narrow drawer, Filters, Chart guide and right contextual surface

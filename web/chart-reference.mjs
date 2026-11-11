@@ -191,8 +191,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     }
     function countShare(tag, { count, percentage }) {
         const value = el(tag, undefined, "chart-reference-value");
-        value.append(doc.createTextNode(number(count)));
-        if (!context.model?.separateUnits) value.append(doc.createTextNode(" "), el("span", `(${percentage})`, "chart-reference-share"));
+        value.append(ux.countShare({ count, percentage: context.model?.separateUnits ? undefined : percentage }));
         return value;
     }
     function definition(label, description, { value, outcome } = {}) {

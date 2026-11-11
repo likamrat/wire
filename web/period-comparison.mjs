@@ -645,7 +645,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                     const text = `${label}, ${names[index].label}: ${count} of ${side.rowIds.length} ${value.definitions.unit}; ${share(count, side.rowIds.length)}. Later minus earlier: ${signed(index ? count - peer : peer - count)} records.`;
                     const row = el("span", undefined, "comparison-group-value"), track = el("span", undefined, "comparison-group-track");
                     const bar = el("span", undefined, "comparison-group-bar"); bar.style.width = `${maximum ? count / maximum * 100 : 0}%`; track.append(bar);
-                    row.append(identity(names[index].label), track, numeric(number(count)));
+                    row.append(identity(names[index].label), track, ux.countShare({ count, percentage: share(count, side.rowIds.length) }));
                     const control = mark(text, row, () => openInspection("calls", control, { side: key, ids: fact?.drilldownIds ?? [], label }));
                     group.append(control);
                 }
@@ -797,7 +797,7 @@ export function mountPeriodComparison({ root, setup = root, toggle, api, time, s
                 const control = button("", () => openInspection("calls", control, { side: sides[index][0],
                     ids: side.analytics.rows.filter(row => row.outcome === key).map(row => row.id), label }));
                 control.append(el("span", undefined, "compare-swatch compare-mark-" + key),
-                    `${label}: ${number(side.analytics.totals[key])} (${rates[key][index] ?? "share unavailable"})`);
+                    `${label}: `, ux.countShare({ count: side.analytics.totals[key], percentage: rates[key][index] ?? "share unavailable" }));
                 details.append(control);
             }
             row.append(details); node.append(row);
@@ -1573,6 +1573,7 @@ export const periodComparisonStyles = `
 .compare-outcome-row{margin-top:24px}
 .comparison-outcome-values{display:flex;gap:8px 20px;flex-wrap:wrap}
 .comparison-outcome-values>button{padding:4px 0;min-height:44px;font:inherit;color:var(--muted)}
+.comparison-outcome-values .percentage-value{display:inline-flex;font:inherit}
 .compare-outcome-bar .compare-outcome-paint{height:32px}
 .comparison-application-results{margin-top:18px}
 .period-comparison .comparison-preset-option{gap:10px}

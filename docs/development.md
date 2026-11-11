@@ -148,6 +148,11 @@ directory and `WIRE_DOC_PROOF` to a separate private evidence directory, then ru
 node --test tests/documentation-screenshots.mjs
 ```
 
+For count/share widgets and the compact prompt reader only, set
+`WIRE_DOC_CAPTURE=widgets` to capture Analyze, the README overview, the reader,
+Search over Analyze and live period comparison without unrelated report journeys
+or screen captures. One synthetic saved report supplies the Search example.
+
 The capture requires committed product source, uses an available loopback port
 with collection timers disabled, and closes its browser/runtime and temporary
 store. It records source and fixture hashes, image hashes and inspected file

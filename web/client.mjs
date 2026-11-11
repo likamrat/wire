@@ -4797,6 +4797,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const chart = dimensional.comparisonView({
             groups, serviceMode, label, icons: dimensionalIcons,
             unit: total => results.columnUnit(applied.layer, total),
+            renderValue: group => ux.countShare({ count: group.total,
+                percentage: !group.native && analytics.measurementEligibility?.outcomeRate === "separate-unit-populations-only"
+                    ? undefined : percentageMath.percent(group.total, group.native ? native.aggregates.selectedRows : analytics.totals.count) }),
             summary: group => `${label(group)}: ${count(group.total)} ${chartGroupUnit(group)}; ${groupSummary(group)}.${group.id === "group:other" ? " Show all categories." : ""}`,
             createAction: group => group.native ? group.unavailable ? el("span") : link("", "activity", { nativeGroup: group.id, source: native.sourceGroups.length === 1 ? native.sourceGroups[0].sourceId : "microsoft-365", page: undefined })
                 : group.id === "group:other" ? link("", "home", { expanded: "true" })

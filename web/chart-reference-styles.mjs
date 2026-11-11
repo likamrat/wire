@@ -48,7 +48,7 @@ export const chartReferenceStyles = `
 .chart-reference-outcome>.wire-icon {width:18px;height:18px}
 .chart-reference-definition>.chart-reference-value {grid-column:2;grid-row:1}
 .chart-reference-value {text-align:right;color:var(--ink);font-variant-numeric:tabular-nums;white-space:normal;font-weight:var(--weight-medium)}
-.chart-reference-share {color:var(--muted);font-weight:var(--weight-regular)}
+.chart-reference-value .percentage-value {font:inherit}
 .chart-reference-actions {display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;flex:none;max-height:35%;overflow:auto;padding:10px 20px;border-top:1px solid var(--surface-divider)}
 .chart-reference-actions>button {display:flex;align-items:center;gap:8px;margin:0}
 .chart-reference-actions>button>.wire-icon {width:16px;height:16px;flex:none}

@@ -31,9 +31,12 @@ test("Model counts exact canonical interactions, not aliases, calls, responses o
     assert.equal(model.total, 9);
     assert.deepEqual(model.coverage, { recorded: 3, partial: 1, unavailable: 2, unverified: 2, conflicting: 1 });
     assert.deepEqual(values(model), { [modelNames[1]]: 2, [modelNames[0]]: 2, [modelNames[2]]: 1, [modelNames[3]]: 1 });
+    assert.deepEqual(model.rows.map(row => row.percentage), ["22.2%", "22.2%", "11.1%", "11.1%"]);
     assert.deepEqual(model.rows.find(row => row.id === modelNames[0]).interactionIds.sort(), [identity(0), identity(1)]);
     assert.deepEqual(model.rows.find(row => row.id === modelNames[1]).interactionIds.sort(), [identity(1), identity(8)]);
-    assert.deepEqual(charts.modelUsage(projectInteractionModels(source)), model, "Even explicit alias membership counts the interaction once");
+    const aliases = charts.modelUsage(projectInteractionModels(source));
+    assert.deepEqual({ ...aliases, interactionIds: aliases.interactionIds.toSorted() },
+        { ...model, interactionIds: model.interactionIds.toSorted() }, "Even explicit alias membership counts the interaction once");
     assert.doesNotMatch(JSON.stringify(model), /not-an-original-model|current-default|conflicting-model|Not recorded/);
     assert.deepEqual(source, before);
 });
@@ -66,6 +69,7 @@ test("one accepted slice drives date, service, tool, author, outcome and Search 
     assert.equal(model.total, 1);
     assert.deepEqual(values(model), { [modelNames[1]]: 1, [modelNames[0]]: 1 });
     assert.equal(model.rows.reduce((sum, row) => sum + row.fraction, 0), 2, "Overlapping models are not forced into a pie");
+    assert.deepEqual(model.rows.map(row => row.percentage), ["100%", "100%"]);
     const empty = createSearchMembership(input, modelOptions, [], [], receipt, searchWireContract);
     assert.deepEqual(charts.modelUsage(refine(input, modelOptions, "", [], empty).scenarios).rows, []);
     assert.throws(() => createSearchMembership(input, modelOptions, [], [hit], { ...receipt, revision: 6 }, searchWireContract), /current strict/);

@@ -41,6 +41,9 @@ shares can therefore overlap. Tool completion means the source recorded
 completion, not that the answer was correct. Returned API entries, Graph call
 sites and HTTP recorder captures have their own units; do not add them to
 tool-call totals. Missing model names mean no name was recorded, not zero usage.
+Breakdown rows show percentage first, with the count in parentheses. Model
+percentages use all matching interactions, including those without model names;
+an interaction with several recorded models counts under each.
 
 Dates filter retained activity; they do not approve older source reads.
 Custom dates include both days in the time zone chosen under

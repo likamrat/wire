@@ -8,6 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
 import { privateFixture, chooseTheme, selectActivityOption, restoreLegacySearch, openAnalyzeFilters, closeAnalyzeFilters } from "./helpers.mjs";
 import { modelRecords, modelNames } from "./model-widget-fixture.mjs";
+import { createPercentageCharts } from "../lib/percentage-charts.mjs";
 
 const proof = process.env.WIRE_MODEL_PROOFS;
 test("normal Analyze entry keeps Model counts, coverage and layout within the shared analytical scope", { timeout: 90000 }, async t => {
@@ -82,7 +83,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
         assert.deepEqual(Object.fromEntries(rows.map(row => [row.model, row.count])), counts);
         for (const row of rows) {
             assert.equal(row.label, row.model);
-            assert.equal(row.value, String(row.count));
+            assert.equal(row.value, `${createPercentageCharts().percent(row.count, total)} (${row.count})`);
             assert.equal(row.fraction, row.count / total);
             assert.ok(Math.abs(parseFloat(row.width) - row.count / total * 100) < .0001);
         }
@@ -95,7 +96,7 @@ test("normal Analyze entry keeps Model counts, coverage and layout within the sh
     const allCounts = { [modelNames[1]]: 2, [modelNames[0]]: 2, [modelNames[2]]: 1, [modelNames[3]]: 1 };
     await expect(widget.locator("h3")).toHaveText("Response models");
     await exact("all", 9, allCounts, 11);
-    const allDefinitions = "Original response models; an interaction may use more than one."
+    const allDefinitions = "Share of all matching interactions, including those with missing model names; an interaction may use more than one model."
         + " 1 partial / 2 not recorded / 2 not verified / 1 conflicting.";
     await expect(data.locator(".percentage-note")).toHaveText(allDefinitions);
     assert.equal(await widget.locator("a,button,svg").count(), 0, "No inexact drilldown or overlapping pie");
