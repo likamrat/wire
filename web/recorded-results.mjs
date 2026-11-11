@@ -215,6 +215,147 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             "unsupported-format": "WIRE could not read all details in this error format",
         })[diagnostic.status];
     }
+    // Version 1 wording is also frozen in new reports. Never reinterpret old saved observations.
+    const interpretationText = {
+        "request-timeout": "The recorded timeout means no completed response arrived within the allowed waiting interval. The timeout signal alone does not identify what caused the delay, the configured deadline, or whether the requested work finished.",
+        "upstream-connection-timeout": "The reported connection to an upstream service timed out before response headers arrived. The record does not identify which upstream service or network hop failed. The tool's elapsed time is not a measurement of that connection alone.",
+        "policy-unavailable": "Work IQ reported that a policy was unavailable. The code does not identify the policy configuration or explain why it was unavailable; the source message carries any more specific reason.",
+        "tool-unavailable": "Work IQ could not find a tool server for the requested path. This is a routing or availability failure at that step, not evidence that the downstream API rejected the request.",
+        "response-processing": "Work IQ reported a failure while processing the response. The record does not identify the processing step or establish that the underlying API operation failed.",
+        "retrieval-stopped": "The recorded retrieval stop reason is an error, but it supplies no failing sub-operation or cause. This marker does not establish a timeout.",
+        "sign-in-required": "Work IQ required authentication for this call at the time it ran. This historical error does not establish the account's current sign-in state.",
+        "access-denied": "The service refused access to the requested operation or resource. The record does not identify the permission, policy or identity responsible.",
+        "http-400": "The service rejected the request as invalid. This status alone does not identify which input or validation rule was responsible.",
+        "http-401": "The service reported missing or invalid authentication for this request. The status does not identify which credential or account was involved.",
+        "http-403": "The service understood but refused the request. HTTP 403 alone does not identify the permission or policy responsible, or prove that signing in again would resolve it.",
+        "http-404": "The service did not find the requested resource, or did not disclose that it exists. This does not distinguish an incorrect path, a removed resource or restricted visibility.",
+        "http-408": "The service reported that it did not receive a complete request within its waiting interval. This is not a measurement of how long a downstream API took to respond.",
+        "http-409": "The request conflicted with the resource's current state. The status alone does not identify the conflicting change.",
+        "http-412": "A condition attached to the request was not satisfied. The status alone does not identify which condition or version check failed.",
+        "http-429": "The service limited this request because too many requests were being made. The record does not establish the applicable limit or when it would allow another request.",
+        "http-500": "The service encountered an internal error while handling the request. This status does not identify the failing component or whether an earlier part of the operation took effect.",
+        "http-502": "A gateway or proxy reported an invalid response from an upstream service. The status does not identify that service or why its response was invalid.",
+        "http-503": "The service was unable to handle the request at that time. HTTP 503 alone does not identify the cause or establish which downstream service failed.",
+        "http-504": "A gateway or proxy did not receive a timely response from an upstream service. The status does not identify that service, the deadline or whether the requested work finished.",
+        "unrecognized-code": "WIRE has no verified meaning for this code in the recorded context. The code alone does not identify the cause.",
+        "missing-completion": "No qualified completion is retained for this call. Missing evidence does not establish a timeout, cancellation or failure.",
+        "cause-not-retained": "The call is recorded as failed, but the completion's error details are missing from this saved view. The failed step within the call cannot be established.",
+        "cause-not-supplied": "The source recorded failure without supplying a detailed reason. The failed step within the call cannot be established from that marker.",
+        "partial-evidence": "Only the retained part of the response can be assessed. It cannot establish the outcomes of omitted entries or a complete explanation of the result.",
+        "conflicting-status": "The recorded statuses disagree. Neither status can replace the other or establish one definitive outcome.",
+    };
+    const interpretationTextV2 = {
+        ...interpretationText,
+        "upstream-connection-timeout": "The reported connection to an upstream service timed out before response headers arrived. This transport message alone does not identify which upstream service or network hop failed. The tool's elapsed time is not a measurement of that connection alone.",
+        "response-processing": "Work IQ reported a failure while processing the response. That error signal alone does not identify the processing step or establish that the underlying API operation failed.",
+        "access-denied": "The service refused access to the requested operation or resource. The denial alone does not identify the permission, policy or identity responsible.",
+        "http-429": "The service limited this request because too many requests were being made. HTTP 429 alone does not establish the applicable limit or when it would allow another request.",
+        "cause-not-retained": "The call is recorded as failed, but its completion-error details are missing from this saved view. That gap alone does not identify the failed step within the call.",
+        "cause-not-supplied": "The source's failure marker supplies no detailed reason. That marker alone does not identify the failed step within the call.",
+    };
+    function validateInterpretation(value) {
+        const fail = () => { throw new TypeError("Invalid recorded-error interpretation."); };
+        const shape = (object, fields) => object && Object.getPrototypeOf(object) === Object.prototype
+            && Object.keys(object).length === fields.length && fields.every(field => Object.hasOwn(object, field));
+        if (!shape(value, ["version", "items"]) || ![1, 2].includes(value.version) || !Array.isArray(value.items) || value.items.length > 800) fail();
+        const wording = value.version === 1 ? interpretationText : interpretationTextV2;
+        const seen = new Set();
+        for (const item of value.items) {
+            if (!shape(item, ["kind", "channel", "entryIndex", "text"]) || !Object.hasOwn(interpretationText, item.kind)
+                || item.text !== wording[item.kind]
+                || !["call", "result", "returned-entry"].includes(item.channel)
+                || (item.channel === "returned-entry" ? !Number.isSafeInteger(item.entryIndex) || item.entryIndex < 0 : item.entryIndex !== null)) fail();
+            const key = JSON.stringify([item.kind, item.channel, item.entryIndex]);
+            if (seen.has(key)) fail();
+            seen.add(key);
+        }
+        return value;
+    }
+    function interpretation(call, outcome) {
+        const items = [], seen = new Set();
+        const add = (kind, channel = "call", entryIndex = null) => {
+            const key = JSON.stringify([kind, channel, entryIndex]);
+            if (!seen.has(key)) { seen.add(key); items.push({ kind, channel, entryIndex, text: interpretationTextV2[kind] }); }
+        };
+        const simple = text => !text || /^(?:error[: ]*)?(?:failure|access[ _-]?denied|forbidden|unauthorized|bad request|invalid request|not found|service unavailable|internal server error|gateway timeout|too many requests|precondition failed|conflict)[.!]?$/i.test(text);
+        function diagnostic(value, fallbackCode, fallbackStatus, channel, entryIndex = null) {
+            const qualifiedMetadata = value?.version === 1
+                && ["recorded", "redacted", "not-supplied", "unsupported-format", "size-excluded", "sensitive-excluded"].includes(value.status)
+                && ["completion-error", "workiq-error-json", "result-error", "mcp-result-text", "native-tool-error"].includes(value.source);
+            const qualified = qualifiedMetadata && ["recorded", "redacted"].includes(value.status);
+            const validStatus = status => Number.isInteger(status) && status >= 100 && status <= 599;
+            if (channel === "returned-entry" && qualifiedMetadata && validStatus(value.statusCode) && validStatus(fallbackStatus)
+                && value.statusCode !== fallbackStatus) {
+                add("conflicting-status", channel, entryIndex);
+                return;
+            }
+            const code = qualified ? value.code ?? fallbackCode : fallbackCode, status = qualified ? value.statusCode ?? fallbackStatus : fallbackStatus;
+            const parts = qualified ? [value, ...(value.details ?? [])] : [];
+            let specific = false;
+            for (const part of parts) {
+                const message = part.message?.trim() ?? "", partCode = part.code ?? code;
+                if (/^(?:MCP server ['"]workiq['"]:\s*)?MCP error -32001: Request timed out[.!]?$/i.test(message)
+                    || partCode === -32001 && /^Request timed out[.!]?$/i.test(message)) {
+                    add("request-timeout", channel, entryIndex); specific = true;
+                } else if (/^MCP server ['"]workiq['"]: MCP request failed: Transport send error: Transport \[[^\r\n]+\] error: unexpected server response: HTTP 503 Service Unavailable: upstream connect error or disconnect\/reset before headers\. reset reason: connection timeout$/.test(message)) {
+                    add("upstream-connection-timeout", channel, entryIndex); specific = true;
+                } else if (value.source === "workiq-error-json" && partCode === "PolicyUnavailable"
+                    && /\bpolicy\b.{0,80}\bunavailable\b/i.test(message) && !/\b(?:not unavailable|example|might|possibly)\b/i.test(message)) {
+                    add("policy-unavailable", channel, entryIndex); specific = true;
+                }
+            }
+            // Detailed source wording carries the explanation already; do not append a status glossary.
+            if (specific || parts.some(part => part.message && !simple(part.message.trim()))) return;
+            if (Object.hasOwn(interpretationText, "http-" + status)) add("http-" + status, channel, entryIndex);
+            else if (["AccessDenied", "accessDenied", "ErrorAccessDenied", "Authorization_RequestDenied"].includes(code)) add("access-denied", channel, entryIndex);
+            else if (["BadRequest", "InvalidRequest"].includes(code)) add("http-400", channel, entryIndex);
+            else if (code != null && code !== "failure") add("unrecognized-code", channel, entryIndex);
+        }
+        const evidence = outcome === "failure" && call?.failureEvidence?.version === 1 ? call.failureEvidence : null;
+        if (evidence?.messageStatus === "text-excluded") {
+            const signal = evidence.messageSignal;
+            if (signal === "request-timeout") add("request-timeout");
+            if (signal === "workiq-sign-in-required") add("sign-in-required");
+            if (signal === "access-denial" && !evidence.diagnostic?.message && !evidence.diagnostic?.details?.length) add("access-denied");
+            if (evidence.messageSource === "workiq-error-json") {
+                if (signal === "mcp-server-path-not-found") add("tool-unavailable");
+                if (signal === "response-processing-error" && evidence.code === "InternalServerError") add("response-processing");
+                if (signal === "retrieval-stopped-error") add("retrieval-stopped");
+            }
+        }
+        if (evidence && !items.length) diagnostic(evidence.diagnostic,
+            evidence.diagnostic ? undefined : evidence.reason === "error-code-recorded" ? evidence.code : undefined, undefined, "call");
+        const result = call?.resultEvidence?.version === 1 ? call.resultEvidence : null;
+        if (result?.statusConflict) add("conflicting-status", "result");
+        else if (result) diagnostic(result.diagnostic, undefined, result.statusCode, "result");
+        for (const entry of call?.apiResults ?? []) {
+            if (Number.isSafeInteger(entry.index) && entry.index >= 0) diagnostic(entry.errorDiagnostic, entry.errorCode, entry.statusCode, "returned-entry", entry.index);
+        }
+        if (result?.contentStatus === "partial") add("partial-evidence", "result");
+        if (outcome === "unknown" && !call?.completionEventId && !call?.completedAt) add("missing-completion");
+        if (outcome === "failure" && !items.length && !call?.apiResults?.length && !result?.diagnostic) {
+            if (!evidence) add("cause-not-retained");
+            else if (evidence.diagnostic?.status === "not-supplied" || evidence.reason === "no-structured-error") add("cause-not-supplied");
+        }
+        // The same diagnostic can be retained on both the completion and result channels.
+        return validateInterpretation({ version: 2, items: items.filter(item =>
+            item.channel !== "result" || !items.some(other => other.channel === "call" && other.kind === item.kind)) });
+    }
+    function interpretationItems(value, { includeReturned = true } = {}) {
+        const groups = new Map();
+        for (const item of validateInterpretation(value).items.filter(item => includeReturned || item.channel !== "returned-entry")) {
+            const key = JSON.stringify([item.channel, item.kind]);
+            const group = groups.get(key) ?? { ...item, indexes: [] };
+            if (item.entryIndex !== null) group.indexes.push(item.entryIndex + 1);
+            groups.set(key, group);
+        }
+        return [...groups.values()].map(item => ({
+            label: "WIRE interpretation" + (item.channel === "returned-entry"
+                ? ` (returned ${item.indexes.length === 1 ? "entry" : "entries"} ${item.indexes.join(", ")})`
+                : item.channel === "result" ? " (result)" : ""),
+            text: item.text, interpretation: true,
+        }));
+    }
     function callReasonItems(call, outcome, { includeReturned = true } = {}) {
         const reason = outcome === "failure" ? failureReason(call, { contextual: true, includeReturned: false })
             : completionReason(call, outcome, true, false);
@@ -232,6 +373,7 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             }
         }
         if (includeReturned) items.push(...returnedErrorGroups(call));
+        if (screen) items.push(...interpretationItems(interpretation(call, outcome), { includeReturned }));
         return items;
     }
     function callOperation(row) {
@@ -375,7 +517,8 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
         return ordinary.flatMap(entry => screen && entry.key !== "failure" ? (() => {
             const groups = new Map();
             for (const row of new Map(rows.filter(row => row.outcome === entry.key).map(row => [row.id, row])).values()) {
-                const call = callFor(row), reason = completionReason(call, row.outcome, contextual, includeReturned);
+                const call = callFor(row), reason = completionReason(call, row.outcome, contextual, includeReturned)
+                    ?? (row.outcome === "unknown" ? "Completion not recorded" : null);
                 const reportedProblem = call?.resultEvidence?.version === 1 && (call.resultEvidence.statusConflict
                     || call.resultEvidence.statusCode >= 400 || diagnosticSummary(call.resultEvidence.diagnostic ?? {}))
                     || call?.apiResults?.some(result => result.statusCode >= 400 || result.errorCode
@@ -402,7 +545,8 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
                 };
             })) : [];
         const problems = scoped.filter(entry => ["failure", "partial", "transport"].includes(entry.tone));
-        const detailed = problems.length ? problems : contextual && scoped.some(entry => entry.coverage) ? scoped : null;
+        const detailed = problems.length ? problems : contextual && scoped.some(entry => entry.coverage
+            || entry.items?.some(item => item.interpretation)) ? scoped : null;
         const reasons = detailed ?? values.filter(entry => entry.reason)
             .map(({ reason, count, key, tone }) => ({ reason, count, outcome: key, tone: tone ?? key,
                 ...(contextual ? { items: [{ label: null, text: reason }] } : {}) }));
@@ -490,5 +634,5 @@ export function createRecordedResults({ scope = () => null, screen = false } = {
             && callService.services[0] === resultService.services[0]
             && typeof parent.endpoint?.path === "string" && row.endpoint?.id === parent.endpoint.id;
     }
-    return { labels, icon, selection, filterValue, summarize, valid, entries, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, callOperation, returnedErrorGroups, returnedCoverage, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
+    return { labels, icon, selection, filterValue, summarize, valid, entries, failureReason, diagnosticDetails, resultDetails, explainedEntries, activitySummary, callLabel, callGroupLabel, callReasonItems, callOperation, returnedErrorGroups, returnedCoverage, interpretation, interpretationItems, validateInterpretation, unit, populationLabel, columnUnit, canInspect, countLabel, heading, outcomeTitle, pathText, callPaths, returnedResult, returnedPath, inheritsCallService, layers: Object.keys(units) };
 }

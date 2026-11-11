@@ -110,6 +110,13 @@ diagnostic. Source-absent details and details WIRE did not retain stay distinct.
 The reader explains completed calls through their recorded completion evidence,
 without claiming the answer was correct or the overall task succeeded.
 
+When a terse error needs context, the same **WIRE interpretation** appears beside
+its recorded reason on the card and reader, and travels in newly prepared reports.
+It explains the supported mechanism and remaining unknowns without replacing the
+code, status or full diagnostic. Opening exact evidence keeps that interpretation
+visible. A clear source explanation needs no duplicate glossary paragraph.
+Timeouts carry no automatic retry advice or inferred downstream cause.
+
 Exact input/provenance disclosure is a separate action. Partial-response
 coverage is separate from failure reasons and matching-call counts.
 

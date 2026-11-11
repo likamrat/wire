@@ -334,11 +334,12 @@ test("late entry retains labelled per-call timing, identity and exact target wit
             return { viewport: rect(body), label: rect(body.querySelector('[data-tool-call-id="activity-26"] .reader-duration-label')),
                 heading: rect(body.querySelector('[data-reader-section=activity]>.reader-section-heading')),
                 target: rect(body.querySelector('[data-tool-call-id="activity-26"]')),
+                callHeading: rect(body.querySelector('[data-tool-call-id="activity-26"] .call-heading')),
                 identity: rect(document.querySelector("#contextSidebarTitle")), scroll: body.scrollTop };
         });
         assert.ok(box.label.top >= box.viewport.top && box.label.bottom <= box.viewport.bottom);
         assert.ok(box.heading.top >= box.identity.bottom && box.target.top >= box.heading.bottom + 4);
-        assert.ok(box.target.bottom <= box.viewport.bottom - 4);
+        assert.ok(box.callHeading.bottom <= box.viewport.bottom - 4, "Identity, outcome and timing stay visible; a longer explanation can continue below.");
         await expect(target.locator("data.call-duration")).toHaveAttribute("value", "975");
         await expect(page.locator(".reader-timing-column")).toHaveCount(0);
         await expect(page.locator(".reader-call-row .reader-duration-label")).toHaveCount(26);

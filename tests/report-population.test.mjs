@@ -47,6 +47,36 @@ test("completed calls with a returned API error are failures, not completed-only
     assert.deepEqual(project([returnedError, unknown, complete], options("completed")).records.map(record => record.scenarioId), ["complete"]);
 });
 
+test("either conflicting returned status can retain error membership without changing the completed call", () => {
+    for (const [reported, diagnostic, hasError] of [
+        [200, 500, true], [500, 200, true], [403, 500, true], [299, 400, true], [200, 599, true],
+        [200, 201, false], [301, 302, false], [200, 399, false],
+    ]) {
+        const value = record(`conflict-${reported}-${diagnostic}`);
+        value.toolCalls[0].apiResults = [{ index: 0, statusCode: reported,
+            errorDiagnostic: { version: 1, source: "result-error", status: "recorded", statusCode: diagnostic,
+                message: hasError ? "The response processor failed." : "The response statuses differ." } }];
+        const before = structuredClone(value);
+        const errors = project([value], options("errors")), completed = project([value], options("completed"));
+        assert.equal(errors.records.length, hasError ? 1 : 0, `${reported}/${diagnostic}: Errors membership`);
+        assert.equal(completed.records.length, hasError ? 0 : 1, `${reported}/${diagnostic}: Completed membership`);
+        assert.equal(errors.reference[0].hasError, hasError);
+        assert.equal(errors.reference[0].completedCallsOnly, !hasError);
+        assert.equal(value.toolCalls[0].reportedOutcome, "succeeded");
+        assert.equal(value.toolCalls[0].apiResults[0].statusCode, reported);
+        assert.deepEqual(value, before);
+    }
+    const oldSource = record("legacy-completed");
+    oldSource.toolCalls[0].apiResults = [{ index: 0, statusCode: 200,
+        errorDiagnostic: { version: 1, source: "result-error", status: "recorded", statusCode: 500 } }];
+    const legacy = freezeReportPopulation(project([oldSource], options("completed")), key);
+    Object.assign(legacy.reference[0], { hasError: false, completedCallsOnly: true });
+    legacy.included = legacy.reference.map(entry => entry.ref);
+    const bytes = JSON.stringify(legacy);
+    assert.equal(validateReportPopulation(legacy).reference[0].hasError, false);
+    assert.equal(JSON.stringify(legacy), bytes, "Saved population flags are read, not recomputed from later source facts.");
+});
+
 test("an empty or withheld field is not itself a failure, while explicit application errors qualify", () => {
     const empty = record("empty-code");
     empty.toolCalls[0].apiResults = [{ index: 0, statusCode: null, errorCode: "" }];

@@ -346,14 +346,16 @@ test("grouped screen reasons keep parent outcomes, partial coverage and conflict
         assert.equal(view.reasons[0].coverage.retained, 1);
         assert.equal(view.reasons[0].coverage.supplied, null);
         assert.match(view.reasons[0].coverage.text, /WIRE saved part of the response: 1 returned entry.*total is unknown/);
-        assert.equal(view.reasons[0].items.length, 1, "Retention coverage is not another failure reason.");
+        assert.equal(view.reasons[0].items.filter(item => !item.interpretation).length, 1, "Retention coverage is not another source-recorded failure reason.");
+        assert.ok(view.reasons[0].items.some(item => item.interpretation && item.label.startsWith("WIRE interpretation")));
         assert.ok(!view.reasons[0].reason.includes("of 1"), "One retained entry cannot become a known batch total.");
     }
     assert.deepEqual(call, before);
     const partial = { ...call, resultEvidence: { version: 1, contentStatus: "body-excluded", resultCount: 7 } };
     assert.equal(results.returnedCoverage(partial).text, "WIRE saved 1 of the 7 returned entries.");
     const missing = results.callReasonItems({}, "failure");
-    assert.deepEqual(missing, [{ label: null, text: "Failure reason was not saved" }]);
+    assert.deepEqual(missing.filter(item => !item.interpretation), [{ label: null, text: "Failure reason was not saved" }]);
+    assert.match(missing.find(item => item.interpretation).text, /error details are missing/);
     const parent = { failureEvidence: { version: 1, diagnostic: { version: 1, source: "completion-error",
         status: "recorded", message: "The batch was rejected.", details: [{ message: "The version is stale." }] } } };
     assert.deepEqual(results.callReasonItems(parent, "failure").map(item => item.text), ["The batch was rejected.", "The version is stale."]);

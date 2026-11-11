@@ -2702,6 +2702,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (inline) list.setAttribute("role", "list");
         for (const item of items) {
             const reason = el(inline ? "span" : "li", "call-reason-item");
+            if (item.interpretation) reason.dataset.interpretation = "true";
             if (inline) reason.setAttribute("role", "listitem");
             if (item.label) reason.append(el("span", "call-reason-label", item.label + ": "));
             reason.append(el("span", "call-reason-text", failureReasonText(item.text)));
@@ -2722,31 +2723,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     };
     function failureReasonText(reason) {
         return Object.hasOwn(failureReasonCopy, reason) ? failureReasonCopy[reason] : reason;
-    }
-    function failureGuidance(call) {
-        const evidence = call?.failureEvidence;
-        if (evidence?.version === 1 && evidence.messageStatus === "text-excluded") {
-            if (evidence.messageSignal === "response-processing-error" && evidence.messageSource === "workiq-error-json"
-                && evidence.code === "InternalServerError") {
-                return "The recorded error does not say why processing failed.";
-            }
-            if (evidence.messageSignal === "mcp-server-path-not-found" && evidence.messageSource === "workiq-error-json") {
-                return "If you still need this, ask Copilot to find an available Work IQ service before trying again.";
-            }
-            if (evidence.messageSignal === "workiq-sign-in-required") {
-                return "If a new attempt also asks you to sign in, sign in to Work IQ in Copilot and try again.";
-            }
-            if (evidence.messageSignal === "access-denial") {
-                return "If this happens again, check your access to the requested information in the original app.";
-            }
-            if (evidence.messageSignal === "request-timeout") {
-                return "Check the original chat before trying again; a timeout alone does not show whether the work finished.";
-            }
-        }
-        if (evidence?.version !== 1 || !["not-supplied", "unsupported-format", "size-excluded", "sensitive-excluded", "text-excluded"].includes(evidence.messageStatus)) {
-            return "The saved record does not explain why this call failed. The original Copilot chat may have more context.";
-        }
-        return "For more detail, check the original Copilot chat, if it is still available.";
     }
     function resultLine(layer, summary, { total, scope = "Recorded results", label, help: explanation, sessionId, heading, compactSingle = false, pillsOnly = false, singleRecord = false, recordLabel, rows, inline = false, includeReturned = true } = {}) {
         const node = el(inline ? "span" : "div", "recorded-results");
@@ -2955,6 +2931,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function returnedDetails(call, row, apiRows, selectedId) {
         if (!apiRows?.length) return null;
+        const interpretations = results.interpretation(call, row.outcome);
         const renderEntry = entry => {
             const item = viewKey(el("div", "api-result-entry"), "returned:" + entry.id);
             item.dataset.resultId = entry.id;
@@ -2972,6 +2949,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             item.append(resultLine("reported-api", results.summarize([entry]), {
                 heading: "Returned API result", compactSingle: true, singleRecord: true, recordLabel }));
             if (diagnostic) item.append(diagnostic);
+            const explanation = results.interpretationItems({ ...interpretations,
+                items: interpretations.items.filter(value => value.channel === "returned-entry" && value.entryIndex === retained?.index) });
+            if (explanation.length) item.append(callReasonList(explanation));
             item.append(actionFields(call, entry, { includeTool: false, returned: true, includeService: !results.inheritsCallService(call, entry, row) }));
             const duration = el("p", "reader-api-duration");
             duration.append("API result duration: ", durationValue(callInvestigation.duration(retained, "reported-api")));
@@ -5947,6 +5927,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             result.classList.add("journey-result");
             const heading = callHeading(tool.tool || "Tool not recorded", result, { tool: true, duration: callInvestigation.duration(tool, "tool") });
             item.append(heading);
+            const explanations = [...heading.querySelectorAll('[data-interpretation="true"]')];
+            if (explanations.length) {
+                const interpretation = el("div", "reader-interpretation call-reason-list");
+                interpretation.setAttribute("role", "list");
+                interpretation.append(...explanations);
+                item.append(interpretation);
+            }
             const serviceValues = recordedCategory(row ? [{ ...row, tool: tool.tool }] : undefined, "tool", { includeGap: !attribution });
             serviceValues.classList.add("reader-call-services");
             if (serviceValues.childElementCount) heading.querySelector(".reader-call-secondary").prepend(serviceValues);
@@ -6002,7 +5989,6 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         && tool.resultEvidence.statusCode === tool.failureEvidence?.diagnostic?.statusCode,
                 });
                 if (diagnostic) expert.append(diagnostic);
-                else expert.append(el("p", "context-help-note reader-failure-guidance", failureGuidance(tool)));
             }
             expert.append(input.node);
             for (const key of ["command", "code", "script"]) if (typeof tool.requestArgs?.[key] === "string") expert.append(recordedBlock(tool.requestArgs[key], { label: "Recorded " + key, copyLabel: "Copy " + key }, visibility));

@@ -92,6 +92,53 @@ Existing frozen observations without this extension stay unchanged; Compare
 can identify newly included evidence without calling it a new execution.
 Readers predating this extension cannot read new reports containing it.
 
+New GitHub result observations can also freeze `interpretation` v2. Its closed
+condition, call/result/returned-entry scope and exact explanatory text are
+validated together. **WIRE interpretation** is technical context, not a quoted
+source reason or a report-author note. It changes no outcome, count or timing
+sample. Compare separates changed interpretations from changed source facts.
+Old observations without it receive no new interpretation when opened. Version 1
+interpretations retain their frozen wording. Version 2 limits absence statements
+to the error signal or status alone, so a specific detail in another retained
+channel is not contradicted. Older readers reject version 2; keep a compatible
+reader after saving new reports.
+
+A returned entry can freeze `statusConflict` v1 with separate `reported` and
+`diagnostic` statuses. Both are qualified numeric statuses, the reported value
+matches the existing entry status, and the values must differ. Its interpretation
+preserves that ambiguity at the same entry instead of choosing a status as the
+definitive outcome. Old entries without the field remain unchanged; the new
+field requires a compatible reader.
+For new preparation, either conflicting side in the 400-599 range counts as
+recorded error evidence: the interaction belongs in Errors & failures and is not
+completed-only. This does not change the outer tool completion or choose an API
+outcome. A conflict between non-error statuses alone is not error evidence.
+
+Interpretations use qualified retained signals, diagnostic fields and statuses,
+never prompts, replies or elapsed-time thresholds. Detailed source wording stays
+intact without a repetitive status glossary. Partial or missing evidence cannot
+establish a timeout, cancellation or the outcomes of omitted entries. Fixed
+technical context can travel without optional diagnostic prose; it contains no
+source-text excerpts, private identifiers or reconstructed causes.
+Each interpreted call keeps its recorded operation and qualified tool interval
+beside the explanation. When diagnostic copies are selected, their masked or
+edited wording appears there too, without another copy in the result-text
+section. Omitted copies stay omitted. The explanation states what the evidence
+does not establish, without next checks, troubleshooting recommendations or
+remediation advice. It never reruns the operation or borrows a nearby call's evidence.
+
+The timeout explanation follows the
+[MCP lifecycle timeout rule](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle#timeouts)
+and the [TypeScript SDK's request timeout handling](https://github.com/modelcontextprotocol/typescript-sdk/blob/v1.25.2/src/shared/protocol.ts).
+The SDK defines `RequestTimeout = -32001`, but
+[JSON-RPC reserves that range for implementation-defined errors](https://www.jsonrpc.org/specification#error_object):
+the number alone is not a universal timeout diagnosis. WIRE requires the
+recorded timeout message or its qualified retained signal. It does not infer
+the configured deadline, the slow component or whether the work finished.
+HTTP explanations follow [RFC 9110 status semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-15)
+and [RFC 6585 for rate limiting](https://www.rfc-editor.org/rfc/rfc6585.html#section-4),
+with recorded upstream connection details kept separate from a bare 503.
+
 ### Report presets and notes
 
 `reportPopulation` v1 freezes metadata-only reference membership and the included
@@ -105,8 +152,12 @@ Mixed interactions qualify. Completed-only requires at least one eligible call,
 every call completed and no recorded errors. Unknown evidence is neither failure
 nor success. Unverified authors remain available through All.
 
-`reportPatterns` v1 binds normalized operations and distinct error channels to
+`reportPatterns` v2 binds normalized operations and distinct error channels to
 their calls and interactions. It does not infer root causes or prompt similarity.
+For conflicting returned statuses with error evidence, patterns preserve both
+the reported and diagnostic sides and label the conflict. Version 1 patterns and
+all saved population flags retain their original frozen meaning; they are not
+recomputed on read. New version 2 patterns require a compatible reader.
 `reportNotes` v1 contains report-author context scoped to included pseudonymous
 interaction IDs. Notes share privacy treatment and the existing copy budget,
 but never enter metrics. Matching namespace hashes are required in the manifest

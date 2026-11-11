@@ -49,15 +49,21 @@ export function createReportComparison(wording = createAssessmentWording(), dura
             ...(value.errorStatusCode !== null ? [`recorded error status ${value.errorStatusCode}`] : []),
             ...(value.resultCount !== null ? [`${value.resultCount} supplied response entries; ${value.retainedResultCount ?? "unknown"} retained`] : []),
             ...(value.paginationPresent === true ? ["next-page indication: recorded"] : []),
-            ...(value.returnedEntries ?? []).map(entry => `returned API entry ${entry.index + 1}: status ${entry.statusCode ?? "unavailable"}${entry.errorCode !== null ? `, code ${entry.errorCode}` : ""}${entry.paginationPresent === true ? ", next-page indication: recorded" : ""}`),
+            ...(value.returnedEntries ?? []).map(entry => `returned API entry ${entry.index + 1}: status ${entry.statusCode ?? "unavailable"}${entry.errorCode !== null ? `, code ${entry.errorCode}` : ""}${entry.paginationPresent === true ? ", next-page indication: recorded" : ""}`
+                + (entry.statusConflict ? `; diagnostic status ${entry.statusConflict.diagnostic} conflicts with returned status ${entry.statusConflict.reported}` : "")),
             value.contentStatus === "partial" ? "partial returned results; total entry count unknown"
                 : `result content: ${(value.contentStatus ?? "definition not saved").replaceAll("-", " ")}`,
             ...(value.diagnosticStatus ? [`error details: ${value.diagnosticStatus.replaceAll("-", " ")}`] : []),
             ...(value.descriptionStatus ? [`source description: ${value.descriptionStatus.replaceAll("-", " ")}`] : []),
+            ...(value.interpretation?.items ?? []).map(item => "WIRE interpretation"
+                + (item.channel === "returned-entry" ? ` (returned entry ${item.entryIndex + 1})` : item.channel === "result" ? " (result)" : "")
+                + ": " + item.text),
         ].join("; ") + ".";
         return { boundary: resultBoundary,
             unavailable: value.status === "unavailable" ? (unavailable[value.reason] ?? "Result-level comparison is unavailable.") + " Missing result facts are not zero." : null,
-            shared: value.shared?.count ? `${value.shared.count} ${value.shared.count === 1 ? "call appears" : "calls appear"} in both reports; recorded result details differ for ${value.shared.changedTypedFacts}. These differences do not establish new executions.` : null,
+            shared: value.shared?.count ? `${value.shared.count} ${value.shared.count === 1 ? "call appears" : "calls appear"} in both reports; recorded result details differ for ${value.shared.changedTypedFacts}.`
+                + (value.shared.changedInterpretations ? ` WIRE interpretations differ for ${value.shared.changedInterpretations}; these are explanations, not new source facts.` : "")
+                + " These differences do not establish new executions." : null,
             changes: (value.changes ?? []).map((change, index) => ({ title: `Changed call ${index + 1}: ${change.tool ?? "Native tool"} (${sourceNames[change.source]})`,
                 baseline: change.baseline.map(observation).join(" Retained observation: "),
                 later: change.later.map(observation).join(" Retained observation: ") })),

@@ -60,6 +60,7 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     await expect(call).toContainText("workiq-retrieve");
     await expect(call).toContainText("180,024 ms (180.024 s)");
     await expect(call).toContainText("The tool did not respond in time");
+    await expect(call).toContainText("allowed waiting interval");
     await page.locator("#closeContextSidebar").click();
     for (const [name, outcome] of [["slow-completed", "success"], ["missing-completion", "unknown"]]) {
         const control = page.locator(".request-card-open").filter({ hasText: `invented ${name} request` });
@@ -107,9 +108,10 @@ test("retained timeout cause stays with its tool across reader, new files, saved
         if (format === "json") {
             assert.equal(JSON.parse(file.bytes).resultFacts.calls[0].observations[0].timingFailure.kind, "request-timeout");
         } else {
-            const text = format === "pdf" ? (await pdfDocumentText(file.bytes)).content : file.bytes.toString().replaceAll("\\", "");
+            const text = format === "pdf" ? (await pdfDocumentText(file.bytes)).content.replace(/\s+/g, " ") : file.bytes.toString().replaceAll("\\", "");
             assert.match(text, /Request timed out \(MCP -32001\)/, format);
             assert.match(text, /workiq-retrieve/, format);
+            assert.match(text, /allowed waiting interval/, format);
         }
     }
     await page.getByRole("button", { name: "Open saved report", exact: true }).click();
@@ -123,6 +125,7 @@ test("retained timeout cause stays with its tool across reader, new files, saved
     const comparison = page.locator("#comparisonWorkspace");
     await comparison.getByRole("button", { name: "Compare reports", exact: true }).click();
     await expect(comparison.locator(".comparison-result-evidence")).toContainText("Request timed out (MCP -32001)");
+    await expect(comparison.locator(".comparison-result-evidence")).toContainText("allowed waiting interval");
     await expect(comparison.locator(".comparison-result-evidence")).toContainText("These differences do not establish new executions");
     const paired = await controller.previewComparison(owner, oldBundle.bundleId, newBundle.bundleId,
         { formats: ["html", "markdown", "json", "pdf"] });

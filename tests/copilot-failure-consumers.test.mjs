@@ -152,5 +152,6 @@ test("partial facts reject invented totals and retain their meaning in shared re
     const invalid = structuredClone(facts); invalid.calls[0].observations[0].resultCount = 0;
     assert.throws(() => validateReportResultFacts(invalid), /Invalid frozen result facts/);
     const complete = structuredClone(facts); complete.calls[0].observations[0].contentStatus = "body-excluded";
+    delete complete.calls[0].observations[0].interpretation;
     assert.match(JSON.stringify(createReportComparison().resultComparisonContent(compareReportResultFacts(complete, facts))), /total entry count unknown/);
 });

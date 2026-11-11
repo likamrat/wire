@@ -3,10 +3,38 @@ import assert from "node:assert/strict";
 import { fixture, privateFixture } from "./helpers.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState } from "../lib/store.mjs";
-import { validateReportPatterns } from "../lib/report-patterns.mjs";
+import { validateReportPatterns, projectReportPatterns, reportPatternError } from "../lib/report-patterns.mjs";
 import { normalizeReportOptions } from "../lib/prompt-projection.mjs";
 import { projectReportResultText } from "../lib/report-result-text.mjs";
 import { projectReportResults } from "../lib/report-result-projection.mjs";
+import { buildReportFacts } from "../lib/assessment-read-model.mjs";
+
+test("error patterns retain both conflicting status sources only when error evidence exists", () => {
+    const key = "a".repeat(64);
+    const records = [500, 201].map((diagnostic, index) => {
+        const record = fixture(`conflicting-pattern-${index}`);
+        record.toolCalls[0].apiResults = [{ index: 0, statusCode: 200,
+            errorDiagnostic: { version: 1, source: "result-error", status: "recorded", statusCode: diagnostic } }];
+        return record;
+    });
+    const before = structuredClone(records), facts = buildReportFacts(records, { revision: 1, pseudonymKey: key }).facts;
+    const results = projectReportResults(records, key).facts, patterns = projectReportPatterns(records, facts, results, key);
+    const groups = patterns.groups.filter(group => group.kind === "errors");
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].callRefs.length, 1);
+    assert.match(reportPatternError(groups[0]), /Conflicting returned-entry statuses/);
+    assert.match(reportPatternError(groups[0]), /reported: 200/);
+    assert.match(reportPatternError(groups[0]), /diagnostic: 500/);
+    assert.equal(patterns.version, 2);
+    const legacy = { ...structuredClone(patterns), version: 1, definition: "wire-report-patterns-v1",
+        groups: patterns.groups.filter(group => group.kind === "operation") };
+    const bytes = JSON.stringify(legacy);
+    assert.doesNotThrow(() => validateReportPatterns(legacy, { facts, results }));
+    assert.equal(JSON.stringify(legacy), bytes, "Version 1 patterns retain their frozen interpretation of the same result facts.");
+    const changed = structuredClone(patterns); changed.groups = changed.groups.filter(group => group.kind !== "errors");
+    assert.throws(() => validateReportPatterns(changed, { facts, results }), /patterns/);
+    assert.deepEqual(records, before);
+});
 
 test("normalized patterns retain every selected interaction and keep authored notes in HTML, Markdown and JSON", async t => {
     const source = Array.from({ length: 6 }, (_, index) => {
