@@ -133,8 +133,29 @@ and nonlocal sources keep distinct dispositions; a directory alone proves none.
 Live tails take priority over bounded earlier-prefix continuation.
 
 A complete tool-result line up to 4 MiB can supply a supported successful
-completion only with its exact original start in the same read. Omitted
-bodies cannot supply inferred failures or API outcomes.
+completion only with its exact original start in the same verified read.
+For a newly observed completion split from its start by a chunk boundary or
+restart, WIRE can make one fresh lookbehind ending at that exact completion.
+The lookbehind, including source guards, is at most 4 MiB and consumes the same
+32 MiB cycle budget. A saved start is not authority. If the cycle lacks room,
+the cursor stops before that completion and retries later; an original start
+outside the bounded span remains unavailable.
+
+Current optional tool labels and completion telemetry do not establish identity,
+authorship or an outcome. WIRE qualifies the observed `preToolUse`,
+`preMcpToolCall` and `postToolUse` hook pairs only when the complete parent chain,
+unique invocation IDs, source, tool, call, arguments and chronology agree.
+Missing hook turn fields are not a general scope exception. Hook payloads are
+not retained, hook success flags do not establish tool success, and tool
+completion does not establish application or task success.
+
+Compact projection validates the entire UTF-8/JSON entry before admitting any
+metadata. Long scalar tails that cannot be selected are validated without
+allocating their discarded string tokens. Structural tokens still count toward
+the unchanged 100,000-token limit, with bounded batches and a depth limit of 64.
+Excessively complex results remain unavailable; neither omitted bodies nor a
+parser limit establishes a failure, timeout or returned API outcome. Installing
+this reader does not rewrite already-consumed historical completions.
 
 ### Event reading and committed progress
 

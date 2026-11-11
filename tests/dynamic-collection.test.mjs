@@ -207,14 +207,19 @@ test("recovered completions and richer full results are never overwritten by lat
 
 test("extended pending metadata survives unchanged checks and restart without borrowing an old start", async t => {
     const app = await installation(t, { metadata174: true }), id = app.session();
-    const file = await logFor(app, id, [event("user.message", { content: "Invented partial completion" }), call("pending-completion")]);
+    const file = await logFor(app, id, [event("user.message", { content: "Invented partial completion" }), call("pending-completion"),
+        ...Array.from({ length: 6 }, () => event("assistant.message", { content: "x".repeat(900000) }))]);
     const completion = event("tool.execution_complete", { toolCallId: "pending-completion", success: true,
         result: { content: "PRIVATE_PENDING_BODY_" + "x".repeat(1536 * 1024) } });
     await appendFile(file, JSON.stringify(completion));
     let collector = await createCollector(app.context, { timers: false });
     app.cleanup.push(() => collector.close());
     await collector.configure({ ...app.config, approved: true, enabled: false, windowDays: 30, pollSeconds: 5 });
-    await collector.collectNow();
+    for (let pass = 0; pass < 4; pass++) {
+        await collector.collectNow();
+        const current = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", "index.json")));
+        if (current.sources[id].cursor.backlogBytes === current.sources[id].cursor.partialBytes) break;
+    }
     const indexFile = path.join(app.context.dataDir, "collector", "index.json");
     const before = JSON.parse(await readFile(indexFile)), cursor = before.sources[id].cursor;
     assert.equal(before.schemaVersion, 3);
@@ -227,8 +232,9 @@ test("extended pending metadata survives unchanged checks and restart without bo
     collector = await createCollector(app.context, { timers: false });
     await appendFile(file, "\n");
     const completed = await collector.collectNow(), state = await loadBoardState(app.context);
-    assert.equal(completed.metrics.lastBytesRead, cursor.partialBytes + 1);
-    assert.equal(state.evidence[0].toolCalls[0].reportedOutcome, "unknown", "A prior-read start cannot authorize metadata recovery");
+    assert.ok(completed.metrics.lastBytesRead > cursor.partialBytes + 1);
+    assert.ok(completed.metrics.lastBytesRead <= cursor.partialBytes + 1 + TAIL_LIMITS.chunkBytes);
+    assert.equal(state.evidence[0].toolCalls[0].reportedOutcome, "unknown", "The saved start is outside the verified lookbehind and cannot authorize metadata recovery");
     const after = JSON.parse(await readFile(indexFile));
     assert.equal(after.sources[id].cursor.partialBytes, 0);
     assert.equal(after.sources[id].cursor.oversizedLines, 1);

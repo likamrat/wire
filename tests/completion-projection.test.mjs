@@ -141,6 +141,35 @@ test("bounds all token work with an explicit one-batch overshoot and stops furth
     }
 });
 
+test("validates escape-heavy discarded strings without allocating their discarded tokens", () => {
+    const bytes = entry({ toolCallId: "c", success: true, result: { content: '"value":'.repeat(100000) } });
+    const result = projectOversizedCompletion(bytes, limits);
+    assert.equal(result.kind, "projected");
+    assert.ok(result.work.omittedStringChars > 900000);
+    assert.ok(result.work.generatedTokens < 2000, "The tokenizer must not allocate a token per discarded escape");
+    assert.equal(result.work.generatedTokens, result.work.consumedTokens);
+    assert.equal(result.work.stringScanChars, bytes.toString("utf8").length);
+    assert.ok(result.work.stringCarryChars <= 5);
+    assert.ok(result.work.largestStringFilterSlice <= COMPLETION_PROJECTION_LIMITS.decodedSliceChars + 5);
+    assert.ok(result.work.largestParserSlice + COMPLETION_PROJECTION_LIMITS.parserCarryChars <= COMPLETION_PROJECTION_LIMITS.joinedInputChars);
+    assert.ok(result.work.largestBatch <= COMPLETION_PROJECTION_LIMITS.batchTokens);
+    assert.ok(result.work.largestValueChunk <= COMPLETION_PROJECTION_LIMITS.valueChunkChars);
+    assert.deepEqual(result.event.data, { toolCallId: "c", success: true });
+    const text = bytes.toString("utf8");
+    for (const suffix of [String.raw`\z`, String.raw`\u123Z`, "\u0000", "\\"]) {
+        const damaged = Buffer.from(text.slice(0, -5) + suffix + text.slice(-5));
+        assert.throws(() => JSON.parse(damaged.toString("utf8")), SyntaxError);
+        const rejected = projectOversizedCompletion(damaged, limits);
+        assert.equal(rejected.kind, "unavailable");
+        assert.equal(rejected.reason, "invalid-json");
+        assert.equal(Object.hasOwn(rejected, "event"), false);
+    }
+    for (const tail of ["garbage", ",", "{}", "]"]) {
+        const damaged = Buffer.from(text.trimEnd() + tail + "\n");
+        assert.equal(projectOversizedCompletion(damaged, limits).reason, "invalid-json");
+    }
+});
+
 test("bounds giant discarded keys, strings and numbers without relying on a 256-character chunk assumption", () => {
     const giant = "x".repeat(2 * 1024 ** 2);
     const number = entry({ toolCallId: "c", success: true, result: "NUMBER" }).toString("utf8").replace('"NUMBER"', "1".repeat(2 * 1024 ** 2));
@@ -382,7 +411,25 @@ test("accounts for late malformed literals and observes whole-lexeme chunks near
         const bytes = align(rawEnvelope(value), value, 0);
         const result = projectOversizedCompletion(bytes, limits);
         assert.equal(result.kind, "projected");
-        assert.ok(result.work.largestValueChunk >= 4094);
+        if (value.startsWith('"')) {
+            assert.ok(result.work.omittedStringChars > 3000);
+            assert.ok(result.work.largestValueChunk <= COMPLETION_PROJECTION_LIMITS.scalarChars + 1);
+        } else assert.ok(result.work.largestValueChunk >= 4094);
         assert.ok(result.work.largestValueChunk <= COMPLETION_PROJECTION_LIMITS.valueChunkChars);
+    }
+});
+
+test("buffered string escapes never enlarge a parser feed or its carry allocation bound", () => {
+    for (const offset of [4091, 4092, 4093, 4094, 4095]) {
+        const value = String.raw`{"text":"short\u0041","items":[` + "0,".repeat(3500) + "0]}";
+        const bytes = align(rawEnvelope(value), String.raw`\u0041`, offset);
+        const result = projectOversizedCompletion(bytes, limits);
+        assert.equal(result.kind, "projected");
+        assert.deepEqual(result.event, nativeProjection(bytes));
+        assert.equal(result.work.generatedTokens, result.work.consumedTokens);
+        assert.ok(result.work.largestParserSlice <= COMPLETION_PROJECTION_LIMITS.decodedSliceChars);
+        assert.ok(result.work.largestParserSlice + COMPLETION_PROJECTION_LIMITS.parserCarryChars
+            <= COMPLETION_PROJECTION_LIMITS.joinedInputChars);
+        assert.ok(result.work.largestBatch <= COMPLETION_PROJECTION_LIMITS.batchTokens);
     }
 });

@@ -83,6 +83,7 @@ test("requires the unique original start in this read, not a saved target or rec
         f => { f.input.original = []; },
         f => { f.start.id = "other-start"; },
         f => { f.start.timestamp = "2026-10-23T11:59:59Z"; },
+        f => { f.start.data.arguments = { entityUrls: ["/different-request"] }; },
         f => { f.start.data.toolName = "other-fetch"; f.start.data.mcpServerName = "other"; },
         f => { f.record.sourceSessionId = "another-source"; },
         f => { f.input.original.push({ offset: 210, endOffset: 220, event: { ...f.start, id: "other-start" } }); },

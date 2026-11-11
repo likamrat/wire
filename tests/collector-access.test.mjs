@@ -735,6 +735,37 @@ for (const invalidation of ["signout", "source-change", "record-revision"]) test
     assert.deepEqual((await readFile(app.sourceFile)).subarray(0, original.length), original);
 });
 
+test("signout after fresh original completion lookbehind rejects publication without advancing its checkpoint", async t => {
+    const app = await fixture(t);
+    await app.command("wire-sign-in");
+    const events = interaction("lookbehind-revoked"), completion = events.pop();
+    completion.data.result = { content: "EXCLUDED_LOOKBEHIND_BODY_" + "x".repeat(1100000) };
+    await app.append(events);
+    await app.collector.collectNow();
+    const before = await loadBoardState(app.context);
+    assert.equal(before.evidence[0].toolCalls[0].reportedOutcome, "unknown");
+    const index = JSON.parse(await readFile(path.join(app.context.dataDir, "collector", "index.json")));
+    const checkpointFile = path.join(app.context.dataDir, "collector", index.fingerprint, `${app.sourceId}.json`);
+    const checkpoint = await readFile(checkpointFile);
+    await app.append([completion]);
+    let opens = 0;
+    const originalOpen = fs.open;
+    const opening = t.mock.method(fs, "open", (...args) => {
+        if (args[0] === app.sourceFile) opens++;
+        return originalOpen(...args);
+    });
+    syncBuiltinESMExports();
+    app.interceptCommit(async () => {
+        assert.ok(opens >= 3, "The initial completion read and fresh lookbehind must precede revocation");
+        await app.command("wire-sign-out");
+    });
+    try {
+        await assert.rejects(app.collector.collectNow(), { code: "wire_access_revoked" });
+        assert.deepEqual((await loadBoardState(app.context)).evidence, before.evidence);
+        assert.deepEqual(await readFile(checkpointFile), checkpoint);
+    } finally { opening.mock.restore(); syncBuiltinESMExports(); }
+});
+
 test("existing deletion coordination waits for acquisition and prevents deleted records and replies from resurrecting", async t => {
     const app = await fixture(t);
     await app.command("wire-sign-in");
