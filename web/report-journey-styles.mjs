@@ -519,7 +519,7 @@ body:has(#reportsView.report-file-stage:not([hidden]))>main{display:flex;flex-di
 #reportActivityOptions{width:min(60rem,calc(100vw - 32px))}
 .report-reading-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 16px;border:1px solid var(--rule);border-bottom:0;border-radius:8px 8px 0 0;background:var(--paper)}
 .report-reading-toolbar>label{display:flex;align-items:center;gap:8px;margin:0}
-#reportsView .report-reading-toolbar>.select-field{flex-direction:row;align-items:center;gap:8px}
+#reportsView .report-reading-toolbar>.select-field{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px}
 #reportsView .report-reading-toolbar>.select-field>label{padding:0}
 .report-reading-toolbar .select-control{min-width:9rem}
 .report-copy-inspection.document-reading-pane{padding:16px 24px;overflow:auto;overscroll-behavior:contain}

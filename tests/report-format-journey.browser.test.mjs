@@ -50,10 +50,11 @@ test("all file viewers preserve the edited report through regeneration, reading 
         }
         return route.continue();
     });
-    async function capture(name) {
+    async function capture(name, screenshot) {
         if (!output) return;
         await mkdir(output, { recursive: true });
-        await page.screenshot({ path: path.join(output, name + ".png"), animations: "disabled" });
+        if (screenshot) await writeFile(path.join(output, name + ".png"), screenshot);
+        else await page.screenshot({ path: path.join(output, name + ".png"), animations: "disabled" });
     }
     async function regenerate(action) {
         const response = page.waitForResponse(value => value.url().endsWith("/api/preview"));
@@ -69,6 +70,37 @@ test("all file viewers preserve the edited report through regeneration, reading 
         else if (format === "html") await expect(file.frameLocator("iframe").locator("h1")).toContainText("Cedar");
         else await expect(file.locator(format === "markdown" ? ".saved-markdown" : ".saved-json-tree")).toBeVisible();
         return file;
+    }
+    async function visibleDocument(file, format, title) {
+        const documentView = format === "html" ? file.frameLocator("iframe") : file.locator(".saved-markdown");
+        const heading = documentView.locator("h1");
+        await expect(heading).toHaveText(title);
+        await expect(heading).toBeInViewport({ ratio: 1 });
+        await expect(documentView.getByText("Retained activity", { exact: true })).toBeInViewport();
+        await expect.poll(() => heading.evaluate(() => document.fonts.status)).toBe("loaded");
+        let screenshot;
+        await expect.poll(async () => {
+            const bounds = await heading.boundingBox(), color = await heading.evaluate(node => getComputedStyle(node).color);
+            screenshot = await page.screenshot({ animations: "disabled", scale: "css" });
+            return page.evaluate(async ({ png, bounds, color }) => {
+                const image = await createImageBitmap(new Blob([Uint8Array.from(atob(png), c => c.charCodeAt(0))]));
+                const canvas = document.createElement("canvas");
+                canvas.width = image.width; canvas.height = image.height;
+                const context = canvas.getContext("2d");
+                context.fillStyle = color; context.fillRect(0, 0, 1, 1);
+                const ink = context.getImageData(0, 0, 1, 1).data;
+                context.drawImage(image, 0, 0); image.close();
+                const pixels = context.getImageData(Math.floor(bounds.x), Math.floor(bounds.y),
+                    Math.ceil(bounds.width), Math.ceil(bounds.height)).data;
+                let painted = 0;
+                for (let index = 0; index < pixels.length; index += 4) {
+                    if (pixels[index + 3] > 0 && Math.abs(pixels[index] - ink[0])
+                        + Math.abs(pixels[index + 1] - ink[1]) + Math.abs(pixels[index + 2] - ink[2]) < 60) painted++;
+                }
+                return painted;
+            }, { png: screenshot.toString("base64"), bounds, color });
+        }, { message: `${format} heading must be painted in the visible document, not just present in its DOM.` }).toBeGreaterThan(100);
+        return screenshot;
     }
     await page.goto(runtime.url + "#reports");
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
@@ -117,12 +149,22 @@ test("all file viewers preserve the edited report through regeneration, reading 
             if (theme === "dark") {
                 await page.setViewportSize({ width: 390, height: 950 });
                 await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
-                await inspection.scrollIntoViewIfNeeded();
+                await page.locator(".report-reading-toolbar").evaluate(node => node.scrollIntoView({ block: "start", behavior: "instant" }));
                 if (format === "pdf") await file.locator('.saved-pdf-pages[aria-busy="false"]').waitFor();
             }
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
             assert.ok((await file.boundingBox()).height >= 200);
-            await capture(`prepared-${format}-${theme}`);
+            const view = await page.getByRole("combobox", { name: "Prepared report view", exact: true }).boundingBox();
+            const header = await page.getByRole("banner").boundingBox();
+            assert.ok(view.y >= header.y + header.height, "The View control must not be covered by the sticky header.");
+            const label = await page.locator(".report-reading-toolbar .select-field>label").evaluate(node => {
+                const range = document.createRange(); range.selectNodeContents(node);
+                return range.getBoundingClientRect().toJSON();
+            });
+            assert.ok(label.bottom <= view.y || label.right <= view.x - 4,
+                "The complete View label must not overlap its select.");
+            const screenshot = ["html", "markdown"].includes(format) ? await visibleDocument(file, format, prepared.title) : undefined;
+            await capture(`prepared-${format}-${theme}`, screenshot);
         }
         await page.evaluate(() => { document.documentElement.style.fontSize = "100%"; });
         await page.setViewportSize({ width: 1440, height: 1100 });
