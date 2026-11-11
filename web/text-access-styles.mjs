@@ -290,6 +290,10 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-owned-text:has(.reader-prompt-role-label) .full-text-qualifiers:not(:empty) {margin-bottom:6px}
 #requestContent .reader-owned-text:has([data-prompt-actor=agent])>.full-text-body {border-inline-start-color:var(--prompt-author-agent)}
 #requestContent .reader-section-actions>.full-text-reader-actions {display:flex;align-items:center;gap:2px;margin:0}
+#requestContent .full-text-content.prompt-preview-clamped {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:clip}
+#requestContent .prompt-preview-toggle {min-height:44px;max-width:100%;margin:4px 0 0;padding:8px 0;border:0;background:transparent;color:var(--accent);font:inherit;text-align:start;text-decoration:underline;text-underline-offset:3px;white-space:normal;overflow-wrap:anywhere}
+#requestContent .prompt-preview-toggle::before {content:none}
+#requestContent .prompt-preview-toggle:hover {color:var(--ink)}
 #requestContent .reader-section .reader-facts {display:grid;gap:12px;margin:12px 0 0}
 #requestContent .reader-section .reader-facts>.reader-fields {display:grid;gap:12px;margin:0}
 #requestContent .reader-section .reader-facts>.reader-fields>div {display:flex;flex-wrap:wrap;gap:2px 8px}

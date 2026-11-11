@@ -2026,6 +2026,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             await navigate(next.view === "analyze" ? next
                 : { ...route, ...next, request: next.request, call: next.call, callRevision: next.callRevision }, false, { fromSearch: true, isCurrent });
             if (!isCurrent()) return false;
+            if (next.view === "request" && !next.call) {
+                textAccess.revealPrompt($("selectedContext")?.querySelector(".full-text"));
+            }
             if (target.focus) {
                 const nativeTarget = target.focus.startsWith("native-source-fact-") || target.focus.startsWith("native-message-");
                 const node = nativeTarget ? readerSections?.revealTarget?.(target.focus) : $(target.focus);
@@ -5299,7 +5302,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const moment = requestTiming.entry(scenario, applied.timeContext);
         const recognition = description.hasText ? textAccess.excerpt(scenario.userPrompt, 96) : null;
         const nameLink = omitted => action.setAttribute("aria-label",
-            `${omitted ? "Read full prompt" : "View interaction"}: ${recognition} (${authorLabel}; ${moment.value})`);
+            `${omitted ? "Read more of prompt" : "View interaction"}: ${recognition} (${authorLabel}; ${moment.value})`);
         if (description.hasText) nameLink(false);
         const prompt = description.hasText ? textAccess.renderCardPreview(scenario.userPrompt, omitted => {
             more.hidden = !omitted;
@@ -5794,6 +5797,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const requestText = el("section", isSelected ? "request-original" : "request-context-prompt");
         requestText.append(readerText(scenario.userPrompt, {
             key: "request:" + scenario.scenarioId, mode: "complete", initialOpen: true, contentFirst: true,
+            collapsePrompt: isSelected,
             originKind, visibility: isSelected ? promptSection.visibility : linkedVisibility,
             actionsHost: isSelected ? promptSection.actions : undefined,
             contextTitle: isSelected ? undefined : group.relation === "preceding" ? "Earlier message" : "Following message",

@@ -71,6 +71,10 @@ non-date filters and authorized Search into the comparison.
 ## Inspect an interaction
 
 Open a card to read its prompt and recorded activity in the right-hand reader.
+Long prompts start with a six-line preview so recorded activity stays close.
+Choose **Show full prompt** to read the rest, or **Show less** to return to the
+preview. Copy still includes the whole retained prompt. Search opens the full
+prompt rather than hiding a match behind the preview.
 Each call keeps its own result, timing and available error details. Open a
 call's disclosure for exact input; **Source details** holds provenance and
 identifiers. Close or Back returns to the originating results.

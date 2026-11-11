@@ -1,6 +1,7 @@
 // Presentation only: callers supply the authorized text, never a lookup for hidden originals.
 export function createTextAccess(ux, presentation, authorship, metadata) {
     const bindings = new WeakMap();
+    const promptReveals = new WeakMap();
     function clearOwnedContent(owner, preserveRootId = false) {
         for (const element of [owner, ...owner.querySelectorAll("*")]) {
             if (element.matches("button")) element.disabled = true;
@@ -93,7 +94,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         });
         return node;
     }
-    function render(source, { key, navigationNode, label, copyLabel, allowCopy = true, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel }) {
+    function render(source, { key, navigationNode, label, copyLabel, allowCopy = true, mode = "preview", notice, copyNoticeId, subject = "request", originKind, initialOpen, contentFirst = false, compactProvenance = false, inlinePreview = false, visibility, actionsHost, headingLabel, collapsePrompt = false }) {
         if (typeof key !== "string" || !key) throw new TypeError("Text access needs a stable presentation key.");
         if (!["request", "response"].includes(subject)) throw new TypeError("Unsupported private text subject.");
         const promptLabel = caption(source, { originKind }), noun = subject === "response" ? "response" : "prompt";
@@ -103,7 +104,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         label ??= "Read " + (complete ? "" : partial ? "retained " : "full ") + noun;
         copyLabel ??= "Copy " + noun;
         let text = retained(source), preview = text === null && subject === "response" ? "Original not available" : excerpt(source);
-        let released = false, cleared = false, control = null, onToggle = null, unsubscribe = null;
+        let released = false, cleared = false, control = null, onToggle = null, unsubscribe = null, releasePreview = null;
         const authorNote = label => metadata.item(label, { helpLabel: "prompt author", help: authorship.reason(source)
             + " Author unverified describes message provenance, not an account sign-in failure." });
         const authorGap = {
@@ -231,6 +232,8 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         bindings.set(root, () => {
             if (cleared) return;
             released = true;
+            releasePreview?.();
+            promptReveals.delete(root);
             source = text = preview = notice = label = copyLabel = headingLabel = null;
             control?.removeEventListener("click", onToggle);
             unsubscribe?.();
@@ -259,8 +262,75 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
             actions.append(control);
             if (!actions.parentNode) root.append(actions);
         }
+        function previewPrompt(pre, body) {
+            const stateKey = "prompt-preview:" + key;
+            const toggle = document.createElement("button"), close = document.createElement("button");
+            pre.id = "text-content-" + encodeURIComponent(key);
+            for (const button of [toggle, close]) {
+                button.type = "button";
+                button.className = "prompt-preview-toggle";
+                button.setAttribute("aria-controls", pre.id);
+                button.hidden = true;
+            }
+            toggle.id = "prompt-preview-toggle-" + encodeURIComponent(key);
+            close.id = "prompt-preview-close-" + encodeURIComponent(key);
+            close.textContent = "Show less";
+            body.append(toggle);
+            readerActions.prepend(close);
+            let active = true;
+            const current = () => active && !released && root.isConnected
+                && (!visibility || visibility.isCurrent() && visibility.isOpen());
+            function measure() {
+                if (!current() || !pre.clientWidth) return;
+                const overflow = pre.scrollHeight > parseFloat(getComputedStyle(pre).lineHeight) * 6 + 1;
+                const open = presentation.isOpen(stateKey, false);
+                const focused = [toggle, close].includes(document.activeElement);
+                pre.classList.toggle("prompt-preview-clamped", overflow && !open);
+                toggle.hidden = !overflow;
+                close.hidden = !overflow || !open;
+                toggle.textContent = open ? "Show less" : "Show full prompt";
+                for (const button of [toggle, close]) button.setAttribute("aria-expanded", String(open));
+                if (!overflow && focused) pre.focus({ preventScroll: true });
+            }
+            function setExpanded(open, focus = false) {
+                if (!current()) return;
+                presentation.setOpen(stateKey, open);
+                measure();
+                if (focus) {
+                    // Keep the one outer reader scroll owner; do not jump to the end of the expanded text.
+                    const scroller = root.closest("#contextSidebarBody");
+                    if (scroller) {
+                        const section = root.closest("[data-reader-section]") || root;
+                        scroller.scrollTop += section.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 12;
+                    }
+                    (open && !close.hidden ? close : !toggle.hidden ? toggle : pre).focus({ preventScroll: true });
+                }
+            }
+            const onPreviewToggle = () => setExpanded(!presentation.isOpen(stateKey, false), true);
+            toggle.addEventListener("click", onPreviewToggle);
+            close.addEventListener("click", onPreviewToggle);
+            promptReveals.set(root, () => setExpanded(true));
+            const observer = new ResizeObserver(measure);
+            observer.observe(pre);
+            document.fonts.ready.then(measure);
+            document.fonts.addEventListener("loadingdone", measure);
+            measure();
+            return () => {
+                active = false;
+                observer.disconnect();
+                document.fonts.removeEventListener("loadingdone", measure);
+                promptReveals.delete(root);
+                for (const button of [toggle, close]) {
+                    button.removeEventListener("click", onPreviewToggle);
+                    clearOwnedContent(button);
+                    button.remove();
+                }
+            };
+        }
         function paint(initial = false) {
             if (released || !initial && !root.isConnected || visibility?.isCurrent && !visibility.isCurrent()) return;
+            releasePreview?.();
+            releasePreview = null;
             const open = visibility ? visibility.isOpen() : presentation.isOpen(stateKey, initiallyOpen);
             control.setAttribute("aria-expanded", String(open));
             const actionLabel = inline ? open ? "Read less" : "Read more" : open ? "Hide " + noun : label;
@@ -310,6 +380,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
                         if (!copyNoticeId) readerActions.append(scope);
                     }
                     body.append(pre);
+                    if (collapsePrompt && complete && subject === "request") releasePreview = previewPrompt(pre, body);
                 } else {
                     body.append(ux.codeBlock(text, { label: subject === "response" ? "Exact retained text / local only" : promptLabel + " / local only", copyLabel, prose: true, ...(notice ? { tooltip: notice } : {}) }));
                 }
@@ -331,6 +402,7 @@ export function createTextAccess(ux, presentation, authorship, metadata) {
         return root;
     }
     return { excerpt, renderExcerpt, renderCardPreview, render, caption, describePrompt,
+        revealPrompt(root) { promptReveals.get(root)?.(); },
         release(root) { bindings.get(root)?.(); bindings.delete(root); },
         isOpen: (key, initial = true) => presentation.isOpen("text:" + key, initial),
         setOpen: (key, open) => presentation.setOpen("text:" + key, open) };

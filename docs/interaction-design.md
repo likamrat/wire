@@ -85,6 +85,7 @@ recorded problems/results, then quiet time/count metadata. Prompts use up to
 two actual line boxes, not an arbitrary character cap. Read more appears only
 on real overflow; it opens the reader at the prompt's top. Other valid reader
 returns can retain their prior position.
+The reader offers a longer exact preview, not a second summary.
 
 A card is one native link without nested Copy, checkbox or duplicate Open
 controls. Report-picker checkboxes remain separate. Native modified-click and
@@ -130,6 +131,15 @@ The reader's order follows the user's question:
 2. Recorded activity: calls and their own results, timing and errors.
 3. Available Copilot reply.
 4. Source details.
+
+Selected prompts exceeding six rendered lines start with those six lines visible.
+This keeps a useful exact excerpt above the recorded activity without a nested
+scroll area. Short prompts have no toggle. **Show full prompt** reveals all retained
+text; **Show less** is available above and below the expanded text and returns to
+the prompt's beginning. Width/font changes recheck actual overflow. The choice
+belongs to that interaction's in-memory reading state, never its stored evidence.
+Search opens the full selected prompt so the preview cannot hide matching text.
+Authorship, exact Copy and report text are unchanged.
 
 Build exact call arguments only while their disclosure is open; clear them
 when it closes. Returned entries keep their own path/status/identity, never

@@ -233,6 +233,8 @@ test("Read more starts at the actual reader top after motion without changing or
                 await settle();
                 assert.equal(await body.evaluate(node => node.scrollTop), 0, "Focus and settled layout must not move the reset reader.");
             }
+            const expandPrompt = body.getByRole("button", { name: "Show full prompt", exact: true });
+            if (await expandPrompt.isVisible()) await expandPrompt.click();
             await body.evaluate(node => node.scrollTop = node.scrollHeight - node.clientHeight);
             assert.ok(await body.evaluate(node => node.scrollTop) > 0, "The next entry must override a genuinely scrolled reader.");
             await close();
@@ -362,7 +364,7 @@ test("card previews use real line space and Read more opens the prompt while cov
                     hiddenTailInName: accessibleName?.includes("FINAL ORIGINAL INSTRUCTION"),
                 }, null, 2));
                 assert.ok(accessibleName?.length < 220, `The actual link name must be concise, not ${accessibleName?.length} characters.`);
-                assert.match(accessibleName, /^Read full prompt: You are checking the workshop notes/);
+                assert.match(accessibleName, /^Read more of prompt: You are checking the workshop notes/);
                 assert.ok(!accessibleName.includes("FINAL ORIGINAL INSTRUCTION"), "The hidden original must not be announced as the link's name.");
             }
             for (const card of [first, second]) {
@@ -385,7 +387,7 @@ test("card previews use real line space and Read more opens the prompt while cov
                 });
                 const omitted = geometry.naturalHeight > geometry.height + 1;
                 await expect(card.locator(".request-card-read-more")).toBeVisible({ visible: omitted });
-                await expect(card).toHaveAccessibleName(omitted ? /^Read full prompt: / : /^View interaction: /);
+                await expect(card).toHaveAccessibleName(omitted ? /^Read more of prompt: / : /^View interaction: /);
                 assert.equal(await card.locator(".request-card-read-more").evaluate(node => node.closest("a")?.getAttribute("href")),
                     await card.getAttribute("href"), "Read more activates the existing real native link.");
                 assert.ok(geometry.height <= geometry.lineHeight * 2 + 1);
