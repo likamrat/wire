@@ -1545,6 +1545,7 @@ export const periodComparisonStyles = `
 .comparison-group{padding:16px 0;border-bottom:1px solid var(--surface-divider)}
 .comparison-group>button{display:block;width:100%;margin-top:8px}
 .comparison-group-value{display:grid;grid-template-columns:minmax(8rem,1fr) minmax(0,3fr) minmax(3rem,auto);align-items:center;gap:16px}
+.comparison-group-value>.percentage-value{grid-column:auto}
 .comparison-group-track{display:block;height:16px}
 .comparison-group-bar{display:block;height:100%;background:var(--chart-mark-high)}
 .comparison-group>button:last-child .comparison-group-bar{background:var(--chart-mark-low)}
@@ -1586,6 +1587,9 @@ export const periodComparisonStyles = `
 }
 @container comparison-results (max-width:24rem){
  .comparison-chart-views{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .comparison-group-value{grid-template-columns:minmax(0,1fr)}
+ .comparison-group-value>.percentage-value{grid-column:1;grid-row:2;justify-content:flex-start;text-align:start}
+ .comparison-group-track{grid-row:3}
 }
 @media(max-width:600px){
  .period-comparison{padding:18px 16px}

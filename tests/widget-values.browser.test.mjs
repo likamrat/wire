@@ -81,8 +81,14 @@ test("normal grouped widgets and live comparisons use complete accepted populati
             overflow: document.documentElement.scrollWidth > innerWidth + 1,
             clipped: [...host.querySelectorAll(".percentage-value,.percentage-value>*,.group-name")]
                 .filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.textContent),
+            splitPercentages: [...host.querySelectorAll(".percentage-value>strong")].filter(node => {
+                if (!node.textContent.endsWith("%")) return false;
+                const range = document.createRange(); range.selectNodeContents(node);
+                return new Set([...range.getClientRects()].map(rect => rect.y)).size > 1;
+            }).map(node => node.textContent),
         }));
         assert.equal(geometry.overflow, false, name); assert.deepEqual(geometry.clipped, [], name);
+        assert.deepEqual(geometry.splitPercentages, [], name);
         evidence.push({ name, geometry });
         if (proof) {
             await mkdir(proof, { recursive: true });
