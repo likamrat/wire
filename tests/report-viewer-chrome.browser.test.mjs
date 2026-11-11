@@ -67,7 +67,7 @@ async function setup(t) {
         await writeFile(path.join(process.env.WIRE_VIEWER_CHROME_PROOFS, name + ".png"),
             screenshot ?? await page.screenshot({ animations: "disabled" }));
     }
-    return { page, bundles, originals, capture, context, exports };
+    return { page, browser, url: runtime.url, bundles, originals, capture, context, exports };
 }
 
 async function logoContrast(page, logo) {
@@ -170,7 +170,7 @@ test("file modes are compact distinct segments with preserved keyboard and file 
 });
 
 test("saved rows expose aligned text treatment and labeled inspect/delete actions", { timeout: 60000 }, async t => {
-    const { page, bundles, capture, context, exports } = await setup(t);
+    const { page, browser, url, bundles, capture, context, exports } = await setup(t);
     for (const [title, mode] of [["Cedar planning decisions and unresolved release handoffs across multiple teams", "original"], ["Cedar report without prompts", "none"]]) {
         const prepared = await exports.preview(title, undefined, { title, promptMode: mode, formats: ["html"] },
             { kind: "all", revision: (await loadBoardState(context)).revision });
@@ -224,6 +224,17 @@ test("saved rows expose aligned text treatment and labeled inspect/delete action
     await expect(current.getByRole("button", { name: "Delete report", exact: true })).toBeVisible();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
     await capture("library-narrow");
+    const touch = await browser.newPage({ viewport: { width: 390, height: 900 }, hasTouch: true });
+    await touch.goto(url + "#reports");
+    await expect(touch.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    const touchRow = touch.locator(".saved-library-row").filter({ hasText: "Cedar current report" });
+    await touchRow.getByRole("button", { name: "Inspect details", exact: true }).tap();
+    await expect(touch.locator("#contextSidebar[open]")).toBeVisible();
+    await touch.getByRole("button", { name: "Close saved report details", exact: true }).tap();
+    await touchRow.getByRole("button", { name: "Delete report", exact: true }).tap();
+    await touch.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).tap();
+    await expect(touchRow.getByRole("button", { name: "Delete report", exact: true })).toBeVisible();
+    await touch.close();
     assert.deepEqual(await loadBoardState(context), before);
     for (const [file, value] of bytes) assert.deepEqual(await readFile(file), value);
 });
