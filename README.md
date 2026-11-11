@@ -20,7 +20,7 @@ Those real interactions can become the basis for better synthetic eval cases.
 Product teams and customers building agents on Work IQ APIs and MCP can use
 that evidence to test the behaviors people rely on and improve their agents.
 
-[![WIRE showing activity, outcomes, recorded models, tools and services beside an interaction with completed and failed calls.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
+[![WIRE showing activity, recorded outcomes, tools and services beside an interaction with an access-denied diagnostic and a separate WIRE interpretation.](docs/images/wire-overview.png)](docs/images/wire-overview.png)
 
 Search runs on-device without AI or provider calls. Reports save locally as
 HTML, PDF, JSON or Markdown, with detected personal details hidden by default.

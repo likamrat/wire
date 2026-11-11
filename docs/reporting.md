@@ -28,6 +28,10 @@ Each choice has a help icon available by pointer, keyboard or touch.
 | My prompts | Interactions whose originating prompt is recorded as user-authored. |
 | Agent prompts | Interactions whose originating prompt is recorded as agent-authored. |
 
+If a returned status and its diagnostic disagree, both remain visible. Recorded
+error evidence on either side qualifies for **Errors & failures**; a disagreement
+without an error does not. The tool's recorded completion stays unchanged.
+
 New reports default to **Last 7 days**, including today in the display time
 zone. **Last 14 days**, **Last 30 days** and **Custom dates** are also available.
 Custom dates opens the calendar directly; Cancel leaves the accepted dates
@@ -71,6 +75,11 @@ names, timing or recorded application results remain unavailable, not zero.
 Examples connect permitted prompt copies with recorded calls; they are not
 generated explanations of intent or task success.
 
+**Tool results** lists every call included in the report, including calls with
+no retained diagnostic. **WIRE interpretation** explains supported conditions
+and evidence limits beside those results. It is separate from original error
+text and report-author notes, and does not recommend next steps.
+
 ## Read and adjust
 
 The report shows its period, scope and recorded patterns. An error report
@@ -110,6 +119,10 @@ control, expand **Additional masking**, and enter one exact term per line.
 | Keep chat details | Includes recorded wording in local files. Detected credentials are still removed. |
 | Include linked requests and replies | Adds available, authorized context up to one linked request before and after each included interaction. It is not the whole chat or a reply-saving permission. |
 | Include error messages from the calls | Adds already-retained error details, always masked. Error reports start with it on. It does not add raw response bodies or unrelated source descriptions. |
+
+Masking, edits and omissions still control the diagnostic copies. A fixed WIRE
+interpretation can remain when you leave out error-message text; it does not
+restore the omitted wording or read prompts, replies or arguments.
 
 **Save as** chooses HTML, PDF, JSON or Markdown files; you can select more than
 one. **View** changes what you are reading: **Report** is the readable page,
@@ -167,6 +180,8 @@ it from current activity or silently open another format.
 
 Saved reports retain their frozen facts, text choices and time context.
 Later collection, browsing filters or screen-theme changes do not rewrite them.
+Reopening an older report does not add newer interpretations. New reports need a
+compatible WIRE reader; an older version may refuse to open them.
 The saved list's search finds metadata; global Search can also find supported
 saved-file content. **Back to Reports** restores the list's search, order, page
 and reading position. Page controls are below the saved rows.

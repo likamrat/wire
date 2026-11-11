@@ -115,7 +115,9 @@ its recorded reason on the card and reader, and travels in newly prepared report
 It explains the supported mechanism and remaining unknowns without replacing the
 code, status or full diagnostic. Opening exact evidence keeps that interpretation
 visible. A clear source explanation needs no duplicate glossary paragraph.
-Timeouts carry no automatic retry advice or inferred downstream cause.
+WIRE interpretations do not generate next checks, troubleshooting or remediation
+advice, or messages for product teams. Timeout explanations do not infer a
+downstream cause.
 
 Exact input/provenance disclosure is a separate action. Partial-response
 coverage is separate from failure reasons and matching-call counts.

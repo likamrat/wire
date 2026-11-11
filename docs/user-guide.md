@@ -75,13 +75,18 @@ Each call keeps its own result, timing and available error details. Open a
 call's disclosure for exact input; **Source details** holds provenance and
 identifiers. Close or Back returns to the originating results.
 
+**WIRE interpretation** explains a recorded condition or evidence gap separately
+from the source diagnostic. It uses fixed local rules, without AI or provider
+calls, and explains what the evidence establishes without suggesting fixes or
+next steps. A clear source explanation needs no additional interpretation.
+
 Drag the reader's left edge or use its minus/plus buttons to narrow or widen
 it. **Maximize interaction** fills the workspace below the toolbar;
 **Restore reader width** returns to your chosen width while keeping your place.
 **Close interaction** leaves the reader instead. When space is limited, WIRE
 uses a single-pane reader and hides the sizing controls.
 
-![An interaction reader beside its card, showing a failed call and its separately attributed returned HTTP results.](images/interaction.png)
+![An interaction reader showing a retained access-denied diagnostic, a separate WIRE interpretation and the call's recorded operation and timing.](images/interaction.png)
 
 **My prompt**, **Agent prompt** and **Author unverified** describe supported
 origin evidence, not who executed or authorized every call. Choosing My and
@@ -171,6 +176,9 @@ check frequency and Pause. **Refresh** checks approved local history;
 **Read stored activity** only rereads WIRE's retained view. Paused collection
 stays paused after a deliberate local-history check. **Collection status**
 explains missing files, bounded reads and other known coverage gaps.
+
+Collector updates improve supported reads; they do not automatically repair
+older retained activity or rewrite saved reports.
 
 **Account > Sign out of this instance** stops collection and hides saved private
 activity in every tab of that WIRE instance, without deleting it. It does not
