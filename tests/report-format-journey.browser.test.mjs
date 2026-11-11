@@ -154,6 +154,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
     prepared = await regenerate(() => page.locator("#reportPeriodChoices [data-report-range='14']").click());
     await expect(page.locator("#preparedReportView")).toHaveValue(filenames[4]);
     assert.equal(await inspection.locator("pre:visible").textContent(), prepared.files[filenames[4]]);
+    await capture("date-change-keeps-source");
     await page.getByRole("button", { name: "Change what's included", exact: true }).click();
     prepared = await regenerate(() => selectActivityOption(page, "reportOutcome", "errors"));
     if (await page.locator("#reportIncludeOptions").isVisible()) await page.locator("#reportIncludeOptions").getByRole("button", { name: "Done", exact: true }).click();
@@ -221,6 +222,7 @@ test("all file viewers preserve the edited report through regeneration, reading 
     for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);
     if (output) {
         for (const [name, content] of Object.entries(prepared.files)) await writeFile(path.join(output, name), bytesOf(content));
+        for (const [file, bytes] of originals) await writeFile(path.join(output, "saved-" + path.basename(file)), bytes);
         await writeFile(path.join(output, "receipt.json"), JSON.stringify(receipts, null, 2));
     }
     assert.deepEqual(errors, []); assert.deepEqual(outside, []);
