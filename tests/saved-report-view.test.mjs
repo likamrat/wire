@@ -22,6 +22,20 @@ async function save(controller, context, options, pair) {
 for (const format of ["json", "markdown"]) test(`exact ad69 ${format} artifacts retain their historical rendered wording on Open`, async t => {
     const fixtures = JSON.parse(await readFile(new URL("./report-origin-v3.fixture.json", import.meta.url), "utf8"));
     const artifact = fixtures.artifacts.find(item => item.format === format);
+    const assetPaths = {
+        fontLicense: ["assets", "fonts", "OFL.txt"],
+        lightWordmark: ["assets", "wire-wordmark.svg"],
+        darkWordmark: ["assets", "wire-wordmark-dark.svg"],
+    };
+    const assets = Object.fromEntries(await Promise.all(artifact.inlineAssets.map(async name => {
+        const bytes = await readFile(path.join(import.meta.dirname, "..", ...assetPaths[name]));
+        return [name, { sha256: reportHash(bytes), bytes: bytes.length }];
+    })));
+    const materialization = Object.entries(fixtures.inlineAssetMaterializations).find(([, candidate]) =>
+        artifact.inlineAssets.every(name => assets[name].sha256 === candidate[name].sha256
+            && assets[name].bytes === candidate[name].bytes))?.[0];
+    assert.ok(materialization, "Inline report assets must match an old-reader-qualified materialization.");
+    const expectedView = artifact.expectedViews[materialization];
     const unpack = packed => {
         const bytes = gunzipSync(Buffer.from(packed.gzipBase64, "base64"));
         assert.equal(bytes.length, packed.bytes);
@@ -44,8 +58,8 @@ for (const format of ["json", "markdown"]) test(`exact ad69 ${format} artifacts 
     assert.match(view.text, /Recorded author evidence conflicts\./);
     assert.match(view.text, /The host did not record the author/);
     assert.doesNotMatch(view.text, /WIRE could not reconcile the recorded origin evidence/);
-    assert.equal(reportHash(view.text), artifact.expectedView.sha256, "The complete historical reading, not only saved file bytes, stays frozen.");
-    assert.equal(Buffer.byteLength(view.text), artifact.expectedView.bytes);
+    assert.equal(reportHash(view.text), expectedView.sha256, "The complete historical reading, not only saved file bytes, stays frozen.");
+    assert.equal(Buffer.byteLength(view.text), expectedView.bytes);
     assert.deepEqual(await loadBoardState(context), before);
     for (const [name, packed] of Object.entries(artifact.files)) {
         assert.deepEqual(await readFile(entry.files[name]), unpack(packed));
