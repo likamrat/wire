@@ -524,8 +524,9 @@ export function createSelectControls(ux, { decorateOption = () => {}, pagingFor 
         trigger.append(value, chevron);
         // An intrinsic grid shares the trigger's real font and tracks option/font
         // changes without measuring the caption's smaller em size.
-        const sizer = select.closest(".chart-heading") ? document.createElement("span") : null;
+        const sizer = select.closest(".chart-heading") || select.dataset.selectWidth === "options" ? document.createElement("span") : null;
         if (sizer) {
+            trigger.classList.add("select-trigger-stable");
             sizer.className = "select-option-sizer";
             sizer.setAttribute("aria-hidden", "true");
             trigger.append(sizer);

@@ -19,7 +19,7 @@ import { promptAuthorStyles } from "./prompt-author-styles.mjs";
 import { analyzeLayoutStyles } from "./analyze-layout-styles.mjs";
 
 // These components already own their painted surface independently of their hit target.
-const textAction = ":is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.wire-account-trigger,.wire-account-action,.filter-chip,.report-step,.report-tile-open,.report-calendar-day,.saved-report-title,.saved-report-summary,[role=tab],.comparison-pattern-title,.time-column,.chart-row,.chart-data-action,.document-back,.document-view-mode,.prepared-file-choice,.saved-pdf-page-choice)";
+const textAction = ":is(button,a.button-link):not(.icon-only,.select-trigger,.theme-trigger,.ux-help,.ux-copy,.filter-clear,.navigation-collapse,.wire-account-trigger,.wire-account-action,.filter-chip,.report-step,.report-tile-open,.report-calendar-day,.trends-option,.trends-highlight,.saved-report-title,.saved-report-summary,[role=tab],.comparison-pattern-title,.time-column,.chart-row,.chart-data-action,.document-back,.document-view-mode,.prepared-file-choice,.saved-pdf-page-choice)";
 
 export const styles = `
 /* Shared screen presentation; saved output uses its own tokens. */

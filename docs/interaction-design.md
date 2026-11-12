@@ -9,6 +9,7 @@ and motion. For user instructions, use [Use WIRE](user-guide.md) or
 | --- | --- |
 | [Navigation](#navigation-and-return) | Accepted destinations, loading and return state |
 | [Analyze](#analyze-and-filters) | Filters, scope and chart reading |
+| [Trends](#trends) | Daily patterns, highlighted changes and exact supporting evidence |
 | [Interaction reader](#interaction-cards-and-reading) | Cards, call results, disclosures, Copy and selection |
 | [Search](#search) | Typed results, excerpts and exact Open |
 | [Reports](#reports) | Choices, prepared copies, saving and saved reading |
@@ -83,6 +84,61 @@ Definitions and table counts use the same accepted facts. A row finder filters
 only table labels, not analytical membership or totals. Overflow remains
 local, keyboard/touch accessible and truthful; do not shrink type or hide data.
 Use the shared [chart encodings](design.md#chart-reading) for those facts.
+
+## Trends
+
+Trends is a peer destination, not another Analyze widget. Its landing follows
+the Reports marketplace: a short overview and compact full-width choices.
+Selecting a trend opens focused reading; Back to Trends restores the activating
+choice and reading position. Default suggestions use local deterministic rules.
+Each suggested card names its measured author, tool, service or model, not just
+the trend family. Opening it selects its supporting series and date, including
+the correct daily page for a long range. Marketplace rows and highlight cards own their
+surface; they do not inherit an extra inset text-button frame.
+One chooser can replace them with a stable set; no threshold or chart-builder UI.
+
+Keep the 7/14/30/custom date family, defaulting to seven days. Every civil day
+remains separate in the selected IANA zone. Calendar rows organize daily cells;
+they do not aggregate a week into one observation. Long ranges page exact days
+after establishing complete membership. Date filtering never approves collection.
+
+Use prominent period counts, appropriate percentages with supporting counts and
+one measure label. Avoid repeated source captions, explanatory subtitles and
+prose narrating values already drawn. Keep necessary coverage qualifications;
+definitions belong in Chart guide. Differences in shares are percentage points.
+Selected-date bars use the same measure and zero-based scale as the chart:
+reach is not call share, and count views use the count axis rather than percent
+widths. Hiding series does not rescale that axis.
+
+Population filters require Apply; Cancel preserves the accepted scope.
+Series visibility does not change membership, rates or exact-data tables.
+Keep controls mounted, plot geometry and scroll anchors stable, and reserve the
+selected-date area's established height during same-view changes. No refocus or
+page jump after toggling a series. Daily marks have deliberate spacing; scroll
+the plot rather than shrinking labels, smoothing values or combining days.
+Measure selectors reserve their longest option's intrinsic width. Responsive
+layout updates settle the selected-date geometry before the next interaction;
+unchanged parent renders do not remount a chart or dismiss its hover value.
+Chart type scales with text size, and long recorded names wrap without truncation
+in legends, selected values and hover cards.
+
+Hover/focus belongs to a bar segment, nearby line sample or exact calendar cell,
+not a full-column invisible target. Use one compact, hoverable, dismissible card.
+Tool reach pairs interactions with call counts; service/model cards preserve
+overlap; errors separate tool failures and result signals; timing names available
+samples. Blank space cannot activate another mark. Escape, departure, scrolling,
+view changes and access withdrawal retire hover content. Keyboard arrows inspect
+dates/series; Enter and touch/click select the exact dated series for evidence.
+
+The selected subject and current measure remain visible above the date breakdown.
+View evidence uses that mark's exact supporting call identities, not the union
+of other shown series. Hiding its series preserves this selection and labels it
+hidden; changing measures preserves the series/date under the newly named measure.
+Before a mark is selected, the scope is explicitly the shown series for the day.
+The evidence dialog separates matching calls from the full interaction opened
+in the existing reader. Wider parent context does not expand the chart measure.
+Leaving or returning preserves only currently authorized state. Late responses
+cannot republish withdrawn data.
 
 ## Interaction cards and reading
 

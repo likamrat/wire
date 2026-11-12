@@ -10,7 +10,7 @@ export function createSessionJourney() {
         return route;
     }
     function returnRoute(value, includeSourceReturn = false) {
-        if (!value || !["analyze", "reports", "settings", "collection-status"].includes(value.view)) return null;
+        if (!value || !["analyze", "trends", "reports", "settings", "collection-status"].includes(value.view)) return null;
         const keys = ["view", "layer", "chart", "bucket", "range", "from", "to", "source", "tool", "services", "includeMissingService",
             "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "page", "expanded",
             "origin", "issues", "section", "setting", "task", "mode", "callSort", "compare", "aFrom", "aTo", "bFrom", "bTo", "comparisonView", "comparisonFocus", "analysisQuery", "search", "inspect", "order", "nativeGroup"];

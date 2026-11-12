@@ -28,6 +28,7 @@ export const uxIconSources = Object.freeze({
     "settings-selected": "settings", "collection-status-selected": "file-search",
     export: "file-output", menu: "menu", "navigation-home": "house", "navigation-analyze": "chart-column",
     "navigation-reports": "clipboard-list", "navigation-settings": "settings",
+    "navigation-trends": "chart-no-axes-combined",
     "navigation-records": "rotate-ccw-clock", "navigation-compare": "scale", "navigation-create-report": "file-text",
     "navigation-collapse": "panel-left", "navigation-expand": "panel-left",
     "search-analysis": "chart-no-axes-combined",

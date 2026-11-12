@@ -62,6 +62,35 @@ Author and Outcome choices remain a draft until **Apply**. **Reset filters**
 clears browsing restrictions, not collected activity or report selections.
 **Chart guide** explains the displayed measures and provides exact numbers.
 
+## Trends
+
+Choose **Trends** in the sidebar for a visual overview and seven ready-made
+views: prompt authors, tools, services, errors & failures, timing, response
+models and activity rhythm. Suggestions highlight supported observed changes;
+**Choose highlights** lets you keep your own choices instead.
+
+Use **Last 7 days**, **Last 14 days**, **Last 30 days** or **Custom dates**.
+Every date stays separate, including in longer ranges. Scroll inside a chart
+for more room; long custom ranges page through days without changing period totals.
+
+**Filters** changes the activity included. The chart's series checkboxes only
+show or hide lines; they do not recalculate percentage denominators.
+Tool **Interaction reach** measures how many interactions used a tool at least
+once, while **Call share** measures its portion of all calls. Both keep their
+supporting counts. Changes in shares use percentage points, not relative growth.
+
+Hover or focus a mark for its date and relevant values. Arrow keys move between
+dates and series; select a mark and choose **View evidence** for its matching
+calls, not the other series' calls. Opening a call shows its full interaction;
+closing the reader returns to the same selected trend. Hiding the selected
+series does not change its evidence.
+**Chart guide** and **View numbers** explain the measures and exact values.
+
+Prompt authors counts interactions with activity that day, not every message
+sent in Copilot. One interaction can appear on several days but counts once in
+the whole period. Missing history, undated calls and unavailable measurements
+remain distinct from zero. Suggestions are local rules, not AI or causal claims.
+
 ## Compare periods
 
 Choose **Compare periods** in the sliding left sidebar. A fresh comparison

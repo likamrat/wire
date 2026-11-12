@@ -2245,6 +2245,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             || route.view !== "analyze" || route.compare !== "periods") { periodReturnReading = null; return; }
         if (periodComparisonUI.consumer()) { restoreReading(saved.position); periodReturnReading = null; }
     }
+    const trendsUI = assessmentFactories.mountTrends({
+        root: $("trendsView"), api, time, ux,
+        getContext: () => ({ active: underlyingRoute().view === "trends", revision: state?.revision,
+            timeContext: viewerTime, publication: api.publicationToken(), stale: isStale || isLoading }),
+        reload: () => load(),
+        recordLink: row => link(row.tool, "request", { request: row.scenarioId, call: row.id }, "text-link"),
+    });
     const periodComparisonUI = assessmentFactories.periodComparison.mount({
         root: $("periodComparison"), setup: $("periodComparisonSetup"), toggle: $("comparePeriods"), api, time, ux, search: localSearch, categories, results,
         projection: createActivityProjection(time, recordedCategories, resultKeys),
@@ -2364,7 +2371,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const params = new URLSearchParams(rawQuery);
         const keys = ["layer", "chart", "bucket", "range", "from", "to", "source", "tool", "services", "includeMissingService", "withinServices", "service", "project", "result", "authors", "scope", "endpoint", "session", "request", "page", "expanded", "origin", "issues", "section", "setting", "task", "mode", "call", "callSort", "callRevision", "compare", "aFrom", "aTo", "bFrom", "bTo", "bundle", "inspect", "order",
             "nativeSource", "nativeRevision", "nativeSourceRevision", "nativeOrdinal", "nativeGroup", "comparisonView", "comparisonFocus"];
-        const values = { view: ["analyze", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
+        const values = { view: ["analyze", "trends", "home", "overview", "activity", "calls", "request", "reports", "settings", "collection-status"].includes(view) ? view : "analyze" };
         for (const key of keys) if (params.has(key)) values[key] = params.get(key);
         if (rawView === "activity" && values.session && values.result && !values.mode) values.mode = "calls";
         if (view === "reports" && !params.has("task") && (rawView === "report" || values.request)) values.task = "create";
@@ -3005,6 +3012,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         }
     }
     function query(value = route) {
+        if (sessionJourney.underlying(value).view === "trends") return {
+            layer: "tool", groupBy: "workload", bucket: "month", filters: { scope: "all", sources: ["github-copilot"] }, limit: 8, timeContext: viewerTime,
+        };
         return { layer: value.layer || "tool", groupBy: value.chart === "endpoint" ? "endpoint" : "workload", bucket: filterState.bucket(value), filters: filterState.query(value), limit: 8, timeContext: viewerTime };
     }
     function validateAnalytics(data, records) {
@@ -3554,7 +3564,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         if (!analytics || queryChanged || isLoading) {
             if (analytics && (route.view !== previousRoute.view || route.compare !== previousRoute.compare)) {
                 const destination = browseName(route) === "compare" ? "compare" : route.view;
-                const name = { analyze: "Analyze", compare: "Compare periods", reports: "Reports", settings: "Settings",
+                const name = { analyze: "Analyze", trends: "Trends", compare: "Compare periods", reports: "Reports", settings: "Settings",
                     request: "Interaction", "collection-status": "Collection status" }[destination];
                 const active = destination === "request" ? "analyze" : destination === "collection-status" ? "settings" : destination;
                 for (const node of document.querySelectorAll("nav [data-nav]")) {
@@ -4029,10 +4039,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             ordinary: route.view === "analyze" && route.compare !== "periods" && (semanticQuery === null || semanticBound) });
         const finishRecoveryPresentation = assessmentUI?.prepareRecoveryPresentation();
         $("wireAnalysisSearchNotice").hidden = semanticQuery === null || route.view !== "analyze" || !$("wireAnalysisSearchNotice").textContent;
-        const active = browseName(route) === "compare" ? "compare" : route.view === "request" ? "analyze" : route.view === "collection-status" ? "settings" : route.view;
+        const active = browseName(route) === "compare" ? "compare" : route.view === "request" ? underlyingRoute().view === "trends" ? "trends" : "analyze" : route.view === "collection-status" ? "settings" : route.view;
         document.querySelectorAll("[data-nav]").forEach((node) => {
             const view = node.dataset.nav;
-            const target = view === "compare" ? browseRoute("compare") : view === "analyze" ? comparisonExitRoute(navigationOrigin) : routeFor(view, { request: undefined, task: undefined });
+            const target = view === "compare" ? browseRoute("compare") : view === "analyze" ? comparisonExitRoute(navigationOrigin)
+                : view === "trends" ? { view: "trends" } : routeFor(view, { request: undefined, task: undefined });
             node.href = routeUrl(target);
             if (["analyze", "compare"].includes(view) && (target.search?.trim() || target.analysisQuery !== null && target.analysisQuery !== undefined)) {
                 node.href += (node.href.includes("?") ? "&" : "?") + "privateView=required";
@@ -4041,15 +4052,15 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             else node.removeAttribute("aria-current");
         });
         const settings = route.view === "settings", operational = route.view === "collection-status", configurationOrStatus = settings || operational;
-        for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
+        for (const [view, ids] of Object.entries({ analyze: ["homeView", "activityView"], trends: ["trendsView"], request: ["requestView"], reports: ["reportsView"], settings: ["settingsView"], "collection-status": ["collectionStatusView"] })) {
             for (const id of ids) $(id).hidden = route.view !== view || view === "analyze" && semanticQuery !== null && !semanticBound;
         }
-        $("filters").hidden = configurationOrStatus || route.view === "request" || route.view === "reports";
+        $("filters").hidden = configurationOrStatus || ["request", "reports", "trends"].includes(route.view);
         $("filterHeading").hidden = false;
         $("appliedFilters").hidden = $("filters").hidden;
-        $("filterChips").hidden = configurationOrStatus || route.view === "reports" || route.view === "request";
-        $("coverage").hidden = configurationOrStatus || route.view === "request";
-        $("coverageNotice").hidden = configurationOrStatus;
+        $("filterChips").hidden = configurationOrStatus || ["reports", "request", "trends"].includes(route.view);
+        $("coverage").hidden = configurationOrStatus || ["request", "trends"].includes(route.view);
+        $("coverageNotice").hidden = configurationOrStatus || route.view === "trends";
         $("settingsDraftNotice").hidden = settings || !collectionSettings?.hasDraft();
         renderSettingsNavigation();
         finishRecoveryPresentation?.();
@@ -4059,6 +4070,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const selectedRequest = state.scenarios.find(scenario => scenario.scenarioId === route.request);
         const titles = {
             analyze: ["Analyze", ""],
+            trends: ["Trends", ""],
             request: [selectedRequest ? route.call ? "Call in context" : "Interaction" : "Interaction unavailable", ""],
             reports: [route.bundle ? savedReportView?.bundleId === route.bundle && savedReportView.entryKey === route.savedEntry
                 ? savedReportView.title : savedTitle(state.exports?.find(item => item.bundleId === route.bundle))
@@ -4105,7 +4117,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         contextualAction.classList.toggle("button-link", !reviewingSelection);
         contextualAction.classList.toggle("text-link", reviewingSelection);
         sessionReportButton.hidden = route.view !== "analyze" || !route.session || applied.layer === "http";
-        $("resetView").hidden = configurationOrStatus || route.view === "reports" || route.view === "request";
+        $("resetView").hidden = configurationOrStatus || ["reports", "request", "trends"].includes(route.view);
         $("resetView").disabled = !viewChanged();
         const resetHost = route.view === "analyze" ? $("filterTools") : $("scopeResetActions");
         if ($("resetView").parentElement !== resetHost) resetHost.append($("resetView"));
@@ -4117,6 +4129,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         const returnLabel = searchReturn ? "Back to search" : returnRoute?.view === "collection-status" ? "Back to history gaps"
             : route.view === "analyze" ? route.returnToSessions ? "Back to results" : applied.layer === "http" ? "Clear source filter" : "Clear chat filter"
             : returnRoute?.view === "reports" ? "Back to report scope"
+            : returnRoute?.view === "trends" ? "Back to Trends"
             : returnRoute?.view === "settings" ? "Back to Settings"
             : route.returnToResults ? "Back to results" : "Back to Analyze";
         const returnKey = JSON.stringify([returnRoute, returnLabel, searchReturn]);
@@ -7753,6 +7766,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (sourceCollection.active) renderBoundedAnalyze();
         }
         if (route.view === "reports") renderReports();
+        trendsUI.update();
         if (route.view === "settings" && route.section === "privacy") assessmentUI.setup($("assessmentSetup"));
         renderCoverage();
         updateSelection();
@@ -7916,7 +7930,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             && collection.lastCheck?.id === model.sourceFailure.lastCheckId
             && collection.error === model.sourceFailure.error;
         host.hidden = ["settings", "collection-status"].includes(route.view) || !notice
-            || ["reports", "request"].includes(route.view) && notice?.severity === "normal"
+            || ["reports", "request", "trends"].includes(route.view) && notice?.severity === "normal"
             || route.view === "analyze" && notice?.severity === "normal" && collection?.state === "paused" && collection?.config?.approved
             || !$("message").hidden && $("message").dataset.connectionFailure === "true"
             || Boolean(collectionReadError) && refreshOwnsReadFailure()
@@ -9905,7 +9919,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         "recollectionUpdateStatus", "newDataNotice",
     ];
     function accessOwners() {
-        return [liveSearchUI, chartReferenceUI, periodComparisonUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
+        return [liveSearchUI, chartReferenceUI, periodComparisonUI, trendsUI, analyzeControls, percentages, nativeActivity, boundedNative, assessmentUI,
             draft, reportJourney, reportExperience, reportSaveWarning, reportComparisonUI, deletionUI, recollectionUI, savedArtifactUI, collectionSettings, sourceSettings, recorderUI,
             ...(accountProfile ? [accountProfile] : []), ...(microsoftProfile ? [microsoftProfile] : []), ...(accountUI ? [accountUI] : [])];
     }

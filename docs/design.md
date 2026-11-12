@@ -25,9 +25,10 @@ Evidence definitions and frozen-file requirements remain in the
 
 | Surface | Reading and navigation role |
 | --- | --- |
-| Sliding left sidebar | Analyze, Reports and Compare periods as peer destinations; Account/Settings at the bottom |
+| Sliding left sidebar | Analyze, Trends, Reports and Compare periods as peer destinations; Account/Settings at the bottom |
 | Expanded, collapsed and narrow navigation | Same nodes and destinations; Settings works without a profile |
 | Analyze | Charts and one interaction list; report selection stays independent of browsing |
+| Trends | Visual highlights and a marketplace of daily patterns; focused charts lead to exact evidence |
 | Right contextual surface | Interaction reading and saved-item inspection; one header, scroll area and fixed action region |
 | Main workspace | Prepared and saved report reading |
 

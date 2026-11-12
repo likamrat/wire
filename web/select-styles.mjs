@@ -54,6 +54,8 @@ export const selectStyles = `
 .chart-heading .select-chevron {grid-area:1/2}
 .select-option-sizer {display:grid;visibility:hidden;pointer-events:none;white-space:nowrap}
 .select-option-sizer>span {grid-area:1/1}
+.select-trigger-stable .select-value,.select-trigger-stable .select-option-sizer {grid-area:1/1}
+.select-trigger-stable .select-chevron {grid-area:1/2}
 .chart-heading .select-trigger::before {border:0;background:transparent}
 .chart-heading .select-trigger:hover:not(:disabled)::before {background:var(--hover)}
 .chart-heading .select-trigger[aria-expanded=true]::before {background:var(--accent-soft)}
