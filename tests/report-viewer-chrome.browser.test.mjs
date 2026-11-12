@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { fixture, privateFixture, chooseTheme, selectActivityOption } from "./helpers.mjs";
@@ -8,7 +9,7 @@ import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { reportHash } from "../lib/report-artifacts.mjs";
-import { brandMark, brandLockup, brandDarkLockup } from "../lib/branding.mjs";
+import { brandMark, brandV1Mark, brandLockup, brandDarkLockup } from "../lib/branding.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 async function setup(t) {
@@ -158,6 +159,37 @@ test("older Report reading chooses visible WIRE artwork without changing origina
     assert.ok((await logoContrast(page, mark)).contrast >= 3);
     await capture("prepared-report-dark");
     if (process.env.WIRE_VIEWER_CHROME_PROOFS) await writeFile(path.join(process.env.WIRE_VIEWER_CHROME_PROOFS, "logo-contrast.json"), JSON.stringify(measurements, null, 2));
+});
+
+test("v1 Markdown file previews keep frozen artwork while application chrome uses corrected contours", { timeout: 60000 }, async t => {
+    const { page, context, originals, capture } = await setup(t);
+    const fixtures = JSON.parse(await readFile(new URL("./report-brand-v1.fixture.json", import.meta.url), "utf8"));
+    const artifact = fixtures.artifacts.find(item => item.format === "markdown");
+    const unpack = packed => gunzipSync(Buffer.from(packed.gzipBase64, "base64"));
+    const entry = JSON.parse(unpack(artifact.registration).toString("utf8"));
+    entry.bundleDir = path.join(context.dataDir, "exports", entry.bundleId);
+    entry.files = {};
+    await mkdir(entry.bundleDir, { recursive: true });
+    for (const [name, packed] of Object.entries(artifact.files)) {
+        const file = path.join(entry.bundleDir, name), bytes = unpack(packed);
+        entry.files[name] = file;
+        originals.set(file, bytes);
+        await writeFile(file, bytes);
+    }
+    await updateBoardState(context, state => { state.exports.push(entry); });
+    await page.reload();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await page.getByRole("button", { name: "View report: Frozen Human Path v1", exact: true }).click();
+    await selectActivityOption(page, "savedReaderFormat", "markdown");
+    const lettering = svg => svg.match(/id="wire-light-wire-lettering"[^>]* d="([^"]+)"/)[1];
+    for (const theme of ["light", "dark"]) {
+        await chooseTheme(page, theme);
+        const saved = page.locator("#savedReportReader .saved-report-mark .brand-logo:visible");
+        await expect(saved.locator(":scope > path")).toHaveAttribute("d", lettering(brandV1Mark));
+        const chrome = page.locator("#shellBrand .brand-logo:visible");
+        await expect(chrome.locator(":scope > path")).toHaveAttribute("d", lettering(brandLockup));
+        await capture(`frozen-v1-markdown-${theme}`);
+    }
 });
 
 test("file modes are compact distinct segments with preserved keyboard and file semantics", { timeout: 60000 }, async t => {

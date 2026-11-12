@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/wire-lockup-dark.svg">
-    <img src="assets/wire-lockup.svg" alt="WIRE" width="560">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/wire-lockup-dark.svg?v=human-path-2">
+    <img src="assets/wire-lockup.svg?v=human-path-2" alt="WIRE" width="560">
   </picture>
 </p>
 

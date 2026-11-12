@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { PRODUCT_NAME, PRODUCT_DESCRIPTION, PRODUCT_TITLE, FAVICON_PATH, logoSvg, darkLogoSvg,
     wordmarkSvg, darkWordmarkSvg, lockupSvg, darkLockupSvg,
-    brandMark, brandDarkMark, brandLockup, brandDarkLockup, brandCompactMark } from "../lib/branding.mjs";
+    brandMark, brandDarkMark, brandV1Mark, brandV1DarkMark, brandLockup, brandDarkLockup, brandCompactMark } from "../lib/branding.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
 import { currentReportPresentation, hasSupportedReportPresentation, reportBrandHeader } from "../lib/report-presentation.mjs";
 
@@ -60,7 +60,7 @@ test("the selected identity is deterministic vector artwork with a shared compac
 });
 
 test("inline identity layers keep decorative semantics and independent paint IDs", () => {
-    for (const [markup, theme] of [[brandMark, "light"], [brandDarkMark, "dark"], [brandLockup, "light"], [brandDarkLockup, "dark"]]) {
+    for (const [markup, theme] of [[brandMark, "light"], [brandDarkMark, "dark"], [brandV1Mark, "light"], [brandV1DarkMark, "dark"], [brandLockup, "light"], [brandDarkLockup, "dark"]]) {
         assert.match(markup, /class="brand-logo" aria-hidden="true" focusable="false"/);
         assert.ok(markup.includes(`data-brand-theme="${theme}"`));
         assert.doesNotMatch(markup, /<title|<desc|<style|aria-labelledby|role="img"/);
@@ -81,6 +81,11 @@ test("frozen presentation, not global screen branding, chooses the report identi
         assert.ok(header.includes(brandMark + brandDarkMark));
         assert.ok(!header.includes(brandLockup));
     }
+    const v1 = { presentation: { schemaVersion: 3, originExplanationVersion: 1, brandVersion: 1 } };
+    assert.ok(hasSupportedReportPresentation(v1));
+    const frozenHeader = reportBrandHeader("Shipped Human Path", v1);
+    assert.ok(frozenHeader.includes(brandV1Mark + brandV1DarkMark));
+    assert.ok(!frozenHeader.includes(brandLockup));
     const header = reportBrandHeader("Current", { presentation: currentReportPresentation });
     assert.ok(header.includes(brandLockup + brandDarkLockup));
     assert.ok(!header.includes(brandMark));
@@ -89,15 +94,17 @@ test("frozen presentation, not global screen branding, chooses the report identi
 
 test("README and application use the current identity without a painted descriptor", () => {
     const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
-    assert.match(readme, /srcset="assets\/wire-lockup-dark.svg"/);
-    assert.match(readme, /src="assets\/wire-lockup.svg" alt="WIRE" width="560"/);
+    assert.match(readme, /srcset="assets\/wire-lockup-dark.svg\?v=human-path-2"/);
+    assert.match(readme, /src="assets\/wire-lockup.svg\?v=human-path-2" alt="WIRE" width="560"/);
     assert.match(readme, /<\/p>\s+# Work IQ Request Explorer(?:\r?\n){2}/);
     const html = renderHtmlShell("a".repeat(64), "synthetic-branding");
     assert.ok(html.includes(`<link rel="icon" type="image/svg+xml" href="${FAVICON_PATH}">`));
     assert.ok(html.includes(`${brandLockup}${brandDarkLockup}${brandCompactMark}</a></div>`));
     assert.ok(html.includes(`<template id="reportBrand">${brandMark}${brandDarkMark}</template>`),
         "Historical readers retain their original theme assets");
-    assert.ok(html.includes(`<template id="reportBrandV1">${brandLockup}${brandDarkLockup}</template>`),
+    assert.ok(html.includes(`<template id="reportBrandV1">${brandV1Mark}${brandV1DarkMark}</template>`),
+        "Shipped Human Path Markdown previews retain their declared artwork");
+    assert.ok(html.includes(`<template id="reportBrandV2">${brandLockup}${brandDarkLockup}</template>`),
         "Current Markdown previews use the declared current identity");
     assert.doesNotMatch(html, /brand-caption|class="brand-name"/);
     assert.doesNotMatch(html, /<(?:img|link|script)[^>]+(?:src|href)=["']https?:/i);

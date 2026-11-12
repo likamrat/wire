@@ -57,7 +57,7 @@ ${gradient("human-path-lower", artwork.symbol.lowerGradient, palette)}
 `;
 }
 
-// Historical wire-wordmark assets are frozen report inputs, not generator outputs.
+// Historical wire-wordmark and wire-report-brand-v1 assets are never generator outputs.
 for (const [file, theme, options] of [
     ["wire-lockup.svg", "light", {}],
     ["wire-lockup-dark.svg", "dark", {}],

@@ -111,11 +111,14 @@ Regenerate current lockups and compact icons with
 `node scripts/build-brand-lockups.mjs`. The full and compact assets share
 symbol coordinates so the sidebar glide stays registered. The favicon supports
 the system color scheme; the inline compact mark follows WIRE's chosen theme.
+Contours use deliberate lines and curves, not pixel-by-pixel raster traces.
+Inspect at README size and enlarged scale as well as in the compact sidebar.
 
-The older `wire-wordmark` SVGs are immutable historical report inputs. New
-reports declare `presentation.brandVersion: 1` for the Human Path identity.
-Preserve old assets, rendering and theme handling when adding a later identity;
-do not apply current branding globally to historical report snapshots.
+The older `wire-wordmark` and `wire-report-brand-v1` SVGs are immutable
+historical report inputs. New reports declare `presentation.brandVersion: 2`
+for the clean-contour Human Path artwork. Version 1 retains the original
+Human Path rendering; unversioned snapshots retain the older wordmarks.
+Do not apply current branding globally to historical report snapshots.
 
 ## Chart reading
 

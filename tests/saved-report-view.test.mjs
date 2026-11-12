@@ -67,13 +67,48 @@ for (const format of ["json", "markdown"]) test(`exact ad69 ${format} artifacts 
     }
 });
 
+for (const format of ["json", "markdown"]) test(`shipped Human Path v1 ${format} retains its complete original saved reading`, async t => {
+    const fixtures = JSON.parse(await readFile(new URL("./report-brand-v1.fixture.json", import.meta.url), "utf8"));
+    const artifact = fixtures.artifacts.find(item => item.format === format);
+    const license = await readFile(new URL("../assets/fonts/OFL.txt", import.meta.url));
+    const materialization = Object.entries(fixtures.fontLicenseMaterializations)
+        .find(([, hash]) => hash === reportHash(license))?.[0];
+    assert.ok(materialization, "The font license must match a v1-reader-qualified materialization.");
+    const unpack = packed => {
+        const bytes = gunzipSync(Buffer.from(packed.gzipBase64, "base64"));
+        assert.equal(bytes.length, packed.bytes);
+        assert.equal(reportHash(bytes), packed.sha256);
+        return bytes;
+    };
+    const { context } = await privateFixture(t, []);
+    const entry = JSON.parse(unpack(artifact.registration).toString("utf8"));
+    entry.bundleDir = path.join(context.dataDir, "exports", entry.bundleId);
+    entry.files = {};
+    await mkdir(entry.bundleDir, { recursive: true });
+    for (const [name, packed] of Object.entries(artifact.files)) {
+        entry.files[name] = path.join(entry.bundleDir, name);
+        await writeFile(entry.files[name], unpack(packed));
+    }
+    await updateBoardState(context, state => { state.exports.push(entry); });
+    const before = await loadBoardState(context);
+    const view = await readSavedReportView(context, before, entry.bundleId);
+    const expected = artifact.expectedViews[materialization];
+    assert.equal(reportHash(view.text), expected.sha256, "The complete shipped v1 rendering stays frozen.");
+    assert.equal(Buffer.byteLength(view.text), expected.bytes);
+    assert.equal((await readSavedArtifactFile(context, before, entry.bundleId, "report", format)).brandVersion, 1);
+    assert.deepEqual(await loadBoardState(context), before);
+    for (const [name, packed] of Object.entries(artifact.files)) {
+        assert.deepEqual(await readFile(entry.files[name]), unpack(packed));
+    }
+});
+
 test("new report origin explanations are versioned and survive JSON-only saved reading", async t => {
     const record = fixture("current-origin");
     record.userPrompt.authorship = { actor: "unknown", basis: "conflicting-source" };
     const { context } = await privateFixture(t, [record]), controller = createExportController(context);
     const bundle = await save(controller, context, { formats: ["json"], promptMode: "original" });
     const snapshot = JSON.parse(await readFile(bundle.files["product-report.json"], "utf8"));
-    assert.deepEqual(snapshot.presentation, { schemaVersion: 3, originExplanationVersion: 1, brandVersion: 1 });
+    assert.deepEqual(snapshot.presentation, { schemaVersion: 3, originExplanationVersion: 1, brandVersion: 2 });
     t.mock.method(promptAuthorship, "reason", () => "Changed live screen explanation.");
     const state = await loadBoardState(context), view = await readSavedReportView(context, state, bundle.bundleId);
     assert.match(view.text, /WIRE could not reconcile the recorded origin evidence\./);
@@ -142,7 +177,7 @@ test("Markdown-only reports have an in-app HTML view without changing their save
     assert.match(view.text, /<h1>Portable saved activity<\/h1>/);
     assert.match(view.text, /<table>/);
     const file = await readSavedArtifactFile(context, state, bundle.bundleId, "report", "markdown");
-    assert.equal(file.brandVersion, 1, "The file preview obtains branding from the verified manifest, not the current screen");
+    assert.equal(file.brandVersion, 2, "The file preview obtains branding from the verified manifest, not the current screen");
     assert.deepEqual(await readFile(bundle.files["product-report.md"]), bytes);
     assert.deepEqual(await loadBoardState(context), state);
 });

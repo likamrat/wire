@@ -326,9 +326,11 @@ or corrupted payloads block preparation.
 Human summaries may omit redundant prose, not selected evidence or
 qualifications. Screen tokens, icons and typography cannot restyle frozen files.
 
-New reports declare `presentation.brandVersion: 1` for the Magenta Human Path
-identity. Snapshots without that field retain the historical brand; unknown
-brand versions are unsupported, not permission to use the current logo.
+New reports declare `presentation.brandVersion: 2` for the clean-contour
+Magenta Human Path artwork. Version 1 retains its originally shipped artwork
+in the frozen `wire-report-brand-v1` SVGs. Snapshots without that field retain
+the historical `wire-wordmark` brand; unknown brand versions are unsupported,
+not permission to use the current logo.
 Keep historical logo assets and report styles unchanged so JSON/Markdown-only
 Open preserves the complete historical rendering, not merely the saved bytes.
 An identity change requires a new presentation brand version and preservation
