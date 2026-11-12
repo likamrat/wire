@@ -6906,7 +6906,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 Number.isSafeInteger(groups) && groups >= 0 ? `${count(groups)} ${hasNative ? "GitHub " : ""}interaction${groups === 1 ? "" : "s"}` : "",
                 hasNative ? `${count(conversations)} Microsoft conversation${conversations === 1 ? "" : "s"}` : "",
             ].filter(Boolean).join(" / ");
-            return { bundle, index, prepared, label, title: savedTitle(bundle) };
+            return { bundle, index, prepared, label, name: title, preparedLabel: date, title: savedTitle(bundle) };
         });
         $("savedReportOrder").value = route.order || "newest";
         rows.sort((a, b) => a.prepared === null ? b.prepared === null ? a.index - b.index : 1
@@ -6923,10 +6923,10 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             onPage: () => leaveSavedInspectorContext(), wrapList: list => {
                 const host = el("div", "saved-report-table"), columns = el("div", "saved-library-columns");
                 columns.setAttribute("aria-hidden", "true");
-                columns.append(el("span", "", "Report"), el("span", "", "Report text"), el("span", "", "Period"),
-                    el("span", "", "Files"), el("span", "", "Actions"));
+                columns.append(el("span", "", "Report"), el("span", "", "Report text"), el("span", "", "Actions"));
+                list.classList.add("saved-report-rows");
                 host.append(columns, list); return host;
-            }, renderItem: ({ bundle, title }) => {
+            }, renderItem: ({ bundle, title, name, preparedLabel }) => {
             detailOwner = "bundle:" + bundle.bundleId;
             const outer = viewKey(el("article", "saved-library-row"), detailOwner);
             outer.dataset.bundleId = bundle.bundleId;
@@ -6937,19 +6937,29 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (current()) openSavedReport(bundle, event.currentTarget);
             }, "saved-report-title"), "open-bundle:" + bundle.bundleId);
             summary.disabled = !readable;
-            summary.replaceChildren(ux.icon("reports"), el("span", "saved-report-name", title));
+            const caption = el("span", "saved-report-caption");
+            caption.append(el("span", "saved-report-name", name));
+            if (preparedLabel !== "Time not recorded") caption.append(el("span", "saved-report-prepared", "Prepared " + preparedLabel));
+            const periodLabel = savedPeriodLabel(bundle);
+            if (periodLabel) caption.append(el("span", "saved-report-period", "Report period: " + periodLabel));
+            summary.replaceChildren(ux.icon("reports"), caption);
             summary.setAttribute("aria-label", "View report: " + title);
+            const metadata = Array.from(caption.children).slice(1);
+            if (metadata.length) summary.setAttribute("aria-describedby", metadata.map((node, index) => {
+                node.id = "saved-report-detail-" + encodeURIComponent(bundle.bundleId) + "-" + index;
+                return node.id;
+            }).join(" "));
             ux.tooltip(summary, "View report");
             const identity = el("span", "saved-report-identity");
-            const privacyLabel = ({ masked: "Personal details hidden where detected", original: "Chat details kept",
+            const privacyLabel = ({ masked: "Detected personal details hidden", original: "Chat details kept",
                 none: "Prompts and replies left out" })[bundle.promptMode] ?? "Text treatment not recorded";
             const privacy = el("span", "saved-report-privacy");
             const privacyIcon = ux.icon(({ masked: "report-masked", original: "report-original", none: "report-no-text" })[bundle.promptMode] ?? "unobserved");
             privacy.append(privacyIcon, el("span", "", privacyLabel));
             identity.append(summary);
-            const period = el("span", "saved-report-period", savedPeriodLabel(bundle));
-            const files = viewKey(button("", () => {}, "quiet saved-report-files"), "files-bundle:" + bundle.bundleId);
-            ux.utility(files, "report-files", "Files for " + title, "Choose a saved file");
+            const files = viewKey(button("Files", () => {}, "quiet saved-report-files"), "files-bundle:" + bundle.bundleId);
+            files.prepend(ux.icon("report-files")); files.setAttribute("aria-label", "Files for " + title);
+            ux.tooltip(files, "Choose a saved file");
             const fileEntries = ["html", "pdf", "json", "markdown", "manifest"].filter(format =>
                 Object.hasOwn(bundle.files ?? {}, savedFileName(bundle, format)));
             files.disabled = !fileEntries.length;
@@ -6965,10 +6975,17 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                 if (current()) savedArtifactUI.open({ artifactKind: bundle.kind ?? "report", artifactId: bundle.bundleId, label: title }, remove);
             }, "quiet danger"), "delete-bundle:" + bundle.bundleId);
             remove.disabled = isStale && !isLoading || bundle.canDelete === false;
-            actions.append(inspect, remove);
-            outer.prepend(identity, privacy, period, files, actions);
+            actions.append(files, inspect, remove);
+            outer.prepend(identity, privacy, actions);
             return outer;
         } });
+        const unlisted = matching.filter(({ bundle }) => bundle.kind !== "comparison" && !savedPeriodLabel(bundle)).length;
+        if (unlisted) {
+            const note = el("p", "saved-period-availability", unlisted === 1
+                ? "The activity period isn't listed for one saved entry."
+                : `Activity periods aren't listed for ${unlisted === matching.length ? "these " : ""}${count(unlisted)} saved entries.`);
+            $("bundleList").append(note);
+        }
         $("bundleList").append(history);
         })();
         if (route.inspect) renderSavedInspector();
@@ -6976,10 +6993,12 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function savedLibraryPageKey() { return "saved-reports:" + localQuery("savedReportSearch") + (route.order === "oldest" ? ":oldest" : ""); }
     function savedPeriodLabel(bundle) {
+        if (bundle.kind === "comparison") return null;
+        if (bundle.reportType === "period-comparison") return "Two saved periods";
         const period = bundle.reportPeriod;
         return period?.range === "capture" ? "All retained dates" : period?.from && period?.to
             ? `${time.formatDate(period.from, bundle.timeContext, true)} to ${time.formatDate(period.to, bundle.timeContext, true)}`
-            : bundle.reportType === "period-comparison" ? "Two saved periods" : "Not recorded";
+            : null;
     }
     function positionSavedMenu(menu, trigger) {
         const box = trigger.getBoundingClientRect(), bounds = menu.getBoundingClientRect();
@@ -7163,11 +7182,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             if (Number.isSafeInteger(bundle.selectionScope?.requestGroups) && bundle.selectionScope.requestGroups >= 0) add(hasNative ? "GitHub interactions" : "Interactions", count(bundle.selectionScope.requestGroups));
             if (hasNative) add("Microsoft conversations", count(nativeConversations));
             add("Prompts", ({ none: "None", masked: "Masked", original: "Original" })[bundle.promptMode]);
-            add("Period", savedPeriodLabel(bundle));
+            add("Report period", savedPeriodLabel(bundle));
             add("Purpose", ({ all: "All activity", errors: "Errors & failures", completed: "Completed calls",
                 mine: "My prompts", agent: "Agent prompts", custom: "Activity report" })[bundle.reportPurpose]);
             if (bundle.timeContext) add("Timezone", time.label(bundle.timeContext));
             body.append(facts);
+            if (bundle.kind !== "comparison" && !savedPeriodLabel(bundle)) body.append(el("p", "saved-period-availability",
+                "Activity period not listed in this saved entry. The report itself may include its dates. Preparation time is separate from the activity period."));
             if (bundle.reportType === "period-comparison") body.append(el("p", "", "Period A and Period B are fixed saved cohorts."));
             const target = { artifactKind: bundle.kind === "comparison" ? "comparison" : "report", artifactId: bundle.bundleId };
             const remove = button(bundle.kind === "comparison" ? "Delete saved comparison" : "Delete report", event => {

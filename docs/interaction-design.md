@@ -220,19 +220,23 @@ directly. A fresh report ignores old Analyze restrictions.
 Selected and Current remain available through inclusion
 controls and their original context-qualified entries.
 
-Saved rows align Report, Report text, Period, Files and Actions. The name and its leading document
-icon open in-app reading; one separate Files control offers registered formats.
+Saved rows align Report, Report text and Actions. The name and its leading document
+icon open in-app reading. Preparation time is a secondary line under the name,
+not part of a generated title. Known saved periods appear there separately.
+A single list note identifies missing period metadata instead of repeating
+"Not recorded" in a mostly empty column. It does not infer a period from preparation time.
+Files, Inspect details and Delete stay together as visible, labeled row actions.
 A padded title target owns its hover and keyboard-focus background. Keep the
 text-treatment icon and its explanation in their own column. This secondary,
 regular-weight text stays visible and readable without hovering; it makes no
 anonymization guarantee, and missing metadata is not inferred.
-Inspect details and Delete report/comparison are visible, labeled row actions;
-the header menu preserves bulk deletion with its existing confirmation.
+Delete uses a quiet text treatment; its confirmation retains the destructive action.
+The header menu preserves bulk deletion with its existing confirmation.
 Inspection alone does not read, download or delete a file.
 Every report choice has accessible help. Saved-report paging follows the rows
 in visual and keyboard order. Privacy and file actions keep their separate
-meaning. Reflow the period under the title based on the list's available width
-and text size before secondary columns squeeze the name.
+meaning. Rows share column widths; narrow layouts stack identity/dates, text
+treatment and actions without shortening their contents.
 
 ### Returning to an unfinished report
 

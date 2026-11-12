@@ -191,7 +191,8 @@ test("file modes are compact distinct segments with preserved keyboard and file 
 test("saved rows expose aligned text treatment and labeled inspect/delete actions", { timeout: 60000 }, async t => {
     const { page, browser, url, bundles, capture, context, exports } = await setup(t);
     for (const [title, mode] of [["Cedar planning decisions and unresolved release handoffs across multiple teams", "original"], ["Cedar report without prompts", "none"]]) {
-        const prepared = await exports.preview(title, undefined, { title, promptMode: mode, formats: ["html"] },
+        const prepared = await exports.preview(title, undefined, { title, promptMode: mode, formats: ["html"],
+            ...(mode === "none" ? { dateSelection: { range: "custom", from: "2026-10-01", to: "2026-11-30" } } : {}) },
             { kind: "all", revision: (await loadBoardState(context)).revision });
         await exports.review(title, prepared.previewId, true);
         await exports.confirm(title, prepared.previewId, true);
@@ -199,14 +200,24 @@ test("saved rows expose aligned text treatment and labeled inspect/delete action
     const comparison = await exports.previewComparison("row-comparison", bundles[0].bundleId, bundles[1].bundleId, { formats: ["html"] });
     await exports.reviewComparison("row-comparison", comparison.previewId, true);
     await exports.confirmComparison("row-comparison", comparison.previewId, true);
-    await updateBoardState(context, state => { delete state.exports.find(entry => entry.bundleId === bundles[0].bundleId).promptMode; });
+    await updateBoardState(context, state => {
+        const older = state.exports.find(entry => entry.bundleId === bundles[0].bundleId);
+        delete older.promptMode; delete older.reportPeriod;
+    });
     const before = await loadBoardState(context), bytes = new Map();
     for (const entry of before.exports) for (const file of Object.values(entry.files)) bytes.set(file, await readFile(file));
     await page.reload();
     await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
     const rows = page.locator(".saved-library-row");
     const current = rows.filter({ hasText: "Cedar current report" });
-    await expect(current.locator(".saved-report-privacy")).toContainText("Personal details hidden where detected");
+    await expect(current.locator(".saved-report-privacy")).toContainText("Detected personal details hidden");
+    await expect(current.locator(".saved-report-period")).toHaveText("Report period: All retained dates");
+    await expect(current.locator(".saved-report-title")).toHaveAccessibleDescription(/Prepared .+ Report period: All retained dates/);
+    await expect(rows.filter({ hasText: "Cedar older report" }).locator(".saved-report-period")).toHaveCount(0);
+    await expect(rows.filter({ hasText: "Cedar report without prompts" }).locator(".saved-report-period")).toHaveText("Report period: Oct 1, 2026 to Nov 30, 2026");
+    await expect(rows.filter({ hasText: "Cedar report without prompts" }).locator(".saved-report-title"))
+        .toHaveAccessibleDescription(/Prepared .+ Report period: Oct 1, 2026 to Nov 30, 2026/);
+    await expect(rows.filter({ hasText: "Report comparison" }).locator(".saved-report-period")).toHaveCount(0);
     await expect(rows.filter({ hasText: "Cedar older report" }).locator(".saved-report-privacy")).toContainText("Text treatment not recorded");
     await expect(rows.filter({ hasText: "Cedar planning decisions" }).locator(".saved-report-privacy")).toContainText("Chat details kept");
     await expect(rows.filter({ hasText: "Cedar report without prompts" }).locator(".saved-report-privacy")).toContainText("Prompts and replies left out");
@@ -238,7 +249,7 @@ test("saved rows expose aligned text treatment and labeled inspect/delete action
     await page.setViewportSize({ width: 390, height: 950 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     await current.scrollIntoViewIfNeeded();
-    await expect(current.locator(".saved-report-privacy")).toContainText("Personal details hidden where detected");
+    await expect(current.locator(".saved-report-privacy")).toContainText("Detected personal details hidden");
     await expect(current.getByRole("button", { name: "Inspect details", exact: true })).toBeVisible();
     await expect(current.getByRole("button", { name: "Delete report", exact: true })).toBeVisible();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
@@ -254,6 +265,67 @@ test("saved rows expose aligned text treatment and labeled inspect/delete action
     await touch.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).tap();
     await expect(touchRow.getByRole("button", { name: "Delete report", exact: true })).toBeVisible();
     await touch.close();
+    assert.deepEqual(await loadBoardState(context), before);
+    for (const [file, value] of bytes) assert.deepEqual(await readFile(file), value);
+});
+
+test("six older saved rows keep names, preparation dates and actions balanced without inventing periods", { timeout: 60000 }, async t => {
+    const { page, context, exports, capture } = await setup(t);
+    for (let index = 0; index < 4; index++) {
+        const prepared = await exports.preview("density-" + index, undefined, {
+            title: "Cedar historical copy " + index, formats: ["html"], promptMode: index % 2 ? "none" : "masked",
+        }, { kind: "all", revision: (await loadBoardState(context)).revision });
+        await exports.review("density-" + index, prepared.previewId, true);
+        await exports.confirm("density-" + index, prepared.previewId, true);
+    }
+    await updateBoardState(context, state => {
+        state.exports.forEach((entry, index) => {
+            if (index) delete entry.title;
+            entry.selectionScope.kind = index % 2 ? "all" : "selected";
+            entry.preparedAt = `2026-10-04T20:${String(43 - index).padStart(2, "0")}:17.000Z`;
+            entry.preparedAtDisplay = `Oct 4, 2026, 1:${43 - index}:17 PM GMT-7`;
+            delete entry.reportPurpose; delete entry.reportPeriod;
+        });
+    });
+    const before = await loadBoardState(context), bytes = new Map();
+    for (const entry of before.exports) for (const file of Object.values(entry.files)) bytes.set(file, await readFile(file));
+    await page.reload(); await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    const rows = page.locator(".saved-library-row");
+    await expect(rows).toHaveCount(6);
+    for (const theme of ["dark", "light"]) {
+        await chooseTheme(page, theme);
+        await page.locator("#savedLibraryTitle").evaluate(node => node.scrollIntoView({ block: "start" }));
+        await capture("density-six-" + theme);
+        if (process.env.WIRE_VIEWER_CHROME_PROOFS) await page.locator("#savedReportsPanel").screenshot({
+            path: path.join(process.env.WIRE_VIEWER_CHROME_PROOFS, "density-library-" + theme + ".png"), animations: "disabled",
+        });
+        const geometry = await rows.evaluateAll(nodes => nodes.map(node => {
+            const title = node.querySelector(".saved-report-name").getBoundingClientRect();
+            return { height: node.getBoundingClientRect().height, titleHeight: title.height };
+        }));
+        if (process.env.WIRE_VIEWER_CHROME_PROOFS) await writeFile(path.join(process.env.WIRE_VIEWER_CHROME_PROOFS,
+            "density-geometry-" + theme + ".json"), JSON.stringify(geometry, null, 2));
+        assert.ok(geometry.every(row => row.height <= 76 && row.titleHeight <= 26),
+            `Scope names must stay compact instead of wrapping their preparation timestamp: ${JSON.stringify(geometry)}`);
+        assert.equal(await rows.locator(".saved-report-name").filter({ hasText: /2026|GMT/ }).count(), 0);
+        await expect(rows.first().locator(".saved-report-prepared")).toContainText("Prepared");
+        await expect(page.locator(".saved-period-availability")).toHaveText("Activity periods aren't listed for these 6 saved entries.");
+        await expect(rows.locator(".saved-report-period")).toHaveCount(0);
+        await expect(rows.first().getByRole("button", { name: "Inspect details", exact: true })).toBeVisible();
+        await expect(rows.first().getByRole("button", { name: "Delete report", exact: true })).toBeVisible();
+    }
+    await rows.first().getByRole("button", { name: "Inspect details", exact: true }).click();
+    await expect(page.locator("#contextSidebar")).toContainText("Activity period not listed");
+    await expect(page.locator("#contextSidebar")).toContainText("Preparation time is separate from the activity period.");
+    await page.getByRole("button", { name: "Close saved report details", exact: true }).click();
+    await rows.first().getByRole("button", { name: "Delete report", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.setViewportSize({ width: 768, height: 1000 }); await capture("density-tablet");
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await rows.first().scrollIntoViewIfNeeded();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+    await capture("density-phone200");
     assert.deepEqual(await loadBoardState(context), before);
     for (const [file, value] of bytes) assert.deepEqual(await readFile(file), value);
 });

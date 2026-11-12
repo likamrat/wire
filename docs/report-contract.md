@@ -200,6 +200,12 @@ Original evidence-file identity also keys the report read model, so reading
 a saved report cannot replace current Analyze facts. Saving appends to current
 state; it never restores the preview's evidence snapshot over newer collection.
 
+New ordinary saved entries retain their snapshot's date selection as `reportPeriod`,
+independently of report presets. When present it must match the frozen manifest
+and participates in the artifact fingerprint. Older entries without it remain
+readable; missing index metadata is not evidence that the file has no period.
+Preparation timestamps never substitute for the saved date selection.
+
 ### Report text choices
 
 | Text choice | Required treatment |

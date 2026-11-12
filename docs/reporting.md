@@ -183,6 +183,11 @@ treatment beside its icon; missing older metadata stays unrecorded.
 metadata. In the reader, choose **Report** to return from a file preview, or
 **Download** to retrieve that file's original bytes.
 
+**Prepared** is when the report was created. **Report period** is its saved date
+selection; **All retained dates** means no date restriction. Older saved-list
+entries may not include a period, even when dates appear inside the report.
+WIRE does not replace a missing period with the preparation time or current filters.
+
 ![A saved report opened at an interaction, with its prompt and recorded calls beneath the section navigation.](images/saved-report.png)
 
 Older unverified reports keep their warning before **View report**. Missing,

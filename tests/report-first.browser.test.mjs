@@ -258,7 +258,7 @@ test("new library metadata and saved comparisons use frozen files and direct loc
         await page.getByRole("link", { name: "Back to Reports", exact: true }).click();
     }
     await expect(page.locator(".saved-report-title")).toHaveCount(2);
-    await expect(page.locator(".saved-report-privacy").first()).toContainText("Personal details hidden where detected");
+    await expect(page.locator(".saved-report-privacy").first()).toContainText("Detected personal details hidden");
     await expect(page.locator(".saved-report-period").first()).not.toHaveText("Not recorded");
     await expect(page.locator("[data-report-preset]")).toHaveCount(5);
     await page.locator("#reportCompareLink").click();
@@ -542,7 +542,7 @@ test("saved names, Files and row actions preserve exact files, paging, search, f
     await page.getByRole("button", { name: "Next saved reports", exact: true }).click();
     await expect(page.locator(".saved-report-title")).toHaveCount(2);
     const title = page.locator(".saved-report-title").first();
-    await expect(title).toHaveText("Return report 7");
+    await expect(title.locator(".saved-report-name")).toHaveText("Return report 7");
     await title.focus();
     const y = await page.evaluate(() => scrollY);
     await title.click();
@@ -590,7 +590,8 @@ test("saved names, Files and row actions preserve exact files, paging, search, f
     await page.locator("#savedReportSearch").fill(legacyId);
     await expect(page.locator(".saved-report-privacy")).toHaveCount(1);
     await expect(page.locator(".saved-report-privacy")).toContainText("Text treatment not recorded");
-    await expect(page.locator(".saved-report-period")).toHaveText("Not recorded");
+    await expect(page.locator(".saved-report-period")).toHaveCount(0);
+    await expect(page.locator(".saved-period-availability")).toHaveText("The activity period isn't listed for one saved entry.");
     assert.deepEqual(errors, []);
 });
 

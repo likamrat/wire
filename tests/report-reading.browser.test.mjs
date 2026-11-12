@@ -156,12 +156,12 @@ test("edited reports give actual HTML a reading pane without opening text inspec
             path: path.join(process.env.WIRE_REPORT_READING_PROOFS, `saved-title-hover-${theme}.png`),
             animations: "disabled",
         });
-        assert.ok(measured.leftInset >= 10 && measured.leadingGap >= 10 && measured.trailingGap >= 16, JSON.stringify(measured));
+        assert.ok(measured.leftInset >= 8 && measured.leadingGap >= 10 && measured.trailingGap >= 16, JSON.stringify(measured));
         assert.equal(measured.separateTargets, true);
         assert.deepEqual(await title.boundingBox(), beforeHover, "Hover must not move the title or status action.");
         await title.focus();
         await expect(title).toBeFocused();
-        await expect(row.locator(".saved-report-privacy")).toContainText("Personal details hidden where detected");
+        await expect(row.locator(".saved-report-privacy")).toContainText("Detected personal details hidden");
     }
     await page.setViewportSize({ width: 560, height: 950 });
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });

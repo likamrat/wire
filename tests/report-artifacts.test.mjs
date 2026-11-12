@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { privateFixture } from "./helpers.mjs";
-import { createSavedArtifactDescriptor, validateSavedSources, describeSavedArtifact } from "../lib/report-artifacts.mjs";
+import { createSavedArtifactDescriptor, validateSavedSources, describeSavedArtifact, readSavedReportDocument, artifactIndexFingerprint } from "../lib/report-artifacts.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { loadBoardState } from "../lib/store.mjs";
 import { artifactDeletionKey } from "../lib/deletion-identities.mjs";
 
 async function artifact(context, { legacy = false, kind = "report" } = {}) {
@@ -87,6 +89,32 @@ test("report choice metadata projects only a known saved request-group count", (
         const unknown = describeSavedArtifact({ ...entry, selectionScope: { nativeConversations } }, { exports: [] });
         assert.equal(Object.hasOwn(unknown, "nativeConversationCount"), false);
     }
+});
+
+test("saved periods retain capture and dated selection independently of preset metadata without rewriting old files", async t => {
+    const { context } = await privateFixture(t);
+    const controller = createExportController(context), originals = new Map();
+    for (const dateSelection of [{ range: "capture" }, { range: "custom", from: "2026-01-01", to: "2026-12-31" }]) {
+        const preview = await controller.preview("period-metadata", undefined, { formats: ["html"], promptMode: "none", dateSelection },
+            { kind: "all", revision: (await loadBoardState(context)).revision });
+        await controller.review("period-metadata", preview.previewId, true);
+        const { bundle } = await controller.confirm("period-metadata", preview.previewId, true);
+        const state = await loadBoardState(context), entry = state.exports.find(item => item.bundleId === bundle.bundleId);
+        assert.equal(entry.reportPurpose, undefined);
+        assert.deepEqual(entry.reportPeriod, dateSelection);
+        assert.deepEqual(describeSavedArtifact(entry, state).reportPeriod, dateSelection);
+        await readSavedReportDocument(context, state, bundle.bundleId);
+        for (const file of Object.values(bundle.files)) originals.set(file, await readFile(file));
+        const older = structuredClone(state), olderEntry = older.exports.find(item => item.bundleId === bundle.bundleId);
+        delete olderEntry.reportPeriod;
+        await readSavedReportDocument(context, older, bundle.bundleId);
+        assert.equal(describeSavedArtifact(olderEntry, older).reportPeriod, undefined, "Missing historical metadata stays distinct from all dates.");
+        const changed = structuredClone(state), changedEntry = changed.exports.find(item => item.bundleId === bundle.bundleId);
+        changedEntry.reportPeriod = { range: "custom", from: "2026-02-01", to: "2026-02-02" };
+        assert.notEqual(artifactIndexFingerprint(changedEntry), artifactIndexFingerprint(entry));
+        await assert.rejects(readSavedReportDocument(context, changed, bundle.bundleId), /frozen contents could not be verified/);
+    }
+    for (const [file, bytes] of originals) assert.deepEqual(await readFile(file), bytes);
 });
 
 test("native report deletion is refused before reading its file inventory and advertised unavailable", async t => {
