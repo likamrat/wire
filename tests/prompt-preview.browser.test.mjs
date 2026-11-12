@@ -131,6 +131,9 @@ test("long prompt previews preserve exact text, author, Copy and accessible repe
             measurements.push({ theme, actor, ...await collapsed(page) });
             await expect(prompt(page).locator(".reader-section-title")).toHaveText(
                 { user: "My prompt", agent: "Agent prompt", unknown: "Author unverified" }[actor]);
+            await expect(prompt(page).locator(".reader-interaction-time")).toHaveText(
+                await card(page, id).locator(".request-card-time").textContent());
+            await expect(prompt(page).locator(".reader-interaction-time")).toBeInViewport();
             assert.equal(await content(page).textContent(), exactPrompt);
             await expect(page.locator('[data-reader-section="activity"] .reader-section-heading')).toBeInViewport();
             if (actor === "agent") await capture(page, "prompt-" + theme + "-collapsed");
@@ -166,6 +169,52 @@ test("long prompt previews preserve exact text, author, Copy and accessible repe
         }
     }
     if (proofs) await writeFile(path.join(proofs, "prompt-measurements.json"), JSON.stringify(measurements, null, 2));
+});
+
+test("reader date matches its card in the chosen zone and keeps missing-message timing qualified", async t => {
+    const dated = record("dated", "Read the invented Cedar notes.");
+    dated.userPrompt.sourceTimestamp = "2026-10-01T06:59:00Z";
+    dated.toolCalls[0].startedAt = "2026-10-01T07:02:00Z";
+    const fallback = record("fallback", "Read the next invented Cedar note.", "agent");
+    delete fallback.userPrompt.sourceTimestamp;
+    fallback.toolCalls[0].startedAt = "2026-10-02T07:03:00Z";
+    const missing = record("missing-time", "Read an undated invented Cedar note.", "unknown");
+    delete missing.userPrompt.sourceTimestamp;
+    missing.toolCalls[0].startedAt = null;
+    const { page, runtime } = await setup(t, [dated, fallback, missing]);
+    await page.evaluate(() => localStorage.setItem("workiq-evidence.time-zone", "America/Los_Angeles"));
+    await page.goto(runtime.url);
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await settled(page);
+    for (const [id, expected] of [
+        ["dated", "Sep 30, 2026, 11:59 PM"],
+        ["fallback", "First timed action: Oct 2, 2026, 12:03 AM"],
+        ["missing-time", "Request time: Not recorded"],
+    ]) {
+        await open(page, id);
+        const date = prompt(page).locator(".reader-interaction-time");
+        await expect(date).toHaveText(expected);
+        await expect(date).toHaveText(await card(page, id).locator(".request-card-time").textContent());
+        await expect(date).toBeInViewport();
+        await expect(page.locator('[data-reader-section="source"]')).toHaveAttribute("data-open", "false");
+        const placement = await date.evaluate(node => ({
+            belowPrompt: node.getBoundingClientRect().top >= node.previousElementSibling.getBoundingClientRect().bottom,
+            aboveActivity: node.getBoundingClientRect().bottom <= document.querySelector('[data-reader-section="activity"]').getBoundingClientRect().top,
+        }));
+        assert.deepEqual(placement, { belowPrompt: true, aboveActivity: true });
+    }
+    await open(page, "dated");
+    await chooseTheme(page, "dark");
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await settled(page);
+    await expect(prompt(page).locator(".reader-interaction-time")).toBeInViewport();
+    assert.equal(await page.locator("#contextSidebarBody").evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
+    await capture(page, "reader-date-narrow");
+    await page.evaluate(() => localStorage.setItem("workiq-evidence.time-zone", "UTC"));
+    await page.reload();
+    await expect(page.locator("#workspace")).toHaveAttribute("aria-busy", "false");
+    await expect(prompt(page).locator(".reader-interaction-time")).toHaveText("Oct 1, 2026, 6:59 AM");
 });
 
 test("overflow is six actual lines, rechecks width and text size, and does not leak to another interaction", async t => {

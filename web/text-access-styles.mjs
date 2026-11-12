@@ -300,6 +300,7 @@ body[data-reader-expanded]>main {visibility:hidden}
 #requestContent .reader-section .reader-facts>.reader-fields dd {flex:1 1 14ch;margin:0}
 #requestContent .reader-section .reader-facts>.reader-fields .model-recording-note {flex-basis:100%;font-size:var(--type-small);color:var(--muted)}
 #requestContent .reader-recorded-at {margin:12px 0 0;color:var(--muted);font:inherit;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#requestContent .reader-interaction-time {font-size:var(--type-caption)}
 #requestContent .reader-prompt-timing {margin-top:12px}
 #requestContent .reader-prompt-timing>.reader-recorded-at {margin:0}
 #requestContent .reader-prompt-timing>.reader-response-timing {margin-top:8px}

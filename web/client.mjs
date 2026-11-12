@@ -5814,6 +5814,11 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             copyLabel: isSelected ? undefined : group.relation === "preceding" ? "Copy earlier message" : "Copy following message",
             notice: "Copy includes the complete retained prompt body only, without export masking. It does not include chat details, warnings, the response or the rest of this page. Other apps and clipboard history may access your system clipboard.",
         }));
+        if (isSelected) {
+            const recorded = requestTiming.entry(scenario, timeContext);
+            requestText.append(el("p", "reader-recorded-at reader-interaction-time",
+                (recorded.label === "Message recorded" ? "" : recorded.label + ": ") + recorded.value));
+        }
         const modelFact = el("dl", "reader-fields interaction-model-fact"), model = originalModelFact(scenario);
         model.firstElementChild.textContent = model.firstElementChild.textContent.replace(/:$/, "");
         modelFact.append(model);

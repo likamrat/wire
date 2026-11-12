@@ -132,6 +132,9 @@ The reader's order follows the user's question:
 3. Available Copilot reply.
 4. Source details.
 
+A quiet date/time line beneath the selected prompt matches its card's recorded
+time and display zone. Any first-action fallback stays explicitly labeled.
+
 Selected prompts exceeding six rendered lines start with those six lines visible.
 This keeps a useful exact excerpt above the recorded activity without a nested
 scroll area. Short prompts have no toggle. **Show full prompt** reveals all retained
