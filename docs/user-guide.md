@@ -109,6 +109,10 @@ The reader explains retained origin gaps separately from call results. For
 example, WIRE may not recognize the host's message format even when the prompt
 text and tool result were saved. Older records may lack that specific reason.
 
+A file attachment may appear as a label such as `notes.md` rather than its
+contents. WIRE keeps the text recorded in Copilot; it does not open the attachment
+or add its local path.
+
 **Tool latency** is the recorded call interval. **Prompt to final response**
 measures from the originating message to its recorded final response when
 that link is available. Concurrent calls are not added into a task duration.

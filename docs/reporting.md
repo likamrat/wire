@@ -61,6 +61,9 @@ Changing report dates does not remove those picks. If you start from
 restriction. Other applicable filters and authorized Search membership stay
 in place; Analyze itself does not change.
 
+If WIRE later corrects who sent a prompt, reports already prepared or saved
+stay unchanged. Prepare a new report to use the corrected author.
+
 ## Read the findings
 
 Start with which activity the report includes and which facts were available.
