@@ -29,11 +29,11 @@ in this release. Saving Copilot reply text is a separate choice under
 ## Read the overview
 
 **Analyze** shows recorded outcomes, activity over time, tools, services and
-available response-model names. The interaction list below follows the same
+available response-model names, plus prompt authors. The interaction list below follows the same
 filters. Open **Filters** to narrow the view by Dates, Tool, Service involved,
 Outcome or Prompt author; **More filters** holds the additional choices.
 
-![Analyze with call outcomes, activity over time, recorded models, tools and service associations in separate panels.](images/analyze.png)
+![Analyze with call outcomes, activity over time, recorded models, tools, services and prompt authors in compact panels.](images/analyze.png)
 
 An interaction groups a prompt with its recorded calls. One interaction can
 contain several calls, and one call can involve several services. Service
@@ -44,6 +44,13 @@ tool-call totals. Missing model names mean no name was recorded, not zero usage.
 Breakdown rows show percentage first, with the count in parentheses. Model
 percentages use all matching interactions, including those without model names;
 an interaction with several recorded models counts under each.
+
+**Prompt authors** counts each originating interaction once across all matching
+pages: **My prompts**, **Agent prompts**, or **Author unverified**. Calls and
+follow-ups do not add prompts. Unverified authors stay in the denominator;
+missing prompt text alone does not make its author unknown. Microsoft 365
+conversations without comparable prompt provenance are shown as unavailable,
+not included in these shares.
 
 Dates filter retained activity; they do not approve older source reads.
 Custom dates include both days in the time zone chosen under

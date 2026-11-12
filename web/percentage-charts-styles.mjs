@@ -52,6 +52,10 @@ export const percentageChartStyles = `
 .percentage-gap-list dt {font-weight:var(--weight-regular);overflow-wrap:anywhere}
 .percentage-gap-list dd {margin:0;font-variant-numeric:tabular-nums;color:var(--ink)}
 .percentage-empty {padding-block:8px;color:var(--muted);font-size:var(--type-small)}
+.percentage-card[data-breakdown=authors] .percentage-label {min-height:1.75rem;color:var(--prompt-author-ink)}
+.percentage-card[data-breakdown=authors] .percentage-value {color:var(--ink)}
+.percentage-card[data-breakdown=authors] .percentage-bar {background:var(--prompt-author-ink)}
+.percentage-card[data-breakdown=authors] .percentage-note {margin:8px 0 0}
 .percentage-exact {margin-top:8px;min-width:0}
 .percentage-exact>summary {cursor:pointer;min-height:44px;align-content:center;font-size:var(--type-small);color:var(--accent);border-radius:var(--radius-small)}
 .percentage-exact>summary:focus-visible {outline:2px solid var(--focus);outline-offset:2px}

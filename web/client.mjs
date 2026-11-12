@@ -262,7 +262,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     const activityProjection = createActivityProjection(time, recordedCategories, Object.keys(results.labels("tool")));
     const analysisSlice = createAnalysisSlice(localSearch, activityProjection);
     const timingPresentation = assessmentFactories.timing;
-    const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, icons: dimensionalIcons,
+    const percentageMath = createPercentageCharts({ dimensional, categories, results, ux, authorship, icons: dimensionalIcons,
         createLink: (kind, row) => Object.hasOwn(row, "nativeFilter") ? row.nativeFilter ? link("", "activity", { ...row.nativeFilter, page: undefined }) : null
             : kind === "outcomes" && applied.layer !== "code-reference" ? link("", "activity", { result: row.id, page: undefined })
             : kind === "services" ? link("", "activity", { withinServices: [...new Set([...(route.withinServices?.split(",") || []), row.id])].sort().join(","), page: undefined,
@@ -272,7 +272,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                         : kind === "service-operation" ? link("", "activity", { tool: "workiq-ask", endpoint: row.endpointId, page: undefined })
                 : kind === "tools" && row.id !== "tool:unidentified" ? link("", "activity", { tool: row.id.slice(5), page: undefined,
                     ...(row.sourceId ? { source: row.sourceId } : {}) }) : null });
-    const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData"), includeModels: true });
+    const percentages = percentageMath.mount($("percentageCharts"), { outcomesHost: $("outcomeChart"), dataHost: $("percentageData"), includeModels: true, includeAuthors: true });
     const live = createLiveState();
     const sourceCheckKey = "workiq-evidence.source-check.v1";
     let sourcePending = false, sourceStorageWarning = "";
@@ -3965,13 +3965,13 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             for (const event of ["click", "auxclick"]) link.addEventListener(event, guard, { capture: true });
             return link;
         };
-        if (context.nativeOnly) {
+        if (context.nativeOnly && topic !== "authors") {
             host.replaceChildren();
             boundedNative.renderExact(host, topic, isCurrent, entry => !presentationState.rowQuery?.trim()
                 || localSearch.phrase(presentationState.rowQuery, [entry.label]));
             return { status: "ready" };
         }
-        if (["outcomes", "services", "models", "tools"].includes(topic)) {
+        if (["outcomes", "services", "models", "authors", "tools"].includes(topic)) {
             percentages.renderExact(topic, host);
             for (const link of host.querySelectorAll("a")) guarded(link);
         } else {

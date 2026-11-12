@@ -23,6 +23,7 @@ export function chartReferenceFacts(analytics, model) {
             }),
             models: freeze({ total: model.models.total,
                 coverage: freeze(Object.fromEntries(coverage.map(key => [key, model.models.coverage[key]]))) }),
+            ...(model.authors ? { authors: freeze({ total: model.authors.total }) } : {}),
         }),
     });
 }
@@ -99,7 +100,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
     }
     const topics = [
         ["outcomes", "Results"], ["time", "Activity over time"],
-        ["services", "Services and operations"], ["models", "Response models"],
+        ["services", "Services and operations"], ["models", "Response models"], ["authors", "Prompt authors"],
         ["tools", "Tools"], ["categories", "Activity categories"],
         ["paths", "Paths and operations"],
     ];
@@ -232,6 +233,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         if (topic === "time") return "";
         if (topic === "services") return "A record can involve several services, so counts can overlap.";
         if (topic === "models") return "Counts interactions by original response model. One interaction may use several models.";
+        if (topic === "authors") return "One originating prompt per matching interaction, across all pages. Tool calls and follow-ups do not add prompts.";
         if (topic === "tools") return "";
         if (topic === "categories") return context.layer === "tool" ? help.charts.activityCategory : help.charts.workload;
         return context.layer === "tool" ? help.charts.endpoint
@@ -283,6 +285,7 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
         } else if (topic === "tools") section.append(el("p", a.layer === "tool"
             ? "Repeated updates of a call count once." : "A call can return several results."));
         else if (topic === "models") section.append(el("p", "Original response model names are unavailable."));
+        else if (topic === "authors") section.append(el("p", "Prompt authorship is unavailable. These conversations are not part of the prompt denominator."));
         else section.append(el("p", topic === "paths" ? "Paths were not recorded." : "Service targets were not recorded."));
         host.append(section);
     }
@@ -369,6 +372,17 @@ export function mountChartReference({ host, root, trigger, createState, ux, resu
                 host.append(section);
             } else list.append(definition("Not recorded", "Original response model names are unavailable."),
                 definition("Partly recorded", "Some model information is missing."));
+        } else if (topic === "authors") {
+            if (showFacts() && context.model.authors) {
+                const section = group();
+                const total = context.model.authors.total;
+                section.append(el("p", `${number(total)} matching ${total === 1 ? "interaction" : "interactions"}. Each belongs to one author category.`));
+                host.append(section);
+            }
+            list.append(definition("My prompts", "Recorded user origin, not verified account identity."),
+                definition("Agent prompts", "Recorded agent origin, including qualified automatic continuations."),
+                definition("Author unverified", "Missing, conflicting, system or unsupported author evidence. These interactions stay in the denominator."),
+                definition("Missing prompt text", "Text availability does not determine authorship. Stored aliases count once."));
         } else if (topic === "tools") {
             list.append(definition("Discovery / preparation", "API, schema or agent lookup, not data-service execution."),
                 definition("Tool outcome", help.facts["Tool outcome"]));

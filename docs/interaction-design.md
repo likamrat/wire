@@ -40,6 +40,14 @@ and right-side legend share a row when the widget has sufficient width; small
 layouts stack without squeezing values. Model, tool and service widgets use
 content-sized layout, not equal-height filler or hidden rows for symmetry.
 
+Prompt authors is a compact, noninteractive breakdown of canonical originating
+interactions across the complete accepted slice, before paging. My prompts,
+Agent prompts and Author unverified use the shared author vocabulary and screen
+colors; all three remain visible when the population is nonempty, including
+known zeros. Its visible denominator names interactions rather than calls.
+Incompatible Microsoft 365 conversations stay separately unavailable. Exact
+counts and provenance definitions live in Chart guide, not another drilldown.
+
 Filters opens one panel with the existing controls, applied chips and separate
 View group. Fields/labels wrap; accepting a restriction must not move focus.
 

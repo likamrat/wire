@@ -1,6 +1,6 @@
 // Presentation only; accepted evidence and navigation remain client-owned.
 export function createChartReferenceState() {
-    const topics = ["outcomes", "time", "services", "models", "tools", "categories", "paths"];
+    const topics = ["outcomes", "time", "services", "models", "authors", "tools", "categories", "paths"];
     let current = { view: "closed", topic: "outcomes" };
     const value = () => ({ ...current });
     function validateTopic(topic) {

@@ -104,7 +104,7 @@ function assertPacking(value, key) {
     assert.ok(value.overflow <= 1, key);
     assert.deepEqual(value.clipped, [], key);
     for (const track of value.tracks) if (track.columns > 1) assert.ok(track.gap >= 8, "Inline labels, bars and values keep their horizontal separation");
-    assert.deepEqual(value.cards.map(card => card.key), ["outcomes", "time", "models", "tools", "services"], "The compact Model summary precedes the longer breakdowns in DOM/reading order");
+    assert.deepEqual(value.cards.map(card => card.key), ["outcomes", "time", "models", "tools", "services", "authors"], "Compact prompt authors follow the existing breakdowns without changing their reading order");
     for (const card of value.cards) for (const other of value.cards) if (card !== other) {
         assert.ok(card.right <= other.x + 1 || other.right <= card.x + 1 || card.bottom <= other.y + 1 || other.bottom <= card.y + 1,
             `${key}: ${card.key} and ${other.key} do not overlap`);
@@ -165,7 +165,7 @@ test("packing survives accepted refresh, grouping, focus, repeated layout and em
     const cdp = await page.context().newCDPSession(page);
     const tree = await cdp.send("Accessibility.getFullAXTree");
     assert.ok(tree.nodes.some(node => !node.ignored && node.role?.value === "region"
-        && node.name?.value === "Tool, service and model breakdowns"), "The shared breakdown region remains in the accessibility tree");
+        && node.name?.value === "Tool, service, model and prompt breakdowns"), "The shared breakdown region remains in the accessibility tree");
     const first = page.locator("#outcomeChart .percentage-label").first();
     await first.focus();
     const identity = await page.locator(widgetSelector).elementHandles();

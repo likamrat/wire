@@ -13,6 +13,7 @@ const output = process.env.WIRE_DOC_OUTPUT;
 const proof = process.env.WIRE_DOC_PROOF;
 const widgetsOnly = process.env.WIRE_DOC_CAPTURE === "widgets";
 const reportsOnly = process.env.WIRE_DOC_CAPTURE === "reports";
+const analyzeOnly = process.env.WIRE_DOC_CAPTURE === "analyze";
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 const day = new Date().toISOString().slice(0, 10);
@@ -132,7 +133,7 @@ test("capture documentation through the normal renderer with isolated light-them
     const originals = new Map(), seeded = new Map();
     const titles = ["Launch review", "Earlier release checklist", "Design review agenda",
         "Service follow-ups", "Support plan", "Architecture notes", "Call results"];
-    for (const [index, title] of (widgetsOnly ? titles.slice(0, 1) : titles).entries()) {
+    for (const [index, title] of (analyzeOnly ? [] : widgetsOnly ? titles.slice(0, 1) : titles).entries()) {
         const state = await loadBoardState(app.context), owner = "documentation-saved-" + index;
         const selected = index === 0 ? [2, 5] : [[12], [4], [6], [7], [9], [10]][index - 1];
         const preview = await app.exports.preview(owner, undefined, {
@@ -212,6 +213,10 @@ test("capture documentation through the normal renderer with isolated light-them
         await expect(page.locator("#contextSidebar")).toBeVisible();
         await expect(page.locator("#requestContent").getByRole("button", { name: "Show full prompt", exact: true })).toBeVisible();
         await capture("wire-overview", { top: true });
+        if (analyzeOnly) {
+            await finish();
+            return;
+        }
         await page.setViewportSize({ width: 1440, height: 1100 });
         await page.locator('#activityList .request-card-open[href*="documentation-0"]').scrollIntoViewIfNeeded();
         await capture("interaction");

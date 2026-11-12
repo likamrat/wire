@@ -13,8 +13,9 @@ import { styles } from "../web/styles.mjs";
 import { fixture } from "./helpers.mjs";
 import { coworkFixture } from "./native-read-model-fixtures.mjs";
 import { projectRetainedNativeRecords } from "../lib/retained-population.mjs";
+import { createPromptAuthorship } from "../lib/prompt-authorship.mjs";
 
-async function setup(t, locale = "en-US") {
+async function setup(t, locale = "en-US", includeAuthors = false) {
     const browser = await chromium.launch();
     t.after(() => browser.close());
     const page = await browser.newPage({ locale, viewport: { width: 1200, height: 1000 }, hasTouch: true, reducedMotion: "reduce" });
@@ -23,23 +24,58 @@ async function setup(t, locale = "en-US") {
     await page.route("**/*", route => { requests.push(route.request().url()); return route.abort(); });
     t.after(() => { assert.deepEqual(errors, []); assert.deepEqual(requests, []); });
     await page.setContent(`<style>${styles}</style><div id="host" style="width:100%;max-width:100%;padding:16px"></div>`);
-    await page.evaluate(({ percentage, dimensional, categories, results, ux, icons, serviceIcons }) => {
+    await page.evaluate(({ percentage, dimensional, categories, results, ux, icons, serviceIcons, authorship, includeAuthors }) => {
         const make = source => (0, eval)(`(${source})`);
         window.chosen = [];
         window.view = make(percentage)({ dimensional: make(dimensional)(), categories: make(categories)(),
-            results: make(results)(), ux: make(ux)(icons), icons: serviceIcons,
+            results: make(results)(), ux: make(ux)(icons), icons: serviceIcons, authorship: make(authorship)(),
             createLink: (kind, row) => {
                 const link = document.createElement("a");
                 link.href = `#analyze?test=${encodeURIComponent(row.id)}`;
                 link.addEventListener("click", event => { event.preventDefault(); window.chosen.push([kind, row.id]); });
                 return link;
             },
-        }).mount(document.querySelector("#host"));
+        }).mount(document.querySelector("#host"), { includeAuthors });
     }, { percentage: createPercentageCharts.toString(), dimensional: createDimensionalCharts.toString(),
         categories: createServiceCategories.toString(), results: createRecordedResults.toString(), ux: createEvidenceUX.toString(),
-        icons: uxIcons, serviceIcons: dimensionalIcons });
+        icons: uxIcons, serviceIcons: dimensionalIcons, authorship: createPromptAuthorship.toString(), includeAuthors });
     return page;
 }
+
+test("prompt shares separate native conversations and erase exact authorship facts on withdrawal", async t => {
+    const page = await setup(t, "en-US", true), record = fixture("prompt-native-qualification");
+    record.userPrompt.authorship = { actor: "user", basis: "source-user" };
+    const native = projectRetainedNativeRecords(coworkFixture()).records;
+    const card = page.locator('[data-breakdown="authors"]');
+    const render = async (records, bounded) => {
+        const analytics = buildActivityAnalytics(records);
+        await page.evaluate(({ analytics, records, bounded }) => window.view.update(analytics,
+            { layer: "tool", filters: {} }, records, bounded), { analytics, records, bounded });
+    };
+    await render([record, ...native]);
+    await expect(card).toHaveAttribute("data-total", "1");
+    await expect(card.locator(".percentage-value")).toHaveText(["100% (1)", "0% (0)", "0% (0)"]);
+    await expect(card.locator(".percentage-denominator")).toHaveText("GitHub Copilot: 1 matching interaction");
+    await expect(card.locator(".percentage-content")).toContainText(`Prompt authorship unavailable for ${native.length} Microsoft 365`);
+    const bounded = { aggregates: { complete: true, layer: "tool", conversations: 3, selectedRows: 0,
+        outcomes: { success: 0, failure: 0, unknown: 0, partial: 0, other: 0, transport: 0 } },
+    toolGroups: { complete: true, groups: [], other: null }, sourceGroups: [] };
+    await render([], bounded);
+    await expect(card.locator(".percentage-value")).toHaveCount(0);
+    await expect(card.locator(".percentage-denominator")).toBeHidden();
+    await expect(card.locator(".percentage-content")).toHaveText("Prompt authorship unavailable for 3 Microsoft 365 conversations.");
+    await card.locator("summary").click();
+    await expect(card.locator(".percentage-exact .percentage-empty")).toHaveCount(1);
+    await card.locator("summary").click(); await card.locator("summary").click();
+    await expect(card.locator(".percentage-exact .percentage-empty")).toHaveCount(1);
+    await render([record]);
+    await expect(card.locator(".percentage-denominator")).toBeVisible();
+    await expect(card.locator(".percentage-table tbody th")).toHaveText(["My prompts", "Agent prompts", "Author unverified"]);
+    await page.evaluate(() => window.view.withdrawAccess());
+    await expect(card.locator(".percentage-legend,.percentage-table,[data-count]")).toHaveCount(0);
+    assert.equal(await card.getAttribute("data-total"), null);
+    await expect(card.locator(".percentage-denominator")).toBeEmpty();
+});
 async function update(page, counts, longNames = false) {
     const record = fixture("percentage-regression"), base = record.toolCalls[0];
     record.toolCalls = counts.flatMap((count, outcome) => Array.from({ length: count }, (_, index) => ({
