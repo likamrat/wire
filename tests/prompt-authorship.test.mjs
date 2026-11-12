@@ -138,6 +138,20 @@ test("explicit system context explains unverified author without guessing from h
     assert.match(promptAuthorship.reason({ authorship: { actor: "unknown", basis: "invalid-source" } }), /host message format/);
 });
 
+test("kickoff qualification preserves an uninterpretable envelope instead of inventing a source contradiction", () => {
+    for (const basis of ["invalid-source", "unsupported-source"]) {
+        const authorship = { actor: "unknown", basis };
+        assert.deepEqual(promptAuthorship.correlateKickoff({ authorship }), authorship);
+    }
+    for (const authorship of [{ actor: "user", basis: "source-user" },
+        { actor: "unknown", basis: "system-source" }, { actor: "unknown", basis: "conflicting-source" }]) {
+        assert.deepEqual(promptAuthorship.correlateKickoff({ authorship }),
+            { actor: "unknown", basis: "conflicting-source" });
+    }
+    assert.deepEqual(promptAuthorship.correlateKickoff({ authorship: { actor: "user", basis: "host-direct-input" } }),
+        { actor: "agent", basis: "parent-kickoff" });
+});
+
 test("normalized interaction reading preserves precise parsed author gaps without changing membership", () => {
     let membership, fingerprint;
     for (const [data, basis] of [
@@ -174,6 +188,7 @@ test("normalized author transport is strict while legacy messages remain unchang
         { actor: "unknown", basis: "invented-basis" },
         { actor: "unknown", basis: "system-source", sourceId: "invented-raw-sender" },
         { actor: "user", basis: "source-user" },
+        { actor: "unknown", basis: "system-source", issue: "host-wrapper-v1" },
     ]) {
         assert.throws(() => validateInteraction({ ...interaction, message: { ...interaction.message, authorship } }), ContractError);
     }

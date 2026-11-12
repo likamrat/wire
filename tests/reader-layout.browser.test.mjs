@@ -615,7 +615,7 @@ test("missing prompt and action facts stay explicit, while contradictory complet
     await page.goto(runtime.url + "#request?request=" + encodeURIComponent(missing.scenarioId));
     const prompt = page.locator('[data-reader-section="prompt"]');
     await expect(prompt).toContainText("Author unverified");
-    await expect(prompt).toContainText("Recorded sender details disagree");
+    await expect(prompt).toContainText("Origin details could not be reconciled");
     await expect(prompt).toContainText("Prompt not available");
     await expect(page.locator('[data-reader-section="activity"]')).toContainText("No individual action details were retained");
     await expect(prompt.locator("pre,.ux-copy")).toHaveCount(0);

@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { replaceEvidence } from "../lib/store.mjs";
 import { qualifyRetainedPromptEvents } from "../lib/prompt-qualification.mjs";
 import { discoverSources } from "../lib/source-discovery.mjs";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 test("status-only Work IQ failure survives the original-event to card/reader reason seam", () => {
     const record = collect(events()), call = record.toolCalls[0];
@@ -31,6 +32,80 @@ test("host image-reference suffix does not erase direct input provenance during 
     const record = collect(events());
     assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
     assert.equal(record.userPrompt.text, events()[0].data.content);
+});
+
+test("rejected host layouts retain closed causes without relaxing original boundaries or sender guards", () => {
+    for (const [layout, basis, issue] of [
+        [content => "Different invented host body.", "invalid-source", "body-boundary-v1"],
+        [content => content + "\nInvented trailing text.", "invalid-source", "body-boundary-v1"],
+        [content => "<invented_context>UNTRUSTED_DIAGNOSTIC_MARKER</invented_context>\n\n" + content,
+            "unsupported-source", "host-wrapper-v1"],
+        [content => "<invented_context>UNTRUSTED_DIAGNOSTIC_MARKER</invented_context>\n\n" + content + imageReminder,
+            "unsupported-source", "host-wrapper-v1"],
+    ]) {
+        const source = events(), event = source[0], original = event.data.content;
+        event.data.transformedContent = `<current_datetime>${event.timestamp}</current_datetime>\n\n` + layout(original);
+        const record = collect(source);
+        assert.deepEqual(record.userPrompt.authorship, { actor: "unknown", basis, issue });
+        assert.deepEqual(collect(source, { retained: false }).userPrompt.authorship, record.userPrompt.authorship);
+        assert.equal(record.userPrompt.text, original);
+        assert.equal(record.toolCalls[0].reportedOutcome, "failed");
+        assert.doesNotMatch(JSON.stringify(record), /UNTRUSTED_DIAGNOSTIC_MARKER/);
+        assert.deepEqual(promptAuthorship.correlateKickoff(record.userPrompt), record.userPrompt.authorship);
+        event.data.source = "user";
+        assert.deepEqual(collect(source).userPrompt.authorship, { actor: "user", basis: "source-user" },
+            "A separate explicit supported source is not inferred from the rejected envelope.");
+    }
+    for (const authorship of [
+        { actor: "user", basis: "source-user", issue: "body-boundary-v1" },
+        { actor: "unknown", basis: "invalid-source", issue: "host-wrapper-v1" },
+        { actor: "unknown", basis: "unsupported-source", issue: "UNTRUSTED_DIAGNOSTIC_MARKER" },
+    ]) assert.deepEqual(promptAuthorship.read({ authorship }), { actor: "unknown", basis: "invalid-source" });
+    const qualified = { authorshipVersion: promptAuthorship.version,
+        authorship: { actor: "unknown", basis: "invalid-source", issue: "body-boundary-v1" } };
+    assert.deepEqual(promptAuthorship.merge(qualified, {
+        authorshipVersion: 6, authorship: { actor: "unknown", basis: "invalid-source" },
+    }), qualified.authorship, "An older compact checkpoint cannot discard the retained qualification cause.");
+});
+
+test("ordinary collection preserves exact origin gaps through restart, normalized reading and generated reports", async t => {
+    const app = await promptInstallation(t), file = app.sourceFiles[1];
+    const source = (await readFile(file, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    const human = app.cases.find(row => row.name === "human");
+    const original = source.find(event => event.id === human.promptId);
+    original.data.transformedContent = `<current_datetime>${original.timestamp}</current_datetime>\n\nInvented unmatched host body.`;
+    await writeFile(file, source.map(event => JSON.stringify(event) + "\n").join(""));
+    const sourceBytes = await readFile(file);
+    await app.runtime().collector.collectNow();
+    const before = await loadBoardState(app.context);
+    const record = before.evidence.find(row => row.scenarioId === human.scenarioId);
+    const expected = { actor: "unknown", basis: "invalid-source", issue: "body-boundary-v1" };
+    assert.deepEqual(record.userPrompt.authorship, expected);
+    const model = buildAssessmentModel(before);
+    const detail = model.details.get(model.catalog.find(row => row.scenarioId === human.scenarioId).interactionRef);
+    assert.deepEqual(detail.interaction.message.authorship, expected);
+    const bundle = await buildSanitizedBundle([record], before.pseudonymKey, {
+        promptMode: "original", formats: ["html", "markdown", "json", "pdf"],
+    });
+    assert.deepEqual(bundle.snapshot.records[0].prompts.find(prompt => prompt.kind === "origin").authorship, expected);
+    for (const format of ["html", "md"]) assert.match(bundle.files[`product-report.${format}`],
+        /could not match the original prompt to a supported host message layout/);
+    const loading = getDocument({ data: new Uint8Array(bundle.files["product-report.pdf"]), useSystemFonts: true });
+    try {
+        const document = await loading.promise, pages = [];
+        for (let index = 1; index <= document.numPages; index++) {
+            const page = await document.getPage(index), content = await page.getTextContent();
+            pages.push(content.items.map(item => item.str ?? "").join(" "));
+        }
+        assert.match(pages.join(" ").replace(/\s+/g, " "),
+            /could not match the original prompt to a supported host message layout/);
+    } finally { await loading.destroy(); }
+    await app.restart();
+    await app.runtime().collector.collectNow();
+    const after = await loadBoardState(app.context);
+    assert.deepEqual(after.evidence, before.evidence);
+    assert.deepEqual(after.exports, before.exports);
+    assert.deepEqual(await readFile(file), sourceBytes);
 });
 
 test("direct extraction and retention agree without manufacturing returned entries, causes or bodies", () => {
@@ -190,7 +265,7 @@ test("normal collection qualifies new envelopes but restart and ordinary append 
     let state = await loadBoardState(app.context);
     const record = state.evidence.find(row => row.scenarioId === human.scenarioId);
     assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
-    assert.equal(record.userPrompt.authorshipVersion, 6);
+    assert.equal(record.userPrompt.authorshipVersion, promptAuthorship.version);
     const v5Prompt = prompt => ({ ...prompt, authorshipVersion: 5,
         ...(prompt.sourceEventId === human.promptId ? { authorship: { actor: "unknown", basis: "invalid-source" } } : {}) });
     await replaceEvidence(app.context, () => ({ records: state.evidence.map(row => row.sourceSessionId === app.child ? {
@@ -238,7 +313,7 @@ test("normal collection qualifies new envelopes but restart and ordinary append 
     assert.equal(afterAppend.evidence.length, state.evidence.length + 1);
     const fresh = afterAppend.evidence.find(row => row.userPrompt.sourceEventId === added[0].id);
     assert.deepEqual(fresh.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
-    assert.equal(fresh.userPrompt.authorshipVersion, 6);
+    assert.equal(fresh.userPrompt.authorshipVersion, promptAuthorship.version);
     assert.ok(afterIndex.sources[app.child].cursor.offset > beforeAppend.sources[app.child].cursor.offset);
     assert.deepEqual(afterIndex.sources[app.child].promptEventQualification, beforeAppend.sources[app.child].promptEventQualification);
     assert.deepEqual(JSON.parse(await readFile(checkpointFile, "utf8")).events.find(event => event.id === human.promptId), cachedBefore);

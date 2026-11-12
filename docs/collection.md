@@ -265,6 +265,16 @@ the image-envelope classifier does not trigger that repair automatically.
 Literal image-reference examples in the original prompt or a supported canvas
 attachment remain content, not host provenance.
 
+New author qualification can retain a closed `issue` code with the existing
+actor/basis pair: `body-boundary-v1` means the original prompt did not match a
+supported transformed-message boundary; `host-wrapper-v1` means the host-added
+prefix was not recognized. Neither code proves malformed source data or supplies
+an author. Raw host context stays excluded. A qualified creator kickoff cannot
+erase that format gap or turn it into a claim of contradictory sender records.
+Already-qualified historical records are not reread or given these details on
+upgrade. Canonical evidence owners resolve origin disagreements before author
+filtering; duplicate-only legacy copies do not override the current owner.
+
 ## Optional replies
 
 **Settings > Privacy & saved data > Recorded replies** has a draft switch and

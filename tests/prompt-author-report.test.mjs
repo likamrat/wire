@@ -3,8 +3,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { authorFilterFixture } from "./prompt-author-filter-fixture.mjs";
-import { loadBoardState, replaceEvidence } from "../lib/store.mjs";
+import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
+import { privateFixture, fixture } from "./helpers.mjs";
+import { createExportController } from "../lib/export.mjs";
+import { readSavedReportView } from "../lib/report-artifacts.mjs";
+import { defaultPersonalEvaluation } from "../lib/personal-evaluation.mjs";
 
 async function pdfText(value) {
     const task = getDocument({ data: new Uint8Array(Buffer.from(value.data, "base64")), useSystemFonts: true });
@@ -80,14 +84,101 @@ test("Current view author membership still includes the full matching originatin
     assert.equal(preview.snapshot.selectionScope.workIqActions, 2);
 });
 
-test("changed originating-author evidence invalidates an already reviewed report", async t => {
+async function reportApi(app) {
+    const origin = new URL(app.runtime.url).origin;
+    const headers = { Origin: origin, "Content-Type": "application/json", "X-Wire-Session-Protocol": "1" };
+    const post = async (route, body, status = 200) => {
+        const response = await fetch(origin + route, { method: "POST", headers, body: JSON.stringify(body) });
+        const result = await response.json();
+        assert.equal(response.status, status, result.error);
+        return result;
+    };
+    headers["X-Board-Capability"] = (await post("/api/session", {})).capability;
+    return post;
+}
+
+test("author-filtered collected preparation keeps its frozen origin through a later correction and explicit Save", async t => {
     const app = await authorFilterFixture(t);
-    const preview = await app.exports.preview("stale-author", undefined, { promptMode: "none", formats: ["json"] },
-        { kind: "selected", revision: app.state.revision, scenarioIds: [app.cases.ownMail.scenarioId], promptAuthors: ["user"] });
-    await app.exports.review("stale-author", preview.previewId, true);
+    const post = await reportApi(app);
+    const preview = await post("/api/preview", {
+        options: { promptMode: "original", formats: ["json"], saveMode: "local" },
+        selection: { kind: "all", revision: app.state.revision, promptAuthors: ["user"] },
+    });
+    assert.equal(preview.collectedSourceFrozen, true);
+    assert.equal(preview.snapshot.selectionScope.requestGroups, 2);
+    assert.equal(preview.snapshot.selectionScope.workIqActions, 3);
+    assert.ok(preview.records.every(record => record.prompts.find(prompt => prompt.kind === "origin").authorship.actor === "user"));
     const changed = structuredClone(app.state.evidence);
     changed.find(record => record.scenarioId === app.cases.ownMail.scenarioId).userPrompt.authorship = { actor: "agent", basis: "source-agent" };
     await replaceEvidence(app.context, () => ({ records: changed, importCoverage: app.state.importCoverage }));
-    await assert.rejects(app.exports.confirm("stale-author", preview.previewId, true), /changed|fresh/i);
+    const current = await loadBoardState(app.context);
+    assert.equal(buildActivityAnalytics(current.evidence, { filters: { scope: "all", promptAuthors: ["user"] } }).rows.length, 1);
+    await post("/api/export", { previewId: preview.previewId, confirmed: true,
+        localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false } }, 428);
+    assert.equal((await loadBoardState(app.context)).exports.length, 0);
+    const saved = await post("/api/export", { previewId: preview.previewId, confirmed: true,
+        localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: true } });
+    const after = await loadBoardState(app.context);
+    assert.deepEqual(after.evidence, changed, "Saving cannot roll back the later source correction.");
+    assert.equal(after.exports.length, 1);
+    assert.equal(saved.bundle.privacyReview.reviewerConfirmed, false);
+    assert.equal(saved.bundle.privacyReview.localSave.method, "explicit-local-save");
+    const bytes = await readFile(saved.bundle.files["product-report.json"], "utf8");
+    assert.equal(bytes, preview.files["product-report.json"]);
+    assert.deepEqual(JSON.parse(bytes), preview.snapshot);
+    const view = await readSavedReportView(app.context, after, saved.bundle.bundleId);
+    assert.match(view.text, /User prompt/);
+    const next = await post("/api/preview", {
+        options: { promptMode: "none", formats: ["json"], saveMode: "local" },
+        selection: { kind: "all", revision: after.revision, promptAuthors: ["user"] },
+    });
+    assert.equal(next.snapshot.selectionScope.requestGroups, 1);
+    assert.equal(next.snapshot.selectionScope.workIqActions, 1);
+});
+
+test("an unpinned author-filtered preparation still refuses changed originating-author evidence", async t => {
+    const record = fixture("unpinned-author");
+    record.userPrompt.authorship = { actor: "user", basis: "source-user" };
+    const { context } = await privateFixture(t, [record]), controller = createExportController(context);
+    const before = await loadBoardState(context);
+    const preview = await controller.preview("unpinned", undefined, { promptMode: "none", formats: ["json"], saveMode: "local" },
+        { kind: "all", revision: before.revision, promptAuthors: ["user"] });
+    assert.equal(preview.collectedSourceFrozen, undefined);
+    const changed = structuredClone(before.evidence);
+    changed[0].userPrompt.authorship = { actor: "agent", basis: "source-agent" };
+    await replaceEvidence(context, () => ({ records: changed, importCoverage: before.importCoverage }));
+    await assert.rejects(controller.confirm("unpinned", preview.previewId, true, undefined, {
+        localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: false },
+    }), /Selected evidence changed/);
+    assert.equal((await loadBoardState(context)).exports.length, 0);
+});
+
+for (const authority of ["source", "consent"]) test(`a frozen author-filtered preparation refuses ${authority} changes before explicit Save`, async t => {
+    const app = await authorFilterFixture(t), post = await reportApi(app);
+    if (authority === "consent") {
+        const source = app.runtime.collector.assessmentSource(await loadBoardState(app.context));
+        await updateBoardState(app.context, state => {
+            const personal = defaultPersonalEvaluation();
+            personal.source = source;
+            personal.consent = { ...personal.consent, state: "enabled", revision: 1, categories: ["answer"],
+                sourceConfigRef: source.sourceConfigRef, sourceConfigRevision: source.sourceConfigRevision,
+                grantedAt: new Date().toISOString(), grantOrigin: "explicit-in-app-setup" };
+            state.personalEvaluation = personal;
+        });
+    }
+    const before = await loadBoardState(app.context);
+    const preview = await post("/api/preview", {
+        options: { promptMode: "original", formats: ["json"], saveMode: "local" },
+        selection: { kind: "all", revision: before.revision, promptAuthors: ["user"] },
+    });
+    assert.equal(preview.collectedSourceFrozen, true);
+    if (authority === "source") await app.runtime.collector.configure({ ...app.config, windowDays: 7 });
+    else await updateBoardState(app.context, state => {
+        state.personalEvaluation.consent = { ...state.personalEvaluation.consent, state: "revoked",
+            revision: state.personalEvaluation.consent.revision + 1, categories: [], revokedAt: new Date().toISOString() };
+    });
+    const refused = await post("/api/export", { previewId: preview.previewId, confirmed: true,
+        localSave: { ...preview.localSaveRequest, keepChatDetailsConfirmed: true } }, 409);
+    assert.match(refused.error, /permission or deletion authority changed/);
     assert.equal((await loadBoardState(app.context)).exports.length, 0);
 });

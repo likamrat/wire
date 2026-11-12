@@ -128,7 +128,7 @@ test("missing and conflicting host senders remain distinct without hiding either
     const page = await browser.newPage({ viewport: { width: 375, height: 1000 }, reducedMotion: "reduce" });
     await page.goto(app.runtime.url + "#analyze"); await ready(page);
     await page.evaluate(() => document.documentElement.style.fontSize = "200%");
-    for (const [name, gap] of [["unverified", "Who sent this was not recorded"], ["conflicting", "Recorded sender details disagree"]]) {
+    for (const [name, gap] of [["unverified", "Who sent this was not recorded"], ["conflicting", "Origin details could not be reconciled"]]) {
         const record = app.cases[name];
         const row = rowFor(page, record.content);
         await expect(row.locator("[data-prompt-actor]")).toHaveAttribute("data-prompt-actor", "unknown");

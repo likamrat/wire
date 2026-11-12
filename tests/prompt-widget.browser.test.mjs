@@ -17,8 +17,13 @@ async function settle(page) {
         animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity));
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
-async function setup(t, { completeSearch = false } = {}) {
+async function setup(t, { completeSearch = false, disputedOrigin = false, qualifiedIssues = false } = {}) {
     const records = promptWidgetRecords(), cleanups = [];
+    if (disputedOrigin) records[1].userPrompt.sourceEventId = records[0].userPrompt.sourceEventId;
+    if (qualifiedIssues) {
+        records[14].userPrompt.authorship.issue = "body-boundary-v1";
+        records[11].userPrompt.authorship.issue = "host-wrapper-v1";
+    }
     if (completeSearch) records[3].userPrompt = { ...records[3].userPrompt, status: "full", text: "Harbor review: read the mailbox updates." };
     const app = await searchFixture({ after: fn => cleanups.push(fn) }, { records, reply: completeSearch });
     const before = await loadBoardState(app.context), errors = [], denied = [];
@@ -83,6 +88,50 @@ async function capture(page, name) {
     await page.screenshot({ path: path.join(proof, name + "-context.png") });
     await page.locator(".analyze-dashboard").screenshot({ path: path.join(proof, name + "-dashboard.png") });
 }
+
+test("a disputed canonical origin stays unknown through filters and the actual reader", { timeout: 45000 }, async t => {
+    const { page, widget } = await setup(t, { disputedOrigin: true });
+    await exact(page, widget, [5, 5, 7], 36);
+    await selectActivityOption(page, "promptAuthorFilter", "unknown");
+    await closeAnalyzeFilters(page);
+    await exact(page, widget, [0, 0, 7], 21);
+    for (const index of [0, 1]) {
+        const card = page.locator(`[data-view-key="request:prompt-widget-${index}"]`);
+        await expect(card.locator(".request-card-author")).toHaveText("Author unverified");
+        await card.locator(".request-card-open").click();
+        await expect(page.locator("#contextSidebar")).toBeVisible();
+        await expect(page.locator("#contextSidebar [data-prompt-actor=unknown]:not(.visually-hidden)")).toHaveText("Author unverified");
+        await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#contextSidebar")).toBeHidden();
+    }
+    await selectActivityOption(page, "outcomeFilter", "failure");
+    await exact(page, widget, [0, 0, 4], 11);
+    await selectActivityOption(page, "promptAuthorFilter", "agent");
+    await exact(page, widget, [0, 2, 0], 4);
+});
+
+test("retained origin causes reach the reader without changing author shares or recorded outcomes", { timeout: 45000 }, async t => {
+    const { page, widget } = await setup(t, { qualifiedIssues: true });
+    await exact(page, widget, [6, 6, 6], 36);
+    await selectActivityOption(page, "promptAuthorFilter", "unknown");
+    await closeAnalyzeFilters(page);
+    await exact(page, widget, [0, 0, 6], 18);
+    for (const [index, reason, width, theme] of [
+        [14, "WIRE could not match the original prompt to a supported host message layout.", 1440, "light"],
+        [11, "WIRE does not recognize the host-added context before the original prompt.", 390, "dark"],
+    ]) {
+        await chooseTheme(page, theme);
+        await page.setViewportSize({ width, height: 1100 });
+        await page.locator(`[data-view-key="request:prompt-widget-${index}"] .request-card-open`).click();
+        await expect(page.locator("#contextSidebar")).toBeVisible();
+        await expect(page.locator("#contextSidebar .reader-state")).toContainText(reason);
+        await expect(page.locator("#contextSidebar")).toContainText(index === 14 ? "Call #1 completed" : "Call #1 failed");
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await capture(page, `origin-issue-${index}-${width}`);
+        await page.locator("#closeContextSidebar").click();
+        await expect(page.locator("#contextSidebar")).toBeHidden();
+    }
+});
 
 test("ordinary Analyze shows complete prompt origins through filters, paging, guide and composed layouts", { timeout: 120000 }, async t => {
     const { page, widget } = await setup(t), evidence = [];

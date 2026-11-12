@@ -2,11 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 import { buildActivityAnalytics } from "../lib/activity-analytics.mjs";
-import { fixture } from "./helpers.mjs";
+import { fixture, privateFixture } from "./helpers.mjs";
 import { buildExportCatalog, selectExportSnapshot } from "../lib/export-selection.mjs";
 import { createReportScope } from "../web/report-scope.mjs";
 import { validateAnalyticsInput } from "../lib/analytics-input.mjs";
 import { BoardError } from "../lib/store.mjs";
+import { currentStatePayload } from "../lib/server.mjs";
+import { buildAssessmentModel } from "../lib/assessment-read-model.mjs";
+import { createPercentageCharts } from "../lib/percentage-charts.mjs";
+import { createAnalysisSlice } from "../web/client.mjs";
+import { buildSanitizedBundle } from "../lib/export.mjs";
 
 test("known Both stays distinct from All including unverified", () => {
     assert.deepEqual(promptAuthorship.selection(), ["user", "agent", "unknown"]);
@@ -36,7 +41,9 @@ test("author filtering keeps complete human-origin calls, not the actor executin
 });
 
 test("invalid author criteria fail explicitly and canonical full-history ownership still wins aliases", () => {
-    const current = fixture("current"), legacy = structuredClone(current);
+    const current = fixture("current");
+    current.userPrompt.sourceEventId = "shared-current-origin";
+    const legacy = structuredClone(current);
     current.userPrompt.authorship = { actor: "user", basis: "source-user" };
     legacy.scenarioId = "legacy-alias"; legacy.isLegacy = true;
     const records = [legacy, current], catalog = buildExportCatalog(records);
@@ -85,4 +92,49 @@ test("explicit report author choice narrows the base scope without discarding hi
     assert.deepEqual(snapshot.scope.promptAuthors, ["user"]);
     assert.equal(snapshot.scope.authorExcludedRequestGroups, 2);
     assert.equal(scopes.resolve(catalog, "selected", [], selected).requests.length, 3, "Returning to All restores the same selected groups");
+});
+
+test("one originating author is resolved before filters and shared by cards, counts and new reports", async t => {
+    const user = fixture("origin-user"), agent = fixture("origin-agent");
+    for (const [record, actor] of [[user, "user"], [agent, "agent"]]) {
+        record.userPrompt = { ...record.userPrompt, sourceEventId: "shared-origin",
+            sourceTimestamp: record.capturedAt, authorship: { actor, basis: `source-${actor}` } };
+    }
+    agent.toolCalls[0].toolSucceeded = false;
+    agent.toolCalls[0].reportedOutcome = "failed";
+    const records = [user, agent], before = structuredClone(records);
+    const { context } = await privateFixture(t, records);
+    const charts = createPercentageCharts({ authorship: promptAuthorship });
+    const slice = createAnalysisSlice(null, null);
+    for (const filters of [{}, { promptAuthors: ["unknown"] }, { outcomes: ["failure"] },
+        { tools: ["workiq-fetch"], promptAuthors: ["unknown"] }]) {
+        const options = { layer: "tool", filters: { scope: "all", ...filters } };
+        const snapshot = await currentStatePayload(context, undefined, options);
+        const accepted = slice(snapshot, options);
+        assert.equal(accepted.rows.length, filters.outcomes ? 1 : 2);
+        assert.ok(accepted.rows.every(row => row.promptAuthor === "unknown"));
+        assert.ok(accepted.scenarios.every(record => record.userPrompt.authorship.actor === "unknown"),
+            "The same accepted facts feed card and reader headings.");
+        assert.deepEqual(charts.authorUsage(accepted.scenarios).rows.map(row => row.count), [0, 0, 1]);
+    }
+    for (const promptAuthors of [["user"], ["agent"]]) {
+        assert.equal(buildActivityAnalytics(records, { filters: { scope: "all", promptAuthors } }).rows.length, 0);
+    }
+    const catalog = buildExportCatalog(records);
+    assert.ok(catalog.requests.every(request => request.promptAuthor === "unknown"));
+    const selected = selectExportSnapshot(records, { kind: "all", revision: 1, promptAuthors: ["unknown"] }, 1);
+    assert.equal(selected.records.flatMap(record => record.toolCalls).length, 2);
+    for (const input of [records, [...records].reverse()]) {
+        const model = buildAssessmentModel({ revision: 1, pseudonymKey: "a".repeat(64), evidence: input });
+        assert.deepEqual([...model.details.values()].map(detail => detail.interaction.message.authorship),
+            [{ actor: "unknown", basis: "conflicting-source" }]);
+    }
+    const bundle = await buildSanitizedBundle(records, "a".repeat(64), {
+        promptMode: "original", formats: ["html", "markdown", "json"],
+    });
+    assert.ok(bundle.snapshot.records.every(record =>
+        record.prompts.find(prompt => prompt.kind === "origin").authorship.actor === "unknown"));
+    assert.match(bundle.files["product-report.html"], /Author not verified/);
+    assert.match(bundle.files["product-report.md"], /Author not verified/);
+    assert.deepEqual(records, before);
 });

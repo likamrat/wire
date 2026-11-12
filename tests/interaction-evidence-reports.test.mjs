@@ -24,7 +24,7 @@ function record(id = "invented-timing-report") {
 test("new output stamps presentation v3 with ms-first timing, leaving envelope and metric definitions unchanged", async () => {
     const bundle = await buildSanitizedBundle([record()], key, { promptMode: "none", formats: ["html", "markdown", "json", "pdf"] });
     assert.equal(bundle.snapshot.schemaVersion, 3);
-    assert.deepEqual(bundle.snapshot.presentation, { schemaVersion: 3 });
+    assert.deepEqual(bundle.snapshot.presentation, { schemaVersion: 3, originExplanationVersion: 1 });
     assert.deepEqual(JSON.parse(bundle.files["coverage-and-redaction-manifest.json"]).presentation, bundle.snapshot.presentation);
     assert.equal(bundle.snapshot.evaluationFacts.metricProjectionVersion, 4);
     const metric = bundle.snapshot.evaluationFacts.metrics.find(item => item.definitionId === "tool-duration");

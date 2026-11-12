@@ -105,6 +105,9 @@ uses a single-pane reader and hides the sizing controls.
 **My prompt**, **Agent prompt** and **Author unverified** describe supported
 origin evidence, not who executed or authorized every call. Choosing My and
 Agent is not the same as All, which also includes unverified authors.
+The reader explains retained origin gaps separately from call results. For
+example, WIRE may not recognize the host's message format even when the prompt
+text and tool result were saved. Older records may lack that specific reason.
 
 **Tool latency** is the recorded call interval. **Prompt to final response**
 measures from the originating message to its recorded final response when

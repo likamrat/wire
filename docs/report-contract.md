@@ -46,6 +46,21 @@ report** filters whole originating interactions; My plus Agent excludes
 unverified. Calls executed by agents stay with their originating interaction.
 Leaving out prompts and replies removes those copies, not membership.
 
+New reports can preserve a closed, versioned author-qualification `issue` on an
+unknown actor/basis pair. It records an observed message-boundary or host-wrapper
+rejection, not an inferred author or a tool-result failure. The reason is carried
+from retained metadata through normalized facts and included prompt copies.
+Older records without it remain readable and gain no inferred issue. Readers
+predating this extension cannot validate new normalized facts containing it;
+keep a compatible reader. Saved files, manifests and hashes are never rewritten.
+
+New prepared presentation declares `originExplanationVersion: 1` alongside
+presentation schema 3. Saved JSON views use that declared wording policy;
+unmarked schema-3 snapshots retain the historical origin explanations, including
+their former conflict wording. Markdown-backed views read the saved Markdown.
+Opening either format must preserve the frozen reading, not only file hashes.
+Report explanation versions are independent of live screen wording.
+
 Synthetic, diagnostic, unknown-source and unidentifiable records retain
 explicit exclusions; missing project context alone is not exclusion. Counts
 distinguish chats, interactions and each evidence layer. Same-count identity
@@ -192,13 +207,18 @@ withdrawal retires their held text and actions with the existing readers.
 | Change after preparation | Effect |
 | --- | --- |
 | Ordinary Back/browsing with unchanged facts and authority | Preview can survive |
-| Scope, author, date or service change | Fresh membership and preparation |
+| Scope, author selection, date or service change | Fresh membership and preparation |
 | Title, note, privacy, copy or format change | Regenerate bytes against the original frozen reference and included populations |
 | Material source/configuration, consent, deletion, key or owner change | Fresh preparation under current authority; old preparation cannot bypass it |
 
 Original evidence-file identity also keys the report read model, so reading
 a saved report cannot replace current Analyze facts. Saving appends to current
 state; it never restores the preview's evidence snapshot over newer collection.
+For a qualified pinned preparation, a later correction to collected prompt
+authorship stays outside that frozen source snapshot. Explicit Save preserves
+the prepared author-filtered membership and facts; a new preparation uses the
+correction. Source/account permission, consent, deletion and owner changes still
+invalidate Save. Unpinned preparations must revalidate their live selected facts.
 
 New ordinary saved entries retain their snapshot's date selection as `reportPeriod`,
 independently of report presets. When present it must match the frozen manifest
