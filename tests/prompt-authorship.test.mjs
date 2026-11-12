@@ -110,6 +110,99 @@ test("supported host canvas-context suffix is neutral attachment data, not an au
         "Tags inside the exact displayed body cannot establish Agent provenance");
 });
 
+test("the runtime plan marker is neutral only at the independently observed host boundary", () => {
+    const content = "Invented plan request.", stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    const metadata = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle", agentMode: "plan" };
+    assert.deepEqual(extract({ ...metadata, transformedContent: stamp + "[[PLAN]] " + content }).userPrompt.authorship,
+        { actor: "user", basis: "host-direct-input" });
+    assert.deepEqual(extract({ ...metadata, transformedContent: stamp + "[[PLAN]] " + sender + content }).userPrompt.authorship,
+        { actor: "agent", basis: "host-agent-envelope" });
+    assert.deepEqual(extract({ ...metadata, source: "user", transformedContent: stamp + "[[PLAN]] " + sender + content }).userPrompt.authorship,
+        { actor: "unknown", basis: "conflicting-source" });
+    for (const prefix of ["[[PLAN]]\n", "[[PLAN]]", "[PLAN] ", "[[PLAN]] [[PLAN]] ", "Invented: [[PLAN]] "]) {
+        assert.equal(extract({ ...metadata, transformedContent: stamp + prefix + sender + content }).userPrompt.authorship.actor, "unknown");
+    }
+    for (const malformed of [sender + sender, sender.replace("00000000-0000-4000-8000-000000000002", "not-an-id")]) {
+        assert.equal(extract({ ...metadata, transformedContent: stamp + "[[PLAN]] " + malformed + content }).userPrompt.authorship.actor, "unknown");
+    }
+    const imitation = "[[PLAN]] " + sender + content;
+    assert.deepEqual(extract({ ...metadata, content: imitation, transformedContent: stamp + "[[PLAN]] " + imitation }).userPrompt.authorship,
+        { actor: "user", basis: "host-direct-input" }, "Plan and sender text inside the complete displayed body cannot supply agent origin.");
+});
+
+test("qualified runtime trailing-whitespace removal preserves exact original text and does not normalize leading or internal text", () => {
+    const content = "  Invented planning request. \n";
+    const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const metadata = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle" };
+    const body = content.replace(/[ \r\n]+$/u, "");
+    for (const prefix of [stamp, stamp + "[[PLAN]] "]) {
+        const record = extract({ ...metadata, transformedContent: prefix + body });
+        assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+        assert.equal(record.userPrompt.text, content);
+        for (const changed of [body.trimStart(), body.replace("planning ", ""), body.replace(" ", "\t")]) {
+            assert.equal(extract({ ...metadata, transformedContent: prefix + changed }).userPrompt.authorship.actor, "unknown");
+        }
+    }
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    assert.deepEqual(extract({ ...metadata, transformedContent: stamp + sender + body }).userPrompt.authorship,
+        { actor: "agent", basis: "host-agent-envelope" });
+    const imitation = sender + content;
+    assert.equal(extract({ ...metadata, content: imitation, transformedContent: stamp + imitation.replace(/[ \r\n]+$/u, "") })
+        .userPrompt.authorship.actor, "user");
+});
+
+test("the historical runtime mode notice and app branch context preserve qualified origin without parsing their prose", () => {
+    const content = "Invented planning request.", stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const notice = "<mode_changed_notice>Invented mode transition.\n<plan_mode>Invented plan context.</plan_mode>\n</mode_changed_notice>\n\n";
+    const context = "<copilot_tauri_workspace>Invented workspace.</copilot_tauri_workspace>\n\n"
+        + "<copilot_working_context>Invented work context.</copilot_working_context>\n\n"
+        + "<copilot_artifacts>Invented artifact scope.</copilot_artifacts>\n\n"
+        + "<branch_rename_request>Invented branch context.</branch_rename_request>\n\n";
+    const metadata = { content, messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle", agentMode: "plan" };
+    const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+    assert.deepEqual(extract({ ...metadata, transformedContent: stamp + notice + "[[PLAN]] " + context + content }).userPrompt.authorship,
+        { actor: "user", basis: "host-direct-input" });
+    assert.deepEqual(extract({ ...metadata, transformedContent: stamp + notice + "[[PLAN]] " + sender + context + content }).userPrompt.authorship,
+        { actor: "agent", basis: "host-agent-envelope" });
+    const opaque = context.replace("Invented branch context.", sender);
+    assert.equal(extract({ ...metadata, transformedContent: stamp + notice + "[[PLAN]] " + opaque + content }).userPrompt.authorship.actor, "user");
+    for (const prefix of [
+        notice + context, notice + notice + "[[PLAN]] ", notice.replace("</plan_mode>", "") + "[[PLAN]] ",
+        notice.replace("<mode_changed_notice>", '<mode_changed_notice source="user">') + "[[PLAN]] ",
+        notice + "[[PLAN]] <unrecognized>Invented.</unrecognized>\n\n",
+    ]) assert.equal(extract({ ...metadata, transformedContent: stamp + prefix + content }).userPrompt.authorship.actor, "unknown");
+    const imitation = notice + "[[PLAN]] " + sender + context + content;
+    assert.equal(extract({ ...metadata, content: imitation, transformedContent: stamp + imitation }).userPrompt.authorship.actor, "user");
+});
+
+test("the app's one-file rich-node projection is matched exactly against its recorded attachment metadata", () => {
+    const attachment = { type: "file", displayName: "invented-notes.md", path: "C:\\invented\\invented-notes.md" };
+    const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";
+    const metadata = { messageId: "00000000-0000-4000-8000-000000000001", delivery: "idle", attachments: [attachment] };
+    const descriptor = `Attached file: ${attachment.displayName} (${attachment.path})`;
+    for (const content of [attachment.displayName, `Read the planning notes in ${attachment.displayName} before replying.`]) {
+        const modelBody = content.replace(attachment.displayName, descriptor);
+        const record = extract({ ...metadata, content, transformedContent: stamp + modelBody });
+        assert.deepEqual(record.userPrompt.authorship, { actor: "user", basis: "host-direct-input" });
+        assert.equal(record.userPrompt.text, content);
+        const sender = "<cross_session_message>\nfrom_session_id: 00000000-0000-4000-8000-000000000002\n</cross_session_message>\n\n";
+        assert.deepEqual(extract({ ...metadata, content, transformedContent: stamp + "[[PLAN]] " + sender + modelBody }).userPrompt.authorship,
+            { actor: "agent", basis: "host-agent-envelope" });
+        for (const attachments of [[], [attachment, attachment], [{ ...attachment, path: "C:\\invented\\different.md" }],
+            [{ ...attachment, type: "directory" }], [{ type: "file", path: attachment.path }],
+            [{ ...attachment, lineRange: { start: 1, end: 4 } }]]) {
+            assert.equal(extract({ ...metadata, attachments, content, transformedContent: stamp + modelBody }).userPrompt.authorship.actor, "unknown");
+        }
+        assert.equal(extract({ ...metadata, content, transformedContent: stamp + modelBody + " changed" }).userPrompt.authorship.actor, "unknown");
+    }
+    const ambiguous = `${attachment.displayName} and ${attachment.displayName}`;
+    assert.equal(extract({ ...metadata, content: ambiguous, transformedContent: stamp + ambiguous.replace(attachment.displayName, descriptor) })
+        .userPrompt.authorship.actor, "unknown");
+    const copied = "Attached file: not-a-source (C:\\invented\\not-a-source)";
+    assert.equal(extract({ ...metadata, content: copied, transformedContent: stamp + copied }).userPrompt.authorship.actor, "user");
+});
+
 test("fixed host image reminder preserves direct-input provenance without accepting arbitrary system reminders", () => {
     const content = "Invented request with an attached image.";
     const stamp = "<current_datetime>2026-10-06T12:00:00Z</current_datetime>\n\n";

@@ -269,11 +269,46 @@ New author qualification can retain a closed `issue` code with the existing
 actor/basis pair: `body-boundary-v1` means the original prompt did not match a
 supported transformed-message boundary; `host-wrapper-v1` means the host-added
 prefix was not recognized. Neither code proves malformed source data or supplies
-an author. Raw host context stays excluded. A qualified creator kickoff cannot
-erase that format gap or turn it into a claim of contradictory sender records.
+an author. Raw host context stays excluded. A layout rejection cannot be turned
+into a claim of contradictory sender records. Separate qualified origin evidence
+can establish an author without making the model-text layout supported.
 Already-qualified historical records are not reread or given these details on
 upgrade. Canonical evidence owners resolve origin disagreements before author
 filtering; duplicate-only legacy copies do not override the current owner.
+
+The host's `[[PLAN]] ` prefix is neutral runtime mode framing, not sender
+evidence. WIRE recognizes it only after the qualified timestamp and outside the
+exact displayed message; the existing sender and attachment checks still apply.
+The historical plan-mode notice and app branch context are also neutral; their
+prose cannot establish a sender.
+The supported runtime can remove trailing spaces and line endings from model
+input while keeping them in the timeline. WIRE recognizes that exact trailing
+transform without changing retained text or normalizing leading/internal text.
+The app's display and model projections can also differ for an attachment.
+For one explicit file with a unique displayed label, WIRE checks the entire
+path-bearing model descriptor against that recorded label and path. Missing or
+ambiguous metadata and any other body difference remain unqualified. This is not
+fuzzy matching or general Markdown removal. Original timeline text stays intact;
+file contents are never opened and attachment paths are not added to retention.
+
+Historical origin correction is separate from collection. The prompt-origin
+maintenance policy binds exact original regions, every retained origin/follow-up
+copy and its checkpoint preimage. Its read-only inspector proposes changes but
+does not authorize them. Prepare and Apply use the existing sealed maintenance
+journal and offline writer guards; they change only author metadata and require
+an explicit decision for the named retained targets. Prompt text, calls, source
+cursors, privacy choices and existing saved reports stay unchanged. An
+interruption resumes the same operation rather than creating a replacement.
+Apply uses the existing persisted sealed-operation fence before any checkpoint
+write. Normal collector startup refuses until that operation is complete.
+An index at schema 3 advances to the store-bound schema-4 reader capability;
+an existing schema-4 store keeps its registry and binding. No completion references
+are created by an author correction. Keep a compatible reader after application;
+do not remove the fence or restore an older index to bypass it.
+Named checkpoint-only companions can correct an existing context message without
+creating a retained interaction. They are counted separately, preserve all tool
+and repaired error carriers, and bind honest before/after checkpoint hashes.
+Already-known origins remain outside the unknown-only repair population.
 
 ## Optional replies
 

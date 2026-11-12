@@ -83,18 +83,25 @@ export async function promptInstallation(t) {
         readSource: async () => { denied.scoringRead++; throw new Error("No extra scoring evidence read allowed"); },
     } };
     let runtime = await startServer(context, createExportController(context), options);
+    let running = true;
+    async function stop() {
+        if (!running) return;
+        running = false;
+        await runtime.close();
+    }
     const approvalBefore = structuredClone((await loadBoardState(context)).personalEvaluation?.modelEvaluation?.automatic?.approval);
     t.after(async () => {
         try {
             assert.deepEqual(denied, { provider: 0, scoringRead: 0 });
             assert.deepEqual((await loadBoardState(context)).personalEvaluation?.modelEvaluation?.automatic?.approval, approvalBefore);
-        } finally { await runtime.close(); db.close(); await rm(root, { recursive: true, force: true }); }
+        } finally { await stop(); db.close(); await rm(root, { recursive: true, force: true }); }
     });
     await runtime.collector.configure(config);
-    return { root, context, config, cases, sourceFiles, child, parent, runtime: () => runtime,
+    return { root, context, config, cases, sourceFiles, child, parent, runtime: () => runtime, stop,
         async restart(beforeStart) {
-            await runtime.close();
+            await stop();
             await beforeStart?.();
             runtime = await startServer(context, createExportController(context), options);
+            running = true;
         } };
 }
