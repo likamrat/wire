@@ -44,7 +44,7 @@ async function setup(t, { polling = false, permissionFeedback = false } = {}) {
             if (req.method === "GET" && comparisonModules.has(req.url)) {
                 res.setHeader("Content-Type", "text/javascript"); res.end(comparisonModules.get(req.url)); return;
             }
-            if (req.url === "/favicon.svg") { res.statusCode = 204; res.end(); return; }
+            if (req.url?.split("?")[0] === "/favicon.svg") { res.statusCode = 204; res.end(); return; }
             let body = ""; for await (const chunk of req) body += chunk;
             const args = JSON.parse(body || "{}"); requests.push({ route: req.url, input: args });
             let data;

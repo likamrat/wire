@@ -23,7 +23,7 @@ async function setup(t) {
             res.setHeader("Content-Type", "text/html");
             return res.end(renderHtmlShell("a".repeat(64), "sidebar-icons", UNBOUND_FIXTURE_BOOTSTRAP));
         }
-        if (req.method === "GET" && req.url === "/favicon.svg") { res.statusCode = 204; return res.end(); }
+        if (req.method === "GET" && req.url?.split("?")[0] === "/favicon.svg") { res.statusCode = 204; return res.end(); }
         res.setHeader("Content-Type", "application/json");
         if (req.method !== "POST" || req.url !== "/api/snapshot") {
             unexpected.push(`${req.method} ${req.url}`);

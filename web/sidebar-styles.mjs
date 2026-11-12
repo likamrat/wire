@@ -1,14 +1,14 @@
 export const sidebarStyles = `
 .app-header {border-bottom-color:transparent}
 .app-header .header-inner {display:grid;grid-template-columns:var(--app-sidebar-width,196px) minmax(0,1fr);min-height:76px;max-width:none;gap:0;padding:0}
-.app-header .brand {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:61px;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid transparent;overflow:hidden}
-.app-header .brand-home {position:relative;grid-area:1/1;justify-self:start;align-self:center;flex:none;width:148px;height:61px;max-width:none}
-.app-header .brand-logo {width:148px;height:auto;max-width:none}
+.app-header .brand {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:44px;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid transparent;overflow:hidden}
+.app-header .brand-home {position:relative;display:grid;align-items:center;grid-area:1/1;justify-self:start;align-self:center;flex:none;width:120px;height:44px;max-width:none}
+.app-header .brand-logo {width:120px;height:auto;max-width:none}
 .brand .brand-compact {display:none}
-.app-header .brand-compact {display:block;position:absolute;left:6px;top:7px;width:32px;height:32px;opacity:0}
+.app-header .brand-compact {display:block;position:absolute;left:6px;top:6px;width:32px;height:32px;opacity:0}
 .app-header :is(.brand-logo,.brand-compact) {transform-origin:0 0;pointer-events:none}
 :root[data-navigation=collapsed] .app-header #shellBrand .brand-logo {opacity:0}
-:root[data-navigation=collapsed] .app-header .brand-home {justify-self:center;width:44px;height:46px}
+:root[data-navigation=collapsed] .app-header .brand-home {justify-self:center;width:44px;height:44px}
 :root[data-navigation=collapsed] .app-header .brand-compact {opacity:1}
 .workspace-toolbar {min-width:0}
 .workspace-toolbar-inner {display:grid;grid-template-columns:minmax(0,1fr) clamp(240px,34vw,460px) minmax(0,1fr);align-items:center;gap:12px;padding:8px 24px}
@@ -70,7 +70,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 .navigation-drawer .drawer-heading h2 {flex:1 1 7rem;min-width:0}
 .navigation-drawer .drawer-heading>button {margin-inline-start:auto}
 .navigation-drawer .brand {margin:0 10px 20px}
-.navigation-drawer .brand-logo {width:148px;height:auto}
+.navigation-drawer .brand-logo {width:120px;height:auto}
 .navigation-drawer::backdrop {background:var(--scrim)}
 @media(forced-colors:active) {
  .app-sidebar,.navigation-drawer {border-right-color:CanvasText;box-shadow:none}

@@ -1,9 +1,11 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/wire-lockup-dark.svg">
-    <img src="assets/wire-lockup.svg" alt="WIRE - Work IQ Request Explorer" width="316">
+    <img src="assets/wire-lockup.svg" alt="WIRE" width="560">
   </picture>
 </p>
+
+# Work IQ Request Explorer
 
 Synthetic evals are essential, but they will always have a blind spot: how people
 actually work with AI. People phrase requests differently, bring different context

@@ -8,7 +8,7 @@ import { periodFixture } from "./period-comparison-fixture.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { loadBoardState, replaceEvidence, updateBoardState } from "../lib/store.mjs";
 import { buildPeriodComparison } from "../lib/period-comparison.mjs";
-import { readSavedReportView, reportHash } from "../lib/report-artifacts.mjs";
+import { readSavedReportView, readSavedArtifactFile, reportHash } from "../lib/report-artifacts.mjs";
 import { promptAuthorship } from "../lib/prompt-authorship.mjs";
 
 async function save(controller, context, options, pair) {
@@ -60,6 +60,7 @@ for (const format of ["json", "markdown"]) test(`exact ad69 ${format} artifacts 
     assert.doesNotMatch(view.text, /WIRE could not reconcile the recorded origin evidence/);
     assert.equal(reportHash(view.text), expectedView.sha256, "The complete historical reading, not only saved file bytes, stays frozen.");
     assert.equal(Buffer.byteLength(view.text), expectedView.bytes);
+    assert.equal((await readSavedArtifactFile(context, before, entry.bundleId, "report", format)).brandVersion, undefined);
     assert.deepEqual(await loadBoardState(context), before);
     for (const [name, packed] of Object.entries(artifact.files)) {
         assert.deepEqual(await readFile(entry.files[name]), unpack(packed));
@@ -72,11 +73,12 @@ test("new report origin explanations are versioned and survive JSON-only saved r
     const { context } = await privateFixture(t, [record]), controller = createExportController(context);
     const bundle = await save(controller, context, { formats: ["json"], promptMode: "original" });
     const snapshot = JSON.parse(await readFile(bundle.files["product-report.json"], "utf8"));
-    assert.deepEqual(snapshot.presentation, { schemaVersion: 3, originExplanationVersion: 1 });
+    assert.deepEqual(snapshot.presentation, { schemaVersion: 3, originExplanationVersion: 1, brandVersion: 1 });
     t.mock.method(promptAuthorship, "reason", () => "Changed live screen explanation.");
     const state = await loadBoardState(context), view = await readSavedReportView(context, state, bundle.bundleId);
     assert.match(view.text, /WIRE could not reconcile the recorded origin evidence\./);
     assert.doesNotMatch(view.text, /Recorded author evidence conflicts\.|Changed live screen explanation/);
+    assert.match(view.text, /wire-light-human-path-upper/);
 });
 
 test("JSON-only activity, period and comparison reports render their frozen saved facts without writes", async t => {
@@ -139,11 +141,14 @@ test("Markdown-only reports have an in-app HTML view without changing their save
     assert.equal(view.sourceFormat, "markdown");
     assert.match(view.text, /<h1>Portable saved activity<\/h1>/);
     assert.match(view.text, /<table>/);
+    const file = await readSavedArtifactFile(context, state, bundle.bundleId, "report", "markdown");
+    assert.equal(file.brandVersion, 1, "The file preview obtains branding from the verified manifest, not the current screen");
     assert.deepEqual(await readFile(bundle.files["product-report.md"]), bytes);
     assert.deepEqual(await loadBoardState(context), state);
 });
 
-for (const presentation of [{ schemaVersion: 999 }, { schemaVersion: 3, originExplanationVersion: 999 }]) test(
+for (const presentation of [{ schemaVersion: 999 }, { schemaVersion: 3, originExplanationVersion: 999 },
+    { schemaVersion: 3, originExplanationVersion: 1, brandVersion: 999 }]) test(
     `unsupported frozen JSON presentation ${JSON.stringify(presentation)} is refused rather than reinterpreted`, async t => {
     const { context } = await privateFixture(t), controller = createExportController(context);
     const bundle = await save(controller, context, { formats: ["json"] });

@@ -70,7 +70,7 @@ async function setup(t, contextOptions = {}) {
             res.setHeader("Content-Type", "text/html");
             return res.end(render("a".repeat(64), "request-metadata"));
         }
-        if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url)) return res.writeHead(204).end();
+        if (req.method === "GET" && ["/favicon.ico", "/favicon.svg"].includes(req.url?.split("?")[0])) return res.writeHead(204).end();
         if (req.method === "GET" && req.url === "/assets/assessment-contract.mjs") {
             res.setHeader("Content-Type", "text/javascript");
             return res.end(await readFile(new URL("../lib/assessment-contract.mjs", import.meta.url)));

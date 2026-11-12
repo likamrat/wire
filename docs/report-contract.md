@@ -326,6 +326,17 @@ or corrupted payloads block preparation.
 Human summaries may omit redundant prose, not selected evidence or
 qualifications. Screen tokens, icons and typography cannot restyle frozen files.
 
+New reports declare `presentation.brandVersion: 1` for the Magenta Human Path
+identity. Snapshots without that field retain the historical brand; unknown
+brand versions are unsupported, not permission to use the current logo.
+Keep historical logo assets and report styles unchanged so JSON/Markdown-only
+Open preserves the complete historical rendering, not merely the saved bytes.
+An identity change requires a new presentation brand version and preservation
+of its predecessors. The screen/README brand is not a global report override.
+Markdown files remain portable text; their in-app file-preview brand follows
+the verified manifest's declared version, with the historical brand used when
+that field is absent.
+
 Recorded tool results include every selected call, including calls with no
 saved diagnostic; there is no first-twelve-call display cap. Each result names
 its tool and the requested operation from the same frozen technical facts,

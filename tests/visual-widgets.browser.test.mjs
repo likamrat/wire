@@ -39,7 +39,7 @@ async function setup(t, state = visualWidgetFixture(), { legacy = false } = {}) 
             if (request.method === "GET" && request.url === "/assets/assessment-contract.mjs") {
                 response.setHeader("Content-Type", "text/javascript"); response.end(contract); return;
             }
-            if (request.method === "GET" && request.url === "/favicon.svg") { response.statusCode = 204; response.end(); return; }
+            if (request.method === "GET" && request.url?.split("?")[0] === "/favicon.svg") { response.statusCode = 204; response.end(); return; }
             let body = ""; for await (const chunk of request) body += chunk;
             const input = JSON.parse(body || "{}");
             reads.push({ route: request.url, input });

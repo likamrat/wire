@@ -142,7 +142,7 @@ export function mountSidebarNavigation(ux, preference) {
         const visibleTarget = targetBrand.layers.find(layer => Number(layer.opacity) > 0);
         for (const target of targetBrand.layers) {
             const origin = originBrand.layers.find(layer => layer.node === target.node);
-            // Register both approved SVGs in their shared artwork coordinates so their W
+            // Register both approved SVGs in their shared artwork coordinates so their symbol
             // follows one path through the fade, including a reversal partway through it.
             const transform = (source, linkBounds) => {
                 const scale = source.matrix.a / target.matrix.a;

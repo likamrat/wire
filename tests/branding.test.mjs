@@ -1,12 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { PRODUCT_NAME, PRODUCT_DESCRIPTION, PRODUCT_TITLE, logoSvg, wordmarkSvg, darkWordmarkSvg, lockupSvg, darkLockupSvg, brandMark, brandDarkMark, brandLockup, brandDarkLockup, brandCompactMark } from "../lib/branding.mjs";
-import { fontDataUrl } from "../lib/typeface.mjs";
+import { PRODUCT_NAME, PRODUCT_DESCRIPTION, PRODUCT_TITLE, FAVICON_PATH, logoSvg, darkLogoSvg,
+    wordmarkSvg, darkWordmarkSvg, lockupSvg, darkLockupSvg,
+    brandMark, brandDarkMark, brandLockup, brandDarkLockup, brandCompactMark } from "../lib/branding.mjs";
 import { renderHtmlShell } from "../lib/render.mjs";
+import { currentReportPresentation, hasSupportedReportPresentation, reportBrandHeader } from "../lib/report-presentation.mjs";
 
-test("WIRE preserves both approved middle-bar wordmarks and uses only local paint references", () => {
+function localPaint(svg) {
+    assert.doesNotMatch(svg, /<script|<image|<foreignObject|\bhref=|\bon[a-z]+=/i);
+    const ids = new Set([...svg.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
+    for (const [, target] of svg.matchAll(/url\(([^)]+)\)/g)) {
+        assert.match(target, /^#[a-z0-9-]+$/);
+        assert.ok(ids.has(target.slice(1)), "Every paint/clip is defined inside the asset");
+    }
+}
+
+test("historical report wordmarks retain their exact approved artwork and local paint", () => {
     assert.equal(PRODUCT_NAME, "WIRE");
     assert.equal(PRODUCT_DESCRIPTION, "Work IQ Request Explorer");
     assert.equal(PRODUCT_TITLE, "WIRE - Work IQ Request Explorer");
@@ -14,71 +26,79 @@ test("WIRE preserves both approved middle-bar wordmarks and uses only local pain
         [wordmarkSvg, "d8941e2fcbe1e8ffd86d992cbf5c8524b8767c335f1414f84e35ff6a83b76418"],
         [darkWordmarkSvg, "d012ff4eb660bd2943667b44f577404f35c6a0fbc1e72f483dde8b88ce6e5741"],
     ]) {
-        assert.match(svg, /viewBox="24 62 500 158"/);
         const drawing = svg.replaceAll("\r\n", "\n").replace(/\s*<(title|desc)\b[^>]*>[\s\S]*?<\/\1>/g, "");
         assert.equal(createHash("sha256").update(drawing).digest("hex"), hash);
-        assert.match(svg, /<title id="title">WIRE - Work IQ Request Explorer<\/title>/);
-        assert.match(svg, /id="letter-e"[^>]+d="M426 201 V90 H489 M426 189 H489"/);
-        assert.doesNotMatch(svg, /unapproved|draft|provisional|<script|<image|<foreignObject|\bhref=|\bon[a-z]+=/i);
-        const ids = new Set([...svg.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
-        for (const [, target] of svg.matchAll(/url\(([^)]+)\)/g)) {
-            assert.match(target, /^#[a-z0-9-]+$/);
-            assert.ok(ids.has(target.slice(1)), "Every paint/clip is defined inside the asset");
-        }
+        assert.match(svg, /viewBox="24 62 500 158"/);
+        localPaint(svg);
     }
-    assert.match(logoSvg, /<title id="title">WIRE<\/title>/);
-    assert.doesNotMatch(logoSvg, /<script|<image|<foreignObject|expression|letter-e|url\(/i);
 });
 
-test("inline light and dark wordmarks keep independent IDs and decorative semantics", () => {
+test("the selected identity is deterministic vector artwork with a shared compact coordinate system", () => {
+    execFileSync(process.execPath, ["scripts/build-brand-lockups.mjs", "--check"], { cwd: new URL("..", import.meta.url) });
+    const artwork = JSON.parse(readFileSync(new URL("../assets/wire-brand.json", import.meta.url), "utf8"));
+    for (const svg of [lockupSvg, darkLockupSvg, logoSvg, darkLogoSvg]) {
+        localPaint(svg);
+        assert.match(svg, /<title id="title">WIRE<\/title>/);
+        assert.ok(svg.includes(artwork.symbol.outline));
+        assert.ok(svg.includes(artwork.symbol.shade));
+        assert.doesNotMatch(svg, /<text|data:font|Work IQ Request Explorer|id="descriptor"/);
+    }
+    for (const svg of [lockupSvg, darkLockupSvg]) {
+        assert.match(svg, /viewBox="0 0 402 82"/);
+        assert.ok(svg.includes(artwork.lettering.path));
+    }
+    for (const svg of [logoSvg, darkLogoSvg]) {
+        assert.match(svg, /viewBox="0 0 82 82"/);
+        assert.ok(!svg.includes(artwork.lettering.path));
+    }
+    assert.equal(lockupSvg.match(/<g transform="([^"]+)"/)[1], logoSvg.match(/<g transform="([^"]+)"/)[1],
+        "Full and compact marks register the same symbol through the sidebar glide");
+    assert.match(lockupSvg, /stop-color="#8f2966"/);
+    assert.match(lockupSvg, /stop-color="#c6398d"/);
+    assert.match(darkLockupSvg, /stop-color="#d97cb4"/);
+    assert.match(logoSvg, /@media\(prefers-color-scheme:dark\)/);
+});
+
+test("inline identity layers keep decorative semantics and independent paint IDs", () => {
     for (const [markup, theme] of [[brandMark, "light"], [brandDarkMark, "dark"], [brandLockup, "light"], [brandDarkLockup, "dark"]]) {
         assert.match(markup, /class="brand-logo" aria-hidden="true" focusable="false"/);
         assert.ok(markup.includes(`data-brand-theme="${theme}"`));
-        assert.doesNotMatch(markup, /<title|<desc|aria-labelledby|role="img"/);
-        const ids = new Set([...markup.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
-        assert.ok([...ids].every(id => id.startsWith(`wire-${theme}-`)));
-        for (const [, target] of markup.matchAll(/url\(#([^)]+)\)/g)) assert.ok(ids.has(target));
+        assert.doesNotMatch(markup, /<title|<desc|<style|aria-labelledby|role="img"/);
+        localPaint(markup);
     }
-    const ids = [...(brandMark + brandDarkMark).matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
-    assert.equal(ids.length, new Set(ids).size, "Theme variants do not create duplicate document IDs");
     assert.match(brandCompactMark, /class="brand-compact" aria-hidden="true" focusable="false"/);
-    assert.doesNotMatch(brandCompactMark, /<title|\bid=|aria-labelledby|role="img"/);
-    assert.equal(brandCompactMark.match(/<path[\s\S]*?\/>/)[0], logoSvg.match(/<path[\s\S]*?\/>/)[0],
-        "The inline compact W keeps the approved path and paint unchanged");
+    assert.doesNotMatch(brandCompactMark, /<title|<desc|<style|aria-labelledby|role="img"/);
+    localPaint(brandCompactMark);
+    const combined = brandLockup + brandDarkLockup + brandCompactMark;
+    const ids = [...combined.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+    assert.equal(ids.length, new Set(ids).size, "Visible brand layers cannot collide on a paint/clip definition");
 });
 
-test("standalone screen/README lockups add only the licensed descriptor to unchanged artwork", () => {
-    for (const [lockup, wordmark] of [[lockupSvg, wordmarkSvg], [darkLockupSvg, darkWordmarkSvg]]) {
-        assert.ok(lockup.includes(fontDataUrl), "Standalone images embed the exact bundled font");
-        assert.match(lockup, /SIL OPEN FONT LICENSE/);
-        assert.match(lockup, /<text id="descriptor"[^>]+font-size="40"[^>]+>Work IQ Request Explorer<\/text>/);
-        const artwork = lockup.replace('viewBox="24 62 500 204"', 'viewBox="24 62 500 158"')
-            .replace(/<style>[\s\S]*?<\/style>\s*/, "")
-            .replace(/  <text id="descriptor"[^>]*>[^<]+<\/text>\r?\n/, "");
-        const normalize = value => value.replaceAll("\r\n", "\n").replace(/[ \t]+$/gm, "");
-        assert.equal(normalize(artwork), normalize(wordmark), "Every original paint, path, transform and proportion is preserved");
+test("frozen presentation, not global screen branding, chooses the report identity", () => {
+    for (const presentation of [{ schemaVersion: 3 }, { schemaVersion: 3, originExplanationVersion: 1 }]) {
+        assert.ok(hasSupportedReportPresentation({ presentation }));
+        const header = reportBrandHeader("Historical", { presentation });
+        assert.ok(header.includes(brandMark + brandDarkMark));
+        assert.ok(!header.includes(brandLockup));
     }
-    for (const mark of [brandLockup, brandDarkLockup]) {
-        assert.doesNotMatch(mark, /<style|data:font/, "Inline lockups reuse the application's embedded font");
-        assert.equal((mark.match(/>Work IQ Request Explorer<\/text>/g) || []).length, 1);
-    }
+    const header = reportBrandHeader("Current", { presentation: currentReportPresentation });
+    assert.ok(header.includes(brandLockup + brandDarkLockup));
+    assert.ok(!header.includes(brandMark));
+    assert.throws(() => reportBrandHeader("Unknown", { presentation: { brandVersion: 999 } }), /Unsupported frozen report brand/);
+});
+
+test("README and application use the current identity without a painted descriptor", () => {
     const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
     assert.match(readme, /srcset="assets\/wire-lockup-dark.svg"/);
-    assert.match(readme, /src="assets\/wire-lockup.svg" alt="WIRE - Work IQ Request Explorer" width="316"/);
-    assert.doesNotMatch(readme, /<sub>|<br>/);
-    assert.match(readme, /<\/p>\s+I built WIRE \(Work IQ Request Explorer\)/);
-});
-
-test("the application uses WIRE, the approved local mark and a same-origin favicon", () => {
+    assert.match(readme, /src="assets\/wire-lockup.svg" alt="WIRE" width="560"/);
+    assert.match(readme, /<\/p>\s+# Work IQ Request Explorer(?:\r?\n){2}/);
     const html = renderHtmlShell("a".repeat(64), "synthetic-branding");
-    assert.match(html, /<title>WIRE - Work IQ Request Explorer<\/title>/);
-    assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="\/favicon\.svg">/);
-    assert.match(html, /<div id="shellBrand" class="brand"><a class="brand-home" href="#analyze" data-nav="analyze" aria-label="WIRE - Work IQ Request Explorer - Analyze">/);
+    assert.ok(html.includes(`<link rel="icon" type="image/svg+xml" href="${FAVICON_PATH}">`));
     assert.ok(html.includes(`${brandLockup}${brandDarkLockup}${brandCompactMark}</a></div>`));
     assert.ok(html.includes(`<template id="reportBrand">${brandMark}${brandDarkMark}</template>`),
-        "Saved readers have a separate unchanged report asset source");
-    assert.doesNotMatch(html, /brand-caption/);
-    assert.doesNotMatch(html, /class="brand-name"/);
-    assert.doesNotMatch(html, /Work IQ Evidence/);
+        "Historical readers retain their original theme assets");
+    assert.ok(html.includes(`<template id="reportBrandV1">${brandLockup}${brandDarkLockup}</template>`),
+        "Current Markdown previews use the declared current identity");
+    assert.doesNotMatch(html, /brand-caption|class="brand-name"/);
     assert.doesNotMatch(html, /<(?:img|link|script)[^>]+(?:src|href)=["']https?:/i);
 });

@@ -2174,8 +2174,9 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             invalidateDialog("Recorded evidence or permission changed. Prepare a new report preview.");
         },
     });
-    function cloneReportBrand() {
-        const originals = $("reportBrand").content.querySelectorAll(".brand-logo");
+    function cloneReportBrand(version) {
+        if (version !== undefined && version !== 1) throw new Error("This report's branding version is not supported.");
+        const originals = $(version === 1 ? "reportBrandV1" : "reportBrand").content.querySelectorAll(".brand-logo");
         if (originals.length !== 2) throw new Error("WIRE's report wordmark assets are unavailable.");
         const mark = el("span", "saved-report-mark");
         mark.setAttribute("role", "img"); mark.setAttribute("aria-label", "WIRE");
@@ -2195,7 +2196,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
     }
     function mountFileInspection(host, files, options) {
         return assessmentFactories.preparedFileInspection(host, files, {
-            ...options, icon: ux.icon, utility: ux.utility, brand: cloneReportBrand,
+            ...options, icon: ux.icon, utility: ux.utility, brand: () => cloneReportBrand(options.brandVersion),
             createPreview: (target, value, settings) => {
                 const mounted = assessmentFactories.savedFilePreview(target, value, {
                     ...settings, frozenFrame: assessmentFactories.liveSearch.frozenFrame,
@@ -7427,7 +7428,8 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
                     }
                     if (result.artifact?.bundleId !== bundle.bundleId || result.artifact.kind !== kind
                         || format !== "pdf" && typeof text !== "string" || !indexedSaved(bundle)) throw new Error("This saved artifact is no longer available.");
-                    value = { kind: format, text, data: format === "pdf" ? result.data : undefined, name: result.name, artifact: result.artifact };
+                    value = { kind: format, text, data: format === "pdf" ? result.data : undefined, name: result.name,
+                        artifact: result.artifact, brandVersion: result.brandVersion };
                 }
                 if (!active()) return;
                 download.disabled = false;
@@ -7555,7 +7557,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
         body.append(preview);
         const name = value.name || savedFileName(artifact || {}, value.kind);
         const mounted = mountFileInspection(preview, { [name]: value.kind === "pdf" ? { data: value.data } : value.text }, {
-            id: "savedFileView", toolbar: current.toolbar, title: current.title, isCurrent: valid,
+            id: "savedFileView", toolbar: current.toolbar, title: current.title, isCurrent: valid, brandVersion: value.brandVersion,
             onInfo: (file, format, trigger) => showSavedFileNotice(current, valid, trigger, false, { file, format,
                 prepared: artifact?.preparedAtDisplay || time.formatTime(artifact?.preparedAt, artifact?.timeContext || viewerTime) }),
         });
@@ -9054,7 +9056,7 @@ export function mountEvidence(capability, createBoardTransport, theme, createRep
             const selection = preparedFileInspection?.selection() ?? readingSelection?.file;
             preparedFileInspection?.dispose();
             preparedFileInspection = mountFileInspection(exactFiles, value.files, {
-                id: "preparedReportFile", selection, hideRail: localSave,
+                id: "preparedReportFile", selection, hideRail: localSave, brandVersion: value.snapshot?.presentation?.brandVersion,
                 isCurrent: () => api.isCurrent(publication) && draft.current(operation) && activePreview?.previewId === value.previewId
                     && (!(value.snapshot?.recordedContext || value.snapshot?.nativeEvidence || value.snapshot?.resultText) || draft.contextCurrent(contextToken)),
             });

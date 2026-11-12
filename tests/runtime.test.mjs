@@ -10,7 +10,7 @@ import { startServer } from "../lib/server.mjs";
 import { createExportController } from "../lib/export.mjs";
 import { createBoardTransport } from "../lib/client-transport.mjs";
 import { createRuntimeClient } from "../lib/runtime-client.mjs";
-import { logoSvg } from "../lib/branding.mjs";
+import { FAVICON_PATH, logoSvg } from "../lib/branding.mjs";
 
 const nativeFetch = globalThis.fetch;
 async function fixture(t, options = {}) {
@@ -250,16 +250,16 @@ test("duplicate runtime cannot acquire the writer endpoint", async t => {
 test("the approved favicon is local, host-protected and does not consume panel capabilities", async t => {
     const { origin } = await fixture(t);
     for (let index = 0; index < 130; index++) {
-        const icon = await nativeFetch(origin + "/favicon.svg");
+        const icon = await nativeFetch(origin + (index % 2 ? FAVICON_PATH : "/favicon.svg"));
         assert.equal(icon.status, 200);
         assert.match(icon.headers.get("content-type"), /^image\/svg\+xml/);
         assert.equal(await icon.text(), logoSvg);
         assert.match(icon.headers.get("content-security-policy"), /img-src 'self';/);
     }
     assert.equal((await post(origin, "/api/session", {})).status, 200, "Icon reads do not exhaust the 128-panel limit");
-    assert.equal((await nativeFetch(origin + "/favicon.svg", { headers: { Origin: "https://foreign.example" } })).status, 403);
+    assert.equal((await nativeFetch(origin + FAVICON_PATH, { headers: { Origin: "https://foreign.example" } })).status, 403);
     const foreignHostStatus = await new Promise((resolve, reject) => {
-        get(origin + "/favicon.svg", { headers: { Host: "foreign.example" } }, response => {
+        get(origin + FAVICON_PATH, { headers: { Host: "foreign.example" } }, response => {
             response.resume();
             resolve(response.statusCode);
         }).on("error", reject);

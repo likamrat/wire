@@ -158,6 +158,10 @@ for (const promptMode of ["none", "masked", "original"]) test(`${promptMode}: fo
     }).replace(/url\(#(wire-dark-wire-(?:letter|cable)-ink)\)/g, (_, id) => {
         assert.ok(bundle.files["product-report.html"].includes(`<linearGradient id="${id}"`), "Bundled dark wordmark paint must resolve locally");
         return "";
+    }).replace(/url\(#(wire-(?:light|dark)-human-path-(?:upper|lower|boundary))\)/g, (_, id) => {
+        assert.match(bundle.files["product-report.html"], new RegExp(`<(?:linearGradient|clipPath) id="${id}"`),
+            "Current brand paint and clipping must resolve inside the saved document");
+        return "";
     }).replace(/url\(#(dimensional-(?:\d+-(?:(?:orange|cyan|teal|pink|slate)(?:-side|-cap)?|cap|end|(?:success|failure|unknown|partial|other|transport)-(?:front|side))|plane-\d+(?:-(?:glass|reflection|shadow|surface))?))\)/g, (_, id) => {
         assert.ok(paintIds.has(id), "Every allowed chart paint/filter/clip fragment must name an existing local definition");
         return "";

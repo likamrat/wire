@@ -8,7 +8,7 @@ import { createExportController } from "../lib/export.mjs";
 import { startServer } from "../lib/server.mjs";
 import { loadBoardState, updateBoardState } from "../lib/store.mjs";
 import { reportHash } from "../lib/report-artifacts.mjs";
-import { brandDarkMark } from "../lib/branding.mjs";
+import { brandMark, brandLockup, brandDarkLockup } from "../lib/branding.mjs";
 import { contrast, measureControlSurface } from "./color-measurements.mjs";
 
 async function setup(t) {
@@ -24,7 +24,8 @@ async function setup(t) {
         bundles.push((await exports.confirm(title, prepared.previewId, true)).bundle);
     }
     const older = bundles[0], file = older.files["product-report.html"];
-    const original = (await readFile(file, "utf8")).replace(' data-evidence-theme="light"', "").replace(brandDarkMark, "");
+    const original = (await readFile(file, "utf8")).replace(' data-evidence-theme="light"', "")
+        .replace(brandLockup, brandMark).replace(brandDarkLockup, "");
     const manifestPath = older.files["coverage-and-redaction-manifest.json"];
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.files["product-report.html"] = { bytes: Buffer.byteLength(original), sha256: reportHash(original) };
@@ -72,18 +73,24 @@ async function setup(t) {
 
 async function logoContrast(page, logo) {
     await expect(logo).toBeInViewport();
-    const geometry = await logo.evaluate(node => ({ box: node.getBoundingClientRect().toJSON(), view: {
-        x: node.viewBox.baseVal.x, y: node.viewBox.baseVal.y, width: node.viewBox.baseVal.width, height: node.viewBox.baseVal.height,
-    } }));
+    // Sample the I and an empty gap; report readers may remap the SVG's internal IDs.
+    const geometry = await logo.evaluate(node => {
+        const view = node.viewBox.baseVal, current = view.width === 402 && view.height === 82;
+        return { box: node.getBoundingClientRect().toJSON(),
+            inkPoint: current ? { x: 244, y: 41 } : { x: 260, y: 180 },
+            backgroundPoint: current ? { x: 98, y: 41 } : { x: 283, y: 180 },
+            view: { x: view.x, y: view.y, width: view.width, height: view.height } };
+    });
     const box = await logo.boundingBox(), screenshot = await page.screenshot({ animations: "disabled", scale: "css" });
-    const colors = await page.evaluate(async ({ png, box, view }) => {
+    const colors = await page.evaluate(async ({ png, box, view, inkPoint, backgroundPoint }) => {
         const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(png), c => c.charCodeAt(0))]));
         const canvas = document.createElement("canvas"); canvas.width = bitmap.width; canvas.height = bitmap.height;
         const context = canvas.getContext("2d"); context.drawImage(bitmap, 0, 0); bitmap.close();
         const sample = (x, y) => [...context.getImageData(Math.floor(x), Math.floor(y), 1, 1).data].slice(0, 3);
-        return { ink: sample(box.x + (260 - view.x) / view.width * box.width, box.y + (180 - view.y) / view.height * box.height),
-            background: sample(box.x + 2, box.y + 2) };
-    }, { png: screenshot.toString("base64"), box, view: geometry.view });
+        return { ink: sample(box.x + (inkPoint.x - view.x) / view.width * box.width, box.y + (inkPoint.y - view.y) / view.height * box.height),
+            background: sample(box.x + (backgroundPoint.x - view.x) / view.width * box.width,
+                box.y + (backgroundPoint.y - view.y) / view.height * box.height) };
+    }, { png: screenshot.toString("base64"), box, view: geometry.view, inkPoint: geometry.inkPoint, backgroundPoint: geometry.backgroundPoint });
     return { ...colors, contrast: contrast(`rgb(${colors.ink})`, `rgb(${colors.background})`), screenshot };
 }
 
@@ -105,6 +112,7 @@ test("older Report reading chooses visible WIRE artwork without changing origina
         await page.emulateMedia({ colorScheme: theme }); await chooseTheme(page, theme);
         await fullHtmlViewport(reader);
         const mark = report.locator(".report-brand .brand-logo:visible");
+        await expect(mark).toHaveAttribute("viewBox", "24 62 500 158");
         const measured = await logoContrast(page, mark);
         measurements.push({ theme, ink: measured.ink, background: measured.background, contrast: measured.contrast });
         await capture("older-report-" + theme);
@@ -136,6 +144,7 @@ test("older Report reading chooses visible WIRE artwork without changing origina
             if (format !== "markdown") await fullHtmlViewport(reader);
             const mark = format === "markdown" ? reader.locator(".saved-report-mark .brand-logo:visible")
                 : reader.frameLocator(".saved-file-preview:visible iframe").locator(".report-brand .brand-logo:visible");
+            await expect(mark).toHaveAttribute("viewBox", "0 0 402 82");
             assert.ok((await logoContrast(page, mark)).contrast >= 3, format);
         }
         await capture("current-" + format + "-dark-shell");
@@ -145,6 +154,7 @@ test("older Report reading chooses visible WIRE artwork without changing origina
     const prepared = page.frameLocator(".report-contained-frame");
     await expect(prepared.locator("h1")).toHaveText("All activity");
     const mark = prepared.locator(".report-brand .brand-logo:visible");
+    await expect(mark).toHaveAttribute("viewBox", "0 0 402 82");
     assert.ok((await logoContrast(page, mark)).contrast >= 3);
     await capture("prepared-report-dark");
     if (process.env.WIRE_VIEWER_CHROME_PROOFS) await writeFile(path.join(process.env.WIRE_VIEWER_CHROME_PROOFS, "logo-contrast.json"), JSON.stringify(measurements, null, 2));

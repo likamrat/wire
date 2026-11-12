@@ -101,12 +101,21 @@ control is not permission to remove its focus ring or hit area.
 
 ### Brand assets
 
-The screen and README use the same self-contained `wire-lockup` SVGs: the
-unchanged cable wordmark and its integrated Asta Sans descriptor. Regenerate
-them with `node scripts/build-brand-lockups.mjs` after an intentional asset
-change. The font and its license are embedded so GitHub does not substitute
-another face. Keep the compact W and the report-only `wire-wordmark` assets
-unchanged; report readers clone those from their own template, not the header.
+The screen and README use the selected Magenta Human Path symbol and custom
+WIRE path lettering in the self-contained `wire-lockup` SVGs. There is no
+expanded-name tagline in the artwork; the README explains Work IQ Request
+Explorer in surrounding text. The application keeps Asta Sans for ordinary UI.
+
+`assets/wire-brand.json` is the current vector artwork and palette source.
+Regenerate current lockups and compact icons with
+`node scripts/build-brand-lockups.mjs`. The full and compact assets share
+symbol coordinates so the sidebar glide stays registered. The favicon supports
+the system color scheme; the inline compact mark follows WIRE's chosen theme.
+
+The older `wire-wordmark` SVGs are immutable historical report inputs. New
+reports declare `presentation.brandVersion: 1` for the Human Path identity.
+Preserve old assets, rendering and theme handling when adding a later identity;
+do not apply current branding globally to historical report snapshots.
 
 ## Chart reading
 

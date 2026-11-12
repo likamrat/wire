@@ -45,7 +45,7 @@ async function setup(t, { approved = true, nonmatchingRecord = false } = {}) {
             response.setHeader("Content-Type", "text/javascript");
             return response.end(await readFile(new URL("../lib/assessment-contract.mjs", import.meta.url), "utf8"));
         }
-        if (request.method === "GET" && request.url === "/favicon.svg") return response.writeHead(204).end();
+        if (request.method === "GET" && request.url?.split("?")[0] === "/favicon.svg") return response.writeHead(204).end();
         let body = ""; for await (const chunk of request) body += chunk;
         const input = body ? JSON.parse(body) : {};
         response.setHeader("Content-Type", "application/json");

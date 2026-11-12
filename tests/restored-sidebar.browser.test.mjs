@@ -460,13 +460,13 @@ test("brand paint follows the eased sidebar through collapse, expansion and reve
         const samples = trace.filter(frame => frame.phase === phase);
         assert.ok(new Set(samples.map(frame => Math.round(frame.width))).size > 1, `${phase}: real lateral motion`);
         assert.ok(samples.some(frame => frame.compact.opacity > 0 && frame.compact.opacity < 1),
-            `${phase}: the W paint must ease with the rail rather than switch at the click`);
+            `${phase}: the symbol paint must ease with the rail rather than switch at the click`);
         assert.ok(samples.some(frame => frame.wordmark.opacity > 0 && frame.wordmark.opacity < 1),
             `${phase}: the wordmark must ease with the rail rather than switch at the click`);
         for (const frame of samples.filter(frame => frame.wordmark.opacity > 0 && frame.compact.opacity > 0)) {
             for (const key of ["a", "d", "e", "f"]) {
                 assert.ok(Math.abs(frame.wordmark.matrix[key] - frame.compact.matrix[key]) < .001,
-                    `${phase}: both W paths share the same rendered artwork coordinates (${key})`);
+                    `${phase}: both symbols share the same rendered artwork coordinates (${key})`);
             }
         }
         if (["collapse", "expand"].includes(phase)) {
@@ -958,7 +958,7 @@ test("brand focus, touch, reduced motion and breakpoint interruption retain sett
                     document.elementFromPoint(x, y)?.closest("a") === node) };
         });
         assert.ok(focus.visible && focus.outline !== "none" && focus.outlineWidth >= 2 && focus.contained && focus.edges);
-        assert.equal(focus.width, 44); assert.equal(focus.height, 46);
+        assert.equal(focus.width, 44); assert.equal(focus.height, 44);
         if (proofs) await page.screenshot({ path: path.join(proofs, `brand-${theme}-keyboard-focus.png`), clip: { x: 0, y: 0, width: 220, height: 144 } });
         await page.keyboard.press("Enter"); await ready(page);
         await expect(page.locator('nav [data-nav="analyze"]')).toHaveAttribute("aria-current", "page");
