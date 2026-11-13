@@ -64,16 +64,26 @@ clears browsing restrictions, not collected activity or report selections.
 
 ## Trends
 
-Choose **Trends** in the sidebar for a visual overview and seven ready-made
-views: prompt authors, tools, services, errors & failures, timing, response
-models and activity rhythm. Suggestions highlight supported observed changes;
-**Choose highlights** lets you keep your own choices instead.
+Choose **Trends** in the sidebar to see tool usage immediately, alongside
+prompt authors and daily activity. Services, errors & failures, response models
+and call duration follow below. The whole chosen period stays useful even
+when there are no calls today.
+
+![Trends with daily tool usage, author composition and supporting charts](images/trends-overview.png)
+
+Use a chart's maximize control for more room and a dated evidence breakdown.
+**Back to overview** returns to the same place. Collapse or restore charts
+without losing their measure, series choices or horizontal reading position.
 
 Use **Last 7 days**, **Last 14 days**, **Last 30 days** or **Custom dates**.
-Every date stays separate, including in longer ranges. Scroll inside a chart
-for more room; long custom ranges page through days without changing period totals.
+Every date is labeled, including all 30 days: past dates show month and day,
+and the current day says **Today**. Scroll inside a chart to read earlier dates;
+new ranges open at the latest dates. Long custom ranges page through days
+without changing period totals.
 
-**Filters** changes the activity included. The chart's series checkboxes only
+**Filters** changes the activity included, even while a chart is maximized.
+Apply author, tool and service choices together; Cancel leaves the scope alone,
+and **Clear filters** restores the unrestricted period. The series checkboxes only
 show or hide lines; they do not recalculate percentage denominators.
 Tool **Interaction reach** measures how many interactions used a tool at least
 once, while **Call share** measures its portion of all calls. Both keep their
@@ -85,11 +95,14 @@ calls, not the other series' calls. Opening a call shows its full interaction;
 closing the reader returns to the same selected trend. Hiding the selected
 series does not change its evidence.
 **Chart guide** and **View numbers** explain the measures and exact values.
+Call duration shows the recorded median and P95 together; either can be hidden
+without changing the qualified sample or timing coverage.
 
 Prompt authors counts interactions with activity that day, not every message
 sent in Copilot. One interaction can appear on several days but counts once in
 the whole period. Missing history, undated calls and unavailable measurements
-remain distinct from zero. Suggestions are local rules, not AI or causal claims.
+remain distinct from zero. These are recorded patterns, not answer-quality
+judgments, productivity scores or causal claims.
 
 ## Compare periods
 
