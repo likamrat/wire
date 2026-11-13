@@ -156,13 +156,17 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         });
         card.chart = mountChart({ root: plot, tooltip, color, canInspect: current, formatDate: fullDate, formatAxisDate: axisDate,
             onInspect() { if (inspecting !== card) inspecting?.chart.hide(); inspecting = card; },
-            onSelect(date, series) { card.selection = { date, id: series }; if (family !== id) maximize(id); else paintInspection(); } });
+            onSelect(date, series) {
+                card.selection = { date, id: series };
+                card.chart.select(card.selection);
+                if (family === id) paintInspection();
+            } });
         const observer = new ResizeObserver(() => {
             if (!current() || !plot.checkVisibility()) return;
             const width = Math.round(plot.clientWidth), height = Math.round(plot.clientHeight);
             if (width === card.width && height === card.height) return;
             card.width = width; card.height = height;
-            card.chart.render(viewData(card), id, card.mode, card.hidden);
+            card.chart.render(viewData(card), id, card.mode, card.hidden, card.selection);
             if (family === id) { inspectionKey = ""; paintInspection(); }
         });
         observer.observe(plot);
@@ -371,7 +375,7 @@ export function mountTrends({ root, api, time, ux, createCalendar, mountChart, g
         else if (id === "problems" && totals.values.problems[0].unknownCalls) limits.push(`Outcome unknown for ${number(totals.values.problems[0].unknownCalls)} ${totals.values.problems[0].unknownCalls === 1 ? "call" : "calls"}`);
         card.limits.textContent = limits.join(" · "); card.limits.hidden = !limits.length;
         if (!panel.hidden && !card.collapsed) {
-            card.chart.render(source, id, mode, hidden);
+            card.chart.render(source, id, mode, hidden, card.selection);
             card.width = Math.round(card.plot.clientWidth); card.height = Math.round(card.plot.clientHeight);
         }
     }

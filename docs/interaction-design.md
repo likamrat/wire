@@ -18,6 +18,13 @@ and motion. For user instructions, use [Use WIRE](user-guide.md) or
 
 ## Navigation and return
 
+The WIRE logo remains a link to Analyze, with **WorkIQ Request Explorer** help
+on hover or keyboard focus, including the compact mark and narrow drawer.
+Escape, activation and leaving the target dismiss that help without taking
+focus. The separate panel control beside the desktop logo retains **Collapse
+navigation** / **Expand navigation** names and expanded state. Narrow navigation
+keeps its existing Open/Close controls and the same mounted brand and links.
+
 Keep existing route, reading-position and focus owners. A return restores the
 actual origin only while its authority and reading intent remain current.
 Later user input wins over delayed navigation, reads and motion callbacks.
@@ -107,6 +114,11 @@ and exact evidence. Back to overview restores the activating control and reading
 position. Collapse/expand and Collapse all/Restore all preserve each chart's
 measure, series choices and date reading. Filters and dates remain available
 while maximized. Do not introduce a generic chart builder or a new analytics layer.
+Only the explicit maximize/restore controls change chart size. Clicking, tapping
+or pressing Enter/Space on a data mark selects it in place, without hiding other
+widgets, moving the page or changing horizontal reading position. A restrained
+selected-mark outline remains after hover closes. Maximizing later retains that
+exact selected date and series for View evidence.
 Measure controls use the same header position for every widget, not just Tools.
 Counts, percentages and timing keep their distinct units; these controls do not
 redefine the underlying evidence. Omit redundant subheaders and the repeated

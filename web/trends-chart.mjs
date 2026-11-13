@@ -45,6 +45,20 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         }
     }
     function target(point) { return root.querySelector(`[data-trend-mark="${scene.points.indexOf(point)}"]`); }
+    function select(selection) {
+        if (!scene || !canInspect()) return;
+        scene.selection = selection;
+        const overlay = root.querySelector(".trends-mark-selection");
+        overlay.replaceChildren();
+        root.querySelector('[data-trend-mark][aria-pressed=true]')?.setAttribute("aria-pressed", "false");
+        const point = scene.points.find(point => point.id === selection?.id && scene.data.days[point.index].date === selection.date);
+        if (!point) return;
+        target(point).setAttribute("aria-pressed", "true");
+        if (point.keyboardOnly) return;
+        overlay.append(point.rect
+            ? svgNode("rect", { ...point.rect, fill: "none", stroke: "var(--ink)", "stroke-width": 2 })
+            : svgNode("circle", { cx: point.x, cy: point.y, r: 6, fill: "var(--paper)", stroke: "var(--ink)", "stroke-width": 2 }));
+    }
     function facts(parent, rows) {
         const list = element("dl", "trends-tip-facts");
         for (const [label, value] of rows) list.append(element("dt", "", label), element("dd", "", String(value)));
@@ -145,7 +159,7 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         candidates.sort((a, b) => a.distance - b.distance);
         return candidates[0]?.point ?? null;
     }
-    function render(data, family, mode, hidden) {
+    function render(data, family, mode, hidden, selection = null) {
         const key = `${data.from}:${data.to}:${data.window.offset}`;
         const previous = scene, reading = previous?.key === key ? previous.reading : null;
         const focused = root.contains(doc.activeElement) ? previous?.points[Number(doc.activeElement.dataset.trendMark)] : null;
@@ -190,6 +204,7 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
                 : svgNode("circle", { cx: point.x, cy: point.y, r: 8, fill: "transparent", stroke: "transparent", "pointer-events": "none" });
             node.setAttribute("data-series", point.id);
             node.dataset.trendMark = String(index); node.setAttribute("tabindex", index ? "-1" : "0"); node.setAttribute("role", "button");
+            node.setAttribute("aria-pressed", "false");
             const amount = metric(value, family, mode);
             const reading = amount === null ? "unavailable" : family === "timing" ? `${number(amount)} milliseconds`
                 : mode === "count" ? `${number(amount)} ${["authors", "models", "problems"].includes(family) ? "interactions" : "calls"}` : rate(amount);
@@ -231,8 +246,10 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         }
         for (const [index, day] of data.days.entries())
             svg.append(svgNode("text", { x: x(index), y: bottom + 27 * scale, "text-anchor": "middle", "data-date-tick": day.date }, labels[index]));
-        svg.append(axis, svgNode("g", { class: "trends-mark-focus", "pointer-events": "none" }));
+        svg.append(svgNode("g", { class: "trends-mark-selection", "pointer-events": "none" }),
+            axis, svgNode("g", { class: "trends-mark-focus", "pointer-events": "none" }));
         erase(root); root.append(svg);
+        select(selection);
         if (!series.length) root.append(element("p", "trends-chart-empty", data.definitions[family].length ? "No series shown"
             : family === "models" ? "No recorded model names" : "No recorded service associations"));
         root.scrollLeft = !reading || reading.end ? root.scrollWidth : reading.day * pitch;
@@ -319,5 +336,5 @@ export function mountTrendsChart({ root, tooltip, color, onSelect, onInspect, fo
         const amount = metric(value, scene.family, scene.mode);
         return amount === null ? 0 : amount * 100 / scene.maximum;
     }
-    return { render, metric, barPercent, emphasize, hide, reveal, withdrawAccess() { hide(); scene = null; erase(root); } };
+    return { render, select, metric, barPercent, emphasize, hide, reveal, withdrawAccess() { hide(); scene = null; erase(root); } };
 }

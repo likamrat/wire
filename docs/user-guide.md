@@ -117,6 +117,8 @@ To investigate a rise in errors or a change in service use, maximize that chart,
 then hover or focus a dated mark for its values. Arrow keys move between dates
 and series. Select the mark and choose **View evidence** to see the calls for
 that exact date and series. Other series' calls are not added to this list.
+Selecting a point in the overview keeps the chart in place. Use its maximize
+button when you want the evidence breakdown; your selected point is retained.
 Hover a legend entry to emphasize its line without filtering the activity.
 
 Open a call to read its result and full parent interaction. That parent context

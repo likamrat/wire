@@ -174,13 +174,19 @@ export function mountSidebarNavigation(ux, preference) {
     }
     // A breakpoint can hide the focused rail before the media change callback runs.
     document.addEventListener("focusin", event => {
-        navigationFocus = rail.contains(event.target) || drawer.contains(event.target) ? event.target : null;
+        navigationFocus = rail.contains(event.target) || drawer.contains(event.target) || brand.contains(event.target) ? event.target : null;
     });
     document.addEventListener("focusout", event => {
         if (event.target === navigationFocus && event.target.checkVisibility()) navigationFocus = null;
     });
     const label = () => collapsed ? "Expand navigation" : "Collapse navigation";
-    ux.tooltip(collapse, label, { placement: "right", tone: "contrast" });
+    const headerHelpAvoid = () => [...content.querySelectorAll("[data-nav]"),
+        ...(media.matches ? [$("closeNavigation")] : [$("wireSearch"), $("themePreference"),
+            $("openChartReference"), $("openAnalyzeFilters"), $("refreshBtn")])].filter(Boolean);
+    ux.tooltip(brand.querySelector(".brand-home"), "WorkIQ Request Explorer", {
+        anchor: brand, placement: "right", tone: "contrast", avoid: headerHelpAvoid,
+    });
+    ux.tooltip(collapse, label, { placement: "right", tone: "contrast", avoid: headerHelpAvoid });
     for (const node of content.querySelectorAll("[data-nav]")) {
         const name = node.textContent.trim();
         node.setAttribute("aria-label", name);

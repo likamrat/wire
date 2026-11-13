@@ -205,6 +205,11 @@ for (const motion of ["no-preference", "reduce"]) test(`sidebar interruption set
     const width = await page.locator("#sidebar").evaluate(node => node.getBoundingClientRect().width);
     await page.locator("#navigationCollapse").evaluate(node => node.addEventListener("click", () => {
         window.sidebarControlFeedback = node.getAnimations().filter(animation => animation instanceof CSSTransition);
+        window.sidebarFeedbackCancellations = 0;
+        for (const animation of window.sidebarControlFeedback) {
+            const cancel = animation.cancel.bind(animation);
+            animation.cancel = () => { window.sidebarFeedbackCancellations++; cancel(); };
+        }
         window.sidebarFeedbackStarted = window.sidebarControlFeedback.map(animation => ({
             property: animation.transitionProperty, state: animation.playState }));
     }, { once: true }));
@@ -223,11 +228,15 @@ for (const motion of ["no-preference", "reduce"]) test(`sidebar interruption set
     const remaining = await page.evaluate(() => {
         const rail = document.querySelector("#sidebar").getBoundingClientRect();
         return { width: rail.width, mainX: document.querySelector("#main").getBoundingClientRect().x,
+            hovered: document.querySelector("#navigationCollapse").matches(":hover"),
+            cancellations: window.sidebarFeedbackCancellations,
             feedback: window.sidebarControlFeedback.map(animation => ({ property: animation.transitionProperty, state: animation.playState })) };
     });
     assert.ok(remaining.width < width - 100, "Resize settles the requested collapsed state");
     assert.ok(Math.abs(remaining.mainX - remaining.width) < 1.1, "The actual main column follows the settled rail");
-    assert.ok(remaining.feedback.every(animation => animation.state !== "idle" && animation.state !== "paused"),
+    assert.equal(remaining.cancellations, 0, "Settlement does not cancel CSS feedback it does not own");
+    // The header control now moves out from under the pointer; CSS may retire its old hover transition.
+    assert.ok(remaining.feedback.every(animation => animation.state !== "paused" && (animation.state !== "idle" || !remaining.hovered)),
         "Sidebar settlement cannot cancel or pause unrelated feedback");
     t.diagnostic(JSON.stringify({ motion, feedback, remaining }));
 });

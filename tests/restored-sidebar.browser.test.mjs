@@ -626,6 +626,9 @@ test("sidebar physically glides without replacing content, losing drafts or chan
     await expect(collapse(page)).toBeFocused();
     if (proofs) await writeFile(path.join(proofs, "sidebar-motion-frames.json"), JSON.stringify(trace, null, 2));
     await page.keyboard.press("Tab");
+    await expect(page.locator("#wireSearch")).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(page.locator("#themePreference")).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(page.locator('nav [data-nav="analyze"]')).toBeFocused();
     await expect(page.getByRole("tooltip", { name: "Analyze", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
@@ -712,10 +715,13 @@ test("trusted sidebar reversals return the scrolled selected record to its origi
         sample();
         window.finishScrolledMotion = () => { running = false; return { trace, clicks }; };
     }, selectedKey);
-    const toggle = await collapse(page).boundingBox();
+    async function clickMovingToggle() {
+        const toggle = await collapse(page).boundingBox();
+        await page.mouse.click(toggle.x + toggle.width / 2, toggle.y + toggle.height / 2);
+    }
     const checkpoints = [];
     for (const [index, wait] of [450, 900, 75, 75, 75, 450, 450, 900].entries()) {
-        await page.mouse.click(toggle.x + toggle.width / 2, toggle.y + toggle.height / 2);
+        await clickMovingToggle();
         await page.waitForTimeout(wait);
         if (index === 1) checkpoints.push(await selected.evaluate(node => ({ cardY: node.getBoundingClientRect().y, scrollY })));
     }
@@ -730,14 +736,14 @@ test("trusted sidebar reversals return the scrolled selected record to its origi
     await inspectSelection();
     assert.ok(Math.abs(after.card.y - before.card.y) < 1, "The same final expanded state restores the same selected record position");
     assert.ok(Math.abs(after.scrollY - before.scrollY) < 1, "Repeated lateral motion does not accumulate page scroll drift");
-    await page.mouse.click(toggle.x + toggle.width / 2, toggle.y + toggle.height / 2);
+    await clickMovingToggle();
     await page.waitForTimeout(70);
     await page.mouse.move(1000, 700);
     await page.mouse.wheel(0, 120);
     await page.waitForFunction(previous => scrollY > previous + 50, after.scrollY);
     await settled(page);
     const wheelY = await page.evaluate(() => scrollY);
-    await page.mouse.click(toggle.x + toggle.width / 2, toggle.y + toggle.height / 2);
+    await clickMovingToggle();
     await settled(page);
     assert.ok(Math.abs(await page.evaluate(() => scrollY) - wheelY) < 1, "Finishing motion never restores stale pre-wheel scroll");
     const count = await page.locator("#activityCount").innerText();

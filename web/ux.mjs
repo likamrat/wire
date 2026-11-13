@@ -119,7 +119,9 @@ export function createEvidenceUX(icons) {
         const candidates = order.map(side => sides[side]);
         for (const rect of protectedBoxes) candidates.push(
             { left: preferred.left, top: rect.top - tip.height - gap },
-            { left: preferred.left, top: rect.bottom + gap });
+            { left: preferred.left, top: rect.bottom + gap },
+            { left: rect.left - tip.width - gap, top: preferred.top },
+            { left: rect.right + gap, top: preferred.top });
         const overlap = (point, rect) => Math.max(0, Math.min(point.left + tip.width, rect.right) - Math.max(point.left, rect.left))
             * Math.max(0, Math.min(point.top + tip.height, rect.bottom) - Math.max(point.top, rect.top));
         const ranked = candidates.map((point, index) => {

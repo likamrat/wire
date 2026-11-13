@@ -103,6 +103,9 @@ test("shared control roles preserve app journeys, full targets and frozen saved 
     await page.waitForFunction(() => !document.getElementById("sidebar").hasAttribute("data-navigation-moving"));
     await expect(page.locator("#navigationCollapse")).toHaveAttribute("aria-expanded", "false");
     await page.locator("#navigationCollapse").focus(); await page.keyboard.press("Tab");
+    await expect(page.locator("#wireSearch")).toBeFocused();
+    await page.keyboard.press("Tab"); await expect(page.locator("#themePreference")).toBeFocused();
+    await page.keyboard.press("Tab");
     assert.equal(await page.locator('nav [data-nav=analyze]').evaluate(node => node.matches(":focus-visible")), true);
     await page.keyboard.press("Escape");
     await page.locator("#navigationCollapse").click(); await page.waitForTimeout(350);

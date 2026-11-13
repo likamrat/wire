@@ -17,7 +17,7 @@ async function capture(page, name) {
     if (name === "overview-light") await page.screenshot({
         path: path.join(process.env.WIRE_TRENDS_PROOFS, "widgets-overview-light.png"),
     });
-    if (name.startsWith("responsive-") || name.startsWith("dates-")) await page.screenshot({
+    if (name.startsWith("responsive-") || name.startsWith("dates-") || name.startsWith("point-")) await page.screenshot({
         path: path.join(process.env.WIRE_TRENDS_PROOFS, name + "-viewport.png"),
     });
     if (name === "responsive-enlarged") await page.locator('[data-family=tools]').screenshot({
@@ -1250,6 +1250,27 @@ test("every widget control works for 7, 14, 30 and custom days through the norma
                 evidence.seriesToggles += 2;
             }
             const controls = panel.locator(".trends-sizing button");
+            const overviewPlot = panel.locator(".trends-plot");
+            await overviewPlot.scrollIntoViewIfNeeded(); await settle(page);
+            const overviewMarks = overviewPlot.locator("[data-trend-mark]");
+            const overviewIndex = await overviewMarks.evaluateAll(nodes => nodes.findIndex(node =>
+                !/unavailable|, 0(?:%| |$)/i.test(node.getAttribute("aria-label"))));
+            const overviewMark = overviewMarks.nth(overviewIndex);
+            await overviewMark.scrollIntoViewIfNeeded(); await settle(page);
+            const pointBox = await overviewMark.boundingBox();
+            const geometry = () => page.locator(".trends-panel").evaluateAll(nodes => ({
+                scroll: scrollY, panels: nodes.map(node => {
+                    const box = node.getBoundingClientRect();
+                    return { id: node.dataset.family, max: node.dataset.maximized, x: box.x, y: box.y, width: box.width, height: box.height,
+                        plotScroll: node.querySelector(".trends-plot").scrollLeft };
+                }),
+            }));
+            const beforeSelection = await geometry();
+            await page.mouse.click(pointBox.x + pointBox.width / 2, pointBox.y + pointBox.height / 2);
+            await settle(page);
+            assert.deepEqual(await geometry(), beforeSelection, `${period}/${id}: clicking the chart must not resize or navigate`);
+            await expect(overviewPlot.locator('[data-trend-mark][aria-pressed=true]')).toHaveCount(1);
+            await capture(page, `point-selection-${period}-${id}`);
             await controls.first().hover();
             await controls.first().click();
             await expect(panel).toHaveAttribute("data-maximized", "true");
@@ -1388,4 +1409,73 @@ test("widget dates retain the accepted range during drafts, pending reads and fa
         return { held: text.data, labels: [...document.querySelectorAll(".trends-period-label")].map(node => node.textContent) };
     });
     assert.deepEqual(cleared, { held: "", labels: ["", "", "", "", "", "", ""] });
+});
+
+test("clicking an overview data point never maximizes or moves the workspace", { timeout: 30000 }, async t => {
+    const { page } = await setup(t, false, { records: measureRecords(), viewport: { width: 1440, height: 1000 } });
+    await dates(page, "2026-08-01", "2026-08-01");
+    const plot = page.locator("#trendsPlot-tools");
+    await plot.scrollIntoViewIfNeeded(); await settle(page);
+    const mark = plot.locator('[data-series="workiq-retrieve"][data-trend-mark]');
+    const box = await mark.boundingBox();
+    const geometry = () => page.locator(".trends-panel").evaluateAll(nodes => ({
+        scroll: scrollY, panels: nodes.map(node => {
+            const box = node.getBoundingClientRect();
+            return { id: node.dataset.family, max: node.dataset.maximized, x: box.x, y: box.y, width: box.width, height: box.height,
+                plotScroll: node.querySelector(".trends-plot").scrollLeft };
+        }),
+    }));
+    const before = await geometry();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.locator("#trendsTooltip")).toBeVisible();
+    await capture(page, "point-click-before");
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await settle(page);
+    await capture(page, "point-click-after");
+    assert.deepEqual(await geometry(), before, "Point selection must not change card sizes, sibling visibility or page position");
+    await expect(page.locator(".trends-panel:visible")).toHaveCount(7);
+    await expect(page.locator(".trends-detail-bar")).toBeHidden();
+    await expect(mark).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.move(8, 8);
+    await expect(plot.locator(".trends-mark-selection > *")).toHaveCount(1);
+    const blank = await plot.boundingBox();
+    await page.mouse.click(blank.x + 3, blank.y + 3); await settle(page);
+    assert.deepEqual(await geometry(), before, "Blank plot space cannot resize the workspace either");
+    await expect(mark).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Maximize Tool usage", exact: true }).click();
+    await expect(page.locator(".trends-inspection-heading")).toContainText("retrieve · Interactions %");
+    await expectEvidence(page, [4]);
+});
+
+test("touch and keyboard select every chart in place and preserve its point through explicit sizing", { timeout: 60000 }, async t => {
+    const { page } = await setup(t, false, { records: measureRecords(), viewport: { width: 1080, height: 1920 }, touch: true });
+    await dates(page, "2026-08-01", "2026-08-01"); await chooseTheme(page, "dark");
+    for (const id of ["tools", "authors", "rhythm", "services", "problems", "models", "timing"]) {
+        const panel = page.locator(`.trends-panel[data-family="${id}"]`), plot = panel.locator(".trends-plot");
+        await plot.scrollIntoViewIfNeeded(); await settle(page);
+        const mark = plot.locator("[data-trend-mark]").first();
+        const box = await mark.boundingBox();
+        const geometry = () => panel.evaluate(node => {
+            const box = node.getBoundingClientRect();
+            return { scroll: scrollY, x: box.x, y: box.y, width: box.width, height: box.height };
+        });
+        const beforeTouch = await geometry();
+        await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2); await settle(page);
+        assert.deepEqual(await geometry(), beforeTouch, `${id}: touch must not resize or scroll the workspace`);
+        await expect(panel).toHaveAttribute("data-maximized", "false");
+        await mark.focus(); await expect(page.locator("#trendsTooltip")).toBeVisible();
+        const beforeKeyboard = await geometry();
+        await page.keyboard.press("Enter"); await settle(page);
+        assert.deepEqual(await geometry(), beforeKeyboard, `${id}: Enter must not resize or scroll the workspace`);
+        await expect(mark).toHaveAttribute("aria-pressed", "true");
+        await page.keyboard.press("Space");
+        await expect(mark).toHaveAttribute("aria-pressed", "true");
+        const selectedLabel = await mark.getAttribute("aria-label");
+        await page.mouse.move(8, 8);
+        await expect(plot.locator(".trends-mark-selection > *")).toHaveCount(1);
+        await panel.locator(".trends-sizing button").first().click();
+        await expect(panel).toHaveAttribute("data-maximized", "true");
+        await expect(plot.locator('[data-trend-mark][aria-pressed=true]')).toHaveAttribute("aria-label", selectedLabel);
+        await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+        await expect(plot.locator('[data-trend-mark][aria-pressed=true]')).toHaveAttribute("aria-label", selectedLabel);
+    }
 });

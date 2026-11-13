@@ -1,7 +1,7 @@
 export const sidebarStyles = `
 .app-header {border-bottom-color:transparent}
 .app-header .header-inner {display:grid;grid-template-columns:var(--app-sidebar-width,196px) minmax(0,1fr);min-height:76px;max-width:none;gap:0;padding:0}
-.app-header .brand {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:44px;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid transparent;overflow:hidden}
+.app-header .brand {display:grid;grid-template-columns:minmax(40px,1fr) 44px;grid-template-rows:44px;column-gap:8px;align-content:center;align-self:stretch;padding:6px 12px;border-right:1px solid transparent}
 .app-header .brand-home {position:relative;display:grid;align-items:center;grid-area:1/1;justify-self:start;align-self:center;flex:none;width:120px;height:44px;max-width:none}
 .app-header .brand-logo {width:120px;height:auto;max-width:none}
 .brand .brand-compact {display:none}
@@ -29,7 +29,7 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .navigation-footer .wire-account-entry {width:100%;padding-top:0}
 .navigation-footer .primary-navigation a {width:44px;gap:0;grid-template-columns:minmax(0,1fr) 0}
 .navigation-footer .navigation-label {width:0;opacity:0}
-.navigation-collapse {display:flex;flex:none;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0 0 12px;padding:0;border:1px solid transparent;border-radius:var(--radius-control);background:transparent;color:var(--muted);box-shadow:none}
+.navigation-collapse {position:relative;z-index:1;display:flex;grid-area:1/2;flex:none;align-items:center;justify-content:center;width:44px;height:44px;min-height:44px;margin:0;padding:0;border:1px solid transparent;border-radius:var(--radius-control);background:transparent;color:var(--muted);box-shadow:none}
 .navigation-collapse:hover {--pill-hover-border:transparent;background:var(--hover);border-color:transparent;color:var(--ink)}
 .navigation-collapse:active {background:var(--pill-pressed);border-color:transparent}
 .navigation-collapse:focus-visible {outline:2px solid var(--focus);outline-offset:3px}
@@ -54,7 +54,8 @@ html {scroll-padding-top:calc(var(--app-header-height,76px) + 16px)}
 .primary-navigation a:hover {color:var(--ink);background:var(--hover)}
 .primary-navigation a:active {color:var(--ink);background:var(--pill-pressed)}
 .primary-navigation a:focus-visible {z-index:1;outline:2px solid var(--focus);outline-offset:3px}
-.primary-navigation a>.wire-icon,.navigation-collapse>.wire-icon {width:var(--icon-navigation-size);height:var(--icon-navigation-size)}
+.primary-navigation a>.wire-icon {width:var(--icon-navigation-size);height:var(--icon-navigation-size)}
+.navigation-collapse>.wire-icon {width:var(--icon-size);height:var(--icon-size)}
 .primary-navigation a>.wire-icon {color:var(--muted);justify-self:center}
 .primary-navigation a:is([aria-current=page],:hover,:focus-visible)>.wire-icon {color:var(--ink)}
 body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--app-sidebar-width,196px);padding:24px 24px 64px;min-width:0;max-width:none}
@@ -71,6 +72,7 @@ body>main {width:calc(100% - var(--app-sidebar-width,196px));margin-left:var(--a
 .navigation-drawer .drawer-heading>button {margin-inline-start:auto}
 .navigation-drawer .brand {margin:0 10px 20px}
 .navigation-drawer .brand-logo {width:120px;height:auto}
+.navigation-drawer .navigation-collapse {display:none}
 .navigation-drawer::backdrop {background:var(--scrim)}
 @media(forced-colors:active) {
  .app-sidebar,.navigation-drawer {border-right-color:CanvasText;box-shadow:none}

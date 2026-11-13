@@ -190,6 +190,18 @@ Date-context cases verify every widget header after presets and custom Apply,
 including month/year boundaries, one-day ranges, Cancel, held/failed reads and
 access withdrawal. Source-wide coverage metadata remains separate from the
 chart-specific limits shown in Trends.
+Point-selection cases compare all widget bounds and scroll positions before
+and after actual data clicks across the seven-widget/four-period matrix.
+Touch and keyboard also select in place; explicit sizing must retain the
+selected point and its exact evidence.
+
+For the brand and navigation header, `tests/branding.browser.test.mjs` uses
+invented Cedar activity and a synthetic selected profile in the normal renderer.
+Set `WIRE_BRAND_PROOFS` to an owned private directory for theme/layout captures
+and unpaused frame traces. It checks full-name help, separate navigation help,
+header alignment, repeated reversal, the mounted avatar and the narrow drawer
+under native and explicitly reduced-motion preferences. Providers and action
+requests are blocked; its disposable runtime and store are closed afterward.
 
 ## Troubleshoot a local run
 

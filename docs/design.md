@@ -86,8 +86,10 @@ Decorative glyphs fit their text line without acquiring control-sized
 whitespace. Keep official Lucide's 24-unit viewBox; painted navigation glyphs
 use 18px at the default text size, reader utilities and chart labels use 18px,
 and compact cues retain their 16px role. Other established utility roles remain
-20px. The simple panel-left glyph keeps its changing accessible expand/collapse
-name and state.
+20px. The header's simple 20px panel-left glyph sits beside the brand and keeps
+its changing accessible expand/collapse name and state. Its 44px target remains
+beside the compact mark without widening the collapsed rail or reserving an
+empty navigation row.
 Interactive targets stay usable independently of their smaller painted face;
 preserve the established 44px targets, focus indications and wrapping labels.
 
@@ -111,6 +113,9 @@ The screen and README use the selected Magenta Human Path symbol and custom
 WIRE path lettering in the self-contained `wire-lockup` SVGs. There is no
 expanded-name tagline in the artwork; the README explains Work IQ Request
 Explorer in surrounding text. The application keeps Asta Sans for ordinary UI.
+Hover or keyboard focus on the existing logo-home link shows
+**WorkIQ Request Explorer** through the shared tooltip owner. This brand
+description stays separate from the neighboring navigation control's help.
 
 `assets/wire-brand.json` is the current vector artwork and palette source.
 Regenerate current lockups and compact icons with
@@ -152,6 +157,8 @@ solid lines lead the reading; do not make people decode dashes, shapes or hatche
 Series keep stable colors and named legends through filters and visibility
 changes. Author and service colors use the existing WIRE roles. Hover or focus
 can emphasize one series without changing its values or the other series.
+Selecting a mark stays in place. Do not resize a chart or hide its neighbors
+as a side effect of a pointer, touch or keyboard data selection.
 
 The same chart owner serves overview and maximized reading. Every daily date
 is labeled with month and day, except Today; hover supplies the exact date.
